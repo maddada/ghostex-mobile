@@ -29,11 +29,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       launchOptions: appDelegate.cachedLaunchOptions)
     appDelegate.window = window
     self.window = window
+
+    open(connectionOptions.urlContexts)
   }
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    open(URLContexts)
+  }
+
+  private func open(_ URLContexts: Set<UIOpenURLContext>) {
+    guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
     for context in URLContexts {
-      _ = RCTLinkingManager.application(UIApplication.shared, open: context.url, options: [:])
+      _ = appDelegate.application(UIApplication.shared, open: context.url, options: [:])
     }
   }
 }
