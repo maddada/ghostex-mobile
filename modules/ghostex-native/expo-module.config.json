@@ -1,0 +1,16 @@
+{
+  "platforms": [
+    "apple",
+    "android"
+  ],
+  "apple": {
+    "modules": [
+      "GhostexNativeModule"
+    ]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.ghostexnative.GhostexNativeModule"
+    ]
+  }
+}
