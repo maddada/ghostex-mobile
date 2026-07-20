@@ -9,7 +9,10 @@
     "backgroundColor": "#181818",
     "scheme": "ghostex",
     "newArchEnabled": true,
-    "plugins": ["./plugins/withPodfileMinDeploymentTarget.js"],
+    "plugins": [
+      "./plugins/withPodfileMinDeploymentTarget.js",
+      "./plugins/withSceneLifecycle.js"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.ghostex.mobile",
