@@ -16,3 +16,14 @@ android {
     abortOnError false
   }
 }
+
+dependencies {
+  // SSH transport: same coordinates as the Ghostex Android fork (app/build.gradle).
+  // bcprov is declared directly because Ghostex replaces Android's stale platform "BC"
+  // provider with the bundled BouncyCastle before SSHJ builds crypto primitives.
+  implementation "com.hierynomus:sshj:0.40.0"
+  implementation "org.bouncycastle:bcprov-jdk18on:1.80.2"
+
+  // The vendored Termux terminal-emulator/terminal-view Java sources use androidx.annotation.
+  implementation "androidx.annotation:annotation:1.9.1"
+}

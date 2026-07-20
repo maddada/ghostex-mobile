@@ -66,7 +66,8 @@ export type GhostexErrorCode =
   | 'E_TIMEOUT'
   | 'E_NOT_CONNECTED'
   | 'E_CHANNEL_FAILED'
-  | 'E_SFTP_FAILED';
+  | 'E_SFTP_FAILED'
+  | 'E_KEYGEN_FAILED';
 
 export type TerminalStateEvent = {
   sessionKey: string;

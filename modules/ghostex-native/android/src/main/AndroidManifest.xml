@@ -1,2 +1,4 @@
-<manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The SSH transport (SSHJ) needs network access; merged into the app manifest. -->
+  <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
