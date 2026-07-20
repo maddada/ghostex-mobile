@@ -16,7 +16,9 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
 
   s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"
-  s.exclude_files = ['Vendor/**/*', 'Vendor/**']
+  # exclude_files is applied to EVERY attribute's globs (including
+  # vendored_frameworks), so it must only match source-like files here.
+  s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}']
 
   # -- Vendored native libraries -------------------------------------------
   # GhosttyKit is a proper xcframework (static library + Headers with a
@@ -39,21 +41,25 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     # `import GhosttyKit` / `import libssh2` from Swift (Clang modules).
-    'SWIFT_INCLUDE_PATHS[sdk=iphoneos*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/GhosttyKit.xcframework/ios-arm64/Headers" "$(PODS_TARGET_SRCROOT)/Vendor/libssh2"',
-    'SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/GhosttyKit.xcframework/ios-arm64-simulator/Headers" "$(PODS_TARGET_SRCROOT)/Vendor/libssh2"',
-    'HEADER_SEARCH_PATHS[sdk=iphoneos*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/GhosttyKit.xcframework/ios-arm64/Headers" "$(PODS_TARGET_SRCROOT)/Vendor/libssh2/include"',
-    'HEADER_SEARCH_PATHS[sdk=iphonesimulator*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/GhosttyKit.xcframework/ios-arm64-simulator/Headers" "$(PODS_TARGET_SRCROOT)/Vendor/libssh2/include"',
-    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/libssh2/ios/lib"',
-    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => '"$(PODS_TARGET_SRCROOT)/Vendor/libssh2/ios-simulator/lib"',
+    # GhosttyKit's module map is provided by CocoaPods' own vendored-xcframework
+    # handling (XCFrameworkIntermediates) — do NOT add the slice Headers here or
+    # the module gets defined twice.
+    'SWIFT_INCLUDE_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Vendor/libssh2"',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Vendor/libssh2/include"',
+    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Vendor/libssh2/ios/lib"',
+    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Vendor/libssh2/ios-simulator/lib"',
   }
 
   # The pod builds as a static library, so libssh2/libssl/libcrypto are
   # resolved at the app's final link. Expo prebuild puts the Podfile at
   # <app>/ios, so $(PODS_ROOT)/../.. is the mobile/ app root.
   ghostex_native_vendor = '$(PODS_ROOT)/../../modules/ghostex-native/ios/Vendor'
+  # NOTE: SDK-conditional xcconfig keys REPLACE the unconditional value for
+  # that SDK, so they must carry $(inherited) or they wipe every other pod's
+  # library search path at the app link step.
   s.user_target_xcconfig = {
-    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => "\"#{ghostex_native_vendor}/libssh2/ios/lib\"",
-    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => "\"#{ghostex_native_vendor}/libssh2/ios-simulator/lib\"",
+    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => "$(inherited) \"#{ghostex_native_vendor}/libssh2/ios/lib\"",
+    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => "$(inherited) \"#{ghostex_native_vendor}/libssh2/ios-simulator/lib\"",
     'OTHER_LDFLAGS' => '$(inherited) -lssh2 -lssl -lcrypto -lz',
   }
 end
