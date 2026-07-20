@@ -30,6 +30,11 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   setFontSize(sessionKey: string, size: number): Promise<void>;
   scrollToBottom(sessionKey: string): Promise<void>;
 
+  /** Make the attached view first responder and show the soft keyboard. No-op if no view attached. */
+  focusTerminal(sessionKey: string): Promise<void>;
+  /** Resign first responder / hide the soft keyboard for the attached view. */
+  blurTerminal(sessionKey: string): Promise<void>;
+
   // SFTP upload with 0600 permissions.
   uploadFile(machineId: string, localPath: string, remotePath: string): Promise<void>;
 
