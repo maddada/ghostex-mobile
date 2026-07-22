@@ -5,7 +5,7 @@
 //  Ported from VVTerm/GhosttyTerminal/Ghostty.App.swift.
 //  Pruned: settings/themes managers, CloudKit-backed appearance, macOS paths,
 //  search actions, scrollbar notifications. Uses a fixed dark configuration
-//  (background #000000, libghostty's built-in default font).
+//  (background #000000, bundled JetBrains Mono Nerd Font).
 //
 
 import Foundation
@@ -38,10 +38,9 @@ extension Ghostty {
 extension Ghostty {
     enum ConfigBuilder {
         /// Fixed dark configuration for the Ghostex mobile terminal.
-        /// libghostty bundles JetBrains Mono as its built-in default font, so no
-        /// font-family is set here.
         static func configContent(fontSize: Double) -> String {
             """
+            font-family = "JetBrainsMono Nerd Font"
             font-size = \(Int(fontSize))
             window-inherit-font-size = false
             window-padding-balance = false

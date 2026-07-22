@@ -90,6 +90,10 @@ export type FontSizeChangeEvent = {
   fontSize: number;
 };
 
+export type KeyModifiersConsumedEvent = {
+  sessionKey: string;
+};
+
 export type ConnectionStateEvent = {
   machineId: string;
   state: 'connecting' | 'connected' | 'disconnected' | 'failed';
@@ -102,6 +106,7 @@ export type GhostexNativeEvents = {
   onTerminalTitle: (event: TerminalTitleEvent) => void;
   onTerminalBell: (event: TerminalBellEvent) => void;
   onFontSizeChange: (event: FontSizeChangeEvent) => void;
+  onKeyModifiersConsumed: (event: KeyModifiersConsumedEvent) => void;
   onConnectionState: (event: ConnectionStateEvent) => void;
 };
 

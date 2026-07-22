@@ -46,6 +46,7 @@ class GhostexNativeModule : Module() {
       "onTerminalTitle",
       "onTerminalBell",
       "onFontSizeChange",
+      "onKeyModifiersConsumed",
       "onConnectionState"
     )
 
@@ -135,6 +136,7 @@ class GhostexNativeModule : Module() {
 
     AsyncFunction("sendKey") { sessionKey: String, key: String, mods: KeyModifiersRecord?, promise: Promise ->
       val session = runningSession(sessionKey, promise) ?: return@AsyncFunction
+      terminalRegistry.get(sessionKey)?.attachedView?.clearKeyModifiers()
       val handled = GhostexKeyMapper.writeKey(
         session,
         key,
@@ -145,6 +147,18 @@ class GhostexNativeModule : Module() {
       if (!handled) {
         promise.reject(GhostexException(GhostexErrorCode.CHANNEL_FAILED, "Unsupported key: \"$key\"."))
         return@AsyncFunction
+      }
+      promise.resolve(null)
+    }
+
+    AsyncFunction("setKeyModifiers") { sessionKey: String, mods: KeyModifiersRecord, promise: Promise ->
+      val entry = terminalRegistry.get(sessionKey)
+      if (entry == null) {
+        promise.reject(noTerminalException(sessionKey))
+        return@AsyncFunction
+      }
+      mainHandler.post {
+        entry.attachedView?.setKeyModifiers(mods.ctrl, mods.alt, mods.shift)
       }
       promise.resolve(null)
     }
@@ -391,6 +405,10 @@ class GhostexNativeModule : Module() {
 
   internal fun emitFontSizeChange(sessionKey: String, fontSizeDp: Int) {
     sendEvent("onFontSizeChange", mapOf("sessionKey" to sessionKey, "fontSize" to fontSizeDp))
+  }
+
+  internal fun emitKeyModifiersConsumed(sessionKey: String) {
+    sendEvent("onKeyModifiersConsumed", mapOf("sessionKey" to sessionKey))
   }
 
   // endregion

@@ -64,6 +64,9 @@ class GhosttyTerminalView: UIView {
     /// Fired on a plain single tap that did not interact with a selection.
     var onSingleTap: (() -> Void)?
 
+    /// Fired after software-keyboard input consumes the RN accessory's one-shot modifiers.
+    var onKeyModifiersConsumed: (() -> Void)?
+
     /// Per-surface presentation overrides (font size)
     private(set) var surfacePresentationOverrides = TerminalPresentationOverrides.empty
 
@@ -206,6 +209,7 @@ class GhosttyTerminalView: UIView {
     private var fallbackHardwarePressKeys: [UInt16: Ghostty.Input.Key] = [:]
     private var fallbackHardwarePressModifiers: [UInt16: UIKeyModifierFlags] = [:]
     fileprivate var systemTextInputPresses: Set<UInt16> = []
+    private var keyModifiers: Ghostty.Input.Mods = []
 
     fileprivate struct HardwarePressResult {
         var forwardedToSystem: Set<UIPress> = []
@@ -2157,6 +2161,25 @@ class GhosttyTerminalView: UIView {
 
         let normalized = text.precomposedStringWithCanonicalMapping
         guard !normalized.isEmpty else { return }
+        if !keyModifiers.isEmpty {
+            let modifiers = consumeKeyModifiers()
+            invalidateLocalTextInputSession()
+            if normalized == "\n" || normalized == "\r" {
+                sendTerminalKey(.enter, accumulatedMods: modifiers)
+                return
+            }
+            if normalized == "\t" {
+                sendTerminalKey(.tab, accumulatedMods: modifiers)
+                return
+            }
+            guard let first = normalized.first else { return }
+            sendCharacterKey(first, mods: modifiers)
+            let remaining = String(normalized.dropFirst())
+            if !remaining.isEmpty {
+                sendTerminalInputText(remaining)
+            }
+            return
+        }
         if let key = terminalKey(forKeyCommandInput: normalized) {
             sendTerminalKey(key)
             return
@@ -2329,6 +2352,23 @@ class GhosttyTerminalView: UIView {
     }
 
     // MARK: - Terminal Key Sending (used by the module sendKey + key commands)
+
+    func setKeyModifiers(_ modifiers: Ghostty.Input.Mods) {
+        keyModifiers = modifiers
+    }
+
+    func clearKeyModifiers() {
+        keyModifiers = []
+    }
+
+    private func consumeKeyModifiers() -> Ghostty.Input.Mods {
+        let modifiers = keyModifiers
+        keyModifiers = []
+        if !modifiers.isEmpty {
+            onKeyModifiersConsumed?()
+        }
+        return modifiers
+    }
 
     func sendTerminalKey(_ key: TerminalKey, accumulatedMods: Ghostty.Input.Mods = []) {
         switch key {
@@ -2759,7 +2799,12 @@ extension GhosttyTerminalView: UIKeyInput, UITextInputTraits {
         if isNativeSelectionTextInputContext {
             guard exitNativeSelectionTextInputContextForTerminalInput() else { return }
         }
-        applyTerminalTextInputEffects(textInputModel.handleDeleteBackward())
+        if !keyModifiers.isEmpty {
+            invalidateLocalTextInputSession()
+            sendTerminalKey(.backspace, accumulatedMods: consumeKeyModifiers())
+        } else {
+            applyTerminalTextInputEffects(textInputModel.handleDeleteBackward())
+        }
     }
 
     fileprivate func consumePendingSystemTextInputHardwareKey() -> UIKey? {

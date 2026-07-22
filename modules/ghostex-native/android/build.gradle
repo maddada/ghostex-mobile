@@ -12,6 +12,12 @@ android {
     versionCode 1
     versionName "0.1.0"
   }
+  sourceSets {
+    main {
+      // Share the exact JetBrains Mono Nerd Font asset used by the iOS pod.
+      assets.srcDir project.file('../../../assets/fonts')
+    }
+  }
   lintOptions {
     abortOnError false
   }

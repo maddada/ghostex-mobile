@@ -3,14 +3,14 @@
  * - In-screen header (native nav bar hidden here), tabs bar when >1 tab,
  *   native terminal surface for the SELECTED tab only (the native registry
  *   keeps other warm entries alive across view detach), state overlays,
- *   2-row key accessory bar above the soft keyboard, floating keyboard/upload
+ *   key accessory/editor bar above the soft keyboard, floating keyboard/upload
  *   controls when the keyboard is hidden, and edge-swipe tab switching.
  * - Keyboard tracking: RN Keyboard events plus measured viewport overlap keep
  *   the terminal and accessory keys above the IME on both platforms.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +39,8 @@ import { GhostexPalette } from '../theme/palette';
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
 const HEADER_HEIGHT = 44;
+/** Keeps Android's edge-to-edge IME from grazing the bottom of the accessory pills. */
+const ANDROID_KEYBOARD_CLEARANCE = 6;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
 
@@ -234,7 +236,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top, paddingBottom: keyboardVisible ? bottomInset : 0 },
+        {
+          paddingTop: insets.top,
+          paddingBottom: keyboardVisible
+            ? bottomInset + (Platform.OS === 'android' ? ANDROID_KEYBOARD_CLEARANCE : 0)
+            : 0,
+        },
       ]}
     >
       <View style={styles.header}>
@@ -276,9 +283,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
       <View style={styles.terminalArea}>
         {activeTab !== null && (
           // Only the selected tab's view is mounted; the native registry keeps
-          // the other warm entries alive (view attach/detach is cheap).
+          // the other warm entries alive. Keep this host mounted while its
+          // sessionKey changes so closing a tab cannot race native teardown
+          // against destruction of the replacement terminal's host view.
           <GhostexTerminalView
-            key={activeTab.sessionKey}
             sessionKey={activeTab.sessionKey}
             style={styles.terminal}
             onSingleTap={() => setTapKeyboardHint(true)}

@@ -27,6 +27,8 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
 
   sendText(sessionKey: string, text: string): Promise<void>;
   sendKey(sessionKey: string, key: TerminalKey, mods?: KeyModifiers): Promise<void>;
+  /** Apply one-shot modifiers to the next key produced by the terminal's software keyboard. */
+  setKeyModifiers(sessionKey: string, mods: KeyModifiers): Promise<void>;
   setFontSize(sessionKey: string, size: number): Promise<void>;
   scrollToBottom(sessionKey: string): Promise<void>;
 

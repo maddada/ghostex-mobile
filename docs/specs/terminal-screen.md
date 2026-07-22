@@ -78,8 +78,13 @@ Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardw
 
 ### Bar
 - Fixed height **88pt**. Background opaque = theme terminal background color. Dark style always.
-- Leading cluster (spacing 8, leading inset 12): Voice button `mic.fill` (default hidden), Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), then 1×18 separator (`separator` α0.4). If no leading buttons, rows extend to leading edge.
+- Leading cluster (spacing 8, leading inset 12): text-editor toggle above Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), then a separator (`separator` α0.4).
 - Rows stack: vertical, spacing 6, fillEqually; insets top 7 / bottom 7 / trailing 10 / leading 10 (after separator) or 12.
+
+### Text editor page
+- The leading text-editor button swaps the key grid for a focused single-line composer, matching the Android Termux toolbar's alternate text-input page.
+- The keyboard Send action writes the entire buffer to the selected terminal and clears it. Sending an empty buffer writes carriage return (Enter).
+- Switching back to the key grid restores terminal keyboard focus.
 
 ### Two rows, 7 equal columns each (fixed grid, no scroll). Empty slots invisible placeholders. Max 14 items, min 1.
 
@@ -90,14 +95,14 @@ Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardw
 Labels (fixed ASCII): CTRL, ALT, Cmd, SHIFT, ESC, TAB, S-Tab, Enter, Bksp, Del, Ins, HOME, END, PGUP, PGDN; arrows are icons (arrow.up/down/left/right); F1..F12; ^C ^D ^Z ^L ^A ^E ^K ^U; Ctrl-J → "NEWLN".
 
 ### Button styling
-- Pill: height 28, radius 14, 1pt border `separator` α0.3, bg dark `white α0.08`, font system 13 semibold, color secondaryLabel, insets T4/L6/B4/R6.
-- Modifier: same but L/R insets 8, min width 40.
+- Pill: height 28, radius 14, 1pt border `separator` α0.3, bg dark `white α0.08`, font system 10 semibold for every text key, color secondaryLabel.
+- Modifier: same dimensions and font size as every other text key.
 - Icon: symbol 14 semibold, tint label, height 32, width 36, radius 16, bg dark `white α0.12`.
-- Buttons fill columns, font auto-shrink min scale 0.72.
+- Buttons fill columns without per-label font shrinking.
 
 ### Modifier latching
 - Ctrl/Alt/Cmd/Shift are toggle latches. Active look: bg systemBlue, white text, no border; 0.2s animate.
-- Non-modifier key press applies all active modifiers then resets ALL latches (one-shot sticky semantics).
+- The next non-modifier input applies all active modifiers and then resets ALL latches (one-shot sticky semantics), whether that input comes from an accessory key or the software keyboard.
 
 ### Repeat-on-hold
 - Repeatable: arrows, backspace, home, end, pageUp, pageDown.

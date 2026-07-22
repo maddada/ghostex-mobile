@@ -1,6 +1,7 @@
 package expo.modules.ghostexnative
 
 import android.content.Context
+import android.graphics.Typeface
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -30,6 +31,9 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   private var sessionKey: String? = null
   private var entry: GhostexTerminalEntry? = null
+  private var ctrlKeyActive = false
+  private var altKeyActive = false
+  private var shiftKeyActive = false
 
   private val module: GhostexNativeModule?
     get() = appContext.registry.getModule<GhostexNativeModule>()
@@ -37,6 +41,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   init {
     terminalView.setTerminalViewClient(this)
     terminalView.setTextSize(dpToPx(GhostexNativeModule.DEFAULT_FONT_SIZE_DP))
+    terminalView.setTypeface(Typeface.createFromAsset(context.assets, TERMINAL_FONT_ASSET))
     terminalView.isFocusable = true
     terminalView.isFocusableInTouchMode = true
     addView(terminalView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -46,6 +51,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   fun setSessionKey(key: String?) {
     if (key == sessionKey) return
+    clearKeyModifiers()
     detachFromEntry()
     sessionKey = key
     if (key == null) return
@@ -104,6 +110,18 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   internal fun onSessionColorsChanged() {
     terminalView.invalidate()
+  }
+
+  internal fun setKeyModifiers(ctrl: Boolean, alt: Boolean, shift: Boolean) {
+    ctrlKeyActive = ctrl
+    altKeyActive = alt
+    shiftKeyActive = shift
+  }
+
+  internal fun clearKeyModifiers() {
+    ctrlKeyActive = false
+    altKeyActive = false
+    shiftKeyActive = false
   }
 
   /** focusTerminal(sessionKey): make the terminal first responder and show the IME. */
@@ -181,15 +199,22 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   override fun onLongPress(event: MotionEvent?): Boolean = false
 
-  override fun readControlKey(): Boolean = false
+  override fun readControlKey(): Boolean = consumeModifier(ctrlKeyActive) { ctrlKeyActive = false }
 
-  override fun readAltKey(): Boolean = false
+  override fun readAltKey(): Boolean = consumeModifier(altKeyActive) { altKeyActive = false }
 
-  override fun readShiftKey(): Boolean = false
+  override fun readShiftKey(): Boolean = consumeModifier(shiftKeyActive) { shiftKeyActive = false }
 
   override fun readFnKey(): Boolean = false
 
   override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession?): Boolean = false
+
+  private inline fun consumeModifier(active: Boolean, clear: () -> Unit): Boolean {
+    if (!active) return false
+    clear()
+    sessionKey?.let { module?.emitKeyModifiersConsumed(it) }
+    return true
+  }
 
   override fun onEmulatorSet() {
     // Nothing extra: font size and session were applied during attach.
@@ -227,6 +252,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   companion object {
     private const val LOG_TAG = "GhostexTerminalView"
+    private const val TERMINAL_FONT_ASSET = "JetBrainsMonoNerdFont-Regular.ttf"
 
     /** Pinch ratchet thresholds from docs/specs/terminal-screen.md §3. */
     private const val PINCH_STEP_UP_SCALE = 1.12f

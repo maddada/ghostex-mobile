@@ -1,7 +1,7 @@
 /**
  * 2-row keyboard accessory bar (terminal-screen.md §2).
- * - Fixed 88 height, terminal-background fill, leading dismiss-keyboard
- *   cluster + 2 rows × 7 equal columns of key pills.
+ * - Fixed 88 height, terminal-background fill, leading text-editor/dismiss
+ *   controls + either 2 rows × 7 equal key pills or a Termux-style composer.
  * - Modifier latching: Ctrl/Alt/Shift toggle; the next non-modifier key sends
  *   with every latched modifier applied, then ALL latches reset (one-shot
  *   sticky semantics).
@@ -11,11 +11,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
 import { GhostexPalette } from '../../theme/palette';
-import { ArrowIcon, KeyboardDismissIcon, type ArrowDirection } from './icons';
+import { ArrowIcon, KeyboardDismissIcon, TextEditorIcon, type ArrowDirection } from './icons';
 
 export const KEY_BAR_HEIGHT = 88;
 const REPEAT_DELAY_MS = 350;
@@ -75,6 +75,8 @@ export default function TerminalKeyBar({
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
   const [latches, setLatches] = useState<LatchState>(NO_LATCHES);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editorText, setEditorText] = useState('');
   const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -90,6 +92,24 @@ export default function TerminalKeyBar({
   }, []);
 
   useEffect(() => clearRepeat, [clearRepeat]);
+
+  const clearModifiers = useCallback((): void => {
+    setLatches(NO_LATCHES);
+    void GhostexNative.setKeyModifiers(sessionKey, NO_LATCHES).catch(() => undefined);
+  }, [sessionKey]);
+
+  useEffect(() => {
+    clearModifiers();
+    setEditorVisible(false);
+    setEditorText('');
+    const subscription = GhostexNative.addListener('onKeyModifiersConsumed', (event) => {
+      if (event.sessionKey === sessionKey) setLatches(NO_LATCHES);
+    });
+    return () => {
+      subscription.remove();
+      void GhostexNative.setKeyModifiers(sessionKey, NO_LATCHES).catch(() => undefined);
+    };
+  }, [clearModifiers, sessionKey]);
 
   const sendKey = useCallback(
     (key: TerminalKey, mods: KeyModifiers): void => {
@@ -108,7 +128,7 @@ export default function TerminalKeyBar({
       alt: item.mods?.alt === true || latches.alt,
       shift: item.mods?.shift === true || latches.shift,
     };
-    setLatches(NO_LATCHES);
+    clearModifiers();
     sendKey(item.key, mods);
     if (item.repeatable === true) {
       repeatTimer.current = setTimeout(() => {
@@ -119,7 +139,32 @@ export default function TerminalKeyBar({
   };
 
   const toggleModifier = (modifier: ModifierId): void => {
-    setLatches((current) => ({ ...current, [modifier]: !current[modifier] }));
+    setLatches((current) => {
+      const next = { ...current, [modifier]: !current[modifier] };
+      void GhostexNative.setKeyModifiers(sessionKey, next).catch(() => undefined);
+      return next;
+    });
+  };
+
+  const toggleEditor = (): void => {
+    clearRepeat();
+    clearModifiers();
+    setEditorVisible((current) => {
+      if (current) {
+        setTimeout(() => {
+          void GhostexNative.focusTerminal(sessionKey).catch(() => undefined);
+        }, 0);
+      }
+      return !current;
+    });
+  };
+
+  const submitEditor = (): void => {
+    const text = editorText.length === 0 ? '\r' : editorText;
+    void GhostexNative.sendText(sessionKey, text).catch(() => {
+      // The terminal state overlay owns connection errors.
+    });
+    setEditorText('');
   };
 
   const renderItem = (item: KeyBarItem) => {
@@ -133,12 +178,7 @@ export default function TerminalKeyBar({
             style={[styles.pill, styles.modifierPill, active && styles.pillActive]}
             onPress={() => toggleModifier(item.modifier)}
           >
-            <Text
-              style={[styles.pillLabel, active && styles.pillLabelActive]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.72}
-            >
+            <Text style={[styles.pillLabel, active && styles.pillLabelActive]} numberOfLines={1}>
               {item.label}
             </Text>
           </Pressable>
@@ -156,12 +196,7 @@ export default function TerminalKeyBar({
           {item.arrow !== undefined ? (
             <ArrowIcon direction={item.arrow} size={14} color={GhostexPalette.MUTED} />
           ) : (
-            <Text
-              style={styles.pillLabel}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.72}
-            >
+            <Text style={styles.pillLabel} numberOfLines={1}>
               {item.label}
             </Text>
           )}
@@ -172,23 +207,60 @@ export default function TerminalKeyBar({
 
   return (
     <View style={styles.bar}>
-      {showDismissButton && (
-        <View style={styles.leadingCluster}>
+      <View style={styles.leadingCluster}>
+        <View style={styles.leadingButtons}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Dismiss keyboard"
-            style={styles.dismissButton}
-            onPress={onDismissKeyboard}
+            accessibilityLabel={editorVisible ? 'Show terminal keys' : 'Open text editor'}
+            accessibilityState={{ selected: editorVisible }}
+            style={[styles.leadingButton, editorVisible && styles.leadingButtonActive]}
+            onPress={toggleEditor}
           >
-            <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
+            <TextEditorIcon
+              size={16}
+              color={editorVisible ? '#FFFFFF' : GhostexPalette.FOREGROUND}
+            />
           </Pressable>
-          <View style={styles.separator} />
+          {showDismissButton && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss keyboard"
+              style={styles.leadingButton}
+              onPress={onDismissKeyboard}
+            >
+              <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.separator} />
+      </View>
+      {editorVisible ? (
+        <View style={styles.editorContainer}>
+          <TextInput
+            autoFocus
+            accessibilityLabel="Terminal text editor"
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            importantForAutofill="no"
+            placeholder="Type text to send to the terminal"
+            placeholderTextColor={GhostexPalette.MUTED}
+            returnKeyType="send"
+            selectionColor={GhostexPalette.FOREGROUND}
+            spellCheck={false}
+            style={styles.editor}
+            submitBehavior="submit"
+            value={editorText}
+            onChangeText={setEditorText}
+            onSubmitEditing={submitEditor}
+          />
+        </View>
+      ) : (
+        <View style={styles.rows}>
+          <View style={styles.row}>{ROW_1.map(renderItem)}</View>
+          <View style={styles.row}>{ROW_2.map(renderItem)}</View>
         </View>
       )}
-      <View style={[styles.rows, showDismissButton ? styles.rowsAfterSeparator : styles.rowsFlush]}>
-        <View style={styles.row}>{ROW_1.map(renderItem)}</View>
-        <View style={styles.row}>{ROW_2.map(renderItem)}</View>
-      </View>
     </View>
   );
 }
@@ -206,7 +278,12 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     gap: 8,
   },
-  dismissButton: {
+  leadingButtons: {
+    height: KEY_BAR_HEIGHT,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  leadingButton: {
     width: 36,
     height: 32,
     borderRadius: 16,
@@ -214,9 +291,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
+  leadingButtonActive: {
+    backgroundColor: MODIFIER_ACTIVE_BG,
+  },
   separator: {
     width: 1,
-    height: 18,
+    height: 60,
     backgroundColor: 'rgba(255,255,255,0.25)',
   },
   rows: {
@@ -224,19 +304,14 @@ const styles = StyleSheet.create({
     paddingTop: 7,
     paddingBottom: 7,
     paddingRight: 10,
-    gap: 6,
-  },
-  rowsAfterSeparator: {
     paddingLeft: 10,
-  },
-  rowsFlush: {
-    paddingLeft: 12,
+    gap: 6,
   },
   row: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   cell: {
     flex: 1,
@@ -246,13 +321,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
   },
   modifierPill: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
   },
   pillPressed: {
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -262,11 +337,29 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   pillLabel: {
-    fontSize: 13,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '600',
     color: GhostexPalette.MUTED,
   },
   pillLabelActive: {
     color: '#FFFFFF',
+  },
+  editorContainer: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingLeft: 10,
+    paddingRight: 12,
+  },
+  editor: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 0,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: GhostexPalette.FOREGROUND,
+    fontSize: 15,
   },
 });

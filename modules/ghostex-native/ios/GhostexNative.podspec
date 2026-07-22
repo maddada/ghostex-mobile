@@ -19,6 +19,7 @@ Pod::Spec.new do |s|
   # exclude_files is applied to EVERY attribute's globs (including
   # vendored_frameworks), so it must only match source-like files here.
   s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}']
+  s.resources = 'Fonts/JetBrainsMonoNerdFont-Regular.ttf'
 
   # -- Vendored native libraries -------------------------------------------
   # GhosttyKit is a proper xcframework (static library + Headers with a

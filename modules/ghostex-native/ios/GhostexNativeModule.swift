@@ -46,6 +46,7 @@ public class GhostexNativeModule: Module {
             "onTerminalTitle",
             "onTerminalBell",
             "onFontSizeChange",
+            "onKeyModifiersConsumed",
             "onConnectionState"
         )
 
@@ -196,6 +197,9 @@ public class GhostexNativeModule: Module {
                         "sessionKey": sessionKey,
                     ])
                 }
+                view.onKeyModifiersConsumed = { [weak self] in
+                    self?.sendEvent("onKeyModifiersConsumed", ["sessionKey": sessionKey])
+                }
                 view.onZoomAction = { [weak self, weak entry, weak view] action in
                     guard let entry, let view else { return nil }
                     let overrides = view.surfacePresentationOverrides.applyingZoom(action)
@@ -319,6 +323,8 @@ public class GhostexNativeModule: Module {
                     throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
                 }
 
+                view.clearKeyModifiers()
+
                 var ghosttyMods: Ghostty.Input.Mods = []
                 if let mods {
                     if mods.ctrl { ghosttyMods.insert(.ctrl) }
@@ -336,6 +342,21 @@ public class GhostexNativeModule: Module {
                     throw GhostexException(code: .channelFailed, reason: "Unknown key: \(key)")
                 }
                 view.sendCharacterKey(character, mods: ghosttyMods)
+            }
+        }
+
+        AsyncFunction("setKeyModifiers") { (sessionKey: String, mods: KeyModifiersRecord) async throws in
+            try await MainActor.run {
+                guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
+                      let view = entry.view else {
+                    throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
+                }
+                var ghosttyMods: Ghostty.Input.Mods = []
+                if mods.ctrl { ghosttyMods.insert(.ctrl) }
+                if mods.alt { ghosttyMods.insert(.alt) }
+                if mods.shift { ghosttyMods.insert(.shift) }
+                if mods.cmd { ghosttyMods.insert(.super) }
+                view.setKeyModifiers(ghosttyMods)
             }
         }
 
