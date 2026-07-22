@@ -159,10 +159,11 @@ class GhostexForegroundService : Service() {
     val working = rows.count { it.status == "working" }
     val attention = rows.count { it.status == "attention" || it.status == "done" }
     val parts = mutableListOf<String>()
-    parts.add(if (rows.size == 1) "1 remote terminal" else "${rows.size} remote terminals")
-    if (working > 0) parts.add("$working working")
     if (attention > 0) parts.add(if (attention == 1) "1 needs attention" else "$attention need attention")
-    if (wakeLock != null) parts.add("keeping connection awake")
+    if (working > 0) parts.add("$working working")
+    if (parts.isEmpty()) {
+      parts.add(if (rows.size == 1) "1 remote terminal" else "${rows.size} remote terminals")
+    }
     return parts.joinToString(" · ")
   }
 
