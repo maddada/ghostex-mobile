@@ -157,6 +157,37 @@ export function acknowledgeAttentionCommand(sessionId: string): string {
   );
 }
 
+/**
+ * Delayed Send: `ghostex delayed-send --session-id <id> --delay-ms <n> --json`.
+ * Arms a host-side timer on the Mac that presses Enter in the session's
+ * terminal after the delay (desktop sidebar "Delayed Send").
+ */
+export function delayedSendCommand(sessionId: string, delayMs: number): string {
+  if (!Number.isFinite(delayMs) || !Number.isInteger(delayMs) || delayMs <= 0) {
+    throw new Error('Ghostex Delayed Send delay must be a positive whole number of milliseconds.');
+  }
+  return (
+    `ghostex delayed-send --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --delay-ms ${delayMs} --json`
+  );
+}
+
+/** Cancel Delayed Send: `ghostex delayed-send --session-id <id> --cancel --json`. */
+export function cancelDelayedSendCommand(sessionId: string): string {
+  return (
+    `ghostex delayed-send --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ' --cancel --json'
+  );
+}
+
+/** Toggle Close After Done: `ghostex close-after-done --session-id <id> --json`. */
+export function closeAfterDoneCommand(sessionId: string): string {
+  return (
+    `ghostex close-after-done --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ' --json'
+  );
+}
+
 /** Close project: `ghostex remove-project --project-id <id> --json`. */
 export function removeProjectCommand(projectId: string): string {
   return `ghostex remove-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;

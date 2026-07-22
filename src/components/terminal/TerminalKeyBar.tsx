@@ -286,7 +286,7 @@ export default function TerminalKeyBar({
             multiline
             placeholder="Type text to send to the terminal"
             placeholderTextColor={GhostexPalette.MUTED}
-            selectionColor={GhostexPalette.FOREGROUND}
+            selectionColor="rgba(125,211,252,0.45)"
             spellCheck
             style={styles.editor}
             submitBehavior="newline"

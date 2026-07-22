@@ -188,6 +188,10 @@ export type GhostexSession = {
   isPinned: boolean;
   /** Current session tag ('' when untagged); values from SIDEBAR_SESSION_TAGS. */
   sessionTag: string;
+  /** Live Delayed Send countdown label ('' when no timer / emitter predates it). */
+  delayedSendRemainingLabel: string;
+  /** Close After Done armed flag (false when unarmed / emitter predates it). */
+  closeAfterDone: boolean;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
   isSleeping: boolean;
   isLive: boolean;
@@ -717,6 +721,8 @@ export function parseSession(value: unknown): GhostexSession | null {
     isFavorite: boolValue(value, 'isFavorite', false),
     isPinned: boolValue(value, 'isPinned', false),
     sessionTag: trimmedValue(value, 'sessionTag'),
+    delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
+    closeAfterDone: boolValue(value, 'closeAfterDone', false),
     isSleeping: legacySleeping && !isLive,
     isLive,
     isPrimaryTitleTerminalTitle: boolValue(value, 'isPrimaryTitleTerminalTitle', false),

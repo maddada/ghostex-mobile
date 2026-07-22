@@ -207,10 +207,17 @@ anchors to the long-pressed row):
 - **Session** (long-press): Rename, Pin/Unpin (`pin-session`), Tag as ›
   (grouped Priority/Progress/Type radio submenu with the desktop tag tints,
   check on `session.sessionTag`, tap-again clears → `tag-session`),
-  Sleep/Wake · Attach, Focus on Mac, Fork (`fork-session`, codex/claude/pi
-  only), Full reload (`reload-session`, non-browser), Copy attach command,
-  Details · Close (confirm → kill). Browser sessions lose Rename/Tag/Fork/
-  Full reload like the desktop.
+  Sleep/Wake · Attach, Copy attach command, Delayed Send (modal mirroring the
+  desktop Hours/Minutes dialog → `delayed-send --delay-ms`, Cancel Timer →
+  `--cancel`), Close After Done (toggle → `close-after-done`, check from
+  `session.closeAfterDone`), Fork (`fork-session`, codex/claude/pi only),
+  Full reload (`reload-session`, non-browser), Details · Close (confirm →
+  kill). Browser sessions lose Rename/Tag/Delayed Send/Close After Done/
+  Fork/Full reload like the desktop. Focus on Mac was removed 2026-07-22.
+  Desktop-only items intentionally absent: Pop Out Pane / Focus (AppKit pane
+  zoom), Move to New Group, Sleep/Close below (sidebar-visual-order bulk
+  actions), View 1st message / Generate Title / Copy resume (need fields the
+  mobile summary does not carry yet).
 - **Project header**: Copy Path, Add to project group › (New project group /
   swatch radio per collection / Remove from group — full-state
   `update-sidebar-project-collections --state-json` round-trip via

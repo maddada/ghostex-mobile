@@ -26,6 +26,22 @@ export function ExitGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Clock glyph (desktop IconClock) for Delayed Send / Close After Done. */
+export function ClockGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 12 7 v 5 l 3 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Circular-arrows refresh glyph. */
 export function RefreshGlyph({ size, color }: GlyphProps) {
   return (

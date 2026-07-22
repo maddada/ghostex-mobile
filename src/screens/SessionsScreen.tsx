@@ -43,6 +43,7 @@ import {
   type ProjectCardBlock,
 } from '../components/sessions/drawerModel';
 import {
+  ClockGlyph,
   CopyGlyph,
   ExitGlyph,
   GitForkGlyph,
@@ -78,13 +79,16 @@ import {
   SIDEBAR_BACKGROUND,
 } from '../components/sessions/rows';
 import SessionRow from '../components/sessions/SessionRow';
+import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import {
   addProjectCommand,
   attachCommand,
+  cancelDelayedSendCommand,
+  closeAfterDoneCommand,
   createAgentCommand,
   createChatCommand,
   createSessionCommand,
-  focusSessionCommand,
+  delayedSendCommand,
   forkSessionCommand,
   killSessionCommand,
   loginShellCommand,
@@ -150,6 +154,7 @@ type Overlay =
   | { kind: 'sessionMenu'; ctx: SessionContext; anchor: MenuAnchor; view: 'root' | 'tags' }
   | { kind: 'sessionDetails'; ctx: SessionContext }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
+  | { kind: 'delayedSend'; ctx: SessionContext }
   | { kind: 'killConfirm'; ctx: SessionContext }
   | { kind: 'copyText'; title: string; text: string }
   | { kind: 'projectMenu'; ctx: ProjectContext; anchor: MenuAnchor; view: 'root' | 'collections' }
@@ -633,11 +638,34 @@ export default function SessionsScreen({ navigation }: Props) {
     });
     items.push({
       kind: 'item',
-      key: 'focus',
-      label: 'Focus on Mac',
+      key: 'copy-attach',
+      label: 'Copy attach command',
+      icon: <CopyGlyph size={14} color={menuIconColor} />,
       onPress: () =>
-        void runSessionCommand(ctx.machine, focusSessionCommand(session.sessionId, projectId)),
+        setOverlay({
+          kind: 'copyText',
+          title: 'Copy attach command',
+          text: attachSshCommand(ctx.machine, session),
+        }),
     });
+    if (!browser) {
+      items.push({
+        kind: 'item',
+        key: 'delayed-send',
+        label: 'Delayed Send',
+        icon: <ClockGlyph size={14} color={menuIconColor} />,
+        onPress: () => setOverlay({ kind: 'delayedSend', ctx }),
+      });
+      items.push({
+        kind: 'item',
+        key: 'close-after-done',
+        label: 'Close After Done',
+        icon: <ClockGlyph size={14} color={menuIconColor} />,
+        selected: session.closeAfterDone,
+        onPress: () =>
+          void runSessionCommand(ctx.machine, closeAfterDoneCommand(session.sessionId)),
+      });
+    }
     if (FORK_AGENT_ICONS.includes(agentKey)) {
       items.push({
         kind: 'item',
@@ -662,18 +690,6 @@ export default function SessionsScreen({ navigation }: Props) {
           void runSessionCommand(ctx.machine, reloadSessionCommand(session.sessionId)),
       });
     }
-    items.push({
-      kind: 'item',
-      key: 'copy-attach',
-      label: 'Copy attach command',
-      icon: <CopyGlyph size={14} color={menuIconColor} />,
-      onPress: () =>
-        setOverlay({
-          kind: 'copyText',
-          title: 'Copy attach command',
-          text: attachSshCommand(ctx.machine, session),
-        }),
-    });
     items.push({
       kind: 'item',
       key: 'details',
@@ -1830,6 +1846,27 @@ export default function SessionsScreen({ navigation }: Props) {
           error={overlay.error}
           confirmLabel="Rename"
           onSubmit={(value) => void submitRename(overlay.ctx, value)}
+          onCancel={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'delayedSend' ? (
+        <DelayedSendDialog
+          visible
+          sessionTitle={sessionTitle(overlay.ctx.item.session)}
+          remainingLabel={overlay.ctx.item.session.delayedSendRemainingLabel}
+          onConfirm={(delayMs) =>
+            void runSessionCommand(
+              overlay.ctx.machine,
+              delayedSendCommand(overlay.ctx.item.session.sessionId, delayMs),
+            )
+          }
+          onCancelTimer={() =>
+            void runSessionCommand(
+              overlay.ctx.machine,
+              cancelDelayedSendCommand(overlay.ctx.item.session.sessionId),
+            )
+          }
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}
