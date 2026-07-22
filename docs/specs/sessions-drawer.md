@@ -141,3 +141,36 @@ displayStatus(): sleeping&&!live → "sleep"; else first actionable (attention|w
 
 ## 8. Notifications (later milestone)
 Foreground service (Android) with custom rows: bold title + muted project + status dot; sorted done→working→running; summary "{n} remote terminal(s)"; sound on transition into attention/done (setting-gated). iOS: no direct equivalent in v1.
+
+## 9. Desktop gpui-sidebar parity amendment (2026-07-22)
+
+The drawer was reworked to match the macOS gpui sidebar exactly; where this
+section conflicts with §§0-7, this section wins.
+
+- **Colored project collections**: the payload's `sidebarProjectCollections`
+  ({order, collections{id:{collectionId,title,color,collapsed,projectIds}}})
+  renders as `COLLECTION_HEADER` rows. Interleaving mirrors the desktop:
+  Chats first, then collections in definition order (member projects inside,
+  each row carrying a colored 2dp left rail), then ungrouped projects.
+- **Ordering**: in-project session order always applies the desktop display
+  layout (browser-kind first → pinned in saved order → attention > working >
+  idle → newest lastInteractionAt → stable wire order). The CLI now forwards
+  isPinned/isFavorite/kind/surface/agentName in `--mobile-summary` to make
+  this possible.
+- **First-start disclosure**: collapse state is inverted to EXPANDED sets
+  (AsyncStorage key `drawer.disclosure.v2`; projects, collections, and named
+  groups all persisted per machine). Anything not explicitly expanded renders
+  collapsed, so a fresh install shows every collection/project/group
+  collapsed. Flat-project "Show more" keeps desktop semantics (default all
+  rows; presence in the collapsed set trims to 6).
+- **Visuals** (tokens in `SidebarPalette`, ported from sidebar/styles/*.css):
+  flat contiguous session rows (no card/border, radius 0), 15dp brand-tinted
+  agent icon, 13sp/600 title (#C8CDD5), compact Last Active label, 9dp glowing
+  status dot (working #FFB454 pulsing, attention/done #95D7F6, error #FF6B6B,
+  remote-sleep grey, idle hidden), sleeping rows at 0.52 opacity. Project
+  headers are ALL-CAPS 12sp/700 letterSpacing 0.12em with folder/chat glyphs
+  and, when collapsed, working/attention/awake count pills (#F8AD07/#95D7F6/
+  #D8D8D8, awake only without action counts). Collection headers use the
+  desktop tint math (color 16% over #141414, 38% border) with a rotating
+  caret. Agent icon set includes the desktop-only codebuddy/kiro/omp/qoder/
+  rovo-dev logos with desktop brand tints.

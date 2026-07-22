@@ -66,6 +66,8 @@ export type MobileSummaryWireRoot = {
   agents?: GhostexAgentLauncher[];
   quickActionsByProject?: Record<string, GhostexQuickAction[]>;
   workspaceGroups?: GhostexWorkspaceGroups;
+  /** Server-normalized colored "Group N" overlay: {order, collections}. */
+  sidebarProjectCollections?: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,20 @@ export type GhostexSessionGroup = {
 export type GhostexWorkspaceGroups = {
   projectOrder?: string[];
   projects?: Record<string, { groups?: { groupId: string; title?: string; sessionIds?: string[] }[] }>;
+};
+
+/**
+ * Colored project collection ("Group N") mirrored from the desktop sidebar.
+ * Collections render before ungrouped projects, in this array order.
+ */
+export type GhostexProjectCollection = {
+  collectionId: string;
+  title: string;
+  /** "transparent" or "#rrggbb" (desktop SIDEBAR_PROJECT_COLLECTION_COLORS). */
+  color: string;
+  /** Desktop-side collapsed flag; mobile keeps its own local disclosure. */
+  collapsed: boolean;
+  projectIds: string[];
 };
 
 export type GhostexSessionActions = {
@@ -190,6 +206,8 @@ export type GhostexMobileSummary = {
   agents: GhostexAgentLauncher[];
   quickActionsByProject: Record<string, GhostexQuickAction[]>;
   workspaceGroups: GhostexWorkspaceGroups | null;
+  /** Ordered colored project collections; empty when the overlay is absent. */
+  projectCollections: GhostexProjectCollection[];
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not
@@ -405,6 +423,7 @@ export type AgentIconId =
   | 'antigravity-cli'
   | 'browser'
   | 'claude'
+  | 'codebuddy'
   | 'cursor-cli'
   | 'codex'
   | 'copilot'
@@ -412,16 +431,22 @@ export type AgentIconId =
   | 'gemini'
   | 'grok-build'
   | 'hermes-agent'
+  | 'kiro'
+  | 'omp'
   | 'opencode'
   | 'pi'
+  | 'qoder'
+  | 'rovo-dev'
   | 't3'
   | 'terminal';
 
+/** Brand tints mirror the desktop sidebar's AGENT_LOGO_COLORS map. */
 const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   'amp-cli': '#FFFFFF',
   'antigravity-cli': '#749BFF',
   browser: '#82B7FF',
   claude: '#D97757',
+  codebuddy: '#72D6FF',
   'cursor-cli': '#EDECEC',
   codex: '#FFFFFF',
   copilot: '#FFFFFF',
@@ -429,8 +454,12 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   gemini: '#8B9AFF',
   'grok-build': '#FFFFFF',
   'hermes-agent': '#F3C46B',
+  kiro: '#A6E3FF',
+  omp: '#C8FF62',
   opencode: '#6D96C0',
   pi: '#C8FF62',
+  qoder: '#A991FF',
+  'rovo-dev': '#4FC3A1',
   t3: '#FF6AF3',
   terminal: '#FAFAFA',
 };
@@ -466,6 +495,15 @@ const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
   'amp cli': 'amp-cli',
   hermes: 'hermes-agent',
   'hermes agent': 'hermes-agent',
+  codebuddy: 'codebuddy',
+  'code buddy': 'codebuddy',
+  kiro: 'kiro',
+  omp: 'omp',
+  'oh my pi': 'omp',
+  qoder: 'qoder',
+  rovo: 'rovo-dev',
+  'rovo dev': 'rovo-dev',
+  'rovo-dev': 'rovo-dev',
   browser: 'browser',
 };
 
@@ -817,6 +855,57 @@ function parseWorkspaceGroups(value: unknown): GhostexWorkspaceGroups | null {
   return { projectOrder, projects };
 }
 
+/**
+ * Parse the server-normalized `{order, collections}` project-collection wire
+ * shape into an ordered array (order first, then leftover collection ids),
+ * mirroring the desktop's parseSidebarProjectCollectionsFromGxserver.
+ */
+function parseProjectCollections(value: unknown): GhostexProjectCollection[] {
+  if (!isObject(value) || !isObject(value.collections)) return [];
+  const byId = value.collections as JsonObject;
+  const orderedIds: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(value.order)) {
+    for (const entry of value.order) {
+      if (typeof entry !== 'string') continue;
+      const collectionId = entry.trim();
+      if (collectionId.length === 0 || seen.has(collectionId) || !(collectionId in byId)) continue;
+      seen.add(collectionId);
+      orderedIds.push(collectionId);
+    }
+  }
+  for (const collectionId of Object.keys(byId)) {
+    if (!seen.has(collectionId)) {
+      seen.add(collectionId);
+      orderedIds.push(collectionId);
+    }
+  }
+  const collections: GhostexProjectCollection[] = [];
+  for (const collectionId of orderedIds) {
+    const entry = byId[collectionId];
+    if (!isObject(entry)) continue;
+    const projectIds: string[] = [];
+    if (Array.isArray(entry.projectIds)) {
+      for (const idValue of entry.projectIds) {
+        if (typeof idValue !== 'string') continue;
+        const projectId = idValue.trim();
+        if (projectId.length > 0 && !projectIds.includes(projectId)) projectIds.push(projectId);
+      }
+    }
+    if (projectIds.length === 0) continue;
+    const rawColor = trimmedValue(entry, 'color');
+    collections.push({
+      collectionId,
+      title: firstNonEmpty(trimmedValue(entry, 'title')) || collectionId,
+      color:
+        rawColor === 'transparent' || /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : 'transparent',
+      collapsed: boolValue(entry, 'collapsed', false),
+      projectIds,
+    });
+  }
+  return collections;
+}
+
 function normalizeRoot(root: JsonObject): GhostexMobileSummary {
   const rawSessions = Array.isArray(root.sessions) ? root.sessions : [];
   const sessions: GhostexSession[] = [];
@@ -836,6 +925,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     agents: parseAgents(root.agents),
     quickActionsByProject: parseQuickActionsByProject(root.quickActionsByProject),
     workspaceGroups,
+    projectCollections: parseProjectCollections(root.sidebarProjectCollections),
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
   };
 }

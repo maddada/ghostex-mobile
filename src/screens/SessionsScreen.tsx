@@ -5,7 +5,7 @@
  * recovery sheet, and focus-scoped 5s inventory polling.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +32,8 @@ import { useCollapseStore } from '../components/sessions/collapseStore';
 import { buildDrawerList, drawerStatusLine, type DrawerListEntry } from '../components/sessions/drawerModel';
 import { MachinesGlyph, RefreshGlyph, SettingsGlyph } from '../components/sessions/icons';
 import {
+  CollectionHeaderRow,
+  collectionRailColor,
   GroupHeaderRow,
   MachineHeaderRow,
   ProjectAgentsRow,
@@ -156,18 +158,20 @@ export default function SessionsScreen({ navigation }: Props) {
         machines,
         inventoriesByMachineId,
         collapse: {
-          collapsedProjectsByMachine: collapse.collapsedProjectsByMachine,
+          expandedProjectsByMachine: collapse.expandedProjectsByMachine,
+          expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
+          expandedGroupsByMachine: collapse.expandedGroupsByMachine,
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
-          collapsedGroupsByMachine: collapse.collapsedGroupsByMachine,
           collapsedMachineIds: collapse.collapsedMachineIds,
         },
       }),
     [
       machines,
       inventoriesByMachineId,
-      collapse.collapsedProjectsByMachine,
+      collapse.expandedProjectsByMachine,
+      collapse.expandedCollectionsByMachine,
+      collapse.expandedGroupsByMachine,
       collapse.collapsedSessionListsByMachine,
-      collapse.collapsedGroupsByMachine,
       collapse.collapsedMachineIds,
     ],
   );
@@ -581,6 +585,23 @@ export default function SessionsScreen({ navigation }: Props) {
   // Rendering.
   // -------------------------------------------------------------------------
 
+  /** Colored left rail for rows nested inside an expanded collection. */
+  const withCollectionRail = (
+    node: ReactElement,
+    collectionColor: string | undefined,
+    listKey: string,
+  ): ReactElement => {
+    if (collectionColor === undefined) return node;
+    return (
+      <View
+        key={listKey}
+        style={[styles.collectionChild, { borderLeftColor: collectionRailColor(collectionColor) }]}
+      >
+        {node}
+      </View>
+    );
+  };
+
   const renderEntry = ({ item: listEntry }: { item: DrawerListEntry }) => {
     const { item, machineId } = listEntry;
     const itemMachine = machineById(machineId);
@@ -602,10 +623,27 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => collapse.toggleMachine(item.machineId)}
           />
         );
-      case 'PROJECT_HEADER':
+      case 'COLLECTION_HEADER':
         return (
+          <CollectionHeaderRow
+            title={item.title}
+            color={item.color}
+            collapsed={item.collapsed}
+            workingCount={item.workingCount}
+            attentionCount={item.attentionCount}
+            awakeCount={item.awakeCount}
+            onPress={() => collapse.toggleCollection(machineId, item.collectionId)}
+          />
+        );
+      case 'PROJECT_HEADER':
+        return withCollectionRail(
           <ProjectHeaderRow
             title={item.title}
+            collapsed={item.collapsed}
+            isChatCollection={item.isChatCollection}
+            workingCount={item.workingCount}
+            attentionCount={item.attentionCount}
+            awakeCount={item.awakeCount}
             showMenu={!item.isChatCollection}
             onToggle={() => collapse.toggleProject(machineId, item.projectKey)}
             onCreate={() => {
@@ -630,10 +668,12 @@ export default function SessionsScreen({ navigation }: Props) {
               if (itemMachine === null) return;
               setOverlay({ kind: 'projectMenu', ctx: { machine: itemMachine, header: item } });
             }}
-          />
+          />,
+          item.collectionColor,
+          listEntry.listKey,
         );
       case 'PROJECT_AGENTS_ROW':
-        return (
+        return withCollectionRail(
           <ProjectAgentsRow
             agents={item.agents}
             quickActions={item.quickActions}
@@ -654,22 +694,30 @@ export default function SessionsScreen({ navigation }: Props) {
               if (itemMachine === null) return;
               runQuickAction(itemMachine, item.projectId, item.projectTitle, action);
             }}
-          />
+          />,
+          item.collectionColor,
+          listEntry.listKey,
         );
       case 'PROJECT_EMPTY':
-        return <ProjectEmptyRow text={item.text} />;
+        return withCollectionRail(
+          <ProjectEmptyRow text={item.text} />,
+          item.collectionColor,
+          listEntry.listKey,
+        );
       case 'GROUP_HEADER':
-        return (
+        return withCollectionRail(
           <GroupHeaderRow
             title={item.title}
             count={item.count}
             collapsed={item.collapsed}
             onPress={() => collapse.toggleGroup(machineId, item.groupCollapseKey)}
-          />
+          />,
+          item.collectionColor,
+          listEntry.listKey,
         );
       case 'SESSION': {
         const active = selectedSessionKey === attachSessionKey(machineId, item.session.sessionId);
-        return (
+        return withCollectionRail(
           <SessionRow
             session={item.session}
             active={active}
@@ -681,15 +729,20 @@ export default function SessionsScreen({ navigation }: Props) {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
               setOverlay({ kind: 'sessionMenu', ctx: { machine: itemMachine, item } });
             }}
-          />
+          />,
+          item.collectionColor,
+          listEntry.listKey,
         );
       }
       case 'SESSION_LIST_TOGGLE':
-        return (
+        return withCollectionRail(
           <SessionListToggleRow
             label={item.label}
+            collapsed={item.collapsed}
             onPress={() => collapse.toggleSessionList(machineId, item.projectKey)}
-          />
+          />,
+          item.collectionColor,
+          listEntry.listKey,
         );
       default:
         return null;
@@ -977,7 +1030,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   listContent: {
-    gap: 8,
     paddingBottom: 24,
+  },
+  collectionChild: {
+    borderLeftWidth: 2,
+    marginLeft: 2,
+    paddingLeft: 5,
   },
 });

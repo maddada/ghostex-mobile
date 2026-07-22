@@ -24,9 +24,10 @@ export type DrawerListEntry = {
 };
 
 export type DrawerCollapseInput = {
-  collapsedProjectsByMachine: Record<string, string[]>;
+  expandedProjectsByMachine: Record<string, string[]>;
+  expandedCollectionsByMachine: Record<string, string[]>;
+  expandedGroupsByMachine: Record<string, string[]>;
   collapsedSessionListsByMachine: Record<string, string[]>;
-  collapsedGroupsByMachine: Record<string, string[]>;
   collapsedMachineIds: string[];
 };
 
@@ -73,9 +74,10 @@ function machineEntries(
   const items = buildDrawerItems({
     machineId: machine.id,
     summary: inventory.summary,
-    collapsedProjectKeys: new Set(collapse.collapsedProjectsByMachine[machine.id] ?? []),
+    expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
+    expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
+    expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
     collapsedSessionListKeys: new Set(collapse.collapsedSessionListsByMachine[machine.id] ?? []),
-    collapsedGroupKeys: new Set(collapse.collapsedGroupsByMachine[machine.id] ?? []),
   });
   if (items.length === 0) {
     return [

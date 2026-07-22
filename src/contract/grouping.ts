@@ -42,6 +42,22 @@ export type MachineHeaderItem = {
   collapsed: boolean;
 };
 
+export type CollectionHeaderItem = {
+  type: 'COLLECTION_HEADER';
+  key: string;
+  machineId: string;
+  collectionId: string;
+  title: string;
+  /** "transparent" or "#rrggbb"; drives the tinted header + member rail. */
+  color: string;
+  collapsed: boolean;
+  projectCount: number;
+  sessionCount: number;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
+};
+
 export type ProjectHeaderItem = {
   type: 'PROJECT_HEADER';
   key: string;
@@ -58,6 +74,10 @@ export type ProjectHeaderItem = {
   workingCount: number;
   attentionCount: number;
   sleepingCount: number;
+  /** Awake (running terminal/browser) count for the collapsed count pills. */
+  awakeCount: number;
+  /** Set when the project renders inside a colored collection (member rail). */
+  collectionColor?: string;
 };
 
 export type ProjectAgentsRowItem = {
@@ -69,6 +89,7 @@ export type ProjectAgentsRowItem = {
   projectTitle: string;
   agents: GhostexAgentLauncher[];
   quickActions: GhostexQuickAction[];
+  collectionColor?: string;
 };
 
 export type ProjectEmptyItem = {
@@ -77,6 +98,7 @@ export type ProjectEmptyItem = {
   machineId: string;
   projectKey: string;
   text: string;
+  collectionColor?: string;
 };
 
 export type GroupHeaderItem = {
@@ -86,11 +108,12 @@ export type GroupHeaderItem = {
   projectKey: string;
   projectId: string;
   groupId: string;
-  /** Collapse key: `${projectKey}|${groupId}` (in-memory persistence). */
+  /** Collapse key: `${projectKey}|${groupId}` (persisted per machine). */
   groupCollapseKey: string;
   title: string;
   count: number;
   collapsed: boolean;
+  collectionColor?: string;
 };
 
 export type SessionItem = {
@@ -103,6 +126,7 @@ export type SessionItem = {
   projectTitle: string;
   projectPath: string;
   session: GhostexSession;
+  collectionColor?: string;
 };
 
 export type SessionListToggleItem = {
@@ -114,11 +138,13 @@ export type SessionListToggleItem = {
   collapsed: boolean;
   label: string;
   totalSessionCount: number;
+  collectionColor?: string;
 };
 
 export type DrawerItem =
   | StateCardItem
   | MachineHeaderItem
+  | CollectionHeaderItem
   | ProjectHeaderItem
   | ProjectAgentsRowItem
   | ProjectEmptyItem
@@ -185,9 +211,11 @@ function groupsForProject(summary: GhostexMobileSummary, projectId: string): Gho
 }
 
 /**
- * Legacy in-project ordering (used when the payload does NOT signal desktop
- * ordering): browser-kind first → pinned (saved order) → attention(2) >
- * working(1) > idle(0) → most recent lastInteractionAt → stable.
+ * In-project display ordering, mirroring the desktop sidebar's default
+ * "lastActivity" layout (shared/active-sessions-sort.ts): browser-kind first →
+ * pinned (saved order) → attention(2) > working(1) > idle(0) → most recent
+ * lastInteractionAt → stable. The wire order (server sortOrder) is the stable
+ * base, which matches the desktop's saved manual order.
  */
 export function compareForSidebarOrder(left: GhostexSession, right: GhostexSession): number {
   const kindDelta = sessionKindRank(left) - sessionKindRank(right);
@@ -238,23 +266,69 @@ function stableSort<T>(items: T[], compare: (a: T, b: T) => number): T[] {
 // Builder.
 // ---------------------------------------------------------------------------
 
+/**
+ * Awake mirror of the desktop's getAwakeTerminalAndBrowserCount: sessions whose
+ * lifecycle is "running" (live, not sleeping, not done/error).
+ */
+function isAwakeSession(session: GhostexSession): boolean {
+  if (!session.isLive || session.isSleeping) return false;
+  const status = displayStatus(session);
+  return status !== 'sleep' && status !== 'sleeping' && status !== 'done' && status !== 'error';
+}
+
+type SessionCounts = {
+  workingCount: number;
+  attentionCount: number;
+  sleepingCount: number;
+  awakeCount: number;
+};
+
+function countSessions(sessions: readonly GhostexSession[]): SessionCounts {
+  const counts: SessionCounts = {
+    workingCount: 0,
+    attentionCount: 0,
+    sleepingCount: 0,
+    awakeCount: 0,
+  };
+  for (const session of sessions) {
+    const status = displayStatus(session);
+    if (status === 'working') counts.workingCount++;
+    if (status === 'attention') counts.attentionCount++;
+    if (status === 'sleep' || status === 'sleeping') counts.sleepingCount++;
+    if (isAwakeSession(session)) counts.awakeCount++;
+  }
+  return counts;
+}
+
 export type DrawerBuildInput = {
   machineId: string;
   summary: GhostexMobileSummary;
-  /** Project header collapse (persisted per machine), keyed by projectKey. */
-  collapsedProjectKeys: ReadonlySet<string>;
+  /**
+   * Expanded disclosure sets (persisted per machine). Absence = collapsed, so
+   * a fresh install starts with every collection/project/group collapsed,
+   * mirroring the requested first-start state.
+   */
+  expandedProjectKeys: ReadonlySet<string>;
+  expandedCollectionIds: ReadonlySet<string>;
+  /** Named-group expansion, keyed by groupCollapseKey(). */
+  expandedGroupKeys: ReadonlySet<string>;
   /**
    * Flat-project session-list collapse (persisted per machine), keyed by
-   * projectKey. Presence = collapsed to 6 rows ("Show more" toggle).
+   * projectKey. Presence = collapsed to 6 rows ("Show more" toggle). Matches
+   * the desktop default of showing all sessions until explicitly collapsed.
    */
   collapsedSessionListKeys: ReadonlySet<string>;
-  /** Named-group collapse (in-memory), keyed by groupCollapseKey(). */
-  collapsedGroupKeys: ReadonlySet<string>;
 };
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
-  const { machineId, summary, collapsedProjectKeys, collapsedSessionListKeys, collapsedGroupKeys } =
-    input;
+  const {
+    machineId,
+    summary,
+    expandedProjectKeys,
+    expandedCollectionIds,
+    expandedGroupKeys,
+    collapsedSessionListKeys,
+  } = input;
 
   const projectById = new Map<string, GhostexProject>();
   for (const project of summary.projects) projectById.set(project.projectId, project);
@@ -276,11 +350,11 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     if (!sessionsByProjectKey.has(key)) sessionsByProjectKey.set(key, []);
   }
 
-  // In-project sorting only for legacy payloads without desktop ordering.
-  if (!summary.preserveSessionOrder) {
-    for (const [key, bucket] of sessionsByProjectKey) {
-      sessionsByProjectKey.set(key, stableSort(bucket, compareForSidebarOrder));
-    }
+  // Desktop display layout: the wire order (server sortOrder) is the stable
+  // manual base; browser-first/pinned-first/activity sorting is applied on top
+  // exactly like the gpui sidebar's default "lastActivity" mode.
+  for (const [key, bucket] of sessionsByProjectKey) {
+    sessionsByProjectKey.set(key, stableSort(bucket, compareForSidebarOrder));
   }
 
   // Project order: chats → workspaceGroups.projectOrder → projects array order
@@ -299,9 +373,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   for (const key of sessionsByProjectKey.keys()) pushKey(key);
 
   const items: DrawerItem[] = [];
-  for (const projectKey of orderedProjectKeys) {
+
+  const emitProject = (projectKey: string, collectionColor?: string): void => {
     const projectSessions = sessionsByProjectKey.get(projectKey);
-    if (projectSessions === undefined) continue;
+    if (projectSessions === undefined) return;
     const isChatCollection = projectKey === CHATS_PROJECT_KEY;
     const first = projectSessions.length > 0 ? projectSessions[0] : null;
     const project =
@@ -331,18 +406,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           ? ''
           : first.projectPath;
     const legacyGroupId = first === null ? '' : first.groupId;
+    const counts = countSessions(projectSessions);
 
-    let workingCount = 0;
-    let attentionCount = 0;
-    let sleepingCount = 0;
-    for (const session of projectSessions) {
-      const status = displayStatus(session);
-      if (status === 'working') workingCount++;
-      if (status === 'attention') attentionCount++;
-      if (status === 'sleep' || status === 'sleeping') sleepingCount++;
-    }
-
-    const collapsed = collapsedProjectKeys.has(projectKey);
+    const collapsed = !expandedProjectKeys.has(projectKey);
     items.push({
       type: 'PROJECT_HEADER',
       key: `project:${projectKey}`,
@@ -355,11 +421,13 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       isChatCollection,
       collapsed,
       sessionCount: projectSessions.length,
-      workingCount,
-      attentionCount,
-      sleepingCount,
+      workingCount: counts.workingCount,
+      attentionCount: counts.attentionCount,
+      sleepingCount: counts.sleepingCount,
+      awakeCount: counts.awakeCount,
+      collectionColor,
     });
-    if (collapsed) continue;
+    if (collapsed) return;
 
     // Agents isle: not for Chats; needs a stable projectId and content.
     const agents = summary.agents;
@@ -374,6 +442,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         projectTitle,
         agents,
         quickActions,
+        collectionColor,
       });
     }
 
@@ -384,8 +453,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         machineId,
         projectKey,
         text: SessionCopy.emptyProjectRow,
+        collectionColor,
       });
-      continue;
+      return;
     }
 
     const sessionItem = (session: GhostexSession, groupId: string): SessionItem => ({
@@ -398,6 +468,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       projectTitle,
       projectPath,
       session,
+      collectionColor,
     });
 
     const namedGroups = isChatCollection ? [] : groupsForProject(summary, projectId);
@@ -421,9 +492,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           collapsed: sessionListCollapsed,
           label: sessionListCollapsed ? SessionCopy.showMore : SessionCopy.showLess,
           totalSessionCount: projectSessions.length,
+          collectionColor,
         });
       }
-      continue;
+      return;
     }
 
     // Grouped project: ungrouped "main" sessions first, then named groups in
@@ -446,7 +518,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       }
       if (groupSessions.length === 0) continue;
       const collapseKey = groupCollapseKey(projectKey, group.groupId);
-      const groupCollapsed = collapsedGroupKeys.has(collapseKey);
+      const groupCollapsed = !expandedGroupKeys.has(collapseKey);
       items.push({
         type: 'GROUP_HEADER',
         key: `group:${collapseKey}`,
@@ -458,12 +530,66 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         title: group.title,
         count: groupSessions.length,
         collapsed: groupCollapsed,
+        collectionColor,
       });
       if (groupCollapsed) continue;
       for (const session of groupSessions) {
         items.push(sessionItem(session, group.groupId));
       }
     }
+  };
+
+  /*
+   * Top-level interleaving mirrors the desktop sidebar
+   * (buildProjectCollectionRenderItems): the Chats collection first, then
+   * colored project collections in definition order (each containing its
+   * member projects in project order), then ungrouped projects.
+   */
+  const emittedProjectKeys = new Set<string>();
+  if (orderedProjectKeys.includes(CHATS_PROJECT_KEY)) {
+    emitProject(CHATS_PROJECT_KEY);
+    emittedProjectKeys.add(CHATS_PROJECT_KEY);
+  }
+
+  for (const collection of summary.projectCollections) {
+    const memberKeys = orderedProjectKeys.filter(
+      (key) =>
+        key !== CHATS_PROJECT_KEY &&
+        key.startsWith('id:') &&
+        collection.projectIds.includes(key.slice(3)) &&
+        !emittedProjectKeys.has(key),
+    );
+    if (memberKeys.length === 0) continue;
+    const collectionSessions: GhostexSession[] = [];
+    for (const key of memberKeys) {
+      collectionSessions.push(...(sessionsByProjectKey.get(key) ?? []));
+    }
+    const counts = countSessions(collectionSessions);
+    const collectionCollapsed = !expandedCollectionIds.has(collection.collectionId);
+    items.push({
+      type: 'COLLECTION_HEADER',
+      key: `collection:${collection.collectionId}`,
+      machineId,
+      collectionId: collection.collectionId,
+      title: collection.title,
+      color: collection.color,
+      collapsed: collectionCollapsed,
+      projectCount: memberKeys.length,
+      sessionCount: collectionSessions.length,
+      workingCount: counts.workingCount,
+      attentionCount: counts.attentionCount,
+      awakeCount: counts.awakeCount,
+    });
+    for (const key of memberKeys) emittedProjectKeys.add(key);
+    if (collectionCollapsed) continue;
+    for (const key of memberKeys) {
+      emitProject(key, collection.color);
+    }
+  }
+
+  for (const projectKey of orderedProjectKeys) {
+    if (emittedProjectKeys.has(projectKey)) continue;
+    emitProject(projectKey);
   }
   return items;
 }

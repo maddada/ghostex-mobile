@@ -1,131 +1,163 @@
 /**
- * Drawer disclosure state (sessions-drawer.md §3):
- * - Project-header collapse and flat-project session-list collapse are
- *   persisted per machine (AsyncStorage).
- * - Named-group collapse and machine-section collapse are in-memory only.
- * All sets default to empty = expanded, mirroring the Android reference.
+ * Drawer disclosure state.
+ * Matching the desktop gpui sidebar request: on first start EVERYTHING
+ * (collections, projects, named groups) is collapsed, so the store tracks
+ * EXPANDED sets — absence means collapsed. Projects, collections, and named
+ * groups are persisted per machine (AsyncStorage, v2 key); the flat-project
+ * "Show more" collapse keeps desktop semantics (default expanded, presence =
+ * collapsed to 6 rows). Machine-section collapse stays in-memory only.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-const DISCLOSURE_STORAGE_KEY = 'drawer.disclosure.v1';
+const DISCLOSURE_STORAGE_KEY = 'drawer.disclosure.v2';
 
-type PersistedDisclosure = Record<string, { projects: string[]; sessionLists: string[] }>;
+type PersistedMachineDisclosure = {
+  expandedProjects: string[];
+  expandedCollections: string[];
+  expandedGroups: string[];
+  collapsedSessionLists: string[];
+};
+
+type PersistedDisclosure = Record<string, PersistedMachineDisclosure>;
 
 function toggled(list: string[], key: string): string[] {
   return list.includes(key) ? list.filter((entry) => entry !== key) : [...list, key];
 }
 
-function isPersistedDisclosure(value: unknown): value is PersistedDisclosure {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  return Object.values(value).every(
-    (entry) =>
-      typeof entry === 'object' &&
-      entry !== null &&
-      Array.isArray((entry as { projects?: unknown }).projects) &&
-      Array.isArray((entry as { sessionLists?: unknown }).sessionLists),
-  );
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
 type CollapseState = {
   hydrated: boolean;
-  /** Persisted per machine: collapsed PROJECT_HEADER projectKeys. */
-  collapsedProjectsByMachine: Record<string, string[]>;
+  /** Persisted per machine: expanded PROJECT_HEADER projectKeys. */
+  expandedProjectsByMachine: Record<string, string[]>;
+  /** Persisted per machine: expanded COLLECTION_HEADER collectionIds. */
+  expandedCollectionsByMachine: Record<string, string[]>;
+  /** Persisted per machine: expanded named-group collapse keys. */
+  expandedGroupsByMachine: Record<string, string[]>;
   /** Persisted per machine: flat projects collapsed to 6 rows ("Show more"). */
   collapsedSessionListsByMachine: Record<string, string[]>;
-  /** In-memory per machine: collapsed named-group collapse keys. */
-  collapsedGroupsByMachine: Record<string, string[]>;
   /** In-memory: collapsed machine section ids (multi-machine drawer). */
   collapsedMachineIds: string[];
 
   hydrate: () => Promise<void>;
   toggleProject: (machineId: string, projectKey: string) => void;
-  toggleSessionList: (machineId: string, projectKey: string) => void;
+  toggleCollection: (machineId: string, collectionId: string) => void;
   toggleGroup: (machineId: string, groupCollapseKey: string) => void;
+  toggleSessionList: (machineId: string, projectKey: string) => void;
   toggleMachine: (machineId: string) => void;
 };
 
 export const useCollapseStore = create<CollapseState>()((set, get) => {
   const persist = (): void => {
-    const { collapsedProjectsByMachine, collapsedSessionListsByMachine } = get();
+    const {
+      expandedProjectsByMachine,
+      expandedCollectionsByMachine,
+      expandedGroupsByMachine,
+      collapsedSessionListsByMachine,
+    } = get();
     const persisted: PersistedDisclosure = {};
     const machineIds = new Set([
-      ...Object.keys(collapsedProjectsByMachine),
+      ...Object.keys(expandedProjectsByMachine),
+      ...Object.keys(expandedCollectionsByMachine),
+      ...Object.keys(expandedGroupsByMachine),
       ...Object.keys(collapsedSessionListsByMachine),
     ]);
     for (const machineId of machineIds) {
       persisted[machineId] = {
-        projects: collapsedProjectsByMachine[machineId] ?? [],
-        sessionLists: collapsedSessionListsByMachine[machineId] ?? [],
+        expandedProjects: expandedProjectsByMachine[machineId] ?? [],
+        expandedCollections: expandedCollectionsByMachine[machineId] ?? [],
+        expandedGroups: expandedGroupsByMachine[machineId] ?? [],
+        collapsedSessionLists: collapsedSessionListsByMachine[machineId] ?? [],
       };
     }
     void AsyncStorage.setItem(DISCLOSURE_STORAGE_KEY, JSON.stringify(persisted));
   };
 
+  const toggleIn = (
+    field:
+      | 'expandedProjectsByMachine'
+      | 'expandedCollectionsByMachine'
+      | 'expandedGroupsByMachine'
+      | 'collapsedSessionListsByMachine',
+    machineId: string,
+    key: string,
+  ): void => {
+    const byMachine = get()[field];
+    set({
+      [field]: {
+        ...byMachine,
+        [machineId]: toggled(byMachine[machineId] ?? [], key),
+      },
+    } as Partial<CollapseState>);
+    persist();
+  };
+
   return {
     hydrated: false,
-    collapsedProjectsByMachine: {},
+    expandedProjectsByMachine: {},
+    expandedCollectionsByMachine: {},
+    expandedGroupsByMachine: {},
     collapsedSessionListsByMachine: {},
-    collapsedGroupsByMachine: {},
     collapsedMachineIds: [],
 
     hydrate: async () => {
       if (get().hydrated) return;
-      let projects: Record<string, string[]> = {};
-      let sessionLists: Record<string, string[]> = {};
+      let expandedProjects: Record<string, string[]> = {};
+      let expandedCollections: Record<string, string[]> = {};
+      let expandedGroups: Record<string, string[]> = {};
+      let collapsedSessionLists: Record<string, string[]> = {};
       try {
         const raw = await AsyncStorage.getItem(DISCLOSURE_STORAGE_KEY);
         if (raw !== null) {
           const parsed: unknown = JSON.parse(raw);
-          if (isPersistedDisclosure(parsed)) {
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
             for (const [machineId, entry] of Object.entries(parsed)) {
-              projects = { ...projects, [machineId]: entry.projects };
-              sessionLists = { ...sessionLists, [machineId]: entry.sessionLists };
+              if (typeof entry !== 'object' || entry === null) continue;
+              const record = entry as Partial<PersistedMachineDisclosure>;
+              expandedProjects = {
+                ...expandedProjects,
+                [machineId]: stringArray(record.expandedProjects),
+              };
+              expandedCollections = {
+                ...expandedCollections,
+                [machineId]: stringArray(record.expandedCollections),
+              };
+              expandedGroups = { ...expandedGroups, [machineId]: stringArray(record.expandedGroups) };
+              collapsedSessionLists = {
+                ...collapsedSessionLists,
+                [machineId]: stringArray(record.collapsedSessionLists),
+              };
             }
           }
         }
       } catch {
-        // Corrupt disclosure state falls back to everything expanded.
+        // Corrupt disclosure state falls back to everything collapsed.
       }
       set({
         hydrated: true,
-        collapsedProjectsByMachine: projects,
-        collapsedSessionListsByMachine: sessionLists,
+        expandedProjectsByMachine: expandedProjects,
+        expandedCollectionsByMachine: expandedCollections,
+        expandedGroupsByMachine: expandedGroups,
+        collapsedSessionListsByMachine: collapsedSessionLists,
       });
     },
 
-    toggleProject: (machineId, projectKey) => {
-      const byMachine = get().collapsedProjectsByMachine;
-      set({
-        collapsedProjectsByMachine: {
-          ...byMachine,
-          [machineId]: toggled(byMachine[machineId] ?? [], projectKey),
-        },
-      });
-      persist();
-    },
+    toggleProject: (machineId, projectKey) =>
+      toggleIn('expandedProjectsByMachine', machineId, projectKey),
 
-    toggleSessionList: (machineId, projectKey) => {
-      const byMachine = get().collapsedSessionListsByMachine;
-      set({
-        collapsedSessionListsByMachine: {
-          ...byMachine,
-          [machineId]: toggled(byMachine[machineId] ?? [], projectKey),
-        },
-      });
-      persist();
-    },
+    toggleCollection: (machineId, collectionId) =>
+      toggleIn('expandedCollectionsByMachine', machineId, collectionId),
 
-    toggleGroup: (machineId, groupCollapseKey) => {
-      const byMachine = get().collapsedGroupsByMachine;
-      set({
-        collapsedGroupsByMachine: {
-          ...byMachine,
-          [machineId]: toggled(byMachine[machineId] ?? [], groupCollapseKey),
-        },
-      });
-    },
+    toggleGroup: (machineId, groupCollapseKey) =>
+      toggleIn('expandedGroupsByMachine', machineId, groupCollapseKey),
+
+    toggleSessionList: (machineId, projectKey) =>
+      toggleIn('collapsedSessionListsByMachine', machineId, projectKey),
 
     toggleMachine: (machineId) => {
       set({ collapsedMachineIds: toggled(get().collapsedMachineIds, machineId) });

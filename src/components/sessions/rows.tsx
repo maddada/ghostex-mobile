@@ -1,7 +1,8 @@
 /**
- * Non-session drawer row renderers (sessions-drawer.md §2):
- * MACHINE_HEADER, PROJECT_HEADER, PROJECT_AGENTS_ROW, PROJECT_EMPTY,
- * GROUP_HEADER, SESSION_LIST_TOGGLE. Sizes/paddings quoted from the spec.
+ * Non-session drawer row renderers, styled after the desktop gpui sidebar
+ * (sidebar/styles/groups.css): MACHINE_HEADER, COLLECTION_HEADER,
+ * PROJECT_HEADER, PROJECT_AGENTS_ROW, PROJECT_EMPTY, GROUP_HEADER,
+ * SESSION_LIST_TOGGLE.
  */
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -13,8 +14,106 @@ import {
   type GhostexAgentLauncher,
   type GhostexQuickAction,
 } from '../../contract/mobileSummary';
-import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
-import { MoreGlyph, PlusGlyph } from './icons';
+import {
+  GhostexPalette,
+  GhostexRadii,
+  GhostexStrokeWidth,
+  mixHexColors,
+  SidebarPalette,
+} from '../../theme/palette';
+import {
+  CaretRightGlyph,
+  ChevronDownGlyph,
+  FolderGlyph,
+  FolderOpenGlyph,
+  MessageCircleGlyph,
+  MoreGlyph,
+  PlusGlyph,
+} from './icons';
+
+/** Left rail color for rows inside a colored collection (desktop 72% mix). */
+export function collectionRailColor(color: string): string {
+  if (color === 'transparent') return 'rgba(255,255,255,0.18)';
+  return mixHexColors(color, SidebarPalette.COLLECTION_SURFACE, 72);
+}
+
+// ---------------------------------------------------------------------------
+// Collapsed status-count pills (desktop .group-collapsed-status-count):
+// 6px glowing dot + 10sp weight-850 tabular count. Working (amber) first, then
+// attention (blue); awake (grey) only when there is no working/attention.
+// ---------------------------------------------------------------------------
+
+function StatusCountPill({ count, color, dim }: { count: number; color: string; dim?: boolean }) {
+  return (
+    <View style={[pillStyles.pill, dim === true ? pillStyles.pillDim : null]}>
+      <View style={[pillStyles.dotHalo, { backgroundColor: `${color}1F` }]}>
+        <View style={[pillStyles.dot, { backgroundColor: color }]} />
+      </View>
+      <Text style={[pillStyles.count, { color }]}>{count}</Text>
+    </View>
+  );
+}
+
+export function StatusCountPills({
+  workingCount,
+  attentionCount,
+  awakeCount,
+}: {
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
+}) {
+  const hasActionStatus = workingCount > 0 || attentionCount > 0;
+  if (!hasActionStatus && awakeCount === 0) return null;
+  return (
+    <View style={pillStyles.cluster}>
+      {workingCount > 0 ? (
+        <StatusCountPill count={workingCount} color={SidebarPalette.PILL_WORKING} />
+      ) : null}
+      {attentionCount > 0 ? (
+        <StatusCountPill count={attentionCount} color={SidebarPalette.PILL_ATTENTION} />
+      ) : null}
+      {!hasActionStatus && awakeCount > 0 ? (
+        <StatusCountPill count={awakeCount} color={SidebarPalette.PILL_AWAKE} dim />
+      ) : null}
+    </View>
+  );
+}
+
+const pillStyles = StyleSheet.create({
+  cluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginStart: 'auto',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  pillDim: {
+    opacity: 0.7,
+  },
+  dotHalo: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  count: {
+    fontSize: 10,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+    lineHeight: 12,
+  },
+});
 
 // ---------------------------------------------------------------------------
 // MACHINE_HEADER: muted 12sp bold ALL-CAPS letterSpacing 0.06em, padding
@@ -57,42 +156,156 @@ const machineHeaderStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// PROJECT_HEADER: padding 6/14/6/6, minHeight 52; title 15sp bold weight 1;
-// "+" 32×32 pill (bg BACKGROUND, BORDER stroke); ⋮ 32×32 pill (hidden for
-// Chats); row tap toggles expand/collapse.
+// COLLECTION_HEADER (desktop .project-collection-header): 30dp rounded header
+// tinted with the collection color (16% over #141414, 38% border), caret that
+// rotates when expanded, 11sp weight-650 title, collapsed count pills.
+// ---------------------------------------------------------------------------
+
+export function CollectionHeaderRow({
+  title,
+  color,
+  collapsed,
+  workingCount,
+  attentionCount,
+  awakeCount,
+  onPress,
+}: {
+  title: string;
+  color: string;
+  collapsed: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
+  onPress: () => void;
+}) {
+  const hasColor = color !== 'transparent';
+  const background = hasColor
+    ? mixHexColors(color, SidebarPalette.COLLECTION_SURFACE, 16)
+    : SidebarPalette.COLLECTION_SURFACE;
+  const borderColor = hasColor ? `${color}61` : 'rgba(255,255,255,0.11)';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
+      style={[collectionStyles.header, { backgroundColor: background, borderColor }]}
+      onPress={onPress}
+    >
+      <View style={collectionStyles.caret}>
+        <CaretRightGlyph size={14} color={SidebarPalette.FOREGROUND} rotated={!collapsed} />
+      </View>
+      <Text style={collectionStyles.title} numberOfLines={1}>
+        {title}
+      </Text>
+      {collapsed ? (
+        <StatusCountPills
+          workingCount={workingCount}
+          attentionCount={attentionCount}
+          awakeCount={awakeCount}
+        />
+      ) : null}
+    </Pressable>
+  );
+}
+
+const collectionStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 34,
+    marginTop: 3,
+    marginBottom: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingLeft: 2,
+    paddingRight: 8,
+  },
+  caret: {
+    width: 20,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    flexShrink: 1,
+    color: SidebarPalette.FOREGROUND,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.28,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// PROJECT_HEADER (desktop .group-head): leading folder (open/closed; chat
+// bubble for Chats), ALL-CAPS 12sp weight-700 letterSpacing 0.12em title,
+// collapsed status-count pills, compact create/menu buttons.
 // ---------------------------------------------------------------------------
 
 export function ProjectHeaderRow({
   title,
+  collapsed,
+  isChatCollection,
+  workingCount,
+  attentionCount,
+  awakeCount,
   showMenu,
   onToggle,
   onCreate,
   onMenu,
 }: {
   title: string;
+  collapsed: boolean;
+  isChatCollection: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
   showMenu: boolean;
   onToggle: () => void;
   onCreate: () => void;
   onMenu: () => void;
 }) {
+  const iconColor = SidebarPalette.GROUP_TITLE;
   return (
     <Pressable accessibilityRole="button" style={projectHeaderStyles.row} onPress={onToggle}>
+      <View style={projectHeaderStyles.leadingIcon}>
+        {isChatCollection ? (
+          <MessageCircleGlyph size={15} color={iconColor} />
+        ) : collapsed ? (
+          <FolderGlyph size={15} color={iconColor} />
+        ) : (
+          <FolderOpenGlyph size={15} color={iconColor} />
+        )}
+      </View>
       <Text style={projectHeaderStyles.title} numberOfLines={1}>
-        {title}
+        {title.toUpperCase()}
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Create a session in ${title}`}
-        style={projectHeaderStyles.pill}
-        onPress={onCreate}
-      >
-        <PlusGlyph size={16} color={GhostexPalette.FOREGROUND} />
-      </Pressable>
-      {showMenu ? (
-        <Pressable accessibilityRole="button" style={projectHeaderStyles.pill} onPress={onMenu}>
-          <MoreGlyph size={16} color={GhostexPalette.FOREGROUND} />
-        </Pressable>
+      {collapsed ? (
+        <StatusCountPills
+          workingCount={workingCount}
+          attentionCount={attentionCount}
+          awakeCount={awakeCount}
+        />
       ) : null}
+      <View style={projectHeaderStyles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Create a session in ${title}`}
+          style={projectHeaderStyles.actionButton}
+          onPress={onCreate}
+        >
+          <PlusGlyph size={14} color={SidebarPalette.MUTED} />
+        </Pressable>
+        {showMenu ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${title} project menu`}
+            style={projectHeaderStyles.actionButton}
+            onPress={onMenu}
+          >
+            <MoreGlyph size={14} color={SidebarPalette.MUTED} />
+          </Pressable>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -102,25 +315,36 @@ const projectHeaderStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 6,
-    paddingTop: 14,
-    paddingRight: 6,
-    paddingBottom: 6,
-    minHeight: 52,
-    gap: 8,
+    paddingRight: 2,
+    paddingTop: 8,
+    paddingBottom: 4,
+    minHeight: 40,
+    gap: 6,
+  },
+  leadingIcon: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    flex: 1,
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 15,
-    fontWeight: 'bold',
+    flexShrink: 1,
+    color: SidebarPalette.GROUP_TITLE,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.44,
+    lineHeight: 14,
   },
-  pill: {
-    width: 32,
-    height: 32,
-    borderRadius: GhostexRadii.pill,
-    backgroundColor: GhostexPalette.BACKGROUND,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginStart: 'auto',
+    gap: 2,
+  },
+  actionButton: {
+    width: 30,
+    height: 30,
+    borderRadius: GhostexRadii.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -196,7 +420,7 @@ const agentsRowStyles = StyleSheet.create({
   content: {
     gap: 6,
     paddingHorizontal: 2,
-    paddingBottom: 4,
+    paddingVertical: 4,
   },
   chip: {
     flexDirection: 'row',
@@ -211,7 +435,7 @@ const agentsRowStyles = StyleSheet.create({
     borderColor: GhostexPalette.BORDER,
   },
   chipLabel: {
-    color: GhostexPalette.FOREGROUND,
+    color: SidebarPalette.FOREGROUND,
     fontSize: 12,
   },
 });
@@ -234,14 +458,14 @@ const emptyStyles = StyleSheet.create({
     paddingVertical: 4,
   },
   text: {
-    color: GhostexPalette.MUTED,
+    color: SidebarPalette.MUTED,
     fontSize: 12,
   },
 });
 
 // ---------------------------------------------------------------------------
-// GROUP_HEADER: muted 13sp bold, padding 14/10/12/4; "{title}" or
-// "{title} ({count})" when collapsed; tap toggles (in-memory).
+// GROUP_HEADER (named workspace session group): caret + muted 12sp bold title,
+// "(count)" suffix when collapsed.
 // ---------------------------------------------------------------------------
 
 export function GroupHeaderRow({
@@ -257,6 +481,7 @@ export function GroupHeaderRow({
 }) {
   return (
     <Pressable accessibilityRole="button" style={groupHeaderStyles.row} onPress={onPress}>
+      <CaretRightGlyph size={12} color={SidebarPalette.MUTED} rotated={!collapsed} />
       <Text style={groupHeaderStyles.title} numberOfLines={1}>
         {collapsed ? `${title} (${count})` : title}
       </Text>
@@ -266,25 +491,40 @@ export function GroupHeaderRow({
 
 const groupHeaderStyles = StyleSheet.create({
   row: {
-    paddingLeft: 14,
-    paddingTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingLeft: 10,
+    paddingTop: 8,
     paddingRight: 12,
     paddingBottom: 4,
+    minHeight: 32,
   },
   title: {
-    color: GhostexPalette.MUTED,
-    fontSize: 13,
-    fontWeight: 'bold',
+    flexShrink: 1,
+    color: SidebarPalette.MUTED,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
 });
 
 // ---------------------------------------------------------------------------
-// SESSION_LIST_TOGGLE: muted 13sp "Show more"/"Show less".
+// SESSION_LIST_TOGGLE: muted 12sp "Show more"/"Show less" reveal row.
 // ---------------------------------------------------------------------------
 
-export function SessionListToggleRow({ label, onPress }: { label: string; onPress: () => void }) {
+export function SessionListToggleRow({
+  label,
+  collapsed,
+  onPress,
+}: {
+  label: string;
+  collapsed: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable accessibilityRole="button" style={toggleStyles.row} onPress={onPress}>
+      <ChevronDownGlyph size={13} color={SidebarPalette.MUTED} rotated={!collapsed} />
       <Text style={toggleStyles.label}>{label}</Text>
     </Pressable>
   );
@@ -292,13 +532,16 @@ export function SessionListToggleRow({ label, onPress }: { label: string; onPres
 
 const toggleStyles = StyleSheet.create({
   row: {
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    minHeight: 36,
-    justifyContent: 'center',
+    minHeight: 34,
   },
   label: {
-    color: GhostexPalette.MUTED,
-    fontSize: 13,
+    color: SidebarPalette.MUTED,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
