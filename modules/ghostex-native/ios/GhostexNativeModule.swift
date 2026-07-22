@@ -26,6 +26,9 @@ struct OpenTerminalOptionsRecord: Record {
     @Field var command: String?
     @Field var termType: String?
     @Field var fontSize: Double?
+    /// True for `ghostex attach` (zmx-backed) sessions. The Android module runs its
+    /// post-attach viewport refresh off this; iOS currently refreshes from JS.
+    @Field var zmxBacked: Bool = false
 }
 
 struct KeyModifiersRecord: Record {

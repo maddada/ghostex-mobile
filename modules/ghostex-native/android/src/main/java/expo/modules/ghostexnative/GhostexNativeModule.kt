@@ -384,7 +384,7 @@ class GhostexNativeModule : Module() {
 
     val fontSize = opts.fontSize?.roundToInt()?.coerceIn(MIN_FONT_SIZE_DP, MAX_FONT_SIZE_DP)
       ?: DEFAULT_FONT_SIZE_DP
-    val entry = GhostexTerminalEntry(sessionKey, machineId, fontSize)
+    val entry = GhostexTerminalEntry(sessionKey, machineId, fontSize, opts.zmxBacked)
     emitTerminalState(sessionKey, "opening", null, null)
 
     val attachProcess = GhostexSshAttachProcess(

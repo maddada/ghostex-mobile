@@ -2,9 +2,12 @@ package expo.modules.ghostexnative
 
 import android.content.Context
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import com.termux.terminal.TerminalSession
 import com.termux.view.GhostexTerminalViewBridge
@@ -28,6 +31,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   private val onSingleTap by EventDispatcher()
 
   internal val terminalView = TerminalView(context, null)
+
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   private var sessionKey: String? = null
   private var entry: GhostexTerminalEntry? = null
@@ -83,6 +88,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     terminalView.setTextSize(dpToPx(candidate.fontSizeDp))
     terminalView.attachSession(session)
     terminalView.invalidate()
+    refreshZmxViewportOnceAfterSessionSwitch(candidate, session, 1)
   }
 
   /** Detach without killing the warm entry (view unmount / sessionKey change). */
@@ -161,6 +167,86 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
     imm?.hideSoftInputFromWindow(terminalView.windowToken, 0)
     terminalView.clearFocus()
+  }
+
+  // endregion
+
+  // region zmx post-attach viewport refresh (ported from the Termux fork's
+  // GhostexAndroidController: retry until the attached terminal is visible and
+  // has rendered remote output, wait ~2s, then force a size update and send the
+  // private ZMX redraw OSC plus a PageUp/PageDown nudge)
+
+  private fun shouldRefreshAfterSessionSwitch(
+    candidate: GhostexTerminalEntry,
+    session: TerminalSession
+  ): Boolean = candidate.zmxBacked && session.isRunning
+
+  private fun refreshZmxViewportOnceAfterSessionSwitch(
+    candidate: GhostexTerminalEntry,
+    session: TerminalSession,
+    attempt: Int
+  ) {
+    if (!shouldRefreshAfterSessionSwitch(candidate, session)) return
+    mainHandler.postDelayed({
+      if (entry !== candidate || !shouldRefreshAfterSessionSwitch(candidate, session)) {
+        return@postDelayed
+      }
+      if (!isZmxAttachVisibleForDelayedRefresh(session)) {
+        if (attempt < GhostexZmxViewportRefresh.MAX_ATTACH_VISIBLE_ATTEMPTS) {
+          refreshZmxViewportOnceAfterSessionSwitch(candidate, session, attempt + 1)
+        }
+        return@postDelayed
+      }
+      sendZmxViewportRefreshAfterVisibleAttach(candidate, session)
+    }, GhostexZmxViewportRefresh.ATTACH_VISIBLE_RETRY_DELAY_MS)
+  }
+
+  private fun sendZmxViewportRefreshAfterVisibleAttach(
+    candidate: GhostexTerminalEntry,
+    session: TerminalSession
+  ) {
+    mainHandler.postDelayed({
+      if (entry !== candidate ||
+        !shouldRefreshAfterSessionSwitch(candidate, session) ||
+        !isZmxAttachVisibleForDelayedRefresh(session)
+      ) {
+        return@postDelayed
+      }
+      terminalView.updateSize()
+      session.write(GhostexZmxViewportRefresh.sequence())
+      sendTerminalPageUpPageDownNudge(session)
+    }, GhostexZmxViewportRefresh.POST_ATTACH_REFRESH_DELAY_MS)
+  }
+
+  private fun sendTerminalPageUpPageDownNudge(session: TerminalSession) {
+    val emulator = session.emulator
+    val cursorApplicationMode = emulator != null && emulator.isCursorKeysApplicationMode
+    val keypadApplicationMode = emulator != null && emulator.isKeypadApplicationMode
+    val pageUp = GhostexZmxViewportRefresh.pageUpSequence(cursorApplicationMode, keypadApplicationMode)
+    val pageDown = GhostexZmxViewportRefresh.pageDownSequence(cursorApplicationMode, keypadApplicationMode)
+    if (pageUp != null) session.write(pageUp)
+    if (pageDown != null) session.write(pageDown)
+  }
+
+  private fun isZmxAttachVisibleForDelayedRefresh(session: TerminalSession): Boolean {
+    val emulator = session.emulator
+    val terminalWidth = terminalView.width
+    val terminalHeight = terminalView.height
+    val terminalViewReady =
+      GhostexZmxViewportRefresh.isTerminalViewReadyForRefresh(terminalWidth, terminalHeight)
+    return GhostexZmxViewportRefresh.isAttachVisibleForDelayedRefresh(
+      terminalWidth,
+      terminalHeight,
+      terminalView.isShown,
+      windowVisibility == View.VISIBLE,
+      emulator != null,
+      terminalViewReady && hasRenderedTerminalOutput(session)
+    )
+  }
+
+  private fun hasRenderedTerminalOutput(session: TerminalSession): Boolean {
+    val emulator = session.emulator ?: return false
+    return GhostexZmxViewportRefresh.hasVisibleTerminalContent(emulator.screen.transcriptText)
   }
 
   // endregion

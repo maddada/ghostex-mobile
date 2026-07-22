@@ -20,6 +20,13 @@ export type OpenTerminalOptions = {
   termType?: string;
   /** Initial font size in points (iOS) / sp (Android). */
   fontSize?: number;
+  /**
+   * True for `ghostex attach` (zmx-backed) sessions. On Android the native
+   * module runs the Termux-fork post-attach viewport refresh (visible-attach
+   * retry loop → size update → ZMX redraw OSC → PageUp/PageDown nudge); iOS
+   * still refreshes from JS.
+   */
+  zmxBacked?: boolean;
 };
 
 export type TerminalKey =

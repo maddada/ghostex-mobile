@@ -15,7 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class GhostexTerminalEntry(
   val sessionKey: String,
   val machineId: String,
-  @Volatile var fontSizeDp: Int
+  @Volatile var fontSizeDp: Int,
+  /** zmx-backed (`ghostex attach`) sessions get the post-attach viewport refresh. */
+  val zmxBacked: Boolean = false
 ) {
   /** Set on the main thread right after construction in openTerminal. */
   @Volatile

@@ -10,6 +10,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -20,8 +21,15 @@ import { useMachinesStore } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
 
 export const MAX_WARM_SESSIONS = 7;
-/** zmx viewport refresh OSC, sent once per attach ~2s after first open. */
+/**
+ * zmx viewport refresh, iOS-only JS path: redraw OSC + PageUp/PageDown nudge
+ * (the old VVTerm fork's postAttachNudgeSequence), sent once per attach ~2s
+ * after first open. Android runs the Termux fork's visibility-gated refresh
+ * natively in GhostexTerminalView (driven by the openTerminal zmxBacked flag),
+ * so the JS timer must not fire there.
+ */
 export const ZMX_REFRESH_OSC = '\x1b]1337;ZMX_REFRESH\x07';
+export const ZMX_POST_ATTACH_NUDGE = `${ZMX_REFRESH_OSC}\x1b[5~\x1b[6~`;
 export const ZMX_REFRESH_DELAY_MS = 2000;
 
 const FONT_SIZES_STORAGE_KEY = 'terminal.fontSizes.v1';
@@ -66,7 +74,7 @@ function scheduleZmxRefresh(sessionKey: string): void {
     zmxRefreshTimers.delete(sessionKey);
     if (zmxRefreshSent.has(sessionKey)) return;
     zmxRefreshSent.add(sessionKey);
-    void GhostexNative.sendText(sessionKey, ZMX_REFRESH_OSC).catch(() => {
+    void GhostexNative.sendText(sessionKey, ZMX_POST_ATTACH_NUDGE).catch(() => {
       // The entry may have closed while the timer was pending.
     });
   }, ZMX_REFRESH_DELAY_MS);
@@ -159,8 +167,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     await evictExcessWarmEntries();
     try {
       await ensureConnected(machine);
-      const opts: { command?: string; fontSize?: number } = {
+      const opts: { command?: string; fontSize?: number; zmxBacked?: boolean } = {
         fontSize: initialFontSize(tab.sessionKey),
+        zmxBacked: tab.kind === 'attach',
       };
       if (command !== null) opts.command = command;
       await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
@@ -287,8 +296,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       touchWarm(sessionKey);
       try {
         await ensureConnected(target);
-        const opts: { command?: string; fontSize?: number } = {
+        const opts: { command?: string; fontSize?: number; zmxBacked?: boolean } = {
           fontSize: initialFontSize(sessionKey),
+          zmxBacked: tab.kind === 'attach',
         };
         if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
           opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
@@ -331,7 +341,7 @@ export function initTerminalEvents(): void {
           : entry,
       ),
     });
-    if (event.state === 'open' && tab.kind === 'attach') {
+    if (event.state === 'open' && tab.kind === 'attach' && Platform.OS === 'ios') {
       scheduleZmxRefresh(event.sessionKey);
     }
     if (event.state === 'closed' || event.state === 'failed') {

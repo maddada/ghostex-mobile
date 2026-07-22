@@ -18,6 +18,8 @@ class OpenTerminalOptionsRecord : Record {
   @Field var command: String? = null
   @Field var termType: String? = null
   @Field var fontSize: Double? = null
+  /** True for `ghostex attach` (zmx-backed) sessions; enables the post-attach viewport refresh. */
+  @Field var zmxBacked: Boolean = false
 }
 
 /** Mirrors `KeyModifiers` in GhostexNative.types.ts. */
