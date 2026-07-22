@@ -42,29 +42,32 @@ export function ds(value: number): number {
   return Math.round(value * DRAWER_SCALE * 2) / 2;
 }
 
-/** Collection panel fill: mix(color 3%, mix(fg 3%, sidebar bg)). */
+/** Collection panel fill: mix(color 5%, mix(fg 4.5%, sidebar bg)). */
 export function collectionPanelBackground(color: string): string {
-  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 3);
+  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 4.5);
   if (color === 'transparent') return base;
-  return mixHexColors(color, base, 3);
+  return mixHexColors(color, base, 5);
 }
 
-/** Collection panel border: mix(color 22%, mix(fg 5%, sidebar bg)). */
+/**
+ * Collection panel border: mix(color 28%, mix(fg 14%, sidebar bg)). The 14%
+ * neutral base keeps a visible outline even for the transparent group color.
+ */
 export function collectionPanelBorder(color: string): string {
-  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 5);
+  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 14);
   if (color === 'transparent') return base;
-  return mixHexColors(color, base, 22);
+  return mixHexColors(color, base, 28);
 }
 
-/** Project card fill: mix(fg 3.5%, sidebar bg). */
+/** Project card fill: mix(fg 6%, sidebar bg). */
 export const PROJECT_CARD_BACKGROUND = mixHexColors(
   SidebarPalette.FOREGROUND,
   SIDEBAR_BACKGROUND,
-  3.5,
+  6,
 );
 
-/** Project card border: mix(fg 5%, sidebar bg). */
-export const PROJECT_CARD_BORDER = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 5);
+/** Project card border: mix(fg 11%, sidebar bg). */
+export const PROJECT_CARD_BORDER = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 11);
 
 /** Header/collection title color: mix(fg 92%, white 8%). */
 const TITLE_COLOR = mixHexColors(SidebarPalette.FOREGROUND, '#FFFFFF', 92);

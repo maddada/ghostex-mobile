@@ -154,9 +154,10 @@ and recloned every surface from the live CSS cascade.
 
 - **Structure**: "Quick" section label → chat sessions as bare rows → 
   "Projects" section label → colored collection PANELS (tinted bg mix(color
-  3%, mix(fg 3%, #0e0e0e)), border mix(color 22%, mix(fg 5%, bg)), radius 5)
-  containing member project CARDS → ungrouped project cards (bg mix(fg 3.5%,
-  bg), 1dp border mix(fg 5%, bg), radius 5). No colored left rail, no
+  5%, mix(fg 4.5%, #0e0e0e)), border mix(color 28%, mix(fg 14%, bg)), radius
+  5; the fg-14% base keeps a visible outline for the transparent color)
+  containing member project CARDS → ungrouped project cards (bg mix(fg 6%,
+  bg), 1dp border mix(fg 11%, bg), radius 5). No colored left rail, no
   uppercase titles, no folder icons. Section labels are 15.5dp weight-300 at
   fg-52% with a filled caret; both sections persist collapse per machine
   (`collapsedSections` in `drawer.disclosure.v2`, default expanded).
