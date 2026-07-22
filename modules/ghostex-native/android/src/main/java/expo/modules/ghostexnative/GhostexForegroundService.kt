@@ -120,6 +120,7 @@ class GhostexForegroundService : Service() {
       .authority("session")
       .appendQueryParameter("machineId", row.machineId)
       .appendQueryParameter("sessionId", row.sessionId)
+      .appendQueryParameter("title", row.title)
       .build()
     val intent = Intent(Intent.ACTION_VIEW, uri)
       .setPackage(packageName)

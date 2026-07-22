@@ -77,7 +77,7 @@ Source: `GhosttyTerminal/GhosttyTerminalView+iOS.swift` (`TerminalInputAccessory
 Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardware keyboard attached, find navigator active, or browse mode.
 
 ### Bar
-- **88pt** content height plus **5pt** bottom padding (**93pt** total). Background opaque = theme terminal background color. Dark style always.
+- **88pt** total height. Background opaque = theme terminal background color. Dark style always. On Android, position the entire bar 3pt above the native visible-window boundary so IME candidate, clipboard, and extended-layout rows cannot cover it; do not compensate with internal bar padding.
 - Trailing cluster (spacing 8, trailing inset 12): text-editor toggle above Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), preceded by a separator (`separator` α0.4).
 - Rows stack: vertical, spacing 6, fillEqually; insets top 7 / bottom 7 / trailing 10 / leading 10 (after separator) or 12.
 

@@ -9,8 +9,8 @@
  *   the terminal and accessory keys above the IME on both platforms.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,8 +39,8 @@ import { GhostexPalette } from '../theme/palette';
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
 const HEADER_HEIGHT = 44;
-/** Keeps Android's edge-to-edge IME from grazing the bottom of the accessory pills. */
-const ANDROID_KEYBOARD_CLEARANCE = 3;
+/** Deliberate separation between the Android IME boundary and the accessory bar. */
+const ANDROID_KEYBOARD_GAP = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
 
@@ -65,10 +65,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const openShellTab = useTerminalStore((state) => state.openShellTab);
   const settings = useSettingsStore((state) => state.settings);
 
-  const { keyboardVisible, bottomInset } = useKeyboardMetrics();
+  const { keyboardVisible, bottomInset, visibleWindowBottom } = useKeyboardMetrics();
   const [tapKeyboardHint, setTapKeyboardHint] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [keyboardOcclusionCorrection, setKeyboardOcclusionCorrection] = useState(0);
+  const keyBarFrameRef = useRef<View>(null);
 
   const activeTab = tabs.find((tab) => tab.sessionKey === selectedSessionKey) ?? null;
 
@@ -107,6 +109,28 @@ export default function TerminalScreen({ navigation, route }: Props) {
   }, [tapKeyboardHint, keyboardVisible]);
 
   const keyBarVisible = keyboardVisible || tapKeyboardHint;
+
+  const reconcileKeyBarWithVisibleWindow = useCallback((): void => {
+    if (!keyboardVisible || visibleWindowBottom === null) return;
+    requestAnimationFrame(() => {
+      keyBarFrameRef.current?.measureInWindow((_x, y, _width, height) => {
+        const signedOcclusion = y + height + ANDROID_KEYBOARD_GAP - visibleWindowBottom;
+        if (Math.abs(signedOcclusion) < 0.5) return;
+        setKeyboardOcclusionCorrection((current) => {
+          const next = Math.max(0, Math.round((current + signedOcclusion) * 2) / 2);
+          return Math.abs(next - current) < 0.5 ? current : next;
+        });
+      });
+    });
+  }, [keyboardVisible, visibleWindowBottom]);
+
+  useEffect(() => {
+    if (!keyboardVisible) {
+      setKeyboardOcclusionCorrection(0);
+      return;
+    }
+    reconcileKeyBarWithVisibleWindow();
+  }, [keyboardVisible, reconcileKeyBarWithVisibleWindow, visibleWindowBottom]);
 
   const dismissKeyboard = useCallback((): void => {
     setTapKeyboardHint(false);
@@ -218,9 +242,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         styles.container,
         {
           paddingTop: insets.top,
-          paddingBottom: keyboardVisible
-            ? bottomInset + (Platform.OS === 'android' ? ANDROID_KEYBOARD_CLEARANCE : 0)
-            : 0,
+          paddingBottom: keyboardVisible ? bottomInset + keyboardOcclusionCorrection : 0,
         },
       ]}
     >
@@ -299,11 +321,17 @@ export default function TerminalScreen({ navigation, route }: Props) {
       </View>
 
       {keyBarVisible && activeTab !== null ? (
-        <TerminalKeyBar
-          sessionKey={activeTab.sessionKey}
-          showDismissButton={settings.keyboardButtonVisible}
-          onDismissKeyboard={dismissKeyboard}
-        />
+        <View
+          ref={keyBarFrameRef}
+          collapsable={false}
+          onLayout={reconcileKeyBarWithVisibleWindow}
+        >
+          <TerminalKeyBar
+            sessionKey={activeTab.sessionKey}
+            showDismissButton={settings.keyboardButtonVisible}
+            onDismissKeyboard={dismissKeyboard}
+          />
+        </View>
       ) : (
         <View style={{ height: insets.bottom }} />
       )}

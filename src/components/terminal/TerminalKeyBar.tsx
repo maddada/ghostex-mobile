@@ -23,9 +23,7 @@ import {
   type ArrowDirection,
 } from './icons';
 
-const KEY_BAR_CONTENT_HEIGHT = 88;
-const KEY_BAR_BOTTOM_PADDING = 5;
-export const KEY_BAR_HEIGHT = KEY_BAR_CONTENT_HEIGHT + KEY_BAR_BOTTOM_PADDING;
+export const KEY_BAR_HEIGHT = 88;
 const REPEAT_DELAY_MS = 350;
 const REPEAT_INTERVAL_MS = 50;
 const MODIFIER_ACTIVE_BG = '#007AFF';
@@ -348,7 +346,6 @@ export default function TerminalKeyBar({
 const styles = StyleSheet.create({
   bar: {
     height: KEY_BAR_HEIGHT,
-    paddingBottom: KEY_BAR_BOTTOM_PADDING,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
@@ -360,7 +357,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trailingButtons: {
-    height: KEY_BAR_CONTENT_HEIGHT,
+    height: KEY_BAR_HEIGHT,
     justifyContent: 'center',
     gap: 6,
   },

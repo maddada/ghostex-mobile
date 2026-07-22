@@ -9,10 +9,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, useWindowDimensions, type KeyboardEvent } from 'react-native';
 
+import { GhostexNative } from '../../../modules/ghostex-native/src';
+
 export type KeyboardMetrics = {
   keyboardVisible: boolean;
   /** Bottom overlap not already handled by a native viewport resize. */
   bottomInset: number;
+  /** Android's actual unobscured window boundary, including IME candidate/tool rows. */
+  visibleWindowBottom: number | null;
 };
 
 export function useKeyboardMetrics(): KeyboardMetrics {
@@ -22,6 +26,7 @@ export function useKeyboardMetrics(): KeyboardMetrics {
     keyboardVisible: false,
     height: 0,
   });
+  const [visibleWindowBottom, setVisibleWindowBottom] = useState<number | null>(null);
 
   // Keep the pre-keyboard viewport height. A same-width height reduction may
   // arrive before Android's keyboardDidShow event, so never adopt that smaller
@@ -59,6 +64,14 @@ export function useKeyboardMetrics(): KeyboardMetrics {
     };
   }, []);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = GhostexNative.addListener('onVisibleWindowFrameChange', (event) => {
+      setVisibleWindowBottom(event.bottom);
+    });
+    return () => subscription.remove();
+  }, []);
+
   const viewportResize =
     Platform.OS === 'android'
       ? Math.max(0, restingViewport.current.height - viewportHeight)
@@ -67,5 +80,6 @@ export function useKeyboardMetrics(): KeyboardMetrics {
   return {
     keyboardVisible: keyboard.keyboardVisible,
     bottomInset: keyboard.keyboardVisible ? Math.max(0, keyboard.height - viewportResize) : 0,
+    visibleWindowBottom,
   };
 }

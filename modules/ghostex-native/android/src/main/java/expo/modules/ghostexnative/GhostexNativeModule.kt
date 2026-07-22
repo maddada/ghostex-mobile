@@ -1,8 +1,11 @@
 package expo.modules.ghostexnative
 
 import android.content.Context
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.view.ViewTreeObserver
 import com.termux.terminal.TerminalSession
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -27,6 +30,10 @@ class GhostexNativeModule : Module() {
 
   private val mainHandler = Handler(Looper.getMainLooper())
 
+  private var visibleWindowDecorView: View? = null
+  private var visibleWindowLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+  private var lastVisibleWindowBottomPx: Int? = null
+
   /** For blocking work not tied to one connection (key generation, teardown). */
   private val backgroundExecutor: ExecutorService = Executors.newCachedThreadPool { runnable ->
     Thread(runnable, "GhostexNativeWork").apply { isDaemon = true }
@@ -47,8 +54,17 @@ class GhostexNativeModule : Module() {
       "onTerminalBell",
       "onFontSizeChange",
       "onKeyModifiersConsumed",
+      "onVisibleWindowFrameChange",
       "onConnectionState"
     )
+
+    OnStartObserving("onVisibleWindowFrameChange") {
+      mainHandler.post { startVisibleWindowFrameObserver() }
+    }
+
+    OnStopObserving("onVisibleWindowFrameChange") {
+      mainHandler.post { stopVisibleWindowFrameObserver() }
+    }
 
     // region connection lifecycle
 
@@ -311,6 +327,7 @@ class GhostexNativeModule : Module() {
     }
 
     OnDestroy {
+      stopVisibleWindowFrameObserver()
       val toClose = connections.values.toList()
       connections.clear()
       Thread({
@@ -428,6 +445,45 @@ class GhostexNativeModule : Module() {
   // endregion
 
   // region event emission
+
+  /**
+   * Termux positions its extra-keys row against getWindowVisibleDisplayFrame instead of trusting
+   * adjustResize alone. Candidate, clipboard, and extended keyboard rows can cover content without
+   * being reflected in Android's resized app viewport, while the visible frame still reports the
+   * real unobscured boundary.
+   */
+  private fun startVisibleWindowFrameObserver() {
+    stopVisibleWindowFrameObserver()
+    val decorView = appContext.currentActivity?.window?.decorView ?: return
+    val listener = ViewTreeObserver.OnGlobalLayoutListener {
+      val visibleFrame = Rect()
+      decorView.getWindowVisibleDisplayFrame(visibleFrame)
+      if (lastVisibleWindowBottomPx == visibleFrame.bottom) return@OnGlobalLayoutListener
+      lastVisibleWindowBottomPx = visibleFrame.bottom
+
+      val windowLocation = IntArray(2)
+      decorView.getLocationOnScreen(windowLocation)
+      val density = decorView.resources.displayMetrics.density
+      val bottomInWindowDp = (visibleFrame.bottom - windowLocation[1]) / density
+      sendEvent("onVisibleWindowFrameChange", mapOf("bottom" to bottomInWindowDp))
+    }
+
+    visibleWindowDecorView = decorView
+    visibleWindowLayoutListener = listener
+    decorView.viewTreeObserver.addOnGlobalLayoutListener(listener)
+    listener.onGlobalLayout()
+  }
+
+  private fun stopVisibleWindowFrameObserver() {
+    val decorView = visibleWindowDecorView
+    val listener = visibleWindowLayoutListener
+    if (decorView != null && listener != null && decorView.viewTreeObserver.isAlive) {
+      decorView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+    }
+    visibleWindowDecorView = null
+    visibleWindowLayoutListener = null
+    lastVisibleWindowBottomPx = null
+  }
 
   internal fun emitTerminalState(sessionKey: String, state: String, error: String?, errorCode: String?) {
     val body = mutableMapOf<String, Any?>("sessionKey" to sessionKey, "state" to state)

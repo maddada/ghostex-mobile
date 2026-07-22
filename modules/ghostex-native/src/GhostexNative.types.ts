@@ -97,6 +97,11 @@ export type KeyModifiersConsumedEvent = {
   sessionKey: string;
 };
 
+export type VisibleWindowFrameChangeEvent = {
+  /** Bottom edge of the unobscured native window, in React Native layout points. */
+  bottom: number;
+};
+
 export type ConnectionStateEvent = {
   machineId: string;
   state: 'connecting' | 'connected' | 'disconnected' | 'failed';
@@ -110,6 +115,7 @@ export type GhostexNativeEvents = {
   onTerminalBell: (event: TerminalBellEvent) => void;
   onFontSizeChange: (event: FontSizeChangeEvent) => void;
   onKeyModifiersConsumed: (event: KeyModifiersConsumedEvent) => void;
+  onVisibleWindowFrameChange: (event: VisibleWindowFrameChangeEvent) => void;
   onConnectionState: (event: ConnectionStateEvent) => void;
 };
 

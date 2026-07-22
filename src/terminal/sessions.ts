@@ -201,6 +201,15 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       if (existing !== undefined) {
+        // Upgrade a placeholder title (raw session id) when the caller knows
+        // the real one (e.g. a notification deep link).
+        if (
+          session.title !== undefined &&
+          session.title.length > 0 &&
+          (existing.title.length === 0 || existing.title === session.sessionId)
+        ) {
+          patchTab(sessionKey, { title: session.title });
+        }
         set({ selectedSessionKey: sessionKey });
         touchWarm(sessionKey);
         return sessionKey;
