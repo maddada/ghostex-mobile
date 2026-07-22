@@ -32,4 +32,7 @@ dependencies {
 
   // The vendored Termux terminal-emulator/terminal-view Java sources use androidx.annotation.
   implementation "androidx.annotation:annotation:1.9.1"
+
+  // NotificationCompat/ContextCompat for the persistent foreground-service notification.
+  implementation "androidx.core:core-ktx:1.15.0"
 }

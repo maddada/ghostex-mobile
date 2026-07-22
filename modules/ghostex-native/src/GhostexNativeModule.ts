@@ -5,6 +5,7 @@ import type {
   GeneratedSshKey,
   GhostexNativeEvents,
   KeyModifiers,
+  NotificationSessionRow,
   OpenTerminalOptions,
   SshConfig,
   SshKeyType,
@@ -42,6 +43,12 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
 
   generateSshKey(type: SshKeyType, comment: string, passphrase?: string): Promise<GeneratedSshKey>;
   resetHostKey(host: string, port: number): Promise<void>;
+
+  // Persistent foreground-service notification (Android only — guard with
+  // Platform.OS before calling; the iOS module does not define these).
+  setPersistentNotificationEnabled(enabled: boolean): Promise<void>;
+  updatePersistentNotification(rows: NotificationSessionRow[]): Promise<void>;
+  requestNotificationPermission(): Promise<void>;
 }
 
 export default requireNativeModule<GhostexNativeModule>('GhostexNative');

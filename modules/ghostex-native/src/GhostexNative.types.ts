@@ -116,6 +116,14 @@ export type GeneratedSshKey = {
   fingerprint: string;
 };
 
+/** One row of the Android persistent-notification session inventory. */
+export type NotificationSessionRow = {
+  title: string;
+  /** working | attention | done | sleep | idle — drives the status dot. */
+  status: string;
+  project: string;
+};
+
 export type SshKeyType = 'ed25519' | 'rsa4096';
 
 export type GhostexTerminalViewProps = {

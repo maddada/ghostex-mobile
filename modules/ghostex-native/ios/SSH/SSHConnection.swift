@@ -241,6 +241,12 @@ actor SSHConnection {
     private var shellChannels: [UUID: ShellChannelState] = [:]
     private var socket: Int32 = -1
     private var isActive = false
+    /**
+     * Set when libssh2 reports a socket-level failure (the OS tears TCP down
+     * while the app is suspended). Without it a dead connection keeps
+     * reporting isConnected == true and every reconnect path no-ops.
+     */
+    private var transportDead = false
     private var ioTask: Task<Void, Never>?
     private var execRequests: [UUID: ExecRequest] = [:]
     private let logger = Logger(
@@ -262,7 +268,17 @@ actor SSHConnection {
     }
 
     var isConnected: Bool {
-        isActive && libssh2Session != nil
+        isActive && !transportDead && libssh2Session != nil
+    }
+
+    /// Flag the whole connection dead on socket-level libssh2 errors so
+    /// callers (ensureConnected / reopen flows) actually reconnect.
+    private func noteTransportError(_ code: Int) {
+        if code == Int(LIBSSH2_ERROR_SOCKET_SEND) || code == Int(LIBSSH2_ERROR_SOCKET_RECV)
+            || code == Int(LIBSSH2_ERROR_SOCKET_DISCONNECT)
+            || code == Int(LIBSSH2_ERROR_SOCKET_TIMEOUT) {
+            transportDead = true
+        }
     }
 
     /// Immediately abort the connection by closing the socket (any thread).
@@ -395,7 +411,12 @@ actor SSHConnection {
         // Set non-blocking for I/O
         libssh2_session_set_blocking(session, 0)
 
+        // Protocol-level keepalive so a half-dead transport surfaces as a
+        // socket error quickly on resume instead of hanging reads.
+        libssh2_keepalive_config(session, 1, 15)
+
         isActive = true
+        transportDead = false
         logger.info("SSH session established")
     }
 
@@ -748,6 +769,7 @@ actor SSHConnection {
                             state.continuation.yield(state.batchBuffer)
                         }
                         logger.error("Read error: \(bytesRead)")
+                        noteTransportError(bytesRead)
                         closeShellInternal(state.id)
                         continue
                     }
@@ -779,6 +801,7 @@ actor SSHConnection {
                     } else if bytesRead == Int(LIBSSH2_ERROR_EAGAIN) {
                         // No data yet
                     } else if bytesRead < 0 {
+                        noteTransportError(bytesRead)
                         finishExecRequest(requestId, error: SSHError.socketError("Exec read failed: \(bytesRead)"))
                         continue
                     }
@@ -790,6 +813,7 @@ actor SSHConnection {
                     } else if stderrRead == Int(LIBSSH2_ERROR_EAGAIN) {
                         // No stderr data yet
                     } else if stderrRead < 0 {
+                        noteTransportError(stderrRead)
                         finishExecRequest(requestId, error: SSHError.socketError("Exec stderr read failed: \(stderrRead)"))
                         continue
                     }
@@ -995,6 +1019,7 @@ actor SSHConnection {
             } else if written == Int(LIBSSH2_ERROR_EAGAIN) {
                 await waitForSocket()
             } else {
+                noteTransportError(written)
                 throw SSHError.socketError("Write failed: \(written)")
             }
         }

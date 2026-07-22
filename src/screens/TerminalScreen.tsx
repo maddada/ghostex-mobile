@@ -129,27 +129,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   /** Re-run the open flow for a failed/closed tab (Retry / Reconnect). */
   const reopenTab = useCallback(async (tab: TerminalTab): Promise<void> => {
-    const target = machineTargetFor(tab.machineId);
-    if (target === null) return;
-    patchTab(tab.sessionKey, { state: 'opening', error: undefined });
-    try {
-      await ensureConnected(target);
-      const store = useTerminalStore.getState();
-      const opts: { command?: string; fontSize?: number } = {
-        fontSize:
-          store.fontSizeBySessionKey[tab.sessionKey] ??
-          useSettingsStore.getState().settings.fontSize,
-      };
-      if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
-        opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
-      }
-      await GhostexNative.openTerminal(tab.sessionKey, tab.machineId, opts);
-    } catch (error) {
-      patchTab(tab.sessionKey, {
-        state: 'failed',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await useTerminalStore.getState().reopenTab(tab.sessionKey);
   }, []);
 
   const confirmCloseTab = useCallback(

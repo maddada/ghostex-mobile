@@ -11,6 +11,8 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './src/navigation/types';
+import { initAppLifecycle } from './src/app/lifecycle';
+import { initPersistentNotification } from './src/app/persistentNotification';
 import { useMachinesStore } from './src/machines/store';
 import { useSettingsStore } from './src/settings/store';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
@@ -43,6 +45,8 @@ export default function App() {
 
   useEffect(() => {
     initTerminalEvents();
+    initAppLifecycle();
+    initPersistentNotification();
     void useMachinesStore.getState().hydrate();
     void useSettingsStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();

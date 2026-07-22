@@ -16,6 +16,7 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import { attachCommand, loginShellCommand } from '../commands/ghostexCli';
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { useMachinesStore } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
 
 export const MAX_WARM_SESSIONS = 7;
@@ -94,6 +95,11 @@ type TerminalState = {
   closeTab: (sessionKey: string) => Promise<void>;
   /** Kill/sleep actions must also drop the warm surface for that session. */
   closeWarmSessionFor: (machineId: string, sessionId: string) => Promise<void>;
+  /**
+   * Re-run the open flow for a failed/closed tab. Shared by the Terminal
+   * screen's Retry/Reconnect buttons and the app-resume auto-reattach.
+   */
+  reopenTab: (sessionKey: string) => Promise<void>;
   setFontSizeForSession: (sessionKey: string, size: number) => void;
 };
 
@@ -249,6 +255,41 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         get().warmOrder.includes(sessionKey)
       ) {
         await get().closeTab(sessionKey);
+      }
+    },
+
+    reopenTab: async (sessionKey) => {
+      const tab = get().tabs.find((entry) => entry.sessionKey === sessionKey);
+      if (tab === undefined || tab.state === 'opening' || tab.state === 'open') return;
+      const record = useMachinesStore
+        .getState()
+        .machines.find((machine) => machine.id === tab.machineId);
+      if (record === undefined) return;
+      const target: MachineConnectionTarget = {
+        id: record.id,
+        host: record.host,
+        username: record.username,
+        port: record.port,
+      };
+      patchTab(sessionKey, { state: 'opening', error: undefined });
+      // A fresh attach gets a fresh viewport-refresh OSC.
+      cancelZmxRefresh(sessionKey);
+      zmxRefreshSent.delete(sessionKey);
+      touchWarm(sessionKey);
+      try {
+        await ensureConnected(target);
+        const opts: { command?: string; fontSize?: number } = {
+          fontSize: initialFontSize(sessionKey),
+        };
+        if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
+          opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
+        }
+        await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
+      } catch (error) {
+        patchTab(sessionKey, {
+          state: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     },
 

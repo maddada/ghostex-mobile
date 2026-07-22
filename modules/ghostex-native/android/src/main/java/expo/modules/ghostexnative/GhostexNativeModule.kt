@@ -250,6 +250,41 @@ class GhostexNativeModule : Module() {
 
     // endregion
 
+    // region persistent notification (Termux-fork foreground service port)
+
+    AsyncFunction("setPersistentNotificationEnabled") { enabled: Boolean ->
+      val context = requireAndroidContext().applicationContext
+      if (enabled) GhostexForegroundService.start(context)
+      else GhostexForegroundService.stop(context)
+    }
+
+    AsyncFunction("updatePersistentNotification") { rows: List<NotificationSessionRecord> ->
+      GhostexForegroundService.sessionRows = rows.map {
+        GhostexForegroundService.Companion.SessionRow(it.title, it.status, it.project)
+      }
+      GhostexForegroundService.update()
+    }
+
+    AsyncFunction("requestNotificationPermission") {
+      if (android.os.Build.VERSION.SDK_INT >= 33) {
+        val activity = appContext.currentActivity
+        val context = requireAndroidContext()
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+          context,
+          android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted && activity != null) {
+          androidx.core.app.ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE
+          )
+        }
+      }
+    }
+
+    // endregion
+
     View(GhostexTerminalView::class) {
       Events("onSingleTap")
 
@@ -419,6 +454,7 @@ class GhostexNativeModule : Module() {
     const val MIN_FONT_SIZE_DP = 4
     const val MAX_FONT_SIZE_DP = 32
 
+    private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 7031
     private const val DEFAULT_TERM_TYPE = "xterm-256color"
     private const val TRANSCRIPT_ROWS = 2_000
     private const val INITIAL_COLUMNS = 80
