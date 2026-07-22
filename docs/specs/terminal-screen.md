@@ -10,7 +10,7 @@ Source: `VVTerm/App/iOS/iOSContentView.swift` (`iOSTerminalView` @814, `iOSTermi
 
 ### Top-to-bottom structure
 `VStack(spacing: 0)`:
-1. **headerTabsBar** — only shown when terminal view is active AND >1 session for the server (and not in Zen mode). Single tab → NO tab bar.
+1. **headerTabsBar** — merged into the header row: back button + tabs capsule track (fills the remaining width; no title text) + overflow button. Shown whenever ≥1 tab, including a single tab.
 2. **sessionContent** — `TerminalEmptyStateView` (no sessions) or the active terminal container.
 
 Screen sits in a nav stack with a native nav bar; back button hidden/custom. Zen mode hides tab bar + nav bar.
@@ -23,9 +23,10 @@ Screen sits in a nav stack with a native nav bar; back button hidden/custom. Zen
 `NavBarBackdrop`: paints terminal background color behind status/nav bar. Height = top safe inset (fallback 44). Non-interactive overlay.
 
 ### Tab bar metrics (`ServerViewTopTabBarMetrics`)
-- tabHeight 36, tabVerticalPadding 7, barVerticalInset 4, tabSpacing 4, horizontalPadding 4, outerHorizontalPadding 12. barHeight = 44.
-- Container: height 44, capsule background `primary.opacity(0.08)` + 1pt stroke `primary.opacity(0.12)`, clipped, padding H12/V6. Animations disabled.
-- Layout: minTabWidth 120. itemWidth = (available - spacing)/count; ≥120 → equal-width HStack filling width; else horizontal ScrollView (no indicators), each tab minWidth 120.
+- tabHeight 28, trackHeight 36 (fits inside the 44 header row), tabSpacing 4, trackInnerPad 4.
+- Track: capsule background `primary.opacity(0.08)` + 1pt stroke `primary.opacity(0.12)`, clipped; flexes to fill the header between back and overflow buttons. Animations disabled.
+- Layout: minTabWidth 120. itemWidth = (available - spacing)/count; ≥120 → equal-width row filling width; else horizontal ScrollView (no indicators), each tab minWidth 120.
+- Scroll mode keeps the selected tab centered: on tap, on selection change, and after a close/content resize the offset re-clamps immediately (no stale gap at the end).
 
 ### Tab button
 - HStack(spacing 8): status dot Circle 6×6 `statusColor` + title `.callout`, 1 line, primary.
@@ -33,7 +34,7 @@ Screen sits in a nav stack with a native nav bar; back button hidden/custom. Zen
 - Selected bg: `primary.opacity(0.18)` capsule; unselected clear.
 - Close button overlaid trailing: `xmark` 11pt bold, `primary.opacity(0.92)`, 20×20 circle bg `primary.opacity(selected ? 0.16 : 0.12)` + 1pt stroke 0.12, trailing pad 8.
 - Tap anywhere selects. Selection animation easeInOut 0.12s.
-- statusColor: connected → green; connecting/reconnecting → orange; disconnected/idle → secondary; failed → red.
+- statusColor: connected/open → NO dot; connecting/reconnecting → orange; disconnected/idle → secondary; failed → red.
 
 ### Nav bar toolbar
 - Leading: back chevron (`chevron.left`) → dismiss keyboard, then back.

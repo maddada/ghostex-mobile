@@ -1,6 +1,7 @@
 /**
  * Terminal screen (docs/specs/terminal-screen.md).
- * - In-screen header (native nav bar hidden here), tabs bar when >1 tab,
+ * - In-screen header (native nav bar hidden here) with the tabs bar embedded
+ *   between the back and overflow buttons (no title text),
  *   native terminal surface for the SELECTED tab only (the native registry
  *   keeps other warm entries alive across view detach), state overlays,
  *   key accessory/editor bar above the soft keyboard, floating keyboard/upload
@@ -10,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -234,8 +235,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
     },
   ];
 
-  const title = activeTab?.title ?? route.params.title ?? 'Terminal';
-
   return (
     <View
       style={[
@@ -256,9 +255,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
         >
           <ChevronLeftIcon size={22} color={GhostexPalette.FOREGROUND} />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {title}
-        </Text>
+        <TerminalTabsBar
+          tabs={tabs}
+          selectedSessionKey={selectedSessionKey}
+          onSelect={handleSelectTab}
+          onClose={(sessionKey) => {
+            const tab = tabs.find((entry) => entry.sessionKey === sessionKey);
+            if (tab !== undefined) confirmCloseTab(tab);
+          }}
+        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="More options"
@@ -269,18 +274,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
           <EllipsisIcon size={22} color={GhostexPalette.FOREGROUND} />
         </Pressable>
       </View>
-
-      {tabs.length > 1 && (
-        <TerminalTabsBar
-          tabs={tabs}
-          selectedSessionKey={selectedSessionKey}
-          onSelect={handleSelectTab}
-          onClose={(sessionKey) => {
-            const tab = tabs.find((entry) => entry.sessionKey === sessionKey);
-            if (tab !== undefined) confirmCloseTab(tab);
-          }}
-        />
-      )}
 
       <View style={styles.terminalArea}>
         {activeTab !== null && (
@@ -363,13 +356,6 @@ const styles = StyleSheet.create({
     height: HEADER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 17,
-    fontWeight: '600',
   },
   terminalArea: {
     flex: 1,
