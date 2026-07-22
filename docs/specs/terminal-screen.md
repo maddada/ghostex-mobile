@@ -78,21 +78,23 @@ Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardw
 
 ### Bar
 - Fixed height **88pt**. Background opaque = theme terminal background color. Dark style always.
-- Leading cluster (spacing 8, leading inset 12): text-editor toggle above Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), then a separator (`separator` α0.4).
+- Trailing cluster (spacing 8, trailing inset 12): text-editor toggle above Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), preceded by a separator (`separator` α0.4).
 - Rows stack: vertical, spacing 6, fillEqually; insets top 7 / bottom 7 / trailing 10 / leading 10 (after separator) or 12.
 
 ### Text editor page
-- The leading text-editor button swaps the key grid for a focused single-line composer, matching the Android Termux toolbar's alternate text-input page.
-- The keyboard Send action writes the entire buffer to the selected terminal and clears it. Sending an empty buffer writes carriage return (Enter).
+- The trailing text-editor button swaps the key grid for a focused multiline composer using the full text keyboard, including emoji, clipboard, composition, and suggestion affordances.
+- While the editor is open, the dismiss-keyboard button becomes Send. Send writes the entire buffer to the selected terminal and clears it; sending an empty buffer sends the terminal Enter key.
+- Return in the software keyboard inserts a newline into the draft instead of sending it.
+- Backspace or Delete on an empty draft is forwarded to the terminal, including repeated events while the key is held.
 - Switching back to the key grid restores terminal keyboard focus.
 
 ### Two rows, 7 equal columns each (fixed grid, no scroll). Empty slots invisible placeholders. Max 14 items, min 1.
 
 ### Default layout (VERBATIM)
-- Row 1: `Esc`, `Shift`, `Ctrl-J` (label **NEWLN**), `Home`, `↑`, `End`, `PGUP`
+- Row 1: `Esc`, `Shift`, `Ctrl-J` (return glyph), `Home`, `↑`, `End`, `PGUP`
 - Row 2: `Tab`, `Ctrl`, `Alt`, `←`, `↓`, `→`, `PGDN`
 
-Labels (fixed ASCII): CTRL, ALT, Cmd, SHIFT, ESC, TAB, S-Tab, Enter, Bksp, Del, Ins, HOME, END, PGUP, PGDN; arrows are icons (arrow.up/down/left/right); F1..F12; ^C ^D ^Z ^L ^A ^E ^K ^U; Ctrl-J → "NEWLN".
+Labels (fixed ASCII): CTRL, ALT, Cmd, SHIFT, ESC, TAB, S-Tab, Enter, Bksp, Del, Ins, HOME, END, PGUP, PGDN; arrows and Ctrl-J use icons; F1..F12; ^C ^D ^Z ^L ^A ^E ^K ^U.
 
 ### Button styling
 - Pill: height 28, radius 14, 1pt border `separator` α0.3, bg dark `white α0.08`, font system 10 semibold for every text key, color secondaryLabel.

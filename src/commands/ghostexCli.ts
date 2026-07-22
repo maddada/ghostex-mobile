@@ -117,6 +117,68 @@ export function runActionCommand(commandId: string, projectId: string): string {
   );
 }
 
+/** Pin/unpin: `ghostex pin-session --session-id <id> --pinned <bool> --json`. */
+export function pinSessionCommand(sessionId: string, pinned: boolean): string {
+  return (
+    `ghostex pin-session --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --pinned ${pinned ? 'true' : 'false'} --json`
+  );
+}
+
+/** Tag: `ghostex tag-session --session-id <id> --tag <tag|none> --json`. */
+export function tagSessionCommand(sessionId: string, tag: string): string {
+  const value = tag.trim().length === 0 ? 'none' : tag.trim();
+  return (
+    `ghostex tag-session --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --tag ${shellQuote(value)} --json`
+  );
+}
+
+/** Full reload: `ghostex reload-session --session-id <id> --json`. */
+export function reloadSessionCommand(sessionId: string): string {
+  return `ghostex reload-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
+}
+
+/** Restart: `ghostex restart-session --session-id <id> --json`. */
+export function restartSessionCommand(sessionId: string): string {
+  return `ghostex restart-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
+}
+
+/** Fork: `ghostex fork-session --session-id <id> --json` (daemon-side fork). */
+export function forkSessionCommand(sessionId: string): string {
+  return `ghostex fork-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
+}
+
+/** Acknowledge attention: `ghostex acknowledge-session-attention --session-id <id> --json`. */
+export function acknowledgeAttentionCommand(sessionId: string): string {
+  return (
+    `ghostex acknowledge-session-attention --session-id` +
+    ` ${shellQuote(requireId(sessionId, 'session id'))} --json`
+  );
+}
+
+/** Close project: `ghostex remove-project --project-id <id> --json`. */
+export function removeProjectCommand(projectId: string): string {
+  return `ghostex remove-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
+}
+
+/** Add project: `ghostex add-project <path> --json`. */
+export function addProjectCommand(path: string): string {
+  return `ghostex add-project ${shellQuote(requireId(path, 'project path'))} --json`;
+}
+
+/**
+ * Durable sidebar project collections write-back:
+ * `ghostex update-sidebar-project-collections --state-json '<json>' --json`.
+ * The CLI passes the FULL state through; gxserver normalizes and persists.
+ */
+export function updateProjectCollectionsCommand(state: unknown): string {
+  return (
+    'ghostex update-sidebar-project-collections --state-json ' +
+    `${shellQuote(JSON.stringify(state))} --json`
+  );
+}
+
 /** Reorder: `ghostex move-project --json --project-id <id> --direction <up|down>`. */
 export function moveProjectCommand(projectId: string, direction: 'up' | 'down'): string {
   if (direction !== 'up' && direction !== 'down') {

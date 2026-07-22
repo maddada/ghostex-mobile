@@ -1,6 +1,6 @@
 /**
  * 2-row keyboard accessory bar (terminal-screen.md §2).
- * - Fixed 88 height, terminal-background fill, leading text-editor/dismiss
+ * - Fixed 88 height, terminal-background fill, trailing text-editor/dismiss
  *   controls + either 2 rows × 7 equal key pills or a Termux-style composer.
  * - Modifier latching: Ctrl/Alt/Shift toggle; the next non-modifier key sends
  *   with every latched modifier applied, then ALL latches reset (one-shot
@@ -15,7 +15,14 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
 import { GhostexPalette } from '../../theme/palette';
-import { ArrowIcon, KeyboardDismissIcon, TextEditorIcon, type ArrowDirection } from './icons';
+import {
+  ArrowIcon,
+  KeyboardDismissIcon,
+  ReturnIcon,
+  SendIcon,
+  TextEditorIcon,
+  type ArrowDirection,
+} from './icons';
 
 export const KEY_BAR_HEIGHT = 88;
 const REPEAT_DELAY_MS = 350;
@@ -35,6 +42,7 @@ type KeyBarItem =
       kind: 'key';
       label?: string;
       arrow?: ArrowDirection;
+      returnGlyph?: boolean;
       key: TerminalKey;
       /** Intrinsic modifiers (e.g. NEWLN = Ctrl-J), merged with latches. */
       mods?: KeyModifiers;
@@ -45,7 +53,7 @@ type KeyBarItem =
 const ROW_1: KeyBarItem[] = [
   { id: 'esc', kind: 'key', label: 'ESC', key: 'escape' },
   { id: 'shift', kind: 'modifier', label: 'SHIFT', modifier: 'shift' },
-  { id: 'newln', kind: 'key', label: 'NEWLN', key: 'j', mods: { ctrl: true } },
+  { id: 'newln', kind: 'key', returnGlyph: true, key: 'j', mods: { ctrl: true } },
   { id: 'home', kind: 'key', label: 'HOME', key: 'home', repeatable: true },
   { id: 'up', kind: 'key', arrow: 'up', key: 'up', repeatable: true },
   { id: 'end', kind: 'key', label: 'END', key: 'end', repeatable: true },
@@ -64,7 +72,7 @@ const ROW_2: KeyBarItem[] = [
 
 export type TerminalKeyBarProps = {
   sessionKey: string;
-  /** settings.keyboardButtonVisible: shows the leading dismiss cluster. */
+  /** settings.keyboardButtonVisible: shows the trailing dismiss control. */
   showDismissButton: boolean;
   onDismissKeyboard: () => void;
 };
@@ -160,11 +168,22 @@ export default function TerminalKeyBar({
   };
 
   const submitEditor = (): void => {
-    const text = editorText.length === 0 ? '\r' : editorText;
-    void GhostexNative.sendText(sessionKey, text).catch(() => {
-      // The terminal state overlay owns connection errors.
-    });
+    if (editorText.length === 0) {
+      sendKey('enter', {});
+    } else {
+      void GhostexNative.sendText(sessionKey, editorText).catch(() => {
+        // The terminal state overlay owns connection errors.
+      });
+    }
     setEditorText('');
+  };
+
+  const handleEditorKeyPress = (key: string): void => {
+    // Once the draft is empty, editing keys retain their terminal meaning.
+    // Software and hardware keyboards emit repeated key-press events while held.
+    if (editorText.length !== 0) return;
+    if (key === 'Backspace') sendKey('backspace', {});
+    if (key === 'Delete') sendKey('delete', {});
   };
 
   const renderItem = (item: KeyBarItem) => {
@@ -189,12 +208,15 @@ export default function TerminalKeyBar({
       <View key={item.id} style={styles.cell}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={item.returnGlyph === true ? 'New line' : item.label}
           style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
           onPressIn={() => handleKeyPressIn(item)}
           onPressOut={clearRepeat}
         >
           {item.arrow !== undefined ? (
             <ArrowIcon direction={item.arrow} size={14} color={GhostexPalette.MUTED} />
+          ) : item.returnGlyph === true ? (
+            <ReturnIcon size={15} color={GhostexPalette.MUTED} />
           ) : (
             <Text style={styles.pillLabel} numberOfLines={1}>
               {item.label}
@@ -207,52 +229,24 @@ export default function TerminalKeyBar({
 
   return (
     <View style={styles.bar}>
-      <View style={styles.leadingCluster}>
-        <View style={styles.leadingButtons}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={editorVisible ? 'Show terminal keys' : 'Open text editor'}
-            accessibilityState={{ selected: editorVisible }}
-            style={[styles.leadingButton, editorVisible && styles.leadingButtonActive]}
-            onPress={toggleEditor}
-          >
-            <TextEditorIcon
-              size={16}
-              color={editorVisible ? '#FFFFFF' : GhostexPalette.FOREGROUND}
-            />
-          </Pressable>
-          {showDismissButton && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss keyboard"
-              style={styles.leadingButton}
-              onPress={onDismissKeyboard}
-            >
-              <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
-            </Pressable>
-          )}
-        </View>
-        <View style={styles.separator} />
-      </View>
       {editorVisible ? (
         <View style={styles.editorContainer}>
           <TextInput
             autoFocus
             accessibilityLabel="Terminal text editor"
             autoCapitalize="none"
-            autoComplete="off"
-            autoCorrect={false}
-            importantForAutofill="no"
+            autoCorrect
+            keyboardType="default"
+            multiline
             placeholder="Type text to send to the terminal"
             placeholderTextColor={GhostexPalette.MUTED}
-            returnKeyType="send"
             selectionColor={GhostexPalette.FOREGROUND}
-            spellCheck={false}
+            spellCheck
             style={styles.editor}
-            submitBehavior="submit"
+            submitBehavior="newline"
             value={editorText}
             onChangeText={setEditorText}
-            onSubmitEditing={submitEditor}
+            onKeyPress={(event) => handleEditorKeyPress(event.nativeEvent.key)}
           />
         </View>
       ) : (
@@ -261,6 +255,44 @@ export default function TerminalKeyBar({
           <View style={styles.row}>{ROW_2.map(renderItem)}</View>
         </View>
       )}
+      <View style={styles.trailingCluster}>
+        <View style={styles.separator} />
+        <View style={styles.trailingButtons}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={editorVisible ? 'Show terminal keys' : 'Open text editor'}
+            accessibilityState={{ selected: editorVisible }}
+            style={[styles.trailingButton, editorVisible && styles.trailingButtonActive]}
+            onPress={toggleEditor}
+          >
+            <TextEditorIcon
+              size={16}
+              color={editorVisible ? '#FFFFFF' : GhostexPalette.FOREGROUND}
+            />
+          </Pressable>
+          {editorVisible ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send text to terminal"
+              style={styles.trailingButton}
+              onPress={submitEditor}
+            >
+              <SendIcon size={16} color={GhostexPalette.FOREGROUND} />
+            </Pressable>
+          ) : (
+            showDismissButton && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss keyboard"
+                style={styles.trailingButton}
+                onPress={onDismissKeyboard}
+              >
+                <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
+              </Pressable>
+            )
+          )}
+        </View>
+      </View>
     </View>
   );
 }
@@ -272,18 +304,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
   },
-  leadingCluster: {
+  trailingCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 12,
+    paddingRight: 12,
     gap: 8,
   },
-  leadingButtons: {
+  trailingButtons: {
     height: KEY_BAR_HEIGHT,
     justifyContent: 'center',
     gap: 6,
   },
-  leadingButton: {
+  trailingButton: {
     width: 36,
     height: 32,
     borderRadius: 16,
@@ -291,7 +323,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  leadingButtonActive: {
+  trailingButtonActive: {
     backgroundColor: MODIFIER_ACTIVE_BG,
   },
   separator: {
@@ -348,18 +380,19 @@ const styles = StyleSheet.create({
   editorContainer: {
     flex: 1,
     paddingVertical: 12,
-    paddingLeft: 10,
-    paddingRight: 12,
+    paddingLeft: 12,
+    paddingRight: 10,
   },
   editor: {
     flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: 0,
+    paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     backgroundColor: 'rgba(255,255,255,0.08)',
     color: GhostexPalette.FOREGROUND,
     fontSize: 15,
+    textAlignVertical: 'top',
   },
 });

@@ -186,6 +186,8 @@ export type GhostexSession = {
   isFocused: boolean;
   isFavorite: boolean;
   isPinned: boolean;
+  /** Current session tag ('' when untagged); values from SIDEBAR_SESSION_TAGS. */
+  sessionTag: string;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
   isSleeping: boolean;
   isLive: boolean;
@@ -208,6 +210,12 @@ export type GhostexMobileSummary = {
   workspaceGroups: GhostexWorkspaceGroups | null;
   /** Ordered colored project collections; empty when the overlay is absent. */
   projectCollections: GhostexProjectCollection[];
+  /**
+   * Verbatim `sidebarProjectCollections` wire state ({order, collections,
+   * nextCollectionNumber}) for full-state read-modify-write via
+   * `ghostex update-sidebar-project-collections`; null when absent.
+   */
+  projectCollectionsState: unknown;
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not
@@ -708,6 +716,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     isFocused: boolValue(value, 'isFocused', false),
     isFavorite: boolValue(value, 'isFavorite', false),
     isPinned: boolValue(value, 'isPinned', false),
+    sessionTag: trimmedValue(value, 'sessionTag'),
     isSleeping: legacySleeping && !isLive,
     isLive,
     isPrimaryTitleTerminalTitle: boolValue(value, 'isPrimaryTitleTerminalTitle', false),
@@ -926,6 +935,9 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     quickActionsByProject: parseQuickActionsByProject(root.quickActionsByProject),
     workspaceGroups,
     projectCollections: parseProjectCollections(root.sidebarProjectCollections),
+    projectCollectionsState: isObject(root.sidebarProjectCollections)
+      ? root.sidebarProjectCollections
+      : null,
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
   };
 }

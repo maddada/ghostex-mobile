@@ -183,7 +183,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   override fun shouldBackButtonBeMappedToEscape(): Boolean = false
 
-  override fun shouldEnforceCharBasedInput(): Boolean = false
+  /** Use a real text-class IME so keyboard emoji, clipboard, and composition tools stay available. */
+  override fun shouldEnforceCharBasedInput(): Boolean = true
 
   override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
 

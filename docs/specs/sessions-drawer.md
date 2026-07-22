@@ -26,10 +26,12 @@ Radius: cards/rows/inputs 8dp; pills/chips fully rounded. Strokes 1dp BORDER (ac
 Width 336dp (RN: use as drawer width on tablets/side panel; can be full-screen page on phones), bg `#181818`, padding 12. Three pages toggled: **Sessions** (default), **Machines**, **Settings**.
 
 ### Sessions page
-1. Header row: Title "Ghostex" (18sp bold, weight 1) | Refresh (48×48 icon btn, bg #262626) | Machines | Settings | Exit — 8dp gaps. Refresh = full reconnect. Exit = quit app.
+1. Header row: Android Exit (48×48 icon btn, bg #262626) | Title "Ghostex" (18sp bold, weight 1) | Refresh | Machines | Settings — 8dp gaps. Refresh = full reconnect. Android Exit = quit app; iOS omits it because iOS apps do not expose a quit action.
 2. Status line: 12sp muted, marginTop 4. Initial: "Connect to a ZMX machine".
 3. "Recent Projects" button: full width, 44dp, marginTop 8, bg #262626 — hidden unless recentProjects non-empty.
 4. Session list: flat list, 8dp transparent gaps between cards, marginTop 12.
+
+On Android, Back from a terminal shows Sessions and Back from Sessions returns to the selected warm terminal. Back is consumed when no terminal is open, so the explicit top-left Exit control is the only app-exit path.
 
 ### Machines page
 Header "Machines" + "Sessions" back button. Status line. Machine cards list. Footer rows: [Retry (accent #7DD3FC/#181818 text) | Add] and [Tailscale | Setup].
@@ -144,33 +146,80 @@ Foreground service (Android) with custom rows: bold title + muted project + stat
 
 ## 9. Desktop gpui-sidebar parity amendment (2026-07-22)
 
-The drawer was reworked to match the macOS gpui sidebar exactly; where this
-section conflicts with §§0-7, this section wins.
+The drawer was reworked to match the macOS gpui sidebar's CURRENT skin (the
+`hierarchy-panels.css` "layered panels" reference layout, which overrides the
+older groups.css look); where this section conflicts with §§0-7, it wins.
+Second pass on 2026-07-22 replaced the agent/action chips with header menus
+and recloned every surface from the live CSS cascade.
 
-- **Colored project collections**: the payload's `sidebarProjectCollections`
-  ({order, collections{id:{collectionId,title,color,collapsed,projectIds}}})
-  renders as `COLLECTION_HEADER` rows. Interleaving mirrors the desktop:
-  Chats first, then collections in definition order (member projects inside,
-  each row carrying a colored 2dp left rail), then ungrouped projects.
-- **Ordering**: in-project session order always applies the desktop display
-  layout (browser-kind first → pinned in saved order → attention > working >
-  idle → newest lastInteractionAt → stable wire order). The CLI now forwards
-  isPinned/isFavorite/kind/surface/agentName in `--mobile-summary` to make
-  this possible.
-- **First-start disclosure**: collapse state is inverted to EXPANDED sets
-  (AsyncStorage key `drawer.disclosure.v2`; projects, collections, and named
-  groups all persisted per machine). Anything not explicitly expanded renders
-  collapsed, so a fresh install shows every collection/project/group
-  collapsed. Flat-project "Show more" keeps desktop semantics (default all
-  rows; presence in the collapsed set trims to 6).
-- **Visuals** (tokens in `SidebarPalette`, ported from sidebar/styles/*.css):
-  flat contiguous session rows (no card/border, radius 0), 15dp brand-tinted
-  agent icon, 13sp/600 title (#C8CDD5), compact Last Active label, 9dp glowing
-  status dot (working #FFB454 pulsing, attention/done #95D7F6, error #FF6B6B,
-  remote-sleep grey, idle hidden), sleeping rows at 0.52 opacity. Project
-  headers are ALL-CAPS 12sp/700 letterSpacing 0.12em with folder/chat glyphs
-  and, when collapsed, working/attention/awake count pills (#F8AD07/#95D7F6/
-  #D8D8D8, awake only without action counts). Collection headers use the
-  desktop tint math (color 16% over #141414, 38% border) with a rotating
-  caret. Agent icon set includes the desktop-only codebuddy/kiro/omp/qoder/
-  rovo-dev logos with desktop brand tints.
+- **Structure**: "Quick" section label → chat sessions as bare rows → 
+  "Projects" section label → colored collection PANELS (tinted bg mix(color
+  3%, mix(fg 3%, #0e0e0e)), border mix(color 22%, mix(fg 5%, bg)), radius 5)
+  containing member project CARDS → ungrouped project cards (bg mix(fg 3.5%,
+  bg), 1dp border mix(fg 5%, bg), radius 5). No colored left rail, no
+  uppercase titles, no folder icons. Section labels are 15.5dp weight-300 at
+  fg-52% with a filled caret; both sections persist collapse per machine
+  (`collapsedSections` in `drawer.disclosure.v2`, default expanded).
+- **Headers**: collection + project headers are flat 30dp rows with 13dp
+  weight-300 titles (mix(fg 92%, white 8%)). Collapsed headers show the count
+  pills (working #F8AD07 dot+count, attention #95D7F6 dot+count, awake
+  #D8D8D8 count WITHOUT dot, weight 300). Expanded project headers show the
+  desktop button cluster (22×22, radius 6, card fill, blue-tinted icons):
+  optional Show-less chevron, Actions menu button (only when the project has
+  quick actions), Create Terminal, and the 24+17 agent split-button (primary
+  agent icon + ▾). Long-press on the header opens the project menu (desktop
+  right-click equivalent).
+- **Menus** (`ContextMenu`, cloned from `.session-context-menu`): 220dp dark
+  popup (#222222, 1dp border, radius 0, 6dp padding, 2dp row gap) anchored
+  under the pressed button. The agent menu lists `summary.agents` with
+  brand-tinted icons and a check on the selected primary agent; selecting
+  launches the agent AND persists it globally (`drawer.launcher.v1`,
+  mirroring the desktop's ghostex-sidebar-project-terminal-launcher). The
+  actions menu lists the project's quick actions with a check on the
+  last-run action (persisted per machine+project). The old
+  PROJECT_AGENTS_ROW chip row is gone.
+- **Session rows**: 34dp flat rows, radius 4 fills, title 15.5dp weight-300
+  #B4B8C0 (active #D8D8D8; sleeping dims ONLY the title to #5F646B at 0.42),
+  leading icon absolute at 5dp (in-card) / 26dp (Quick) with 48% opacity
+  (80% active; 13dp agent masks, 15dp terminal/browser glyphs), relative
+  time 13.5dp #4F5359 right-aligned (hidden while working/attention), and a
+  flat 7dp right-edge dot: #95D7F6 for attention/done/error, grey for remote
+  sleeping, NOTHING for working/idle (desktop hides the working dot; no
+  pulse animation). Pinned rows show a mirrored 13dp pin at 50% opacity.
+  "Show more" renders as a session-styled "Show N more" row; "Show less" is
+  the header chevron button. Empty projects render the dashed "No sessions"
+  38dp box; empty Quick renders bare "No Quick Sessions" (#444444).
+- **Ordering** (unchanged): browser-kind first → pinned in saved order →
+  attention > working > idle → newest lastInteractionAt → stable wire order;
+  the CLI forwards isPinned/isFavorite/kind/surface/agentName.
+- **First-start disclosure** (unchanged): EXPANDED sets in
+  `drawer.disclosure.v2`; everything starts collapsed except the two section
+  labels.
+
+### §9.1 Context-menu parity (2026-07-22, second amendment)
+
+Every drawer surface now carries a ⋮ trigger (GhostMenuButton, the mobile
+stand-in for desktop right-click) opening a desktop-parity `ContextMenu`:
+
+- **Session** (⋮ or long-press): Rename, Pin/Unpin (`pin-session`), Tag as ›
+  (grouped Priority/Progress/Type radio submenu with the desktop tag tints,
+  check on `session.sessionTag`, tap-again clears → `tag-session`),
+  Sleep/Wake · Attach, Focus on Mac, Fork (`fork-session`, codex/claude/pi
+  only), Full reload (`reload-session`, non-browser), Copy attach command,
+  Details · Close (confirm → kill). Browser sessions lose Rename/Tag/Fork/
+  Full reload like the desktop.
+- **Project header**: Copy Path, Add to project group › (New project group /
+  swatch radio per collection / Remove from group — full-state
+  `update-sidebar-project-collections --state-json` round-trip via
+  `contract/collectionsState.ts`) · Sleep Inactive⇄Wake, Full reload · Close
+  inactive, Close Project (`remove-project`) · Move up/down, Refresh,
+  Details (mobile extras).
+- **Collection header**: Sleep/Wake/Pin/Unpin/Full-reload sessions (bulk) ·
+  Rename group (prompt), Group color › (desktop 9-color swatch submenu),
+  Delete group, Close all sessions.
+- **Named group header**: Full reload, Sleep⇄Wake, Close (confirm).
+- **Section labels**: Quick → Quick Terminal; Projects → Add Project
+  (path prompt → `add-project`), Recent Projects, Collapse All / Expand All.
+
+The Rust mobile emitter now also forwards `sessionTag`; menus needing it
+degrade gracefully (no check mark) until the CLI is redeployed.

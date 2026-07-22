@@ -8,8 +8,10 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -27,46 +29,103 @@ import DetailsSheet from '../components/common/DetailsSheet';
 import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import StateCard from '../components/common/StateCard';
+import { AGENT_ICONS } from '../assets/agentIcons.generated';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import { useCollapseStore } from '../components/sessions/collapseStore';
-import { buildDrawerList, drawerStatusLine, type DrawerListEntry } from '../components/sessions/drawerModel';
-import { MachinesGlyph, RefreshGlyph, SettingsGlyph } from '../components/sessions/icons';
+import ContextMenu, {
+  type ContextMenuItem,
+  type MenuAnchor,
+} from '../components/sessions/ContextMenu';
+import {
+  buildDrawerList,
+  drawerStatusLine,
+  type DrawerBlock,
+  type ProjectCardBlock,
+} from '../components/sessions/drawerModel';
+import {
+  CopyGlyph,
+  ExitGlyph,
+  GitForkGlyph,
+  MachinesGlyph,
+  PaletteGlyph,
+  PencilGlyph,
+  PinGlyph,
+  PlayGlyph,
+  PlusGlyph,
+  RefreshGlyph,
+  SettingsGlyph,
+  SleepGlyph,
+  TagGlyph,
+  TerminalGlyph,
+  TrashGlyph,
+  WorldGlyph,
+  XGlyph,
+} from '../components/sessions/icons';
+import { useLauncherStore, lastActionKey } from '../components/sessions/launcherStore';
 import {
   CollectionHeaderRow,
-  collectionRailColor,
+  collectionPanelBackground,
+  collectionPanelBorder,
   GroupHeaderRow,
   MachineHeaderRow,
-  ProjectAgentsRow,
+  PROJECT_CARD_BACKGROUND,
+  PROJECT_CARD_BORDER,
   ProjectEmptyRow,
   ProjectHeaderRow,
+  SectionLabelRow,
   SessionListToggleRow,
+  SIDEBAR_BACKGROUND,
 } from '../components/sessions/rows';
 import SessionRow from '../components/sessions/SessionRow';
 import {
+  addProjectCommand,
   attachCommand,
   createAgentCommand,
   createChatCommand,
   createSessionCommand,
   focusSessionCommand,
+  forkSessionCommand,
   killSessionCommand,
   loginShellCommand,
   moveProjectCommand,
+  pinSessionCommand,
+  reloadSessionCommand,
+  removeProjectCommand,
   renameSessionCommand,
   restoreRecentProjectCommand,
   runActionCommand,
   shellQuote,
   sleepSessionCommand,
+  tagSessionCommand,
+  updateProjectCollectionsCommand,
   wakeSessionCommand,
 } from '../commands/ghostexCli';
 import {
+  COLLECTION_COLOR_OPTIONS,
+  collectionIdForProject,
+  stateWithCollectionColor,
+  stateWithCollectionTitle,
+  stateWithNewCollection,
+  stateWithoutCollection,
+  stateWithoutProject,
+  stateWithProjectInCollection,
+} from '../contract/collectionsState';
+import {
   CHATS_PROJECT_KEY,
   projectKeyForSession,
+  type CollectionHeaderItem,
+  type DrawerItem,
+  type GroupHeaderItem,
   type ProjectHeaderItem,
   type SessionItem,
 } from '../contract/grouping';
+import { SESSION_TAG_SECTIONS } from '../contract/sessionTags';
 import {
+  agentIconTint,
   displayStatus,
   formatLastActive,
+  resolveAgentIconId,
+  type GhostexAgentLauncher,
   type GhostexQuickAction,
   type GhostexSession,
 } from '../contract/mobileSummary';
@@ -82,16 +141,33 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 type SessionContext = { machine: MachineRecord; item: SessionItem };
 type ProjectContext = { machine: MachineRecord; header: ProjectHeaderItem };
 
+type CollectionContext = { machine: MachineRecord; header: CollectionHeaderItem };
+type GroupContext = { machine: MachineRecord; item: GroupHeaderItem };
+
 type Overlay =
   | { kind: 'none' }
-  | { kind: 'sessionMenu'; ctx: SessionContext }
+  | { kind: 'sessionMenu'; ctx: SessionContext; anchor: MenuAnchor; view: 'root' | 'tags' }
   | { kind: 'sessionDetails'; ctx: SessionContext }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
   | { kind: 'killConfirm'; ctx: SessionContext }
   | { kind: 'copyText'; title: string; text: string }
-  | { kind: 'projectMenu'; ctx: ProjectContext }
+  | { kind: 'projectMenu'; ctx: ProjectContext; anchor: MenuAnchor; view: 'root' | 'collections' }
   | { kind: 'projectKillConfirm'; ctx: ProjectContext }
   | { kind: 'projectDetails'; ctx: ProjectContext }
+  | { kind: 'agentMenu'; ctx: ProjectContext; anchor: MenuAnchor }
+  | { kind: 'actionsMenu'; ctx: ProjectContext; anchor: MenuAnchor }
+  | { kind: 'collectionMenu'; ctx: CollectionContext; anchor: MenuAnchor; view: 'root' | 'colors' }
+  | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
+  | { kind: 'groupMenu'; ctx: GroupContext; anchor: MenuAnchor }
+  | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects'; anchor: MenuAnchor }
+  | { kind: 'addProject'; machine: MachineRecord; error: string | null }
+  | {
+      kind: 'confirmAction';
+      title: string;
+      body: string;
+      confirmLabel: string;
+      run: () => void;
+    }
   | { kind: 'recentProjects'; machine: MachineRecord }
   | { kind: 'recovery'; machine: MachineRecord | null };
 
@@ -120,6 +196,8 @@ export default function SessionsScreen({ navigation }: Props) {
   const stopPolling = useInventoryStore((state) => state.stopPolling);
 
   const collapse = useCollapseStore();
+  const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
+  const lastActionByProject = useLauncherStore((state) => state.lastActionByProject);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
@@ -147,9 +225,34 @@ export default function SessionsScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void useCollapseStore.getState().hydrate();
+      void useLauncherStore.getState().hydrate();
       if (machine !== null) startPolling();
       return () => stopPolling();
     }, [machine !== null, startPolling, stopPolling]),
+  );
+
+  // Android Back alternates between sessions and the selected warm terminal.
+  // When no terminal is open, consume Back so exiting remains an explicit action.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return undefined;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        const terminal = useTerminalStore.getState();
+        const selectedTab =
+          terminal.tabs.find((tab) => tab.sessionKey === terminal.selectedSessionKey) ??
+          terminal.tabs[terminal.tabs.length - 1];
+        if (selectedTab !== undefined) {
+          terminal.selectTab(selectedTab.sessionKey);
+          navigation.navigate('Terminal', {
+            sessionKey: selectedTab.sessionKey,
+            machineId: selectedTab.machineId,
+            title: selectedTab.title,
+          });
+        }
+        return true;
+      });
+      return () => subscription.remove();
+    }, [navigation]),
   );
 
   const entries = useMemo(
@@ -162,6 +265,7 @@ export default function SessionsScreen({ navigation }: Props) {
           expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
           expandedGroupsByMachine: collapse.expandedGroupsByMachine,
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
+          collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedMachineIds: collapse.collapsedMachineIds,
         },
       }),
@@ -172,6 +276,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.expandedCollectionsByMachine,
       collapse.expandedGroupsByMachine,
       collapse.collapsedSessionListsByMachine,
+      collapse.collapsedSectionsByMachine,
       collapse.collapsedMachineIds,
     ],
   );
@@ -392,141 +497,883 @@ export default function SessionsScreen({ navigation }: Props) {
   // Menus.
   // -------------------------------------------------------------------------
 
-  const sessionMenuItems = (ctx: SessionContext): ActionSheetItem[] => {
+  // Desktop-parity context menus ---------------------------------------------
+
+  const summaryFor = (machineId: string) =>
+    useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
+
+  const isBrowserSession = (session: GhostexSession): boolean =>
+    session.kind === 'browser' || session.surface === 'browser';
+
+  /** Sleepable-now sessions (awake, not working/attention) — "inactive". */
+  const isInactiveAwake = (session: GhostexSession): boolean => {
+    const status = displayStatus(session);
+    return (
+      !session.isSleeping &&
+      status !== 'sleep' &&
+      status !== 'sleeping' &&
+      status !== 'working' &&
+      status !== 'attention'
+    );
+  };
+
+  const isSleepingSession = (session: GhostexSession): boolean => {
+    const status = displayStatus(session);
+    return session.isSleeping || status === 'sleep' || status === 'sleeping';
+  };
+
+  /** Run one command per session, then refresh (bulk menu actions). */
+  const runBulkSessionCommands = useCallback(
+    async (target: MachineRecord, commands: string[]): Promise<void> => {
+      setOverlay(NONE);
+      try {
+        for (const command of commands) {
+          await runGhostexCli(target, command);
+        }
+        await refreshMachine(target);
+      } catch (error) {
+        setTransientStatus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [refreshMachine, setTransientStatus],
+  );
+
+  /** Write the FULL collections state back through the CLI, then refresh. */
+  const runCollectionsUpdate = useCallback(
+    (target: MachineRecord, state: unknown): void => {
+      void runSessionCommand(target, updateProjectCollectionsCommand(state));
+    },
+    [runSessionCommand],
+  );
+
+  const collectionMemberSessions = (ctx: CollectionContext): GhostexSession[] => {
+    const summary = summaryFor(ctx.machine.id);
+    if (summary === null) return [];
+    const collection = summary.projectCollections.find(
+      (entry) => entry.collectionId === ctx.header.collectionId,
+    );
+    if (collection === undefined) return [];
+    return summary.sessions.filter((session) => collection.projectIds.includes(session.projectId));
+  };
+
+  const groupMemberSessions = (ctx: GroupContext): GhostexSession[] => {
+    const summary = summaryFor(ctx.machine.id);
+    if (summary === null) return [];
+    const groups = summary.workspaceGroups?.projects?.[ctx.item.projectId]?.groups ?? [];
+    const group = groups.find((entry) => entry.groupId === ctx.item.groupId);
+    const memberIds = new Set(group?.sessionIds ?? []);
+    return summary.sessions.filter((session) => memberIds.has(session.sessionId));
+  };
+
+  const menuIconColor = GhostexPalette.FOREGROUND;
+  const dangerIconColor = '#FF7B72';
+  const FORK_AGENT_ICONS = ['codex', 'claude', 'pi'];
+
+  /** SESSION context menu root — desktop sortable-session-card menu order. */
+  const sessionMenuRootItems = (ctx: SessionContext, anchor: MenuAnchor): ContextMenuItem[] => {
     const { session } = ctx.item;
     const projectId = session.projectId.length > 0 ? session.projectId : undefined;
-    return [
-      {
-        key: 'attach',
-        label: 'Attach',
-        detail: 'Open this ZMX session in the terminal.',
-        onPress: () => void attach(ctx.machine, session),
-      },
-      {
-        key: 'focus',
-        label: 'Focus on Mac',
-        detail: 'Focus this session in the running Ghostex app.',
-        onPress: () => void runSessionCommand(ctx.machine, focusSessionCommand(session.sessionId, projectId)),
-      },
-      {
+    const browser = isBrowserSession(session);
+    const sleeping = isSleepingSession(session);
+    const agentKey = session.agentIcon.length > 0 ? session.agentIcon : session.agent;
+    const items: ContextMenuItem[] = [];
+
+    if (!browser) {
+      items.push({
+        kind: 'item',
         key: 'rename',
         label: 'Rename',
-        detail: 'Update this session title in Ghostex.',
+        icon: <PencilGlyph size={14} color={menuIconColor} />,
         onPress: () => setOverlay({ kind: 'rename', ctx, error: null }),
-      },
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'pin',
+      label: session.isPinned ? 'Unpin' : 'Pin',
+      icon: <PinGlyph size={14} color={menuIconColor} />,
+      onPress: () =>
+        void runSessionCommand(ctx.machine, pinSessionCommand(session.sessionId, !session.isPinned)),
+    });
+    if (!browser) {
+      items.push({
+        kind: 'item',
+        key: 'tag',
+        label: 'Tag as',
+        icon: <TagGlyph size={14} color={menuIconColor} />,
+        submenu: true,
+        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, anchor, view: 'tags' }),
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'sleep',
+      label: sleeping ? 'Wake' : 'Sleep',
+      icon: sleeping ? (
+        <PlayGlyph size={14} color={menuIconColor} />
+      ) : (
+        <SleepGlyph size={14} color={menuIconColor} />
+      ),
+      onPress: () =>
+        sleeping
+          ? void runSessionCommand(ctx.machine, wakeSessionCommand(session.sessionId, projectId))
+          : void runSessionCommand(ctx.machine, sleepSessionCommand(session.sessionId, projectId), {
+              closeWarmSessionId: session.sessionId,
+            }),
+    });
+
+    items.push({ kind: 'separator', key: 'sep-1' });
+    items.push({
+      kind: 'item',
+      key: 'attach',
+      label: 'Attach',
+      icon: <TerminalGlyph size={14} color={menuIconColor} />,
+      onPress: () => void attach(ctx.machine, session),
+    });
+    items.push({
+      kind: 'item',
+      key: 'focus',
+      label: 'Focus on Mac',
+      onPress: () =>
+        void runSessionCommand(ctx.machine, focusSessionCommand(session.sessionId, projectId)),
+    });
+    if (FORK_AGENT_ICONS.includes(agentKey)) {
+      items.push({
+        kind: 'item',
+        key: 'fork',
+        label: 'Fork',
+        icon: <GitForkGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runCreationFlow(
+            ctx.machine,
+            forkSessionCommand(session.sessionId),
+            ProgressCopy.creatingTerminal(ctx.item.projectTitle),
+          ),
+      });
+    }
+    if (!browser) {
+      items.push({
+        kind: 'item',
+        key: 'full-reload',
+        label: 'Full reload',
+        icon: <RefreshGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runSessionCommand(ctx.machine, reloadSessionCommand(session.sessionId)),
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'copy-attach',
+      label: 'Copy attach command',
+      icon: <CopyGlyph size={14} color={menuIconColor} />,
+      onPress: () =>
+        setOverlay({
+          kind: 'copyText',
+          title: 'Copy attach command',
+          text: attachSshCommand(ctx.machine, session),
+        }),
+    });
+    items.push({
+      kind: 'item',
+      key: 'details',
+      label: 'Details',
+      onPress: () => setOverlay({ kind: 'sessionDetails', ctx }),
+    });
+
+    items.push({ kind: 'separator', key: 'sep-2' });
+    items.push({
+      kind: 'item',
+      key: 'close',
+      label: 'Close',
+      icon: <XGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      onPress: () => setOverlay({ kind: 'killConfirm', ctx }),
+    });
+    return items;
+  };
+
+  /** SESSION "Tag as" submenu — grouped Priority/Progress/Type radio rows. */
+  const sessionTagItems = (ctx: SessionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+    const { session } = ctx.item;
+    const current = session.sessionTag;
+    const applyTag = (value: string): void =>
+      void runSessionCommand(ctx.machine, tagSessionCommand(session.sessionId, value));
+    const items: ContextMenuItem[] = [
       {
+        kind: 'item',
+        key: 'back',
+        label: '‹ Back',
+        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, anchor, view: 'root' }),
+      },
+      { kind: 'separator', key: 'sep-back' },
+    ];
+    if (current.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'clear',
+        label: 'Clear tag',
+        icon: <XGlyph size={14} color={menuIconColor} />,
+        onPress: () => applyTag('none'),
+      });
+    }
+    SESSION_TAG_SECTIONS.forEach((section, index) => {
+      if (index > 0 || current.length > 0) {
+        items.push({ kind: 'separator', key: `sep-${section.label}` });
+      }
+      for (const option of section.options) {
+        items.push({
+          kind: 'item',
+          key: option.value,
+          label: option.label,
+          icon: <TagGlyph size={14} color={option.color} />,
+          selected: current === option.value,
+          onPress: () => applyTag(current === option.value ? 'none' : option.value),
+        });
+      }
+    });
+    return items;
+  };
+
+  /** PROJECT context menu root — desktop project-header menu order + extras. */
+  const projectMenuRootItems = (ctx: ProjectContext, anchor: MenuAnchor): ContextMenuItem[] => {
+    const { header } = ctx;
+    const orderedHeaders: ProjectHeaderItem[] = [];
+    for (const block of entries) {
+      if (block.machineId !== ctx.machine.id) continue;
+      if (block.kind === 'project') orderedHeaders.push(block.card.header);
+      else if (block.kind === 'collection') {
+        for (const projectBlock of block.projects) orderedHeaders.push(projectBlock.header);
+      }
+    }
+    const index = orderedHeaders.findIndex((entry) => entry.projectKey === header.projectKey);
+    const canMove = header.projectId.length > 0;
+    const sessions = sessionsForProject(ctx.machine, header);
+    const inactive = sessions.filter(isInactiveAwake);
+    const sleeping = sessions.filter(isSleepingSession);
+    const allSleeping = sessions.length > 0 && sleeping.length === sessions.length;
+    const nonBrowser = sessions.filter((session) => !isBrowserSession(session));
+
+    const items: ContextMenuItem[] = [
+      {
+        kind: 'item',
+        key: 'copy-path',
+        label: 'Copy Path',
+        icon: <CopyGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          setOverlay({ kind: 'copyText', title: 'Copy project path', text: header.projectPath }),
+      },
+    ];
+    if (header.projectId.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'add-to-group',
+        label: 'Add to project group',
+        icon: <PlusGlyph size={14} color={menuIconColor} />,
+        submenu: true,
+        onPress: () => setOverlay({ kind: 'projectMenu', ctx, anchor, view: 'collections' }),
+      });
+    }
+    items.push({ kind: 'separator', key: 'sep-1' });
+    if (allSleeping) {
+      items.push({
+        kind: 'item',
         key: 'wake',
         label: 'Wake',
-        detail: 'Resume this persistent Ghostex session on the Mac.',
-        onPress: () => void runSessionCommand(ctx.machine, wakeSessionCommand(session.sessionId, projectId)),
+        icon: <PlayGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runBulkSessionCommands(
+            ctx.machine,
+            sleeping.map((session) =>
+              wakeSessionCommand(
+                session.sessionId,
+                session.projectId.length > 0 ? session.projectId : undefined,
+              ),
+            ),
+          ),
+      });
+    } else {
+      items.push({
+        kind: 'item',
+        key: 'sleep-inactive',
+        label: 'Sleep Inactive',
+        icon: <SleepGlyph size={14} color={menuIconColor} />,
+        disabled: inactive.length === 0,
+        onPress: () => {
+          for (const session of inactive) {
+            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
+          }
+          void runBulkSessionCommands(
+            ctx.machine,
+            inactive.map((session) =>
+              sleepSessionCommand(
+                session.sessionId,
+                session.projectId.length > 0 ? session.projectId : undefined,
+              ),
+            ),
+          );
+        },
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'full-reload',
+      label: 'Full reload',
+      icon: <RefreshGlyph size={14} color={menuIconColor} />,
+      disabled: nonBrowser.length === 0,
+      onPress: () =>
+        void runBulkSessionCommands(
+          ctx.machine,
+          nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+        ),
+    });
+    items.push({ kind: 'separator', key: 'sep-2' });
+    items.push({
+      kind: 'item',
+      key: 'close-inactive',
+      label: 'Close inactive',
+      icon: <XGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      disabled: inactive.length === 0,
+      onPress: () =>
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Close inactive sessions?',
+          body: `This stops ${inactive.length} inactive session(s) in ${header.title} on the connected machine.`,
+          confirmLabel: 'Close',
+          run: () => {
+            for (const session of inactive) {
+              void useTerminalStore
+                .getState()
+                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
+            }
+            void runBulkSessionCommands(
+              ctx.machine,
+              inactive.map((session) =>
+                killSessionCommand(
+                  session.sessionId,
+                  session.projectId.length > 0 ? session.projectId : undefined,
+                ),
+              ),
+            );
+          },
+        }),
+    });
+    items.push({
+      kind: 'item',
+      key: 'close-project',
+      label: 'Close Project',
+      icon: <XGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      disabled: header.projectId.length === 0,
+      onPress: () =>
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Close project?',
+          body: `This parks ${header.title} (and its ${sessions.length} session(s)) into Recent Projects on the Mac.`,
+          confirmLabel: 'Close Project',
+          run: () => void runSessionCommand(ctx.machine, removeProjectCommand(header.projectId)),
+        }),
+    });
+    items.push({ kind: 'separator', key: 'sep-3' });
+    items.push({
+      kind: 'item',
+      key: 'move-up',
+      label: 'Move project up',
+      disabled: !canMove || index <= 0,
+      onPress: () => void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'up')),
+    });
+    items.push({
+      kind: 'item',
+      key: 'move-down',
+      label: 'Move project down',
+      disabled: !canMove || index < 0 || index >= orderedHeaders.length - 1,
+      onPress: () =>
+        void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'down')),
+    });
+    items.push({
+      kind: 'item',
+      key: 'refresh',
+      label: 'Refresh sessions',
+      icon: <RefreshGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        void refreshMachine(ctx.machine);
       },
+    });
+    items.push({
+      kind: 'item',
+      key: 'details',
+      label: 'Details',
+      onPress: () => setOverlay({ kind: 'projectDetails', ctx }),
+    });
+    return items;
+  };
+
+  /** PROJECT "Add to project group" submenu — desktop collections subview. */
+  const projectCollectionsItems = (ctx: ProjectContext, anchor: MenuAnchor): ContextMenuItem[] => {
+    const summary = summaryFor(ctx.machine.id);
+    const state = summary?.projectCollectionsState ?? null;
+    const projectId = ctx.header.projectId;
+    const currentId = collectionIdForProject(state, projectId);
+    const items: ContextMenuItem[] = [
       {
+        kind: 'item',
+        key: 'back',
+        label: '‹ Back',
+        onPress: () => setOverlay({ kind: 'projectMenu', ctx, anchor, view: 'root' }),
+      },
+      { kind: 'separator', key: 'sep-back' },
+      {
+        kind: 'item',
+        key: 'new-group',
+        label: 'New project group',
+        icon: <PlusGlyph size={14} color={menuIconColor} />,
+        onPress: () => runCollectionsUpdate(ctx.machine, stateWithNewCollection(state, projectId)),
+      },
+    ];
+    for (const collection of summary?.projectCollections ?? []) {
+      items.push({
+        kind: 'item',
+        key: `col:${collection.collectionId}`,
+        label: collection.title,
+        swatch: collection.color,
+        selected: collection.collectionId === currentId,
+        onPress: () =>
+          runCollectionsUpdate(
+            ctx.machine,
+            stateWithProjectInCollection(state, collection.collectionId, projectId),
+          ),
+      });
+    }
+    if (currentId !== null) {
+      items.push({ kind: 'separator', key: 'sep-remove' });
+      items.push({
+        kind: 'item',
+        key: 'remove',
+        label: 'Remove from group',
+        icon: <XGlyph size={14} color={menuIconColor} />,
+        onPress: () => runCollectionsUpdate(ctx.machine, stateWithoutProject(state, projectId)),
+      });
+    }
+    return items;
+  };
+
+  /** COLLECTION header menu root — desktop project-collection menu. */
+  const collectionMenuRootItems = (ctx: CollectionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+    const summary = summaryFor(ctx.machine.id);
+    const state = summary?.projectCollectionsState ?? null;
+    const sessions = collectionMemberSessions(ctx);
+    const awake = sessions.filter((session) => !isSleepingSession(session));
+    const sleeping = sessions.filter(isSleepingSession);
+    const unpinned = sessions.filter((session) => !session.isPinned);
+    const pinned = sessions.filter((session) => session.isPinned);
+    const nonBrowser = sessions.filter((session) => !isBrowserSession(session));
+    const items: ContextMenuItem[] = [];
+
+    if (awake.length > 0) {
+      items.push({
+        kind: 'item',
         key: 'sleep',
-        label: 'Sleep',
-        detail: 'Leave the session persistent but idle on the Mac.',
+        label: 'Sleep sessions',
+        icon: <SleepGlyph size={14} color={menuIconColor} />,
+        onPress: () => {
+          for (const session of awake) {
+            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
+          }
+          void runBulkSessionCommands(
+            ctx.machine,
+            awake.map((session) =>
+              sleepSessionCommand(
+                session.sessionId,
+                session.projectId.length > 0 ? session.projectId : undefined,
+              ),
+            ),
+          );
+        },
+      });
+    }
+    if (sleeping.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'wake',
+        label: 'Wake sessions',
+        icon: <PlayGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runSessionCommand(ctx.machine, sleepSessionCommand(session.sessionId, projectId), {
-            closeWarmSessionId: session.sessionId,
-          }),
-      },
-      {
-        key: 'kill',
-        label: 'Kill',
-        detail: 'Stop this remote session on the Mac.',
-        destructive: true,
-        onPress: () => setOverlay({ kind: 'killConfirm', ctx }),
-      },
-      {
-        key: 'copy-attach',
-        label: 'Copy attach command',
-        detail: 'Copy the SSH command for this session.',
+          void runBulkSessionCommands(
+            ctx.machine,
+            sleeping.map((session) =>
+              wakeSessionCommand(
+                session.sessionId,
+                session.projectId.length > 0 ? session.projectId : undefined,
+              ),
+            ),
+          ),
+      });
+    }
+    if (unpinned.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'pin',
+        label: 'Pin sessions',
+        icon: <PinGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          setOverlay({
-            kind: 'copyText',
-            title: 'Copy attach command',
-            text: attachSshCommand(ctx.machine, session),
-          }),
+          void runBulkSessionCommands(
+            ctx.machine,
+            unpinned.map((session) => pinSessionCommand(session.sessionId, true)),
+          ),
+      });
+    }
+    if (pinned.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'unpin',
+        label: 'Unpin sessions',
+        icon: <PinGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runBulkSessionCommands(
+            ctx.machine,
+            pinned.map((session) => pinSessionCommand(session.sessionId, false)),
+          ),
+      });
+    }
+    if (nonBrowser.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'full-reload',
+        label: 'Full reload sessions',
+        icon: <RefreshGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runBulkSessionCommands(
+            ctx.machine,
+            nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+          ),
+      });
+    }
+    if (items.length > 0) items.push({ kind: 'separator', key: 'sep-1' });
+    items.push({
+      kind: 'item',
+      key: 'rename',
+      label: 'Rename group',
+      icon: <PencilGlyph size={14} color={menuIconColor} />,
+      onPress: () => setOverlay({ kind: 'collectionRename', ctx, error: null }),
+    });
+    items.push({
+      kind: 'item',
+      key: 'color',
+      label: 'Group color',
+      icon: <PaletteGlyph size={14} color={menuIconColor} />,
+      submenu: true,
+      onPress: () => setOverlay({ kind: 'collectionMenu', ctx, anchor, view: 'colors' }),
+    });
+    items.push({
+      kind: 'item',
+      key: 'delete',
+      label: 'Delete group',
+      icon: <TrashGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      onPress: () =>
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Delete group?',
+          body: `This removes the ${ctx.header.title} group. Its projects stay in the sidebar.`,
+          confirmLabel: 'Delete',
+          run: () =>
+            runCollectionsUpdate(ctx.machine, stateWithoutCollection(state, ctx.header.collectionId)),
+        }),
+    });
+    items.push({
+      kind: 'item',
+      key: 'close-all',
+      label: 'Close all sessions',
+      icon: <XGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      disabled: sessions.length === 0,
+      onPress: () =>
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Close all sessions?',
+          body: `This stops ${sessions.length} session(s) in ${ctx.header.title} on the connected machine.`,
+          confirmLabel: 'Close',
+          run: () => {
+            for (const session of sessions) {
+              void useTerminalStore
+                .getState()
+                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
+            }
+            void runBulkSessionCommands(
+              ctx.machine,
+              sessions.map((session) =>
+                killSessionCommand(
+                  session.sessionId,
+                  session.projectId.length > 0 ? session.projectId : undefined,
+                ),
+              ),
+            );
+          },
+        }),
+    });
+    return items;
+  };
+
+  /** COLLECTION "Group color" submenu — desktop 9-color swatch radio list. */
+  const collectionColorItems = (ctx: CollectionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+    const summary = summaryFor(ctx.machine.id);
+    const state = summary?.projectCollectionsState ?? null;
+    const items: ContextMenuItem[] = [
+      {
+        kind: 'item',
+        key: 'back',
+        label: '‹ Back',
+        onPress: () => setOverlay({ kind: 'collectionMenu', ctx, anchor, view: 'root' }),
+      },
+      { kind: 'separator', key: 'sep-back' },
+    ];
+    for (const option of COLLECTION_COLOR_OPTIONS) {
+      items.push({
+        kind: 'item',
+        key: option.value,
+        label: option.label,
+        swatch: option.value,
+        selected: ctx.header.color === option.value,
+        onPress: () =>
+          runCollectionsUpdate(
+            ctx.machine,
+            stateWithCollectionColor(state, ctx.header.collectionId, option.value),
+          ),
+      });
+    }
+    return items;
+  };
+
+  /** Named session-group header menu — desktop group-head menu. */
+  const groupMenuItems = (ctx: GroupContext): ContextMenuItem[] => {
+    const sessions = groupMemberSessions(ctx);
+    const sleeping = sessions.filter(isSleepingSession);
+    const allSleeping = sessions.length > 0 && sleeping.length === sessions.length;
+    const nonBrowser = sessions.filter((session) => !isBrowserSession(session));
+    const items: ContextMenuItem[] = [];
+    if (nonBrowser.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'full-reload',
+        label: 'Full reload',
+        icon: <RefreshGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runBulkSessionCommands(
+            ctx.machine,
+            nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+          ),
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'sleep',
+      label: allSleeping ? 'Wake' : 'Sleep',
+      icon: allSleeping ? (
+        <PlayGlyph size={14} color={menuIconColor} />
+      ) : (
+        <SleepGlyph size={14} color={menuIconColor} />
+      ),
+      disabled: sessions.length === 0,
+      onPress: () => {
+        const targets = allSleeping ? sleeping : sessions.filter((s) => !isSleepingSession(s));
+        if (!allSleeping) {
+          for (const session of targets) {
+            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
+          }
+        }
+        void runBulkSessionCommands(
+          ctx.machine,
+          targets.map((session) =>
+            allSleeping
+              ? wakeSessionCommand(
+                  session.sessionId,
+                  session.projectId.length > 0 ? session.projectId : undefined,
+                )
+              : sleepSessionCommand(
+                  session.sessionId,
+                  session.projectId.length > 0 ? session.projectId : undefined,
+                ),
+          ),
+        );
+      },
+    });
+    items.push({ kind: 'separator', key: 'sep-1' });
+    items.push({
+      kind: 'item',
+      key: 'close',
+      label: 'Close',
+      icon: <XGlyph size={14} color={dangerIconColor} />,
+      destructive: true,
+      disabled: sessions.length === 0,
+      onPress: () =>
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Close group?',
+          body: `This stops ${sessions.length} session(s) in ${ctx.item.title} on the connected machine.`,
+          confirmLabel: 'Close Group',
+          run: () => {
+            for (const session of sessions) {
+              void useTerminalStore
+                .getState()
+                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
+            }
+            void runBulkSessionCommands(
+              ctx.machine,
+              sessions.map((session) =>
+                killSessionCommand(
+                  session.sessionId,
+                  session.projectId.length > 0 ? session.projectId : undefined,
+                ),
+              ),
+            );
+          },
+        }),
+    });
+    return items;
+  };
+
+  /** Quick/Projects section-label menus — desktop section hover actions. */
+  const sectionMenuItems = (
+    target: MachineRecord,
+    section: 'quick' | 'projects',
+  ): ContextMenuItem[] => {
+    if (section === 'quick') {
+      return [
+        {
+          kind: 'item',
+          key: 'new-terminal',
+          label: 'Quick Terminal',
+          icon: <TerminalGlyph size={14} color={menuIconColor} />,
+          onPress: () =>
+            void runCreationFlow(target, createChatCommand(), ProgressCopy.creatingQuickSession),
+        },
+      ];
+    }
+    const summary = summaryFor(target.id);
+    const projectKeys: string[] = [];
+    for (const project of summary?.projects ?? []) {
+      if (project.isChat !== true) projectKeys.push(`id:${project.projectId}`);
+    }
+    const collectionIds = (summary?.projectCollections ?? []).map((entry) => entry.collectionId);
+    return [
+      {
+        kind: 'item',
+        key: 'add-project',
+        label: 'Add Project',
+        icon: <PlusGlyph size={14} color={menuIconColor} />,
+        onPress: () => setOverlay({ kind: 'addProject', machine: target, error: null }),
       },
       {
-        key: 'refresh',
-        label: 'Refresh sessions',
-        detail: 'Reload the ZMX session list from the Mac.',
+        kind: 'item',
+        key: 'recent',
+        label: 'Recent Projects',
+        icon: <RefreshGlyph size={14} color={menuIconColor} />,
+        onPress: () => setOverlay({ kind: 'recentProjects', machine: target }),
+      },
+      { kind: 'separator', key: 'sep-1' },
+      {
+        kind: 'item',
+        key: 'collapse-all',
+        label: 'Collapse All',
         onPress: () => {
           setOverlay(NONE);
-          void refreshMachine(ctx.machine);
+          collapse.collapseAllProjects(target.id);
         },
       },
       {
-        key: 'details',
-        label: 'Details',
-        onPress: () => setOverlay({ kind: 'sessionDetails', ctx }),
+        kind: 'item',
+        key: 'expand-all',
+        label: 'Expand All',
+        onPress: () => {
+          setOverlay(NONE);
+          collapse.expandAllProjects(target.id, projectKeys, collectionIds);
+        },
       },
     ];
   };
 
-  const projectMenuItems = (ctx: ProjectContext): ActionSheetItem[] => {
-    const { header } = ctx;
-    const orderedHeaders = entries.filter(
-      (entry) =>
-        entry.machineId === ctx.machine.id &&
-        entry.item.type === 'PROJECT_HEADER' &&
-        !entry.item.isChatCollection,
-    );
-    const index = orderedHeaders.findIndex(
-      (entry) => entry.item.type === 'PROJECT_HEADER' && entry.item.projectKey === header.projectKey,
-    );
-    const canMove = header.projectId.length > 0;
-    return [
-      {
-        key: 'move-up',
-        label: 'Move project up',
-        disabled: !canMove || index <= 0,
-        onPress: () =>
-          void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'up')),
-      },
-      {
-        key: 'move-down',
-        label: 'Move project down',
-        disabled: !canMove || index < 0 || index >= orderedHeaders.length - 1,
-        onPress: () =>
-          void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'down')),
-      },
-      {
-        key: 'refresh',
-        label: 'Refresh sessions',
+  // Desktop agent split-button + actions button menus -----------------------
+
+  const resolvePrimaryAgent = useCallback(
+    (agents: GhostexAgentLauncher[]): GhostexAgentLauncher | null => {
+      if (agents.length === 0) return null;
+      return agents.find((agent) => agent.agentId === primaryAgentId) ?? agents[0];
+    },
+    [primaryAgentId],
+  );
+
+  const launchAgent = useCallback(
+    (target: MachineRecord, header: ProjectHeaderItem, agent: GhostexAgentLauncher): void => {
+      if (header.projectId.length === 0) {
+        setTransientStatus(ProgressCopy.noStableProjectId);
+        return;
+      }
+      const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+      void runCreationFlow(
+        target,
+        createAgentCommand(agent.agentId, header.projectId),
+        ProgressCopy.startingAgent(agentName, header.title),
+      );
+    },
+    [runCreationFlow, setTransientStatus],
+  );
+
+  /** Agent menu (desktop .group-agent-menu): brand icon + name + check. */
+  const agentMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
+    const selected = resolvePrimaryAgent(ctx.header.agents);
+    return ctx.header.agents.map((agent) => {
+      const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+      const iconId = resolveAgentIconId(agent.icon, name);
+      const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
+      return {
+        kind: 'item' as const,
+        key: agent.agentId,
+        label: name,
+        icon: <Icon size={14} color={agentIconTint(iconId)} />,
+        selected: selected !== null && selected.agentId === agent.agentId,
         onPress: () => {
           setOverlay(NONE);
-          void refreshMachine(ctx.machine);
+          useLauncherStore.getState().setPrimaryAgent(agent.agentId);
+          launchAgent(ctx.machine, ctx.header, agent);
         },
-      },
-      {
-        key: 'wake',
-        label: 'Wake project sessions',
-        onPress: () => void runProjectSessionsAction(ctx, 'wake'),
-      },
-      {
-        key: 'sleep',
-        label: 'Sleep project sessions',
-        onPress: () => void runProjectSessionsAction(ctx, 'sleep'),
-      },
-      {
-        key: 'kill',
-        label: 'Kill project sessions',
-        destructive: true,
-        onPress: () => setOverlay({ kind: 'projectKillConfirm', ctx }),
-      },
-      {
-        key: 'copy-path',
-        label: 'Copy project path',
-        onPress: () =>
-          setOverlay({ kind: 'copyText', title: 'Copy project path', text: header.projectPath }),
-      },
-      {
-        key: 'details',
-        label: 'Details',
-        onPress: () => setOverlay({ kind: 'projectDetails', ctx }),
-      },
-    ];
+      };
+    });
+  };
+
+  /** Actions menu: one row per project quick action, check on the last run. */
+  const actionsMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
+    const selectedCommandId =
+      lastActionByProject[lastActionKey(ctx.machine.id, ctx.header.projectId)] ?? '';
+    return ctx.header.quickActions.map((action, index) => {
+      const name =
+        action.name !== undefined && action.name.length > 0 ? action.name : action.actionType;
+      const commandId = action.commandId ?? '';
+      const iconId = resolveAgentIconId(
+        action.icon,
+        action.actionType === 'browser' ? 'browser' : name,
+      );
+      const Icon = AGENT_ICONS[iconId];
+      return {
+        kind: 'item' as const,
+        key: commandId.length > 0 ? commandId : `action-${index}`,
+        label: name,
+        icon:
+          Icon !== undefined ? (
+            <Icon size={14} color={agentIconTint(iconId)} />
+          ) : (
+            <WorldGlyph size={14} color={agentIconTint('browser')} />
+          ),
+        selected: commandId.length > 0 && commandId === selectedCommandId,
+        onPress: () => {
+          setOverlay(NONE);
+          if (commandId.length > 0) {
+            useLauncherStore.getState().setLastAction(ctx.machine.id, ctx.header.projectId, commandId);
+          }
+          runQuickAction(ctx.machine, ctx.header.projectId, ctx.header.title, action);
+        },
+      };
+    });
   };
 
   const recoveryItems = (target: MachineRecord | null): ActionSheetItem[] => [
@@ -585,26 +1432,190 @@ export default function SessionsScreen({ navigation }: Props) {
   // Rendering.
   // -------------------------------------------------------------------------
 
-  /** Colored left rail for rows nested inside an expanded collection. */
-  const withCollectionRail = (
-    node: ReactElement,
-    collectionColor: string | undefined,
-    listKey: string,
+  /** Rows nested inside a project card (sessions, groups, empty, Show more). */
+  const renderChildItem = (
+    target: MachineRecord | null,
+    machineId: string,
+    child: DrawerItem,
+  ): ReactElement | null => {
+    switch (child.type) {
+      case 'PROJECT_EMPTY':
+        return <ProjectEmptyRow key={child.key} text={child.text} quick={false} />;
+      case 'GROUP_HEADER':
+        return (
+          <GroupHeaderRow
+            key={child.key}
+            title={child.title}
+            count={child.count}
+            collapsed={child.collapsed}
+            onPress={() => collapse.toggleGroup(machineId, child.groupCollapseKey)}
+            onMenu={(anchor) => {
+              if (target === null) return;
+              setOverlay({ kind: 'groupMenu', ctx: { machine: target, item: child }, anchor });
+            }}
+          />
+        );
+      case 'SESSION': {
+        const active = selectedSessionKey === attachSessionKey(machineId, child.session.sessionId);
+        return (
+          <SessionRow
+            key={child.key}
+            session={child.session}
+            active={active}
+            inCard
+            onPress={() => {
+              if (target !== null) void attach(target, child.session);
+            }}
+            onMenu={(anchor) => {
+              if (target === null) return;
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setOverlay({
+                kind: 'sessionMenu',
+                ctx: { machine: target, item: child },
+                anchor,
+                view: 'root',
+              });
+            }}
+          />
+        );
+      }
+      case 'SESSION_LIST_TOGGLE':
+        return (
+          <SessionListToggleRow
+            key={child.key}
+            label={child.label}
+            quick={false}
+            onPress={() => collapse.toggleSessionList(machineId, child.projectKey)}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  /** One desktop-style project card: header row + child rows. */
+  const renderProjectCard = (
+    target: MachineRecord | null,
+    machineId: string,
+    card: ProjectCardBlock,
+    inCollection: boolean,
   ): ReactElement => {
-    if (collectionColor === undefined) return node;
+    const header = card.header;
+    const primaryAgent = resolvePrimaryAgent(header.agents);
+    const selectedActionId = lastActionByProject[lastActionKey(machineId, header.projectId)] ?? '';
+    const selectedAction =
+      header.quickActions.find((action) => (action.commandId ?? '') === selectedActionId) ??
+      (header.quickActions.length > 0 ? header.quickActions[0] : null);
     return (
       <View
-        key={listKey}
-        style={[styles.collectionChild, { borderLeftColor: collectionRailColor(collectionColor) }]}
+        key={`card:${header.key}`}
+        style={[
+          styles.projectCard,
+          inCollection ? styles.projectCardInPanel : styles.projectCardTopLevel,
+          !header.collapsed ? styles.projectCardExpanded : null,
+        ]}
       >
-        {node}
+        <ProjectHeaderRow
+          title={header.title}
+          collapsed={header.collapsed}
+          workingCount={header.workingCount}
+          attentionCount={header.attentionCount}
+          awakeCount={header.awakeCount}
+          hasActions={header.quickActions.length > 0}
+          selectedActionType={
+            selectedAction === null
+              ? null
+              : selectedAction.actionType === 'browser'
+                ? 'browser'
+                : 'terminal'
+          }
+          primaryAgent={primaryAgent}
+          showSessionListCollapse={header.sessionListClipped && !header.sessionListCollapsed}
+          onToggle={() => collapse.toggleProject(machineId, header.projectKey)}
+          onMenu={(anchor) => {
+            if (target === null) return;
+            setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, anchor, view: 'root' });
+          }}
+          onCreateTerminal={() => {
+            if (target === null) return;
+            void runCreationFlow(
+              target,
+              createSessionCommand({
+                projectId: header.projectId.length > 0 ? header.projectId : undefined,
+                groupId:
+                  header.projectId.length === 0 && header.legacyGroupId.length > 0
+                    ? header.legacyGroupId
+                    : undefined,
+              }),
+              ProgressCopy.creatingTerminal(header.title),
+            );
+          }}
+          onLaunchPrimary={() => {
+            if (target === null || primaryAgent === null) return;
+            launchAgent(target, header, primaryAgent);
+          }}
+          onOpenAgentMenu={(anchor) => {
+            if (target === null) return;
+            setOverlay({ kind: 'agentMenu', ctx: { machine: target, header }, anchor });
+          }}
+          onOpenActionsMenu={(anchor) => {
+            if (target === null) return;
+            setOverlay({ kind: 'actionsMenu', ctx: { machine: target, header }, anchor });
+          }}
+          onCollapseSessionList={() => collapse.toggleSessionList(machineId, header.projectKey)}
+        />
+        {!header.collapsed && card.children.length > 0 ? (
+          <View style={styles.cardSessions}>
+            {card.children.map((child) => renderChildItem(target, machineId, child))}
+          </View>
+        ) : null}
       </View>
     );
   };
 
-  const renderEntry = ({ item: listEntry }: { item: DrawerListEntry }) => {
-    const { item, machineId } = listEntry;
-    const itemMachine = machineById(machineId);
+  const renderBlock = ({ item: block }: { item: DrawerBlock }) => {
+    const target = machineById(block.machineId);
+    if (block.kind === 'project') {
+      return renderProjectCard(target, block.machineId, block.card, false);
+    }
+    if (block.kind === 'collection') {
+      const header = block.header;
+      return (
+        <View
+          style={[
+            styles.collectionPanel,
+            {
+              backgroundColor: collectionPanelBackground(header.color),
+              borderColor: collectionPanelBorder(header.color),
+            },
+          ]}
+        >
+          <CollectionHeaderRow
+            title={header.title}
+            collapsed={header.collapsed}
+            workingCount={header.workingCount}
+            attentionCount={header.attentionCount}
+            awakeCount={header.awakeCount}
+            onPress={() => collapse.toggleCollection(block.machineId, header.collectionId)}
+            onMenu={(anchor) => {
+              if (target === null) return;
+              setOverlay({
+                kind: 'collectionMenu',
+                ctx: { machine: target, header },
+                anchor,
+                view: 'root',
+              });
+            }}
+          />
+          {!header.collapsed && block.projects.length > 0 ? (
+            <View style={styles.collectionProjects}>
+              {block.projects.map((card) => renderProjectCard(target, block.machineId, card, true))}
+            </View>
+          ) : null}
+        </View>
+      );
+    }
+    const { item } = block;
     switch (item.type) {
       case 'STATE_CARD':
         return (
@@ -612,7 +1623,7 @@ export default function SessionsScreen({ navigation }: Props) {
             title={item.title}
             body={item.body}
             actionHint={item.actionHint}
-            onPress={() => setOverlay({ kind: 'recovery', machine: itemMachine })}
+            onPress={() => setOverlay({ kind: 'recovery', machine: target })}
           />
         );
       case 'MACHINE_HEADER':
@@ -623,126 +1634,64 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => collapse.toggleMachine(item.machineId)}
           />
         );
-      case 'COLLECTION_HEADER':
+      case 'SECTION_LABEL':
         return (
-          <CollectionHeaderRow
+          <SectionLabelRow
             title={item.title}
-            color={item.color}
             collapsed={item.collapsed}
-            workingCount={item.workingCount}
-            attentionCount={item.attentionCount}
-            awakeCount={item.awakeCount}
-            onPress={() => collapse.toggleCollection(machineId, item.collectionId)}
+            first={item.section === 'quick'}
+            onToggle={() => collapse.toggleSection(block.machineId, item.section)}
+            onCreate={
+              item.section === 'quick'
+                ? () => {
+                    if (target === null) return;
+                    void runCreationFlow(
+                      target,
+                      createChatCommand(),
+                      ProgressCopy.creatingQuickSession,
+                    );
+                  }
+                : undefined
+            }
+            onMenu={(anchor) => {
+              if (target === null) return;
+              setOverlay({ kind: 'sectionMenu', machine: target, section: item.section, anchor });
+            }}
           />
         );
-      case 'PROJECT_HEADER':
-        return withCollectionRail(
-          <ProjectHeaderRow
-            title={item.title}
-            collapsed={item.collapsed}
-            isChatCollection={item.isChatCollection}
-            workingCount={item.workingCount}
-            attentionCount={item.attentionCount}
-            awakeCount={item.awakeCount}
-            showMenu={!item.isChatCollection}
-            onToggle={() => collapse.toggleProject(machineId, item.projectKey)}
-            onCreate={() => {
-              if (itemMachine === null) return;
-              if (item.isChatCollection) {
-                void runCreationFlow(itemMachine, createChatCommand(), ProgressCopy.creatingQuickSession);
-                return;
-              }
-              void runCreationFlow(
-                itemMachine,
-                createSessionCommand({
-                  projectId: item.projectId.length > 0 ? item.projectId : undefined,
-                  groupId:
-                    item.projectId.length === 0 && item.legacyGroupId.length > 0
-                      ? item.legacyGroupId
-                      : undefined,
-                }),
-                ProgressCopy.creatingTerminal(item.title),
-              );
-            }}
-            onMenu={() => {
-              if (itemMachine === null) return;
-              setOverlay({ kind: 'projectMenu', ctx: { machine: itemMachine, header: item } });
-            }}
-          />,
-          item.collectionColor,
-          listEntry.listKey,
-        );
-      case 'PROJECT_AGENTS_ROW':
-        return withCollectionRail(
-          <ProjectAgentsRow
-            agents={item.agents}
-            quickActions={item.quickActions}
-            onAgentPress={(agent) => {
-              if (itemMachine === null) return;
-              if (item.projectId.length === 0) {
-                setTransientStatus(ProgressCopy.noStableProjectId);
-                return;
-              }
-              const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
-              void runCreationFlow(
-                itemMachine,
-                createAgentCommand(agent.agentId, item.projectId),
-                ProgressCopy.startingAgent(agentName, item.projectTitle),
-              );
-            }}
-            onQuickActionPress={(action) => {
-              if (itemMachine === null) return;
-              runQuickAction(itemMachine, item.projectId, item.projectTitle, action);
-            }}
-          />,
-          item.collectionColor,
-          listEntry.listKey,
-        );
       case 'PROJECT_EMPTY':
-        return withCollectionRail(
-          <ProjectEmptyRow text={item.text} />,
-          item.collectionColor,
-          listEntry.listKey,
-        );
-      case 'GROUP_HEADER':
-        return withCollectionRail(
-          <GroupHeaderRow
-            title={item.title}
-            count={item.count}
-            collapsed={item.collapsed}
-            onPress={() => collapse.toggleGroup(machineId, item.groupCollapseKey)}
-          />,
-          item.collectionColor,
-          listEntry.listKey,
-        );
+        return <ProjectEmptyRow text={item.text} quick />;
       case 'SESSION': {
-        const active = selectedSessionKey === attachSessionKey(machineId, item.session.sessionId);
-        return withCollectionRail(
+        const active =
+          selectedSessionKey === attachSessionKey(block.machineId, item.session.sessionId);
+        return (
           <SessionRow
             session={item.session}
             active={active}
+            inCard={false}
             onPress={() => {
-              if (itemMachine !== null) void attach(itemMachine, item.session);
+              if (target !== null) void attach(target, item.session);
             }}
-            onLongPress={() => {
-              if (itemMachine === null) return;
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              setOverlay({ kind: 'sessionMenu', ctx: { machine: itemMachine, item } });
+            onMenu={(anchor) => {
+              if (target === null) return;
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setOverlay({
+                kind: 'sessionMenu',
+                ctx: { machine: target, item },
+                anchor,
+                view: 'root',
+              });
             }}
-          />,
-          item.collectionColor,
-          listEntry.listKey,
+          />
         );
       }
       case 'SESSION_LIST_TOGGLE':
-        return withCollectionRail(
+        return (
           <SessionListToggleRow
             label={item.label}
-            collapsed={item.collapsed}
-            onPress={() => collapse.toggleSessionList(machineId, item.projectKey)}
-          />,
-          item.collectionColor,
-          listEntry.listKey,
+            quick
+            onPress={() => collapse.toggleSessionList(block.machineId, item.projectKey)}
+          />
         );
       default:
         return null;
@@ -754,6 +1703,16 @@ export default function SessionsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
+        {Platform.OS === 'android' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Exit Ghostex"
+            style={styles.headerButton}
+            onPress={() => BackHandler.exitApp()}
+          >
+            <ExitGlyph size={22} color={GhostexPalette.FOREGROUND} />
+          </Pressable>
+        ) : null}
         <Text style={styles.title}>Ghostex</Text>
         <Pressable
           accessibilityRole="button"
@@ -799,7 +1758,7 @@ export default function SessionsScreen({ navigation }: Props) {
       <FlatList
         data={entries}
         keyExtractor={(entry) => entry.listKey}
-        renderItem={renderEntry}
+        renderItem={renderBlock}
         style={styles.list}
         contentContainerStyle={styles.listContent}
       />
@@ -807,11 +1766,14 @@ export default function SessionsScreen({ navigation }: Props) {
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
 
       {overlay.kind === 'sessionMenu' ? (
-        <ActionSheet
+        <ContextMenu
           visible
-          title={sessionTitle(overlay.ctx.item.session)}
-          subtitle={`Session ${overlay.ctx.item.session.alias} · ${displayStatus(overlay.ctx.item.session)}`}
-          items={sessionMenuItems(overlay.ctx)}
+          anchor={overlay.anchor}
+          items={
+            overlay.view === 'tags'
+              ? sessionTagItems(overlay.ctx, overlay.anchor)
+              : sessionMenuRootItems(overlay.ctx, overlay.anchor)
+          }
           onClose={() => setOverlay(NONE)}
         />
       ) : null}
@@ -909,11 +1871,121 @@ export default function SessionsScreen({ navigation }: Props) {
       ) : null}
 
       {overlay.kind === 'projectMenu' ? (
-        <ActionSheet
+        <ContextMenu
           visible
-          title={overlay.ctx.header.title}
-          subtitle={`${overlay.ctx.header.sessionCount} ZMX session(s)`}
-          items={projectMenuItems(overlay.ctx)}
+          anchor={overlay.anchor}
+          items={
+            overlay.view === 'collections'
+              ? projectCollectionsItems(overlay.ctx, overlay.anchor)
+              : projectMenuRootItems(overlay.ctx, overlay.anchor)
+          }
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'collectionMenu' ? (
+        <ContextMenu
+          visible
+          anchor={overlay.anchor}
+          items={
+            overlay.view === 'colors'
+              ? collectionColorItems(overlay.ctx, overlay.anchor)
+              : collectionMenuRootItems(overlay.ctx, overlay.anchor)
+          }
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'groupMenu' ? (
+        <ContextMenu
+          visible
+          anchor={overlay.anchor}
+          items={groupMenuItems(overlay.ctx)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'sectionMenu' ? (
+        <ContextMenu
+          visible
+          anchor={overlay.anchor}
+          items={sectionMenuItems(overlay.machine, overlay.section)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'collectionRename' ? (
+        <PromptDialog
+          visible
+          title="Rename group"
+          body="Update this project group's title."
+          placeholder="Group title"
+          initialValue={overlay.ctx.header.title}
+          error={overlay.error}
+          confirmLabel="Rename"
+          onSubmit={(value) => {
+            const title = value.trim();
+            if (title.length === 0) {
+              setOverlay({ kind: 'collectionRename', ctx: overlay.ctx, error: 'Enter a title.' });
+              return;
+            }
+            const state = summaryFor(overlay.ctx.machine.id)?.projectCollectionsState ?? null;
+            runCollectionsUpdate(
+              overlay.ctx.machine,
+              stateWithCollectionTitle(state, overlay.ctx.header.collectionId, title),
+            );
+          }}
+          onCancel={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'addProject' ? (
+        <PromptDialog
+          visible
+          title="Add Project"
+          body="Absolute path of the repository on the Mac."
+          placeholder="/Users/you/dev/project"
+          initialValue=""
+          error={overlay.error}
+          confirmLabel="Add"
+          onSubmit={(value) => {
+            const path = value.trim();
+            if (path.length === 0) {
+              setOverlay({ kind: 'addProject', machine: overlay.machine, error: 'Enter a path.' });
+              return;
+            }
+            void runSessionCommand(overlay.machine, addProjectCommand(path));
+          }}
+          onCancel={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'confirmAction' ? (
+        <ConfirmDialog
+          visible
+          title={overlay.title}
+          body={overlay.body}
+          confirmLabel={overlay.confirmLabel}
+          destructive
+          onConfirm={overlay.run}
+          onCancel={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'agentMenu' ? (
+        <ContextMenu
+          visible
+          anchor={overlay.anchor}
+          items={agentMenuItems(overlay.ctx)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'actionsMenu' ? (
+        <ContextMenu
+          visible
+          anchor={overlay.anchor}
+          items={actionsMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
         />
       ) : null}
@@ -986,7 +2058,7 @@ export default function SessionsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GhostexPalette.BACKGROUND,
+    backgroundColor: SIDEBAR_BACKGROUND,
     padding: 12,
   },
   headerRow: {
@@ -1032,9 +2104,42 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 24,
   },
-  collectionChild: {
-    borderLeftWidth: 2,
-    marginLeft: 2,
-    paddingLeft: 5,
+  /** Desktop project card (hierarchy-panels.css .group[data-project-group]). */
+  projectCard: {
+    backgroundColor: PROJECT_CARD_BACKGROUND,
+    borderWidth: 1,
+    borderColor: PROJECT_CARD_BORDER,
+    borderRadius: 5,
+  },
+  projectCardTopLevel: {
+    marginLeft: 3,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  projectCardInPanel: {
+    marginHorizontal: 3,
+    marginBottom: 5,
+  },
+  projectCardExpanded: {
+    marginBottom: 7,
+  },
+  /** Card session area (.group-sessions): 3dp inner inset. */
+  cardSessions: {
+    paddingHorizontal: 3,
+    paddingBottom: 3,
+  },
+  /** Desktop collection panel (section.project-collection). */
+  collectionPanel: {
+    borderWidth: 1,
+    borderRadius: 5,
+    marginLeft: 3,
+    marginRight: 5,
+    marginBottom: 8,
+  },
+  /** Panel member area (.project-collection-projects). */
+  collectionProjects: {
+    paddingHorizontal: 3,
+    paddingTop: 2,
+    paddingBottom: 3,
   },
 });

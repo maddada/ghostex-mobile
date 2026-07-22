@@ -136,6 +136,38 @@ export function TextEditorIcon(props: IconProps) {
   );
 }
 
+/** Return/newline glyph: arrow turning down and left. */
+export function ReturnIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M19 5v6a4 4 0 0 1-4 4H6M10 11l-4 4 4 4"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Compact send glyph used in place of keyboard-dismiss while composing text. */
+export function SendIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 4l17 8-17 8 3-8-3-8zM7 12h14"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function PaperclipIcon(props: IconProps) {
   const { size, color, strokeWidth } = iconDefaults(props);
   return (

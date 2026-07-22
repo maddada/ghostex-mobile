@@ -42,6 +42,19 @@ export type MachineHeaderItem = {
   collapsed: boolean;
 };
 
+/**
+ * Desktop reference-sidebar section label ("Quick" above the chat sessions,
+ * "Projects" above collections + project cards).
+ */
+export type SectionLabelItem = {
+  type: 'SECTION_LABEL';
+  key: string;
+  machineId: string;
+  section: 'quick' | 'projects';
+  title: string;
+  collapsed: boolean;
+};
+
 export type CollectionHeaderItem = {
   type: 'COLLECTION_HEADER';
   key: string;
@@ -76,20 +89,19 @@ export type ProjectHeaderItem = {
   sleepingCount: number;
   /** Awake (running terminal/browser) count for the collapsed count pills. */
   awakeCount: number;
-  /** Set when the project renders inside a colored collection (member rail). */
+  /** Set when the project renders inside a colored collection panel. */
   collectionColor?: string;
-};
-
-export type ProjectAgentsRowItem = {
-  type: 'PROJECT_AGENTS_ROW';
-  key: string;
-  machineId: string;
-  projectKey: string;
-  projectId: string;
-  projectTitle: string;
+  /**
+   * Header launcher data (desktop agent split-button + actions menu): the
+   * global agent launcher rows and this project's quick actions. Empty for
+   * projects without a stable projectId.
+   */
   agents: GhostexAgentLauncher[];
   quickActions: GhostexQuickAction[];
-  collectionColor?: string;
+  /** True when the session list exceeds the collapsed cap (toggle exists). */
+  sessionListClipped: boolean;
+  /** True when the list is currently clipped to the collapsed cap. */
+  sessionListCollapsed: boolean;
 };
 
 export type ProjectEmptyItem = {
@@ -129,12 +141,16 @@ export type SessionItem = {
   collectionColor?: string;
 };
 
+/**
+ * "Show N more" reveal row (desktop renders it as a session-styled row) or the
+ * Quick section's "Show less" counterpart.
+ */
 export type SessionListToggleItem = {
   type: 'SESSION_LIST_TOGGLE';
   key: string;
   machineId: string;
   projectKey: string;
-  /** True when the list is currently collapsed to 6 (label "Show more"). */
+  /** True when the list is currently collapsed (label "Show N more"). */
   collapsed: boolean;
   label: string;
   totalSessionCount: number;
@@ -144,9 +160,9 @@ export type SessionListToggleItem = {
 export type DrawerItem =
   | StateCardItem
   | MachineHeaderItem
+  | SectionLabelItem
   | CollectionHeaderItem
   | ProjectHeaderItem
-  | ProjectAgentsRowItem
   | ProjectEmptyItem
   | GroupHeaderItem
   | SessionItem
@@ -318,6 +334,11 @@ export type DrawerBuildInput = {
    * the desktop default of showing all sessions until explicitly collapsed.
    */
   collapsedSessionListKeys: ReadonlySet<string>;
+  /**
+   * Collapsed top-level sections ('quick' | 'projects'). Presence = collapsed;
+   * both sections default expanded like the desktop reference sidebar.
+   */
+  collapsedSectionKeys: ReadonlySet<string>;
 };
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
@@ -328,6 +349,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     expandedCollectionIds,
     expandedGroupKeys,
     collapsedSessionListKeys,
+    collapsedSectionKeys,
   } = input;
 
   const projectById = new Map<string, GhostexProject>();
@@ -377,36 +399,27 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const emitProject = (projectKey: string, collectionColor?: string): void => {
     const projectSessions = sessionsByProjectKey.get(projectKey);
     if (projectSessions === undefined) return;
-    const isChatCollection = projectKey === CHATS_PROJECT_KEY;
     const first = projectSessions.length > 0 ? projectSessions[0] : null;
-    const project =
-      !isChatCollection && projectKey.startsWith('id:')
-        ? projectById.get(projectKey.slice(3)) ?? null
-        : null;
+    const project = projectKey.startsWith('id:')
+      ? projectById.get(projectKey.slice(3)) ?? null
+      : null;
 
-    const projectId = isChatCollection
-      ? ''
-      : project !== null
-        ? project.projectId
-        : first === null
-          ? ''
-          : first.projectId;
-    const projectTitle = isChatCollection
-      ? SessionCopy.chatsTitle
-      : project !== null
+    const projectId = project !== null ? project.projectId : first === null ? '' : first.projectId;
+    const projectTitle =
+      project !== null
         ? projectDisplayName(project)
         : first === null
           ? 'Project'
           : displayProjectName(first);
-    const projectPath = isChatCollection
-      ? ''
-      : project !== null
-        ? project.path ?? ''
-        : first === null
-          ? ''
-          : first.projectPath;
+    const projectPath =
+      project !== null ? project.path ?? '' : first === null ? '' : first.projectPath;
     const legacyGroupId = first === null ? '' : first.groupId;
     const counts = countSessions(projectSessions);
+
+    const namedGroups = groupsForProject(summary, projectId);
+    const sessionListClipped =
+      namedGroups.length === 0 && projectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
+    const sessionListCollapsed = sessionListClipped && collapsedSessionListKeys.has(projectKey);
 
     const collapsed = !expandedProjectKeys.has(projectKey);
     items.push({
@@ -418,7 +431,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       legacyGroupId,
       title: projectTitle,
       projectPath,
-      isChatCollection,
+      isChatCollection: false,
       collapsed,
       sessionCount: projectSessions.length,
       workingCount: counts.workingCount,
@@ -426,25 +439,12 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       sleepingCount: counts.sleepingCount,
       awakeCount: counts.awakeCount,
       collectionColor,
+      agents: projectId.length > 0 ? summary.agents : [],
+      quickActions: projectId.length > 0 ? summary.quickActionsByProject[projectId] ?? [] : [],
+      sessionListClipped,
+      sessionListCollapsed,
     });
     if (collapsed) return;
-
-    // Agents isle: not for Chats; needs a stable projectId and content.
-    const agents = summary.agents;
-    const quickActions = summary.quickActionsByProject[projectId] ?? [];
-    if (!isChatCollection && projectId.length > 0 && (agents.length > 0 || quickActions.length > 0)) {
-      items.push({
-        type: 'PROJECT_AGENTS_ROW',
-        key: `agents:${projectKey}`,
-        machineId,
-        projectKey,
-        projectId,
-        projectTitle,
-        agents,
-        quickActions,
-        collectionColor,
-      });
-    }
 
     if (projectSessions.length === 0) {
       items.push({
@@ -471,26 +471,25 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       collectionColor,
     });
 
-    const namedGroups = isChatCollection ? [] : groupsForProject(summary, projectId);
     if (namedGroups.length === 0) {
-      // Flat project: 6-row collapse + Show more/less.
-      const sessionListCollapsed =
-        collapsedSessionListKeys.has(projectKey) &&
-        projectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
+      // Flat project: 6-row collapse; the collapsed reveal is a session-styled
+      // "Show N more" row, expanded lists collapse via the header chevron.
       const visibleCount = sessionListCollapsed
         ? PROJECT_SESSION_LIST_COLLAPSED_COUNT
         : projectSessions.length;
       for (let index = 0; index < visibleCount; index++) {
         items.push(sessionItem(projectSessions[index], legacyGroupId));
       }
-      if (projectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT) {
+      if (sessionListCollapsed) {
         items.push({
           type: 'SESSION_LIST_TOGGLE',
           key: `toggle:${projectKey}`,
           machineId,
           projectKey,
-          collapsed: sessionListCollapsed,
-          label: sessionListCollapsed ? SessionCopy.showMore : SessionCopy.showLess,
+          collapsed: true,
+          label: SessionCopy.showCountMore(
+            projectSessions.length - PROJECT_SESSION_LIST_COLLAPSED_COUNT,
+          ),
           totalSessionCount: projectSessions.length,
           collectionColor,
         });
@@ -540,16 +539,79 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   };
 
   /*
-   * Top-level interleaving mirrors the desktop sidebar
-   * (buildProjectCollectionRenderItems): the Chats collection first, then
-   * colored project collections in definition order (each containing its
-   * member projects in project order), then ungrouped projects.
+   * Top-level layout mirrors the desktop reference sidebar: a "Quick" section
+   * label with the chat sessions as bare rows, then a "Projects" section label
+   * with colored collection panels (members in project order) followed by
+   * ungrouped project cards.
    */
+  if (summary.sessions.length === 0 && summary.projects.length === 0) return items;
+
   const emittedProjectKeys = new Set<string>();
-  if (orderedProjectKeys.includes(CHATS_PROJECT_KEY)) {
-    emitProject(CHATS_PROJECT_KEY);
-    emittedProjectKeys.add(CHATS_PROJECT_KEY);
+  emittedProjectKeys.add(CHATS_PROJECT_KEY);
+
+  const quickCollapsed = collapsedSectionKeys.has('quick');
+  items.push({
+    type: 'SECTION_LABEL',
+    key: 'section:quick',
+    machineId,
+    section: 'quick',
+    title: SessionCopy.quickSectionTitle,
+    collapsed: quickCollapsed,
+  });
+  if (!quickCollapsed) {
+    const chatSessions = sessionsByProjectKey.get(CHATS_PROJECT_KEY) ?? [];
+    if (chatSessions.length === 0) {
+      items.push({
+        type: 'PROJECT_EMPTY',
+        key: `empty:${CHATS_PROJECT_KEY}`,
+        machineId,
+        projectKey: CHATS_PROJECT_KEY,
+        text: SessionCopy.emptyQuickRow,
+      });
+    } else {
+      const clipped = chatSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
+      const listCollapsed = clipped && collapsedSessionListKeys.has(CHATS_PROJECT_KEY);
+      const visibleCount = listCollapsed ? PROJECT_SESSION_LIST_COLLAPSED_COUNT : chatSessions.length;
+      for (let index = 0; index < visibleCount; index++) {
+        const session = chatSessions[index];
+        items.push({
+          type: 'SESSION',
+          key: `session:${CHATS_PROJECT_KEY}:${session.sessionId}`,
+          machineId,
+          projectKey: CHATS_PROJECT_KEY,
+          projectId: session.projectId,
+          groupId: session.groupId,
+          projectTitle: SessionCopy.chatsTitle,
+          projectPath: '',
+          session,
+        });
+      }
+      if (clipped) {
+        items.push({
+          type: 'SESSION_LIST_TOGGLE',
+          key: `toggle:${CHATS_PROJECT_KEY}`,
+          machineId,
+          projectKey: CHATS_PROJECT_KEY,
+          collapsed: listCollapsed,
+          label: listCollapsed
+            ? SessionCopy.showCountMore(chatSessions.length - PROJECT_SESSION_LIST_COLLAPSED_COUNT)
+            : SessionCopy.showLess,
+          totalSessionCount: chatSessions.length,
+        });
+      }
+    }
   }
+
+  const projectsCollapsed = collapsedSectionKeys.has('projects');
+  items.push({
+    type: 'SECTION_LABEL',
+    key: 'section:projects',
+    machineId,
+    section: 'projects',
+    title: SessionCopy.projectsSectionTitle,
+    collapsed: projectsCollapsed,
+  });
+  if (projectsCollapsed) return items;
 
   for (const collection of summary.projectCollections) {
     const memberKeys = orderedProjectKeys.filter(

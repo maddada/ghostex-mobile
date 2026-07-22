@@ -40,7 +40,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
 const HEADER_HEIGHT = 44;
 /** Keeps Android's edge-to-edge IME from grazing the bottom of the accessory pills. */
-const ANDROID_KEYBOARD_CLEARANCE = 6;
+const ANDROID_KEYBOARD_CLEARANCE = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
 

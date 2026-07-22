@@ -7,6 +7,25 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 export type GlyphProps = { size: number; color: string };
 
+/** Door-and-arrow glyph for the Android-only explicit app exit action. */
+export function ExitGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 10 4 h 8 a 1 1 0 0 1 1 1 v 14 a 1 1 0 0 1 -1 1 h -8 v -2 h 7 V 6 h -7 Z"
+        fill={color}
+      />
+      <Path
+        d="M 5 12 h 9 M 9.5 7.5 L 5 12 l 4.5 4.5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Circular-arrows refresh glyph. */
 export function RefreshGlyph({ size, color }: GlyphProps) {
   return (
@@ -129,6 +148,175 @@ export function MessageCircleGlyph({ size, color }: GlyphProps) {
         d="M 12 4 c 4.97 0 9 3.36 9 7.5 S 16.97 19 12 19 c -1.1 0 -2.16 -0.16 -3.13 -0.46 L 4 20 l 1.32 -3.95 C 3.87 14.75 3 13.2 3 11.5 3 7.36 7.03 4 12 4 Z"
         stroke={color}
         strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Two stacked squares (desktop IconCopy, Copy Path). */
+export function CopyGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={8} y={8} width={12} height={12} rx={2} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 16 8 V 6 a 2 2 0 0 0 -2 -2 H 6 a 2 2 0 0 0 -2 2 v 8 a 2 2 0 0 0 2 2 h 2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Pencil (desktop IconPencil, Rename). */
+export function PencilGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 4 20 l 1 -4 L 16.5 4.5 a 2.1 2.1 0 0 1 3 3 L 8 19 Z M 13.5 6.5 l 3 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** X cross (desktop IconX, Close/Kill rows). */
+export function XGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M 6 6 l 12 12 M 18 6 L 6 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Trash can (desktop IconTrash, Delete group). */
+export function TrashGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 4 7 h 16 M 10 11 v 6 M 14 11 v 6 M 5 7 l 1 12 a 2 2 0 0 0 2 2 h 8 a 2 2 0 0 0 2 -2 l 1 -12 M 9 7 V 4 a 1 1 0 0 1 1 -1 h 4 a 1 1 0 0 1 1 1 v 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Painter palette (desktop IconPalette, Group color). */
+export function PaletteGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 12 3 a 9 9 0 1 0 0 18 c 1.1 0 1.9 -0.9 1.9 -2 0 -0.5 -0.2 -1 -0.5 -1.3 -0.3 -0.4 -0.5 -0.8 -0.5 -1.3 0 -1.1 0.9 -2 2 -2 h 2.3 A 3.8 3.8 0 0 0 21 10.6 C 20.8 6.3 16.8 3 12 3 Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Circle cx={7.5} cy={11} r={1.2} fill={color} />
+      <Circle cx={10.5} cy={7.5} r={1.2} fill={color} />
+      <Circle cx={15} cy={7.5} r={1.2} fill={color} />
+    </Svg>
+  );
+}
+
+/** Price-tag (desktop IconTag, Tag session). */
+export function TagGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 4 5.5 A 1.5 1.5 0 0 1 5.5 4 h 5.2 a 2 2 0 0 1 1.4 0.6 l 7.3 7.3 a 2 2 0 0 1 0 2.8 l -4.7 4.7 a 2 2 0 0 1 -2.8 0 L 4.6 12.1 A 2 2 0 0 1 4 10.7 Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Circle cx={9} cy={9} r={1.4} fill={color} />
+    </Svg>
+  );
+}
+
+/** Terminal window (desktop IconTerminal2, create-terminal header button). */
+export function TerminalGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3} y={4} width={18} height={16} rx={2} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 7 9 l 3 3 -3 3 M 12.5 15 H 17"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Globe (desktop IconWorld, browser quick actions). */
+export function WorldGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 3 12 h 18 M 12 3 c 2.7 2.4 4 5.4 4 9 s -1.3 6.6 -4 9 c -2.7 -2.4 -4 -5.4 -4 -9 s 1.3 -6.6 4 -9 Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Play triangle (desktop IconPlayerPlay, terminal quick actions). */
+export function PlayGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 7 5 v 14 l 11 -7 Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Git fork (desktop IconGitFork, session Fork action). */
+export function GitForkGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={6} cy={6} r={2.2} stroke={color} strokeWidth={2} />
+      <Circle cx={18} cy={6} r={2.2} stroke={color} strokeWidth={2} />
+      <Circle cx={12} cy={18} r={2.2} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 6 8.2 v 1.3 a 2 2 0 0 0 2 2 h 8 a 2 2 0 0 0 2 -2 V 8.2 M 12 11.5 v 4.3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Pin (desktop IconPin, mirrored like the sidebar's pinned marker). */
+export function PinGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ transform: [{ scaleX: -1 }] }}
+    >
+      <Path
+        d="M 9 4 h 6 l -0.8 6 2.8 2.5 v 1.5 H 7 v -1.5 L 9.8 10 Z M 12 14 v 6"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </Svg>

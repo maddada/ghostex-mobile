@@ -14,10 +14,18 @@ export const WelcomeCopy = {
 export const SessionCopy = {
   /** Row/menu title fallback when a session has no display title. */
   fallbackTitle: 'Ghostex Session',
-  emptyProjectRow: 'No sessions yet. Tap + to create one.',
+  /** Desktop parity: project cards say exactly "No sessions". */
+  emptyProjectRow: 'No sessions',
+  /** Desktop parity: empty Quick section body. */
+  emptyQuickRow: 'No Quick Sessions',
   showMore: 'Show more',
   showLess: 'Show less',
+  /** Desktop session-styled reveal row: "Show 4 more". */
+  showCountMore: (count: number) => `Show ${count} more`,
   chatsTitle: 'Chats',
+  /** Desktop reference sidebar section labels. */
+  quickSectionTitle: 'Quick',
+  projectsSectionTitle: 'Projects',
   unknownRecency: 'Unknown',
   attachCommandCopied: 'Attach command copied',
 } as const;

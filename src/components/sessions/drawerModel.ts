@@ -1,33 +1,47 @@
 /**
- * Sessions drawer list assembly (sessions-drawer.md §§1-3,5): stitches the
- * per-machine `buildDrawerItems` output into one flat multi-machine list.
- * Mirrors the Android reference: with a single saved machine the drawer keeps
- * a headerless layout; with two or more, each machine gets a collapsible
- * MACHINE_HEADER followed by its items (or a per-machine state card).
+ * Sessions drawer list assembly: stitches per-machine `buildDrawerItems`
+ * output into a flat multi-machine list of render BLOCKS matching the desktop
+ * layered-panel skin — plain rows (section labels, quick sessions, state
+ * cards), project cards (header + child rows in one bordered card), and
+ * collection panels (tinted panel containing member project cards). With a
+ * single saved machine the drawer keeps a headerless layout; with two or
+ * more, each machine gets a collapsible MACHINE_HEADER.
  */
 
 import {
   buildDrawerItems,
   machineHeaderItem,
   stateCardItem,
+  type CollectionHeaderItem,
   type DrawerItem,
+  type ProjectHeaderItem,
 } from '../../contract/grouping';
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
 
-export type DrawerListEntry = {
-  /** FlatList key, machine-scoped to avoid cross-machine collisions. */
-  listKey: string;
-  machineId: string;
-  item: DrawerItem;
+export type ProjectCardBlock = {
+  header: ProjectHeaderItem;
+  children: DrawerItem[];
 };
+
+export type DrawerBlock =
+  | { kind: 'row'; listKey: string; machineId: string; item: DrawerItem }
+  | { kind: 'project'; listKey: string; machineId: string; card: ProjectCardBlock }
+  | {
+      kind: 'collection';
+      listKey: string;
+      machineId: string;
+      header: CollectionHeaderItem;
+      projects: ProjectCardBlock[];
+    };
 
 export type DrawerCollapseInput = {
   expandedProjectsByMachine: Record<string, string[]>;
   expandedCollectionsByMachine: Record<string, string[]>;
   expandedGroupsByMachine: Record<string, string[]>;
   collapsedSessionListsByMachine: Record<string, string[]>;
+  collapsedSectionsByMachine: Record<string, string[]>;
   collapsedMachineIds: string[];
 };
 
@@ -37,19 +51,78 @@ export type DrawerListInput = {
   collapse: DrawerCollapseInput;
 };
 
-function entry(machineId: string, item: DrawerItem): DrawerListEntry {
-  return { listKey: `${machineId}:${item.key}`, machineId, item };
+function rowBlock(machineId: string, item: DrawerItem): DrawerBlock {
+  return { kind: 'row', listKey: `${machineId}:${item.key}`, machineId, item };
 }
 
-function machineEntries(
+function isProjectChild(item: DrawerItem): boolean {
+  return (
+    item.type === 'PROJECT_EMPTY' ||
+    item.type === 'GROUP_HEADER' ||
+    item.type === 'SESSION' ||
+    item.type === 'SESSION_LIST_TOGGLE'
+  );
+}
+
+/** Group the flat builder output into card/panel blocks. */
+export function blocksFromItems(machineId: string, items: DrawerItem[]): DrawerBlock[] {
+  const blocks: DrawerBlock[] = [];
+  let index = 0;
+
+  const collectCard = (header: ProjectHeaderItem): ProjectCardBlock => {
+    const children: DrawerItem[] = [];
+    while (index < items.length && isProjectChild(items[index])) {
+      children.push(items[index]);
+      index++;
+    }
+    return { header, children };
+  };
+
+  while (index < items.length) {
+    const item = items[index];
+    if (item.type === 'COLLECTION_HEADER') {
+      index++;
+      const projects: ProjectCardBlock[] = [];
+      while (index < items.length) {
+        const member = items[index];
+        if (member.type !== 'PROJECT_HEADER' || member.collectionColor === undefined) break;
+        index++;
+        projects.push(collectCard(member));
+      }
+      blocks.push({
+        kind: 'collection',
+        listKey: `${machineId}:${item.key}`,
+        machineId,
+        header: item,
+        projects,
+      });
+      continue;
+    }
+    if (item.type === 'PROJECT_HEADER') {
+      index++;
+      blocks.push({
+        kind: 'project',
+        listKey: `${machineId}:${item.key}`,
+        machineId,
+        card: collectCard(item),
+      });
+      continue;
+    }
+    blocks.push(rowBlock(machineId, item));
+    index++;
+  }
+  return blocks;
+}
+
+function machineBlocks(
   machine: MachineRecord,
   inventory: MachineInventory | undefined,
   collapse: DrawerCollapseInput,
-): DrawerListEntry[] {
+): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
   if (inventory === undefined || (inventory.summary === null && !inventory.hasLoaded)) {
     return [
-      entry(
+      rowBlock(
         machine.id,
         stateCardItem(
           StateCardCopy.connecting.title,
@@ -61,7 +134,7 @@ function machineEntries(
   }
   if (inventory.summary === null) {
     return [
-      entry(
+      rowBlock(
         machine.id,
         stateCardItem(
           StateCardCopy.failure.title,
@@ -78,10 +151,11 @@ function machineEntries(
     expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
     expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
     collapsedSessionListKeys: new Set(collapse.collapsedSessionListsByMachine[machine.id] ?? []),
+    collapsedSectionKeys: new Set(collapse.collapsedSectionsByMachine[machine.id] ?? []),
   });
   if (items.length === 0) {
     return [
-      entry(
+      rowBlock(
         machine.id,
         stateCardItem(
           StateCardCopy.empty.title,
@@ -91,14 +165,14 @@ function machineEntries(
       ),
     ];
   }
-  return items.map((item) => entry(machine.id, item));
+  return blocksFromItems(machine.id, items);
 }
 
-export function buildDrawerList(input: DrawerListInput): DrawerListEntry[] {
+export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
   const { machines, inventoriesByMachineId, collapse } = input;
   if (machines.length === 0) {
     return [
-      entry(
+      rowBlock(
         '',
         stateCardItem(
           StateCardCopy.noMachines.title,
@@ -110,16 +184,18 @@ export function buildDrawerList(input: DrawerListInput): DrawerListEntry[] {
   }
   if (machines.length === 1) {
     const machine = machines[0];
-    return machineEntries(machine, inventoriesByMachineId[machine.id], collapse);
+    return machineBlocks(machine, inventoriesByMachineId[machine.id], collapse);
   }
-  const entries: DrawerListEntry[] = [];
+  const blocks: DrawerBlock[] = [];
   for (const machine of machines) {
     const collapsed = collapse.collapsedMachineIds.includes(machine.id);
-    entries.push(entry(machine.id, machineHeaderItem(machine.id, machineDisplayLabel(machine), collapsed)));
+    blocks.push(
+      rowBlock(machine.id, machineHeaderItem(machine.id, machineDisplayLabel(machine), collapsed)),
+    );
     if (collapsed) continue;
-    entries.push(...machineEntries(machine, inventoriesByMachineId[machine.id], collapse));
+    blocks.push(...machineBlocks(machine, inventoriesByMachineId[machine.id], collapse));
   }
-  return entries;
+  return blocks;
 }
 
 /** Status line per sessions-drawer.md §5 for the selected machine. */
