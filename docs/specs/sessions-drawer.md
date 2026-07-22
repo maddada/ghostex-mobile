@@ -184,9 +184,12 @@ and recloned every surface from the live CSS cascade.
   leading icon absolute at 5dp (in-card) / 26dp (Quick) with 48% opacity
   (80% active; 13dp agent masks, 15dp terminal/browser glyphs), relative
   time 13.5dp #4F5359 right-aligned (hidden while working/attention), and a
-  flat 7dp right-edge dot: #95D7F6 for attention/done/error, grey for remote
-  sleeping, NOTHING for working/idle (desktop hides the working dot; no
-  pulse animation). Pinned rows show a mirrored 13dp pin at 50% opacity.
+  flat 7dp right-edge dot matching desktop .session-status-dot activity
+  colors (2026-07-22 amendment): working #FFB454 with the desktop 1.35s
+  pulse (opacity .78/scale .92 ↔ full), attention/done #95D7F6, error
+  #FF6B6B, grey for remote sleeping, nothing for idle. Same displayStatus
+  as the collapsed project/group count pills. Pinned rows show a mirrored
+  13dp pin at 50% opacity.
   "Show more" renders as a session-styled "Show N more" row; "Show less" is
   the header chevron button. Empty projects render the dashed "No sessions"
   38dp box; empty Quick renders bare "No Quick Sessions" (#444444).

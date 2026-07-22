@@ -53,6 +53,10 @@ export const SidebarPalette = {
   PILL_ATTENTION: '#95D7F6',
   /** Collapsed-header awake terminal/browser count pill. */
   PILL_AWAKE: '#D8D8D8',
+  /** Session-row working status dot (desktop .session-status-dot #ffb454). */
+  WORKING_DOT: '#FFB454',
+  /** Session-row error status dot (desktop #ff6b6b). */
+  ERROR_DOT: '#FF6B6B',
   /** Remote sleeping-row dot: mix(--app-muted 86%, --app-foreground 14%). */
   SLEEP_DOT: '#808791',
   /** Sleeping row content opacity (desktop .session[data-sleeping]). */

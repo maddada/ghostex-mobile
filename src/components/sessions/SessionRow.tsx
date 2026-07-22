@@ -1,16 +1,17 @@
 /**
  * SESSION row renderer, cloned from the desktop gpui reference sidebar
- * (sidebar/styles/group-panels.css + hierarchy-panels.css): 34dp flat row,
+ * (sidebar/styles/group-panels.css + session-cards.css): 34dp flat row,
  * absolutely-placed leading agent icon at 48% opacity (13dp brand masks, 15dp
  * terminal/browser glyphs), 15.5dp weight-300 title (#b4b8c0), muted relative
- * time on the right (hidden while working/attention), and a tiny flat 7dp
- * status dot at the right edge — blue for attention/done/error, gray for
- * remote sleeping, and NOTHING for working/idle (desktop hides both). Sleeping
- * dims only the title, and the active row gets the translucent rounded fill.
+ * time on the right (hidden while working/attention), and a 7dp status dot at
+ * the right edge matching the desktop .session-status-dot activity colors —
+ * pulsing orange for working, blue for attention/done, red for error, gray for
+ * remote sleeping, nothing for idle. Sleeping dims only the title, and the
+ * active row gets the translucent rounded fill.
  */
 
-import { useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import {
@@ -52,16 +53,65 @@ function compactLastActive(session: GhostexSession): string {
 }
 
 /**
- * Right-edge dot color per the desktop reference sidebar: attention/done/error
- * share the blue token, remote sleeping is neutral gray, and working/idle rows
- * show no dot at all (the working dot is display:none there).
+ * Right-edge dot color per the desktop .session-status-dot activity rules
+ * (session-cards.css): working → pulsing orange #ffb454, attention/done → the
+ * blue attention token, error → red #ff6b6b, remote sleeping → neutral gray,
+ * idle → no dot. This is the same displayStatus that drives the collapsed
+ * project/group count pills, so a session showing in a "working" pill shows
+ * the matching orange dot when its row is visible.
  */
 function referenceDotColor(status: string): string | null {
-  if (status === 'attention' || status === 'done' || status === 'error') {
-    return SidebarPalette.PILL_ATTENTION;
-  }
+  if (status === 'working') return SidebarPalette.WORKING_DOT;
+  if (status === 'attention' || status === 'done') return SidebarPalette.PILL_ATTENTION;
+  if (status === 'error') return SidebarPalette.ERROR_DOT;
   if (status === 'sleep' || status === 'sleeping') return SidebarPalette.SLEEP_DOT;
   return null;
+}
+
+/**
+ * Status dot with the desktop working pulse (session-status-dot-pulse: 1.35s
+ * ease-in-out between opacity .78/scale .92 and full). Non-working dots stay
+ * static.
+ */
+function StatusDot({ color, pulse }: { color: string; pulse: boolean }) {
+  const animation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!pulse) {
+      animation.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animation, {
+          toValue: 1,
+          duration: 675,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(animation, {
+          toValue: 0,
+          duration: 675,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, animation]);
+
+  const opacity = pulse
+    ? animation.interpolate({ inputRange: [0, 1], outputRange: [0.78, 1] })
+    : 1;
+  const scale = pulse
+    ? animation.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] })
+    : 1;
+  return (
+    <Animated.View
+      style={[styles.dot, { backgroundColor: color, opacity, transform: [{ scale }] }]}
+    />
+  );
 }
 
 export default function SessionRow({ session, active, inCard, onPress, onMenu }: SessionRowProps) {
@@ -119,7 +169,7 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
         {title}
       </Text>
       {lastActive.length > 0 ? <Text style={styles.lastActive}>{lastActive}</Text> : null}
-      {dotColor !== null ? <View style={[styles.dot, { backgroundColor: dotColor }]} /> : null}
+      {dotColor !== null ? <StatusDot color={dotColor} pulse={working} /> : null}
     </Pressable>
   );
 }
