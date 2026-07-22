@@ -5,8 +5,8 @@
  *   keeps other warm entries alive across view detach), state overlays,
  *   2-row key accessory bar above the soft keyboard, floating keyboard/upload
  *   controls when the keyboard is hidden, and edge-swipe tab switching.
- * - Keyboard tracking: RN Keyboard events; iOS translates the bottom chrome
- *   by the keyboard height, Android relies on the resize window mode.
+ * - Keyboard tracking: RN Keyboard events plus measured viewport overlap keep
+ *   the terminal and accessory keys above the IME on both platforms.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
@@ -108,9 +108,16 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   const dismissKeyboard = useCallback((): void => {
     setTapKeyboardHint(false);
-    // TODO(native): expose a resignFirstResponder/blur method on
-    // GhostexTerminalView; Keyboard.dismiss only blurs RN TextInputs.
+    const sessionKey = useTerminalStore.getState().selectedSessionKey;
+    if (sessionKey !== null) void GhostexNative.blurTerminal(sessionKey).catch(() => undefined);
     Keyboard.dismiss();
+  }, []);
+
+  const showKeyboard = useCallback((): void => {
+    const sessionKey = useTerminalStore.getState().selectedSessionKey;
+    if (sessionKey === null) return;
+    setTapKeyboardHint(true);
+    void GhostexNative.focusTerminal(sessionKey).catch(() => setTapKeyboardHint(false));
   }, []);
 
   const handleBack = useCallback((): void => {
@@ -297,11 +304,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             uploadEnabled={uploadEnabled}
             uploading={uploading}
             bottomOffset={16}
-            onKeyboard={() => {
-              // TODO(native): expose a focus method on GhostexTerminalView so
-              // this button can summon the keyboard; today tapping the
-              // terminal surface focuses it natively.
-            }}
+            onKeyboard={showKeyboard}
             onUpload={() => void handleUpload()}
           />
         )}

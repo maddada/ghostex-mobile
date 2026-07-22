@@ -1,39 +1,46 @@
 /**
- * Soft-keyboard visibility + height tracking (terminal-screen.md §2).
- * - iOS: the window never resizes, so the screen must translate its bottom
- *   chrome up by the keyboard height (`bottomInset`). `keyboardWillShow` /
- *   `keyboardWillChangeFrame` keep the height current across QuickType and
- *   orientation changes.
- * - Android: `android.softwareKeyboardLayoutMode` defaults to resize, so the
- *   window itself shrinks and no extra translation is needed (`bottomInset`
- *   stays 0); only `keyboardDidShow`/`keyboardDidHide` visibility is tracked.
+ * Soft-keyboard visibility + overlap tracking (terminal-screen.md §2).
+ * Android devices do not all honor adjustResize once edge-to-edge layout is
+ * active. Measure how much of the keyboard the viewport resize already
+ * handled, then inset only the remaining overlap. iOS keeps its full-height
+ * viewport, so its remaining overlap is the keyboard height.
  */
 
-import { useEffect, useState } from 'react';
-import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Keyboard, Platform, useWindowDimensions, type KeyboardEvent } from 'react-native';
 
 export type KeyboardMetrics = {
   keyboardVisible: boolean;
-  /** Extra bottom translation needed to sit above the keyboard (iOS only). */
+  /** Bottom overlap not already handled by a native viewport resize. */
   bottomInset: number;
 };
 
 export function useKeyboardMetrics(): KeyboardMetrics {
-  const [metrics, setMetrics] = useState<KeyboardMetrics>({
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const restingViewport = useRef({ width: viewportWidth, height: viewportHeight });
+  const [keyboard, setKeyboard] = useState({
     keyboardVisible: false,
-    bottomInset: 0,
+    height: 0,
   });
+
+  // Keep the pre-keyboard viewport height. A same-width height reduction may
+  // arrive before Android's keyboardDidShow event, so never adopt that smaller
+  // value as the resting height. Width changes identify a real orientation
+  // change while the keyboard is hidden.
+  if (!keyboard.keyboardVisible) {
+    const resting = restingViewport.current;
+    if (viewportWidth !== resting.width || viewportHeight > resting.height) {
+      restingViewport.current = { width: viewportWidth, height: viewportHeight };
+    }
+  }
 
   useEffect(() => {
     const onShow = (event: KeyboardEvent): void => {
       const height = event.endCoordinates?.height ?? 0;
-      setMetrics({
-        keyboardVisible: true,
-        bottomInset: Platform.OS === 'ios' ? height : 0,
-      });
+      setKeyboard({ keyboardVisible: true, height });
     };
     const onHide = (): void => {
-      setMetrics({ keyboardVisible: false, bottomInset: 0 });
+      setKeyboard({ keyboardVisible: false, height: 0 });
     };
 
     const subscriptions =
@@ -52,5 +59,13 @@ export function useKeyboardMetrics(): KeyboardMetrics {
     };
   }, []);
 
-  return metrics;
+  const viewportResize =
+    Platform.OS === 'android'
+      ? Math.max(0, restingViewport.current.height - viewportHeight)
+      : 0;
+
+  return {
+    keyboardVisible: keyboard.keyboardVisible,
+    bottomInset: keyboard.keyboardVisible ? Math.max(0, keyboard.height - viewportResize) : 0,
+  };
 }
