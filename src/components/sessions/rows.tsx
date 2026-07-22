@@ -21,7 +21,6 @@ import type { MenuAnchor } from './ContextMenu';
 import {
   CaretRightGlyph,
   ChevronDownGlyph,
-  MoreGlyph,
   PlayGlyph,
   TerminalGlyph,
   WorldGlyph,
@@ -216,32 +215,6 @@ function HeaderButton({
   );
 }
 
-/**
- * Borderless ⋮ context-menu trigger (mobile affordance for the desktop
- * right-click menus; colored like the desktop hover action icons #858c95).
- */
-export function GhostMenuButton({
-  accessibilityLabel,
-  onAnchorPress,
-}: {
-  accessibilityLabel: string;
-  onAnchorPress: (anchor: MenuAnchor) => void;
-}) {
-  const ref = useRef<View | null>(null);
-  return (
-    <Pressable
-      ref={ref}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      hitSlop={6}
-      style={({ pressed }) => [buttonStyles.ghost, pressed ? buttonStyles.ghostPressed : null]}
-      onPress={() => measurePress(ref, onAnchorPress)}
-    >
-      <MoreGlyph size={ds(14)} color="#858C95" />
-    </Pressable>
-  );
-}
-
 function AgentSplitButton({
   primaryAgent,
   onLaunchPrimary,
@@ -331,16 +304,6 @@ const buttonStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghost: {
-    width: ds(22),
-    height: ds(22),
-    borderRadius: ds(6),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ghostPressed: {
-    backgroundColor: 'rgba(200,205,213,0.08)',
-  },
 });
 
 // ---------------------------------------------------------------------------
@@ -387,6 +350,7 @@ const machineHeaderStyles = StyleSheet.create({
 // SECTION_LABEL (desktop .reference-sidebar-section-row): "Quick"/"Projects",
 // 15.5dp light label at fg 52%, filled caret that rotates when expanded. The
 // Quick row carries a trailing create-terminal button (desktop hover action).
+// Long-press opens the section menu (desktop right-click).
 // ---------------------------------------------------------------------------
 
 export function SectionLabelRow({
@@ -405,13 +369,15 @@ export function SectionLabelRow({
   onCreate?: () => void;
   onMenu?: (anchor: MenuAnchor) => void;
 }) {
+  const rowRef = useRef<View | null>(null);
   return (
-    <View style={[sectionStyles.row, first ? sectionStyles.rowFirst : null]}>
+    <View ref={rowRef} style={[sectionStyles.row, first ? sectionStyles.rowFirst : null]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
         style={sectionStyles.heading}
         onPress={onToggle}
+        onLongPress={onMenu === undefined ? undefined : () => measurePress(rowRef, onMenu)}
       >
         <Text style={sectionStyles.title}>{title}</Text>
         <CaretRightGlyph size={ds(13)} color="#727982" rotated={!collapsed} />
@@ -421,9 +387,6 @@ export function SectionLabelRow({
           <HeaderButton accessibilityLabel={`Create a session in ${title}`} onPress={onCreate}>
             <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
           </HeaderButton>
-        ) : null}
-        {onMenu !== undefined ? (
-          <GhostMenuButton accessibilityLabel={`${title} menu`} onAnchorPress={onMenu} />
         ) : null}
       </View>
     </View>
@@ -486,8 +449,10 @@ export function CollectionHeaderRow({
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
 }) {
+  const rowRef = useRef<View | null>(null);
   return (
     <Pressable
+      ref={rowRef}
       accessibilityRole="button"
       accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
       style={({ pressed }) => [
@@ -495,6 +460,7 @@ export function CollectionHeaderRow({
         pressed ? collectionStyles.headerPressed : null,
       ]}
       onPress={onPress}
+      onLongPress={() => measurePress(rowRef, onMenu)}
     >
       <View style={collectionStyles.caret}>
         <CaretRightGlyph size={ds(14)} color={TITLE_COLOR} rotated={!collapsed} />
@@ -509,7 +475,6 @@ export function CollectionHeaderRow({
           awakeCount={awakeCount}
         />
       ) : null}
-      <GhostMenuButton accessibilityLabel={`${title} group menu`} onAnchorPress={onMenu} />
     </Pressable>
   );
 }
@@ -588,14 +553,17 @@ export function ProjectHeaderRow({
   onCollapseSessionList: () => void;
   onMenu: (anchor: MenuAnchor) => void;
 }) {
+  const rowRef = useRef<View | null>(null);
   return (
     <Pressable
+      ref={rowRef}
       accessibilityRole="button"
       style={({ pressed }) => [
         projectHeaderStyles.row,
         pressed ? projectHeaderStyles.rowPressed : null,
       ]}
       onPress={onToggle}
+      onLongPress={() => measurePress(rowRef, onMenu)}
     >
       <Text style={projectHeaderStyles.title} numberOfLines={1}>
         {title}
@@ -644,7 +612,6 @@ export function ProjectHeaderRow({
             ) : null}
           </View>
         )}
-        <GhostMenuButton accessibilityLabel={`${title} project menu`} onAnchorPress={onMenu} />
       </View>
     </Pressable>
   );
@@ -734,7 +701,8 @@ const emptyStyles = StyleSheet.create({
 
 // ---------------------------------------------------------------------------
 // GROUP_HEADER (named workspace session group inside a project card): caret +
-// light muted title, "(count)" suffix when collapsed.
+// light muted title, "(count)" suffix when collapsed. Long-press opens the
+// group menu (desktop right-click).
 // ---------------------------------------------------------------------------
 
 export function GroupHeaderRow({
@@ -750,22 +718,22 @@ export function GroupHeaderRow({
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
 }) {
+  const rowRef = useRef<View | null>(null);
   return (
     <Pressable
+      ref={rowRef}
       accessibilityRole="button"
       style={({ pressed }) => [
         groupHeaderStyles.row,
         pressed ? groupHeaderStyles.rowPressed : null,
       ]}
       onPress={onPress}
+      onLongPress={() => measurePress(rowRef, onMenu)}
     >
       <CaretRightGlyph size={ds(12)} color={SidebarPalette.MUTED} rotated={!collapsed} />
       <Text style={groupHeaderStyles.title} numberOfLines={1}>
         {collapsed ? `${title} (${count})` : title}
       </Text>
-      <View style={groupHeaderStyles.trailing}>
-        <GhostMenuButton accessibilityLabel={`${title} group menu`} onAnchorPress={onMenu} />
-      </View>
     </Pressable>
   );
 }
@@ -789,9 +757,6 @@ const groupHeaderStyles = StyleSheet.create({
     fontSize: ds(13),
     fontWeight: '300',
     letterSpacing: 0.16,
-  },
-  trailing: {
-    marginStart: 'auto',
   },
 });
 

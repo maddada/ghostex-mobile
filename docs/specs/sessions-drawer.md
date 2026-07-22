@@ -199,10 +199,12 @@ and recloned every surface from the live CSS cascade.
 
 ### §9.1 Context-menu parity (2026-07-22, second amendment)
 
-Every drawer surface now carries a ⋮ trigger (GhostMenuButton, the mobile
-stand-in for desktop right-click) opening a desktop-parity `ContextMenu`:
+Every drawer surface opens a desktop-parity `ContextMenu` via LONG-PRESS on
+the row (the mobile stand-in for desktop right-click; the earlier ⋮
+GhostMenuButton triggers were removed 2026-07-22, third amendment — the menu
+anchors to the long-pressed row):
 
-- **Session** (⋮ or long-press): Rename, Pin/Unpin (`pin-session`), Tag as ›
+- **Session** (long-press): Rename, Pin/Unpin (`pin-session`), Tag as ›
   (grouped Priority/Progress/Type radio submenu with the desktop tag tints,
   check on `session.sessionTag`, tap-again clears → `tag-session`),
   Sleep/Wake · Attach, Focus on Mac, Fork (`fork-session`, codex/claude/pi

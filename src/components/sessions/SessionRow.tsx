@@ -22,7 +22,7 @@ import {
 import { SessionCopy } from '../../copy';
 import { SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
-import { ds, GhostMenuButton } from './rows';
+import { ds } from './rows';
 import { PinGlyph } from './icons';
 
 export type SessionRowProps = {
@@ -32,7 +32,7 @@ export type SessionRowProps = {
   /** True for rows inside a project card (tighter insets than Quick rows). */
   inCard: boolean;
   onPress: () => void;
-  /** Context menu, from the ⋮ button or a long-press (anchored either way). */
+  /** Context menu, opened by long-pressing the row (anchored to the row). */
   onMenu: (anchor: MenuAnchor) => void;
 };
 
@@ -120,9 +120,6 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
       </Text>
       {lastActive.length > 0 ? <Text style={styles.lastActive}>{lastActive}</Text> : null}
       {dotColor !== null ? <View style={[styles.dot, { backgroundColor: dotColor }]} /> : null}
-      <View style={styles.menuButton}>
-        <GhostMenuButton accessibilityLabel={`${title} session menu`} onAnchorPress={onMenu} />
-      </View>
     </Pressable>
   );
 }
@@ -132,14 +129,8 @@ const styles = StyleSheet.create({
     height: ds(34),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: ds(40),
+    paddingRight: ds(14),
     borderRadius: ds(4),
-  },
-  menuButton: {
-    position: 'absolute',
-    right: ds(14),
-    top: '50%',
-    marginTop: -ds(11),
   },
   rowCard: {
     paddingLeft: ds(26),
