@@ -7,11 +7,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import kotlin.math.abs
 
 /**
  * Persistent foreground-service notification, ported from the Ghostex Termux
@@ -101,11 +104,53 @@ class GhostexForegroundService : Service() {
     return PendingIntent.getService(this, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
   }
 
-  private fun statusDot(status: String): String = when (status) {
-    "working" -> "🟠" // orange circle
-    "attention", "done" -> "🔵" // blue circle
-    "sleep", "sleeping" -> "🌙" // crescent moon
-    else -> "⚪" // white circle
+  /** Status dot tint, matching the old fork's notification row colors. */
+  private fun dotColor(status: String): Int = when (status) {
+    "working" -> 0xFFF59E0B.toInt()
+    "attention", "done" -> 0xFF95D7F6.toInt()
+    "sleep", "sleeping" -> 0xFF6E7684.toInt()
+    else -> 0xFF9CA3AF.toInt()
+  }
+
+  /** Deep-link tap target for one session row (ghostex:// scheme). */
+  private fun rowPendingIntent(row: SessionRow, index: Int): PendingIntent? {
+    if (row.sessionId.isEmpty() || row.machineId.isEmpty()) return null
+    val uri = Uri.Builder()
+      .scheme("ghostex")
+      .authority("session")
+      .appendQueryParameter("machineId", row.machineId)
+      .appendQueryParameter("sessionId", row.sessionId)
+      .build()
+    val intent = Intent(Intent.ACTION_VIEW, uri)
+      .setPackage(packageName)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val requestCode = 10_000 + index + abs(row.sessionId.hashCode() % 10_000)
+    return PendingIntent.getActivity(
+      this,
+      requestCode,
+      intent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+  }
+
+  /** Fill one shared row slot (dot color + text + tap intent) or hide it. */
+  private fun bindRows(views: RemoteViews, rows: List<SessionRow>, slotCount: Int) {
+    for (slot in 0 until slotCount) {
+      val rowId = ROW_IDS[slot]
+      val dotId = ROW_DOT_IDS[slot]
+      val textId = ROW_TEXT_IDS[slot]
+      val row = rows.getOrNull(slot)
+      if (row == null) {
+        views.setViewVisibility(rowId, android.view.View.GONE)
+        continue
+      }
+      views.setViewVisibility(rowId, android.view.View.VISIBLE)
+      views.setTextViewText(dotId, "●")
+      views.setTextColor(dotId, dotColor(row.status))
+      val suffix = if (row.project.isNotEmpty()) " — ${row.project}" else ""
+      views.setTextViewText(textId, "${row.title}$suffix")
+      rowPendingIntent(row, slot)?.let { views.setOnClickPendingIntent(rowId, it) }
+    }
   }
 
   private fun summaryText(rows: List<SessionRow>): String {
@@ -141,15 +186,25 @@ class GhostexForegroundService : Service() {
     }
 
     if (rows.isNotEmpty()) {
-      val style = NotificationCompat.InboxStyle()
-      for (row in rows.take(MAX_NOTIFICATION_ROWS)) {
-        val suffix = if (row.project.isNotEmpty()) " — ${row.project}" else ""
-        style.addLine("${statusDot(row.status)} ${row.title}$suffix")
-      }
+      val summary = summaryText(rows)
+
+      val collapsed = RemoteViews(packageName, R.layout.notification_ghostex_collapsed)
+      collapsed.setTextViewText(R.id.ghostex_summary, summary)
+      bindRows(collapsed, rows, COLLAPSED_ROW_COUNT)
+
+      val expanded = RemoteViews(packageName, R.layout.notification_ghostex_expanded)
+      expanded.setTextViewText(R.id.ghostex_summary, summary)
+      bindRows(expanded, rows, MAX_NOTIFICATION_ROWS)
       if (rows.size > MAX_NOTIFICATION_ROWS) {
-        style.setSummaryText("+${rows.size - MAX_NOTIFICATION_ROWS} more")
+        expanded.setViewVisibility(R.id.ghostex_more, android.view.View.VISIBLE)
+        expanded.setTextViewText(R.id.ghostex_more, "+${rows.size - MAX_NOTIFICATION_ROWS} more")
+      } else {
+        expanded.setViewVisibility(R.id.ghostex_more, android.view.View.GONE)
       }
-      builder.setStyle(style)
+
+      builder.setStyle(NotificationCompat.DecoratedCustomViewStyle())
+      builder.setCustomContentView(collapsed)
+      builder.setCustomBigContentView(expanded)
       builder.setNumber(rows.size)
       builder.setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
     }
@@ -178,8 +233,27 @@ class GhostexForegroundService : Service() {
     const val ACTION_WAKE_LOCK = "expo.modules.ghostexnative.service.WAKE_LOCK"
     const val ACTION_WAKE_UNLOCK = "expo.modules.ghostexnative.service.WAKE_UNLOCK"
     const val MAX_NOTIFICATION_ROWS = 5
+    const val COLLAPSED_ROW_COUNT = 2
 
-    data class SessionRow(val title: String, val status: String, val project: String)
+    private val ROW_IDS = intArrayOf(
+      R.id.ghostex_row1, R.id.ghostex_row2, R.id.ghostex_row3, R.id.ghostex_row4, R.id.ghostex_row5
+    )
+    private val ROW_DOT_IDS = intArrayOf(
+      R.id.ghostex_row1_dot, R.id.ghostex_row2_dot, R.id.ghostex_row3_dot,
+      R.id.ghostex_row4_dot, R.id.ghostex_row5_dot
+    )
+    private val ROW_TEXT_IDS = intArrayOf(
+      R.id.ghostex_row1_text, R.id.ghostex_row2_text, R.id.ghostex_row3_text,
+      R.id.ghostex_row4_text, R.id.ghostex_row5_text
+    )
+
+    data class SessionRow(
+      val title: String,
+      val status: String,
+      val project: String,
+      val machineId: String,
+      val sessionId: String,
+    )
 
     /** Snapshot rendered into the notification; written from the module. */
     @Volatile

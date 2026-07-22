@@ -136,7 +136,7 @@ class GhostexNativeModule : Module() {
 
     AsyncFunction("sendKey") { sessionKey: String, key: String, mods: KeyModifiersRecord?, promise: Promise ->
       val session = runningSession(sessionKey, promise) ?: return@AsyncFunction
-      terminalRegistry.get(sessionKey)?.attachedView?.clearKeyModifiers()
+      terminalRegistry.get(sessionKey)?.attachedView?.consumeKeyModifiersForAccessoryKey()
       val handled = GhostexKeyMapper.writeKey(
         session,
         key,
@@ -158,7 +158,14 @@ class GhostexNativeModule : Module() {
         return@AsyncFunction
       }
       mainHandler.post {
-        entry.attachedView?.setKeyModifiers(mods.ctrl, mods.alt, mods.shift)
+        entry.attachedView?.setKeyModifiers(
+          mods.ctrl,
+          mods.alt,
+          mods.shift,
+          mods.ctrlLocked,
+          mods.altLocked,
+          mods.shiftLocked
+        )
       }
       promise.resolve(null)
     }
@@ -260,7 +267,13 @@ class GhostexNativeModule : Module() {
 
     AsyncFunction("updatePersistentNotification") { rows: List<NotificationSessionRecord> ->
       GhostexForegroundService.sessionRows = rows.map {
-        GhostexForegroundService.Companion.SessionRow(it.title, it.status, it.project)
+        GhostexForegroundService.Companion.SessionRow(
+          it.title,
+          it.status,
+          it.project,
+          it.machineId,
+          it.sessionId
+        )
       }
       GhostexForegroundService.update()
     }

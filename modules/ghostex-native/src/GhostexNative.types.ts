@@ -56,6 +56,9 @@ export type KeyModifiers = {
   alt?: boolean;
   shift?: boolean;
   cmd?: boolean;
+  ctrlLocked?: boolean;
+  altLocked?: boolean;
+  shiftLocked?: boolean;
 };
 
 export type GhostexErrorCode =
@@ -122,6 +125,9 @@ export type NotificationSessionRow = {
   /** working | attention | done | sleep | idle — drives the status dot. */
   status: string;
   project: string;
+  /** Row-tap deep link target: ghostex://session?machineId=…&sessionId=…. */
+  machineId: string;
+  sessionId: string;
 };
 
 export type SshKeyType = 'ed25519' | 'rsa4096';

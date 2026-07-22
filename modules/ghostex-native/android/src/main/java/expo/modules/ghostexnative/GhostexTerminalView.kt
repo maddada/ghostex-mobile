@@ -34,6 +34,9 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   private var ctrlKeyActive = false
   private var altKeyActive = false
   private var shiftKeyActive = false
+  private var ctrlKeyLocked = false
+  private var altKeyLocked = false
+  private var shiftKeyLocked = false
 
   private val module: GhostexNativeModule?
     get() = appContext.registry.getModule<GhostexNativeModule>()
@@ -112,16 +115,40 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     terminalView.invalidate()
   }
 
-  internal fun setKeyModifiers(ctrl: Boolean, alt: Boolean, shift: Boolean) {
+  internal fun setKeyModifiers(
+    ctrl: Boolean,
+    alt: Boolean,
+    shift: Boolean,
+    ctrlLocked: Boolean,
+    altLocked: Boolean,
+    shiftLocked: Boolean
+  ) {
     ctrlKeyActive = ctrl
     altKeyActive = alt
     shiftKeyActive = shift
+    ctrlKeyLocked = ctrlLocked
+    altKeyLocked = altLocked
+    shiftKeyLocked = shiftLocked
   }
 
   internal fun clearKeyModifiers() {
     ctrlKeyActive = false
     altKeyActive = false
     shiftKeyActive = false
+    ctrlKeyLocked = false
+    altKeyLocked = false
+    shiftKeyLocked = false
+  }
+
+  internal fun consumeKeyModifiersForAccessoryKey() {
+    val consumedOneShot =
+      (ctrlKeyActive && !ctrlKeyLocked) ||
+        (altKeyActive && !altKeyLocked) ||
+        (shiftKeyActive && !shiftKeyLocked)
+    ctrlKeyActive = ctrlKeyLocked
+    altKeyActive = altKeyLocked
+    shiftKeyActive = shiftKeyLocked
+    if (consumedOneShot) sessionKey?.let { module?.emitKeyModifiersConsumed(it) }
   }
 
   /** focusTerminal(sessionKey): make the terminal first responder and show the IME. */
@@ -200,20 +227,25 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   override fun onLongPress(event: MotionEvent?): Boolean = false
 
-  override fun readControlKey(): Boolean = consumeModifier(ctrlKeyActive) { ctrlKeyActive = false }
+  override fun readControlKey(): Boolean =
+    consumeModifier(ctrlKeyActive, ctrlKeyLocked) { ctrlKeyActive = false }
 
-  override fun readAltKey(): Boolean = consumeModifier(altKeyActive) { altKeyActive = false }
+  override fun readAltKey(): Boolean =
+    consumeModifier(altKeyActive, altKeyLocked) { altKeyActive = false }
 
-  override fun readShiftKey(): Boolean = consumeModifier(shiftKeyActive) { shiftKeyActive = false }
+  override fun readShiftKey(): Boolean =
+    consumeModifier(shiftKeyActive, shiftKeyLocked) { shiftKeyActive = false }
 
   override fun readFnKey(): Boolean = false
 
   override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession?): Boolean = false
 
-  private inline fun consumeModifier(active: Boolean, clear: () -> Unit): Boolean {
+  private inline fun consumeModifier(active: Boolean, locked: Boolean, clear: () -> Unit): Boolean {
     if (!active) return false
-    clear()
-    sessionKey?.let { module?.emitKeyModifiersConsumed(it) }
+    if (!locked) {
+      clear()
+      sessionKey?.let { module?.emitKeyModifiersConsumed(it) }
+    }
     return true
   }
 

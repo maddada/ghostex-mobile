@@ -11,6 +11,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './src/navigation/types';
+import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/deepLinks';
 import { initAppLifecycle } from './src/app/lifecycle';
 import { initPersistentNotification } from './src/app/persistentNotification';
 import { useMachinesStore } from './src/machines/store';
@@ -47,6 +48,7 @@ export default function App() {
     initTerminalEvents();
     initAppLifecycle();
     initPersistentNotification();
+    initDeepLinks();
     void useMachinesStore.getState().hydrate();
     void useSettingsStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();
@@ -58,7 +60,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer ref={navigationRef} theme={navigationTheme} onReady={flushPendingDeepLink}>
         <StatusBar style="light" />
         <Stack.Navigator
           screenOptions={{

@@ -25,7 +25,7 @@ function statusRank(status: string): number {
   return 2;
 }
 
-function rowsFromSummary(summary: GhostexMobileSummary): NotificationSessionRow[] {
+function rowsFromSummary(machineId: string, summary: GhostexMobileSummary): NotificationSessionRow[] {
   const projectNameById = new Map<string, string>();
   for (const project of summary.projects) {
     projectNameById.set(project.projectId, project.name ?? project.path ?? '');
@@ -36,14 +36,16 @@ function rowsFromSummary(summary: GhostexMobileSummary): NotificationSessionRow[
       title: session.displayTitle.length > 0 ? session.displayTitle : session.sessionId,
       status: displayStatus(session),
       project: projectNameById.get(session.projectId) ?? '',
+      machineId,
+      sessionId: session.sessionId,
     }));
 }
 
 function collectRows(): NotificationSessionRow[] {
   const inventories = useInventoryStore.getState().inventoriesByMachineId;
   const rows: NotificationSessionRow[] = [];
-  for (const inventory of Object.values(inventories)) {
-    if (inventory.summary !== null) rows.push(...rowsFromSummary(inventory.summary));
+  for (const [machineId, inventory] of Object.entries(inventories)) {
+    if (inventory.summary !== null) rows.push(...rowsFromSummary(machineId, inventory.summary));
   }
   return rows
     .map((row, index) => ({ row, index }))

@@ -77,7 +77,7 @@ Source: `GhosttyTerminal/GhosttyTerminalView+iOS.swift` (`TerminalInputAccessory
 Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardware keyboard attached, find navigator active, or browse mode.
 
 ### Bar
-- Fixed height **88pt**. Background opaque = theme terminal background color. Dark style always.
+- **88pt** content height plus **5pt** bottom padding (**93pt** total). Background opaque = theme terminal background color. Dark style always.
 - Trailing cluster (spacing 8, trailing inset 12): text-editor toggle above Dismiss-keyboard `keyboard.chevron.compact.down` (default **shown**), preceded by a separator (`separator` α0.4).
 - Rows stack: vertical, spacing 6, fillEqually; insets top 7 / bottom 7 / trailing 10 / leading 10 (after separator) or 12.
 
@@ -103,8 +103,9 @@ Labels (fixed ASCII): CTRL, ALT, Cmd, SHIFT, ESC, TAB, S-Tab, Enter, Bksp, Del, 
 - Buttons fill columns without per-label font shrinking.
 
 ### Modifier latching
-- Ctrl/Alt/Cmd/Shift are toggle latches. Active look: bg systemBlue, white text, no border; 0.2s animate.
-- The next non-modifier input applies all active modifiers and then resets ALL latches (one-shot sticky semantics), whether that input comes from an accessory key or the software keyboard.
+- Tapping Ctrl/Alt/Cmd/Shift activates it for the next input only. One-shot look: system blue background with white text.
+- Long-pressing a modifier for 450ms locks it until the modifier is tapped again. Locked look: purple background, white text, and a brighter border so it is visually distinct from one-shot activation.
+- The next non-modifier input clears only one-shot modifiers. Locked modifiers remain applied to accessory keys and software-keyboard input.
 
 ### Repeat-on-hold
 - Repeatable: arrows, backspace, home, end, pageUp, pageDown.

@@ -33,6 +33,9 @@ struct KeyModifiersRecord: Record {
     @Field var alt: Bool = false
     @Field var shift: Bool = false
     @Field var cmd: Bool = false
+    @Field var ctrlLocked: Bool = false
+    @Field var altLocked: Bool = false
+    @Field var shiftLocked: Bool = false
 }
 
 // MARK: - Module
@@ -323,7 +326,7 @@ public class GhostexNativeModule: Module {
                     throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
                 }
 
-                view.clearKeyModifiers()
+                view.consumeKeyModifiersForAccessoryKey()
 
                 var ghosttyMods: Ghostty.Input.Mods = []
                 if let mods {
@@ -356,7 +359,11 @@ public class GhostexNativeModule: Module {
                 if mods.alt { ghosttyMods.insert(.alt) }
                 if mods.shift { ghosttyMods.insert(.shift) }
                 if mods.cmd { ghosttyMods.insert(.super) }
-                view.setKeyModifiers(ghosttyMods)
+                var lockedMods: Ghostty.Input.Mods = []
+                if mods.ctrlLocked { lockedMods.insert(.ctrl) }
+                if mods.altLocked { lockedMods.insert(.alt) }
+                if mods.shiftLocked { lockedMods.insert(.shift) }
+                view.setKeyModifiers(ghosttyMods, locked: lockedMods)
             }
         }
 

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Expanded persistent-notification content (ported from the Termux fork's
+  notification_ghostex_expanded): summary line + five tappable session rows
+  (small colored dot + title, project appended) + "+N more" overflow line.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+  <TextView
+      android:id="@+id/ghostex_summary"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:singleLine="true"
+      android:ellipsize="end"
+      android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+
+  <LinearLayout
+      android:id="@+id/ghostex_row1"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:paddingTop="2dp">
+    <TextView
+        android:id="@+id/ghostex_row1_dot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingEnd="6dp"
+        android:textSize="9sp" />
+    <TextView
+        android:id="@+id/ghostex_row1_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textAppearance="@style/TextAppearance.Compat.Notification" />
+  </LinearLayout>
+  <LinearLayout
+      android:id="@+id/ghostex_row2"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:paddingTop="2dp">
+    <TextView
+        android:id="@+id/ghostex_row2_dot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingEnd="6dp"
+        android:textSize="9sp" />
+    <TextView
+        android:id="@+id/ghostex_row2_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textAppearance="@style/TextAppearance.Compat.Notification" />
+  </LinearLayout>
+  <LinearLayout
+      android:id="@+id/ghostex_row3"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:paddingTop="2dp">
+    <TextView
+        android:id="@+id/ghostex_row3_dot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingEnd="6dp"
+        android:textSize="9sp" />
+    <TextView
+        android:id="@+id/ghostex_row3_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textAppearance="@style/TextAppearance.Compat.Notification" />
+  </LinearLayout>
+  <LinearLayout
+      android:id="@+id/ghostex_row4"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:paddingTop="2dp">
+    <TextView
+        android:id="@+id/ghostex_row4_dot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingEnd="6dp"
+        android:textSize="9sp" />
+    <TextView
+        android:id="@+id/ghostex_row4_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textAppearance="@style/TextAppearance.Compat.Notification" />
+  </LinearLayout>
+  <LinearLayout
+      android:id="@+id/ghostex_row5"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:paddingTop="2dp">
+    <TextView
+        android:id="@+id/ghostex_row5_dot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingEnd="6dp"
+        android:textSize="9sp" />
+    <TextView
+        android:id="@+id/ghostex_row5_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textAppearance="@style/TextAppearance.Compat.Notification" />
+  </LinearLayout>
+
+  <TextView
+      android:id="@+id/ghostex_more"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:paddingTop="2dp"
+      android:singleLine="true"
+      android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+
+</LinearLayout>

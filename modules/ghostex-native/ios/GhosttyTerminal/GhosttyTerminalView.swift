@@ -210,6 +210,7 @@ class GhosttyTerminalView: UIView {
     private var fallbackHardwarePressModifiers: [UInt16: UIKeyModifierFlags] = [:]
     fileprivate var systemTextInputPresses: Set<UInt16> = []
     private var keyModifiers: Ghostty.Input.Mods = []
+    private var lockedKeyModifiers: Ghostty.Input.Mods = []
 
     fileprivate struct HardwarePressResult {
         var forwardedToSystem: Set<UIPress> = []
@@ -2353,18 +2354,25 @@ class GhosttyTerminalView: UIView {
 
     // MARK: - Terminal Key Sending (used by the module sendKey + key commands)
 
-    func setKeyModifiers(_ modifiers: Ghostty.Input.Mods) {
+    func setKeyModifiers(_ modifiers: Ghostty.Input.Mods, locked: Ghostty.Input.Mods) {
         keyModifiers = modifiers
+        lockedKeyModifiers = locked
     }
 
     func clearKeyModifiers() {
         keyModifiers = []
+        lockedKeyModifiers = []
+    }
+
+    func consumeKeyModifiersForAccessoryKey() {
+        _ = consumeKeyModifiers()
     }
 
     private func consumeKeyModifiers() -> Ghostty.Input.Mods {
         let modifiers = keyModifiers
-        keyModifiers = []
-        if !modifiers.isEmpty {
+        let consumedOneShotModifiers = modifiers.subtracting(lockedKeyModifiers)
+        keyModifiers = lockedKeyModifiers
+        if !consumedOneShotModifiers.isEmpty {
             onKeyModifiersConsumed?()
         }
         return modifiers

@@ -2,9 +2,8 @@
  * 2-row keyboard accessory bar (terminal-screen.md §2).
  * - Fixed 88 height, terminal-background fill, trailing text-editor/dismiss
  *   controls + either 2 rows × 7 equal key pills or a Termux-style composer.
- * - Modifier latching: Ctrl/Alt/Shift toggle; the next non-modifier key sends
- *   with every latched modifier applied, then ALL latches reset (one-shot
- *   sticky semantics).
+ * - Modifier latching: tap for one-shot; long-press to lock until tapped again.
+ *   One-shot and locked states use distinct colors.
  * - Repeat-on-hold for arrows/Home/End/PGUP/PGDN: fires once on press-in,
  *   then after 350ms repeats every 50ms until press-out/cancel; repeats reuse
  *   the modifiers captured on the initial press.
@@ -18,22 +17,45 @@ import { GhostexPalette } from '../../theme/palette';
 import {
   ArrowIcon,
   KeyboardDismissIcon,
+  PencilIcon,
   ReturnIcon,
   SendIcon,
-  TextEditorIcon,
   type ArrowDirection,
 } from './icons';
 
-export const KEY_BAR_HEIGHT = 88;
+const KEY_BAR_CONTENT_HEIGHT = 88;
+const KEY_BAR_BOTTOM_PADDING = 5;
+export const KEY_BAR_HEIGHT = KEY_BAR_CONTENT_HEIGHT + KEY_BAR_BOTTOM_PADDING;
 const REPEAT_DELAY_MS = 350;
 const REPEAT_INTERVAL_MS = 50;
 const MODIFIER_ACTIVE_BG = '#007AFF';
+const MODIFIER_LOCKED_BG = '#AF52DE';
+const MODIFIER_LONG_PRESS_MS = 450;
 
 type ModifierId = 'ctrl' | 'alt' | 'shift';
+type ModifierMode = 'off' | 'oneShot' | 'locked';
+type ModifierState = Record<ModifierId, ModifierMode>;
 
-type LatchState = Record<ModifierId, boolean>;
+const NO_MODIFIERS: ModifierState = { ctrl: 'off', alt: 'off', shift: 'off' };
 
-const NO_LATCHES: LatchState = { ctrl: false, alt: false, shift: false };
+function modifierPayload(state: ModifierState): KeyModifiers {
+  return {
+    ctrl: state.ctrl !== 'off',
+    alt: state.alt !== 'off',
+    shift: state.shift !== 'off',
+    ctrlLocked: state.ctrl === 'locked',
+    altLocked: state.alt === 'locked',
+    shiftLocked: state.shift === 'locked',
+  };
+}
+
+function retainLockedModifiers(state: ModifierState): ModifierState {
+  return {
+    ctrl: state.ctrl === 'locked' ? 'locked' : 'off',
+    alt: state.alt === 'locked' ? 'locked' : 'off',
+    shift: state.shift === 'locked' ? 'locked' : 'off',
+  };
+}
 
 type KeyBarItem =
   | { id: string; kind: 'modifier'; label: string; modifier: ModifierId }
@@ -82,7 +104,7 @@ export default function TerminalKeyBar({
   showDismissButton,
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
-  const [latches, setLatches] = useState<LatchState>(NO_LATCHES);
+  const [modifiers, setModifiers] = useState<ModifierState>(NO_MODIFIERS);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorText, setEditorText] = useState('');
   const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,8 +124,10 @@ export default function TerminalKeyBar({
   useEffect(() => clearRepeat, [clearRepeat]);
 
   const clearModifiers = useCallback((): void => {
-    setLatches(NO_LATCHES);
-    void GhostexNative.setKeyModifiers(sessionKey, NO_LATCHES).catch(() => undefined);
+    setModifiers(NO_MODIFIERS);
+    void GhostexNative.setKeyModifiers(sessionKey, modifierPayload(NO_MODIFIERS)).catch(
+      () => undefined,
+    );
   }, [sessionKey]);
 
   useEffect(() => {
@@ -111,11 +135,15 @@ export default function TerminalKeyBar({
     setEditorVisible(false);
     setEditorText('');
     const subscription = GhostexNative.addListener('onKeyModifiersConsumed', (event) => {
-      if (event.sessionKey === sessionKey) setLatches(NO_LATCHES);
+      if (event.sessionKey === sessionKey) {
+        setModifiers((current) => retainLockedModifiers(current));
+      }
     });
     return () => {
       subscription.remove();
-      void GhostexNative.setKeyModifiers(sessionKey, NO_LATCHES).catch(() => undefined);
+      void GhostexNative.setKeyModifiers(sessionKey, modifierPayload(NO_MODIFIERS)).catch(
+        () => undefined,
+      );
     };
   }, [clearModifiers, sessionKey]);
 
@@ -130,13 +158,13 @@ export default function TerminalKeyBar({
 
   const handleKeyPressIn = (item: Extract<KeyBarItem, { kind: 'key' }>): void => {
     clearRepeat();
-    // Merge intrinsic mods with the latched one-shot modifiers, then reset.
+    // Apply every active modifier, then retain only long-press locks.
     const mods: KeyModifiers = {
-      ctrl: item.mods?.ctrl === true || latches.ctrl,
-      alt: item.mods?.alt === true || latches.alt,
-      shift: item.mods?.shift === true || latches.shift,
+      ctrl: item.mods?.ctrl === true || modifiers.ctrl !== 'off',
+      alt: item.mods?.alt === true || modifiers.alt !== 'off',
+      shift: item.mods?.shift === true || modifiers.shift !== 'off',
     };
-    clearModifiers();
+    setModifiers((current) => retainLockedModifiers(current));
     sendKey(item.key, mods);
     if (item.repeatable === true) {
       repeatTimer.current = setTimeout(() => {
@@ -146,10 +174,20 @@ export default function TerminalKeyBar({
     }
   };
 
-  const toggleModifier = (modifier: ModifierId): void => {
-    setLatches((current) => {
-      const next = { ...current, [modifier]: !current[modifier] };
-      void GhostexNative.setKeyModifiers(sessionKey, next).catch(() => undefined);
+  const setModifierMode = (modifier: ModifierId, longPress: boolean): void => {
+    setModifiers((current) => {
+      const currentMode = current[modifier];
+      const nextMode: ModifierMode = longPress
+        ? currentMode === 'locked'
+          ? 'off'
+          : 'locked'
+        : currentMode === 'off'
+          ? 'oneShot'
+          : 'off';
+      const next = { ...current, [modifier]: nextMode };
+      void GhostexNative.setKeyModifiers(sessionKey, modifierPayload(next)).catch(
+        () => undefined,
+      );
       return next;
     });
   };
@@ -188,14 +226,24 @@ export default function TerminalKeyBar({
 
   const renderItem = (item: KeyBarItem) => {
     if (item.kind === 'modifier') {
-      const active = latches[item.modifier];
+      const mode = modifiers[item.modifier];
+      const active = mode !== 'off';
+      const locked = mode === 'locked';
       return (
         <View key={item.id} style={styles.cell}>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
-            style={[styles.pill, styles.modifierPill, active && styles.pillActive]}
-            onPress={() => toggleModifier(item.modifier)}
+            accessibilityHint="Tap for one key, or hold to lock until tapped again"
+            delayLongPress={MODIFIER_LONG_PRESS_MS}
+            style={[
+              styles.pill,
+              styles.modifierPill,
+              active && styles.pillActive,
+              locked && styles.pillLocked,
+            ]}
+            onPress={() => setModifierMode(item.modifier, false)}
+            onLongPress={() => setModifierMode(item.modifier, true)}
           >
             <Text style={[styles.pillLabel, active && styles.pillLabelActive]} numberOfLines={1}>
               {item.label}
@@ -265,7 +313,7 @@ export default function TerminalKeyBar({
             style={[styles.trailingButton, editorVisible && styles.trailingButtonActive]}
             onPress={toggleEditor}
           >
-            <TextEditorIcon
+            <PencilIcon
               size={16}
               color={editorVisible ? '#FFFFFF' : GhostexPalette.FOREGROUND}
             />
@@ -300,6 +348,7 @@ export default function TerminalKeyBar({
 const styles = StyleSheet.create({
   bar: {
     height: KEY_BAR_HEIGHT,
+    paddingBottom: KEY_BAR_BOTTOM_PADDING,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
@@ -311,7 +360,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trailingButtons: {
-    height: KEY_BAR_HEIGHT,
+    height: KEY_BAR_CONTENT_HEIGHT,
     justifyContent: 'center',
     gap: 6,
   },
@@ -367,6 +416,10 @@ const styles = StyleSheet.create({
   pillActive: {
     backgroundColor: MODIFIER_ACTIVE_BG,
     borderColor: 'transparent',
+  },
+  pillLocked: {
+    backgroundColor: MODIFIER_LOCKED_BG,
+    borderColor: 'rgba(255,255,255,0.7)',
   },
   pillLabel: {
     fontSize: 10,

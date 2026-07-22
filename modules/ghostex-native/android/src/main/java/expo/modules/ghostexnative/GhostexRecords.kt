@@ -26,6 +26,9 @@ class KeyModifiersRecord : Record {
   @Field var alt: Boolean = false
   @Field var shift: Boolean = false
   @Field var cmd: Boolean = false
+  @Field var ctrlLocked: Boolean = false
+  @Field var altLocked: Boolean = false
+  @Field var shiftLocked: Boolean = false
 }
 
 /** Mirrors `NotificationSessionRow` in GhostexNative.types.ts. */
@@ -33,4 +36,6 @@ class NotificationSessionRecord : Record {
   @Field var title: String = ""
   @Field var status: String = ""
   @Field var project: String = ""
+  @Field var machineId: String = ""
+  @Field var sessionId: String = ""
 }

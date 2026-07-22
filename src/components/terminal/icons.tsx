@@ -121,16 +121,17 @@ export function KeyboardDismissIcon(props: IconProps) {
   );
 }
 
-/** A compact text-composer glyph for the terminal toolbar page toggle. */
-export function TextEditorIcon(props: IconProps) {
+/** A compact pencil glyph for the terminal toolbar page toggle. */
+export function PencilIcon(props: IconProps) {
   const { size, color, strokeWidth } = iconDefaults(props);
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M5 6h14M5 11h14M5 16h8M17 15v6M14 18h6"
+        d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5z"
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
