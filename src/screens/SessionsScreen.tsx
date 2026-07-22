@@ -66,6 +66,7 @@ import {
   CollectionHeaderRow,
   collectionPanelBackground,
   collectionPanelBorder,
+  ds,
   GroupHeaderRow,
   MachineHeaderRow,
   PROJECT_CARD_BACKGROUND,
@@ -1703,16 +1704,6 @@ export default function SessionsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        {Platform.OS === 'android' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Exit Ghostex"
-            style={styles.headerButton}
-            onPress={() => BackHandler.exitApp()}
-          >
-            <ExitGlyph size={22} color={GhostexPalette.FOREGROUND} />
-          </Pressable>
-        ) : null}
         <Text style={styles.title}>Ghostex</Text>
         <Pressable
           accessibilityRole="button"
@@ -1742,6 +1733,16 @@ export default function SessionsScreen({ navigation }: Props) {
         >
           <SettingsGlyph size={22} color={GhostexPalette.FOREGROUND} />
         </Pressable>
+        {Platform.OS === 'android' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Exit Ghostex"
+            style={styles.headerButton}
+            onPress={() => BackHandler.exitApp()}
+          >
+            <ExitGlyph size={22} color={GhostexPalette.FOREGROUND} />
+          </Pressable>
+        ) : null}
       </View>
       <Text style={styles.statusLine} numberOfLines={2}>
         {statusLine}
@@ -2109,37 +2110,37 @@ const styles = StyleSheet.create({
     backgroundColor: PROJECT_CARD_BACKGROUND,
     borderWidth: 1,
     borderColor: PROJECT_CARD_BORDER,
-    borderRadius: 5,
+    borderRadius: ds(5),
   },
   projectCardTopLevel: {
-    marginLeft: 3,
-    marginRight: 5,
-    marginBottom: 5,
+    marginLeft: ds(3),
+    marginRight: ds(5),
+    marginBottom: ds(5),
   },
   projectCardInPanel: {
-    marginHorizontal: 3,
-    marginBottom: 5,
+    marginHorizontal: ds(3),
+    marginBottom: ds(5),
   },
   projectCardExpanded: {
-    marginBottom: 7,
+    marginBottom: ds(7),
   },
   /** Card session area (.group-sessions): 3dp inner inset. */
   cardSessions: {
-    paddingHorizontal: 3,
-    paddingBottom: 3,
+    paddingHorizontal: ds(3),
+    paddingBottom: ds(3),
   },
   /** Desktop collection panel (section.project-collection). */
   collectionPanel: {
     borderWidth: 1,
-    borderRadius: 5,
-    marginLeft: 3,
-    marginRight: 5,
-    marginBottom: 8,
+    borderRadius: ds(5),
+    marginLeft: ds(3),
+    marginRight: ds(5),
+    marginBottom: ds(8),
   },
   /** Panel member area (.project-collection-projects). */
   collectionProjects: {
-    paddingHorizontal: 3,
-    paddingTop: 2,
-    paddingBottom: 3,
+    paddingHorizontal: ds(3),
+    paddingTop: ds(2),
+    paddingBottom: ds(3),
   },
 });

@@ -30,6 +30,18 @@ import {
 /** Desktop sidebar background (--app-background). */
 export const SIDEBAR_BACKGROUND = '#0E0E0E';
 
+/**
+ * Sessions-list density scale: every font/control/spacing in the drawer list
+ * renders 25% larger than the desktop pixel values (user preference). The
+ * page header (Ghostex title row, status line) stays unscaled.
+ */
+export const DRAWER_SCALE = 1.25;
+
+/** Scale a desktop dp value by DRAWER_SCALE, rounded to half-dp. */
+export function ds(value: number): number {
+  return Math.round(value * DRAWER_SCALE * 2) / 2;
+}
+
 /** Collection panel fill: mix(color 3%, mix(fg 3%, sidebar bg)). */
 export function collectionPanelBackground(color: string): string {
   const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 3);
@@ -126,34 +138,34 @@ const pillStyles = StyleSheet.create({
   cluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: ds(6),
     marginStart: 'auto',
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: ds(3),
   },
   pillDim: {
     opacity: 0.7,
   },
   dotHalo: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: ds(12),
+    height: ds(12),
+    borderRadius: ds(6),
     alignItems: 'center',
     justifyContent: 'center',
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: ds(6),
+    height: ds(6),
+    borderRadius: ds(3),
   },
   count: {
-    fontSize: 10,
+    fontSize: ds(10),
     fontWeight: '300',
     fontVariant: ['tabular-nums'],
-    lineHeight: 12,
+    lineHeight: ds(12),
   },
 });
 
@@ -222,7 +234,7 @@ export function GhostMenuButton({
       style={({ pressed }) => [buttonStyles.ghost, pressed ? buttonStyles.ghostPressed : null]}
       onPress={() => measurePress(ref, onAnchorPress)}
     >
-      <MoreGlyph size={14} color="#858C95" />
+      <MoreGlyph size={ds(14)} color="#858C95" />
     </Pressable>
   );
 }
@@ -256,7 +268,7 @@ function AgentSplitButton({
         ]}
         onPress={onLaunchPrimary}
       >
-        <Icon size={14} color={AGENT_LAUNCHER_ICON_COLOR} />
+        <Icon size={ds(14)} color={AGENT_LAUNCHER_ICON_COLOR} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -268,7 +280,7 @@ function AgentSplitButton({
         ]}
         onPress={() => measurePress(ref, onOpenMenu)}
       >
-        <ChevronDownGlyph size={13} color={SidebarPalette.HEADER_BUTTON_ICON} />
+        <ChevronDownGlyph size={ds(13)} color={SidebarPalette.HEADER_BUTTON_ICON} />
       </Pressable>
     </View>
   );
@@ -276,9 +288,9 @@ function AgentSplitButton({
 
 const buttonStyles = StyleSheet.create({
   button: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: ds(22),
+    height: ds(22),
+    borderRadius: ds(6),
     backgroundColor: SidebarPalette.HEADER_BUTTON_BG,
     borderWidth: 1,
     borderColor: SidebarPalette.HEADER_BUTTON_BORDER,
@@ -291,13 +303,13 @@ const buttonStyles = StyleSheet.create({
   },
   split: {
     flexDirection: 'row',
-    height: 22,
+    height: ds(22),
   },
   splitMain: {
-    width: 24,
-    height: 22,
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+    width: ds(24),
+    height: ds(22),
+    borderTopLeftRadius: ds(6),
+    borderBottomLeftRadius: ds(6),
     backgroundColor: SidebarPalette.HEADER_BUTTON_BG,
     borderWidth: 1,
     borderColor: SidebarPalette.HEADER_BUTTON_BORDER,
@@ -305,10 +317,10 @@ const buttonStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   splitToggle: {
-    width: 17,
-    height: 22,
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
+    width: ds(17),
+    height: ds(22),
+    borderTopRightRadius: ds(6),
+    borderBottomRightRadius: ds(6),
     backgroundColor: SidebarPalette.HEADER_BUTTON_BG,
     borderWidth: 1,
     borderLeftWidth: 0,
@@ -317,9 +329,9 @@ const buttonStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   ghost: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: ds(22),
+    height: ds(22),
+    borderRadius: ds(6),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -353,18 +365,18 @@ export function MachineHeaderRow({
 
 const machineHeaderStyles = StyleSheet.create({
   row: {
-    paddingLeft: 8,
-    paddingTop: 18,
-    paddingRight: 8,
-    paddingBottom: 4,
-    minHeight: 36,
+    paddingLeft: ds(8),
+    paddingTop: ds(18),
+    paddingRight: ds(8),
+    paddingBottom: ds(4),
+    minHeight: ds(36),
     justifyContent: 'flex-end',
   },
   title: {
     color: GhostexPalette.MUTED,
-    fontSize: 12,
+    fontSize: ds(12),
     fontWeight: '300',
-    letterSpacing: 0.72,
+    letterSpacing: 0.9,
   },
 });
 
@@ -399,12 +411,12 @@ export function SectionLabelRow({
         onPress={onToggle}
       >
         <Text style={sectionStyles.title}>{title}</Text>
-        <CaretRightGlyph size={13} color="#727982" rotated={!collapsed} />
+        <CaretRightGlyph size={ds(13)} color="#727982" rotated={!collapsed} />
       </Pressable>
       <View style={sectionStyles.actions}>
         {onCreate !== undefined ? (
           <HeaderButton accessibilityLabel={`Create a session in ${title}`} onPress={onCreate}>
-            <TerminalGlyph size={14} color={SidebarPalette.HEADER_BUTTON_ICON} />
+            <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
           </HeaderButton>
         ) : null}
         {onMenu !== undefined ? (
@@ -419,32 +431,32 @@ const sectionStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 26,
-    marginTop: 17,
-    marginBottom: 10,
-    paddingLeft: 13,
-    paddingRight: 8,
+    minHeight: ds(26),
+    marginTop: ds(17),
+    marginBottom: ds(10),
+    paddingLeft: ds(13),
+    paddingRight: ds(8),
   },
   rowFirst: {
-    marginTop: 6,
+    marginTop: ds(6),
   },
   heading: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: ds(6),
     flexShrink: 1,
   },
   title: {
     color: SECTION_LABEL_COLOR,
-    fontSize: 15.5,
+    fontSize: ds(15.5),
     fontWeight: '300',
-    lineHeight: 18,
+    lineHeight: ds(18),
   },
   actions: {
     marginStart: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: ds(2),
   },
 });
 
@@ -482,7 +494,7 @@ export function CollectionHeaderRow({
       onPress={onPress}
     >
       <View style={collectionStyles.caret}>
-        <CaretRightGlyph size={14} color={TITLE_COLOR} rotated={!collapsed} />
+        <CaretRightGlyph size={ds(14)} color={TITLE_COLOR} rotated={!collapsed} />
       </View>
       <Text style={collectionStyles.title} numberOfLines={1}>
         {title}
@@ -503,28 +515,28 @@ const collectionStyles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    minHeight: 30,
-    paddingLeft: 2,
-    paddingRight: 8,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
+    gap: ds(5),
+    minHeight: ds(30),
+    paddingLeft: ds(2),
+    paddingRight: ds(8),
+    borderTopLeftRadius: ds(4),
+    borderTopRightRadius: ds(4),
   },
   headerPressed: {
     backgroundColor: 'rgba(200,205,213,0.05)',
   },
   caret: {
-    width: 20,
-    height: 24,
+    width: ds(20),
+    height: ds(24),
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     flex: 1,
     color: TITLE_COLOR,
-    fontSize: 13,
+    fontSize: ds(13),
     fontWeight: '300',
-    letterSpacing: 0.13,
+    letterSpacing: 0.16,
   },
 });
 
@@ -599,7 +611,7 @@ export function ProjectHeaderRow({
                 accessibilityLabel={`Show fewer sessions in ${title}`}
                 onPress={onCollapseSessionList}
               >
-                <ChevronDownGlyph size={14} color={SidebarPalette.HEADER_BUTTON_ICON} rotated />
+                <ChevronDownGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} rotated />
               </HeaderButton>
             ) : null}
             {hasActions ? (
@@ -608,9 +620,9 @@ export function ProjectHeaderRow({
                 onAnchorPress={onOpenActionsMenu}
               >
                 {selectedActionType === 'browser' ? (
-                  <WorldGlyph size={14} color={SidebarPalette.HEADER_BUTTON_ICON} />
+                  <WorldGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
                 ) : (
-                  <PlayGlyph size={14} color={SidebarPalette.HEADER_BUTTON_ICON} />
+                  <PlayGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
                 )}
               </HeaderButton>
             ) : null}
@@ -618,7 +630,7 @@ export function ProjectHeaderRow({
               accessibilityLabel={`Create a terminal in ${title}`}
               onPress={onCreateTerminal}
             >
-              <TerminalGlyph size={14} color={SidebarPalette.HEADER_BUTTON_ICON} />
+              <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
             </HeaderButton>
             {primaryAgent !== null ? (
               <AgentSplitButton
@@ -639,12 +651,12 @@ const projectHeaderStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 30,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
-    gap: 6,
+    minHeight: ds(30),
+    paddingHorizontal: ds(8),
+    paddingVertical: ds(2),
+    borderTopLeftRadius: ds(4),
+    borderTopRightRadius: ds(4),
+    gap: ds(6),
   },
   rowPressed: {
     backgroundColor: 'rgba(200,205,213,0.06)',
@@ -652,21 +664,21 @@ const projectHeaderStyles = StyleSheet.create({
   title: {
     flexShrink: 1,
     color: TITLE_COLOR,
-    fontSize: 13,
+    fontSize: ds(13),
     fontWeight: '300',
-    letterSpacing: 0.13,
-    lineHeight: 18,
+    letterSpacing: 0.16,
+    lineHeight: ds(18),
   },
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
     marginStart: 'auto',
-    gap: 4,
+    gap: ds(4),
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: ds(4),
   },
 });
 
@@ -692,7 +704,7 @@ export function ProjectEmptyRow({ text, quick }: { text: string; quick: boolean 
 
 const emptyStyles = StyleSheet.create({
   cardRow: {
-    height: 38,
+    height: ds(38),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -701,19 +713,19 @@ const emptyStyles = StyleSheet.create({
   },
   cardText: {
     color: mixHexColors(SidebarPalette.MUTED, SidebarPalette.FOREGROUND, 82),
-    fontSize: 12,
+    fontSize: ds(12),
     fontWeight: '300',
-    letterSpacing: 0.36,
+    letterSpacing: 0.45,
   },
   quickRow: {
-    marginTop: 8,
-    paddingLeft: 18,
+    marginTop: ds(8),
+    paddingLeft: ds(18),
   },
   quickText: {
     color: '#444444',
-    fontSize: 15.5,
+    fontSize: ds(15.5),
     fontWeight: '300',
-    lineHeight: 18,
+    lineHeight: ds(18),
   },
 });
 
@@ -744,7 +756,7 @@ export function GroupHeaderRow({
       ]}
       onPress={onPress}
     >
-      <CaretRightGlyph size={12} color={SidebarPalette.MUTED} rotated={!collapsed} />
+      <CaretRightGlyph size={ds(12)} color={SidebarPalette.MUTED} rotated={!collapsed} />
       <Text style={groupHeaderStyles.title} numberOfLines={1}>
         {collapsed ? `${title} (${count})` : title}
       </Text>
@@ -759,11 +771,11 @@ const groupHeaderStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingLeft: 8,
-    paddingRight: 8,
-    minHeight: 28,
-    borderRadius: 4,
+    gap: ds(5),
+    paddingLeft: ds(8),
+    paddingRight: ds(8),
+    minHeight: ds(28),
+    borderRadius: ds(4),
   },
   rowPressed: {
     backgroundColor: 'rgba(200,205,213,0.06)',
@@ -771,9 +783,9 @@ const groupHeaderStyles = StyleSheet.create({
   title: {
     flexShrink: 1,
     color: SidebarPalette.MUTED,
-    fontSize: 13,
+    fontSize: ds(13),
     fontWeight: '300',
-    letterSpacing: 0.13,
+    letterSpacing: 0.16,
   },
   trailing: {
     marginStart: 'auto',
@@ -814,24 +826,24 @@ export function SessionListToggleRow({
 
 const toggleStyles = StyleSheet.create({
   row: {
-    height: 34,
+    height: ds(34),
     justifyContent: 'center',
     opacity: 0.8,
-    borderRadius: 5,
+    borderRadius: ds(5),
   },
   rowCard: {
-    paddingLeft: 26,
+    paddingLeft: ds(26),
   },
   rowQuick: {
-    paddingLeft: 47,
+    paddingLeft: ds(47),
   },
   rowPressed: {
     backgroundColor: 'rgba(200,205,213,0.06)',
   },
   label: {
     color: '#B4B8C0',
-    fontSize: 15.5,
+    fontSize: ds(15.5),
     fontWeight: '300',
-    lineHeight: 20,
+    lineHeight: ds(20),
   },
 });

@@ -22,7 +22,7 @@ import {
 import { SessionCopy } from '../../copy';
 import { SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
-import { GhostMenuButton } from './rows';
+import { ds, GhostMenuButton } from './rows';
 import { PinGlyph } from './icons';
 
 export type SessionRowProps = {
@@ -71,7 +71,7 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
     session.agentName.length > 0 ? session.agentName : session.agent,
   );
   const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
-  const iconSize = iconId === 'terminal' || iconId === 'browser' ? 15 : 13;
+  const iconSize = iconId === 'terminal' || iconId === 'browser' ? ds(15) : ds(13);
   const status = displayStatus(session);
   const sleeping = status === 'sleep' || status === 'sleeping';
   const working = status === 'working';
@@ -79,7 +79,7 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
   const dotColor = referenceDotColor(status);
   const lastActive = working || attention ? '' : compactLastActive(session);
-  const iconLeft = inCard ? 5 : 26;
+  const iconLeft = inCard ? ds(5) : ds(26);
 
   const openMenuFromRow = (): void => {
     const node = rowRef.current;
@@ -100,8 +100,8 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
       onLongPress={openMenuFromRow}
     >
       {session.isPinned ? (
-        <View style={[styles.pin, { left: Math.max(0, iconLeft - 16) }]}>
-          <PinGlyph size={13} color="rgba(255,255,255,0.9)" />
+        <View style={[styles.pin, { left: Math.max(0, iconLeft - ds(16)) }]}>
+          <PinGlyph size={ds(13)} color="rgba(255,255,255,0.9)" />
         </View>
       ) : null}
       <View style={[styles.icon, { left: iconLeft }, active ? styles.iconActive : null]}>
@@ -129,23 +129,23 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
 
 const styles = StyleSheet.create({
   row: {
-    height: 34,
+    height: ds(34),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 40,
-    borderRadius: 4,
+    paddingRight: ds(40),
+    borderRadius: ds(4),
   },
   menuButton: {
     position: 'absolute',
-    right: 14,
+    right: ds(14),
     top: '50%',
-    marginTop: -11,
+    marginTop: -ds(11),
   },
   rowCard: {
-    paddingLeft: 26,
+    paddingLeft: ds(26),
   },
   rowQuick: {
-    paddingLeft: 47,
+    paddingLeft: ds(47),
   },
   rowActive: {
     backgroundColor: 'rgba(200,205,213,0.10)',
@@ -156,17 +156,17 @@ const styles = StyleSheet.create({
   pin: {
     position: 'absolute',
     top: '50%',
-    marginTop: -6.5,
-    width: 13,
-    height: 13,
+    marginTop: -ds(6.5),
+    width: ds(13),
+    height: ds(13),
     opacity: 0.5,
   },
   icon: {
     position: 'absolute',
     top: '50%',
-    marginTop: -7.5,
-    width: 15,
-    height: 15,
+    marginTop: -ds(7.5),
+    width: ds(15),
+    height: ds(15),
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.48,
@@ -177,9 +177,9 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     color: '#B4B8C0',
-    fontSize: 15.5,
+    fontSize: ds(15.5),
     fontWeight: '300',
-    lineHeight: 20,
+    lineHeight: ds(20),
   },
   titleActive: {
     color: '#D8D8D8',
@@ -189,20 +189,20 @@ const styles = StyleSheet.create({
     opacity: 0.42,
   },
   lastActive: {
-    marginStart: 8,
+    marginStart: ds(8),
     color: '#4F5359',
-    fontSize: 13.5,
+    fontSize: ds(13.5),
     fontWeight: '300',
-    lineHeight: 20,
+    lineHeight: ds(20),
     textAlign: 'right',
   },
   dot: {
     position: 'absolute',
-    right: 6,
+    right: ds(6),
     top: '50%',
-    marginTop: -3.5,
-    width: 7,
-    height: 7,
+    marginTop: -ds(3.5),
+    width: ds(7),
+    height: ds(7),
     borderRadius: 999,
   },
 });
