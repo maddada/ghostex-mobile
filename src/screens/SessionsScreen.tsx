@@ -1809,7 +1809,7 @@ export default function SessionsScreen({ navigation }: Props) {
         contentContainerStyle={styles.listContent}
         ListFooterComponent={
           <Text style={styles.longPressHint}>
-            Long press on a section, group, project, or session to see more options
+            Long press a section, group, project, or session for more options
           </Text>
         }
       />
