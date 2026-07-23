@@ -53,6 +53,10 @@ struct SSHConnectionConfig: Sendable {
     var username: String
     var credentials: SSHCredentials
     var connectionTimeout: TimeInterval = 30
+    /// Send SSH protocol keep-alive packets on this connection.
+    var keepAliveEnabled: Bool = true
+    /// Keep-alive interval in seconds; clamped to 10...120 when enabled.
+    var keepAliveIntervalSec: Int = 30
 }
 
 struct SSHExecResult: Sendable {
@@ -248,6 +252,7 @@ actor SSHConnection {
      */
     private var transportDead = false
     private var ioTask: Task<Void, Never>?
+    private var keepAliveTask: Task<Void, Never>?
     private var execRequests: [UUID: ExecRequest] = [:]
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "app.ghostex.mobile",
@@ -412,11 +417,13 @@ actor SSHConnection {
         libssh2_session_set_blocking(session, 0)
 
         // Protocol-level keepalive so a half-dead transport surfaces as a
-        // socket error quickly on resume instead of hanging reads.
-        libssh2_keepalive_config(session, 1, 15)
+        // socket error quickly on resume instead of hanging reads. Interval 0
+        // disables keep-alives entirely (libssh2_keepalive_send no-ops).
+        libssh2_keepalive_config(session, 1, UInt32(config.keepAliveEnabled ? keepAliveIntervalSeconds : 0))
 
         isActive = true
         transportDead = false
+        startKeepAliveLoop()
         logger.info("SSH session established")
     }
 
@@ -557,6 +564,8 @@ actor SSHConnection {
         // Mark as inactive first to stop any pending operations
         isActive = false
 
+        stopKeepAliveLoop()
+
         // Finish shell streams first to unblock any waiting consumers
         closeAllShellChannels()
 
@@ -592,6 +601,7 @@ actor SSHConnection {
     }
 
     private func cleanup() {
+        stopKeepAliveLoop()
         atomicSocket.closeImmediately()
         socket = -1
         cleanupLibssh2()
@@ -1073,10 +1083,44 @@ actor SSHConnection {
 
     // MARK: - Keep Alive
 
-    func sendKeepAlive() {
-        guard let session = libssh2Session else { return }
+    /// Configured cadence clamped to the contract range.
+    private var keepAliveIntervalSeconds: Int {
+        min(max(config.keepAliveIntervalSec, 10), 120)
+    }
+
+    /// libssh2 only emits keep-alives from libssh2_keepalive_send, so an idle
+    /// session (no shell I/O driving the transport) needs this loop. It ends
+    /// when the connection is disconnected or the transport dies.
+    private func startKeepAliveLoop() {
+        guard config.keepAliveEnabled, keepAliveTask == nil else { return }
+        let interval = keepAliveIntervalSeconds
+        keepAliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                if Task.isCancelled { break }
+                guard let self, await self.sendKeepAlive() else { break }
+            }
+        }
+    }
+
+    private func stopKeepAliveLoop() {
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
+    }
+
+    /// Returns false once the transport is unusable so the loop stops.
+    /// libssh2 tracks the cadence internally (keepalive_config interval) and
+    /// silently skips sends that are not due yet or would block (EAGAIN).
+    @discardableResult
+    func sendKeepAlive() -> Bool {
+        guard isConnected, let session = libssh2Session else { return false }
         var secondsToNext: Int32 = 0
-        libssh2_keepalive_send(session, &secondsToNext)
+        let rc = libssh2_keepalive_send(session, &secondsToNext)
+        if rc != 0 {
+            noteTransportError(Int(rc))
+            return false
+        }
+        return true
     }
 
     // MARK: - Upload

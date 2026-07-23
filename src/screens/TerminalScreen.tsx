@@ -346,13 +346,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             onKeyboard={showKeyboard}
             onDismissKeyboard={dismissKeyboard}
             onUpload={() => void handleUpload()}
-            onRefresh={() => {
-              if (activeTab !== null) {
-                void GhostexNative.refreshTerminalViewport(activeTab.sessionKey).catch(
-                  () => undefined,
-                );
-              }
-            }}
+            onRefresh={handleRefresh}
           />
         )}
       </View>

@@ -39,6 +39,10 @@ class GhosttyTerminalView: UIView {
     private let initialCommand: String?
     private let useCustomIO: Bool
 
+    /// Scrollback row limit this surface was created with (config regeneration
+    /// must keep emitting it so the surface-config cache key stays truthful).
+    let scrollbackRows: Int
+
     /// Called when the terminal process exits (surface close requested)
     var onProcessExit: (() -> Void)?
 
@@ -267,12 +271,14 @@ class GhosttyTerminalView: UIView {
         appWrapper: Ghostty.App? = nil,
         command: String? = nil,
         fontSize: Double? = nil,
+        scrollbackRows: Int = TerminalDefaults.defaultScrollbackRows,
         useCustomIO: Bool = false
     ) {
         self.worktreePath = worktreePath
         self.ghosttyApp = ghosttyApp
         self.ghosttyAppWrapper = appWrapper
         self.initialCommand = command
+        self.scrollbackRows = scrollbackRows
         self.useCustomIO = useCustomIO
         if let fontSize {
             self.surfacePresentationOverrides = TerminalPresentationOverrides(fontSize: fontSize)
@@ -447,11 +453,15 @@ class GhosttyTerminalView: UIView {
             self.surfaceReference = wrapper.registerSurface(cSurface, terminalView: self)
         }
 
-        // Apply per-surface font size overrides (surface was created with the
-        // right font_size already, but this keeps config-derived values, e.g.
-        // cell metrics, consistent when overrides differ from the app default).
-        if !surfacePresentationOverrides.isEmpty, let wrapper = ghosttyAppWrapper {
-            wrapper.updateSurfaceConfig(cSurface, presentationOverrides: surfacePresentationOverrides)
+        // Apply the per-surface config right away: font size overrides plus
+        // the module-global cursor settings, which the app-level config the
+        // surface was created from may not carry yet.
+        if let wrapper = ghosttyAppWrapper {
+            wrapper.updateSurfaceConfig(
+                cSurface,
+                presentationOverrides: surfacePresentationOverrides,
+                scrollbackRows: scrollbackRows
+            )
         }
 
         Self.logger.info("Ghostty surface created, sublayers: \(self.layer.sublayers?.count ?? 0)")
@@ -508,10 +518,20 @@ class GhosttyTerminalView: UIView {
         surfacePresentationOverrides = presentationOverrides
 
         guard let surface = surface?.unsafeCValue else { return }
-        ghosttyAppWrapper?.updateSurfaceConfig(surface, presentationOverrides: presentationOverrides)
+        ghosttyAppWrapper?.updateSurfaceConfig(
+            surface,
+            presentationOverrides: presentationOverrides,
+            scrollbackRows: scrollbackRows
+        )
         lastPixelSize = .zero
         sizeDidChange(bounds.size)
         requestRender()
+    }
+
+    /// Re-push this surface's config so module-global setting changes
+    /// (cursor style/blink) take effect on an already-open terminal.
+    func reapplySurfaceConfig() {
+        applyPresentationOverrides(surfacePresentationOverrides)
     }
 
     private func reportGridResizeIfNeeded() {
@@ -652,6 +672,18 @@ class GhosttyTerminalView: UIView {
 
     @discardableResult
     func requestKeyboardFocus(for reason: TerminalKeyboardFocusReason) -> Bool {
+        // First-responder status is what presents the IME (UIKeyInput), so
+        // with the soft keyboard disabled, touch-driven focus must not go
+        // through; the explicit keyboard button (module focusTerminal) and
+        // hardware-keyboard focus still may.
+        if !Ghostty.App.runtimeSettings.softKeyboardEnabled {
+            switch reason {
+            case .directTouch, .selectionGesture:
+                return false
+            case .explicitUserRequest, .initialActivation, .reconnectRestore, .hardwareKeyboard:
+                break
+            }
+        }
         guard keyboardFocusPolicy.requestFocus(for: reason) else { return false }
         guard !isFirstResponder else { return true }
         return becomeFirstResponder()
@@ -767,7 +799,27 @@ class GhosttyTerminalView: UIView {
         if isPointOnTouchSelectionHandle(location) {
             return
         }
+        sendLinkActivationTap(at: location)
         onSingleTap?()
+    }
+
+    /// With "open URLs on tap" enabled, forward a plain tap as a super+left
+    /// click so libghostty runs its link matcher at the tapped cell and fires
+    /// GHOSTTY_ACTION_OPEN_URL when a URL is there (core requires the link
+    /// modifier on the click; it does nothing when no link is under the
+    /// cell). Skipped while an app has the mouse captured so TUI apps keep
+    /// receiving their normal input.
+    private func sendLinkActivationTap(at location: CGPoint) {
+        guard Ghostty.App.runtimeSettings.openUrlsOnTap else { return }
+        guard canRouteTerminalInput, let surface else { return }
+        guard !surface.mouseCaptured else { return }
+
+        let pos = ghosttyPoint(location)
+        // Position first: core resolves the link under the cursor from the
+        // last reported mouse position, not from the click event itself.
+        surface.sendMousePos(.init(x: pos.x, y: pos.y, mods: [.super]))
+        surface.sendMouseButton(.init(action: .press, button: .left, mods: [.super]))
+        surface.sendMouseButton(.init(action: .release, button: .left, mods: [.super]))
     }
 
     private func ghosttyPoint(_ location: CGPoint) -> CGPoint {

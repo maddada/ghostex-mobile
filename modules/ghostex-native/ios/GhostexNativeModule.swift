@@ -11,6 +11,7 @@ import Foundation
 import UIKit
 import ExpoModulesCore
 import Darwin
+import AudioToolbox
 
 // MARK: - Records
 
@@ -21,6 +22,10 @@ struct SshConfigRecord: Record {
     @Field var password: String?
     @Field var privateKey: String?
     @Field var passphrase: String?
+    /// Send SSH protocol keep-alive packets on this connection.
+    @Field var keepAliveEnabled: Bool = true
+    /// Keep-alive interval in seconds (10-120). Ignored when disabled.
+    @Field var keepAliveIntervalSec: Int = 30
 }
 
 struct OpenTerminalOptionsRecord: Record {
@@ -28,8 +33,19 @@ struct OpenTerminalOptionsRecord: Record {
     @Field var termType: String?
     @Field var fontSize: Double?
     /// True for `ghostex attach` (zmx-backed) sessions. The Android module runs its
-    /// post-attach viewport refresh off this; iOS currently refreshes from JS.
+    /// post-attach viewport refresh off this; iOS refreshes explicitly via
+    /// refreshTerminalViewport (plus the JS post-attach nudge).
     @Field var zmxBacked: Bool = false
+    /// Scrollback row limit for newly created buffers: 2000 | 10000 | 50000.
+    @Field var scrollbackRows: Int = 10000
+}
+
+struct TerminalRuntimeSettingsRecord: Record {
+    @Field var autoScroll: Bool = true
+    @Field var cursorStyle: String = "block"
+    @Field var cursorBlink: Bool = true
+    @Field var softKeyboardEnabled: Bool = true
+    @Field var openUrlsOnTap: Bool = true
 }
 
 struct KeyModifiersRecord: Record {
@@ -69,7 +85,9 @@ public class GhostexNativeModule: Module {
                 host: config.host,
                 port: config.port,
                 username: config.username,
-                credentials: credentials
+                credentials: credentials,
+                keepAliveEnabled: config.keepAliveEnabled,
+                keepAliveIntervalSec: config.keepAliveIntervalSec
             )
 
             self.sendConnectionState(machineId, state: "connecting")
@@ -169,6 +187,13 @@ public class GhostexNativeModule: Module {
             let fontSize = TerminalDefaults.clampedFontSize(opts.fontSize ?? TerminalDefaults.defaultFontSize)
             let termType = opts.termType ?? "xterm-256color"
             let command = opts.command
+            let scrollbackRows = opts.scrollbackRows
+            guard TerminalDefaults.allowedScrollbackRows.contains(scrollbackRows) else {
+                throw GhostexException(
+                    code: .channelFailed,
+                    reason: "Invalid scrollbackRows: \(scrollbackRows)"
+                )
+            }
 
             // Create the terminal view + surface natively (custom I/O mode).
             let (entry, cols, rows) = try await MainActor.run {
@@ -183,8 +208,13 @@ public class GhostexNativeModule: Module {
                     sessionKey: sessionKey,
                     machineId: machineId,
                     connection: connection,
-                    fontSize: fontSize
+                    fontSize: fontSize,
+                    zmxBacked: opts.zmxBacked
                 )
+
+                // The new surface inherits scrollback-limit from the
+                // app-level config at creation time.
+                app.prepareAppConfigForSurfaceCreation(scrollbackRows: scrollbackRows)
 
                 let view = GhosttyTerminalView(
                     frame: .zero,
@@ -193,6 +223,7 @@ public class GhostexNativeModule: Module {
                     appWrapper: app,
                     command: nil,
                     fontSize: fontSize,
+                    scrollbackRows: scrollbackRows,
                     useCustomIO: true
                 )
                 entry.view = view
@@ -417,6 +448,64 @@ public class GhostexNativeModule: Module {
                 }
                 view.scrollToBottom()
             }
+        }
+
+        // MARK: Module-global terminal settings
+
+        AsyncFunction("setTerminalSettings") { (settings: TerminalRuntimeSettingsRecord) async throws in
+            guard let cursorStyle = TerminalRuntimeSettings.CursorStyle(rawValue: settings.cursorStyle) else {
+                throw GhostexException(code: .channelFailed, reason: "Unknown cursor style: \(settings.cursorStyle)")
+            }
+            await MainActor.run {
+                Ghostty.App.runtimeSettings = TerminalRuntimeSettings(
+                    autoScroll: settings.autoScroll,
+                    cursorStyle: cursorStyle,
+                    cursorBlink: settings.cursorBlink,
+                    softKeyboardEnabled: settings.softKeyboardEnabled,
+                    openUrlsOnTap: settings.openUrlsOnTap
+                )
+                // Push the regenerated config (cursor style/blink) to every
+                // live surface; warm entries share the same views.
+                for entry in GhostexTerminalRegistry.shared.entries.values {
+                    entry.view?.reapplySurfaceConfig()
+                }
+            }
+        }
+
+        AsyncFunction("refreshTerminalViewport") { (sessionKey: String) async throws in
+            try await MainActor.run {
+                guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
+                      let view = entry.view else {
+                    throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
+                }
+                guard entry.zmxBacked else { return }
+                // Same recipe as the JS post-attach nudge: ZMX redraw OSC to
+                // the remote, then a PageUp/PageDown round trip to force a
+                // full viewport repaint.
+                view.sendText("\u{1b}]1337;ZMX_REFRESH\u{07}")
+                view.sendTerminalKey(.pageUp)
+                view.sendTerminalKey(.pageDown)
+            }
+        }
+
+        AsyncFunction("setKeepScreenOn") { (enabled: Bool) async in
+            await MainActor.run {
+                UIApplication.shared.isIdleTimerDisabled = enabled
+            }
+        }
+
+        AsyncFunction("playAlertSound") { (kind: String) throws in
+            // System sound IDs (AudioToolbox): 1057 is a short audible
+            // SIM-toolkit beep for terminal bells; 1007 is the notification
+            // chime for attention alerts. Fire-and-forget, safe to repeat.
+            let soundID: SystemSoundID
+            switch kind {
+            case "bell": soundID = 1057
+            case "attention": soundID = 1007
+            default:
+                throw GhostexException(code: .channelFailed, reason: "Unknown alert sound: \(kind)")
+            }
+            AudioServicesPlaySystemSound(soundID)
         }
 
         // MARK: File upload

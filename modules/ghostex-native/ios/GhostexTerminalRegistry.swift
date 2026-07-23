@@ -53,6 +53,10 @@ final class TerminalSessionEntry {
     let machineId: String
     let connection: SSHConnection
 
+    /// True for `ghostex attach` (zmx-backed) sessions; gates the explicit
+    /// refreshTerminalViewport nudge.
+    let zmxBacked: Bool
+
     var view: GhosttyTerminalView?
     var shellId: UUID?
     var fontSize: Double
@@ -63,11 +67,18 @@ final class TerminalSessionEntry {
     /// "closed" event when the byte pump drains).
     var isClosed = false
 
-    init(sessionKey: String, machineId: String, connection: SSHConnection, fontSize: Double) {
+    init(
+        sessionKey: String,
+        machineId: String,
+        connection: SSHConnection,
+        fontSize: Double,
+        zmxBacked: Bool = false
+    ) {
         self.sessionKey = sessionKey
         self.machineId = machineId
         self.connection = connection
         self.fontSize = fontSize
+        self.zmxBacked = zmxBacked
     }
 
     func teardown() {

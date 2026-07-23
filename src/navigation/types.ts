@@ -6,4 +6,5 @@ export type RootStackParamList = {
   MachineForm: { machineId?: string } | undefined;
   Terminal: { sessionKey: string; machineId: string; title?: string };
   Settings: undefined;
+  ExtraKeysEditor: undefined;
 };

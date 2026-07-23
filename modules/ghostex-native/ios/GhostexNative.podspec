@@ -36,7 +36,7 @@ Pod::Spec.new do |s|
   # library search paths visible at the final (app) link step.
   s.preserve_paths = 'Vendor/**/*'
 
-  s.frameworks = 'Metal', 'QuartzCore', 'UIKit', 'IOSurface', 'Security'
+  s.frameworks = 'Metal', 'QuartzCore', 'UIKit', 'IOSurface', 'Security', 'AudioToolbox'
   s.libraries = 'z', 'c++'
 
   s.pod_target_xcconfig = {

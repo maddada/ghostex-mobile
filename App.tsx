@@ -11,13 +11,18 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './src/navigation/types';
+import { initAlerts } from './src/app/alerts';
+import { initAutoReconnect } from './src/app/autoReconnect';
 import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/deepLinks';
 import { initAppLifecycle } from './src/app/lifecycle';
 import { initPersistentNotification } from './src/app/persistentNotification';
 import { useMachinesStore } from './src/machines/store';
+import { useExtraKeysStore } from './src/settings/extraKeys';
+import { initSettingsNativeSync } from './src/settings/nativeSync';
 import { useSettingsStore } from './src/settings/store';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { GhostexPalette } from './src/theme/palette';
+import ExtraKeysEditorScreen from './src/screens/ExtraKeysEditorScreen';
 import MachineFormScreen from './src/screens/MachineFormScreen';
 import MachinesScreen from './src/screens/MachinesScreen';
 import SessionsScreen from './src/screens/SessionsScreen';
@@ -49,9 +54,16 @@ export default function App() {
     initAppLifecycle();
     initPersistentNotification();
     initDeepLinks();
+    initAlerts();
+    initAutoReconnect();
     void useMachinesStore.getState().hydrate();
-    void useSettingsStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();
+    void useExtraKeysStore.getState().hydrate();
+    // Native sync installs after hydration so it pushes the persisted values.
+    void useSettingsStore
+      .getState()
+      .hydrate()
+      .then(() => initSettingsNativeSync());
   }, []);
 
   if (!hydrated) {
@@ -99,6 +111,11 @@ export default function App() {
                 })}
               />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+              <Stack.Screen
+                name="ExtraKeysEditor"
+                component={ExtraKeysEditorScreen}
+                options={{ title: 'Extra Keys' }}
+              />
             </>
           )}
         </Stack.Navigator>

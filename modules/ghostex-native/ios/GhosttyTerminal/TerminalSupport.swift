@@ -21,9 +21,32 @@ enum TerminalDefaults {
 
     static let defaultFontSize = 13.0
 
+    /// Scrollback row limit choices exposed by the JS settings contract.
+    static let defaultScrollbackRows = 10000
+    static let allowedScrollbackRows: Set<Int> = [2000, 10000, 50000]
+
     nonisolated static func clampedFontSize(_ fontSize: Double) -> Double {
         min(max(fontSize.rounded(), minimumFontSize), maximumFontSize)
     }
+}
+
+// MARK: - Runtime Settings (module-global, set via setTerminalSettings)
+
+/// Module-global terminal behavior settings mirroring the JS
+/// TerminalRuntimeSettings contract. Defaults match the pre-settings-screen
+/// behavior so terminals opened before the first JS push are unchanged.
+struct TerminalRuntimeSettings {
+    enum CursorStyle: String {
+        case block
+        case underline
+        case bar
+    }
+
+    var autoScroll = true
+    var cursorStyle: CursorStyle = .block
+    var cursorBlink = true
+    var softKeyboardEnabled = true
+    var openUrlsOnTap = true
 }
 
 // MARK: - Zoom

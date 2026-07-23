@@ -38,7 +38,12 @@ extension Ghostty {
 extension Ghostty {
     enum ConfigBuilder {
         /// Fixed dark configuration for the Ghostex mobile terminal.
-        static func configContent(fontSize: Double) -> String {
+        static func configContent(
+            fontSize: Double,
+            cursorStyle: TerminalRuntimeSettings.CursorStyle,
+            cursorBlink: Bool,
+            scrollbackRows: Int
+        ) -> String {
             """
             font-family = "JetBrainsMono Nerd Font"
             font-size = \(Int(fontSize))
@@ -52,8 +57,8 @@ extension Ghostty {
             shell-integration = none
 
             # Cursor
-            cursor-style = block
-            cursor-style-blink = true
+            cursor-style = \(cursorStyle.rawValue)
+            cursor-style-blink = \(cursorBlink)
 
             # Fixed dark theme: black background.
             background = #000000
@@ -62,7 +67,7 @@ extension Ghostty {
             audible-bell = false
 
             # Limit scrollback to prevent unbounded memory growth
-            scrollback-limit = 10000
+            scrollback-limit = \(scrollbackRows)
 
             # Faster scroll speed for iOS touch
             mouse-scroll-multiplier = 3
@@ -81,15 +86,32 @@ extension Ghostty {
             case idle, loading, error, ready
         }
 
+        /// Module-global runtime settings (JS setTerminalSettings). Config
+        /// regeneration and touch/keyboard gating read this on the main actor.
+        static var runtimeSettings = TerminalRuntimeSettings()
+
         /// The ghostty app instance
         private(set) var app: ghostty_app_t? = nil
 
         /// Readiness state
         private(set) var readiness: Readiness = .loading
 
+        /// Every setting that changes the generated ghostty config must be
+        /// part of this key, otherwise a stale cached config gets applied.
+        private struct SurfaceConfigKey: Hashable {
+            let fontSize: Int
+            let cursorStyle: TerminalRuntimeSettings.CursorStyle
+            let cursorBlink: Bool
+            let scrollbackRows: Int
+        }
+
         /// Track active surfaces for config propagation
         private var activeSurfaces: [Ghostty.SurfaceReference] = []
-        private var surfaceConfigCache: [Int: ghostty_config_t] = [:]
+        private var surfaceConfigCache: [SurfaceConfigKey: ghostty_config_t] = [:]
+
+        /// scrollback-limit currently baked into the app-level config. New
+        /// surfaces inherit it at creation (libghostty reads it only then).
+        private var appConfigScrollbackRows = TerminalDefaults.defaultScrollbackRows
 
         // MARK: - Initialization
 
@@ -126,7 +148,10 @@ extension Ghostty {
                 close_surface_cb: { userdata, processAlive in App.closeSurface(userdata, processAlive: processAlive) }
             )
 
-            guard let config = makeConfig(fontSize: TerminalDefaults.defaultFontSize) else {
+            guard let config = makeConfig(
+                fontSize: TerminalDefaults.defaultFontSize,
+                scrollbackRows: appConfigScrollbackRows
+            ) else {
                 Ghostty.logger.critical("ghostty_config_new failed")
                 readiness = .error
                 return
@@ -196,33 +221,76 @@ extension Ghostty {
             return activeSurfaces.count
         }
 
-        /// Apply per-surface presentation overrides (font size).
-        func updateSurfaceConfig(_ surface: ghostty_surface_t, presentationOverrides: TerminalPresentationOverrides) {
-            guard let config = cachedSurfaceConfig(fontSize: presentationOverrides.resolvedFontSize()) else { return }
+        /// Apply per-surface presentation overrides (font size) plus the
+        /// module-global cursor settings. scrollback-limit is included for
+        /// cache-key fidelity but only takes effect at surface creation.
+        func updateSurfaceConfig(
+            _ surface: ghostty_surface_t,
+            presentationOverrides: TerminalPresentationOverrides,
+            scrollbackRows: Int
+        ) {
+            guard let config = cachedSurfaceConfig(
+                fontSize: presentationOverrides.resolvedFontSize(),
+                scrollbackRows: scrollbackRows
+            ) else { return }
             ghostty_surface_update_config(surface, config)
             Ghostty.logger.info("Updated surface presentation overrides")
         }
 
+        /// libghostty reads scrollback-limit only while creating a surface
+        /// (Termio init), so the app-level config must carry the requested
+        /// value before ghostty_surface_new. The app-level update propagates
+        /// to existing surfaces and resets their font size to the app
+        /// default, so their per-surface configs are re-applied right after.
+        func prepareAppConfigForSurfaceCreation(scrollbackRows: Int) {
+            guard scrollbackRows != appConfigScrollbackRows else { return }
+            guard let app else { return }
+            guard let config = makeConfig(
+                fontSize: TerminalDefaults.defaultFontSize,
+                scrollbackRows: scrollbackRows
+            ) else { return }
+
+            ghostty_app_update_config(app, config)
+            ghostty_config_free(config)
+            appConfigScrollbackRows = scrollbackRows
+
+            activeSurfaces = activeSurfaces.filter { $0.isValid && $0.terminalView != nil }
+            for ref in activeSurfaces {
+                guard let view = ref.terminalView else { continue }
+                updateSurfaceConfig(
+                    ref.surface,
+                    presentationOverrides: view.surfacePresentationOverrides,
+                    scrollbackRows: view.scrollbackRows
+                )
+            }
+        }
+
         // MARK: - Private Helpers
 
-        private func makeConfig(fontSize: Double) -> ghostty_config_t? {
+        private func makeConfig(fontSize: Double, scrollbackRows: Int) -> ghostty_config_t? {
             guard let config = ghostty_config_new() else {
                 Ghostty.logger.error("ghostty_config_new failed")
                 return nil
             }
 
-            loadConfigIntoGhostty(config, fontSize: fontSize)
+            loadConfigIntoGhostty(config, fontSize: fontSize, scrollbackRows: scrollbackRows)
             ghostty_config_finalize(config)
             return config
         }
 
-        private func cachedSurfaceConfig(fontSize: Double) -> ghostty_config_t? {
-            let key = Int(TerminalDefaults.clampedFontSize(fontSize))
+        private func cachedSurfaceConfig(fontSize: Double, scrollbackRows: Int) -> ghostty_config_t? {
+            let settings = Self.runtimeSettings
+            let key = SurfaceConfigKey(
+                fontSize: Int(TerminalDefaults.clampedFontSize(fontSize)),
+                cursorStyle: settings.cursorStyle,
+                cursorBlink: settings.cursorBlink,
+                scrollbackRows: scrollbackRows
+            )
             if let cachedConfig = surfaceConfigCache[key] {
                 return cachedConfig
             }
 
-            guard let config = makeConfig(fontSize: Double(key)) else {
+            guard let config = makeConfig(fontSize: Double(key.fontSize), scrollbackRows: scrollbackRows) else {
                 return nil
             }
 
@@ -238,15 +306,25 @@ extension Ghostty {
         }
 
         /// Generate and load config content into a ghostty_config_t.
-        private func loadConfigIntoGhostty(_ config: ghostty_config_t, fontSize: Double) {
+        private func loadConfigIntoGhostty(_ config: ghostty_config_t, fontSize: Double, scrollbackRows: Int) {
+            let settings = Self.runtimeSettings
             let tempDir = NSTemporaryDirectory()
             let configDir = (tempDir as NSString).appendingPathComponent("ghostex-ghostty")
-            let configFilePath = (configDir as NSString).appendingPathComponent("config-\(Int(fontSize))")
+            // The file name must be unique per generated content, otherwise
+            // concurrent cache entries overwrite each other's file.
+            let configFileName = "config-\(Int(fontSize))-\(settings.cursorStyle.rawValue)"
+                + "-\(settings.cursorBlink ? "blink" : "steady")-\(scrollbackRows)"
+            let configFilePath = (configDir as NSString).appendingPathComponent(configFileName)
 
             do {
                 try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
 
-                let configContent = ConfigBuilder.configContent(fontSize: fontSize)
+                let configContent = ConfigBuilder.configContent(
+                    fontSize: fontSize,
+                    cursorStyle: settings.cursorStyle,
+                    cursorBlink: settings.cursorBlink,
+                    scrollbackRows: scrollbackRows
+                )
                 try configContent.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
                 configFilePath.withCString { pathPtr in
@@ -323,6 +401,25 @@ extension Ghostty {
                 return true
 
             case GHOSTTY_ACTION_PROMPT_TITLE:
+                return true
+
+            case GHOSTTY_ACTION_OPEN_URL:
+                let openUrl = action.action.open_url
+                guard let urlPtr = openUrl.url, openUrl.len > 0 else { return true }
+                // The URL buffer is not null-terminated; copy exactly len bytes.
+                let urlString = String(
+                    decoding: UnsafeRawBufferPointer(start: urlPtr, count: Int(openUrl.len)),
+                    as: UTF8.self
+                )
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard App.runtimeSettings.openUrlsOnTap else { return }
+                        guard let url = URL(string: urlString),
+                              let scheme = url.scheme?.lowercased(),
+                              scheme == "http" || scheme == "https" else { return }
+                        UIApplication.shared.open(url)
+                    }
+                }
                 return true
 
             case GHOSTTY_ACTION_MOUSE_SHAPE,
