@@ -24,11 +24,13 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { logAppEvent } from '../app/appLog';
 import { markManualDisconnect } from '../app/autoReconnect';
 import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import DetailsSheet from '../components/common/DetailsSheet';
+import LogsSheet from '../components/common/LogsSheet';
 import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import StateCard from '../components/common/StateCard';
@@ -179,7 +181,8 @@ type Overlay =
       run: () => void;
     }
   | { kind: 'recentProjects'; machine: MachineRecord }
-  | { kind: 'recovery'; machine: MachineRecord | null };
+  | { kind: 'recovery'; machine: MachineRecord | null }
+  | { kind: 'logs' };
 
 const NONE: Overlay = { kind: 'none' };
 
@@ -215,6 +218,8 @@ export default function SessionsScreen({ navigation }: Props) {
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
   const [tailscaleConnected, setTailscaleConnected] = useState(false);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Last logged Tailscale state, so the 5s probe logs only transitions. */
+  const tailscaleLogged = useRef<boolean | null>(null);
 
   const machineById = useCallback(
     (id: string): MachineRecord | null => machines.find((entry) => entry.id === id) ?? null,
@@ -228,6 +233,7 @@ export default function SessionsScreen({ navigation }: Props) {
     }
     setStatusOverride(message);
     if (message !== null) {
+      logAppEvent(message);
       statusTimer.current = setTimeout(() => setStatusOverride(null), 6000);
     }
   }, []);
@@ -245,14 +251,18 @@ export default function SessionsScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const applyTailscaleState = (connected: boolean): void => {
+        if (!active) return;
+        setTailscaleConnected(connected);
+        if (tailscaleLogged.current !== connected) {
+          tailscaleLogged.current = connected;
+          logAppEvent(connected ? 'Tailscale: connected' : 'Tailscale: not connected');
+        }
+      };
       const refreshTailscaleStatus = (): void => {
         void GhostexNative.isTailscaleConnected()
-          .then((connected) => {
-            if (active) setTailscaleConnected(connected);
-          })
-          .catch(() => {
-            if (active) setTailscaleConnected(false);
-          });
+          .then(applyTailscaleState)
+          .catch(() => applyTailscaleState(false));
       };
 
       refreshTailscaleStatus();
@@ -1795,9 +1805,39 @@ export default function SessionsScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
       </View>
-      <Text style={styles.statusLine} numberOfLines={2}>
-        {statusLine}
-      </Text>
+      <View style={styles.statusRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show logs"
+          hitSlop={8}
+          style={styles.statusPressable}
+          onPress={() => setOverlay({ kind: 'logs' })}
+        >
+          <Text style={styles.statusLine} numberOfLines={1} ellipsizeMode="tail">
+            {statusLine}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Tailscale ${tailscaleConnected ? 'connected' : 'not connected'}`}
+          hitSlop={8}
+          style={styles.tailscaleIndicator}
+          onPress={() => void openTailscaleOrDownload()}
+        >
+          <Text
+            style={[
+              styles.tailscaleIndicatorLabel,
+              {
+                color: tailscaleConnected
+                  ? GhostexPalette.STATUS_CONNECTED
+                  : GhostexPalette.STATUS_SLEEPING,
+              },
+            ]}
+          >
+            • Tailscale
+          </Text>
+        </Pressable>
+      </View>
       {recentProjects.length > 0 && machine !== null ? (
         <Pressable
           accessibilityRole="button"
@@ -1819,27 +1859,6 @@ export default function SessionsScreen({ navigation }: Props) {
           </Text>
         }
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Tailscale ${tailscaleConnected ? 'connected' : 'not connected'}`}
-        hitSlop={8}
-        style={styles.tailscaleIndicator}
-        onPress={() => void openTailscaleOrDownload()}
-      >
-        <Text
-          style={[
-            styles.tailscaleIndicatorLabel,
-            {
-              color: tailscaleConnected
-                ? GhostexPalette.STATUS_CONNECTED
-                : GhostexPalette.STATUS_SLEEPING,
-            },
-          ]}
-        >
-          • Tailscale
-        </Text>
-      </Pressable>
-
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
 
       {overlay.kind === 'sessionMenu' ? (
@@ -2137,6 +2156,8 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
 
+      {overlay.kind === 'logs' ? <LogsSheet visible onClose={() => setOverlay(NONE)} /> : null}
+
       {overlay.kind === 'recovery' ? (
         <ActionSheet
           visible
@@ -2178,10 +2199,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  statusPressable: {
+    flex: 1,
+    minWidth: 0,
+  },
   statusLine: {
     color: GhostexPalette.MUTED,
     fontSize: 12,
-    marginTop: 4,
   },
   recentButton: {
     marginTop: 8,
@@ -2213,10 +2243,8 @@ const styles = StyleSheet.create({
   },
   tailscaleIndicator: {
     minHeight: 28,
-    alignSelf: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    paddingHorizontal: 12,
   },
   tailscaleIndicatorLabel: {
     fontSize: 11,

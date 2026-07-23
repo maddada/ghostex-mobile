@@ -8,9 +8,10 @@
 
 import { create } from 'zustand';
 
+import { logAppEvent } from '../app/appLog';
 import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import { hasPassword } from '../machines/credentials';
-import { useMachinesStore, type MachineRecord } from '../machines/store';
+import { machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { fetchInventory, summarizeFailure } from './client';
 
 export const INVENTORY_POLL_INTERVAL_MS = 5000;
@@ -74,6 +75,10 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
         const { summary, fingerprint } = await fetchInventory(machine);
         const previous = get().inventoriesByMachineId[machine.id];
         useMachinesStore.getState().markConnected(machine.id);
+        // Log only connect transitions (first load or recovery), not every poll.
+        if (previous === undefined || !previous.hasLoaded || previous.lastError !== null) {
+          logAppEvent(`${machineDisplayLabel(machine)}: connected`);
+        }
         if (previous !== undefined && previous.fingerprint === fingerprint) {
           // Unchanged payload: skip the summary swap, just clear transient state.
           patchMachine(machine.id, { refreshing: false, hasLoaded: true, lastError: null });
@@ -89,10 +94,15 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       } catch (error) {
         const raw = error instanceof Error ? error.message : String(error);
         const machineHasPassword = await hasPassword(machine.id);
+        const failure = summarizeFailure(raw, machineHasPassword);
+        // 5s polling repeats the same failure; log only new failure text.
+        if (get().inventoriesByMachineId[machine.id]?.lastError !== failure) {
+          logAppEvent(`${machineDisplayLabel(machine)}: ${failure}`);
+        }
         patchMachine(machine.id, {
           refreshing: false,
           hasLoaded: true,
-          lastError: summarizeFailure(raw, machineHasPassword),
+          lastError: failure,
         });
       } finally {
         inFlightMachineIds.delete(machine.id);
