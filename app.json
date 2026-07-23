@@ -11,20 +11,23 @@
     "newArchEnabled": true,
     "plugins": [
       "./plugins/withPodfileMinDeploymentTarget.js",
-      "./plugins/withSceneLifecycle.js"
+      "./plugins/withSceneLifecycle.js",
+      "./plugins/withAndroidReleaseSigning.js"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "io.ghostex.mobile",
+      "bundleIdentifier": "com.maddada.ghostex.ios",
+      "appleTeamId": "KTKP595G3B",
       "infoPlist": {
         "UIUserInterfaceStyle": "Dark",
+        "ITSAppUsesNonExemptEncryption": false,
         "UIAppFonts": [
           "JetBrainsMonoNerdFont-Regular.ttf"
         ]
       }
     },
     "android": {
-      "package": "io.ghostex.mobile",
+      "package": "io.ghostex",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png"
