@@ -141,6 +141,7 @@ import { ProgressCopy, RenameCopy, SessionCopy, StateCardCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, selectedMachine, useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
+import { acknowledgeSessionAttention } from '../terminal/attention';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette, GhostexRadii } from '../theme/palette';
 
@@ -328,6 +329,9 @@ export default function SessionsScreen({ navigation }: Props) {
   const attach = useCallback(
     async (target: MachineRecord, session: GhostexSession): Promise<void> => {
       setOverlay(NONE);
+      // Desktop parity: opening a session from the list acknowledges its
+      // attention status.
+      acknowledgeSessionAttention(target.id, session.sessionId);
       setTransientStatus(ProgressCopy.preparingAttach(session.alias));
       try {
         const sessionKey = await useTerminalStore.getState().attachSession(target, {

@@ -35,6 +35,7 @@ import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useSettingsStore } from '../settings/store';
+import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
 import { GhostexPalette } from '../theme/palette';
 
@@ -195,6 +196,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
     (sessionKey: string): void => {
       if (sessionKey !== useTerminalStore.getState().selectedSessionKey) {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      // Desktop parity: tapping a session's tab acknowledges its attention
+      // status (even when the tab is already selected).
+      const tab = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === sessionKey);
+      if (tab?.ghostexSessionId !== undefined) {
+        acknowledgeSessionAttention(tab.machineId, tab.ghostexSessionId);
       }
       selectTab(sessionKey);
     },

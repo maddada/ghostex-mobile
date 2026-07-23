@@ -39,6 +39,12 @@ type InventoryState = {
   stopPolling: () => void;
   /** Drop cached inventory (e.g. when a machine is removed). */
   clearMachine: (machineId: string) => void;
+  /**
+   * Optimistically clear a session's attention state (desktop-parity instant
+   * dot clear on tap). Drops the fingerprint so the next poll always swaps the
+   * summary back to server truth, covering a failed acknowledge CLI call.
+   */
+  acknowledgeAttentionLocally: (machineId: string, sessionId: string) => void;
 };
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -122,6 +128,22 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       const next = { ...get().inventoriesByMachineId };
       delete next[machineId];
       set({ inventoriesByMachineId: next });
+    },
+
+    acknowledgeAttentionLocally: (machineId, sessionId) => {
+      const summary = get().inventoriesByMachineId[machineId]?.summary;
+      if (summary === null || summary === undefined) return;
+      const sessions = summary.sessions.map((session) =>
+        session.sessionId === sessionId
+          ? {
+              ...session,
+              activity: 'idle',
+              status: session.status === 'attention' ? 'idle' : session.status,
+              attentionAcknowledged: true,
+            }
+          : session,
+      );
+      patchMachine(machineId, { summary: { ...summary, sessions }, fingerprint: null });
     },
   };
 });
