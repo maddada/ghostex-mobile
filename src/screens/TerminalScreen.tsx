@@ -113,7 +113,27 @@ export default function TerminalScreen({ navigation, route }: Props) {
     return () => clearTimeout(timer);
   }, [tapKeyboardHint, keyboardVisible]);
 
-  const keyBarVisible = keyboardVisible || tapKeyboardHint;
+  const keyBarVisible = (keyboardVisible || tapKeyboardHint) && settings.extraKeysToolbarVisible;
+
+  // Keep the display awake only while this terminal screen is active.
+  useEffect(() => {
+    const keepAwake = isFocused && settings.keepScreenOn;
+    void GhostexNative.setKeepScreenOn(keepAwake).catch(() => undefined);
+    return () => {
+      if (keepAwake) void GhostexNative.setKeepScreenOn(false).catch(() => undefined);
+    };
+  }, [isFocused, settings.keepScreenOn]);
+
+  // Hide keyboard on startup OFF → explicitly focus a terminal once it opens,
+  // at most once per session per visit (a deliberate dismissal stays dismissed).
+  useEffect(() => {
+    if (settings.hideKeyboardOnStartup || !isFocused) return;
+    if (activeTab === null || activeTab.state !== 'open') return;
+    if (autoFocusedSessionsRef.current.has(activeTab.sessionKey)) return;
+    autoFocusedSessionsRef.current.add(activeTab.sessionKey);
+    setTapKeyboardHint(true);
+    void GhostexNative.focusTerminal(activeTab.sessionKey).catch(() => setTapKeyboardHint(false));
+  }, [settings.hideKeyboardOnStartup, isFocused, activeTab]);
 
   const reconcileKeyBarWithVisibleWindow = useCallback((): void => {
     if (!keyboardVisible || visibleWindowBottom === null) return;
@@ -216,6 +236,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
       // The store marks the tab failed; the state overlay surfaces it.
     }
   }, [activeTab?.machineId, openShellTab]);
+
+  const handleRefresh = useCallback((): void => {
+    const store = useTerminalStore.getState();
+    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
+    if (tab === undefined || tab.state !== 'open') return;
+    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
+  }, []);
 
   const uploadEnabled = activeTab !== null && activeTab.state === 'open';
 
@@ -343,7 +370,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
           />
         </View>
       ) : (
-        <View style={{ height: insets.bottom }} />
+        // With the keyboard up (toolbar hidden), the container's bottom
+        // padding already clears the IME; only add the home-indicator inset
+        // while the keyboard is down.
+        <View style={{ height: keyboardVisible ? 0 : insets.bottom }} />
       )}
 
       <TerminalOverflowMenu
