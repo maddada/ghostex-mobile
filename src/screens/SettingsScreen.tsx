@@ -18,7 +18,9 @@ import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palet
 /** Status line copy, sessions-drawer.md §1 Settings page. */
 const SETTINGS_STATUS_LINE = 'Edit terminal behavior and remote-session alerts.';
 
-type BooleanSettingKey = Exclude<keyof GhostexSettings, 'fontSize'>;
+type BooleanSettingKey = {
+  [Key in keyof GhostexSettings]: GhostexSettings[Key] extends boolean ? Key : never;
+}[keyof GhostexSettings];
 
 const TOGGLES: { key: BooleanSettingKey; label: string }[] = [
   { key: 'autoScroll', label: 'Auto scroll' },

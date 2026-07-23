@@ -69,7 +69,10 @@ class GhostexSshConnection(
     try {
       ssh.connect(config.host, config.port)
       authenticate(ssh)
-      ssh.connection.keepAlive.keepAliveInterval = KEEP_ALIVE_INTERVAL_SECONDS
+      // 0 disables SSHJ's keep-alive thread; the thread dies with the transport on disconnect.
+      ssh.connection.keepAlive.keepAliveInterval =
+        if (config.keepAliveEnabled) config.keepAliveIntervalSec.coerceIn(MIN_KEEP_ALIVE_INTERVAL_SECONDS, MAX_KEEP_ALIVE_INTERVAL_SECONDS)
+        else 0
       client = ssh
     } catch (error: Exception) {
       try {
@@ -259,7 +262,8 @@ class GhostexSshConnection(
   companion object {
     const val CONNECT_TIMEOUT_MS = 8_000
     const val DEFAULT_EXEC_TIMEOUT_MS = 20_000L
-    private const val KEEP_ALIVE_INTERVAL_SECONDS = 15
+    private const val MIN_KEEP_ALIVE_INTERVAL_SECONDS = 10
+    private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
     private const val OWNER_READ_WRITE_PERMISSIONS = 0b110_000_000 // 0600
 

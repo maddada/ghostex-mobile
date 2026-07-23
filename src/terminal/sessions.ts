@@ -109,6 +109,8 @@ type TerminalState = {
    */
   reopenTab: (sessionKey: string) => Promise<void>;
   setFontSizeForSession: (sessionKey: string, size: number) => void;
+  /** Drop all pinch-zoom overrides and re-apply the global default everywhere. */
+  clearFontSizeOverrides: () => void;
 };
 
 function isFontSizeMap(value: unknown): value is Record<string, number> {
@@ -167,9 +169,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     await evictExcessWarmEntries();
     try {
       await ensureConnected(machine);
-      const opts: { command?: string; fontSize?: number; zmxBacked?: boolean } = {
+      const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
         fontSize: initialFontSize(tab.sessionKey),
         zmxBacked: tab.kind === 'attach',
+        scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
       };
       if (command !== null) opts.command = command;
       await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
@@ -252,6 +255,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       if (!get().tabs.some((tab) => tab.sessionKey === sessionKey)) return;
       set({ selectedSessionKey: sessionKey });
       touchWarm(sessionKey);
+      // Auto scroll: land at the live bottom when returning to a warm tab.
+      if (useSettingsStore.getState().settings.autoScroll) {
+        void GhostexNative.scrollToBottom(sessionKey).catch(() => undefined);
+      }
     },
 
     closeTab: async (sessionKey) => {
@@ -296,9 +303,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       touchWarm(sessionKey);
       try {
         await ensureConnected(target);
-        const opts: { command?: string; fontSize?: number; zmxBacked?: boolean } = {
+        const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
           fontSize: initialFontSize(sessionKey),
           zmxBacked: tab.kind === 'attach',
+          scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
         };
         if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
           opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
@@ -316,6 +324,15 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       const fontSizeBySessionKey = { ...get().fontSizeBySessionKey, [sessionKey]: size };
       set({ fontSizeBySessionKey });
       void AsyncStorage.setItem(FONT_SIZES_STORAGE_KEY, JSON.stringify(fontSizeBySessionKey));
+    },
+
+    clearFontSizeOverrides: () => {
+      set({ fontSizeBySessionKey: {} });
+      void AsyncStorage.setItem(FONT_SIZES_STORAGE_KEY, JSON.stringify({}));
+      const size = useSettingsStore.getState().settings.fontSize;
+      for (const tab of get().tabs) {
+        void GhostexNative.setFontSize(tab.sessionKey, size).catch(() => undefined);
+      }
     },
   };
 });
@@ -343,6 +360,10 @@ export function initTerminalEvents(): void {
     });
     if (event.state === 'open' && tab.kind === 'attach' && Platform.OS === 'ios') {
       scheduleZmxRefresh(event.sessionKey);
+    }
+    // Auto scroll: newly opened/reattached terminals start at the live bottom.
+    if (event.state === 'open' && useSettingsStore.getState().settings.autoScroll) {
+      void GhostexNative.scrollToBottom(event.sessionKey).catch(() => undefined);
     }
     if (event.state === 'closed' || event.state === 'failed') {
       cancelZmxRefresh(event.sessionKey);

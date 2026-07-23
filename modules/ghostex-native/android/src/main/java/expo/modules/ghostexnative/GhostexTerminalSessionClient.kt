@@ -62,7 +62,11 @@ class GhostexTerminalSessionClient(
     // External (SSH-backed) sessions have no meaningful local pid.
   }
 
-  override fun getTerminalCursorStyle(): Int? = null
+  /**
+   * TerminalEmulator reads this at construction and on every setCursorStyle()/reset(),
+   * so new emulators and live style changes both follow the module settings.
+   */
+  override fun getTerminalCursorStyle(): Int? = module.terminalCursorStyleCode()
 
   override fun logError(tag: String?, message: String?) {
     Log.e(tag ?: LOG_TAG, message ?: "")

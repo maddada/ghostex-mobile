@@ -9,7 +9,9 @@ import type {
   OpenTerminalOptions,
   SshConfig,
   SshKeyType,
+  TerminalAlertSoundKind,
   TerminalKey,
+  TerminalRuntimeSettings,
 } from './GhostexNative.types';
 
 declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
@@ -32,6 +34,26 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   setKeyModifiers(sessionKey: string, mods: KeyModifiers): Promise<void>;
   setFontSize(sessionKey: string, size: number): Promise<void>;
   scrollToBottom(sessionKey: string): Promise<void>;
+
+  /**
+   * Apply module-global terminal settings (auto scroll, cursor style/blink,
+   * soft-keyboard policy, URL-tap opening) to every live and warm terminal
+   * entry immediately and to all terminals opened afterwards.
+   */
+  setTerminalSettings(settings: TerminalRuntimeSettings): Promise<void>;
+
+  /**
+   * Explicit ZMX viewport refresh for one terminal (refresh button): size
+   * update + ZMX redraw OSC + PageUp/PageDown nudge, natively on both
+   * platforms. No-op for a terminal that is not zmx-backed.
+   */
+  refreshTerminalViewport(sessionKey: string): Promise<void>;
+
+  /** Keep the display awake (terminal screen active) or release the request. */
+  setKeepScreenOn(enabled: boolean): Promise<void>;
+
+  /** Play a short native alert sound (terminal bell beep or attention alert). */
+  playAlertSound(kind: TerminalAlertSoundKind): Promise<void>;
 
   /** Make the attached view first responder and show the soft keyboard. No-op if no view attached. */
   focusTerminal(sessionKey: string): Promise<void>;

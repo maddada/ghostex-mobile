@@ -11,6 +11,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { markManualDisconnect } from '../app/autoReconnect';
 import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -143,6 +144,7 @@ export default function MachinesScreen({ navigation }: Props) {
       setOverlay(NONE);
       // New credentials should immediately be retried against the machine.
       try {
+        markManualDisconnect(machine.id);
         await GhostexNative.disconnect(machine.id);
       } catch {
         // Not connected is fine.
@@ -180,6 +182,7 @@ export default function MachinesScreen({ navigation }: Props) {
       setOverlay(NONE);
       clearMachineInventory(machine.id);
       try {
+        markManualDisconnect(machine.id);
         await GhostexNative.disconnect(machine.id);
       } catch {
         // Not connected is fine.

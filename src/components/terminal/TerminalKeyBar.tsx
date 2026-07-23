@@ -13,6 +13,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
+import {
+  resolveExtraKeysLayout,
+  useExtraKeysStore,
+  type ResolvedExtraKey,
+} from '../../settings/extraKeys';
 import { GhostexPalette } from '../../theme/palette';
 import {
   ArrowIcon,
@@ -20,7 +25,6 @@ import {
   PencilIcon,
   ReturnIcon,
   SendIcon,
-  type ArrowDirection,
 } from './icons';
 
 export const KEY_BAR_HEIGHT = 88;
@@ -55,40 +59,8 @@ function retainLockedModifiers(state: ModifierState): ModifierState {
   };
 }
 
-type KeyBarItem =
-  | { id: string; kind: 'modifier'; label: string; modifier: ModifierId }
-  | {
-      id: string;
-      kind: 'key';
-      label?: string;
-      arrow?: ArrowDirection;
-      returnGlyph?: boolean;
-      key: TerminalKey;
-      /** Intrinsic modifiers (e.g. NEWLN = Ctrl-J), merged with latches. */
-      mods?: KeyModifiers;
-      repeatable?: boolean;
-    };
-
-/** Default layout, verbatim from the spec (§2). */
-const ROW_1: KeyBarItem[] = [
-  { id: 'esc', kind: 'key', label: 'ESC', key: 'escape' },
-  { id: 'shift', kind: 'modifier', label: 'SHIFT', modifier: 'shift' },
-  { id: 'newln', kind: 'key', returnGlyph: true, key: 'j', mods: { ctrl: true } },
-  { id: 'home', kind: 'key', label: 'HOME', key: 'home', repeatable: true },
-  { id: 'up', kind: 'key', arrow: 'up', key: 'up', repeatable: true },
-  { id: 'end', kind: 'key', label: 'END', key: 'end', repeatable: true },
-  { id: 'pgup', kind: 'key', label: 'PGUP', key: 'pageUp', repeatable: true },
-];
-
-const ROW_2: KeyBarItem[] = [
-  { id: 'tab', kind: 'key', label: 'TAB', key: 'tab' },
-  { id: 'ctrl', kind: 'modifier', label: 'CTRL', modifier: 'ctrl' },
-  { id: 'alt', kind: 'modifier', label: 'ALT', modifier: 'alt' },
-  { id: 'left', kind: 'key', arrow: 'left', key: 'left', repeatable: true },
-  { id: 'down', kind: 'key', arrow: 'down', key: 'down', repeatable: true },
-  { id: 'right', kind: 'key', arrow: 'right', key: 'right', repeatable: true },
-  { id: 'pgdn', kind: 'key', label: 'PGDN', key: 'pageDown', repeatable: true },
-];
+/** Rendered key model: the user-editable layout from the extra-keys store. */
+type KeyBarItem = ResolvedExtraKey;
 
 export type TerminalKeyBarProps = {
   sessionKey: string;
@@ -102,6 +74,8 @@ export default function TerminalKeyBar({
   showDismissButton,
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
+  const layout = useExtraKeysStore((state) => state.layout);
+  const [row1 = [], row2 = []] = resolveExtraKeysLayout(layout);
   const [modifiers, setModifiers] = useState<ModifierState>(NO_MODIFIERS);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorText, setEditorText] = useState('');
@@ -170,6 +144,20 @@ export default function TerminalKeyBar({
         repeatInterval.current = setInterval(() => sendKey(item.key, mods), REPEAT_INTERVAL_MS);
       }, REPEAT_DELAY_MS);
     }
+  };
+
+  const handleTextActionPress = (item: Extract<KeyBarItem, { kind: 'text' }>): void => {
+    clearRepeat();
+    setModifiers((current) => retainLockedModifiers(current));
+    void GhostexNative.sendText(sessionKey, item.text)
+      .then(() => {
+        if (item.sendEnter) {
+          void GhostexNative.sendKey(sessionKey, 'enter', {}).catch(() => undefined);
+        }
+      })
+      .catch(() => {
+        // The native entry may be closed/failed; overlays surface that state.
+      });
   };
 
   const setModifierMode = (modifier: ModifierId, longPress: boolean): void => {
@@ -250,6 +238,22 @@ export default function TerminalKeyBar({
         </View>
       );
     }
+    if (item.kind === 'text') {
+      return (
+        <View key={item.id} style={styles.cell}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+            onPress={() => handleTextActionPress(item)}
+          >
+            <Text style={styles.pillLabel} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
     return (
       <View key={item.id} style={styles.cell}>
         <Pressable
@@ -297,8 +301,8 @@ export default function TerminalKeyBar({
         </View>
       ) : (
         <View style={styles.rows}>
-          <View style={styles.row}>{ROW_1.map(renderItem)}</View>
-          <View style={styles.row}>{ROW_2.map(renderItem)}</View>
+          <View style={styles.row}>{row1.map(renderItem)}</View>
+          <View style={styles.row}>{row2.map(renderItem)}</View>
         </View>
       )}
       <View style={styles.trailingCluster}>

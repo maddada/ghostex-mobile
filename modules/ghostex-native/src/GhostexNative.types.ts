@@ -5,6 +5,10 @@ export type SshConfig = {
   password?: string;
   privateKey?: string;
   passphrase?: string;
+  /** Send SSH protocol keep-alive packets on this connection. Defaults to true. */
+  keepAliveEnabled?: boolean;
+  /** Keep-alive interval in seconds (10-120). Ignored when keepAliveEnabled is false. */
+  keepAliveIntervalSec?: number;
 };
 
 export type ExecResult = {
@@ -27,7 +31,33 @@ export type OpenTerminalOptions = {
    * still refreshes from JS.
    */
   zmxBacked?: boolean;
+  /**
+   * Scrollback row limit for this terminal's buffer (applies to newly created
+   * buffers only). One of 2000 | 10000 | 50000. Defaults to 10000.
+   */
+  scrollbackRows?: number;
 };
+
+export type CursorStyle = 'block' | 'underline' | 'bar';
+
+/**
+ * Module-global terminal presentation/behavior settings. Applied via
+ * setTerminalSettings to all live and warm terminal entries immediately, and
+ * to every terminal opened afterwards.
+ */
+export type TerminalRuntimeSettings = {
+  /** Follow new output when the user is already at the bottom. When false, never move the viewport on output. */
+  autoScroll: boolean;
+  cursorStyle: CursorStyle;
+  cursorBlink: boolean;
+  /** When false, terminal taps must not implicitly present the software keyboard (explicit focusTerminal still works). */
+  softKeyboardEnabled: boolean;
+  /** When true, tapping a URL rendered in the terminal opens it in the system browser. */
+  openUrlsOnTap: boolean;
+};
+
+/** Short app alert sounds played natively (no bundled JS audio dependency). */
+export type TerminalAlertSoundKind = 'bell' | 'attention';
 
 export type TerminalKey =
   | 'escape'

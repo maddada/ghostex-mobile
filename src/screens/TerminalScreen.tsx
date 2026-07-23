@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,11 +68,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const settings = useSettingsStore((state) => state.settings);
 
   const { keyboardVisible, bottomInset, visibleWindowBottom } = useKeyboardMetrics();
+  const isFocused = useIsFocused();
   const [tapKeyboardHint, setTapKeyboardHint] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [keyboardOcclusionCorrection, setKeyboardOcclusionCorrection] = useState(0);
   const keyBarFrameRef = useRef<View>(null);
+  /** Session keys already auto-focused this visit (hide-keyboard-on-startup off). */
+  const autoFocusedSessionsRef = useRef<Set<string>>(new Set());
 
   const activeTab = tabs.find((tab) => tab.sessionKey === selectedSessionKey) ?? null;
 
@@ -304,11 +308,24 @@ export default function TerminalScreen({ navigation, route }: Props) {
           <TerminalFloatingControls
             showKeyboardButton={settings.keyboardButtonVisible}
             showUploadButton={settings.fileUploadButtonVisible}
+            showRefreshButton={
+              settings.refreshButtonVisible && activeTab?.kind === 'attach'
+            }
             uploadEnabled={uploadEnabled}
             uploading={uploading}
+            refreshEnabled={activeTab?.state === 'open'}
+            keyboardShown={keyboardVisible}
             bottomOffset={16}
             onKeyboard={showKeyboard}
+            onDismissKeyboard={dismissKeyboard}
             onUpload={() => void handleUpload()}
+            onRefresh={() => {
+              if (activeTab !== null) {
+                void GhostexNative.refreshTerminalViewport(activeTab.sessionKey).catch(
+                  () => undefined,
+                );
+              }
+            }}
           />
         )}
       </View>

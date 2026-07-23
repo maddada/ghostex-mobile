@@ -10,6 +10,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 import type { SshConfig } from '../../modules/ghostex-native/src';
+import { useSettingsStore } from '../settings/store';
 
 type CredentialKind = 'password' | 'sshkey' | 'passphrase' | 'publickey';
 
@@ -135,10 +136,13 @@ export async function resolveSshConfig(machine: MachineConnectionTarget): Promis
     getSshKey(machine.id),
     getPassphrase(machine.id),
   ]);
+  const { keepAliveEnabled, keepAliveIntervalSec } = useSettingsStore.getState().settings;
   const config: SshConfig = {
     host: machine.host,
     port: machine.port,
     username: machine.username,
+    keepAliveEnabled,
+    keepAliveIntervalSec,
   };
   if (password !== null && password.length > 0) config.password = password;
   if (privateKey !== null && privateKey.length > 0) config.privateKey = privateKey;

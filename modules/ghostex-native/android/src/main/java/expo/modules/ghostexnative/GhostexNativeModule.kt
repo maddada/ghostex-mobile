@@ -3,10 +3,15 @@ package expo.modules.ghostexnative
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.media.AudioManager
+import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewTreeObserver
+import android.view.WindowManager
+import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -30,7 +35,18 @@ class GhostexNativeModule : Module() {
 
   internal val terminalRegistry = GhostexTerminalRegistry()
 
+  /**
+   * Module-global terminal settings. Read by views (tap policy), the session client
+   * (cursor style for new emulators), and applied to every registry entry on change.
+   */
+  @Volatile
+  internal var terminalSettings = TerminalRuntimeSettingsRecord()
+
   private val mainHandler = Handler(Looper.getMainLooper())
+
+  /** Lazily created for bell beeps, released in OnDestroy. Guarded by [toneGeneratorLock]. */
+  private var toneGenerator: ToneGenerator? = null
+  private val toneGeneratorLock = Any()
 
   private var visibleWindowDecorView: View? = null
   private var visibleWindowLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
@@ -240,6 +256,49 @@ class GhostexNativeModule : Module() {
       promise.resolve(null)
     }
 
+    AsyncFunction("setTerminalSettings") { settings: TerminalRuntimeSettingsRecord, promise: Promise ->
+      terminalSettings = settings
+      mainHandler.post {
+        for (sessionKey in terminalRegistry.keys()) {
+          terminalRegistry.get(sessionKey)?.let { applyTerminalSettingsToEntry(it) }
+        }
+        promise.resolve(null)
+      }
+    }
+
+    AsyncFunction("refreshTerminalViewport") { sessionKey: String, promise: Promise ->
+      val entry = terminalRegistry.get(sessionKey)
+      if (entry == null) {
+        promise.reject(noTerminalException(sessionKey))
+        return@AsyncFunction
+      }
+      // performZmxViewportRefreshNow no-ops for non-zmx entries; detached views resolve as no-op.
+      mainHandler.post {
+        entry.attachedView?.performZmxViewportRefreshNow()
+        promise.resolve(null)
+      }
+    }
+
+    AsyncFunction("setKeepScreenOn") { enabled: Boolean, promise: Promise ->
+      val window = appContext.currentActivity?.window
+      if (window == null) {
+        promise.resolve(null)
+        return@AsyncFunction
+      }
+      mainHandler.post {
+        if (enabled) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        promise.resolve(null)
+      }
+    }
+
+    AsyncFunction("playAlertSound") { kind: String ->
+      when (kind) {
+        "bell" -> playBellBeep()
+        "attention" -> playAttentionSound()
+      }
+    }
+
     AsyncFunction("focusTerminal") { sessionKey: String, promise: Promise ->
       val entry = terminalRegistry.get(sessionKey)
       if (entry == null) {
@@ -383,6 +442,10 @@ class GhostexNativeModule : Module() {
 
     OnDestroy {
       stopVisibleWindowFrameObserver()
+      synchronized(toneGeneratorLock) {
+        toneGenerator?.release()
+        toneGenerator = null
+      }
       val toClose = connections.values.toList()
       connections.clear()
       Thread({
@@ -468,12 +531,65 @@ class GhostexNativeModule : Module() {
     // first attached view resizes the PTY to real metrics.
     mainHandler.post {
       val client = GhostexTerminalSessionClient(entry, this)
-      val session = TerminalSession(attachProcess, TRANSCRIPT_ROWS, client)
+      val session = TerminalSession(attachProcess, resolveTranscriptRows(opts.scrollbackRows), client)
       entry.session = session
       terminalRegistry.register(entry)
+      // updateSize creates the emulator synchronously (cursor style comes from the session
+      // client at construction); auto-scroll must be applied to the fresh emulator here so
+      // warm sessions honor the current settings before any view attaches.
       session.updateSize(INITIAL_COLUMNS, INITIAL_ROWS, INITIAL_CELL_WIDTH_PX, INITIAL_CELL_HEIGHT_PX)
+      applyTerminalSettingsToEntry(entry)
     }
   }
+
+  /** Only the fixed option values are valid; anything else means a stale/foreign caller. */
+  private fun resolveTranscriptRows(requested: Int?): Int =
+    if (requested != null && requested in ALLOWED_TRANSCRIPT_ROWS) requested
+    else DEFAULT_TRANSCRIPT_ROWS
+
+  /** Main thread only: push the current [terminalSettings] onto one registry entry. */
+  private fun applyTerminalSettingsToEntry(entry: GhostexTerminalEntry) {
+    val settings = terminalSettings
+    val emulator = entry.session?.emulator ?: return
+    emulator.setAutoScrollDisabled(!settings.autoScroll)
+    // Re-reads the style this module now reports through the session client.
+    emulator.setCursorStyle()
+    entry.attachedView?.applyTerminalSettings(settings)
+  }
+
+  /** Termux cursor-style code for the current settings; read by the session client. */
+  internal fun terminalCursorStyleCode(): Int = when (terminalSettings.cursorStyle) {
+    "underline" -> TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE
+    "bar" -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR
+    else -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK
+  }
+
+  // region alert sounds
+
+  private fun playBellBeep() {
+    try {
+      val generator = synchronized(toneGeneratorLock) {
+        toneGenerator
+          ?: ToneGenerator(AudioManager.STREAM_NOTIFICATION, BELL_TONE_VOLUME).also { toneGenerator = it }
+      }
+      generator.startTone(ToneGenerator.TONE_PROP_BEEP, BELL_TONE_DURATION_MS)
+    } catch (ignored: Exception) {
+      // ToneGenerator construction throws when no audio resources are available;
+      // alert sounds must never take the terminal down.
+    }
+  }
+
+  private fun playAttentionSound() {
+    try {
+      val context = safeContext ?: return
+      val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
+      RingtoneManager.getRingtone(context, uri)?.play()
+    } catch (ignored: Exception) {
+      // A missing/unresolvable system notification sound is not actionable here.
+    }
+  }
+
+  // endregion
 
   private fun runningSession(sessionKey: String, promise: Promise): TerminalSession? {
     val entry = terminalRegistry.get(sessionKey)
@@ -581,7 +697,12 @@ class GhostexNativeModule : Module() {
 
     private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 7031
     private const val DEFAULT_TERM_TYPE = "xterm-256color"
-    private const val TRANSCRIPT_ROWS = 2_000
+    private val ALLOWED_TRANSCRIPT_ROWS = setOf(2_000, 10_000, 50_000)
+    /** Unified cross-platform scrollback default (matches iOS and the JS settings screen). */
+    private const val DEFAULT_TRANSCRIPT_ROWS = 10_000
+
+    private const val BELL_TONE_VOLUME = 80
+    private const val BELL_TONE_DURATION_MS = 150
     private const val INITIAL_COLUMNS = 80
     private const val INITIAL_ROWS = 24
     private const val INITIAL_CELL_WIDTH_PX = 12

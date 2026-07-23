@@ -1,7 +1,10 @@
 package expo.modules.ghostexnative
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -87,6 +90,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     candidate.attachedView = this
     terminalView.setTextSize(dpToPx(candidate.fontSizeDp))
     terminalView.attachSession(session)
+    module?.terminalSettings?.let { applyTerminalSettings(it) }
     terminalView.invalidate()
     refreshZmxViewportOnceAfterSessionSwitch(candidate, session, 1)
   }
@@ -97,6 +101,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     val current = entry ?: return
     entry = null
     if (current.attachedView === this) current.attachedView = null
+    // Cancel the blinker runnable so it cannot keep toggling a detached emulator.
+    terminalView.setTerminalCursorBlinkerState(false, false)
     terminalView.attachSession(null)
     terminalView.invalidate()
   }
@@ -118,6 +124,17 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   }
 
   internal fun onSessionColorsChanged() {
+    terminalView.invalidate()
+  }
+
+  /**
+   * View-scoped half of setTerminalSettings: the cursor blinker lives on TerminalView and
+   * must be re-armed per its API contract (rate first, then state; state only takes effect
+   * once the emulator is set). Emulator-scoped settings are applied by the module.
+   */
+  internal fun applyTerminalSettings(settings: TerminalRuntimeSettingsRecord) {
+    terminalView.setTerminalCursorBlinkerRate(if (settings.cursorBlink) CURSOR_BLINK_RATE_MS else 0)
+    terminalView.setTerminalCursorBlinkerState(settings.cursorBlink, true)
     terminalView.invalidate()
   }
 
@@ -212,10 +229,22 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
       ) {
         return@postDelayed
       }
-      terminalView.updateSize()
-      session.write(GhostexZmxViewportRefresh.sequence())
-      sendTerminalPageUpPageDownNudge(session)
+      performZmxViewportRefreshNow()
     }, GhostexZmxViewportRefresh.POST_ATTACH_REFRESH_DELAY_MS)
+  }
+
+  /**
+   * Explicit refresh (refreshTerminalViewport): the same size update + ZMX redraw OSC +
+   * PageUp/PageDown nudge the post-attach path sends, without its visibility retry loop.
+   * No-op unless the attached entry is zmx-backed and still running.
+   */
+  internal fun performZmxViewportRefreshNow() {
+    val current = entry ?: return
+    val session = current.session ?: return
+    if (!shouldRefreshAfterSessionSwitch(current, session)) return
+    terminalView.updateSize()
+    session.write(GhostexZmxViewportRefresh.sequence())
+    sendTerminalPageUpPageDownNudge(session)
   }
 
   private fun sendTerminalPageUpPageDownNudge(session: TerminalSession) {
@@ -291,7 +320,65 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   override fun onSingleTapUp(e: MotionEvent?) {
     onSingleTap(emptyMap())
-    showSoftKeyboard()
+    val settings = module?.terminalSettings ?: return
+    // A tap that opens a URL must not also pop the keyboard; every other tap keeps the
+    // previous behavior, gated by the soft-keyboard setting (focusTerminal stays explicit).
+    if (settings.openUrlsOnTap && e != null && openUrlUnderTap(e)) return
+    if (settings.softKeyboardEnabled) showSoftKeyboard()
+  }
+
+  /**
+   * Hit-test the tapped cell against http(s) URLs on the tapped logical line. Reuses the
+   * vendored getWordAtLocation geometry: wrapped rows are joined by getSelectedText and
+   * contribute exactly one column per character, so the tap's index in the joined string
+   * is (rowsAboveTap * columns + column). Wrap expansion is bounded so tapping inside a
+   * pasted megabyte-long line cannot build a huge string per tap.
+   */
+  private fun openUrlUnderTap(event: MotionEvent): Boolean {
+    val emulator = terminalView.mEmulator ?: return false
+    val screen = emulator.screen
+    val columnAndRow = terminalView.getColumnAndRow(event, true)
+    val column = columnAndRow[0]
+    val tapRow = columnAndRow[1]
+    if (column < 0 || column >= emulator.mColumns) return false
+    if (tapRow < -screen.activeTranscriptRows || tapRow >= emulator.mRows) return false
+
+    var firstRow = tapRow
+    while (firstRow > -screen.activeTranscriptRows &&
+      tapRow - firstRow < MAX_URL_WRAPPED_ROWS &&
+      screen.getLineWrap(firstRow - 1)
+    ) firstRow--
+    var lastRow = tapRow
+    while (lastRow < emulator.mRows - 1 &&
+      lastRow - tapRow < MAX_URL_WRAPPED_ROWS &&
+      screen.getLineWrap(lastRow)
+    ) lastRow++
+
+    val text = screen.getSelectedText(0, firstRow, emulator.mColumns, lastRow)
+    val tapOffset = (tapRow - firstRow) * emulator.mColumns + column
+    if (tapOffset >= text.length) return false
+
+    for (match in URL_PATTERN.findAll(text)) {
+      if (tapOffset < match.range.first) break
+      // Trailing sentence punctuation around a URL is part of the regex match but not the
+      // link; a tap on it should behave like a plain tap.
+      val url = match.value.trimEnd(*URL_TRAILING_DELIMITERS)
+      val lastUrlOffset = match.range.first + url.length - 1
+      if (tapOffset > lastUrlOffset) continue
+      return openUrl(url)
+    }
+    return false
+  }
+
+  private fun openUrl(url: String): Boolean {
+    return try {
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+      true
+    } catch (ignored: ActivityNotFoundException) {
+      // No browser installed: treat as a plain tap.
+      false
+    }
   }
 
   override fun shouldBackButtonBeMappedToEscape(): Boolean = false
@@ -342,7 +429,9 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   }
 
   override fun onEmulatorSet() {
-    // Nothing extra: font size and session were applied during attach.
+    // The blinker only arms once TerminalView has an emulator (see its API contract), so
+    // settings applied during attach must be re-applied when the emulator appears.
+    module?.terminalSettings?.let { applyTerminalSettings(it) }
   }
 
   override fun logError(tag: String?, message: String?) {
@@ -382,5 +471,13 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     /** Pinch ratchet thresholds from docs/specs/terminal-screen.md §3. */
     private const val PINCH_STEP_UP_SCALE = 1.12f
     private const val PINCH_STEP_DOWN_SCALE = 0.89f
+
+    /** Within TerminalView's 100-2000ms valid blinker range; 0 disables the blinker. */
+    private const val CURSOR_BLINK_RATE_MS = 600
+
+    /** Only these two schemes are ever opened from terminal output. */
+    private val URL_PATTERN = Regex("""https?://\S+""")
+    private val URL_TRAILING_DELIMITERS = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '>', '"', '\'')
+    private const val MAX_URL_WRAPPED_ROWS = 8
   }
 }

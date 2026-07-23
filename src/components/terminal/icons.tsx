@@ -59,6 +59,27 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function RefreshIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20 12a8 8 0 1 1-2.34-5.66"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M20 3v4.5h-4.5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export type ArrowDirection = 'up' | 'down' | 'left' | 'right';
 
 const ARROW_PATHS: Record<ArrowDirection, string> = {

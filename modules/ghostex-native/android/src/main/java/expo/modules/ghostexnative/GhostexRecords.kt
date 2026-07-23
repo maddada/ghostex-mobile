@@ -11,6 +11,9 @@ class SshConfigRecord : Record {
   @Field var password: String? = null
   @Field var privateKey: String? = null
   @Field var passphrase: String? = null
+  @Field var keepAliveEnabled: Boolean = true
+  /** Seconds between SSH keep-alive packets; clamped to 10-120 at connect time. */
+  @Field var keepAliveIntervalSec: Int = 30
 }
 
 /** Mirrors `OpenTerminalOptions` in GhostexNative.types.ts. */
@@ -20,6 +23,21 @@ class OpenTerminalOptionsRecord : Record {
   @Field var fontSize: Double? = null
   /** True for `ghostex attach` (zmx-backed) sessions; enables the post-attach viewport refresh. */
   @Field var zmxBacked: Boolean = false
+  /** Scrollback row limit for the new buffer; one of 2000 | 10000 | 50000, default 10000. */
+  @Field var scrollbackRows: Int? = null
+}
+
+/**
+ * Mirrors `TerminalRuntimeSettings` in GhostexNative.types.ts. Defaults match the
+ * pre-settings behavior so terminals opened before the first setTerminalSettings
+ * call render exactly as they always have.
+ */
+class TerminalRuntimeSettingsRecord : Record {
+  @Field var autoScroll: Boolean = true
+  @Field var cursorStyle: String = "block"
+  @Field var cursorBlink: Boolean = false
+  @Field var softKeyboardEnabled: Boolean = true
+  @Field var openUrlsOnTap: Boolean = false
 }
 
 /** Mirrors `KeyModifiers` in GhostexNative.types.ts. */

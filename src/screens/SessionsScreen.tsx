@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { markManualDisconnect } from '../app/autoReconnect';
 import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -413,6 +414,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const fullReconnect = useCallback(async (): Promise<void> => {
     for (const target of machines) {
       try {
+        markManualDisconnect(target.id);
         await GhostexNative.disconnect(target.id);
       } catch {
         // Not connected is fine; refresh reconnects below.
