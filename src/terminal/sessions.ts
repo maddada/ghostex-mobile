@@ -14,7 +14,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { attachCommand, loginShellCommand } from '../commands/ghostexCli';
+import { attachCommand, loginShellCommand, shellQuote } from '../commands/ghostexCli';
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
@@ -44,9 +44,21 @@ export type TerminalTab = {
   kind: TerminalTabKind;
   /** Stable Ghostex session id (attach tabs only). */
   ghostexSessionId?: string;
+  /** Starting directory for shell tabs (unset → login-shell default, ~). */
+  cwd?: string;
   state: TerminalTabState;
   error?: string;
 };
+
+/**
+ * Interactive login shell started in `cwd` (shell-tab open and reopen share
+ * it); null when no directory is requested, which makes the native PTY start
+ * its own plain login shell.
+ */
+function shellCommandIn(cwd: string | undefined): string | null {
+  if (cwd === undefined || cwd.length === 0) return null;
+  return loginShellCommand(`cd ${shellQuote(cwd)} && exec "$SHELL" -l`);
+}
 
 export function attachSessionKey(machineId: string, sessionId: string): string {
   return `${machineId}:${sessionId}`;
@@ -96,8 +108,11 @@ type TerminalState = {
     machine: MachineConnectionTarget,
     session: { sessionId: string; projectId?: string; title?: string },
   ) => Promise<string>;
-  /** Open a plain interactive login-shell tab on a machine. */
-  openShellTab: (machine: MachineConnectionTarget, title?: string) => Promise<string>;
+  /** Open an interactive login-shell tab on a machine (in `cwd` when given). */
+  openShellTab: (
+    machine: MachineConnectionTarget,
+    options?: { title?: string; cwd?: string },
+  ) => Promise<string>;
   selectTab: (sessionKey: string) => void;
   /** Close a tab and its warm native entry. */
   closeTab: (sessionKey: string) => Promise<void>;
@@ -238,17 +253,20 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       return openTab(machine, tab, command);
     },
 
-    openShellTab: async (machine, title) => {
+    openShellTab: async (machine, options) => {
       const sessionKey = `${machine.id}:tab:${randomTabId()}`;
+      const title = options?.title ?? '';
+      const cwd = options?.cwd?.trim() ?? '';
       const tab: TerminalTab = {
         sessionKey,
         machineId: machine.id,
-        title: title !== undefined && title.length > 0 ? title : 'Terminal',
+        title: title.length > 0 ? title : 'Terminal',
         kind: 'shell',
+        ...(cwd.length > 0 ? { cwd } : {}),
         state: 'opening',
       };
       // command == null → interactive login shell in the native PTY.
-      return openTab(machine, tab, null);
+      return openTab(machine, tab, shellCommandIn(tab.cwd));
     },
 
     selectTab: (sessionKey) => {
@@ -310,6 +328,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         };
         if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
           opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
+        } else if (tab.kind === 'shell') {
+          const command = shellCommandIn(tab.cwd);
+          if (command !== null) opts.command = command;
         }
         await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
       } catch (error) {

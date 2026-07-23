@@ -31,6 +31,7 @@ import { pickAndSendAttachment } from '../components/terminal/uploads';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
 import { attachCommand, loginShellCommand } from '../commands/ghostexCli';
 import { ensureConnected, summarizeFailure } from '../inventory/client';
+import { useInventoryStore } from '../inventory/store';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -51,6 +52,23 @@ function machineTargetFor(machineId: string): MachineConnectionTarget | null {
   const record = useMachinesStore.getState().machines.find((machine) => machine.id === machineId);
   if (record === undefined) return null;
   return { id: record.id, host: record.host, username: record.username, port: record.port };
+}
+
+/**
+ * Folder of the session shown in `tab` ('' when unknown): a shell tab reuses
+ * its own starting directory; an attach tab resolves its session's project
+ * path from the machine inventory.
+ */
+function sessionFolderFor(tab: TerminalTab | null): string {
+  if (tab === null) return '';
+  if (tab.kind === 'shell') return tab.cwd ?? '';
+  if (tab.ghostexSessionId === undefined) return '';
+  const summary = useInventoryStore.getState().inventoriesByMachineId[tab.machineId]?.summary;
+  if (summary === null || summary === undefined) return '';
+  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
+  if (session === undefined) return '';
+  const project = summary.projects.find((entry) => entry.projectId === session.projectId);
+  return project?.path ?? '';
 }
 
 function patchTab(sessionKey: string, patch: Partial<TerminalTab>): void {
@@ -238,11 +256,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
     const target = machineTargetFor(machineId);
     if (target === null) return;
     try {
-      await openShellTab(target);
+      // New terminals open in the folder of the session being viewed.
+      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
     } catch {
       // The store marks the tab failed; the state overlay surfaces it.
     }
-  }, [activeTab?.machineId, openShellTab]);
+  }, [activeTab, openShellTab]);
 
   const handleRefresh = useCallback((): void => {
     const store = useTerminalStore.getState();
