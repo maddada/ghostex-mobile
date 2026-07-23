@@ -1,6 +1,7 @@
 package expo.modules.ghostexnative
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +12,7 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.net.NetworkInterface
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -44,6 +46,36 @@ class GhostexNativeModule : Module() {
 
   private fun requireAndroidContext(): Context =
     appContext.reactContext ?: throw CodedException("React context is unavailable.")
+
+  private fun hasTailscaleNetworkAddress(): Boolean {
+    return try {
+      val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
+      while (interfaces.hasMoreElements()) {
+        val networkInterface = interfaces.nextElement()
+        if (!networkInterface.isUp) continue
+        val addresses = networkInterface.inetAddresses
+        while (addresses.hasMoreElements()) {
+          val bytes = addresses.nextElement().address
+          val tailscaleIpv4 =
+            bytes.size == 4 &&
+              bytes[0].toInt() and 0xff == 100 &&
+              bytes[1].toInt() and 0xff in 64..127
+          val tailscaleIpv6 =
+            bytes.size == 16 &&
+              bytes[0].toInt() and 0xff == 0xfd &&
+              bytes[1].toInt() and 0xff == 0x7a &&
+              bytes[2].toInt() and 0xff == 0x11 &&
+              bytes[3].toInt() and 0xff == 0x5c &&
+              bytes[4].toInt() and 0xff == 0xa1 &&
+              bytes[5].toInt() and 0xff == 0xe0
+          if (tailscaleIpv4 || tailscaleIpv6) return true
+        }
+      }
+      false
+    } catch (_: Exception) {
+      false
+    }
+  }
 
   override fun definition() = ModuleDefinition {
     Name("GhostexNative")
@@ -269,6 +301,29 @@ class GhostexNativeModule : Module() {
 
     AsyncFunction("resetHostKey") { host: String, port: Int ->
       GhostexHostKeyStore(requireAndroidContext()).reset(host, port)
+    }
+
+    AsyncFunction("openTailscale") {
+      val context = requireAndroidContext()
+      val intent = context.packageManager.getLaunchIntentForPackage(TAILSCALE_ANDROID_PACKAGE)
+        ?: return@AsyncFunction false
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+      true
+    }
+
+    AsyncFunction("isTailscaleConnected") {
+      hasTailscaleNetworkAddress()
+    }
+
+    AsyncFunction("quitApp") {
+      val context = requireAndroidContext().applicationContext
+      val activity = appContext.currentActivity
+      context.stopService(Intent(context, GhostexForegroundService::class.java))
+      mainHandler.post {
+        activity?.finishAndRemoveTask()
+        android.os.Process.killProcess(android.os.Process.myPid())
+      }
     }
 
     // endregion
@@ -518,8 +573,9 @@ class GhostexNativeModule : Module() {
   // endregion
 
   companion object {
-    /** Termux's default terminal font size baseline (dp). */
-    const val DEFAULT_FONT_SIZE_DP = 12
+    private const val TAILSCALE_ANDROID_PACKAGE = "com.tailscale.ipn"
+    /** Shared default terminal font size baseline (dp). */
+    const val DEFAULT_FONT_SIZE_DP = 13
     const val MIN_FONT_SIZE_DP = 4
     const val MAX_FONT_SIZE_DP = 32
 

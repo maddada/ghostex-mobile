@@ -29,6 +29,8 @@ export const GhostexPalette = {
   STATUS_WORKING: '#FFB454',
   /** Sleep icon/dot tint. */
   STATUS_SLEEPING: '#6E7684',
+  /** Connected service status. */
+  STATUS_CONNECTED: '#63D17A',
   /** Error dot (red). Matches desktop lifecycle-error dot. */
   STATUS_ERROR: '#FF6B6B',
   /** Terminal surface background fallback ("Aizen Dark" port later). */

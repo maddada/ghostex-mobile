@@ -21,6 +21,9 @@
       "infoPlist": {
         "UIUserInterfaceStyle": "Dark",
         "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "tailscale"
+        ],
         "UIAppFonts": [
           "JetBrainsMonoNerdFont-Regular.ttf"
         ]

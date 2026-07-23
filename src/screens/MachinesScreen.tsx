@@ -6,11 +6,12 @@
  */
 
 import { useCallback, useState } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import DetailsSheet from '../components/common/DetailsSheet';
@@ -77,14 +78,6 @@ export default function MachinesScreen({ navigation }: Props) {
     selected,
     selected === null ? undefined : inventoriesByMachineId[selected.id],
   );
-
-  const openTailscale = useCallback((): void => {
-    Linking.openURL('tailscale://').catch(() => {
-      void Linking.openURL('https://tailscale.com/download').catch(() => {
-        // No handler available; nothing else to do.
-      });
-    });
-  }, []);
 
   const switchToMachine = useCallback(
     (machine: MachineRecord): void => {
@@ -246,7 +239,7 @@ export default function MachinesScreen({ navigation }: Props) {
       label: 'Open Tailscale',
       onPress: () => {
         setOverlay(NONE);
-        openTailscale();
+        void openTailscaleOrDownload();
       },
     },
   ];
@@ -356,7 +349,11 @@ export default function MachinesScreen({ navigation }: Props) {
         </Pressable>
       </View>
       <View style={styles.footerRow}>
-        <Pressable accessibilityRole="button" style={styles.footerButton} onPress={openTailscale}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.footerButton}
+          onPress={() => void openTailscaleOrDownload()}
+        >
           <Text style={styles.footerLabel}>Tailscale</Text>
         </Pressable>
         <Pressable

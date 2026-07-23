@@ -10,6 +10,7 @@
 import Foundation
 import UIKit
 import ExpoModulesCore
+import Darwin
 
 // MARK: - Records
 
@@ -121,6 +122,10 @@ public class GhostexNativeModule: Module {
                 return false
             }
             return await connection.isConnected
+        }
+
+        AsyncFunction("isTailscaleConnected") { () -> Bool in
+            self.hasTailscaleNetworkAddress()
         }
 
         // MARK: Non-interactive exec
@@ -477,6 +482,60 @@ public class GhostexNativeModule: Module {
     }
 
     // MARK: - Helpers
+
+    private func hasTailscaleNetworkAddress() -> Bool {
+        var firstAddress: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&firstAddress) == 0, let firstAddress else {
+            return false
+        }
+        defer { freeifaddrs(firstAddress) }
+
+        var currentAddress: UnsafeMutablePointer<ifaddrs>? = firstAddress
+        while let interface = currentAddress {
+            defer { currentAddress = interface.pointee.ifa_next }
+            guard
+                (interface.pointee.ifa_flags & UInt32(IFF_UP)) != 0,
+                let address = interface.pointee.ifa_addr
+            else {
+                continue
+            }
+
+            let family = Int32(address.pointee.sa_family)
+            guard family == AF_INET || family == AF_INET6 else {
+                continue
+            }
+
+            let addressLength =
+                family == AF_INET
+                ? socklen_t(MemoryLayout<sockaddr_in>.size)
+                : socklen_t(MemoryLayout<sockaddr_in6>.size)
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard
+                getnameinfo(
+                    address,
+                    addressLength,
+                    &host,
+                    socklen_t(host.count),
+                    nil,
+                    0,
+                    NI_NUMERICHOST
+                ) == 0
+            else {
+                continue
+            }
+
+            let ipAddress = String(cString: host).lowercased()
+            if ipAddress.hasPrefix("fd7a:115c:a1e0:") {
+                return true
+            }
+            let octets = ipAddress.split(separator: ".").compactMap { UInt8($0) }
+            if octets.count == 4, octets[0] == 100, (64...127).contains(octets[1]) {
+                return true
+            }
+        }
+
+        return false
+    }
 
     private func sendTerminalState(
         _ sessionKey: String,

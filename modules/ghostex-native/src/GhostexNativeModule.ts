@@ -44,6 +44,15 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   generateSshKey(type: SshKeyType, comment: string, passphrase?: string): Promise<GeneratedSshKey>;
   resetHostKey(host: string, port: number): Promise<void>;
 
+  /** Open the installed Tailscale app. Android launches its package directly. */
+  openTailscale(): Promise<boolean>;
+
+  /** Whether this device currently owns an active Tailscale IPv4 or IPv6 address. */
+  isTailscaleConnected(): Promise<boolean>;
+
+  /** Fully stop the Android app, including its foreground service and process. */
+  quitApp(): Promise<void>;
+
   // Persistent foreground-service notification (Android only — guard with
   // Platform.OS before calling; the iOS module does not define these).
   setPersistentNotificationEnabled(enabled: boolean): Promise<void>;

@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   FlatList,
   Linking,
@@ -23,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import DetailsSheet from '../components/common/DetailsSheet';
@@ -209,6 +211,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [progress, setProgress] = useState<string | null>(null);
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
+  const [tailscaleConnected, setTailscaleConnected] = useState(false);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const machineById = useCallback(
@@ -235,6 +238,32 @@ export default function SessionsScreen({ navigation }: Props) {
       if (machine !== null) startPolling();
       return () => stopPolling();
     }, [machine !== null, startPolling, stopPolling]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const refreshTailscaleStatus = (): void => {
+        void GhostexNative.isTailscaleConnected()
+          .then((connected) => {
+            if (active) setTailscaleConnected(connected);
+          })
+          .catch(() => {
+            if (active) setTailscaleConnected(false);
+          });
+      };
+
+      refreshTailscaleStatus();
+      const interval = setInterval(refreshTailscaleStatus, 5000);
+      const appStateSubscription = AppState.addEventListener('change', (state) => {
+        if (state === 'active') refreshTailscaleStatus();
+      });
+      return () => {
+        active = false;
+        clearInterval(interval);
+        appStateSubscription.remove();
+      };
+    }, []),
   );
 
   // Android Back alternates between sessions and the selected warm terminal.
@@ -294,14 +323,6 @@ export default function SessionsScreen({ navigation }: Props) {
   // -------------------------------------------------------------------------
   // Actions.
   // -------------------------------------------------------------------------
-
-  const openTailscale = useCallback((): void => {
-    Linking.openURL('tailscale://').catch(() => {
-      void Linking.openURL('https://tailscale.com/download').catch(() => {
-        // No handler available; nothing else to do.
-      });
-    });
-  }, []);
 
   const attach = useCallback(
     async (target: MachineRecord, session: GhostexSession): Promise<void> => {
@@ -1408,7 +1429,7 @@ export default function SessionsScreen({ navigation }: Props) {
       label: 'Open Tailscale',
       onPress: () => {
         setOverlay(NONE);
-        openTailscale();
+        void openTailscaleOrDownload();
       },
     },
     {
@@ -1752,9 +1773,17 @@ export default function SessionsScreen({ navigation }: Props) {
         {Platform.OS === 'android' ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Exit Ghostex"
+            accessibilityLabel="Quit Ghostex"
             style={styles.headerButton}
-            onPress={() => BackHandler.exitApp()}
+            onPress={() =>
+              setOverlay({
+                kind: 'confirmAction',
+                title: 'Quit Ghostex?',
+                body: 'This fully closes Ghostex and all active mobile terminal connections.',
+                confirmLabel: 'Quit',
+                run: () => void GhostexNative.quitApp(),
+              })
+            }
           >
             <ExitGlyph size={22} color={GhostexPalette.FOREGROUND} />
           </Pressable>
@@ -1778,7 +1807,32 @@ export default function SessionsScreen({ navigation }: Props) {
         renderItem={renderBlock}
         style={styles.list}
         contentContainerStyle={styles.listContent}
+        ListFooterComponent={
+          <Text style={styles.longPressHint}>
+            Long press on a section, group, project, or session to see more options
+          </Text>
+        }
       />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Tailscale ${tailscaleConnected ? 'connected' : 'not connected'}`}
+        hitSlop={8}
+        style={styles.tailscaleIndicator}
+        onPress={() => void openTailscaleOrDownload()}
+      >
+        <Text
+          style={[
+            styles.tailscaleIndicatorLabel,
+            {
+              color: tailscaleConnected
+                ? GhostexPalette.STATUS_CONNECTED
+                : GhostexPalette.STATUS_SLEEPING,
+            },
+          ]}
+        >
+          • Tailscale
+        </Text>
+      </Pressable>
 
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
 
@@ -2141,6 +2195,27 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 24,
+  },
+  longPressHint: {
+    color: GhostexPalette.MUTED,
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+    marginTop: 14,
+    paddingHorizontal: 12,
+    opacity: 0.72,
+  },
+  tailscaleIndicator: {
+    minHeight: 28,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  tailscaleIndicatorLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
   },
   /** Desktop project card (hierarchy-panels.css .group[data-project-group]). */
   projectCard: {

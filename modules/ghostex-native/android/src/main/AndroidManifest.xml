@@ -8,6 +8,11 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+  <!-- Android 11+ package visibility for opening the installed Tailscale app. -->
+  <queries>
+    <package android:name="com.tailscale.ipn" />
+  </queries>
+
   <application>
     <service
         android:name="expo.modules.ghostexnative.GhostexForegroundService"
