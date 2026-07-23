@@ -28,12 +28,26 @@ module.exports = function withAndroidReleaseSigning(config) {
       }
       contents = contents.replace(DEBUG_SIGNING_CONFIG, RELEASE_SIGNING_CONFIG);
     }
-    contents = contents.replace(
-      /release \{\n([\s\S]*?)signingConfig signingConfigs\.debug/,
-      'release {\n$1signingConfig signingConfigs.release'
+    const buildTypesStart = contents.indexOf('    buildTypes {');
+    const releaseBuildTypeStart = contents.indexOf('        release {', buildTypesStart);
+    const releaseSigningStart = contents.indexOf(
+      'signingConfig signingConfigs.debug',
+      releaseBuildTypeStart
     );
-    if (!contents.includes('signingConfig signingConfigs.release')) {
+    if (
+      buildTypesStart === -1 ||
+      releaseBuildTypeStart === -1 ||
+      releaseSigningStart === -1
+    ) {
       throw new Error('withAndroidReleaseSigning could not select the release signing config');
+    }
+    contents =
+      contents.slice(0, releaseSigningStart) +
+      'signingConfig signingConfigs.release' +
+      contents.slice(releaseSigningStart + 'signingConfig signingConfigs.debug'.length);
+    const debugBuildType = contents.slice(buildTypesStart, releaseBuildTypeStart);
+    if (!debugBuildType.includes('signingConfig signingConfigs.debug')) {
+      throw new Error('withAndroidReleaseSigning must preserve debug signing for debug builds');
     }
     cfg.modResults.contents = contents;
     return cfg;
