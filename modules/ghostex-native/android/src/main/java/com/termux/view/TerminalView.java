@@ -326,13 +326,14 @@ public final class TerminalView extends View {
         // and the alternate view was the one selected the last time.
         if (mClient.isTerminalViewSelected()) {
             if (mClient.shouldEnforceCharBasedInput()) {
-                // Keep this a normal text field so keyboards can offer gesture typing, emoji,
-                // clipboard, and composing input while committed characters still flow directly
-                // into the terminal through this input connection.
-                outAttrs.inputType = InputType.TYPE_CLASS_TEXT |
-                    InputType.TYPE_TEXT_VARIATION_NORMAL |
-                    InputType.TYPE_TEXT_FLAG_AUTO_CORRECT |
-                    InputType.TYPE_TEXT_FLAG_MULTI_LINE;
+                // Some keyboards seems do not reset the internal state on TYPE_NULL.
+                // Affects mostly Samsung stock keyboards.
+                // https://github.com/termux/termux-app/issues/686
+                // However, this is not a valid value as per AOSP since `InputType.TYPE_CLASS_*` is
+                // not set and it logs a warning:
+                // W/InputAttributes: Unexpected input class: inputType=0x00080090 imeOptions=0x02000000
+                // https://cs.android.com/android/platform/superproject/+/android-11.0.0_r40:packages/inputmethods/LatinIME/java/src/com/android/inputmethod/latin/InputAttributes.java;l=79
+                outAttrs.inputType = InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
             } else {
                 // Using InputType.NULL is the most correct input type and avoids issues with other hacks.
                 //
@@ -354,54 +355,13 @@ public final class TerminalView extends View {
 
         return new BaseInputConnection(this, true) {
 
-            /**
-             * Composition text already streamed into the terminal. The text-class
-             * input type above makes IMEs compose words (gesture typing,
-             * suggestions), but a terminal must show every keystroke immediately —
-             * so each composing update is forwarded right away as a diff
-             * (backspace over the stale suffix, then send the new one) instead of
-             * buffering the word until the IME commits it at a space.
-             */
-            String mStreamedComposingText = "";
-
-            @Override
-            public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) {
-                    mClient.logInfo(LOG_TAG, "IME: setComposingText(\"" + text + "\", " + newCursorPosition + ")");
-                }
-                super.setComposingText(text, newCursorPosition);
-                streamComposingUpdate(text.toString());
-                return true;
-            }
-
-            @Override
-            public boolean setComposingRegion(int start, int end) {
-                if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) {
-                    mClient.logInfo(LOG_TAG, "IME: setComposingRegion(" + start + ", " + end + ")");
-                }
-                boolean result = super.setComposingRegion(start, end);
-                // Recomposition over already-committed text (e.g. tapping a word
-                // to autocorrect it): adopt that text as the streamed state so the
-                // next setComposingText replaces it instead of duplicating it.
-                Editable content = getEditable();
-                int composingStart = getComposingSpanStart(content);
-                int composingEnd = getComposingSpanEnd(content);
-                mStreamedComposingText = (composingStart >= 0 && composingEnd >= composingStart)
-                    ? content.subSequence(composingStart, composingEnd).toString()
-                    : "";
-                return result;
-            }
-
             @Override
             public boolean finishComposingText() {
                 if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) mClient.logInfo(LOG_TAG, "IME: finishComposingText()");
                 super.finishComposingText();
 
-                // Streaming already forwarded the composition; the diff below is a
-                // no-op unless an exotic IME edited the editable directly.
-                streamComposingUpdate(getEditable().toString());
+                sendTextToTerminal(getEditable());
                 getEditable().clear();
-                mStreamedComposingText = "";
                 return true;
             }
 
@@ -414,37 +374,10 @@ public final class TerminalView extends View {
 
                 if (mEmulator == null) return true;
 
-                // Diff against the streamed composition so committing "hello "
-                // over a streamed "helo" only sends one backspace plus "lo ".
                 Editable content = getEditable();
-                streamComposingUpdate(content.toString());
+                sendTextToTerminal(content);
                 content.clear();
-                mStreamedComposingText = "";
                 return true;
-            }
-
-            /** Backspace over the no-longer-valid suffix, then send the new one. */
-            void streamComposingUpdate(String newText) {
-                String previous = mStreamedComposingText;
-                mStreamedComposingText = newText;
-                if (mEmulator == null) return;
-                int commonPrefix = 0;
-                int max = Math.min(previous.length(), newText.length());
-                while (commonPrefix < max && previous.charAt(commonPrefix) == newText.charAt(commonPrefix)) {
-                    commonPrefix++;
-                }
-                // Never split a surrogate pair at the diff boundary.
-                if (commonPrefix > 0 && Character.isHighSurrogate(previous.charAt(commonPrefix - 1))) {
-                    commonPrefix--;
-                }
-                int deleteCount = previous.codePointCount(commonPrefix, previous.length());
-                if (deleteCount > 0) {
-                    KeyEvent deleteKey = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
-                    for (int i = 0; i < deleteCount; i++) sendKeyEvent(deleteKey);
-                }
-                if (newText.length() > commonPrefix) {
-                    sendTextToTerminal(newText.substring(commonPrefix));
-                }
             }
 
             @Override

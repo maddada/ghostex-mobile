@@ -296,8 +296,14 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   override fun shouldBackButtonBeMappedToEscape(): Boolean = false
 
-  /** Use a real text-class IME so keyboard emoji, clipboard, and composition tools stay available. */
-  override fun shouldEnforceCharBasedInput(): Boolean = true
+  /**
+   * false → InputType.TYPE_NULL, matching the old Termux-fork app's default
+   * (enforce-char-based-input off): the IME sends real key events straight to
+   * onKeyDown with correct ctrl handling instead of composing words. Text-class
+   * input modes (tried for gesture typing) made Gboard buffer/re-commit
+   * composition text, which duplicated typed text and broke ctrl hotkeys.
+   */
+  override fun shouldEnforceCharBasedInput(): Boolean = false
 
   override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
 
