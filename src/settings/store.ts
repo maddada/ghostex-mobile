@@ -1,12 +1,11 @@
 /**
  * App settings store with the Android defaults (docs/ARCHITECTURE.md):
  * autoScroll=true, doneNotificationSound=true, refresh/upload/keyboard buttons
- * visible=true, hideKeyboardOnStartup=true, terminal font size 9 (phone) /
- * 12 (tablet). Persisted to AsyncStorage.
+ * visible=true, hideKeyboardOnStartup=true, and terminal font size 13.
+ * Persisted to AsyncStorage.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Dimensions, Platform } from 'react-native';
 import { create } from 'zustand';
 
 const SETTINGS_STORAGE_KEY = 'settings.v1';
@@ -25,16 +24,8 @@ export type GhostexSettings = {
 export const TERMINAL_FONT_SIZE_MIN = 4;
 export const TERMINAL_FONT_SIZE_MAX = 32;
 
-function isTablet(): boolean {
-  if (Platform.OS === 'ios') {
-    return Platform.isPad === true;
-  }
-  const { width, height } = Dimensions.get('screen');
-  return Math.min(width, height) >= 600;
-}
-
 export function defaultFontSize(): number {
-  return isTablet() ? 12 : 9;
+  return 13;
 }
 
 export function defaultSettings(): GhostexSettings {

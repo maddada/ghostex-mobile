@@ -108,7 +108,7 @@ onConnectionState: { machineId: string; state: 'connecting'|'connected'|'disconn
 Native view responsibilities (per platform, matching current apps):
 - Rendering + scrollback scrolling (iOS: synthetic wheel events w/ momentum per spec §4; Android: Termux TerminalView built-ins).
 - IME/soft-keyboard text input directly into the engine (view is the text-input responder).
-- Pinch-to-zoom → font size ratchet (±1pt at 1.12/0.89 thresholds) + native HUD ("N pt" / "Font Size") per spec §3, then emit `onFontSizeChange` for JS persistence. Range 4–32, default iPhone 9 / iPad 12 / Android: Termux font size default.
+- Pinch-to-zoom → font size ratchet (±1pt at 1.12/0.89 thresholds) + native HUD ("N pt" / "Font Size") per spec §3, then emit `onFontSizeChange` for JS persistence. Range 4–32, default 13 on every platform.
 - Touch text selection (both platforms keep their existing native implementations).
 - Scroll-to-bottom on output/keypress (engine behavior; respect autoScroll setting via prop later).
 

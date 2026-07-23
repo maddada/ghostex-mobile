@@ -51,8 +51,8 @@ export default function SettingsScreen() {
             <Switch
               value={settings[toggle.key]}
               onValueChange={(value) => setSetting(toggle.key, value)}
-              trackColor={{ false: '#3A3A3A', true: '#6B6B6B' }}
-              thumbColor={settings[toggle.key] ? '#E0E0E0' : '#A8A8A8'}
+              trackColor={{ false: '#3A3A3A', true: GhostexPalette.ACCENT }}
+              thumbColor={settings[toggle.key] ? GhostexPalette.FOREGROUND : '#A8A8A8'}
               ios_backgroundColor="#3A3A3A"
             />
           </View>

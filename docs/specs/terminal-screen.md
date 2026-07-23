@@ -126,7 +126,7 @@ Profile: 2 rows × 7 columns, drag reorder, custom actions (≤100, title ≤24 
 ## 3. Pinch to Zoom
 
 - Pinch recognizer on terminal surface; disabled while text selection active.
-- Changes **font size in points**, per-session. Range 4.0–32.0, step 1.0. Default: iPhone 9pt, iPad 12pt.
+- Changes **font size in points**, per-session. Range 4.0–32.0, step 1.0. Default: 13pt.
 - Ratchet logic: reference scale at began; relativeScale ≥1.12 → +1pt; ≤0.89 → −1pt; reset reference each step. Not continuous.
 - Persistence: per-session presentation override, persisted; falls back to global `terminalFontSize`.
 - HUD: centered dark-blur card radius 18, min 112×72; value "12 pt" (monospaced 24 semibold white) over "Font Size" (12 medium white α0.72). Fade in 0.12s, auto-hide 0.8s idle (0.45s after gesture end), fade out 0.18s.

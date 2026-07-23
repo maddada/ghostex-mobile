@@ -19,16 +19,7 @@ enum TerminalDefaults {
     static let maximumFontSize = 32.0
     static let fontSizeStep = 1.0
 
-    static var defaultFontSize: Double {
-        switch UIDevice.current.userInterfaceIdiom {
-        case .pad:
-            return 12.0
-        case .phone:
-            return 9.0
-        default:
-            return 10.0
-        }
-    }
+    static let defaultFontSize = 13.0
 
     nonisolated static func clampedFontSize(_ fontSize: Double) -> Double {
         min(max(fontSize.rounded(), minimumFontSize), maximumFontSize)
