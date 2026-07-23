@@ -18,7 +18,7 @@ import {
   useExtraKeysStore,
   type ResolvedExtraKey,
 } from '../../settings/extraKeys';
-import { agentKeyPage, EXTRA_KEYS_PAGE } from './keyBarPages';
+import { agentKeyPage, EXTRA_KEYS_PAGE, type KeyPageItem } from './keyBarPages';
 import { GhostexPalette } from '../../theme/palette';
 import {
   ArrowIcon,
@@ -34,6 +34,10 @@ const REPEAT_INTERVAL_MS = 50;
 const MODIFIER_ACTIVE_BG = '#007AFF';
 const MODIFIER_LOCKED_BG = '#AF52DE';
 const MODIFIER_LONG_PRESS_MS = 450;
+const PAGE_HINT_LONG_PRESS_MS = 350;
+const PAGE_HINT_TIMEOUT_MS = 3500;
+/** Empty-state line keeping the hint slot's height stable while a page is open. */
+const PAGE_HINT_PLACEHOLDER = 'Hold a key to see what it does';
 
 type ModifierId = 'ctrl' | 'alt' | 'shift';
 type ModifierMode = 'off' | 'oneShot' | 'locked';
@@ -87,12 +91,27 @@ export default function TerminalKeyBar({
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorText, setEditorText] = useState('');
   const [page, setPage] = useState<KeyBarPage>('none');
+  const [pageHint, setPageHint] = useState<string | null>(null);
   const agentPage = agentKeyPage(agentId);
   // A tab switch to an agent without hotkeys drops a stale open agent page.
   const activePage = page === 'agent' && agentPage === null ? 'none' : page;
   const pageRows = activePage === 'extra' ? EXTRA_KEYS_PAGE : activePage === 'agent' ? agentPage : null;
   const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pageHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showPageHint = useCallback((hint: string): void => {
+    if (pageHintTimer.current !== null) clearTimeout(pageHintTimer.current);
+    setPageHint(hint);
+    pageHintTimer.current = setTimeout(() => setPageHint(null), PAGE_HINT_TIMEOUT_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (pageHintTimer.current !== null) clearTimeout(pageHintTimer.current);
+    },
+    [],
+  );
 
   const clearRepeat = useCallback((): void => {
     if (repeatTimer.current !== null) {
@@ -119,6 +138,7 @@ export default function TerminalKeyBar({
     setEditorVisible(false);
     setEditorText('');
     setPage('none');
+    setPageHint(null);
     const subscription = GhostexNative.addListener('onKeyModifiersConsumed', (event) => {
       if (event.sessionKey === sessionKey) {
         setModifiers((current) => retainLockedModifiers(current));
@@ -141,9 +161,8 @@ export default function TerminalKeyBar({
     [sessionKey],
   );
 
-  const handleKeyPressIn = (item: Extract<KeyBarItem, { kind: 'key' }>): void => {
-    clearRepeat();
-    // Apply every active modifier, then retain only long-press locks.
+  /** Apply every active modifier, send once, retain only long-press locks. */
+  const sendItemKeyOnce = (item: Extract<KeyBarItem, { kind: 'key' }>): KeyModifiers => {
     const mods: KeyModifiers = {
       ctrl: item.mods?.ctrl === true || modifiers.ctrl !== 'off',
       alt: item.mods?.alt === true || modifiers.alt !== 'off',
@@ -151,6 +170,12 @@ export default function TerminalKeyBar({
     };
     setModifiers((current) => retainLockedModifiers(current));
     sendKey(item.key, mods);
+    return mods;
+  };
+
+  const handleKeyPressIn = (item: Extract<KeyBarItem, { kind: 'key' }>): void => {
+    clearRepeat();
+    const mods = sendItemKeyOnce(item);
     if (item.repeatable === true) {
       repeatTimer.current = setTimeout(() => {
         repeatTimer.current = null;
@@ -242,11 +267,12 @@ export default function TerminalKeyBar({
             style={[styles.pill, active && styles.pillActive]}
             onPress={() => {
               clearRepeat();
+              setPageHint(null);
               setPage(active ? 'none' : target);
             }}
           >
             <Text style={[styles.pillLabel, active && styles.pillLabelActive]} numberOfLines={1}>
-              {item.label}
+              {target === 'extra' ? 'KEYS' : 'AGENT'}
             </Text>
           </Pressable>
         </View>
@@ -318,13 +344,48 @@ export default function TerminalKeyBar({
     );
   };
 
+  /**
+   * Page pills send on release and explain themselves on hold — so page keys
+   * deliberately have no repeat-on-hold; the hold gesture belongs to the hint.
+   */
+  const renderPageItem = (item: KeyPageItem) => {
+    if (item.kind === 'modifier') return renderItem(item);
+    return (
+      <View key={item.id} style={styles.cell}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={item.description}
+          accessibilityHint="Hold to see what this key does"
+          delayLongPress={PAGE_HINT_LONG_PRESS_MS}
+          style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          onPress={() => {
+            clearRepeat();
+            if (item.kind === 'text') handleTextActionPress(item);
+            else sendItemKeyOnce(item);
+          }}
+          onLongPress={() => showPageHint(`${item.label}  —  ${item.description}`)}
+        >
+          <Text style={styles.pillLabel} numberOfLines={1}>
+            {item.label}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <View>
       {!editorVisible && pageRows !== null ? (
         <View style={styles.pagePanel}>
+          <Text
+            style={[styles.pageHint, pageHint === null && styles.pageHintPlaceholder]}
+            numberOfLines={1}
+          >
+            {pageHint ?? PAGE_HINT_PLACEHOLDER}
+          </Text>
           {pageRows.map((row, rowIndex) => (
             <View key={`page-row-${rowIndex}`} style={styles.pageRow}>
-              {row.map((item) => renderItem(item))}
+              {row.map(renderPageItem)}
             </View>
           ))}
         </View>
@@ -427,6 +488,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  /** Fixed-height hold-to-explain line, so hints never shift the layout. */
+  pageHint: {
+    height: 16,
+    fontSize: 11,
+    lineHeight: 15,
+    color: GhostexPalette.FOREGROUND,
+    paddingHorizontal: 2,
+  },
+  pageHintPlaceholder: {
+    color: GhostexPalette.MUTED,
+    opacity: 0.55,
   },
   trailingCluster: {
     flexDirection: 'row',
