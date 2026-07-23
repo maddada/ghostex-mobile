@@ -398,7 +398,7 @@ const sectionStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: ds(26),
-    marginTop: ds(17),
+    marginTop: ds(8),
     marginBottom: ds(10),
     paddingLeft: ds(13),
     paddingRight: ds(8),

@@ -1,13 +1,18 @@
 /**
  * SESSION row renderer, cloned from the desktop gpui reference sidebar
- * (sidebar/styles/group-panels.css + session-cards.css): 34dp flat row,
- * absolutely-placed leading agent icon at 48% opacity (13dp brand masks, 15dp
- * terminal/browser glyphs), 15.5dp weight-300 title (#b4b8c0), muted relative
- * time on the right (hidden while working/attention), and a 7dp status dot at
- * the right edge matching the desktop .session-status-dot activity colors —
- * pulsing orange for working, blue for attention/done, red for error, gray for
- * remote sleeping, nothing for idle. Sleeping dims only the title, and the
- * active row gets the translucent rounded fill.
+ * (sidebar/styles/session-cards.css reference-layout skin +
+ * session-card-content.tsx): 34dp flat row, absolutely-placed leading agent
+ * icon at 48% opacity (13dp brand masks, 15dp terminal/browser glyphs) that an
+ * active Delayed Send (yellow clock) or Close After Done (pastel-red clock)
+ * timer replaces at full opacity, 15.5dp weight-300 title (#b4b8c0), and ONE
+ * shared trailing slot flush at the row's right edge. Trailing precedence
+ * matches the desktop trailing rules: a timer countdown label always wins the
+ * text slot (getSessionCardTimerTrailingLabel), then the status indicator —
+ * spinning orange ring for working (reference-sidebar-working-spin), static
+ * blue dot for attention/done, red for error, gray for remote sleeping — and
+ * the muted Last Active time renders only when neither is present, so the time
+ * and the status indicator occupy the same right-aligned area. Sleeping dims
+ * only the title, and the active row gets the translucent rounded fill.
  */
 
 import { useEffect, useRef } from 'react';
@@ -24,7 +29,71 @@ import { SessionCopy } from '../../copy';
 import { SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
-import { PinGlyph } from './icons';
+import { ClockGlyph, PinGlyph } from './icons';
+
+/**
+ * Desktop timer-label precedence (session-card-content.tsx
+ * getSessionCardTimerTrailingLabel): a live Delayed Send countdown wins, then
+ * an armed Close After Done shows the constant 03:00 label. The mobile summary
+ * carries only the live remaining label and the armed flag.
+ */
+function timerTrailingLabel(session: GhostexSession): string {
+  if (session.delayedSendRemainingLabel.length > 0) return session.delayedSendRemainingLabel;
+  return session.closeAfterDone ? '03:00' : '';
+}
+
+/** Compact desktop-style relative time: 32s / 5m / 3h / 2d (relative-time.ts). */
+function compactLastActive(session: GhostexSession): string {
+  const iso = session.lastInteractionAt.length > 0 ? session.lastInteractionAt : session.lastActiveAt;
+  if (iso.length === 0) return '';
+  const timestamp = Date.parse(iso);
+  if (Number.isNaN(timestamp)) return '';
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/**
+ * Static right-edge dot color per the desktop reference-layout rules
+ * (session-cards.css): attention/done → the blue attention token, error → red
+ * #ff6b6b, remote sleeping → neutral gray, idle → no dot. Working renders the
+ * spinning ring instead of a dot. This is the same displayStatus that drives
+ * the collapsed project/group count pills.
+ */
+function referenceDotColor(status: string): string | null {
+  if (status === 'attention' || status === 'done') return SidebarPalette.PILL_ATTENTION;
+  if (status === 'error') return SidebarPalette.ERROR_DOT;
+  if (status === 'sleep' || status === 'sleeping') return SidebarPalette.SLEEP_DOT;
+  return null;
+}
+
+/**
+ * Desktop working indicator (reference-sidebar-working-spin): a 12dp orange
+ * ring with a transparent right quarter, rotating at 0.82s/turn.
+ */
+function WorkingSpinner() {
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 820,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [rotation]);
+
+  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return <Animated.View style={[styles.workingSpinner, { transform: [{ rotate }] }]} />;
+}
 
 export type SessionRowProps = {
   session: GhostexSession;
@@ -37,83 +106,6 @@ export type SessionRowProps = {
   onMenu: (anchor: MenuAnchor) => void;
 };
 
-/** Compact desktop-style relative time: 32s / 5m / 3h / 2d. */
-function compactLastActive(session: GhostexSession): string {
-  const iso = session.lastInteractionAt.length > 0 ? session.lastInteractionAt : session.lastActiveAt;
-  if (iso.length === 0) return '';
-  const timestamp = Date.parse(iso);
-  if (Number.isNaN(timestamp)) return '';
-  const elapsedSeconds = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
-  const minutes = Math.floor(elapsedSeconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
-/**
- * Right-edge dot color per the desktop .session-status-dot activity rules
- * (session-cards.css): working → pulsing orange #ffb454, attention/done → the
- * blue attention token, error → red #ff6b6b, remote sleeping → neutral gray,
- * idle → no dot. This is the same displayStatus that drives the collapsed
- * project/group count pills, so a session showing in a "working" pill shows
- * the matching orange dot when its row is visible.
- */
-function referenceDotColor(status: string): string | null {
-  if (status === 'working') return SidebarPalette.WORKING_DOT;
-  if (status === 'attention' || status === 'done') return SidebarPalette.PILL_ATTENTION;
-  if (status === 'error') return SidebarPalette.ERROR_DOT;
-  if (status === 'sleep' || status === 'sleeping') return SidebarPalette.SLEEP_DOT;
-  return null;
-}
-
-/**
- * Status dot with the desktop working pulse (session-status-dot-pulse: 1.35s
- * ease-in-out between opacity .78/scale .92 and full). Non-working dots stay
- * static.
- */
-function StatusDot({ color, pulse }: { color: string; pulse: boolean }) {
-  const animation = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!pulse) {
-      animation.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(animation, {
-          toValue: 1,
-          duration: 675,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(animation, {
-          toValue: 0,
-          duration: 675,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse, animation]);
-
-  const opacity = pulse
-    ? animation.interpolate({ inputRange: [0, 1], outputRange: [0.78, 1] })
-    : 1;
-  const scale = pulse
-    ? animation.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] })
-    : 1;
-  return (
-    <Animated.View
-      style={[styles.dot, { backgroundColor: color, opacity, transform: [{ scale }] }]}
-    />
-  );
-}
-
 export default function SessionRow({ session, active, inCard, onPress, onMenu }: SessionRowProps) {
   const rowRef = useRef<View | null>(null);
   const iconId = resolveAgentIconId(
@@ -125,10 +117,21 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
   const status = displayStatus(session);
   const sleeping = status === 'sleep' || status === 'sleeping';
   const working = status === 'working';
-  const attention = status === 'attention';
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
-  const dotColor = referenceDotColor(status);
-  const lastActive = working || attention ? '' : compactLastActive(session);
+  const timerLabel = timerTrailingLabel(session);
+  const dotColor = working ? null : referenceDotColor(status);
+  // The time yields the trailing slot to a timer countdown or status indicator.
+  const lastActive =
+    timerLabel.length === 0 && !working && dotColor === null ? compactLastActive(session) : '';
+  const trailingText = timerLabel.length > 0 ? timerLabel : lastActive;
+  // Desktop leading-slot precedence: Delayed Send clock, then Close After Done
+  // clock, then the normal agent icon.
+  const timerClockColor =
+    session.delayedSendRemainingLabel.length > 0
+      ? SidebarPalette.DELAYED_SEND_CLOCK
+      : session.closeAfterDone
+        ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
+        : null;
   const iconLeft = inCard ? ds(5) : ds(26);
 
   const openMenuFromRow = (): void => {
@@ -154,8 +157,18 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
           <PinGlyph size={ds(13)} color="rgba(255,255,255,0.9)" />
         </View>
       ) : null}
-      <View style={[styles.icon, { left: iconLeft }, active ? styles.iconActive : null]}>
-        <Icon size={iconSize} color={agentIconTint(iconId)} />
+      <View
+        style={[
+          styles.icon,
+          { left: iconLeft },
+          timerClockColor !== null ? styles.iconTimer : active ? styles.iconActive : null,
+        ]}
+      >
+        {timerClockColor !== null ? (
+          <ClockGlyph size={ds(15)} color={timerClockColor} />
+        ) : (
+          <Icon size={iconSize} color={agentIconTint(iconId)} />
+        )}
       </View>
       <Text
         style={[
@@ -168,8 +181,14 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
       >
         {title}
       </Text>
-      {lastActive.length > 0 ? <Text style={styles.lastActive}>{lastActive}</Text> : null}
-      {dotColor !== null ? <StatusDot color={dotColor} pulse={working} /> : null}
+      <View style={styles.trailing}>
+        {trailingText.length > 0 ? <Text style={styles.trailingText}>{trailingText}</Text> : null}
+        {working ? (
+          <WorkingSpinner />
+        ) : dotColor !== null ? (
+          <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -179,7 +198,7 @@ const styles = StyleSheet.create({
     height: ds(34),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: ds(14),
+    paddingRight: ds(6),
     borderRadius: ds(4),
   },
   rowCard: {
@@ -215,6 +234,9 @@ const styles = StyleSheet.create({
   iconActive: {
     opacity: 0.8,
   },
+  iconTimer: {
+    opacity: 1,
+  },
   title: {
     flex: 1,
     color: '#B4B8C0',
@@ -229,8 +251,13 @@ const styles = StyleSheet.create({
     color: '#5F646B',
     opacity: 0.42,
   },
-  lastActive: {
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(5),
     marginStart: ds(8),
+  },
+  trailingText: {
     color: '#4F5359',
     fontSize: ds(13.5),
     fontWeight: '300',
@@ -238,12 +265,16 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   dot: {
-    position: 'absolute',
-    right: ds(6),
-    top: '50%',
-    marginTop: -ds(3.5),
     width: ds(7),
     height: ds(7),
     borderRadius: 999,
+  },
+  workingSpinner: {
+    width: ds(12),
+    height: ds(12),
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: SidebarPalette.WORKING_SPINNER,
+    borderRightColor: 'transparent',
   },
 });

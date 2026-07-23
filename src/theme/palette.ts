@@ -57,6 +57,12 @@ export const SidebarPalette = {
   PILL_AWAKE: '#D8D8D8',
   /** Session-row working status dot (desktop .session-status-dot #ffb454). */
   WORKING_DOT: '#FFB454',
+  /** Reference-sidebar working spinner ring (reference-sidebar-working-spin #d99a62). */
+  WORKING_SPINNER: '#D99A62',
+  /** Delayed Send leading clock (.session-delayed-send-agent-icon #f6c945). */
+  DELAYED_SEND_CLOCK: '#F6C945',
+  /** Close After Done leading clock (.session-close-after-done-agent-icon #ff9aa2). */
+  CLOSE_AFTER_DONE_CLOCK: '#FF9AA2',
   /** Session-row error status dot (desktop #ff6b6b). */
   ERROR_DOT: '#FF6B6B',
   /** Remote sleeping-row dot: mix(--app-muted 86%, --app-foreground 14%). */
