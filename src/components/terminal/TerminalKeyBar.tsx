@@ -18,6 +18,7 @@ import {
   useExtraKeysStore,
   type ResolvedExtraKey,
 } from '../../settings/extraKeys';
+import { agentKeyPage, EXTRA_KEYS_PAGE } from './keyBarPages';
 import { GhostexPalette } from '../../theme/palette';
 import {
   ArrowIcon,
@@ -62,8 +63,13 @@ function retainLockedModifiers(state: ModifierState): ModifierState {
 /** Rendered key model: the user-editable layout from the extra-keys store. */
 type KeyBarItem = ResolvedExtraKey;
 
+/** Toggle pages opened by the base bar's PGUP/PGDN pills (keyBarPages.ts). */
+type KeyBarPage = 'none' | 'extra' | 'agent';
+
 export type TerminalKeyBarProps = {
   sessionKey: string;
+  /** Resolved agent icon id of the shown session ('' / 'terminal' when none). */
+  agentId: string;
   /** settings.keyboardButtonVisible: shows the trailing dismiss control. */
   showDismissButton: boolean;
   onDismissKeyboard: () => void;
@@ -71,6 +77,7 @@ export type TerminalKeyBarProps = {
 
 export default function TerminalKeyBar({
   sessionKey,
+  agentId,
   showDismissButton,
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
@@ -79,6 +86,11 @@ export default function TerminalKeyBar({
   const [modifiers, setModifiers] = useState<ModifierState>(NO_MODIFIERS);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorText, setEditorText] = useState('');
+  const [page, setPage] = useState<KeyBarPage>('none');
+  const agentPage = agentKeyPage(agentId);
+  // A tab switch to an agent without hotkeys drops a stale open agent page.
+  const activePage = page === 'agent' && agentPage === null ? 'none' : page;
+  const pageRows = activePage === 'extra' ? EXTRA_KEYS_PAGE : activePage === 'agent' ? agentPage : null;
   const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -106,6 +118,7 @@ export default function TerminalKeyBar({
     clearModifiers();
     setEditorVisible(false);
     setEditorText('');
+    setPage('none');
     const subscription = GhostexNative.addListener('onKeyModifiersConsumed', (event) => {
       if (event.sessionKey === sessionKey) {
         setModifiers((current) => retainLockedModifiers(current));
@@ -210,7 +223,35 @@ export default function TerminalKeyBar({
     if (key === 'Delete') sendKey('delete', {});
   };
 
-  const renderItem = (item: KeyBarItem) => {
+  // pageToggles: only the base rows turn PGUP/PGDN into page toggles; inside
+  // an open page those pills stay real PgUp/PgDn keys.
+  const renderItem = (item: KeyBarItem, pageToggles = false) => {
+    if (
+      pageToggles &&
+      item.kind === 'key' &&
+      (item.key === 'pageUp' || (item.key === 'pageDown' && agentPage !== null))
+    ) {
+      const target: KeyBarPage = item.key === 'pageUp' ? 'extra' : 'agent';
+      const active = activePage === target;
+      return (
+        <View key={item.id} style={styles.cell}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={target === 'extra' ? 'Extra keys' : 'Agent hotkeys'}
+            accessibilityState={{ selected: active }}
+            style={[styles.pill, active && styles.pillActive]}
+            onPress={() => {
+              clearRepeat();
+              setPage(active ? 'none' : target);
+            }}
+          >
+            <Text style={[styles.pillLabel, active && styles.pillLabelActive]} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
     if (item.kind === 'modifier') {
       const mode = modifiers[item.modifier];
       const active = mode !== 'off';
@@ -278,8 +319,18 @@ export default function TerminalKeyBar({
   };
 
   return (
-    <View style={styles.bar}>
-      {editorVisible ? (
+    <View>
+      {!editorVisible && pageRows !== null ? (
+        <View style={styles.pagePanel}>
+          {pageRows.map((row, rowIndex) => (
+            <View key={`page-row-${rowIndex}`} style={styles.pageRow}>
+              {row.map((item) => renderItem(item))}
+            </View>
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.bar}>
+        {editorVisible ? (
         <View style={styles.editorContainer}>
           <TextInput
             autoFocus
@@ -301,13 +352,13 @@ export default function TerminalKeyBar({
         </View>
       ) : (
         <View style={styles.rows}>
-          <View style={styles.row}>{row1.map(renderItem)}</View>
-          <View style={styles.row}>{row2.map(renderItem)}</View>
+          <View style={styles.row}>{row1.map((item) => renderItem(item, true))}</View>
+          <View style={styles.row}>{row2.map((item) => renderItem(item, true))}</View>
         </View>
       )}
-      <View style={styles.trailingCluster}>
-        <View style={styles.separator} />
-        <View style={styles.trailingButtons}>
+        <View style={styles.trailingCluster}>
+          <View style={styles.separator} />
+          <View style={styles.trailingButtons}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={editorVisible ? 'Show terminal keys' : 'Open text editor'}
@@ -323,11 +374,17 @@ export default function TerminalKeyBar({
           {editorVisible ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Send text to terminal"
+              accessibilityLabel={
+                editorText.length === 0 ? 'Send Enter to terminal' : 'Insert text into terminal'
+              }
               style={styles.trailingButton}
               onPress={submitEditor}
             >
-              <SendIcon size={16} color={GhostexPalette.FOREGROUND} />
+              {editorText.length === 0 ? (
+                <SendIcon size={16} color={GhostexPalette.FOREGROUND} />
+              ) : (
+                <ArrowIcon direction="up" size={16} color={GhostexPalette.FOREGROUND} />
+              )}
             </Pressable>
           ) : (
             showDismissButton && (
@@ -341,6 +398,7 @@ export default function TerminalKeyBar({
               </Pressable>
             )
           )}
+          </View>
         </View>
       </View>
     </View>
@@ -353,6 +411,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
+  },
+  /** Toggle page above the bar (fixed-height rows, same pill styling). */
+  pagePanel: {
+    backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
+    paddingTop: 7,
+    paddingHorizontal: 10,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
+    paddingBottom: 7,
+  },
+  pageRow: {
+    height: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   trailingCluster: {
     flexDirection: 'row',

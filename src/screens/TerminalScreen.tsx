@@ -30,6 +30,7 @@ import { ChevronLeftIcon, EllipsisIcon } from '../components/terminal/icons';
 import { pickAndSendAttachment } from '../components/terminal/uploads';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
 import { attachCommand, loginShellCommand } from '../commands/ghostexCli';
+import { resolveAgentIconId, type GhostexMobileSummary } from '../contract/mobileSummary';
 import { ensureConnected, summarizeFailure } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
 import type { MachineConnectionTarget } from '../machines/credentials';
@@ -71,6 +72,25 @@ function sessionFolderFor(tab: TerminalTab | null): string {
   return project?.path ?? '';
 }
 
+/**
+ * Resolved agent icon id of the session shown in `tab` ('terminal' when it is
+ * a shell tab or the session is unknown) — drives the key bar's agent-hotkey
+ * page. Pure so the screen can subscribe to it as an inventory selector.
+ */
+function sessionAgentIdFor(
+  tab: TerminalTab | null,
+  summary: GhostexMobileSummary | null | undefined,
+): string {
+  if (tab === null || tab.ghostexSessionId === undefined) return 'terminal';
+  if (summary === null || summary === undefined) return 'terminal';
+  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
+  if (session === undefined) return 'terminal';
+  return resolveAgentIconId(
+    session.agentIcon,
+    session.agentName.length > 0 ? session.agentName : session.agent,
+  );
+}
+
 function patchTab(sessionKey: string, patch: Partial<TerminalTab>): void {
   useTerminalStore.setState((state) => ({
     tabs: state.tabs.map((tab) => (tab.sessionKey === sessionKey ? { ...tab, ...patch } : tab)),
@@ -97,6 +117,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const autoFocusedSessionsRef = useRef<Set<string>>(new Set());
 
   const activeTab = tabs.find((tab) => tab.sessionKey === selectedSessionKey) ?? null;
+  const activeAgentId = useInventoryStore((state) =>
+    sessionAgentIdFor(
+      activeTab,
+      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
+    ),
+  );
 
   // The native nav bar has no styling guarantee here; render our own header.
   useLayoutEffect(() => {
@@ -385,6 +411,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         >
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
+            agentId={activeAgentId}
             showDismissButton={settings.keyboardButtonVisible}
             onDismissKeyboard={dismissKeyboard}
           />
