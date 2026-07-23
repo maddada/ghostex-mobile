@@ -272,7 +272,7 @@ export default function TerminalKeyBar({
             }}
           >
             <Text style={[styles.pillLabel, active && styles.pillLabelActive]} numberOfLines={1}>
-              {target === 'extra' ? 'KEYS' : 'AGENT'}
+              {target === 'extra' ? 'MORE' : 'AGENT'}
             </Text>
           </Pressable>
         </View>
