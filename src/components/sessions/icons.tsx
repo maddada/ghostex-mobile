@@ -7,6 +7,42 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 export type GlyphProps = { size: number; color: string };
 
+/** Circled information glyph for Details context-menu rows. */
+export function InfoGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+      <Circle cx={12} cy={7.5} r={1.2} fill={color} />
+      <Path d="M 12 11 v 6" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Directional arrow for Back and project-reordering context-menu rows. */
+export function ArrowGlyph({
+  size,
+  color,
+  direction,
+}: GlyphProps & { direction: 'left' | 'up' | 'down' }) {
+  const path =
+    direction === 'left'
+      ? 'M 19 12 H 5 M 10 7 l -5 5 5 5'
+      : direction === 'up'
+        ? 'M 12 19 V 5 M 7 10 l 5 -5 5 5'
+        : 'M 12 5 v 14 M 7 14 l 5 5 5 -5';
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={path}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Door-and-arrow glyph for the Android-only explicit app exit action. */
 export function ExitGlyph({ size, color }: GlyphProps) {
   return (

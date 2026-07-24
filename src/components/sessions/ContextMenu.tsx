@@ -1,12 +1,12 @@
 /**
  * Desktop sidebar context-menu clone (sidebar/styles/session-overlays.css
- * .session-context-menu): a fixed 220dp dark popup anchored under a header
- * button — right edge aligned to the anchor, 6dp below it, clamped 12dp from
- * the screen edges. Items are icon + label + optional trailing check, with
+ * .session-context-menu): a 220dp dark popup that prefers 6dp below its
+ * anchor, flips above near the bottom edge, and uses the full safe viewport
+ * before scrolling. Items are icon + label + optional trailing check, with
  * hover-gray press feedback, 1dp dividers, and danger tinting.
  */
 
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import {
   Modal,
   Pressable,
@@ -16,31 +16,42 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SidebarPalette } from '../../theme/palette';
 
 /** Window-coordinate frame of the pressed button (measureInWindow). */
 export type MenuAnchor = { x: number; y: number; width: number; height: number };
 
+type ContextMenuAction = {
+  kind: 'item';
+  key: string;
+  label: string;
+  /** Trailing IconCheck on the currently-selected row. */
+  selected?: boolean;
+  /** Trailing chevron marking a submenu row. */
+  submenu?: boolean;
+  destructive?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+};
+
+type ContextMenuLeadingVisual =
+  | {
+      /** 14dp leading glyph, already tinted (brand agent icons keep tints). */
+      icon: ReactElement;
+      swatch?: never;
+    }
+  | {
+      icon?: never;
+      /** 14dp leading color swatch circle (collection colors). */
+      swatch: string;
+    };
+
 export type ContextMenuItem =
   | { kind: 'separator'; key: string }
   | { kind: 'label'; key: string; label: string }
-  | {
-      kind: 'item';
-      key: string;
-      label: string;
-      /** 14dp leading glyph, already tinted (brand agent icons keep tints). */
-      icon?: ReactElement;
-      /** 14dp leading color swatch circle (collection colors). */
-      swatch?: string;
-      /** Trailing IconCheck on the currently-selected row. */
-      selected?: boolean;
-      /** Trailing chevron marking a submenu row. */
-      submenu?: boolean;
-      destructive?: boolean;
-      disabled?: boolean;
-      onPress: () => void;
-    };
+  | (ContextMenuAction & ContextMenuLeadingVisual);
 
 export type ContextMenuProps = {
   visible: boolean;
@@ -87,19 +98,57 @@ const checkStyles = StyleSheet.create({
 
 export default function ContextMenu({ visible, anchor, items, onClose }: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const safeArea = useSafeAreaInsets();
+  const contentKey = items.map((item) => `${item.kind}:${item.key}`).join('|');
+  const [measurement, setMeasurement] = useState({ contentKey: '', height: 0 });
   if (!visible || anchor === null) return null;
 
+  const horizontalStart = Math.max(EDGE_MARGIN, safeArea.left);
+  const horizontalEnd = screenWidth - Math.max(EDGE_MARGIN, safeArea.right);
+  const menuWidth = Math.max(1, Math.min(MENU_WIDTH, horizontalEnd - horizontalStart));
   const left = Math.min(
-    Math.max(EDGE_MARGIN, anchor.x + anchor.width - MENU_WIDTH),
-    screenWidth - MENU_WIDTH - EDGE_MARGIN,
+    Math.max(horizontalStart, anchor.x + anchor.width - menuWidth),
+    horizontalEnd - menuWidth,
   );
-  const top = Math.max(EDGE_MARGIN, anchor.y + anchor.height + ANCHOR_GAP);
-  const maxHeight = Math.max(120, screenHeight - top - EDGE_MARGIN);
+  const verticalStart = Math.max(EDGE_MARGIN, safeArea.top);
+  const verticalEnd = screenHeight - Math.max(EDGE_MARGIN, safeArea.bottom);
+  const maxHeight = Math.max(1, verticalEnd - verticalStart);
+  const menuHeight =
+    measurement.contentKey === contentKey ? Math.min(measurement.height, maxHeight) : 0;
+  const belowTop = anchor.y + anchor.height + ANCHOR_GAP;
+  const aboveTop = anchor.y - ANCHOR_GAP - menuHeight;
+  const top =
+    menuHeight === 0
+      ? verticalStart
+      : belowTop + menuHeight <= verticalEnd
+        ? belowTop
+        : aboveTop >= verticalStart
+          ? aboveTop
+          : Math.max(verticalStart, Math.min(belowTop, verticalEnd - menuHeight));
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.menu, { left, top, maxHeight }]}>
+        <View
+          onLayout={({ nativeEvent }) => {
+            const nextHeight = Math.min(nativeEvent.layout.height, maxHeight);
+            setMeasurement((current) =>
+              current.contentKey === contentKey && Math.abs(current.height - nextHeight) < 0.5
+                ? current
+                : { contentKey, height: nextHeight },
+            );
+          }}
+          style={[
+            styles.menu,
+            {
+              left,
+              top,
+              width: menuWidth,
+              maxHeight,
+              opacity: menuHeight > 0 ? 1 : 0,
+            },
+          ]}
+        >
           <ScrollView contentContainerStyle={styles.menuContent}>
             {items.map((item) => {
               if (item.kind === 'separator') return <View key={item.key} style={styles.separator} />;

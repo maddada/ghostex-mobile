@@ -6,7 +6,16 @@
  * are no persisted-only toggles.
  */
 
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +35,13 @@ import {
 } from '../settings/store';
 import { useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
+import {
+  normalizeSidebarTint,
+  sidebarBackgroundForSettings,
+  SIDEBAR_BACKGROUND_CONTRAST_MAX,
+  SIDEBAR_BACKGROUND_CONTRAST_MIN,
+  SIDEBAR_BACKGROUND_TINT_OPTIONS,
+} from '../theme/sidebarAppearance';
 
 /** Status line copy, sessions-drawer.md §1 Settings page. */
 const SETTINGS_STATUS_LINE = 'Edit terminal behavior and remote-session alerts.';
@@ -47,6 +63,7 @@ const TERMINAL_BEHAVIOR_TOGGLES: { key: BooleanSettingKey; label: string }[] = [
   { key: 'doneNotificationSound', label: 'Attention notification sound' },
   { key: 'hideKeyboardOnStartup', label: 'Hide keyboard on startup' },
   { key: 'openUrlsOnTap', label: 'Open URLs on tap' },
+  { key: 'confirmTabClose', label: 'Confirm before closing tabs' },
 ];
 
 const CURSOR_STYLE_ROWS: { value: CursorStyle; label: string }[] = [
@@ -63,6 +80,79 @@ const BELL_ROWS: { value: BellBehavior; label: string }[] = [
 
 function formatRows(rows: number): string {
   return `${rows.toLocaleString('en-US')} rows`;
+}
+
+function SidebarTintControl({
+  value,
+  resolvedBackground,
+  onChange,
+}: {
+  value: string;
+  resolvedBackground: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value.toUpperCase());
+
+  useEffect(() => {
+    setDraft(value.toUpperCase());
+  }, [value]);
+
+  const commitDraft = (): void => {
+    if (/^#[0-9a-f]{6}$/iu.test(draft.trim())) {
+      onChange(normalizeSidebarTint(draft));
+    } else {
+      setDraft(value.toUpperCase());
+    }
+  };
+
+  return (
+    <View style={styles.tintCard}>
+      <View style={styles.tintHeader}>
+        <Text style={styles.rowLabel}>Background Tint</Text>
+        <View style={[styles.resolvedBackgroundPreview, { backgroundColor: resolvedBackground }]} />
+      </View>
+      <View style={styles.tintSwatches}>
+        {SIDEBAR_BACKGROUND_TINT_OPTIONS.map((option) => {
+          const selected = option.value.toLowerCase() === value.toLowerCase();
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityLabel={`${option.label} sidebar tint`}
+              accessibilityState={{ selected }}
+              hitSlop={3}
+              style={[
+                styles.tintSwatch,
+                { backgroundColor: option.value },
+                selected ? styles.tintSwatchSelected : null,
+              ]}
+              onPress={() => onChange(option.value.toLowerCase())}
+            />
+          );
+        })}
+      </View>
+      <TextInput
+        accessibilityLabel="Sidebar background tint hex color"
+        autoCapitalize="characters"
+        autoCorrect={false}
+        maxLength={7}
+        placeholder="#808080"
+        placeholderTextColor={GhostexPalette.MUTED}
+        returnKeyType="done"
+        spellCheck={false}
+        style={styles.tintInput}
+        value={draft}
+        onBlur={commitDraft}
+        onChangeText={(next) => {
+          setDraft(next);
+          if (/^#[0-9a-f]{6}$/iu.test(next.trim())) {
+            onChange(normalizeSidebarTint(next));
+          }
+        }}
+        onSubmitEditing={commitDraft}
+      />
+    </View>
+  );
 }
 
 export default function SettingsScreen() {
@@ -87,6 +177,17 @@ export default function SettingsScreen() {
       Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, settings.keepAliveIntervalSec + delta),
     );
     setSetting('keepAliveIntervalSec', next);
+  };
+
+  const stepSidebarContrast = (delta: number): void => {
+    const next = Math.min(
+      SIDEBAR_BACKGROUND_CONTRAST_MAX,
+      Math.max(
+        SIDEBAR_BACKGROUND_CONTRAST_MIN,
+        settings.sidebarBackgroundContrast + delta,
+      ),
+    );
+    setSetting('sidebarBackgroundContrast', next);
   };
 
   const renderToggle = (key: BooleanSettingKey, label: string) => (
@@ -155,6 +256,29 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.list}>
         <Text style={styles.statusLine}>{SETTINGS_STATUS_LINE}</Text>
+
+        <Text style={styles.sectionHeader}>Theming</Text>
+        {renderStepper(
+          'Background Contrast',
+          `${settings.sidebarBackgroundContrast}`,
+          settings.sidebarBackgroundContrast > SIDEBAR_BACKGROUND_CONTRAST_MIN,
+          settings.sidebarBackgroundContrast < SIDEBAR_BACKGROUND_CONTRAST_MAX,
+          stepSidebarContrast,
+        )}
+        <Text style={styles.sectionCaption}>
+          85 is softer gray; 100 is black. Drawer surfaces adjust automatically.
+        </Text>
+        <SidebarTintControl
+          value={settings.sidebarBackgroundTint}
+          resolvedBackground={sidebarBackgroundForSettings(
+            settings.sidebarBackgroundTint,
+            settings.sidebarBackgroundContrast,
+          )}
+          onChange={(value) => setSetting('sidebarBackgroundTint', value)}
+        />
+        <Text style={styles.sectionCaption}>
+          Applies the same calibrated dark tint logic as the GPUI sidebar.
+        </Text>
 
         <Text style={styles.sectionHeader}>Terminal behavior</Text>
         {TERMINAL_BEHAVIOR_TOGGLES.map((toggle) => renderToggle(toggle.key, toggle.label))}
@@ -280,6 +404,53 @@ const styles = StyleSheet.create({
     color: GhostexPalette.FOREGROUND,
     fontSize: 14,
     flex: 1,
+  },
+  tintCard: {
+    gap: 10,
+    padding: 12,
+    borderRadius: GhostexRadii.row,
+    backgroundColor: GhostexPalette.CARD,
+    borderWidth: GhostexStrokeWidth,
+    borderColor: GhostexPalette.BORDER,
+  },
+  tintHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  resolvedBackgroundPreview: {
+    width: 28,
+    height: 28,
+    borderRadius: GhostexRadii.pill,
+    borderWidth: 1,
+    borderColor: GhostexPalette.BORDER,
+  },
+  tintSwatches: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: GhostexPalette.BORDER,
+  },
+  tintSwatchSelected: {
+    borderWidth: 3,
+    borderColor: GhostexPalette.ACCENT,
+  },
+  tintInput: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: GhostexRadii.row,
+    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
+    borderWidth: GhostexStrokeWidth,
+    borderColor: GhostexPalette.BORDER,
+    color: GhostexPalette.FOREGROUND,
+    fontSize: 14,
+    fontFamily: 'monospace',
   },
   rowChevron: {
     color: GhostexPalette.MUTED,

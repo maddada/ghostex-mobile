@@ -42,7 +42,7 @@ struct OpenTerminalOptionsRecord: Record {
 
 struct TerminalRuntimeSettingsRecord: Record {
     @Field var autoScroll: Bool = true
-    @Field var cursorStyle: String = "block"
+    @Field var cursorStyle: String = "bar"
     @Field var cursorBlink: Bool = true
     @Field var softKeyboardEnabled: Bool = true
     @Field var openUrlsOnTap: Bool = true

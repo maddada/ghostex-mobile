@@ -48,10 +48,13 @@ import {
   type ProjectCardBlock,
 } from '../components/sessions/drawerModel';
 import {
+  ArrowGlyph,
+  ChevronDownGlyph,
   ClockGlyph,
   CopyGlyph,
   ExitGlyph,
   GitForkGlyph,
+  InfoGlyph,
   MachinesGlyph,
   PaletteGlyph,
   PencilGlyph,
@@ -73,6 +76,7 @@ import {
   collectionPanelBackground,
   collectionPanelBorder,
   ds,
+  expandedGroupBackground,
   GroupHeaderRow,
   MachineHeaderRow,
   PROJECT_CARD_BACKGROUND,
@@ -140,12 +144,18 @@ import {
   type GhostexSession,
 } from '../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy, StateCardCopy } from '../copy';
+import {
+  optimisticChangeResourceKey,
+  type OptimisticInventoryChange,
+} from '../inventory/optimistic';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, selectedMachine, useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
+import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette, GhostexRadii } from '../theme/palette';
+import { resolveSidebarAppearance } from '../theme/sidebarAppearance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 
@@ -161,7 +171,7 @@ type Overlay =
   | { kind: 'sessionDetails'; ctx: SessionContext }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
   | { kind: 'delayedSend'; ctx: SessionContext }
-  | { kind: 'killConfirm'; ctx: SessionContext }
+  | { kind: 'closeConfirm'; ctx: SessionContext }
   | { kind: 'copyText'; title: string; text: string }
   | { kind: 'projectMenu'; ctx: ProjectContext; anchor: MenuAnchor; view: 'root' | 'collections' }
   | { kind: 'projectKillConfirm'; ctx: ProjectContext }
@@ -185,6 +195,140 @@ type Overlay =
   | { kind: 'logs' };
 
 const NONE: Overlay = { kind: 'none' };
+
+type BulkSessionAction = {
+  sessionId: string;
+  command: string;
+  closeWarmSession: boolean;
+  optimisticChange?: OptimisticInventoryChange;
+};
+
+const remoteMutationQueues = new Map<string, Promise<void>>();
+
+async function enqueueRemoteMutation(
+  machineId: string,
+  resourceKey: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const queueKey = `${machineId}:${resourceKey}`;
+  const previous = remoteMutationQueues.get(queueKey) ?? Promise.resolve();
+  const scheduled = previous.catch(() => undefined).then(run);
+  remoteMutationQueues.set(queueKey, scheduled);
+  try {
+    await scheduled;
+  } finally {
+    if (remoteMutationQueues.get(queueKey) === scheduled) {
+      remoteMutationQueues.delete(queueKey);
+    }
+  }
+}
+
+function pinMutation(sessionId: string, isPinned: boolean): OptimisticInventoryChange {
+  return {
+    kind: 'sessionPatch',
+    sessionId,
+    patch: { isPinned },
+    confirmPatch: { isPinned },
+  };
+}
+
+function tagMutation(sessionId: string, tag: string): OptimisticInventoryChange {
+  const sessionTag = tag === 'none' ? '' : tag;
+  return {
+    kind: 'sessionPatch',
+    sessionId,
+    patch: { sessionTag },
+    confirmPatch: { sessionTag },
+  };
+}
+
+function renameMutation(sessionId: string, title: string): OptimisticInventoryChange {
+  return {
+    kind: 'sessionPatch',
+    sessionId,
+    patch: { title, displayTitle: title, displayTitleTooltip: title },
+    confirmPatch: { title },
+  };
+}
+
+function lifecycleMutation(
+  sessionId: string,
+  sleeping: boolean,
+): OptimisticInventoryChange {
+  return sleeping
+    ? {
+        kind: 'sessionPatch',
+        sessionId,
+        patch: {
+          isSleeping: true,
+          isLive: false,
+          status: 'sleep',
+          activity: 'sleep',
+          nativePaneState: 'unmounted',
+        },
+        confirmPatch: { isSleeping: true },
+      }
+    : {
+        kind: 'sessionPatch',
+        sessionId,
+        patch: {
+          isSleeping: false,
+          isLive: true,
+          status: 'idle',
+          activity: 'idle',
+          nativePaneState: 'mounted',
+        },
+        confirmPatch: { isSleeping: false },
+      };
+}
+
+function closeMutation(sessionId: string): OptimisticInventoryChange {
+  return { kind: 'sessionClose', sessionId };
+}
+
+function lifecycleSessionAction(
+  session: GhostexSession,
+  sleeping: boolean,
+): BulkSessionAction {
+  const projectId = session.projectId.length > 0 ? session.projectId : undefined;
+  return {
+    sessionId: session.sessionId,
+    command: sleeping
+      ? sleepSessionCommand(session.sessionId, projectId)
+      : wakeSessionCommand(session.sessionId, projectId),
+    closeWarmSession: sleeping,
+    optimisticChange: lifecycleMutation(session.sessionId, sleeping),
+  };
+}
+
+function closeSessionAction(session: GhostexSession): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: killSessionCommand(
+      session.sessionId,
+      session.projectId.length > 0 ? session.projectId : undefined,
+    ),
+    closeWarmSession: true,
+    optimisticChange: closeMutation(session.sessionId),
+  };
+}
+
+function pinSessionAction(session: GhostexSession, isPinned: boolean): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: pinSessionCommand(session.sessionId, isPinned),
+    closeWarmSession: false,
+    optimisticChange: pinMutation(session.sessionId, isPinned),
+  };
+}
+
+function reloadSessionAction(session: GhostexSession): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: reloadSessionCommand(session.sessionId),
+    closeWarmSession: false,
+  };
+}
 
 /** `ssh -tt [-p port] user@host '<login-shell attach command>'` (§2 row 7). */
 function attachSshCommand(machine: MachineRecord, session: GhostexSession): string {
@@ -212,6 +356,21 @@ export default function SessionsScreen({ navigation }: Props) {
   const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
   const lastActionByProject = useLauncherStore((state) => state.lastActionByProject);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
+  const surfacedSessionKeys = useTerminalStore((state) => state.warmOrder);
+  const sidebarBackgroundContrast = useSettingsStore(
+    (state) => state.settings.sidebarBackgroundContrast,
+  );
+  const sidebarBackgroundTint = useSettingsStore(
+    (state) => state.settings.sidebarBackgroundTint,
+  );
+  const sidebarAppearance = useMemo(
+    () => resolveSidebarAppearance(sidebarBackgroundTint, sidebarBackgroundContrast),
+    [sidebarBackgroundContrast, sidebarBackgroundTint],
+  );
+  const neutralExpandedGroupSurface = useMemo(
+    () => expandedGroupBackground(sidebarAppearance.background),
+    [sidebarAppearance.background],
+  );
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [progress, setProgress] = useState<string | null>(null);
@@ -388,20 +547,110 @@ export default function SessionsScreen({ navigation }: Props) {
     async (
       target: MachineRecord,
       command: string,
-      options?: { closeWarmSessionId?: string },
+      options?: {
+        closeWarmSessionId?: string;
+        optimisticChange?: OptimisticInventoryChange;
+      },
     ): Promise<void> => {
       setOverlay(NONE);
+      const inventory = useInventoryStore.getState();
+      const mutationId =
+        options?.optimisticChange === undefined
+          ? null
+          : inventory.beginOptimisticMutations(target.id, [options.optimisticChange])[0];
+      const mutationIds = mutationId === null ? [] : [mutationId];
       try {
-        if (options?.closeWarmSessionId !== undefined) {
-          await useTerminalStore.getState().closeWarmSessionFor(target.id, options.closeWarmSessionId);
+        const run = async (): Promise<void> => {
+          if (options?.closeWarmSessionId !== undefined) {
+            await useTerminalStore
+              .getState()
+              .closeWarmSessionFor(target.id, options.closeWarmSessionId);
+          }
+          await runGhostexCli(target, command);
+          if (mutationIds.length > 0) {
+            useInventoryStore.getState().commitOptimisticMutations(target.id, mutationIds);
+          }
+        };
+        if (options?.optimisticChange === undefined) {
+          await run();
+        } else {
+          await enqueueRemoteMutation(
+            target.id,
+            optimisticChangeResourceKey(options.optimisticChange),
+            run,
+          );
         }
-        await runGhostexCli(target, command);
-        await refreshMachine(target);
+        await useInventoryStore.getState().refreshMachineFresh(target);
       } catch (error) {
+        if (mutationIds.length > 0) {
+          useInventoryStore.getState().rollbackOptimisticMutations(target.id, mutationIds);
+        }
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }
     },
-    [refreshMachine, setTransientStatus],
+    [setTransientStatus],
+  );
+
+  /** Run a session batch sequentially, retaining per-session rollback. */
+  const runBulkSessionActions = useCallback(
+    async (target: MachineRecord, actions: readonly BulkSessionAction[]): Promise<void> => {
+      setOverlay(NONE);
+      const changes = actions.flatMap((action) =>
+        action.optimisticChange === undefined ? [] : [action.optimisticChange],
+      );
+      const mutationIds = useInventoryStore
+        .getState()
+        .beginOptimisticMutations(target.id, changes);
+      let mutationIndex = 0;
+      const prepared = actions.map((action) => {
+        const mutationId =
+          action.optimisticChange === undefined ? null : mutationIds[mutationIndex++];
+        return { action, mutationId };
+      });
+      const failures: string[] = [];
+      let successCount = 0;
+
+      for (const { action, mutationId } of prepared) {
+        const actionMutationIds = mutationId === null ? [] : [mutationId];
+        try {
+          await enqueueRemoteMutation(
+            target.id,
+            `session:${action.sessionId}`,
+            async (): Promise<void> => {
+              if (action.closeWarmSession) {
+                await useTerminalStore
+                  .getState()
+                  .closeWarmSessionFor(target.id, action.sessionId);
+              }
+              await runGhostexCli(target, action.command);
+              if (actionMutationIds.length > 0) {
+                useInventoryStore
+                  .getState()
+                  .commitOptimisticMutations(target.id, actionMutationIds);
+              }
+            },
+          );
+          successCount++;
+        } catch (error) {
+          if (actionMutationIds.length > 0) {
+            useInventoryStore
+              .getState()
+              .rollbackOptimisticMutations(target.id, actionMutationIds);
+          }
+          failures.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+
+      if (successCount > 0) {
+        await useInventoryStore.getState().refreshMachineFresh(target);
+      }
+      if (failures.length > 0) {
+        const prefix =
+          failures.length === 1 ? '1 session action failed' : `${failures.length} session actions failed`;
+        setTransientStatus(`${prefix}: ${failures[0]}`);
+      }
+    },
+    [setTransientStatus],
   );
 
   /** Creation flow (§6): progress overlay → CLI → refresh → auto-attach. */
@@ -452,6 +701,7 @@ export default function SessionsScreen({ navigation }: Props) {
           title,
           session.projectId.length > 0 ? session.projectId : undefined,
         ),
+        { optimisticChange: renameMutation(session.sessionId, title) },
       );
     },
     [runSessionCommand],
@@ -512,28 +762,17 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const runProjectSessionsAction = useCallback(
     async (ctx: ProjectContext, action: 'wake' | 'sleep' | 'kill'): Promise<void> => {
-      setOverlay(NONE);
       const sessions = sessionsForProject(ctx.machine, ctx.header);
-      try {
-        for (const session of sessions) {
-          const projectId = session.projectId.length > 0 ? session.projectId : undefined;
-          if (action === 'sleep' || action === 'kill') {
-            await useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
-          }
-          const command =
-            action === 'wake'
-              ? wakeSessionCommand(session.sessionId, projectId)
-              : action === 'sleep'
-                ? sleepSessionCommand(session.sessionId, projectId)
-                : killSessionCommand(session.sessionId, projectId);
-          await runGhostexCli(ctx.machine, command);
-        }
-        await refreshMachine(ctx.machine);
-      } catch (error) {
-        setTransientStatus(error instanceof Error ? error.message : String(error));
-      }
+      await runBulkSessionActions(
+        ctx.machine,
+        sessions.map((session) =>
+          action === 'kill'
+            ? closeSessionAction(session)
+            : lifecycleSessionAction(session, action === 'sleep'),
+        ),
+      );
     },
-    [refreshMachine, sessionsForProject, setTransientStatus],
+    [runBulkSessionActions, sessionsForProject],
   );
 
   // -------------------------------------------------------------------------
@@ -565,26 +804,12 @@ export default function SessionsScreen({ navigation }: Props) {
     return session.isSleeping || status === 'sleep' || status === 'sleeping';
   };
 
-  /** Run one command per session, then refresh (bulk menu actions). */
-  const runBulkSessionCommands = useCallback(
-    async (target: MachineRecord, commands: string[]): Promise<void> => {
-      setOverlay(NONE);
-      try {
-        for (const command of commands) {
-          await runGhostexCli(target, command);
-        }
-        await refreshMachine(target);
-      } catch (error) {
-        setTransientStatus(error instanceof Error ? error.message : String(error));
-      }
-    },
-    [refreshMachine, setTransientStatus],
-  );
-
   /** Write the FULL collections state back through the CLI, then refresh. */
   const runCollectionsUpdate = useCallback(
     (target: MachineRecord, state: unknown): void => {
-      void runSessionCommand(target, updateProjectCollectionsCommand(state));
+      void runSessionCommand(target, updateProjectCollectionsCommand(state), {
+        optimisticChange: { kind: 'projectCollections', state },
+      });
     },
     [runSessionCommand],
   );
@@ -636,7 +861,11 @@ export default function SessionsScreen({ navigation }: Props) {
       label: session.isPinned ? 'Unpin' : 'Pin',
       icon: <PinGlyph size={14} color={menuIconColor} />,
       onPress: () =>
-        void runSessionCommand(ctx.machine, pinSessionCommand(session.sessionId, !session.isPinned)),
+        void runSessionCommand(
+          ctx.machine,
+          pinSessionCommand(session.sessionId, !session.isPinned),
+          { optimisticChange: pinMutation(session.sessionId, !session.isPinned) },
+        ),
     });
     if (!browser) {
       items.push({
@@ -659,10 +888,19 @@ export default function SessionsScreen({ navigation }: Props) {
       ),
       onPress: () =>
         sleeping
-          ? void runSessionCommand(ctx.machine, wakeSessionCommand(session.sessionId, projectId))
-          : void runSessionCommand(ctx.machine, sleepSessionCommand(session.sessionId, projectId), {
-              closeWarmSessionId: session.sessionId,
-            }),
+          ? void runSessionCommand(
+              ctx.machine,
+              wakeSessionCommand(session.sessionId, projectId),
+              { optimisticChange: lifecycleMutation(session.sessionId, false) },
+            )
+          : void runSessionCommand(
+              ctx.machine,
+              sleepSessionCommand(session.sessionId, projectId),
+              {
+                closeWarmSessionId: session.sessionId,
+                optimisticChange: lifecycleMutation(session.sessionId, true),
+              },
+            ),
     });
 
     items.push({ kind: 'separator', key: 'sep-1' });
@@ -731,6 +969,7 @@ export default function SessionsScreen({ navigation }: Props) {
       kind: 'item',
       key: 'details',
       label: 'Details',
+      icon: <InfoGlyph size={14} color={menuIconColor} />,
       onPress: () => setOverlay({ kind: 'sessionDetails', ctx }),
     });
 
@@ -738,10 +977,10 @@ export default function SessionsScreen({ navigation }: Props) {
     items.push({
       kind: 'item',
       key: 'close',
-      label: 'Close',
+      label: 'Close Session',
       icon: <XGlyph size={14} color={dangerIconColor} />,
       destructive: true,
-      onPress: () => setOverlay({ kind: 'killConfirm', ctx }),
+      onPress: () => setOverlay({ kind: 'closeConfirm', ctx }),
     });
     return items;
   };
@@ -751,12 +990,15 @@ export default function SessionsScreen({ navigation }: Props) {
     const { session } = ctx.item;
     const current = session.sessionTag;
     const applyTag = (value: string): void =>
-      void runSessionCommand(ctx.machine, tagSessionCommand(session.sessionId, value));
+      void runSessionCommand(ctx.machine, tagSessionCommand(session.sessionId, value), {
+        optimisticChange: tagMutation(session.sessionId, value),
+      });
     const items: ContextMenuItem[] = [
       {
         kind: 'item',
         key: 'back',
-        label: '‹ Back',
+        label: 'Back',
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
         onPress: () => setOverlay({ kind: 'sessionMenu', ctx, anchor, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -799,8 +1041,19 @@ export default function SessionsScreen({ navigation }: Props) {
         for (const projectBlock of block.projects) orderedHeaders.push(projectBlock.header);
       }
     }
-    const index = orderedHeaders.findIndex((entry) => entry.projectKey === header.projectKey);
-    const canMove = header.projectId.length > 0;
+    const orderedProjectIds = orderedHeaders
+      .map((entry) => entry.projectId)
+      .filter((projectId) => projectId.length > 0);
+    const projectIndex = orderedProjectIds.indexOf(header.projectId);
+    const canMove = header.projectId.length > 0 && projectIndex >= 0;
+    const movedProjectOrder = (direction: 'up' | 'down'): string[] => {
+      const next = [...orderedProjectIds];
+      const destination = direction === 'up' ? projectIndex - 1 : projectIndex + 1;
+      if (projectIndex < 0 || destination < 0 || destination >= next.length) return next;
+      const [projectId] = next.splice(projectIndex, 1);
+      next.splice(destination, 0, projectId);
+      return next;
+    };
     const sessions = sessionsForProject(ctx.machine, header);
     const inactive = sessions.filter(isInactiveAwake);
     const sleeping = sessions.filter(isSleepingSession);
@@ -835,14 +1088,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Wake',
         icon: <PlayGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            sleeping.map((session) =>
-              wakeSessionCommand(
-                session.sessionId,
-                session.projectId.length > 0 ? session.projectId : undefined,
-              ),
-            ),
+            sleeping.map((session) => lifecycleSessionAction(session, false)),
           ),
       });
     } else {
@@ -852,20 +1100,11 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Sleep Inactive',
         icon: <SleepGlyph size={14} color={menuIconColor} />,
         disabled: inactive.length === 0,
-        onPress: () => {
-          for (const session of inactive) {
-            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
-          }
-          void runBulkSessionCommands(
+        onPress: () =>
+          void runBulkSessionActions(
             ctx.machine,
-            inactive.map((session) =>
-              sleepSessionCommand(
-                session.sessionId,
-                session.projectId.length > 0 ? session.projectId : undefined,
-              ),
-            ),
-          );
-        },
+            inactive.map((session) => lifecycleSessionAction(session, true)),
+          ),
       });
     }
     items.push({
@@ -875,9 +1114,9 @@ export default function SessionsScreen({ navigation }: Props) {
       icon: <RefreshGlyph size={14} color={menuIconColor} />,
       disabled: nonBrowser.length === 0,
       onPress: () =>
-        void runBulkSessionCommands(
+        void runBulkSessionActions(
           ctx.machine,
-          nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+          nonBrowser.map(reloadSessionAction),
         ),
     });
     items.push({ kind: 'separator', key: 'sep-2' });
@@ -894,22 +1133,11 @@ export default function SessionsScreen({ navigation }: Props) {
           title: 'Close inactive sessions?',
           body: `This stops ${inactive.length} inactive session(s) in ${header.title} on the connected machine.`,
           confirmLabel: 'Close',
-          run: () => {
-            for (const session of inactive) {
-              void useTerminalStore
-                .getState()
-                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
-            }
-            void runBulkSessionCommands(
+          run: () =>
+            void runBulkSessionActions(
               ctx.machine,
-              inactive.map((session) =>
-                killSessionCommand(
-                  session.sessionId,
-                  session.projectId.length > 0 ? session.projectId : undefined,
-                ),
-              ),
-            );
-          },
+              inactive.map(closeSessionAction),
+            ),
         }),
     });
     items.push({
@@ -933,16 +1161,37 @@ export default function SessionsScreen({ navigation }: Props) {
       kind: 'item',
       key: 'move-up',
       label: 'Move project up',
-      disabled: !canMove || index <= 0,
-      onPress: () => void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'up')),
+      icon: <ArrowGlyph size={14} color={menuIconColor} direction="up" />,
+      disabled: !canMove || projectIndex <= 0,
+      onPress: () =>
+        void runSessionCommand(
+          ctx.machine,
+          moveProjectCommand(header.projectId, 'up'),
+          {
+            optimisticChange: {
+              kind: 'projectOrder',
+              projectOrder: movedProjectOrder('up'),
+            },
+          },
+        ),
     });
     items.push({
       kind: 'item',
       key: 'move-down',
       label: 'Move project down',
-      disabled: !canMove || index < 0 || index >= orderedHeaders.length - 1,
+      icon: <ArrowGlyph size={14} color={menuIconColor} direction="down" />,
+      disabled: !canMove || projectIndex >= orderedProjectIds.length - 1,
       onPress: () =>
-        void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'down')),
+        void runSessionCommand(
+          ctx.machine,
+          moveProjectCommand(header.projectId, 'down'),
+          {
+            optimisticChange: {
+              kind: 'projectOrder',
+              projectOrder: movedProjectOrder('down'),
+            },
+          },
+        ),
     });
     items.push({
       kind: 'item',
@@ -958,6 +1207,7 @@ export default function SessionsScreen({ navigation }: Props) {
       kind: 'item',
       key: 'details',
       label: 'Details',
+      icon: <InfoGlyph size={14} color={menuIconColor} />,
       onPress: () => setOverlay({ kind: 'projectDetails', ctx }),
     });
     return items;
@@ -973,7 +1223,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {
         kind: 'item',
         key: 'back',
-        label: '‹ Back',
+        label: 'Back',
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
         onPress: () => setOverlay({ kind: 'projectMenu', ctx, anchor, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -1030,20 +1281,11 @@ export default function SessionsScreen({ navigation }: Props) {
         key: 'sleep',
         label: 'Sleep sessions',
         icon: <SleepGlyph size={14} color={menuIconColor} />,
-        onPress: () => {
-          for (const session of awake) {
-            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
-          }
-          void runBulkSessionCommands(
+        onPress: () =>
+          void runBulkSessionActions(
             ctx.machine,
-            awake.map((session) =>
-              sleepSessionCommand(
-                session.sessionId,
-                session.projectId.length > 0 ? session.projectId : undefined,
-              ),
-            ),
-          );
-        },
+            awake.map((session) => lifecycleSessionAction(session, true)),
+          ),
       });
     }
     if (sleeping.length > 0) {
@@ -1053,14 +1295,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Wake sessions',
         icon: <PlayGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            sleeping.map((session) =>
-              wakeSessionCommand(
-                session.sessionId,
-                session.projectId.length > 0 ? session.projectId : undefined,
-              ),
-            ),
+            sleeping.map((session) => lifecycleSessionAction(session, false)),
           ),
       });
     }
@@ -1071,9 +1308,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Pin sessions',
         icon: <PinGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            unpinned.map((session) => pinSessionCommand(session.sessionId, true)),
+            unpinned.map((session) => pinSessionAction(session, true)),
           ),
       });
     }
@@ -1084,9 +1321,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Unpin sessions',
         icon: <PinGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            pinned.map((session) => pinSessionCommand(session.sessionId, false)),
+            pinned.map((session) => pinSessionAction(session, false)),
           ),
       });
     }
@@ -1097,9 +1334,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Full reload sessions',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+            nonBrowser.map(reloadSessionAction),
           ),
       });
     }
@@ -1148,22 +1385,11 @@ export default function SessionsScreen({ navigation }: Props) {
           title: 'Close all sessions?',
           body: `This stops ${sessions.length} session(s) in ${ctx.header.title} on the connected machine.`,
           confirmLabel: 'Close',
-          run: () => {
-            for (const session of sessions) {
-              void useTerminalStore
-                .getState()
-                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
-            }
-            void runBulkSessionCommands(
+          run: () =>
+            void runBulkSessionActions(
               ctx.machine,
-              sessions.map((session) =>
-                killSessionCommand(
-                  session.sessionId,
-                  session.projectId.length > 0 ? session.projectId : undefined,
-                ),
-              ),
-            );
-          },
+              sessions.map(closeSessionAction),
+            ),
         }),
     });
     return items;
@@ -1177,7 +1403,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {
         kind: 'item',
         key: 'back',
-        label: '‹ Back',
+        label: 'Back',
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
         onPress: () => setOverlay({ kind: 'collectionMenu', ctx, anchor, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -1213,9 +1440,9 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Full reload',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          void runBulkSessionCommands(
+          void runBulkSessionActions(
             ctx.machine,
-            nonBrowser.map((session) => reloadSessionCommand(session.sessionId)),
+            nonBrowser.map(reloadSessionAction),
           ),
       });
     }
@@ -1231,24 +1458,9 @@ export default function SessionsScreen({ navigation }: Props) {
       disabled: sessions.length === 0,
       onPress: () => {
         const targets = allSleeping ? sleeping : sessions.filter((s) => !isSleepingSession(s));
-        if (!allSleeping) {
-          for (const session of targets) {
-            void useTerminalStore.getState().closeWarmSessionFor(ctx.machine.id, session.sessionId);
-          }
-        }
-        void runBulkSessionCommands(
+        void runBulkSessionActions(
           ctx.machine,
-          targets.map((session) =>
-            allSleeping
-              ? wakeSessionCommand(
-                  session.sessionId,
-                  session.projectId.length > 0 ? session.projectId : undefined,
-                )
-              : sleepSessionCommand(
-                  session.sessionId,
-                  session.projectId.length > 0 ? session.projectId : undefined,
-                ),
-          ),
+          targets.map((session) => lifecycleSessionAction(session, !allSleeping)),
         );
       },
     });
@@ -1266,22 +1478,11 @@ export default function SessionsScreen({ navigation }: Props) {
           title: 'Close group?',
           body: `This stops ${sessions.length} session(s) in ${ctx.item.title} on the connected machine.`,
           confirmLabel: 'Close Group',
-          run: () => {
-            for (const session of sessions) {
-              void useTerminalStore
-                .getState()
-                .closeWarmSessionFor(ctx.machine.id, session.sessionId);
-            }
-            void runBulkSessionCommands(
+          run: () =>
+            void runBulkSessionActions(
               ctx.machine,
-              sessions.map((session) =>
-                killSessionCommand(
-                  session.sessionId,
-                  session.projectId.length > 0 ? session.projectId : undefined,
-                ),
-              ),
-            );
-          },
+              sessions.map(closeSessionAction),
+            ),
         }),
     });
     return items;
@@ -1330,6 +1531,7 @@ export default function SessionsScreen({ navigation }: Props) {
         kind: 'item',
         key: 'collapse-all',
         label: 'Collapse All',
+        icon: <ChevronDownGlyph size={14} color={menuIconColor} rotated />,
         onPress: () => {
           setOverlay(NONE);
           collapse.collapseAllProjects(target.id);
@@ -1339,6 +1541,7 @@ export default function SessionsScreen({ navigation }: Props) {
         kind: 'item',
         key: 'expand-all',
         label: 'Expand All',
+        icon: <ChevronDownGlyph size={14} color={menuIconColor} />,
         onPress: () => {
           setOverlay(NONE);
           collapse.expandAllProjects(target.id, projectKeys, collectionIds);
@@ -1491,6 +1694,7 @@ export default function SessionsScreen({ navigation }: Props) {
     target: MachineRecord | null,
     machineId: string,
     child: DrawerItem,
+    expandedGroupSurface: string,
   ): ReactElement | null => {
     switch (child.type) {
       case 'PROJECT_EMPTY':
@@ -1510,12 +1714,17 @@ export default function SessionsScreen({ navigation }: Props) {
           />
         );
       case 'SESSION': {
-        const active = selectedSessionKey === attachSessionKey(machineId, child.session.sessionId);
+        const sessionKey = attachSessionKey(machineId, child.session.sessionId);
+        const active = selectedSessionKey === sessionKey;
         return (
           <SessionRow
             key={child.key}
             session={child.session}
             active={active}
+            surfaced={surfacedSessionKeys.includes(sessionKey)}
+            expandedGroupSurface={expandedGroupSurface}
+            sidebarBackground={sidebarAppearance.background}
+            sidebarForeground={sidebarAppearance.foreground}
             inCard
             onPress={() => {
               if (target !== null) void attach(target, child.session);
@@ -1553,6 +1762,7 @@ export default function SessionsScreen({ navigation }: Props) {
     machineId: string,
     card: ProjectCardBlock,
     inCollection: boolean,
+    expandedGroupSurface: string,
   ): ReactElement => {
     const header = card.header;
     const primaryAgent = resolvePrimaryAgent(header.agents);
@@ -1565,8 +1775,12 @@ export default function SessionsScreen({ navigation }: Props) {
         key={`card:${header.key}`}
         style={[
           styles.projectCard,
+          {
+            backgroundColor: sidebarAppearance.projectCard,
+            borderColor: sidebarAppearance.projectBorder,
+          },
           inCollection ? styles.projectCardInPanel : styles.projectCardTopLevel,
-          !header.collapsed ? styles.projectCardExpanded : null,
+          inCollection && !header.collapsed ? styles.projectCardExpanded : null,
         ]}
       >
         <ProjectHeaderRow
@@ -1620,7 +1834,9 @@ export default function SessionsScreen({ navigation }: Props) {
         />
         {!header.collapsed && card.children.length > 0 ? (
           <View style={styles.cardSessions}>
-            {card.children.map((child) => renderChildItem(target, machineId, child))}
+            {card.children.map((child) =>
+              renderChildItem(target, machineId, child, expandedGroupSurface),
+            )}
           </View>
         ) : null}
       </View>
@@ -1630,17 +1846,33 @@ export default function SessionsScreen({ navigation }: Props) {
   const renderBlock = ({ item: block }: { item: DrawerBlock }) => {
     const target = machineById(block.machineId);
     if (block.kind === 'project') {
-      return renderProjectCard(target, block.machineId, block.card, false);
+      return renderProjectCard(
+        target,
+        block.machineId,
+        block.card,
+        false,
+        neutralExpandedGroupSurface,
+      );
     }
     if (block.kind === 'collection') {
       const header = block.header;
+      const expandedGroupSurface = collectionPanelBackground(
+        header.color,
+        sidebarAppearance.background,
+      );
       return (
         <View
           style={[
             styles.collectionPanel,
             {
-              backgroundColor: collectionPanelBackground(header.color),
-              borderColor: collectionPanelBorder(header.color),
+              backgroundColor: header.collapsed
+                ? sidebarAppearance.projectCard
+                : expandedGroupSurface,
+              borderColor: collectionPanelBorder(
+                header.color,
+                sidebarAppearance.background,
+                sidebarAppearance.foreground,
+              ),
             },
           ]}
         >
@@ -1663,7 +1895,9 @@ export default function SessionsScreen({ navigation }: Props) {
           />
           {!header.collapsed && block.projects.length > 0 ? (
             <View style={styles.collectionProjects}>
-              {block.projects.map((card) => renderProjectCard(target, block.machineId, card, true))}
+              {block.projects.map((card) =>
+                renderProjectCard(target, block.machineId, card, true, expandedGroupSurface),
+              )}
             </View>
           ) : null}
         </View>
@@ -1716,12 +1950,16 @@ export default function SessionsScreen({ navigation }: Props) {
       case 'PROJECT_EMPTY':
         return <ProjectEmptyRow text={item.text} quick />;
       case 'SESSION': {
-        const active =
-          selectedSessionKey === attachSessionKey(block.machineId, item.session.sessionId);
+        const sessionKey = attachSessionKey(block.machineId, item.session.sessionId);
+        const active = selectedSessionKey === sessionKey;
         return (
           <SessionRow
             session={item.session}
             active={active}
+            surfaced={surfacedSessionKeys.includes(sessionKey)}
+            expandedGroupSurface={neutralExpandedGroupSurface}
+            sidebarBackground={sidebarAppearance.background}
+            sidebarForeground={sidebarAppearance.foreground}
             inCard={false}
             onPress={() => {
               if (target !== null) void attach(target, item.session);
@@ -1755,42 +1993,45 @@ export default function SessionsScreen({ navigation }: Props) {
   const refreshing = selectedInventory?.refreshing === true;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: sidebarAppearance.background }]}
+      edges={['top', 'bottom']}
+    >
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Ghostex</Text>
+        <Text style={[styles.title, { color: sidebarAppearance.foreground }]}>Ghostex</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh"
-          style={styles.headerButton}
+          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
           onPress={() => void fullReconnect()}
         >
           {refreshing ? (
-            <ActivityIndicator size="small" color={GhostexPalette.FOREGROUND} />
+            <ActivityIndicator size="small" color={sidebarAppearance.foreground} />
           ) : (
-            <RefreshGlyph size={22} color={GhostexPalette.FOREGROUND} />
+            <RefreshGlyph size={22} color={sidebarAppearance.foreground} />
           )}
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Machines"
-          style={styles.headerButton}
+          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
           onPress={() => navigation.navigate('Machines')}
         >
-          <MachinesGlyph size={22} color={GhostexPalette.FOREGROUND} />
+          <MachinesGlyph size={22} color={sidebarAppearance.foreground} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          style={styles.headerButton}
+          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
           onPress={() => navigation.navigate('Settings')}
         >
-          <SettingsGlyph size={22} color={GhostexPalette.FOREGROUND} />
+          <SettingsGlyph size={22} color={sidebarAppearance.foreground} />
         </Pressable>
         {Platform.OS === 'android' ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Quit Ghostex"
-            style={styles.headerButton}
+            style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
             onPress={() =>
               setOverlay({
                 kind: 'confirmAction',
@@ -1801,7 +2042,7 @@ export default function SessionsScreen({ navigation }: Props) {
               })
             }
           >
-            <ExitGlyph size={22} color={GhostexPalette.FOREGROUND} />
+            <ExitGlyph size={22} color={sidebarAppearance.foreground} />
           </Pressable>
         ) : null}
       </View>
@@ -1813,7 +2054,11 @@ export default function SessionsScreen({ navigation }: Props) {
           style={styles.statusPressable}
           onPress={() => setOverlay({ kind: 'logs' })}
         >
-          <Text style={styles.statusLine} numberOfLines={1} ellipsizeMode="tail">
+          <Text
+            style={[styles.statusLine, { color: sidebarAppearance.muted }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {statusLine}
           </Text>
         </Pressable>
@@ -1830,7 +2075,7 @@ export default function SessionsScreen({ navigation }: Props) {
               {
                 color: tailscaleConnected
                   ? GhostexPalette.STATUS_CONNECTED
-                  : GhostexPalette.STATUS_SLEEPING,
+                  : GhostexPalette.STATUS_ERROR,
               },
             ]}
           >
@@ -1841,10 +2086,12 @@ export default function SessionsScreen({ navigation }: Props) {
       {recentProjects.length > 0 && machine !== null ? (
         <Pressable
           accessibilityRole="button"
-          style={styles.recentButton}
+          style={[styles.recentButton, { backgroundColor: sidebarAppearance.cardActive }]}
           onPress={() => setOverlay({ kind: 'recentProjects', machine })}
         >
-          <Text style={styles.recentButtonLabel}>Recent Projects</Text>
+          <Text style={[styles.recentButtonLabel, { color: sidebarAppearance.foreground }]}>
+            Recent Projects
+          </Text>
         </Pressable>
       ) : null}
       <FlatList
@@ -1950,13 +2197,13 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
 
-      {overlay.kind === 'killConfirm' ? (
+      {overlay.kind === 'closeConfirm' ? (
         <ConfirmDialog
           visible
-          title="Kill remote session?"
-          body="This stops the selected Ghostex session on the connected machine."
+          title="Close session?"
+          body="This closes the selected Ghostex session on the connected machine."
           targetLine={`${overlay.ctx.item.session.alias} · ${sessionTitle(overlay.ctx.item.session)}`}
-          confirmLabel="Kill"
+          confirmLabel="Close Session"
           destructive
           onConfirm={() =>
             void runSessionCommand(
@@ -1967,7 +2214,10 @@ export default function SessionsScreen({ navigation }: Props) {
                   ? overlay.ctx.item.session.projectId
                   : undefined,
               ),
-              { closeWarmSessionId: overlay.ctx.item.session.sessionId },
+              {
+                closeWarmSessionId: overlay.ctx.item.session.sessionId,
+                optimisticChange: closeMutation(overlay.ctx.item.session.sessionId),
+              },
             )
           }
           onCancel={() => setOverlay(NONE)}
@@ -2261,7 +2511,7 @@ const styles = StyleSheet.create({
   projectCardTopLevel: {
     marginLeft: ds(3),
     marginRight: ds(5),
-    marginBottom: ds(5),
+    marginBottom: ds(10),
   },
   projectCardInPanel: {
     marginHorizontal: ds(3),
@@ -2281,7 +2531,7 @@ const styles = StyleSheet.create({
     borderRadius: ds(5),
     marginLeft: ds(3),
     marginRight: ds(5),
-    marginBottom: ds(8),
+    marginBottom: ds(10),
   },
   /** Panel member area (.project-collection-projects). */
   collectionProjects: {

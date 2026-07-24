@@ -41,32 +41,44 @@ export function ds(value: number): number {
   return Math.round(value * DRAWER_SCALE * 2) / 2;
 }
 
-/** Collection panel fill: mix(color 5%, mix(fg 4.5%, sidebar bg)). */
-export function collectionPanelBackground(color: string): string {
-  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 4.5);
-  if (color === 'transparent') return base;
-  return mixHexColors(color, base, 5);
+/** Neutral expanded-group fill: mix(sidebar bg 96%, black 4%). */
+export function expandedGroupBackground(sidebarBackground: string): string {
+  return mixHexColors(sidebarBackground, '#000000', 96);
+}
+
+/** Collection panel fill: mix(color 5%, neutral expanded-group fill). */
+export function collectionPanelBackground(
+  color: string,
+  sidebarBackground: string = SIDEBAR_BACKGROUND,
+): string {
+  const expandedBackground = expandedGroupBackground(sidebarBackground);
+  if (color === 'transparent') return expandedBackground;
+  return mixHexColors(color, expandedBackground, 5);
 }
 
 /**
  * Collection panel border: mix(color 28%, mix(fg 14%, sidebar bg)). The 14%
  * neutral base keeps a visible outline even for the transparent group color.
  */
-export function collectionPanelBorder(color: string): string {
-  const base = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 14);
+export function collectionPanelBorder(
+  color: string,
+  sidebarBackground: string = SIDEBAR_BACKGROUND,
+  sidebarForeground: string = SidebarPalette.FOREGROUND,
+): string {
+  const base = mixHexColors(sidebarForeground, sidebarBackground, 14);
   if (color === 'transparent') return base;
   return mixHexColors(color, base, 28);
 }
 
-/** Project card fill: mix(fg 6%, sidebar bg). */
-export const PROJECT_CARD_BACKGROUND = mixHexColors(
-  SidebarPalette.FOREGROUND,
-  SIDEBAR_BACKGROUND,
-  6,
-);
+/**
+ * Project card fill: foreground at 4.5% over the surface beneath it. Keeping
+ * this translucent matches CSS color-mix(..., transparent), including cards
+ * nested inside a collection panel.
+ */
+export const PROJECT_CARD_BACKGROUND = 'rgba(200,205,213,0.045)';
 
-/** Project card border: mix(fg 11%, sidebar bg). */
-export const PROJECT_CARD_BORDER = mixHexColors(SidebarPalette.FOREGROUND, SIDEBAR_BACKGROUND, 11);
+/** Project card border: foreground at 13%, matching the current gpui card. */
+export const PROJECT_CARD_BORDER = 'rgba(200,205,213,0.13)';
 
 /** Header/collection title color: mix(fg 92%, white 8%). */
 const TITLE_COLOR = mixHexColors(SidebarPalette.FOREGROUND, '#FFFFFF', 92);

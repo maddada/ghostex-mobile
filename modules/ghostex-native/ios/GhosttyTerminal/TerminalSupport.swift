@@ -43,7 +43,7 @@ struct TerminalRuntimeSettings {
     }
 
     var autoScroll = true
-    var cursorStyle: CursorStyle = .block
+    var cursorStyle: CursorStyle = .bar
     var cursorBlink = true
     var softKeyboardEnabled = true
     var openUrlsOnTap = true

@@ -10,6 +10,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import type { CursorStyle } from '../../modules/ghostex-native/src/GhostexNative.types';
+import {
+  clampSidebarContrast,
+  DEFAULT_SIDEBAR_BACKGROUND_CONTRAST,
+  DEFAULT_SIDEBAR_BACKGROUND_TINT,
+  normalizeSidebarTint,
+} from '../theme/sidebarAppearance';
 
 const SETTINGS_STORAGE_KEY = 'settings.v1';
 
@@ -27,6 +33,7 @@ export type GhostexSettings = {
   doneNotificationSound: boolean;
   hideKeyboardOnStartup: boolean;
   openUrlsOnTap: boolean;
+  confirmTabClose: boolean;
   /** Haptic tick on key-bar presses + lock-in buzz on held modifiers. */
   keyBarHapticsEnabled: boolean;
   /** Terminal font size in pt (iOS) / sp (Android). Range 4-32. */
@@ -36,6 +43,10 @@ export type GhostexSettings = {
   cursorStyle: CursorStyle;
   cursorBlink: boolean;
   bellBehavior: BellBehavior;
+  /** GPUI-parity constrained sidebar background contrast (85-100). */
+  sidebarBackgroundContrast: number;
+  /** GPUI-parity sidebar background tint as a normalized #rrggbb value. */
+  sidebarBackgroundTint: string;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -64,18 +75,21 @@ export function defaultSettings(): GhostexSettings {
     extraKeysToolbarVisible: true,
     softKeyboardEnabled: true,
     keepScreenOn: false,
-    refreshButtonVisible: true,
+    refreshButtonVisible: false,
     fileUploadButtonVisible: true,
-    keyboardButtonVisible: true,
+    keyboardButtonVisible: false,
     doneNotificationSound: true,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
+    confirmTabClose: false,
     keyBarHapticsEnabled: true,
     fontSize: defaultFontSize(),
     scrollbackRows: 10_000,
-    cursorStyle: 'block',
+    cursorStyle: 'bar',
     cursorBlink: true,
     bellBehavior: 'vibrate',
+    sidebarBackgroundContrast: DEFAULT_SIDEBAR_BACKGROUND_CONTRAST,
+    sidebarBackgroundTint: DEFAULT_SIDEBAR_BACKGROUND_TINT,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -113,6 +127,14 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     typeof record.keepAliveIntervalSec === 'number' && Number.isFinite(record.keepAliveIntervalSec)
       ? clampKeepAliveInterval(record.keepAliveIntervalSec)
       : defaults.keepAliveIntervalSec;
+  const sidebarBackgroundContrast =
+    typeof record.sidebarBackgroundContrast === 'number'
+      ? clampSidebarContrast(record.sidebarBackgroundContrast)
+      : defaults.sidebarBackgroundContrast;
+  const sidebarBackgroundTint =
+    typeof record.sidebarBackgroundTint === 'string'
+      ? normalizeSidebarTint(record.sidebarBackgroundTint)
+      : defaults.sidebarBackgroundTint;
   return {
     autoScroll: bool('autoScroll', defaults.autoScroll),
     extraKeysToolbarVisible: bool('extraKeysToolbarVisible', defaults.extraKeysToolbarVisible),
@@ -124,12 +146,15 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     doneNotificationSound: bool('doneNotificationSound', defaults.doneNotificationSound),
     hideKeyboardOnStartup: bool('hideKeyboardOnStartup', defaults.hideKeyboardOnStartup),
     openUrlsOnTap: bool('openUrlsOnTap', defaults.openUrlsOnTap),
+    confirmTabClose: bool('confirmTabClose', defaults.confirmTabClose),
     keyBarHapticsEnabled: bool('keyBarHapticsEnabled', defaults.keyBarHapticsEnabled),
     fontSize,
     scrollbackRows,
     cursorStyle,
     cursorBlink: bool('cursorBlink', defaults.cursorBlink),
     bellBehavior,
+    sidebarBackgroundContrast,
+    sidebarBackgroundTint,
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

@@ -875,7 +875,7 @@ function parseWorkspaceGroups(value: unknown): GhostexWorkspaceGroups | null {
  * shape into an ordered array (order first, then leftover collection ids),
  * mirroring the desktop's parseSidebarProjectCollectionsFromGxserver.
  */
-function parseProjectCollections(value: unknown): GhostexProjectCollection[] {
+export function parseProjectCollections(value: unknown): GhostexProjectCollection[] {
   if (!isObject(value) || !isObject(value.collections)) return [];
   const byId = value.collections as JsonObject;
   const orderedIds: string[] = [];

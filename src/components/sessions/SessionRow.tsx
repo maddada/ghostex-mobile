@@ -26,10 +26,13 @@ import {
   type GhostexSession,
 } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
-import { SidebarPalette } from '../../theme/palette';
+import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
 import { ClockGlyph, PinGlyph } from './icons';
+
+const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
+const INACTIVE_SURFACED_DARKEN_PERCENT = 30;
 
 /**
  * Desktop timer-label precedence (session-card-content.tsx
@@ -99,6 +102,14 @@ export type SessionRowProps = {
   session: GhostexSession;
   /** Warm-attached session key matches the current terminal. */
   active: boolean;
+  /** A warm native terminal surface exists for this session. */
+  surfaced: boolean;
+  /** Exact expanded-group surface behind this row, including collection tint. */
+  expandedGroupSurface: string;
+  /** Current tint/contrast-resolved sidebar backing. */
+  sidebarBackground: string;
+  /** Current tint/contrast-resolved sidebar foreground. */
+  sidebarForeground: string;
   /** True for rows inside a project card (tighter insets than Quick rows). */
   inCard: boolean;
   onPress: () => void;
@@ -106,7 +117,17 @@ export type SessionRowProps = {
   onMenu: (anchor: MenuAnchor) => void;
 };
 
-export default function SessionRow({ session, active, inCard, onPress, onMenu }: SessionRowProps) {
+export default function SessionRow({
+  session,
+  active,
+  surfaced,
+  expandedGroupSurface,
+  sidebarBackground,
+  sidebarForeground,
+  inCard,
+  onPress,
+  onMenu,
+}: SessionRowProps) {
   const rowRef = useRef<View | null>(null);
   const iconId = resolveAgentIconId(
     session.agentIcon,
@@ -133,6 +154,11 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
         ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
         : null;
   const iconLeft = inCard ? ds(5) : ds(26);
+  const lightSurfacedBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
+  const surfacedBackground = active
+    ? mixHexColors('#000000', lightSurfacedBackground, ACTIVE_SURFACED_DARKEN_PERCENT)
+    : mixHexColors('#000000', lightSurfacedBackground, INACTIVE_SURFACED_DARKEN_PERCENT);
+  const pressedBackground = mixHexColors(sidebarBackground, '#000000', 90);
 
   const openMenuFromRow = (): void => {
     const node = rowRef.current;
@@ -147,7 +173,8 @@ export default function SessionRow({ session, active, inCard, onPress, onMenu }:
       style={({ pressed }) => [
         styles.row,
         inCard ? styles.rowCard : styles.rowQuick,
-        active ? styles.rowActive : pressed ? styles.rowPressed : null,
+        surfaced ? { backgroundColor: surfacedBackground } : null,
+        !surfaced && pressed ? { backgroundColor: pressedBackground } : null,
       ]}
       onPress={onPress}
       onLongPress={openMenuFromRow}
@@ -206,12 +233,6 @@ const styles = StyleSheet.create({
   },
   rowQuick: {
     paddingLeft: ds(47),
-  },
-  rowActive: {
-    backgroundColor: 'rgba(200,205,213,0.10)',
-  },
-  rowPressed: {
-    backgroundColor: 'rgba(200,205,213,0.06)',
   },
   pin: {
     position: 'absolute',

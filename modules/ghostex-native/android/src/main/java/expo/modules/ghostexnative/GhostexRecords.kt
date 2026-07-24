@@ -34,7 +34,7 @@ class OpenTerminalOptionsRecord : Record {
  */
 class TerminalRuntimeSettingsRecord : Record {
   @Field var autoScroll: Boolean = true
-  @Field var cursorStyle: String = "block"
+  @Field var cursorStyle: String = "bar"
   @Field var cursorBlink: Boolean = false
   @Field var softKeyboardEnabled: Boolean = true
   @Field var openUrlsOnTap: Boolean = false

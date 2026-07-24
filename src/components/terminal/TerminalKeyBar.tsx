@@ -91,15 +91,12 @@ export type TerminalKeyBarProps = {
   sessionKey: string;
   /** Resolved agent icon id of the shown session ('' / 'terminal' when none). */
   agentId: string;
-  /** settings.keyboardButtonVisible: shows the trailing dismiss control. */
-  showDismissButton: boolean;
   onDismissKeyboard: () => void;
 };
 
 export default function TerminalKeyBar({
   sessionKey,
   agentId,
-  showDismissButton,
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
   const layout = useExtraKeysStore((state) => state.layout);
@@ -471,16 +468,14 @@ export default function TerminalKeyBar({
               )}
             </Pressable>
           ) : (
-            showDismissButton && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss keyboard"
-                style={styles.trailingButton}
-                onPress={onDismissKeyboard}
-              >
-                <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
-              </Pressable>
-            )
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss keyboard"
+              style={styles.trailingButton}
+              onPress={onDismissKeyboard}
+            >
+              <KeyboardDismissIcon size={16} color={GhostexPalette.FOREGROUND} />
+            </Pressable>
           )}
           </View>
         </View>

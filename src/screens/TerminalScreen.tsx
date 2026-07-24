@@ -11,8 +11,8 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { Alert, BackHandler, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,11 +142,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // No tabs left (last one closed) → leave the terminal screen.
-  useEffect(() => {
-    if (tabs.length === 0 && navigation.canGoBack()) navigation.goBack();
-  }, [tabs.length, navigation]);
-
   // Optimistic key-bar visibility from onSingleTap until keyboard events land.
   useEffect(() => {
     if (!tapKeyboardHint) return;
@@ -209,6 +204,29 @@ export default function TerminalScreen({ navigation, route }: Props) {
     Keyboard.dismiss();
   }, []);
 
+  const showSessions = useCallback((): void => {
+    dismissKeyboard();
+    navigation.popTo('Sessions');
+  }, [dismissKeyboard, navigation]);
+
+  // Android Back always switches to Sessions and is never allowed to fall
+  // through to the system app-exit behavior.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return undefined;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        showSessions();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [showSessions]),
+  );
+
+  // No tabs left (last one closed) → leave the terminal screen.
+  useEffect(() => {
+    if (tabs.length === 0) showSessions();
+  }, [tabs.length, showSessions]);
+
   const showKeyboard = useCallback((): void => {
     const sessionKey = useTerminalStore.getState().selectedSessionKey;
     if (sessionKey === null) return;
@@ -216,24 +234,23 @@ export default function TerminalScreen({ navigation, route }: Props) {
     void GhostexNative.focusTerminal(sessionKey).catch(() => setTapKeyboardHint(false));
   }, []);
 
-  const handleBack = useCallback((): void => {
-    dismissKeyboard();
-    if (navigation.canGoBack()) navigation.goBack();
-  }, [dismissKeyboard, navigation]);
-
   /** Re-run the open flow for a failed/closed tab (Retry / Reconnect). */
   const reopenTab = useCallback(async (tab: TerminalTab): Promise<void> => {
     await useTerminalStore.getState().reopenTab(tab.sessionKey);
   }, []);
 
-  const confirmCloseTab = useCallback(
+  const requestCloseTab = useCallback(
     (tab: TerminalTab): void => {
+      if (!settings.confirmTabClose) {
+        void closeTab(tab.sessionKey);
+        return;
+      }
       Alert.alert('Close Tab?', `This will disconnect "${tab.title}".`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Close', style: 'destructive', onPress: () => void closeTab(tab.sessionKey) },
       ]);
     },
-    [closeTab],
+    [closeTab, settings.confirmTabClose],
   );
 
   const handleSelectTab = useCallback(
@@ -313,7 +330,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       destructive: true,
       disabled: activeTab === null,
       onPress: () => {
-        if (activeTab !== null) confirmCloseTab(activeTab);
+        if (activeTab !== null) requestCloseTab(activeTab);
       },
     },
   ];
@@ -334,7 +351,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           accessibilityLabel="Back"
           hitSlop={8}
           style={styles.headerButton}
-          onPress={handleBack}
+          onPress={showSessions}
         >
           <ChevronLeftIcon size={22} color={GhostexPalette.FOREGROUND} />
         </Pressable>
@@ -344,7 +361,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           onSelect={handleSelectTab}
           onClose={(sessionKey) => {
             const tab = tabs.find((entry) => entry.sessionKey === sessionKey);
-            if (tab !== undefined) confirmCloseTab(tab);
+            if (tab !== undefined) requestCloseTab(tab);
           }}
         />
         <Pressable
@@ -412,7 +429,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
             agentId={activeAgentId}
-            showDismissButton={settings.keyboardButtonVisible}
             onDismissKeyboard={dismissKeyboard}
           />
         </View>
