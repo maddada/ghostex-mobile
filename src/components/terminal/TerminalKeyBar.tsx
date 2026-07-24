@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
@@ -66,19 +66,27 @@ function retainLockedModifiers(state: ModifierState): ModifierState {
   };
 }
 
-/** Light tick on every key-bar press (settings.keyBarHapticsEnabled). */
+/** Short platform-native tick on every key-bar press (settings.keyBarHapticsEnabled). */
 function clickHaptic(): void {
   if (!useSettingsStore.getState().settings.keyBarHapticsEnabled) return;
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  const feedback =
+    Platform.OS === 'android'
+      ? Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Tap)
+      : Haptics.selectionAsync();
+  void feedback.catch(() => {});
 }
 
 /**
- * Distinct second buzz when a held modifier locks into its persistent state,
+ * Distinct, crisp second click when a held modifier locks into its persistent state,
  * so the user can feel Ctrl/Alt/Shift arming without watching the pill color.
  */
 function lockHaptic(): void {
   if (!useSettingsStore.getState().settings.keyBarHapticsEnabled) return;
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  const feedback =
+    Platform.OS === 'android'
+      ? Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Context_Click)
+      : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+  void feedback.catch(() => {});
 }
 
 /** Rendered key model: the user-editable layout from the extra-keys store. */
