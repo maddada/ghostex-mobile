@@ -61,7 +61,7 @@ ZStack: bg color → terminal surface (hit-testing only when connected) → stat
 Centered VStack(24): `terminal` icon 56 secondary; server name title2 semibold; "No terminals open" body secondary; button "New Terminal" (plus + text, pad H24/V12, tint bg, radius 10, white text).
 
 ### Alerts
-- "Close Tab?" → destructive "Close" / "Cancel"; message: `This will disconnect "<title>".`
+- Closing a tab disconnects immediately by default. When "Confirm before closing tabs" is enabled, show "Close Tab?" → destructive "Close" / "Cancel"; message: `This will disconnect "<title>".`
 - "Replace Trusted Host?" → "Cancel" / "Replace and Reconnect" (destructive); message includes host:port.
 - "Upload Failed" → "OK".
 
@@ -84,7 +84,7 @@ Real `inputAccessoryView` riding above the software keyboard. Hidden when: hardw
 
 ### Text editor page
 - The trailing text-editor button swaps the key grid for a focused multiline composer using the full text keyboard, including emoji, clipboard, composition, and suggestion affordances.
-- While the editor is open, the dismiss-keyboard button becomes Send. Send writes the entire buffer to the selected terminal and clears it; sending an empty buffer sends the terminal Enter key.
+- While the editor is open, the dismiss-keyboard button becomes the editor action. A non-empty buffer shows an up-arrow and inserts the entire buffer into the selected terminal before clearing it. An empty buffer shows the Send glyph and sends the terminal Enter key.
 - Return in the software keyboard inserts a newline into the draft instead of sending it.
 - Backspace or Delete on an empty draft is forwarded to the terminal, including repeated events while the key is held.
 - Switching back to the key grid restores terminal keyboard focus.

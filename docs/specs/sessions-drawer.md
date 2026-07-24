@@ -27,9 +27,10 @@ Width 336dp (RN: use as drawer width on tablets/side panel; can be full-screen p
 
 ### Sessions page
 1. Header row: Android Exit (48×48 icon btn, bg #262626) | Title "Ghostex" (18sp bold, weight 1) | Refresh | Machines | Settings — 8dp gaps. Refresh = full reconnect. Android Exit = quit app; iOS omits it because iOS apps do not expose a quit action.
-2. Status line: 12sp muted, marginTop 4. Initial: "Connect to a ZMX machine".
+2. Status row: 12sp muted, marginTop 4. Initial: "Connect to a ZMX machine". The tappable Tailscale indicator is green while connected and red while disconnected.
 3. "Recent Projects" button: full width, 44dp, marginTop 8, bg #262626 — hidden unless recentProjects non-empty.
-4. Session list: flat list, 8dp transparent gaps between cards, marginTop 12.
+4. Session list: flat list, 10dp transparent gaps between top-level project
+   cards and collection panels, marginTop 12.
 
 On Android, Back from a terminal shows Sessions and Back from Sessions returns to the selected warm terminal. Back is consumed when no terminal is open, so the explicit top-left Exit control is the only app-exit path.
 
@@ -37,7 +38,7 @@ On Android, Back from a terminal shows Sessions and Back from Sessions returns t
 Header "Machines" + "Sessions" back button. Status line. Machine cards list. Footer rows: [Retry (accent #7DD3FC/#181818 text) | Add] and [Tailscale | Setup].
 
 ### Settings page
-Header "Settings" + back. Status "Edit terminal behavior and remote-session alerts." Toggles: Auto scroll, Extra keys toolbar, Soft keyboard, Keep screen on, Show refresh/upload/keyboard button, Attention notification sound, Fullscreen, Hide keyboard on startup, Open URLs on tap, Disable session change toasts; font size. (v1: implement subset backed by settings store with Android defaults: autoScroll=true, sound=true, buttons visible=true, hideKeyboardOnStartup=true.)
+Header "Settings" + back. Status "Edit terminal behavior and remote-session alerts." Theming starts with GPUI-parity Background Contrast (85–100, default 90) and Background Tint: the same calibrated preset swatches plus a custom `#RRGGBB` field. These settings recolor the drawer backing and its derived group, project, border, header-button, and session surfaces while leaving menus and Settings surfaces untinted. Toggles: Auto scroll, Extra keys toolbar, Soft keyboard, Keep screen on, Show refresh/upload/keyboard button, Attention notification sound, Fullscreen, Hide keyboard on startup, Open URLs on tap, Confirm before closing tabs, Disable session change toasts; font size. Tab-close confirmation defaults to off. The file-upload floating button defaults on; the refresh and keyboard floating buttons default off.
 
 ## 2. Row types
 
@@ -64,10 +65,17 @@ Title = displayTitle or "Ghostex Session"; subtitle "Session {alias} · {display
 3. Rename — "Update this session title in Ghostex." → prompt: title "Rename session", body "This updates the session title in Ghostex on the connected Mac.", input hint "Session title" (prefill raw title), Cancel/Rename; empty → "Enter a session title."
 4. Wake — "Resume this persistent Ghostex session on the Mac."
 5. Sleep — "Leave the session persistent but idle on the Mac."
-6. Kill (destructive) — "Stop this remote session on the Mac." → confirm: "Kill remote session?" / "This stops the selected Ghostex session on the connected machine." / target "{alias} · {title}" / "Kill".
+6. Close Session (destructive) — confirm: "Close session?" / "This closes the selected Ghostex session on the connected machine." / target "{alias} · {title}" / "Close Session". The row is removed optimistically and restored if the remote close fails.
 7. Copy attach command — "Copy the SSH command for this session." (toast "Attach command copied")
 8. Refresh sessions — "Reload the ZMX session list from the Mac."
 9. Details — Machine, Project, Project path, Status, Focused on Mac, Last active, Provider "zmx", ZMX session, Agent, Session id ("-" for blanks). Subtitle "Remote session metadata from the Ghostex CLI."
+
+Session rename, pin/tag changes, sleep/wake, project ordering, project-group
+membership/title/color/deletion, and single or bulk session closes update the
+drawer optimistically. Pending changes are rebased over inventory polling,
+serialized per affected resource, and rolled back individually on command
+failure. A successful command remains optimistic only while the server
+inventory converges; repeated authoritative disagreement restores server truth.
 
 ### Recency: <60s "{n}s ago" (min 1); <60m "{n}m ago"; <48h "{n}h ago"; else "{n}d ago"; unknown → "Unknown" (details only; rows are title-only single line).
 
@@ -154,13 +162,16 @@ and recloned every surface from the live CSS cascade.
 
 - **Structure**: "Quick" section label → chat sessions as bare rows → 
   "Projects" section label → colored collection PANELS (tinted bg mix(color
-  5%, mix(fg 4.5%, #0e0e0e)), border mix(color 28%, mix(fg 14%, bg)), radius
+  5%, mix(bg 96%, black 4%)), border mix(color 28%, mix(fg 14%, bg)), radius
   5; the fg-14% base keeps a visible outline for the transparent color)
-  containing member project CARDS → ungrouped project cards (bg mix(fg 6%,
-  bg), 1dp border mix(fg 11%, bg), radius 5). No colored left rail, no
-  uppercase titles, no folder icons. Section labels are 15.5dp weight-300 at
-  fg-52% with a filled caret; both sections persist collapse per machine
-  (`collapsedSections` in `drawer.disclosure.v2`, default expanded).
+  containing member project CARDS → ungrouped project cards (translucent bg
+  fg-4.5%, 1dp translucent border fg-13%, radius 5). This is the current gpui
+  hierarchy: darker group panels with lighter project cards. No colored left
+  rail, no uppercase titles, no folder icons. Section labels are 15.5dp
+  weight-300 at fg-52% with a filled caret; both sections persist collapse per
+  machine (`collapsedSections` in `drawer.disclosure.v2`, default expanded).
+  Top-level groups and projects always have a 10dp gap. Collapsed groups use
+  the same translucent fg-4.5% background as collapsed ungrouped projects.
 - **Headers**: collection + project headers are flat 30dp rows with 13dp
   weight-300 titles (mix(fg 92%, white 8%)). Collapsed headers show the count
   pills (working #F8AD07 dot+count, attention #95D7F6 dot+count, awake
@@ -172,15 +183,25 @@ and recloned every surface from the live CSS cascade.
   right-click equivalent).
 - **Menus** (`ContextMenu`, cloned from `.session-context-menu`): 220dp dark
   popup (#222222, 1dp border, radius 0, 6dp padding, 2dp row gap) anchored
-  under the pressed button. The agent menu lists `summary.agents` with
-  brand-tinted icons and a check on the selected primary agent; selecting
+  under the pressed button when it fits and above it near the bottom edge.
+  Its maximum height is always the full safe viewport rather than the space
+  remaining below the anchor, so long menus do not collapse into a short
+  strip. Every actionable row has a 14dp leading glyph or semantic color
+  swatch; the shared item type requires this, including Back, Details,
+  ordering, and expand/collapse rows. The agent menu lists `summary.agents`
+  with brand-tinted icons and a check on the selected primary agent; selecting
   launches the agent AND persists it globally (`drawer.launcher.v1`,
   mirroring the desktop's ghostex-sidebar-project-terminal-launcher). The
-  actions menu lists the project's quick actions with a check on the
-  last-run action (persisted per machine+project). The old
-  PROJECT_AGENTS_ROW chip row is gone.
+  actions menu lists the project's quick actions with a check on the last-run
+  action (persisted per machine+project). The old PROJECT_AGENTS_ROW chip row
+  is gone.
 - **Session rows**: 34dp flat rows, radius 4 fills, title 15.5dp weight-300
   #B4B8C0 (active #D8D8D8; sleeping dims ONLY the title to #5F646B at 0.42),
+  with the gpui surface chain driven by warm terminal state: unsurfaced rows
+  are transparent until pressed (90% resolved sidebar background / 10% black);
+  surfaced rows start with 30% foreground over their expanded-group background
+  (including collection tint); active rows mix that base 10% toward black,
+  while surfaced-but-inactive rows mix the same base 30% toward black,
   leading icon absolute at 5dp (in-card) / 26dp (Quick) with 48% opacity
   (80% active; 13dp agent masks, 15dp terminal/browser glyphs), relative
   time 13.5dp #4F5359 right-aligned (hidden while working/attention), and a

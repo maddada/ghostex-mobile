@@ -126,7 +126,7 @@ Same as both existing apps — JSON over SSH, no gxserver wire protocol:
 
 ## Defaults (from the Android app)
 
-autoScroll=true · doneNotificationSound=true · refreshButton/fileUploadButton/keyboardButton visible=true · hideKeyboardOnStartup=true · terminal dark-only theme, background `#000000` fallback ("Aizen Dark" port later).
+autoScroll=true · doneNotificationSound=true · refreshButton=false · fileUploadButton=true · keyboardButton=false · hideKeyboardOnStartup=true · terminal dark-only theme, background `#000000` fallback ("Aizen Dark" port later).
 
 ## Licensing
 

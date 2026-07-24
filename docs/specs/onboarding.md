@@ -103,4 +103,4 @@ Sheet "Discover Local Devices": Bonjour + port-22 scan; sections "Nearby SSH Hos
 - `hasSeenWelcome`: boolean.
 - Machines list: persisted store (id, name, host, port, username, transport, authMethod, notes, createdAt).
 - Credentials: secure storage, per machine id: password / privateKey / passphrase / publicKey.
-- Defaults from Android app: autoScroll=true, doneNotificationSound=true, refreshButton/fileUploadButton/keyboardButton visible=true, hideKeyboardOnStartup=true.
+- Defaults: autoScroll=true, doneNotificationSound=true, only the file-upload floating button visible, hideKeyboardOnStartup=true.
