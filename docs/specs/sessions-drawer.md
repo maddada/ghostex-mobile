@@ -201,7 +201,7 @@ and recloned every surface from the live CSS cascade.
   are transparent until pressed (90% resolved sidebar background / 10% black);
   surfaced rows start with 30% foreground over their expanded-group background
   (including collection tint); active rows mix that base 10% toward black,
-  while surfaced-but-inactive rows mix the same base 30% toward black,
+  while surfaced-but-inactive rows mix the same base 40% toward black,
   leading icon absolute at 5dp (in-card) / 26dp (Quick) with 48% opacity
   (80% active; 13dp agent masks, 15dp terminal/browser glyphs), relative
   time 13.5dp #4F5359 right-aligned (hidden while working/attention), and a

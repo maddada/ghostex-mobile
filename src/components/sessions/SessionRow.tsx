@@ -32,7 +32,7 @@ import { ds } from './rows';
 import { ClockGlyph, PinGlyph } from './icons';
 
 const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
-const INACTIVE_SURFACED_DARKEN_PERCENT = 30;
+const INACTIVE_SURFACED_DARKEN_PERCENT = 40;
 
 /**
  * Desktop timer-label precedence (session-card-content.tsx
