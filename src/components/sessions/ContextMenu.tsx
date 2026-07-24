@@ -1,12 +1,12 @@
 /**
  * Desktop sidebar context-menu clone (sidebar/styles/session-overlays.css
- * .session-context-menu): a 220dp dark popup that prefers 6dp below its
- * anchor, flips above near the bottom edge, and uses the full safe viewport
- * before scrolling. Items are icon + label + optional trailing check, with
- * hover-gray press feedback, 1dp dividers, and danger tinting.
+ * .session-context-menu): a 220dp dark popup aligned horizontally to its
+ * anchor and always filling the safe viewport vertically. Items are icon +
+ * label + optional trailing check, with hover-gray press feedback, 1dp
+ * dividers, and danger tinting.
  */
 
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import {
   Modal,
   Pressable,
@@ -62,7 +62,6 @@ export type ContextMenuProps = {
 
 const MENU_WIDTH = 220;
 const EDGE_MARGIN = 12;
-const ANCHOR_GAP = 6;
 
 /** Filled 14dp check glyph (desktop IconCheck) drawn with two rotated bars. */
 function CheckGlyph({ color }: { color: string }) {
@@ -99,8 +98,6 @@ const checkStyles = StyleSheet.create({
 export default function ContextMenu({ visible, anchor, items, onClose }: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
-  const contentKey = items.map((item) => `${item.kind}:${item.key}`).join('|');
-  const [measurement, setMeasurement] = useState({ contentKey: '', height: 0 });
   if (!visible || anchor === null) return null;
 
   const horizontalStart = Math.max(EDGE_MARGIN, safeArea.left);
@@ -112,44 +109,23 @@ export default function ContextMenu({ visible, anchor, items, onClose }: Context
   );
   const verticalStart = Math.max(EDGE_MARGIN, safeArea.top);
   const verticalEnd = screenHeight - Math.max(EDGE_MARGIN, safeArea.bottom);
-  const maxHeight = Math.max(1, verticalEnd - verticalStart);
-  const menuHeight =
-    measurement.contentKey === contentKey ? Math.min(measurement.height, maxHeight) : 0;
-  const belowTop = anchor.y + anchor.height + ANCHOR_GAP;
-  const aboveTop = anchor.y - ANCHOR_GAP - menuHeight;
-  const top =
-    menuHeight === 0
-      ? verticalStart
-      : belowTop + menuHeight <= verticalEnd
-        ? belowTop
-        : aboveTop >= verticalStart
-          ? aboveTop
-          : Math.max(verticalStart, Math.min(belowTop, verticalEnd - menuHeight));
+  const menuHeight = Math.max(1, verticalEnd - verticalStart);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <View
-          onLayout={({ nativeEvent }) => {
-            const nextHeight = Math.min(nativeEvent.layout.height, maxHeight);
-            setMeasurement((current) =>
-              current.contentKey === contentKey && Math.abs(current.height - nextHeight) < 0.5
-                ? current
-                : { contentKey, height: nextHeight },
-            );
-          }}
           style={[
             styles.menu,
             {
               left,
-              top,
+              top: verticalStart,
               width: menuWidth,
-              maxHeight,
-              opacity: menuHeight > 0 ? 1 : 0,
+              height: menuHeight,
             },
           ]}
         >
-          <ScrollView contentContainerStyle={styles.menuContent}>
+          <ScrollView style={styles.menuScroll} contentContainerStyle={styles.menuContent}>
             {items.map((item) => {
               if (item.kind === 'separator') return <View key={item.key} style={styles.separator} />;
               if (item.kind === 'label') {
@@ -229,6 +205,9 @@ const styles = StyleSheet.create({
   menuContent: {
     padding: 6,
     gap: 2,
+  },
+  menuScroll: {
+    flex: 1,
   },
   item: {
     flexDirection: 'row',

@@ -182,13 +182,13 @@ and recloned every surface from the live CSS cascade.
   agent icon + ▾). Long-press on the header opens the project menu (desktop
   right-click equivalent).
 - **Menus** (`ContextMenu`, cloned from `.session-context-menu`): 220dp dark
-  popup (#222222, 1dp border, radius 0, 6dp padding, 2dp row gap) anchored
-  under the pressed button when it fits and above it near the bottom edge.
-  Its maximum height is always the full safe viewport rather than the space
-  remaining below the anchor, so long menus do not collapse into a short
-  strip. Every actionable row has a 14dp leading glyph or semantic color
-  swatch; the shared item type requires this, including Back, Details,
-  ordering, and expand/collapse rows. The agent menu lists `summary.agents`
+  popup (#222222, 1dp border, radius 0, 6dp padding, 2dp row gap) aligned
+  horizontally to the pressed row and fixed to the full safe viewport height.
+  Its vertical frame never depends on space remaining below the anchor, so
+  menus opened near the bottom cannot collapse into a short strip. Every
+  actionable row has a 14dp leading glyph or semantic color swatch; the shared
+  item type requires this, including Back, Details, ordering, and
+  expand/collapse rows. The agent menu lists `summary.agents`
   with brand-tinted icons and a check on the selected primary agent; selecting
   launches the agent AND persists it globally (`drawer.launcher.v1`,
   mirroring the desktop's ghostex-sidebar-project-terminal-launcher). The
