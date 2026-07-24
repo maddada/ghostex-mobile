@@ -11,8 +11,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
+import { useSettingsStore } from '../../settings/store';
 import {
   resolveExtraKeysLayout,
   useExtraKeysStore,
@@ -62,6 +64,21 @@ function retainLockedModifiers(state: ModifierState): ModifierState {
     alt: state.alt === 'locked' ? 'locked' : 'off',
     shift: state.shift === 'locked' ? 'locked' : 'off',
   };
+}
+
+/** Light tick on every key-bar press (settings.keyBarHapticsEnabled). */
+function clickHaptic(): void {
+  if (!useSettingsStore.getState().settings.keyBarHapticsEnabled) return;
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+}
+
+/**
+ * Distinct second buzz when a held modifier locks into its persistent state,
+ * so the user can feel Ctrl/Alt/Shift arming without watching the pill color.
+ */
+function lockHaptic(): void {
+  if (!useSettingsStore.getState().settings.keyBarHapticsEnabled) return;
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 }
 
 /** Rendered key model: the user-editable layout from the extra-keys store. */
@@ -163,6 +180,7 @@ export default function TerminalKeyBar({
 
   /** Apply every active modifier, send once, retain only long-press locks. */
   const sendItemKeyOnce = (item: Extract<KeyBarItem, { kind: 'key' }>): KeyModifiers => {
+    clickHaptic();
     const mods: KeyModifiers = {
       ctrl: item.mods?.ctrl === true || modifiers.ctrl !== 'off',
       alt: item.mods?.alt === true || modifiers.alt !== 'off',
@@ -186,6 +204,7 @@ export default function TerminalKeyBar({
 
   const handleTextActionPress = (item: Extract<KeyBarItem, { kind: 'text' }>): void => {
     clearRepeat();
+    clickHaptic();
     setModifiers((current) => retainLockedModifiers(current));
     void GhostexNative.sendText(sessionKey, item.text)
       .then(() => {
@@ -199,6 +218,9 @@ export default function TerminalKeyBar({
   };
 
   const setModifierMode = (modifier: ModifierId, longPress: boolean): void => {
+    // Lock-in gets the distinct buzz; taps and unlocks get the plain tick.
+    if (longPress && modifiers[modifier] !== 'locked') lockHaptic();
+    else clickHaptic();
     setModifiers((current) => {
       const currentMode = current[modifier];
       const nextMode: ModifierMode = longPress
@@ -267,6 +289,7 @@ export default function TerminalKeyBar({
             style={[styles.pill, active && styles.pillActive]}
             onPress={() => {
               clearRepeat();
+              clickHaptic();
               setPageHint(null);
               setPage(active ? 'none' : target);
             }}

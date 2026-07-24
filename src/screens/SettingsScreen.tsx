@@ -38,6 +38,7 @@ type BooleanSettingKey = {
 const TERMINAL_BEHAVIOR_TOGGLES: { key: BooleanSettingKey; label: string }[] = [
   { key: 'autoScroll', label: 'Auto scroll' },
   { key: 'extraKeysToolbarVisible', label: 'Extra keys toolbar' },
+  { key: 'keyBarHapticsEnabled', label: 'Key bar vibration' },
   { key: 'softKeyboardEnabled', label: 'Soft keyboard' },
   { key: 'keepScreenOn', label: 'Keep screen on' },
   { key: 'refreshButtonVisible', label: 'Show refresh button' },

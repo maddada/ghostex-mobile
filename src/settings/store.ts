@@ -27,6 +27,8 @@ export type GhostexSettings = {
   doneNotificationSound: boolean;
   hideKeyboardOnStartup: boolean;
   openUrlsOnTap: boolean;
+  /** Haptic tick on key-bar presses + lock-in buzz on held modifiers. */
+  keyBarHapticsEnabled: boolean;
   /** Terminal font size in pt (iOS) / sp (Android). Range 4-32. */
   fontSize: number;
   /** Scrollback rows for newly created terminal buffers. */
@@ -68,6 +70,7 @@ export function defaultSettings(): GhostexSettings {
     doneNotificationSound: true,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
+    keyBarHapticsEnabled: true,
     fontSize: defaultFontSize(),
     scrollbackRows: 10_000,
     cursorStyle: 'block',
@@ -121,6 +124,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     doneNotificationSound: bool('doneNotificationSound', defaults.doneNotificationSound),
     hideKeyboardOnStartup: bool('hideKeyboardOnStartup', defaults.hideKeyboardOnStartup),
     openUrlsOnTap: bool('openUrlsOnTap', defaults.openUrlsOnTap),
+    keyBarHapticsEnabled: bool('keyBarHapticsEnabled', defaults.keyBarHapticsEnabled),
     fontSize,
     scrollbackRows,
     cursorStyle,
