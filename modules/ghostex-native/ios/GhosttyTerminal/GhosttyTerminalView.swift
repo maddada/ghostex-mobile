@@ -1074,7 +1074,11 @@ class GhosttyTerminalView: UIView {
     }
 
     private func setupNativeTextSelectionInteractions() {
-        let interaction = UITextInteraction(for: .nonEditable)
+        // This view is both the terminal's native selection surface and its
+        // UITextInput. Editable mode lets UIKit present the software keyboard
+        // when the terminal becomes first responder; non-editable mode accepts
+        // selection but suppresses the IME.
+        let interaction = UITextInteraction(for: .editable)
         interaction.delegate = self
         interaction.textInput = self
         addInteraction(interaction)

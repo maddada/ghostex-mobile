@@ -21,12 +21,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { CursorStyle } from '../../modules/ghostex-native/src/GhostexNative.types';
+import SteppedSlider from '../components/common/SteppedSlider';
 import type { RootStackParamList } from '../navigation/types';
 import {
   KEEP_ALIVE_INTERVAL_MAX_SEC,
   KEEP_ALIVE_INTERVAL_MIN_SEC,
   KEEP_ALIVE_INTERVAL_STEP_SEC,
-  SCROLLBACK_ROW_OPTIONS,
+  SCROLLBACK_ROWS_MAX,
+  SCROLLBACK_ROWS_MIN,
+  SCROLLBACK_ROWS_STEP,
   TERMINAL_FONT_SIZE_MAX,
   TERMINAL_FONT_SIZE_MIN,
   useSettingsStore,
@@ -292,6 +295,14 @@ export default function SettingsScreen() {
           <Text style={styles.rowLabel}>Extra keys layout</Text>
           <Text style={styles.rowChevron}>›</Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.row}
+          onPress={() => navigation.navigate('AgentHotkeysEditor')}
+        >
+          <Text style={styles.rowLabel}>Agent hotkeys</Text>
+          <Text style={styles.rowChevron}>›</Text>
+        </Pressable>
 
         <Text style={styles.sectionHeader}>Font size</Text>
         {renderStepper(
@@ -315,11 +326,15 @@ export default function SettingsScreen() {
         )}
 
         <Text style={styles.sectionHeader}>Scrollback</Text>
-        {SCROLLBACK_ROW_OPTIONS.map((rows) =>
-          renderChoice(`scrollback-${rows}`, formatRows(rows), settings.scrollbackRows === rows, () =>
-            setSetting('scrollbackRows', rows),
-          ),
-        )}
+        <SteppedSlider
+          label="Scrollback"
+          maximumValue={SCROLLBACK_ROWS_MAX}
+          minimumValue={SCROLLBACK_ROWS_MIN}
+          step={SCROLLBACK_ROWS_STEP}
+          value={settings.scrollbackRows}
+          valueLabel={formatRows(settings.scrollbackRows)}
+          onValueChange={(value) => setSetting('scrollbackRows', value)}
+        />
         <Text style={styles.sectionCaption}>Applies to newly opened terminals.</Text>
 
         <Text style={styles.sectionHeader}>Cursor</Text>

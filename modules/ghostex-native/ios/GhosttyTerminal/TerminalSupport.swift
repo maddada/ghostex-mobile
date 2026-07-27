@@ -21,12 +21,20 @@ enum TerminalDefaults {
 
     static let defaultFontSize = 13.0
 
-    /// Scrollback row limit choices exposed by the JS settings contract.
-    static let defaultScrollbackRows = 10000
-    static let allowedScrollbackRows: Set<Int> = [2000, 10000, 50000]
+    /// Stepped scrollback range exposed by the JS settings contract.
+    static let defaultScrollbackRows = 2000
+    static let minimumScrollbackRows = 500
+    static let maximumScrollbackRows = 20000
+    static let scrollbackRowsStep = 500
 
     nonisolated static func clampedFontSize(_ fontSize: Double) -> Double {
         min(max(fontSize.rounded(), minimumFontSize), maximumFontSize)
+    }
+
+    nonisolated static func isValidScrollbackRows(_ rows: Int) -> Bool {
+        rows >= minimumScrollbackRows
+            && rows <= maximumScrollbackRows
+            && rows.isMultiple(of: scrollbackRowsStep)
     }
 }
 

@@ -7,4 +7,5 @@ export type RootStackParamList = {
   Terminal: { sessionKey: string; machineId: string; title?: string };
   Settings: undefined;
   ExtraKeysEditor: undefined;
+  AgentHotkeysEditor: undefined;
 };

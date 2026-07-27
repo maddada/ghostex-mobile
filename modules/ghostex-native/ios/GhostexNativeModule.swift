@@ -36,8 +36,8 @@ struct OpenTerminalOptionsRecord: Record {
     /// post-attach viewport refresh off this; iOS refreshes explicitly via
     /// refreshTerminalViewport after the JS-visible-ready delay.
     @Field var zmxBacked: Bool = false
-    /// Scrollback row limit for newly created buffers: 2000 | 10000 | 50000.
-    @Field var scrollbackRows: Int = 10000
+    /// Scrollback row limit for newly created buffers: 500...20000 in 500-row steps.
+    @Field var scrollbackRows: Int = 2000
 }
 
 struct TerminalRuntimeSettingsRecord: Record {
@@ -188,7 +188,7 @@ public class GhostexNativeModule: Module {
             let termType = opts.termType ?? "xterm-256color"
             let command = opts.command
             let scrollbackRows = opts.scrollbackRows
-            guard TerminalDefaults.allowedScrollbackRows.contains(scrollbackRows) else {
+            guard TerminalDefaults.isValidScrollbackRows(scrollbackRows) else {
                 throw GhostexException(
                     code: .channelFailed,
                     reason: "Invalid scrollbackRows: \(scrollbackRows)"

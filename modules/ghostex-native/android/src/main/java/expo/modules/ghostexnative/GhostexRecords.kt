@@ -23,7 +23,7 @@ class OpenTerminalOptionsRecord : Record {
   @Field var fontSize: Double? = null
   /** True for `ghostex attach` (zmx-backed) sessions; enables the post-attach viewport refresh. */
   @Field var zmxBacked: Boolean = false
-  /** Scrollback row limit for the new buffer; one of 2000 | 10000 | 50000, default 10000. */
+  /** Scrollback row limit for the new buffer; 500-20000 in 500-row steps, default 2000. */
   @Field var scrollbackRows: Int? = null
 }
 

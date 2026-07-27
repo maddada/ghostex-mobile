@@ -542,9 +542,13 @@ class GhostexNativeModule : Module() {
     }
   }
 
-  /** Only the fixed option values are valid; anything else means a stale/foreign caller. */
+  /** Accept the settings slider's 500-row steps; stale/foreign values use the default. */
   private fun resolveTranscriptRows(requested: Int?): Int =
-    if (requested != null && requested in ALLOWED_TRANSCRIPT_ROWS) requested
+    if (
+      requested != null &&
+      requested in MIN_TRANSCRIPT_ROWS..MAX_TRANSCRIPT_ROWS &&
+      requested % TRANSCRIPT_ROWS_STEP == 0
+    ) requested
     else DEFAULT_TRANSCRIPT_ROWS
 
   /** Main thread only: push the current [terminalSettings] onto one registry entry. */
@@ -697,9 +701,11 @@ class GhostexNativeModule : Module() {
 
     private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 7031
     private const val DEFAULT_TERM_TYPE = "xterm-256color"
-    private val ALLOWED_TRANSCRIPT_ROWS = setOf(2_000, 10_000, 50_000)
+    private const val MIN_TRANSCRIPT_ROWS = 500
+    private const val MAX_TRANSCRIPT_ROWS = 20_000
+    private const val TRANSCRIPT_ROWS_STEP = 500
     /** Unified cross-platform scrollback default (matches iOS and the JS settings screen). */
-    private const val DEFAULT_TRANSCRIPT_ROWS = 10_000
+    private const val DEFAULT_TRANSCRIPT_ROWS = 2_000
 
     private const val BELL_TONE_VOLUME = 80
     private const val BELL_TONE_DURATION_MS = 150

@@ -33,7 +33,7 @@ export type OpenTerminalOptions = {
   zmxBacked?: boolean;
   /**
    * Scrollback row limit for this terminal's buffer (applies to newly created
-   * buffers only). One of 2000 | 10000 | 50000. Defaults to 10000.
+   * buffers only). 500-20000 in 500-row steps. Defaults to 2000.
    */
   scrollbackRows?: number;
 };

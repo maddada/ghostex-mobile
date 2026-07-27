@@ -17,12 +17,14 @@ import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/de
 import { initAppLifecycle } from './src/app/lifecycle';
 import { initPersistentNotification } from './src/app/persistentNotification';
 import { useMachinesStore } from './src/machines/store';
+import { useAgentHotkeysStore } from './src/settings/agentHotkeys';
 import { useExtraKeysStore } from './src/settings/extraKeys';
 import { initSettingsNativeSync } from './src/settings/nativeSync';
 import { useSettingsStore } from './src/settings/store';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { GhostexPalette } from './src/theme/palette';
 import ExtraKeysEditorScreen from './src/screens/ExtraKeysEditorScreen';
+import AgentHotkeysEditorScreen from './src/screens/AgentHotkeysEditorScreen';
 import MachineFormScreen from './src/screens/MachineFormScreen';
 import MachinesScreen from './src/screens/MachinesScreen';
 import SessionsScreen from './src/screens/SessionsScreen';
@@ -59,6 +61,7 @@ export default function App() {
     void useMachinesStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();
     void useExtraKeysStore.getState().hydrate();
+    void useAgentHotkeysStore.getState().hydrate();
     // Native sync installs after hydration so it pushes the persisted values.
     void useSettingsStore
       .getState()
@@ -115,6 +118,11 @@ export default function App() {
                 name="ExtraKeysEditor"
                 component={ExtraKeysEditorScreen}
                 options={{ title: 'Extra Keys' }}
+              />
+              <Stack.Screen
+                name="AgentHotkeysEditor"
+                component={AgentHotkeysEditorScreen}
+                options={{ title: 'Agent Hotkeys' }}
               />
             </>
           )}

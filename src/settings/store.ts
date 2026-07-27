@@ -58,7 +58,9 @@ export type GhostexSettings = {
 export const TERMINAL_FONT_SIZE_MIN = 4;
 export const TERMINAL_FONT_SIZE_MAX = 32;
 
-export const SCROLLBACK_ROW_OPTIONS = [2_000, 10_000, 50_000] as const;
+export const SCROLLBACK_ROWS_MIN = 500;
+export const SCROLLBACK_ROWS_MAX = 20_000;
+export const SCROLLBACK_ROWS_STEP = 500;
 export const CURSOR_STYLE_OPTIONS: CursorStyle[] = ['block', 'underline', 'bar'];
 export const BELL_BEHAVIOR_OPTIONS: BellBehavior[] = ['vibrate', 'beep', 'ignore'];
 
@@ -85,7 +87,7 @@ export function defaultSettings(): GhostexSettings {
     confirmTabClose: false,
     keyBarHapticsEnabled: true,
     fontSize: defaultFontSize(),
-    scrollbackRows: 10_000,
+    scrollbackRows: 2_000,
     cursorStyle: 'bar',
     cursorBlink: true,
     bellBehavior: 'vibrate',
@@ -103,6 +105,11 @@ function clampKeepAliveInterval(value: number): number {
   return Math.min(KEEP_ALIVE_INTERVAL_MAX_SEC, Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, stepped));
 }
 
+export function clampScrollbackRows(value: number): number {
+  const stepped = Math.round(value / SCROLLBACK_ROWS_STEP) * SCROLLBACK_ROWS_STEP;
+  return Math.min(SCROLLBACK_ROWS_MAX, Math.max(SCROLLBACK_ROWS_MIN, stepped));
+}
+
 function sanitizeSettings(value: unknown): GhostexSettings {
   const defaults = defaultSettings();
   if (typeof value !== 'object' || value === null) return defaults;
@@ -113,11 +120,10 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     typeof record.fontSize === 'number' && Number.isFinite(record.fontSize)
       ? Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(record.fontSize)))
       : defaults.fontSize;
-  const scrollbackRows = (SCROLLBACK_ROW_OPTIONS as readonly number[]).includes(
-    record.scrollbackRows as number,
-  )
-    ? (record.scrollbackRows as number)
-    : defaults.scrollbackRows;
+  const scrollbackRows =
+    typeof record.scrollbackRows === 'number' && Number.isFinite(record.scrollbackRows)
+      ? clampScrollbackRows(record.scrollbackRows)
+      : defaults.scrollbackRows;
   const cursorStyle = CURSOR_STYLE_OPTIONS.includes(record.cursorStyle as CursorStyle)
     ? (record.cursorStyle as CursorStyle)
     : defaults.cursorStyle;

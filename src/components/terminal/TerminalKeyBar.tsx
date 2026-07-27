@@ -14,6 +14,11 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import * as Haptics from 'expo-haptics';
 
 import { GhostexNative, type KeyModifiers, type TerminalKey } from '../../../modules/ghostex-native/src';
+import {
+  AGENT_HOTKEY_SEQUENCE_DELAY_MS,
+  useAgentHotkeysStore,
+  type AgentHotkeyStep,
+} from '../../settings/agentHotkeys';
 import { useSettingsStore } from '../../settings/store';
 import {
   resolveExtraKeysLayout,
@@ -108,13 +113,14 @@ export default function TerminalKeyBar({
   onDismissKeyboard,
 }: TerminalKeyBarProps) {
   const layout = useExtraKeysStore((state) => state.layout);
+  const agentHotkeyProfiles = useAgentHotkeysStore((state) => state.profiles);
   const [row1 = [], row2 = []] = resolveExtraKeysLayout(layout);
   const [modifiers, setModifiers] = useState<ModifierState>(NO_MODIFIERS);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorText, setEditorText] = useState('');
   const [page, setPage] = useState<KeyBarPage>('none');
   const [pageHint, setPageHint] = useState<string | null>(null);
-  const agentPage = agentKeyPage(agentId);
+  const agentPage = agentKeyPage(agentId, agentHotkeyProfiles);
   // A tab switch to an agent without hotkeys drops a stale open agent page.
   const activePage = page === 'agent' && agentPage === null ? 'none' : page;
   const pageRows = activePage === 'extra' ? EXTRA_KEYS_PAGE : activePage === 'agent' ? agentPage : null;
@@ -220,6 +226,24 @@ export default function TerminalKeyBar({
       .catch(() => {
         // The native entry may be closed/failed; overlays surface that state.
       });
+  };
+
+  const handleAgentHotkeyPress = (steps: AgentHotkeyStep[]): void => {
+    clearRepeat();
+    clickHaptic();
+    setModifiers((current) => retainLockedModifiers(current));
+    void (async () => {
+      for (const [index, hotkeyStep] of steps.entries()) {
+        if (index > 0) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, AGENT_HOTKEY_SEQUENCE_DELAY_MS);
+          });
+        }
+        await GhostexNative.sendKey(sessionKey, hotkeyStep.key, hotkeyStep.mods);
+      }
+    })().catch(() => {
+      // The native entry may be closed/failed; overlays surface that state.
+    });
   };
 
   const setModifierMode = (modifier: ModifierId, longPress: boolean): void => {
@@ -388,7 +412,8 @@ export default function TerminalKeyBar({
           style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
           onPress={() => {
             clearRepeat();
-            if (item.kind === 'text') handleTextActionPress(item);
+            if (item.kind === 'sequence') handleAgentHotkeyPress(item.steps);
+            else if (item.kind === 'text') handleTextActionPress(item);
             else sendItemKeyOnce(item);
           }}
           onLongPress={() => showPageHint(`${item.label}  —  ${item.description}`)}
