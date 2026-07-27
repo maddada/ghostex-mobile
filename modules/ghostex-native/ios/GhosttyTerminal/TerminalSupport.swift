@@ -153,6 +153,7 @@ enum TerminalKeyboardFocusReason {
     case initialActivation
     case reconnectRestore
     case directTouch
+    case terminalTap
     case selectionGesture
     case hardwareKeyboard
 }
@@ -176,7 +177,7 @@ struct TerminalKeyboardFocusPolicy {
 
     mutating func requestFocus(for reason: TerminalKeyboardFocusReason) -> Bool {
         switch reason {
-        case .explicitUserRequest, .hardwareKeyboard:
+        case .explicitUserRequest, .terminalTap, .hardwareKeyboard:
             mode = .typing
             shouldRestoreOnReconnect = true
             return true

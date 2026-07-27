@@ -7,6 +7,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import type { CursorStyle } from '../../modules/ghostex-native/src/GhostexNative.types';
@@ -66,7 +67,7 @@ export const KEEP_ALIVE_INTERVAL_MAX_SEC = 120;
 export const KEEP_ALIVE_INTERVAL_STEP_SEC = 10;
 
 export function defaultFontSize(): number {
-  return 13;
+  return Platform.OS === 'ios' ? 10 : 13;
 }
 
 export function defaultSettings(): GhostexSettings {

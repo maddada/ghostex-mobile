@@ -678,7 +678,7 @@ class GhosttyTerminalView: UIView {
         // hardware-keyboard focus still may.
         if !Ghostty.App.runtimeSettings.softKeyboardEnabled {
             switch reason {
-            case .directTouch, .selectionGesture:
+            case .directTouch, .terminalTap, .selectionGesture:
                 return false
             case .explicitUserRequest, .initialActivation, .reconnectRestore, .hardwareKeyboard:
                 break
@@ -799,6 +799,9 @@ class GhosttyTerminalView: UIView {
         if isPointOnTouchSelectionHandle(location) {
             return
         }
+        // A completed terminal tap is an explicit return to typing, including
+        // after navigation or a user keyboard dismissal left us in browse mode.
+        requestKeyboardFocus(for: .terminalTap)
         if surface?.mouseCaptured == true {
             sendCapturedTerminalTap(at: location)
         } else {
