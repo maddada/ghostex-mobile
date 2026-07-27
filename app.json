@@ -12,7 +12,8 @@
     "plugins": [
       "./plugins/withPodfileMinDeploymentTarget.js",
       "./plugins/withSceneLifecycle.js",
-      "./plugins/withAndroidReleaseSigning.js"
+      "./plugins/withAndroidReleaseSigning.js",
+      "expo-status-bar"
     ],
     "ios": {
       "supportsTablet": true,

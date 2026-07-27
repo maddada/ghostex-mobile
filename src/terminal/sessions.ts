@@ -6,7 +6,7 @@
  *   recently used non-selected entry is evicted via closeTerminal.
  * - Attach flow (sessions-drawer.md §5 / terminal-screen.md §6): connect if
  *   needed → openTerminal with the login-shell-wrapped attach command → ~2s
- *   after the entry first opens, send the zmx viewport refresh OSC once.
+ *   after the entry first opens, refresh the native viewport once.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,15 +22,9 @@ import { useSettingsStore } from '../settings/store';
 
 export const MAX_WARM_SESSIONS = 7;
 /**
- * zmx viewport refresh, iOS-only JS path: redraw OSC + PageUp/PageDown nudge
- * (the old VVTerm fork's postAttachNudgeSequence), sent once per attach ~2s
- * after first open. Android runs the Termux fork's visibility-gated refresh
- * natively in GhostexTerminalView (driven by the openTerminal zmxBacked flag),
- * so the JS timer must not fire there.
+ * Delay before the one-shot native viewport refresh after an attach opens.
  */
-export const ZMX_REFRESH_OSC = '\x1b]1337;ZMX_REFRESH\x07';
-export const ZMX_POST_ATTACH_NUDGE = `${ZMX_REFRESH_OSC}\x1b[5~\x1b[6~`;
-export const ZMX_REFRESH_DELAY_MS = 2000;
+export const ATTACH_VIEWPORT_REFRESH_DELAY_MS = 2000;
 
 const FONT_SIZES_STORAGE_KEY = 'terminal.fontSizes.v1';
 
@@ -68,7 +62,7 @@ function randomTabId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** One-shot guard so the zmx refresh OSC is sent at most once per open entry. */
+/** One-shot guard so the native viewport refresh runs at most once per open entry. */
 const zmxRefreshSent = new Set<string>();
 const zmxRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -86,10 +80,10 @@ function scheduleZmxRefresh(sessionKey: string): void {
     zmxRefreshTimers.delete(sessionKey);
     if (zmxRefreshSent.has(sessionKey)) return;
     zmxRefreshSent.add(sessionKey);
-    void GhostexNative.sendText(sessionKey, ZMX_POST_ATTACH_NUDGE).catch(() => {
+    void GhostexNative.refreshTerminalViewport(sessionKey).catch(() => {
       // The entry may have closed while the timer was pending.
     });
-  }, ZMX_REFRESH_DELAY_MS);
+  }, ATTACH_VIEWPORT_REFRESH_DELAY_MS);
   zmxRefreshTimers.set(sessionKey, timer);
 }
 
@@ -315,7 +309,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         port: record.port,
       };
       patchTab(sessionKey, { state: 'opening', error: undefined });
-      // A fresh attach gets a fresh viewport-refresh OSC.
+      // A fresh attach gets a fresh native viewport refresh.
       cancelZmxRefresh(sessionKey);
       zmxRefreshSent.delete(sessionKey);
       touchWarm(sessionKey);

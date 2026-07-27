@@ -34,7 +34,7 @@ struct OpenTerminalOptionsRecord: Record {
     @Field var fontSize: Double?
     /// True for `ghostex attach` (zmx-backed) sessions. The Android module runs its
     /// post-attach viewport refresh off this; iOS refreshes explicitly via
-    /// refreshTerminalViewport (plus the JS post-attach nudge).
+    /// refreshTerminalViewport after the JS-visible-ready delay.
     @Field var zmxBacked: Bool = false
     /// Scrollback row limit for newly created buffers: 2000 | 10000 | 50000.
     @Field var scrollbackRows: Int = 10000
@@ -479,10 +479,7 @@ public class GhostexNativeModule: Module {
                     throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
                 }
                 guard entry.zmxBacked else { return }
-                // Same recipe as the JS post-attach nudge: ZMX redraw OSC to
-                // the remote, then a PageUp/PageDown round trip to force a
-                // full viewport repaint.
-                view.sendText("\u{1b}]1337;ZMX_REFRESH\u{07}")
+                view.forceRefresh()
                 view.sendTerminalKey(.pageUp)
                 view.sendTerminalKey(.pageDown)
             }
@@ -562,6 +559,7 @@ public class GhostexNativeModule: Module {
         // MARK: View
 
         View(GhostexTerminalHostView.self) {
+            ViewName("GhostexTerminalView")
             Events("onSingleTap")
 
             Prop("sessionKey") { (view: GhostexTerminalHostView, sessionKey: String) in

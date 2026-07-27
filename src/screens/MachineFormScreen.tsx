@@ -157,8 +157,28 @@ export default function MachineFormScreen({ navigation, route }: Props) {
         ? privateKey.trim().length > 0
         : privateKey.trim().length > 0 && keyPassphrase.length > 0;
   const canSave =
-    name.trim().length > 0 && host.trim().length > 0 && parsedPort !== null && credentialsValid;
+    host.trim().length > 0 && parsedPort !== null && credentialsValid;
   const canTest = host.trim().length > 0 && parsedPort !== null && credentialsValid;
+
+  useEffect(() => {
+    console.log('[GXDBG_ADD_SERVER] validation-v2', {
+      nameLength: name.trim().length,
+      hostLength: host.trim().length,
+      parsedPort,
+      credentialsValid,
+      canTest,
+      canSave,
+      testState: testState.kind,
+    });
+  }, [
+    canSave,
+    canTest,
+    credentialsValid,
+    host,
+    name,
+    parsedPort,
+    testState.kind,
+  ]);
 
   const buildTestConfig = async (): Promise<{ config: SshConfig; hasPassword: boolean }> => {
     const config: SshConfig = {

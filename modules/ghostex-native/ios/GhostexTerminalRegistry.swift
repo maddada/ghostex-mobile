@@ -54,7 +54,7 @@ final class TerminalSessionEntry {
     let connection: SSHConnection
 
     /// True for `ghostex attach` (zmx-backed) sessions; gates the explicit
-    /// refreshTerminalViewport nudge.
+    /// native viewport refresh.
     let zmxBacked: Bool
 
     var view: GhosttyTerminalView?

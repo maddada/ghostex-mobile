@@ -799,8 +799,23 @@ class GhosttyTerminalView: UIView {
         if isPointOnTouchSelectionHandle(location) {
             return
         }
-        sendLinkActivationTap(at: location)
+        if surface?.mouseCaptured == true {
+            sendCapturedTerminalTap(at: location)
+        } else {
+            sendLinkActivationTap(at: location)
+        }
         onSingleTap?()
+    }
+
+    /// Forward a direct tap as a normal left click when the running terminal
+    /// application has enabled mouse reporting.
+    private func sendCapturedTerminalTap(at location: CGPoint) {
+        guard canRouteTerminalInput, let surface else { return }
+        let pos = ghosttyPoint(location)
+        surface.sendMousePos(.init(x: pos.x, y: pos.y, mods: []))
+        surface.sendMouseButton(.init(action: .press, button: .left, mods: []))
+        surface.sendMouseButton(.init(action: .release, button: .left, mods: []))
+        requestRender()
     }
 
     /// With "open URLs on tap" enabled, forward a plain tap as a super+left
@@ -2010,6 +2025,20 @@ class GhosttyTerminalView: UIView {
             if shouldRoutePressToSystemTextInput(key) {
                 let keyCode = UInt16(key.keyCode.rawValue)
                 let keyProducesText = !(key.characters.isEmpty && key.charactersIgnoringModifiers.isEmpty)
+                let shouldSendInterpretedTextDirectly =
+                    TerminalHardwareTextInputRoutingPolicy.shouldRecordPendingInterpretedHardwareKey(
+                        keyProducesText: keyProducesText,
+                        hasControlModifier: key.modifierFlags.contains(.control),
+                        hasAlternateModifier: key.modifierFlags.contains(.alternate),
+                        hasCommandModifier: key.modifierFlags.contains(.command),
+                        hasActiveIMEComposition: textInputModel.hasActiveIMEComposition,
+                        isSystemTextInputToggleKey: key.keyCode == .keyboardCapsLock
+                    )
+                if shouldSendInterpretedTextDirectly,
+                   sendInterpretedHardwareKeyText(key.characters, for: key) {
+                    result.didHandleGhosttyInput = true
+                    continue
+                }
                 systemTextInputPresses.insert(keyCode)
                 if TerminalHardwareTextInputRoutingPolicy.shouldRecordPendingInterpretedHardwareKey(
                     keyProducesText: keyProducesText,
@@ -2686,9 +2715,10 @@ class GhosttyTerminalView: UIView {
             let view = Unmanaged<GhosttyTerminalView>.fromOpaque(userdata).takeUnretainedValue()
             guard let data = data, len > 0 else { return }
             let swiftData = Data(bytes: data, count: len)
-            // Ghostty calls this from the main thread; no queue hop needed.
-            MainActor.assumeIsolated {
-                view.writeCallback?(swiftData)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    view.writeCallback?(swiftData)
+                }
             }
         }, userdata)
     }
