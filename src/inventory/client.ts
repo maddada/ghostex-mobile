@@ -101,6 +101,18 @@ function extractCliError(output: string): string | null {
 }
 
 /**
+ * True when the failure text means "this machine's Ghostex predates the feature
+ * being used". A CLI that does not know a verb answers `Unknown command: <verb>`
+ * followed by its entire usage dump, and a daemon that does not know an endpoint
+ * answers `No gxserver endpoint for <METHOD> <path>`. Neither text belongs in a
+ * phone banner: the actionable part is "update Ghostex on the machine".
+ */
+export function isOutdatedMachineFailure(text: string | null | undefined): boolean {
+  const lower = (text ?? '').toLowerCase();
+  return lower.includes('unknown command:') || lower.includes('no gxserver endpoint for');
+}
+
+/**
  * Map raw SSH/CLI failure text to actionable copy (sessions-drawer.md §5).
  * Unmatched text is truncated to 220 chars + "...".
  */
@@ -139,6 +151,7 @@ export function summarizeFailure(raw: string | null | undefined, hasPassword: bo
     return FailureCopy.noCli;
   }
   if (lowerText.includes('unknown command: android-check')) return FailureCopy.oldCli;
+  if (isOutdatedMachineFailure(text)) return FailureCopy.outdatedForFeature;
   if (
     lowerText.includes('session persistence is set to') &&
     !lowerText.includes('session persistence is set to zmx')

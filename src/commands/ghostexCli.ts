@@ -22,6 +22,27 @@ function requireId(value: string, label: string): string {
   return trimmed;
 }
 
+/**
+ * Positional CLI arguments are parsed by the Rust CLI before gxserver ever
+ * sees them, and anything starting with `-` is read as a flag there. Reject
+ * those at the command boundary instead of shipping a value that would be
+ * silently reinterpreted.
+ */
+function requirePositional(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) throw new Error(`Ghostex ${label} is required.`);
+  if (trimmed.startsWith('-')) throw new Error(`Ghostex ${label} must not start with "-".`);
+  return trimmed;
+}
+
+function positiveIntegerFlag(name: string, value: number | undefined, label: string): string {
+  if (value === undefined) return '';
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Ghostex ${label} must be a positive whole number of milliseconds.`);
+  }
+  return ` ${name} ${value}`;
+}
+
 function projectFlag(projectId?: string): string {
   const trimmed = projectId === undefined ? '' : projectId.trim();
   return trimmed.length === 0 ? '' : ` --project-id ${shellQuote(trimmed)}`;
@@ -193,9 +214,88 @@ export function removeProjectCommand(projectId: string): string {
   return `ghostex remove-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
 }
 
-/** Add project: `ghostex add-project <path> --json`. */
-export function addProjectCommand(path: string): string {
-  return `ghostex add-project ${shellQuote(requireId(path, 'project path'))} --json`;
+/**
+ * Add project: `ghostex add-project <path> [--create-if-missing] --json`.
+ * `--create-if-missing` is what lets the Add Project flow register a folder the
+ * user typed but has not created yet; without it gxserver keeps rejecting a
+ * missing path.
+ */
+export function addProjectCommand(path: string, options?: { createIfMissing?: boolean }): string {
+  const createIfMissing = options?.createIfMissing === true ? ' --create-if-missing' : '';
+  return `ghostex add-project ${shellQuote(requirePositional(path, 'project path'))}${createIfMissing} --json`;
+}
+
+/**
+ * Directory suggestions for an Add Project path input:
+ * `ghostex browse-directories <partialPath> [--limit n] --json`.
+ * `--cwd` is never sent: mobile has no active project, so relative paths are
+ * not offered at all (t3code spec §5.6).
+ */
+export function browseDirectoriesCommand(
+  partialPath: string,
+  options?: { limit?: number },
+): string {
+  const limit = options?.limit;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+    throw new Error('Ghostex browse limit must be a positive whole number.');
+  }
+  const limitFlag = limit === undefined ? '' : ` --limit ${limit}`;
+  return (
+    `ghostex browse-directories ${shellQuote(requirePositional(partialPath, 'browse path'))}` +
+    `${limitFlag} --json`
+  );
+}
+
+/**
+ * Hosting-CLI readiness for the source picker:
+ * `ghostex discover-source-control [--timeout ms] --json`.
+ * `--timeout` raises the CLI's own gxserver HTTP timeout (15s by default),
+ * which is shorter than the worst case of four 5s provider probes.
+ */
+export function discoverSourceControlCommand(options?: { timeoutMs?: number }): string {
+  const timeout = positiveIntegerFlag('--timeout', options?.timeoutMs, 'discovery timeout');
+  return `ghostex discover-source-control${timeout} --json`;
+}
+
+export type SourceControlLookupProvider = 'github' | 'gitlab';
+
+/** Repository lookup: `ghostex lookup-repository <provider> <owner/repo> --json`. */
+export function lookupRepositoryCommand(
+  provider: SourceControlLookupProvider,
+  repository: string,
+  options?: { timeoutMs?: number },
+): string {
+  if (provider !== 'github' && provider !== 'gitlab') {
+    throw new Error(`Unsupported Ghostex repository provider: ${provider as string}`);
+  }
+  const timeout = positiveIntegerFlag('--timeout', options?.timeoutMs, 'lookup timeout');
+  return (
+    `ghostex lookup-repository ${shellQuote(provider)}` +
+    ` ${shellQuote(requirePositional(repository, 'repository'))}${timeout} --json`
+  );
+}
+
+/**
+ * Clone + register: `ghostex clone-repository <remoteUrl> <destinationPath>
+ * [--wait-timeout-ms n] [--timeout ms] --json`. The CLI blocks until the
+ * daemon's clone job leaves `running`; a wait timeout never cancels the clone.
+ */
+export function cloneRepositoryCommand(
+  remoteUrl: string,
+  destinationPath: string,
+  options?: { waitTimeoutMs?: number; timeoutMs?: number },
+): string {
+  const waitTimeout = positiveIntegerFlag(
+    '--wait-timeout-ms',
+    options?.waitTimeoutMs,
+    'clone wait timeout',
+  );
+  const timeout = positiveIntegerFlag('--timeout', options?.timeoutMs, 'clone request timeout');
+  return (
+    `ghostex clone-repository ${shellQuote(requirePositional(remoteUrl, 'repository URL'))}` +
+    ` ${shellQuote(requirePositional(destinationPath, 'destination path'))}` +
+    `${waitTimeout}${timeout} --json`
+  );
 }
 
 /**
