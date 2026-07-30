@@ -80,6 +80,8 @@ export const FailureCopy = {
     'Connected over SSH, but the Mac could not find the Ghostex CLI. Install Ghostex CLI and make sure ghostex is available in the SSH login shell.',
   oldCli:
     'Connected over SSH, but this Mac has an older Ghostex CLI. Update Ghostex so ghostex android-check --json is available.',
+  outdatedForFeature:
+    "This machine's Ghostex is too old for this feature. Update Ghostex on the machine, then try again.",
   persistenceNotZmx:
     'Ghostex is reachable, but Session persistence is not set to zmx. Open Ghostex Settings on the Mac and set Session persistence to zmx.',
   zmxMissing:
@@ -132,6 +134,48 @@ export const ProgressCopy = {
   openedInBrowser: (name: string) => `Opened ${name} in the browser.`,
   restoringProject: (title: string) => `Restoring ${title}...`,
   restoredProject: (title: string) => `Restored ${title}.`,
+} as const;
+
+/**
+ * Add Project flow copy (plans/014-add-project-dialog.t3code-spec.md §§3,5),
+ * adapted to Ghostex mobile: the machine is chosen by the entry-point context
+ * menu, and there is no in-app source-control settings screen to deep-link to.
+ */
+export const AddProjectCopy = {
+  sourceTitle: 'Add Project',
+  localTitle: 'Local folder',
+  destinationTitle: 'Clone destination',
+  machineLine: (label: string) => `Adding a project on ${label}.`,
+  machineMissing: 'This machine is no longer saved on this device.',
+  sourcesSection: 'Choose a source',
+  localRowTitle: 'Local folder',
+  localRowDescription: 'Browse a folder on disk',
+  browseSection: 'Browse folders',
+  browseEmpty: 'No folders here.',
+  parentRow: '..',
+  pathLabel: 'Project path',
+  pathPlaceholder: '~/projects/my-app',
+  addButton: 'Add project',
+  createAndAddButton: 'Create & add project',
+  createHint: 'This folder does not exist yet and will be created.',
+  duplicateTitle: 'Project already exists',
+  duplicateBody: (title: string) => `${title} is already open on this machine.`,
+  repositorySection: 'Repository',
+  urlPlaceholder: 'https://github.com/org/repo.git',
+  repositoryPlaceholder: (label: string, hint: string) => `${label} repository (${hint})`,
+  continueButton: 'Continue',
+  lookupButton: 'Lookup repository',
+  destinationSection: 'Select where to clone',
+  destinationPreview: (path: string) => `Clones into ${path}`,
+  cloneButton: 'Clone project',
+  cloningButton: 'Cloning…',
+  discoveryPending: 'Checking which hosting CLIs this machine can clone with…',
+  providerUnavailableHint: 'Provider status unavailable on this machine.',
+  providerUnauthenticatedHint: (label: string) => `${label} is not signed in on this machine.`,
+  setupRequired: 'Setup required',
+  emptyPathError: 'Enter a project path.',
+  emptyRepositoryError: 'Enter a repository.',
+  emptyUrlError: 'Enter a Git clone URL.',
 } as const;
 
 /** Rename prompt copy, sessions-drawer.md §2. */

@@ -22,16 +22,21 @@ import { useExtraKeysStore } from './src/settings/extraKeys';
 import { initSettingsNativeSync } from './src/settings/nativeSync';
 import { useSettingsStore } from './src/settings/store';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
+import { addProjectSourceLabel } from './src/addProject/sources';
 import { GhostexPalette } from './src/theme/palette';
 import ExtraKeysEditorScreen from './src/screens/ExtraKeysEditorScreen';
 import AgentHotkeysEditorScreen from './src/screens/AgentHotkeysEditorScreen';
+import AddProjectDestinationScreen from './src/screens/AddProjectDestinationScreen';
+import AddProjectLocalScreen from './src/screens/AddProjectLocalScreen';
+import AddProjectRepositoryScreen from './src/screens/AddProjectRepositoryScreen';
+import AddProjectSourceScreen from './src/screens/AddProjectSourceScreen';
 import MachineFormScreen from './src/screens/MachineFormScreen';
 import MachinesScreen from './src/screens/MachinesScreen';
 import SessionsScreen from './src/screens/SessionsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TerminalScreen from './src/screens/TerminalScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
-import { MachineCopy } from './src/copy';
+import { AddProjectCopy, MachineCopy } from './src/copy';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -123,6 +128,26 @@ export default function App() {
                 name="AgentHotkeysEditor"
                 component={AgentHotkeysEditorScreen}
                 options={{ title: 'Agent Hotkeys' }}
+              />
+              <Stack.Screen
+                name="AddProjectSource"
+                component={AddProjectSourceScreen}
+                options={{ title: AddProjectCopy.sourceTitle }}
+              />
+              <Stack.Screen
+                name="AddProjectLocal"
+                component={AddProjectLocalScreen}
+                options={{ title: AddProjectCopy.localTitle }}
+              />
+              <Stack.Screen
+                name="AddProjectRepository"
+                component={AddProjectRepositoryScreen}
+                options={({ route }) => ({ title: addProjectSourceLabel(route.params.source) })}
+              />
+              <Stack.Screen
+                name="AddProjectDestination"
+                component={AddProjectDestinationScreen}
+                options={{ title: AddProjectCopy.destinationTitle }}
               />
             </>
           )}

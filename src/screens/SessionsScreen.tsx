@@ -90,7 +90,6 @@ import {
 import SessionRow from '../components/sessions/SessionRow';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import {
-  addProjectCommand,
   attachCommand,
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
@@ -182,7 +181,6 @@ type Overlay =
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
   | { kind: 'groupMenu'; ctx: GroupContext; anchor: MenuAnchor }
   | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects'; anchor: MenuAnchor }
-  | { kind: 'addProject'; machine: MachineRecord; error: string | null }
   | {
       kind: 'confirmAction';
       title: string;
@@ -1517,7 +1515,10 @@ export default function SessionsScreen({ navigation }: Props) {
         key: 'add-project',
         label: 'Add Project',
         icon: <PlusGlyph size={14} color={menuIconColor} />,
-        onPress: () => setOverlay({ kind: 'addProject', machine: target, error: null }),
+        onPress: () => {
+          setOverlay(NONE);
+          navigation.navigate('AddProjectSource', { machineId: target.id });
+        },
       },
       {
         kind: 'item',
@@ -2301,27 +2302,6 @@ export default function SessionsScreen({ navigation }: Props) {
               overlay.ctx.machine,
               stateWithCollectionTitle(state, overlay.ctx.header.collectionId, title),
             );
-          }}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'addProject' ? (
-        <PromptDialog
-          visible
-          title="Add Project"
-          body="Absolute path of the repository on the Mac."
-          placeholder="/Users/you/dev/project"
-          initialValue=""
-          error={overlay.error}
-          confirmLabel="Add"
-          onSubmit={(value) => {
-            const path = value.trim();
-            if (path.length === 0) {
-              setOverlay({ kind: 'addProject', machine: overlay.machine, error: 'Enter a path.' });
-              return;
-            }
-            void runSessionCommand(overlay.machine, addProjectCommand(path));
           }}
           onCancel={() => setOverlay(NONE)}
         />
