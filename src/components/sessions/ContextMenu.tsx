@@ -1,9 +1,9 @@
 /**
  * Desktop sidebar context-menu clone (sidebar/styles/session-overlays.css
- * .session-context-menu): a 220dp dark popup aligned horizontally to its
- * anchor and always filling the safe viewport vertically. Items are icon +
- * label + optional trailing check, with hover-gray press feedback, 1dp
- * dividers, and danger tinting.
+ * .session-context-menu): a 220dp dark popup aligned to its anchor, sized to
+ * its content and only scrolling once it would overflow the safe viewport.
+ * Items are icon + label + optional trailing check, with hover-gray press
+ * feedback, 1dp dividers, and danger tinting.
  */
 
 import type { ReactElement } from 'react';
@@ -62,6 +62,10 @@ export type ContextMenuProps = {
 
 const MENU_WIDTH = 220;
 const EDGE_MARGIN = 12;
+/** Gap between the anchor button and the popup, matching the desktop offset. */
+const ANCHOR_GAP = 4;
+/** Below the anchor is only worth using if a couple of rows actually fit. */
+const MIN_DROP_DOWN_HEIGHT = 132;
 
 /** Filled 14dp check glyph (desktop IconCheck) drawn with two rotated bars. */
 function CheckGlyph({ color }: { color: string }) {
@@ -109,23 +113,23 @@ export default function ContextMenu({ visible, anchor, items, onClose }: Context
   );
   const verticalStart = Math.max(EDGE_MARGIN, safeArea.top);
   const verticalEnd = screenHeight - Math.max(EDGE_MARGIN, safeArea.bottom);
-  const menuHeight = Math.max(1, verticalEnd - verticalStart);
+  const spaceBelow = verticalEnd - (anchor.y + anchor.height + ANCHOR_GAP);
+  const spaceAbove = anchor.y - ANCHOR_GAP - verticalStart;
+  const dropsDown = spaceBelow >= MIN_DROP_DOWN_HEIGHT || spaceBelow >= spaceAbove;
+  const placement = dropsDown
+    ? { top: anchor.y + anchor.height + ANCHOR_GAP }
+    : { bottom: screenHeight - (anchor.y - ANCHOR_GAP) };
+  const maxHeight = Math.max(1, dropsDown ? spaceBelow : spaceAbove);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View
-          style={[
-            styles.menu,
-            {
-              left,
-              top: verticalStart,
-              width: menuWidth,
-              height: menuHeight,
-            },
-          ]}
-        >
-          <ScrollView style={styles.menuScroll} contentContainerStyle={styles.menuContent}>
+        <View style={[styles.menu, placement, { left, width: menuWidth, maxHeight }]}>
+          <ScrollView
+            style={styles.menuScroll}
+            contentContainerStyle={styles.menuContent}
+            bounces={false}
+          >
             {items.map((item) => {
               if (item.kind === 'separator') return <View key={item.key} style={styles.separator} />;
               if (item.kind === 'label') {
@@ -207,7 +211,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   menuScroll: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
   },
   item: {
     flexDirection: 'row',
