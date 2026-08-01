@@ -330,3 +330,92 @@ export function restoreRecentProjectCommand(projectId: string): string {
 export function androidCheckCommand(): string {
   return 'ghostex android-check --json';
 }
+
+// ---------------------------------------------------------------------------
+// Session Chat (chat view of an agent session over SSH; the daemon owns all
+// transcript decoding — these verbs are thin wrappers over its chat endpoints).
+// ---------------------------------------------------------------------------
+
+/** Extra CLI HTTP-timeout margin on top of a read's long-poll wait. */
+const SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS = 15000;
+
+export type SessionChatReadOptions = {
+  limit?: number;
+  beforeOffset?: number;
+  /** Long-poll: hold until the chat changes or this many ms pass. */
+  waitMs?: number;
+  /** The fingerprint from the previous read result (required for waitMs). */
+  fingerprint?: string;
+};
+
+function sessionChatSelector(sessionId: string, projectId: string): string {
+  return (
+    `--session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --project-id ${shellQuote(requireId(projectId, 'project id'))}`
+  );
+}
+
+/**
+ * Read: `ghostex read-session-chat --session-id <id> --project-id <id>
+ * [--limit n] [--before-offset n] [--wait-ms n --fingerprint f] --json`.
+ * A waiting read raises `--timeout` above the wait so the CLI's own gxserver
+ * HTTP timeout (15s default) cannot cut the long-poll short.
+ */
+export function readSessionChatCommand(
+  sessionId: string,
+  projectId: string,
+  options?: SessionChatReadOptions,
+): string {
+  const parts = [`ghostex read-session-chat ${sessionChatSelector(sessionId, projectId)}`];
+  parts.push(positiveIntegerFlag('--limit', options?.limit, 'chat read limit').trim());
+  const beforeOffset = options?.beforeOffset;
+  if (beforeOffset !== undefined) {
+    if (!Number.isInteger(beforeOffset) || beforeOffset < 0) {
+      throw new Error('Ghostex chat read beforeOffset must be a non-negative whole number.');
+    }
+    parts.push(`--before-offset ${beforeOffset}`);
+  }
+  const waitMs = options?.waitMs;
+  const fingerprint = options?.fingerprint?.trim() ?? '';
+  if (waitMs !== undefined && fingerprint.length > 0) {
+    parts.push(positiveIntegerFlag('--wait-ms', waitMs, 'chat read wait').trim());
+    parts.push(`--fingerprint ${shellQuote(fingerprint)}`);
+    parts.push(`--timeout ${waitMs + SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS}`);
+  }
+  parts.push('--json');
+  return parts.filter((part) => part.length > 0).join(' ');
+}
+
+/** Send: `ghostex send-session-chat-message --session-id <id> --project-id <id> --text <text> --json`. */
+export function sendSessionChatMessageCommand(
+  sessionId: string,
+  projectId: string,
+  text: string,
+): string {
+  return (
+    `ghostex send-session-chat-message ${sessionChatSelector(sessionId, projectId)}` +
+    ` --text ${shellQuote(text)} --json`
+  );
+}
+
+/**
+ * Answer a question/approval prompt:
+ * `ghostex answer-session-chat-prompt --session-id <id> --project-id <id>
+ * --answer-json '<json>' --json`. The answer object carries kind plus
+ * selections or approvalSend, exactly as the shared transport produced it.
+ */
+export function answerSessionChatPromptCommand(
+  sessionId: string,
+  projectId: string,
+  answer: unknown,
+): string {
+  return (
+    `ghostex answer-session-chat-prompt ${sessionChatSelector(sessionId, projectId)}` +
+    ` --answer-json ${shellQuote(JSON.stringify(answer))} --json`
+  );
+}
+
+/** Interrupt the running turn: `ghostex interrupt-session-chat --session-id <id> --project-id <id> --json`. */
+export function interruptSessionChatCommand(sessionId: string, projectId: string): string {
+  return `ghostex interrupt-session-chat ${sessionChatSelector(sessionId, projectId)} --json`;
+}
