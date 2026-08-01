@@ -39,13 +39,14 @@ function firstJsonObject(output: string): Record<string, unknown> | null {
 export async function runGhostexCli(
   machine: MachineConnectionTarget,
   command: string,
+  options?: { timeoutMs?: number },
 ): Promise<CliJsonResult> {
   try {
     await ensureConnected(machine);
     const result = await GhostexNative.exec(
       machine.id,
       loginShellCommand(command),
-      INVENTORY_EXEC_TIMEOUT_MS,
+      options?.timeoutMs ?? INVENTORY_EXEC_TIMEOUT_MS,
     );
     const output = `${result.stdout}\n${result.stderr}`.trim();
     const json = firstJsonObject(result.stdout);

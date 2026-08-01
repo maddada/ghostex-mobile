@@ -37,10 +37,7 @@ import StateCard from '../components/common/StateCard';
 import { AGENT_ICONS } from '../assets/agentIcons.generated';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import { useCollapseStore } from '../components/sessions/collapseStore';
-import ContextMenu, {
-  type ContextMenuItem,
-  type MenuAnchor,
-} from '../components/sessions/ContextMenu';
+import ContextMenu, { type ContextMenuItem } from '../components/sessions/ContextMenu';
 import {
   buildDrawerList,
   drawerStatusLine,
@@ -166,21 +163,21 @@ type GroupContext = { machine: MachineRecord; item: GroupHeaderItem };
 
 type Overlay =
   | { kind: 'none' }
-  | { kind: 'sessionMenu'; ctx: SessionContext; anchor: MenuAnchor; view: 'root' | 'tags' }
+  | { kind: 'sessionMenu'; ctx: SessionContext; view: 'root' | 'tags' }
   | { kind: 'sessionDetails'; ctx: SessionContext }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
   | { kind: 'delayedSend'; ctx: SessionContext }
   | { kind: 'closeConfirm'; ctx: SessionContext }
   | { kind: 'copyText'; title: string; text: string }
-  | { kind: 'projectMenu'; ctx: ProjectContext; anchor: MenuAnchor; view: 'root' | 'collections' }
+  | { kind: 'projectMenu'; ctx: ProjectContext; view: 'root' | 'collections' }
   | { kind: 'projectKillConfirm'; ctx: ProjectContext }
   | { kind: 'projectDetails'; ctx: ProjectContext }
-  | { kind: 'agentMenu'; ctx: ProjectContext; anchor: MenuAnchor }
-  | { kind: 'actionsMenu'; ctx: ProjectContext; anchor: MenuAnchor }
-  | { kind: 'collectionMenu'; ctx: CollectionContext; anchor: MenuAnchor; view: 'root' | 'colors' }
+  | { kind: 'agentMenu'; ctx: ProjectContext }
+  | { kind: 'actionsMenu'; ctx: ProjectContext }
+  | { kind: 'collectionMenu'; ctx: CollectionContext; view: 'root' | 'colors' }
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
-  | { kind: 'groupMenu'; ctx: GroupContext; anchor: MenuAnchor }
-  | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects'; anchor: MenuAnchor }
+  | { kind: 'groupMenu'; ctx: GroupContext }
+  | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects' }
   | {
       kind: 'confirmAction';
       title: string;
@@ -836,7 +833,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const FORK_AGENT_ICONS = ['codex', 'claude', 'pi'];
 
   /** SESSION context menu root — desktop sortable-session-card menu order. */
-  const sessionMenuRootItems = (ctx: SessionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const sessionMenuRootItems = (ctx: SessionContext): ContextMenuItem[] => {
     const { session } = ctx.item;
     const projectId = session.projectId.length > 0 ? session.projectId : undefined;
     const browser = isBrowserSession(session);
@@ -872,7 +869,7 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Tag as',
         icon: <TagGlyph size={14} color={menuIconColor} />,
         submenu: true,
-        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, anchor, view: 'tags' }),
+        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, view: 'tags' }),
       });
     }
     items.push({
@@ -984,7 +981,7 @@ export default function SessionsScreen({ navigation }: Props) {
   };
 
   /** SESSION "Tag as" submenu — grouped Priority/Progress/Type radio rows. */
-  const sessionTagItems = (ctx: SessionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const sessionTagItems = (ctx: SessionContext): ContextMenuItem[] => {
     const { session } = ctx.item;
     const current = session.sessionTag;
     const applyTag = (value: string): void =>
@@ -997,7 +994,7 @@ export default function SessionsScreen({ navigation }: Props) {
         key: 'back',
         label: 'Back',
         icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
-        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, anchor, view: 'root' }),
+        onPress: () => setOverlay({ kind: 'sessionMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
     ];
@@ -1029,7 +1026,7 @@ export default function SessionsScreen({ navigation }: Props) {
   };
 
   /** PROJECT context menu root — desktop project-header menu order + extras. */
-  const projectMenuRootItems = (ctx: ProjectContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const projectMenuRootItems = (ctx: ProjectContext): ContextMenuItem[] => {
     const { header } = ctx;
     const orderedHeaders: ProjectHeaderItem[] = [];
     for (const block of entries) {
@@ -1075,7 +1072,7 @@ export default function SessionsScreen({ navigation }: Props) {
         label: 'Add to project group',
         icon: <PlusGlyph size={14} color={menuIconColor} />,
         submenu: true,
-        onPress: () => setOverlay({ kind: 'projectMenu', ctx, anchor, view: 'collections' }),
+        onPress: () => setOverlay({ kind: 'projectMenu', ctx, view: 'collections' }),
       });
     }
     items.push({ kind: 'separator', key: 'sep-1' });
@@ -1212,7 +1209,7 @@ export default function SessionsScreen({ navigation }: Props) {
   };
 
   /** PROJECT "Add to project group" submenu — desktop collections subview. */
-  const projectCollectionsItems = (ctx: ProjectContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const projectCollectionsItems = (ctx: ProjectContext): ContextMenuItem[] => {
     const summary = summaryFor(ctx.machine.id);
     const state = summary?.projectCollectionsState ?? null;
     const projectId = ctx.header.projectId;
@@ -1223,7 +1220,7 @@ export default function SessionsScreen({ navigation }: Props) {
         key: 'back',
         label: 'Back',
         icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
-        onPress: () => setOverlay({ kind: 'projectMenu', ctx, anchor, view: 'root' }),
+        onPress: () => setOverlay({ kind: 'projectMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
       {
@@ -1262,7 +1259,7 @@ export default function SessionsScreen({ navigation }: Props) {
   };
 
   /** COLLECTION header menu root — desktop project-collection menu. */
-  const collectionMenuRootItems = (ctx: CollectionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const collectionMenuRootItems = (ctx: CollectionContext): ContextMenuItem[] => {
     const summary = summaryFor(ctx.machine.id);
     const state = summary?.projectCollectionsState ?? null;
     const sessions = collectionMemberSessions(ctx);
@@ -1352,7 +1349,7 @@ export default function SessionsScreen({ navigation }: Props) {
       label: 'Group color',
       icon: <PaletteGlyph size={14} color={menuIconColor} />,
       submenu: true,
-      onPress: () => setOverlay({ kind: 'collectionMenu', ctx, anchor, view: 'colors' }),
+      onPress: () => setOverlay({ kind: 'collectionMenu', ctx, view: 'colors' }),
     });
     items.push({
       kind: 'item',
@@ -1394,7 +1391,7 @@ export default function SessionsScreen({ navigation }: Props) {
   };
 
   /** COLLECTION "Group color" submenu — desktop 9-color swatch radio list. */
-  const collectionColorItems = (ctx: CollectionContext, anchor: MenuAnchor): ContextMenuItem[] => {
+  const collectionColorItems = (ctx: CollectionContext): ContextMenuItem[] => {
     const summary = summaryFor(ctx.machine.id);
     const state = summary?.projectCollectionsState ?? null;
     const items: ContextMenuItem[] = [
@@ -1403,7 +1400,7 @@ export default function SessionsScreen({ navigation }: Props) {
         key: 'back',
         label: 'Back',
         icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
-        onPress: () => setOverlay({ kind: 'collectionMenu', ctx, anchor, view: 'root' }),
+        onPress: () => setOverlay({ kind: 'collectionMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
     ];
@@ -1708,9 +1705,9 @@ export default function SessionsScreen({ navigation }: Props) {
             count={child.count}
             collapsed={child.collapsed}
             onPress={() => collapse.toggleGroup(machineId, child.groupCollapseKey)}
-            onMenu={(anchor) => {
+            onMenu={() => {
               if (target === null) return;
-              setOverlay({ kind: 'groupMenu', ctx: { machine: target, item: child }, anchor });
+              setOverlay({ kind: 'groupMenu', ctx: { machine: target, item: child } });
             }}
           />
         );
@@ -1730,13 +1727,12 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => {
               if (target !== null) void attach(target, child.session);
             }}
-            onMenu={(anchor) => {
+            onMenu={() => {
               if (target === null) return;
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               setOverlay({
                 kind: 'sessionMenu',
                 ctx: { machine: target, item: child },
-                anchor,
                 view: 'root',
               });
             }}
@@ -1801,9 +1797,9 @@ export default function SessionsScreen({ navigation }: Props) {
           primaryAgent={primaryAgent}
           showSessionListCollapse={header.sessionListClipped && !header.sessionListCollapsed}
           onToggle={() => collapse.toggleProject(machineId, header.projectKey)}
-          onMenu={(anchor) => {
+          onMenu={() => {
             if (target === null) return;
-            setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, anchor, view: 'root' });
+            setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, view: 'root' });
           }}
           onCreateTerminal={() => {
             if (target === null) return;
@@ -1823,13 +1819,13 @@ export default function SessionsScreen({ navigation }: Props) {
             if (target === null || primaryAgent === null) return;
             launchAgent(target, header, primaryAgent);
           }}
-          onOpenAgentMenu={(anchor) => {
+          onOpenAgentMenu={() => {
             if (target === null) return;
-            setOverlay({ kind: 'agentMenu', ctx: { machine: target, header }, anchor });
+            setOverlay({ kind: 'agentMenu', ctx: { machine: target, header } });
           }}
-          onOpenActionsMenu={(anchor) => {
+          onOpenActionsMenu={() => {
             if (target === null) return;
-            setOverlay({ kind: 'actionsMenu', ctx: { machine: target, header }, anchor });
+            setOverlay({ kind: 'actionsMenu', ctx: { machine: target, header } });
           }}
           onCollapseSessionList={() => collapse.toggleSessionList(machineId, header.projectKey)}
         />
@@ -1884,12 +1880,11 @@ export default function SessionsScreen({ navigation }: Props) {
             attentionCount={header.attentionCount}
             awakeCount={header.awakeCount}
             onPress={() => collapse.toggleCollection(block.machineId, header.collectionId)}
-            onMenu={(anchor) => {
+            onMenu={() => {
               if (target === null) return;
               setOverlay({
                 kind: 'collectionMenu',
                 ctx: { machine: target, header },
-                anchor,
                 view: 'root',
               });
             }}
@@ -1942,9 +1937,9 @@ export default function SessionsScreen({ navigation }: Props) {
                   }
                 : undefined
             }
-            onMenu={(anchor) => {
+            onMenu={() => {
               if (target === null) return;
-              setOverlay({ kind: 'sectionMenu', machine: target, section: item.section, anchor });
+              setOverlay({ kind: 'sectionMenu', machine: target, section: item.section });
             }}
           />
         );
@@ -1965,13 +1960,12 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => {
               if (target !== null) void attach(target, item.session);
             }}
-            onMenu={(anchor) => {
+            onMenu={() => {
               if (target === null) return;
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               setOverlay({
                 kind: 'sessionMenu',
                 ctx: { machine: target, item },
-                anchor,
                 view: 'root',
               });
             }}
@@ -2112,11 +2106,12 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'sessionMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={sessionTitle(overlay.ctx.item.session)}
+          subtitle={overlay.view === 'tags' ? 'Tags' : overlay.ctx.item.projectTitle}
           items={
             overlay.view === 'tags'
-              ? sessionTagItems(overlay.ctx, overlay.anchor)
-              : sessionMenuRootItems(overlay.ctx, overlay.anchor)
+              ? sessionTagItems(overlay.ctx)
+              : sessionMenuRootItems(overlay.ctx)
           }
           onClose={() => setOverlay(NONE)}
         />
@@ -2241,11 +2236,12 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'projectMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.ctx.header.title}
+          subtitle={overlay.view === 'collections' ? 'Move to group' : 'Project'}
           items={
             overlay.view === 'collections'
-              ? projectCollectionsItems(overlay.ctx, overlay.anchor)
-              : projectMenuRootItems(overlay.ctx, overlay.anchor)
+              ? projectCollectionsItems(overlay.ctx)
+              : projectMenuRootItems(overlay.ctx)
           }
           onClose={() => setOverlay(NONE)}
         />
@@ -2254,11 +2250,12 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'collectionMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.ctx.header.title}
+          subtitle={overlay.view === 'colors' ? 'Group color' : 'Group'}
           items={
             overlay.view === 'colors'
-              ? collectionColorItems(overlay.ctx, overlay.anchor)
-              : collectionMenuRootItems(overlay.ctx, overlay.anchor)
+              ? collectionColorItems(overlay.ctx)
+              : collectionMenuRootItems(overlay.ctx)
           }
           onClose={() => setOverlay(NONE)}
         />
@@ -2267,7 +2264,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'groupMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.ctx.item.title}
+          subtitle="Session group"
           items={groupMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
         />
@@ -2276,7 +2274,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'sectionMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.section === 'quick' ? 'Quick Actions' : 'Projects'}
+          subtitle={machineDisplayLabel(overlay.machine)}
           items={sectionMenuItems(overlay.machine, overlay.section)}
           onClose={() => setOverlay(NONE)}
         />
@@ -2322,7 +2321,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'agentMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.ctx.header.title}
+          subtitle="Start an agent session"
           items={agentMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
         />
@@ -2331,7 +2331,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'actionsMenu' ? (
         <ContextMenu
           visible
-          anchor={overlay.anchor}
+          title={overlay.ctx.header.title}
+          subtitle="Quick actions"
           items={actionsMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
         />

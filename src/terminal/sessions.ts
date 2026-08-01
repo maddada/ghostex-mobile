@@ -27,6 +27,7 @@ export const MAX_WARM_SESSIONS = 7;
 export const ATTACH_VIEWPORT_REFRESH_DELAY_MS = 2000;
 
 const FONT_SIZES_STORAGE_KEY = 'terminal.fontSizes.v1';
+const CHAT_MODE_STORAGE_KEY = 'terminal.chatMode.v1';
 
 export type TerminalTabKind = 'attach' | 'shell';
 export type TerminalTabState = 'opening' | 'open' | 'closed' | 'failed';
@@ -95,6 +96,14 @@ type TerminalState = {
   warmOrder: string[];
   /** Per-session font size overrides, persisted. */
   fontSizeBySessionKey: Record<string, number>;
+  /**
+   * Tabs currently showing the Session Chat surface instead of the terminal.
+   * Per tab by design: toggling one tab never affects the others. Persisted:
+   * a session reopened after a restart (or after its tab was closed) comes
+   * back in whichever view it last used. Attach-tab keys are stable
+   * `${machineId}:${sessionId}`, so entries survive restarts correctly.
+   */
+  chatModeSessionKeys: string[];
 
   hydrate: () => Promise<void>;
   /** Open (or re-select) an attach tab for a remote Ghostex session. */
@@ -120,11 +129,17 @@ type TerminalState = {
   setFontSizeForSession: (sessionKey: string, size: number) => void;
   /** Drop all pinch-zoom overrides and re-apply the global default everywhere. */
   clearFontSizeOverrides: () => void;
+  /** Flip one tab between terminal and Session Chat view. */
+  toggleChatMode: (sessionKey: string) => void;
 };
 
 function isFontSizeMap(value: unknown): value is Record<string, number> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   return Object.values(value).every((entry) => typeof entry === 'number');
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
 export const useTerminalStore = create<TerminalState>()((set, get) => {
@@ -202,6 +217,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     selectedSessionKey: null,
     warmOrder: [],
     fontSizeBySessionKey: {},
+    chatModeSessionKeys: [],
 
     hydrate: async () => {
       if (get().hydrated) return;
@@ -215,7 +231,17 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       } catch {
         // Corrupt persisted sizes fall back to the global default.
       }
-      set({ hydrated: true, fontSizeBySessionKey });
+      let chatModeSessionKeys: string[] = [];
+      try {
+        const raw = await AsyncStorage.getItem(CHAT_MODE_STORAGE_KEY);
+        if (raw !== null) {
+          const parsed: unknown = JSON.parse(raw);
+          if (isStringArray(parsed)) chatModeSessionKeys = parsed;
+        }
+      } catch {
+        // Corrupt persisted chat modes fall back to terminal view everywhere.
+      }
+      set({ hydrated: true, fontSizeBySessionKey, chatModeSessionKeys });
     },
 
     attachSession: async (machine, session) => {
@@ -278,6 +304,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       zmxRefreshSent.delete(sessionKey);
       dropWarm(sessionKey);
       removeTab(sessionKey);
+      // Chat mode is intentionally NOT cleared here: the persisted last-used
+      // view survives tab close so a later reopen restores it.
       try {
         await GhostexNative.closeTerminal(sessionKey);
       } catch {
@@ -348,6 +376,15 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       for (const tab of get().tabs) {
         void GhostexNative.setFontSize(tab.sessionKey, size).catch(() => undefined);
       }
+    },
+
+    toggleChatMode: (sessionKey) => {
+      const current = get().chatModeSessionKeys;
+      const chatModeSessionKeys = current.includes(sessionKey)
+        ? current.filter((key) => key !== sessionKey)
+        : [...current, sessionKey];
+      set({ chatModeSessionKeys });
+      void AsyncStorage.setItem(CHAT_MODE_STORAGE_KEY, JSON.stringify(chatModeSessionKeys));
     },
   };
 });

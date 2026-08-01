@@ -45,6 +45,38 @@ export function EllipsisIcon(props: IconProps) {
   );
 }
 
+/** Speech bubble: shown in terminal view to switch the tab to Session Chat. */
+export function ChatBubbleIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** `>_` prompt glyph: shown in chat view to switch the tab back to the terminal. */
+export function TerminalPromptIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 17l6-6-6-6M12 19h8"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   const { size, color, strokeWidth } = iconDefaults(props);
   return (

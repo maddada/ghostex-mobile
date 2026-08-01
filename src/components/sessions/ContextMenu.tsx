@@ -1,9 +1,10 @@
 /**
- * Desktop sidebar context-menu clone (sidebar/styles/session-overlays.css
- * .session-context-menu): a 220dp dark popup aligned to its anchor, sized to
- * its content and only scrolling once it would overflow the safe viewport.
- * Items are icon + label + optional trailing check, with hover-gray press
- * feedback, 1dp dividers, and danger tinting.
+ * Session-list context menu: a floating card centred over the sessions list
+ * (not anchored to the pressed row), titled with the thing it acts on. It
+ * sizes to its content, scrolls once the item list outgrows the safe viewport,
+ * and wraps long labels instead of truncating them. Items are icon + label +
+ * optional trailing check, with press feedback, 1dp dividers, and danger
+ * tinting carried over from the desktop sidebar menu.
  */
 
 import type { ReactElement } from 'react';
@@ -55,17 +56,19 @@ export type ContextMenuItem =
 
 export type ContextMenuProps = {
   visible: boolean;
-  anchor: MenuAnchor | null;
+  /** What the menu is acting on — shown in the card header. */
+  title: string;
+  /** Optional second header line, e.g. the current submenu. */
+  subtitle?: string;
   items: ContextMenuItem[];
   onClose: () => void;
 };
 
-const MENU_WIDTH = 220;
-const EDGE_MARGIN = 12;
-/** Gap between the anchor button and the popup, matching the desktop offset. */
-const ANCHOR_GAP = 4;
-/** Below the anchor is only worth using if a couple of rows actually fit. */
-const MIN_DROP_DOWN_HEIGHT = 132;
+/** Comfortable reading width; the card shrinks on narrow screens. */
+const MENU_MAX_WIDTH = 360;
+const EDGE_MARGIN = 20;
+/** Leave the list visibly floating over the sessions list, never full-bleed. */
+const MAX_HEIGHT_RATIO = 0.78;
 
 /** Filled 14dp check glyph (desktop IconCheck) drawn with two rotated bars. */
 function CheckGlyph({ color }: { color: string }) {
@@ -99,32 +102,44 @@ const checkStyles = StyleSheet.create({
   },
 });
 
-export default function ContextMenu({ visible, anchor, items, onClose }: ContextMenuProps) {
+export default function ContextMenu({
+  visible,
+  title,
+  subtitle,
+  items,
+  onClose,
+}: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
-  if (!visible || anchor === null) return null;
+  if (!visible) return null;
 
-  const horizontalStart = Math.max(EDGE_MARGIN, safeArea.left);
-  const horizontalEnd = screenWidth - Math.max(EDGE_MARGIN, safeArea.right);
-  const menuWidth = Math.max(1, Math.min(MENU_WIDTH, horizontalEnd - horizontalStart));
-  const left = Math.min(
-    Math.max(horizontalStart, anchor.x + anchor.width - menuWidth),
-    horizontalEnd - menuWidth,
-  );
-  const verticalStart = Math.max(EDGE_MARGIN, safeArea.top);
-  const verticalEnd = screenHeight - Math.max(EDGE_MARGIN, safeArea.bottom);
-  const spaceBelow = verticalEnd - (anchor.y + anchor.height + ANCHOR_GAP);
-  const spaceAbove = anchor.y - ANCHOR_GAP - verticalStart;
-  const dropsDown = spaceBelow >= MIN_DROP_DOWN_HEIGHT || spaceBelow >= spaceAbove;
-  const placement = dropsDown
-    ? { top: anchor.y + anchor.height + ANCHOR_GAP }
-    : { bottom: screenHeight - (anchor.y - ANCHOR_GAP) };
-  const maxHeight = Math.max(1, dropsDown ? spaceBelow : spaceAbove);
+  const horizontalRoom =
+    screenWidth - Math.max(EDGE_MARGIN, safeArea.left) - Math.max(EDGE_MARGIN, safeArea.right);
+  const menuWidth = Math.max(1, Math.min(MENU_MAX_WIDTH, horizontalRoom));
+  const verticalRoom =
+    screenHeight - Math.max(EDGE_MARGIN, safeArea.top) - Math.max(EDGE_MARGIN, safeArea.bottom);
+  const maxHeight = Math.max(1, verticalRoom * MAX_HEIGHT_RATIO);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.menu, placement, { left, width: menuWidth, maxHeight }]}>
+        {/* Swallows presses on the card itself so only the backdrop closes. */}
+        <Pressable
+          style={[styles.menu, { width: menuWidth, maxHeight }]}
+          onPress={() => {
+            /* card body is not a dismiss target */
+          }}
+        >
+          <View style={styles.header}>
+            <Text style={styles.headerTitle} numberOfLines={2}>
+              {title}
+            </Text>
+            {subtitle !== undefined && subtitle.length > 0 ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
           <ScrollView
             style={styles.menuScroll}
             contentContainerStyle={styles.menuContent}
@@ -168,7 +183,6 @@ export default function ContextMenu({ visible, anchor, items, onClose }: Context
                       styles.itemLabel,
                       item.destructive === true ? styles.itemLabelDanger : null,
                     ]}
-                    numberOfLines={1}
                   >
                     {item.label}
                   </Text>
@@ -183,7 +197,7 @@ export default function ContextMenu({ visible, anchor, items, onClose }: Context
               );
             })}
           </ScrollView>
-        </View>
+        </Pressable>
       </Pressable>
     </Modal>
   );
@@ -192,22 +206,42 @@ export default function ContextMenu({ visible, anchor, items, onClose }: Context
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   menu: {
-    position: 'absolute',
-    width: MENU_WIDTH,
     backgroundColor: SidebarPalette.MENU_BG,
     borderWidth: 1,
     borderColor: SidebarPalette.MENU_BORDER,
-    borderRadius: 0,
+    borderRadius: 12,
+    overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.32,
     shadowRadius: 28,
     elevation: 12,
   },
+  header: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: SidebarPalette.MENU_DIVIDER,
+    gap: 2,
+  },
+  headerTitle: {
+    color: SidebarPalette.FOREGROUND,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  headerSubtitle: {
+    color: SidebarPalette.MUTED,
+    fontSize: 11,
+  },
   menuContent: {
-    padding: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
     gap: 2,
   },
   menuScroll: {
@@ -217,10 +251,10 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 0,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 8,
   },
   itemActive: {
     backgroundColor: SidebarPalette.MENU_HOVER,
@@ -238,6 +272,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: SidebarPalette.FOREGROUND,
     fontSize: 13,
+    lineHeight: 18,
   },
   itemLabelDanger: {
     color: SidebarPalette.MENU_DANGER,
@@ -267,8 +302,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    paddingHorizontal: 8,
-    paddingTop: 6,
+    paddingHorizontal: 10,
+    paddingTop: 8,
     paddingBottom: 2,
   },
   separator: {
