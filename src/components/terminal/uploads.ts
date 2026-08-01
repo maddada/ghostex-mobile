@@ -37,7 +37,7 @@ export function remoteAttachmentPathScript(sanitizedFilename: string): string {
 }
 
 /** file:// URI → local filesystem path for the native SFTP upload. */
-function localPathFromUri(uri: string): string {
+export function localPathFromUri(uri: string): string {
   const withoutScheme = uri.startsWith('file://') ? uri.slice('file://'.length) : uri;
   try {
     return decodeURIComponent(withoutScheme);
@@ -49,13 +49,22 @@ function localPathFromUri(uri: string): string {
 export type AttachmentUploadResult = 'sent' | 'cancelled';
 
 /**
- * Pick one document, stage a remote path, upload, and send the markdown-style
- * reference into the terminal. Throws on failure (caller shows "Upload
- * Failed"); resolves 'cancelled' when the picker was dismissed.
+ * Delivers the finished `[Title](remotePath)` reference. The terminal view
+ * types it into the PTY; the Session Chat view has no PTY in front of the
+ * user, so it sends the reference as a chat message instead.
+ */
+export type AttachmentReferenceSink = (reference: string) => Promise<void>;
+
+/**
+ * Pick one document, stage a remote path, upload, and deliver the
+ * markdown-style reference through `deliver` (default: type it into the
+ * terminal). Throws on failure (caller shows "Upload Failed"); resolves
+ * 'cancelled' when the picker was dismissed.
  */
 export async function pickAndSendAttachment(
   machineId: string,
   sessionKey: string,
+  deliver?: AttachmentReferenceSink,
 ): Promise<AttachmentUploadResult> {
   const result = await DocumentPicker.getDocumentAsync({
     multiple: false,
@@ -80,7 +89,12 @@ export async function pickAndSendAttachment(
 
   const isImage = asset.mimeType?.startsWith('image/') === true;
   const title = isImage ? `Image #${++imageCounter}` : `File #${++fileCounter}`;
-  // No trailing newline, per spec.
-  await GhostexNative.sendText(sessionKey, `[${title}](${remotePath})`);
+  const reference = `[${title}](${remotePath})`;
+  if (deliver !== undefined) {
+    await deliver(reference);
+  } else {
+    // No trailing newline, per spec.
+    await GhostexNative.sendText(sessionKey, reference);
+  }
   return 'sent';
 }

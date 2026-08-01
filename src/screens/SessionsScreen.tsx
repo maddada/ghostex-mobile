@@ -35,6 +35,7 @@ import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import StateCard from '../components/common/StateCard';
 import { AGENT_ICONS } from '../assets/agentIcons.generated';
+import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import { useCollapseStore } from '../components/sessions/collapseStore';
 import ContextMenu, { type ContextMenuItem } from '../components/sessions/ContextMenu';
@@ -53,6 +54,7 @@ import {
   GitForkGlyph,
   InfoGlyph,
   MachinesGlyph,
+  MessageCircleGlyph,
   PaletteGlyph,
   PencilGlyph,
   PinGlyph,
@@ -140,10 +142,16 @@ import {
   type GhostexSession,
 } from '../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy, StateCardCopy } from '../copy';
+import type { OptimisticInventoryChange } from '../inventory/optimistic';
 import {
-  optimisticChangeResourceKey,
-  type OptimisticInventoryChange,
-} from '../inventory/optimistic';
+  enqueueRemoteMutation,
+  FORK_AGENT_ICONS,
+  lifecycleMutation,
+  pinMutation,
+  renameMutation,
+  runSessionCommand as runSessionCommandOnMachine,
+  tagMutation,
+} from '../sessions/sessionCommands';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, selectedMachine, useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -197,85 +205,6 @@ type BulkSessionAction = {
   closeWarmSession: boolean;
   optimisticChange?: OptimisticInventoryChange;
 };
-
-const remoteMutationQueues = new Map<string, Promise<void>>();
-
-async function enqueueRemoteMutation(
-  machineId: string,
-  resourceKey: string,
-  run: () => Promise<void>,
-): Promise<void> {
-  const queueKey = `${machineId}:${resourceKey}`;
-  const previous = remoteMutationQueues.get(queueKey) ?? Promise.resolve();
-  const scheduled = previous.catch(() => undefined).then(run);
-  remoteMutationQueues.set(queueKey, scheduled);
-  try {
-    await scheduled;
-  } finally {
-    if (remoteMutationQueues.get(queueKey) === scheduled) {
-      remoteMutationQueues.delete(queueKey);
-    }
-  }
-}
-
-function pinMutation(sessionId: string, isPinned: boolean): OptimisticInventoryChange {
-  return {
-    kind: 'sessionPatch',
-    sessionId,
-    patch: { isPinned },
-    confirmPatch: { isPinned },
-  };
-}
-
-function tagMutation(sessionId: string, tag: string): OptimisticInventoryChange {
-  const sessionTag = tag === 'none' ? '' : tag;
-  return {
-    kind: 'sessionPatch',
-    sessionId,
-    patch: { sessionTag },
-    confirmPatch: { sessionTag },
-  };
-}
-
-function renameMutation(sessionId: string, title: string): OptimisticInventoryChange {
-  return {
-    kind: 'sessionPatch',
-    sessionId,
-    patch: { title, displayTitle: title, displayTitleTooltip: title },
-    confirmPatch: { title },
-  };
-}
-
-function lifecycleMutation(
-  sessionId: string,
-  sleeping: boolean,
-): OptimisticInventoryChange {
-  return sleeping
-    ? {
-        kind: 'sessionPatch',
-        sessionId,
-        patch: {
-          isSleeping: true,
-          isLive: false,
-          status: 'sleep',
-          activity: 'sleep',
-          nativePaneState: 'unmounted',
-        },
-        confirmPatch: { isSleeping: true },
-      }
-    : {
-        kind: 'sessionPatch',
-        sessionId,
-        patch: {
-          isSleeping: false,
-          isLive: true,
-          status: 'idle',
-          activity: 'idle',
-          nativePaneState: 'mounted',
-        },
-        confirmPatch: { isSleeping: false },
-      };
-}
 
 function closeMutation(sessionId: string): OptimisticInventoryChange {
   return { kind: 'sessionClose', sessionId };
@@ -516,6 +445,23 @@ export default function SessionsScreen({ navigation }: Props) {
     [navigation, setTransientStatus],
   );
 
+  /**
+   * Open a session straight onto its Session Chat surface. The attach tab's
+   * key is deterministic, so chat mode is armed BEFORE the tab opens and the
+   * Terminal screen mounts the chat view without flashing the terminal first.
+   */
+  const attachInChatMode = useCallback(
+    async (target: MachineRecord, session: GhostexSession): Promise<void> => {
+      const sessionKey = attachSessionKey(target.id, session.sessionId);
+      const terminal = useTerminalStore.getState();
+      if (!terminal.chatModeSessionKeys.includes(sessionKey)) {
+        terminal.toggleChatMode(sessionKey);
+      }
+      await attach(target, session);
+    },
+    [attach],
+  );
+
   /** Attach a session that only exists as an id (creation flows, §6). */
   const attachCreated = useCallback(
     async (target: MachineRecord, sessionId: string): Promise<void> => {
@@ -548,40 +494,10 @@ export default function SessionsScreen({ navigation }: Props) {
       },
     ): Promise<void> => {
       setOverlay(NONE);
-      const inventory = useInventoryStore.getState();
-      const mutationId =
-        options?.optimisticChange === undefined
-          ? null
-          : inventory.beginOptimisticMutations(target.id, [options.optimisticChange])[0];
-      const mutationIds = mutationId === null ? [] : [mutationId];
-      try {
-        const run = async (): Promise<void> => {
-          if (options?.closeWarmSessionId !== undefined) {
-            await useTerminalStore
-              .getState()
-              .closeWarmSessionFor(target.id, options.closeWarmSessionId);
-          }
-          await runGhostexCli(target, command);
-          if (mutationIds.length > 0) {
-            useInventoryStore.getState().commitOptimisticMutations(target.id, mutationIds);
-          }
-        };
-        if (options?.optimisticChange === undefined) {
-          await run();
-        } else {
-          await enqueueRemoteMutation(
-            target.id,
-            optimisticChangeResourceKey(options.optimisticChange),
-            run,
-          );
-        }
-        await useInventoryStore.getState().refreshMachineFresh(target);
-      } catch (error) {
-        if (mutationIds.length > 0) {
-          useInventoryStore.getState().rollbackOptimisticMutations(target.id, mutationIds);
-        }
-        setTransientStatus(error instanceof Error ? error.message : String(error));
-      }
+      await runSessionCommandOnMachine(target, command, {
+        ...options,
+        onError: setTransientStatus,
+      });
     },
     [setTransientStatus],
   );
@@ -830,7 +746,6 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const menuIconColor = GhostexPalette.FOREGROUND;
   const dangerIconColor = '#FF7B72';
-  const FORK_AGENT_ICONS = ['codex', 'claude', 'pi'];
 
   /** SESSION context menu root — desktop sortable-session-card menu order. */
   const sessionMenuRootItems = (ctx: SessionContext): ContextMenuItem[] => {
@@ -906,6 +821,20 @@ export default function SessionsScreen({ navigation }: Props) {
       icon: <TerminalGlyph size={14} color={menuIconColor} />,
       onPress: () => void attach(ctx.machine, session),
     });
+    if (
+      session.projectId.length > 0 &&
+      isSessionChatSupportedAgent(
+        resolveAgentIconId(session.agentIcon, session.agentName.length > 0 ? session.agentName : session.agent),
+      )
+    ) {
+      items.push({
+        kind: 'item',
+        key: 'chat',
+        label: 'Chat',
+        icon: <MessageCircleGlyph size={14} color={menuIconColor} />,
+        onPress: () => void attachInChatMode(ctx.machine, session),
+      });
+    }
     items.push({
       kind: 'item',
       key: 'copy-attach',

@@ -6,7 +6,7 @@
  * of the native terminal view while a tab is in chat mode.
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
@@ -33,15 +33,25 @@ export type SessionChatWebViewProps = {
   sessionId: string;
   /** Agent icon id ("claude", "codex", …) for the page's empty state. */
   agentId: string;
+  /**
+   * Live agent-is-working signal from the machine inventory. The page cannot
+   * see it (its own view of the turn is whatever the last read returned), so
+   * the host pushes it in like the desktop and web hosts do.
+   */
+  working: boolean;
+  /** False while the session cannot take input (asleep / not live). */
+  canSend: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
 export default function SessionChatWebView({
   agentId,
+  canSend,
   machine,
   projectId,
   sessionId,
   style,
+  working,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
 
@@ -50,6 +60,26 @@ export default function SessionChatWebView({
       `window.__ghostexMobileChatConfig = ${injectableJson({ agentId })}; true;`,
     [agentId],
   );
+
+  /*
+   * The page installs `ghostexMobileChatSetHostState` while its inline bundle
+   * script runs, i.e. strictly before load-end. Pushing both on change and
+   * once at load-end therefore covers the two orderings (state settled before
+   * the page was ready, and state changing afterwards) without either push
+   * being dropped.
+   */
+  const hostStateRef = useRef({ canSend, working });
+  hostStateRef.current = { canSend, working };
+  const pushHostState = useCallback((): void => {
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatSetHostState && window.ghostexMobileChatSetHostState(' +
+        `${injectableJson(hostStateRef.current)}); true;`,
+    );
+  }, []);
+
+  useEffect(() => {
+    pushHostState();
+  }, [canSend, working, pushHostState]);
 
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
@@ -74,6 +104,7 @@ export default function SessionChatWebView({
       style={[styles.webview, style]}
       containerStyle={styles.container}
       injectedJavaScriptBeforeContentLoaded={configScript}
+      onLoadEnd={pushHostState}
       onMessage={handleMessage}
       // Markdown links in the transcript open in the system browser instead
       // of navigating the chat surface away.

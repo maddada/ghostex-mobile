@@ -107,6 +107,30 @@ export function renameSessionCommand(sessionId: string, title: string, projectId
   );
 }
 
+/**
+ * Agent-aware rename: `ghostex request-session-rename --session-id <id>
+ * --project-id <id> --title=<title> [--agent-name=<agent>] --json`.
+ *
+ * Unlike `rename-session` (a plain title write), this goes through gxserver's
+ * rename request, which answers `shouldSendAgentRenameCommand` when the agent
+ * CLI owns the title and the client still has to stage `/rename <title>` into
+ * its TUI — the same two-step the desktop and web chat surfaces perform.
+ */
+export function requestSessionRenameCommand(
+  sessionId: string,
+  projectId: string,
+  title: string,
+  agentName?: string,
+): string {
+  const agent = agentName === undefined ? '' : agentName.trim();
+  return (
+    `ghostex request-session-rename --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --project-id ${shellQuote(requireId(projectId, 'project id'))}` +
+    ` --title=${shellQuote(title)}` +
+    `${agent.length === 0 ? '' : ` --agent-name=${shellQuote(agent)}`} --json`
+  );
+}
+
 /** Create terminal session: `ghostex create-session --json [--project-id <id>] [--group-id <id>]`. */
 export function createSessionCommand(options?: { projectId?: string; groupId?: string }): string {
   const parts = ['ghostex create-session --json'];
