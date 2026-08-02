@@ -47,7 +47,7 @@ export function isSessionChatSupportedAgent(agentId: string): boolean {
 
 export type SessionChatBridgeRequest = {
   id: number;
-  op: 'read' | 'send' | 'answerPrompt' | 'interrupt' | 'saveImage';
+  op: 'read' | 'send' | 'answerPrompt' | 'interrupt' | 'saveImage' | 'saveAttachment' | 'loadImage';
   params?: Record<string, unknown>;
 };
 
@@ -66,6 +66,12 @@ const SESSION_CHAT_READ_TIMEOUT_MARGIN_MS = 25000;
 const REMOTE_PATH_EXEC_TIMEOUT_MS = 20000;
 /** Filename used when the composer pastes bytes without one. */
 const PASTED_IMAGE_FALLBACK_NAME = 'pasted-image.png';
+/** Filename used when a non-image attachment arrives without one. */
+const ATTACHMENT_FALLBACK_NAME = 'attachment.bin';
+/** Overlay-viewer image reads over SSH exec: refuse anything larger. */
+const IMAGE_READ_MAX_BYTES = 10 * 1024 * 1024;
+/** Exec timeout for base64-ing an image file back over the SSH channel. */
+const IMAGE_READ_EXEC_TIMEOUT_MS = 45000;
 
 export function parseSessionChatBridgeRequest(raw: string): SessionChatBridgeRequest | null {
   let parsed: unknown;
@@ -82,7 +88,9 @@ export function parseSessionChatBridgeRequest(raw: string): SessionChatBridgeReq
     record.op !== 'send' &&
     record.op !== 'answerPrompt' &&
     record.op !== 'interrupt' &&
-    record.op !== 'saveImage'
+    record.op !== 'saveImage' &&
+    record.op !== 'saveAttachment' &&
+    record.op !== 'loadImage'
   ) {
     return null;
   }
@@ -112,14 +120,15 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
  * local copy exists only to give the native uploader a path and is deleted
  * either way.
  */
-async function saveChatImage(
+async function saveChatUpload(
   machine: MachineConnectionTarget,
   params: Record<string, unknown>,
+  fallbackName: string,
 ): Promise<{ path: string; bytes: number }> {
   const raw = typeof params.base64Data === 'string' ? params.base64Data : '';
   const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
-  if (base64.length === 0) throw new Error('The pasted image carried no data.');
-  const suggested = stringParam(params, 'suggestedName') ?? PASTED_IMAGE_FALLBACK_NAME;
+  if (base64.length === 0) throw new Error('The attachment carried no data.');
+  const suggested = stringParam(params, 'suggestedName') ?? fallbackName;
   const sanitized = sanitizeAttachmentFilename(suggested);
 
   const localFile = new File(Paths.cache, `ghostex-chat-${Date.now()}-${sanitized}`);
@@ -147,6 +156,72 @@ async function saveChatImage(
     // Cache-directory scratch file; nothing downstream reads it again.
     localFile.delete();
   }
+}
+
+function imageMediaTypeForPath(path: string): string | null {
+  const extension = path.toLowerCase().split('.').pop() ?? '';
+  switch (extension) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'bmp':
+      return 'image/bmp';
+    case 'avif':
+      return 'image/avif';
+    case 'svg':
+      return 'image/svg+xml';
+    case 'ico':
+      return 'image/x-icon';
+    case 'tif':
+    case 'tiff':
+      return 'image/tiff';
+    case 'heic':
+    case 'heif':
+      return 'image/heic';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Overlay-viewer image read. The native module has no download API, so the
+ * bytes come back as base64 over the machine's SSH exec channel, with a
+ * size guard so a mislabeled huge file cannot flood the bridge.
+ */
+async function loadChatImage(
+  machine: MachineConnectionTarget,
+  params: Record<string, unknown>,
+): Promise<{ base64Data: string; mediaType: string; bytes: number }> {
+  const path = stringParam(params, 'path') ?? '';
+  if (!path.startsWith('/')) throw new Error('Image reads need an absolute path.');
+  const mediaType = imageMediaTypeForPath(path);
+  if (mediaType === null) throw new Error('The file is not a recognized image.');
+  await ensureConnected(machine);
+  const quotedPath = `'${path.replace(/'/g, `'\\''`)}'`;
+  const script = [
+    `image_path=${quotedPath}`,
+    'byte_count=$(wc -c < "$image_path" 2>/dev/null | tr -d "[:space:]")',
+    `if [ -z "$byte_count" ] || [ "$byte_count" -le 0 ] || [ "$byte_count" -gt ${IMAGE_READ_MAX_BYTES} ]; then`,
+    '  echo "unreadable or too large" >&2',
+    '  exit 1',
+    'fi',
+    'base64 < "$image_path"',
+  ].join('\n');
+  const exec = await GhostexNative.exec(machine.id, script, IMAGE_READ_EXEC_TIMEOUT_MS);
+  // Linux base64 wraps lines; strip all whitespace either way.
+  const base64Data = exec.stdout.replace(/\s+/g, '');
+  if (exec.exitCode !== 0 || base64Data.length === 0) {
+    throw new Error(
+      exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Could not read the image file.',
+    );
+  }
+  return { base64Data, bytes: Math.floor((base64Data.length * 3) / 4), mediaType };
 }
 
 /**
@@ -206,7 +281,21 @@ export async function runSessionChatBridgeRequest(
         return { id: request.id, ok: true, result: { interrupted: true } };
       }
       case 'saveImage': {
-        return { id: request.id, ok: true, result: await saveChatImage(machine, params) };
+        return {
+          id: request.id,
+          ok: true,
+          result: await saveChatUpload(machine, params, PASTED_IMAGE_FALLBACK_NAME),
+        };
+      }
+      case 'saveAttachment': {
+        return {
+          id: request.id,
+          ok: true,
+          result: await saveChatUpload(machine, params, ATTACHMENT_FALLBACK_NAME),
+        };
+      }
+      case 'loadImage': {
+        return { id: request.id, ok: true, result: await loadChatImage(machine, params) };
       }
     }
   } catch (error) {
