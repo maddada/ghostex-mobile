@@ -39,8 +39,8 @@ Screen sits in a nav stack with a native nav bar; back button hidden/custom. Zen
 ### Nav bar toolbar
 - Leading: back chevron (`chevron.left`) → dismiss keyboard, then back.
 - Principal: segmented view switcher (Terminal / Files / Stats / Sessions). For the RN v1 we have Terminal + Sessions.
-- Trailing: overflow menu (`ellipsis.circle`):
-  - "Upload Image or File" — `paperclip` (or `hourglass` while uploading); disabled unless connected + terminal view + not uploading.
+- Trailing: one overflow menu (`ellipsis.circle`) holding both sections — the Agent Actions section (Rename, Sleep/Wake, Delayed Actions, Fork, Full Reload, Prompt Editor) for resolved gxserver sessions, then the Session section:
+  - "Send & Attach File" — `paperclip`; disabled unless connected + terminal view + not uploading.
   - "New Terminal" — `plus`.
   - divider, "Settings" — `gear`, "Find" — `magnifyingglass`, "Edit Server" — `pencil`, "Zen Mode", "Disconnect" (destructive) — `xmark.circle`.
 
@@ -140,7 +140,7 @@ Profile: 2 rows × 7 columns, drag reorder, custom actions (≤100, title ≤24 
 
 ## 5. File Attach & Send
 
-- Entry: overflow menu "Upload Image or File" (paperclip/hourglass) + floating Upload control. Enabled only when connected.
+- Entry: overflow menu "Send & Attach File" (paperclip) + floating Upload control. Enabled only when connected.
 - Picker: document picker, any type, single selection.
 - Payload: read file data, filename (fallback `upload.bin`), MIME (`application/octet-stream` fallback), isImage by UTType/MIME.
 - Remote path creation (run over SSH, POSIX only):

@@ -21,19 +21,13 @@ import { GhostexNative, GhostexTerminalView } from '../../modules/ghostex-native
 import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
-import AgentActionsMenu, {
-  type AgentActionId,
-} from '../components/terminal/AgentActionsMenu';
 import EdgeSwipeZones from '../components/terminal/EdgeSwipeZones';
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
-import TerminalOverflowMenu, {
-  type OverflowMenuItem,
-} from '../components/terminal/TerminalOverflowMenu';
+import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
-import { MoreGlyph } from '../components/sessions/icons';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import {
   ChatBubbleIcon,
@@ -85,7 +79,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 /** Which Agent Actions surface (if any) is on top of the terminal screen. */
 type AgentOverlay =
   | { kind: 'none' }
-  | { kind: 'menu' }
   | { kind: 'rename'; error: string | null }
   | { kind: 'delayedSend' }
   | { kind: 'promptEditor'; sending: boolean };
@@ -664,8 +657,31 @@ export default function TerminalScreen({ navigation, route }: Props) {
     }
   }, [chatModeActive, sendChatMessageFromUser, uploading]);
 
-  const handleAgentAction = useCallback(
-    (id: AgentActionId): void => {
+  const handleNewTerminal = useCallback(async (): Promise<void> => {
+    const machineId = activeTab?.machineId ?? useMachinesStore.getState().selectedMachineId;
+    if (machineId === null || machineId === undefined) return;
+    const target = machineTargetFor(machineId);
+    if (target === null) return;
+    try {
+      // New terminals open in the folder of the session being viewed.
+      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
+    } catch {
+      // The store marks the tab failed; the state overlay surfaces it.
+    }
+  }, [activeTab, openShellTab]);
+
+  const handleRefresh = useCallback((): void => {
+    const store = useTerminalStore.getState();
+    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
+    if (tab === undefined || tab.state !== 'open') return;
+    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
+  }, []);
+
+  const handleMenuAction = useCallback(
+    (id: TerminalMenuActionId): void => {
+      // One menu, one dismissal point: every row closes the card before the
+      // action opens its own overlay (or leaves the screen).
+      setMenuVisible(false);
       switch (id) {
         case 'rename':
           setAgentOverlay({ kind: 'rename', error: null });
@@ -689,30 +705,28 @@ export default function TerminalScreen({ navigation, route }: Props) {
           setAgentOverlay(AGENT_OVERLAY_NONE);
           void handleUpload();
           return;
+        case 'newTerminal':
+          void handleNewTerminal();
+          return;
+        case 'settings':
+          navigation.navigate('Settings');
+          return;
+        case 'disconnect':
+          if (activeTab !== null) requestCloseTab(activeTab);
+          return;
       }
     },
-    [handleUpload, runAgentFork, runAgentFullReload, runAgentSleep],
+    [
+      activeTab,
+      handleNewTerminal,
+      handleUpload,
+      navigation,
+      requestCloseTab,
+      runAgentFork,
+      runAgentFullReload,
+      runAgentSleep,
+    ],
   );
-
-  const handleNewTerminal = useCallback(async (): Promise<void> => {
-    const machineId = activeTab?.machineId ?? useMachinesStore.getState().selectedMachineId;
-    if (machineId === null || machineId === undefined) return;
-    const target = machineTargetFor(machineId);
-    if (target === null) return;
-    try {
-      // New terminals open in the folder of the session being viewed.
-      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
-    } catch {
-      // The store marks the tab failed; the state overlay surfaces it.
-    }
-  }, [activeTab, openShellTab]);
-
-  const handleRefresh = useCallback((): void => {
-    const store = useTerminalStore.getState();
-    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
-    if (tab === undefined || tab.state !== 'open') return;
-    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
-  }, []);
 
   const uploadEnabled =
     activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
@@ -720,26 +734,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeSession === null || activeSession.displayTitle.length === 0
       ? SessionCopy.fallbackTitle
       : activeSession.displayTitle;
-
-  const menuItems: OverflowMenuItem[] = [
-    {
-      id: 'upload',
-      label: 'Upload Image or File',
-      disabled: !uploadEnabled || uploading,
-      onPress: () => void handleUpload(),
-    },
-    { id: 'new-terminal', label: 'New Terminal', onPress: () => void handleNewTerminal() },
-    { id: 'settings', label: 'Settings', onPress: () => navigation.navigate('Settings') },
-    {
-      id: 'disconnect',
-      label: 'Disconnect',
-      destructive: true,
-      disabled: activeTab === null,
-      onPress: () => {
-        if (activeTab !== null) requestCloseTab(activeTab);
-      },
-    },
-  ];
+  // Shell tabs have no gxserver session record; the menu still names the thing
+  // it acts on, so fall back to the tab's own title before the generic copy.
+  const menuTitle =
+    activeSession !== null && activeSession.displayTitle.length > 0
+      ? activeSession.displayTitle
+      : activeTab !== null && activeTab.title.length > 0
+        ? activeTab.title
+        : SessionCopy.fallbackTitle;
 
   return (
     <View
@@ -783,17 +785,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
             ) : (
               <ChatBubbleIcon size={19} color={GhostexPalette.FOREGROUND} />
             )}
-          </Pressable>
-        )}
-        {agentActionsCapable && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Agent Actions"
-            hitSlop={8}
-            style={styles.headerButton}
-            onPress={() => setAgentOverlay({ kind: 'menu' })}
-          >
-            <MoreGlyph size={20} color={GhostexPalette.FOREGROUND} />
           </Pressable>
         )}
         <Pressable
@@ -892,23 +883,20 @@ export default function TerminalScreen({ navigation, route }: Props) {
         <View style={{ height: keyboardVisible ? 0 : insets.bottom }} />
       )}
 
-      <TerminalOverflowMenu
+      <TerminalMenu
         visible={menuVisible}
-        topOffset={insets.top + HEADER_HEIGHT + 4}
-        items={menuItems}
-        onDismiss={() => setMenuVisible(false)}
+        sessionTitle={menuTitle}
+        agentActionsEnabled={agentActionsCapable && activeSession !== null}
+        sleeping={activeSession?.isSleeping === true}
+        forkEnabled={FORK_AGENT_ICONS.includes(activeAgentId)}
+        attachEnabled={uploadEnabled && !uploading}
+        disconnectEnabled={activeTab !== null}
+        onSelect={handleMenuAction}
+        onClose={() => setMenuVisible(false)}
       />
 
       {activeSession !== null ? (
         <>
-          <AgentActionsMenu
-            visible={agentOverlay.kind === 'menu'}
-            sessionTitle={agentSessionTitle}
-            sleeping={activeSession.isSleeping}
-            forkEnabled={FORK_AGENT_ICONS.includes(activeAgentId)}
-            onSelect={handleAgentAction}
-            onClose={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
-          />
           {agentOverlay.kind === 'rename' ? (
             <PromptDialog
               visible
