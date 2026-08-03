@@ -2103,21 +2103,38 @@ export default function SessionsScreen({ navigation }: Props) {
 
       {overlay.kind === 'delayedSend' ? (
         <DelayedSendDialog
+          agentIcon={overlay.ctx.item.session.agentIcon}
+          agentName={
+            overlay.ctx.item.session.agentName.length > 0
+              ? overlay.ctx.item.session.agentName
+              : overlay.ctx.item.session.agent
+          }
+          closeAfterDoneActive={overlay.ctx.item.session.closeAfterDone}
           visible
           sessionTitle={sessionTitle(overlay.ctx.item.session)}
           remainingLabel={overlay.ctx.item.session.delayedSendRemainingLabel}
-          onConfirm={(delayMs) =>
-            void runSessionCommand(
-              overlay.ctx.machine,
-              delayedSendCommand(overlay.ctx.item.session.sessionId, delayMs),
-            )
+          sendWhenAllProjectSessionsStopActive={
+            overlay.ctx.item.session.sendWhenAllProjectSessionsStopActive
           }
-          onCancelTimer={() =>
-            void runSessionCommand(
+          sendWhenAgentStopsActive={overlay.ctx.item.session.sendWhenAgentStopsActive}
+          onConfirm={async (trigger, delayMs) => {
+            await runSessionCommand(
+              overlay.ctx.machine,
+              delayedSendCommand(overlay.ctx.item.session.sessionId, trigger, delayMs),
+            );
+          }}
+          onCancelTimer={async () => {
+            await runSessionCommand(
               overlay.ctx.machine,
               cancelDelayedSendCommand(overlay.ctx.item.session.sessionId),
-            )
-          }
+            );
+          }}
+          onToggleCloseAfterDone={async () => {
+            await runSessionCommand(
+              overlay.ctx.machine,
+              closeAfterDoneCommand(overlay.ctx.item.session.sessionId),
+            );
+          }}
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}

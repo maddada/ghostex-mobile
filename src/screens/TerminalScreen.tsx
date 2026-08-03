@@ -41,6 +41,7 @@ import {
   acknowledgeAttentionCommand,
   attachCommand,
   cancelDelayedSendCommand,
+  closeAfterDoneCommand,
   delayedSendCommand,
   forkSessionCommand,
   loginShellCommand,
@@ -86,7 +87,7 @@ type AgentOverlay =
 const AGENT_OVERLAY_NONE: AgentOverlay = { kind: 'none' };
 
 const HEADER_HEIGHT = 44;
-/** Deliberate separation between the Android IME boundary and the accessory bar. */
+/** Deliberate separation between the Android IME boundary and the screen's bottom edge. */
 const ANDROID_KEYBOARD_GAP = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
@@ -190,7 +191,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [keyboardOcclusionCorrection, setKeyboardOcclusionCorrection] = useState(0);
-  const keyBarFrameRef = useRef<View>(null);
+  const bottomEdgeFrameRef = useRef<View>(null);
   /** Session keys already auto-focused this visit (hide-keyboard-on-startup off). */
   const autoFocusedSessionsRef = useRef<Set<string>>(new Set());
 
@@ -287,10 +288,19 @@ export default function TerminalScreen({ navigation, route }: Props) {
     void GhostexNative.focusTerminal(activeTab.sessionKey).catch(() => setTapKeyboardHint(false));
   }, [settings.hideKeyboardOnStartup, isFocused, activeTab]);
 
-  const reconcileKeyBarWithVisibleWindow = useCallback((): void => {
+  /*
+   * Android's reported keyboard height can fall short of what actually covers
+   * the window (IME candidate/tool rows, gesture bar), so measure the screen's
+   * own bottom edge — the extra-keys toolbar when it is up, the bottom spacer
+   * otherwise — and fold the residual overlap into the container's padding.
+   * Chat mode has no toolbar, which is why this measures the wrapper rather
+   * than the toolbar itself: without it the composer's last few pixels sit
+   * under the keyboard.
+   */
+  const reconcileBottomEdgeWithVisibleWindow = useCallback((): void => {
     if (!keyboardVisible || visibleWindowBottom === null) return;
     requestAnimationFrame(() => {
-      keyBarFrameRef.current?.measureInWindow((_x, y, _width, height) => {
+      bottomEdgeFrameRef.current?.measureInWindow((_x, y, _width, height) => {
         const signedOcclusion = y + height + ANDROID_KEYBOARD_GAP - visibleWindowBottom;
         if (Math.abs(signedOcclusion) < 0.5) return;
         setKeyboardOcclusionCorrection((current) => {
@@ -306,8 +316,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
       setKeyboardOcclusionCorrection(0);
       return;
     }
-    reconcileKeyBarWithVisibleWindow();
-  }, [keyboardVisible, reconcileKeyBarWithVisibleWindow, visibleWindowBottom]);
+    reconcileBottomEdgeWithVisibleWindow();
+  }, [keyboardVisible, reconcileBottomEdgeWithVisibleWindow, visibleWindowBottom]);
 
   const dismissKeyboard = useCallback((): void => {
     setTapKeyboardHint(false);
@@ -531,11 +541,11 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * of inventing a phone-side timer that would not survive the app closing.
    */
   const runDelayedSend = useCallback(
-    async (delayMs: number): Promise<void> => {
+    async (trigger: Parameters<typeof delayedSendCommand>[1], delayMs: number): Promise<void> => {
       const target = agentTarget();
       if (target === null) return;
       setAgentOverlay(AGENT_OVERLAY_NONE);
-      await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, delayMs), {
+      await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, trigger, delayMs), {
         onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]),
       });
     },
@@ -550,6 +560,17 @@ export default function TerminalScreen({ navigation, route }: Props) {
       target.machine,
       cancelDelayedSendCommand(target.session.sessionId),
       { onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]) },
+    );
+  }, [agentTarget]);
+
+  const toggleCloseAfterDone = useCallback(async (): Promise<void> => {
+    const target = agentTarget();
+    if (target === null) return;
+    setAgentOverlay(AGENT_OVERLAY_NONE);
+    await runSessionCommand(
+      target.machine,
+      closeAfterDoneCommand(target.session.sessionId),
+      { onError: (message) => Alert.alert('Session Automation Failed', message, [{ text: 'OK' }]) },
     );
   }, [agentTarget]);
 
@@ -864,24 +885,33 @@ export default function TerminalScreen({ navigation, route }: Props) {
         )}
       </View>
 
-      {keyBarVisible && activeTab !== null && !chatModeActive ? (
-        <View
-          ref={keyBarFrameRef}
-          collapsable={false}
-          onLayout={reconcileKeyBarWithVisibleWindow}
-        >
+      {/*
+        The screen's bottom edge, always mounted and measurable: the extra-keys
+        toolbar while it is up, otherwise the bottom margin.
+      */}
+      <View
+        ref={bottomEdgeFrameRef}
+        collapsable={false}
+        onLayout={reconcileBottomEdgeWithVisibleWindow}
+      >
+        {keyBarVisible && activeTab !== null && !chatModeActive ? (
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
             agentId={activeAgentId}
             onDismissKeyboard={dismissKeyboard}
           />
-        </View>
-      ) : (
-        // With the keyboard up (toolbar hidden), the container's bottom
-        // padding already clears the IME; only add the home-indicator inset
-        // while the keyboard is down.
-        <View style={{ height: keyboardVisible ? 0 : insets.bottom }} />
-      )}
+        ) : (
+          // With the keyboard up the container's bottom padding already clears
+          // the IME, so the terminal surface takes all of it and only adds the
+          // home-indicator inset while the keyboard is down. The chat composer
+          // is a control rather than a full-bleed surface: it keeps the margin
+          // it has with the keyboard down so its bottom row never sits flush
+          // against the keyboard.
+          <View
+            style={{ height: !keyboardVisible || chatModeActive ? insets.bottom : 0 }}
+          />
+        )}
+      </View>
 
       <TerminalMenu
         visible={menuVisible}
@@ -912,11 +942,23 @@ export default function TerminalScreen({ navigation, route }: Props) {
           ) : null}
           {agentOverlay.kind === 'delayedSend' ? (
             <DelayedSendDialog
+              agentIcon={activeSession.agentIcon}
+              agentName={
+                activeSession.agentName.length > 0
+                  ? activeSession.agentName
+                  : activeSession.agent
+              }
+              closeAfterDoneActive={activeSession.closeAfterDone}
               visible
               sessionTitle={agentSessionTitle}
               remainingLabel={activeSession.delayedSendRemainingLabel}
-              onConfirm={(delayMs) => void runDelayedSend(delayMs)}
+              sendWhenAllProjectSessionsStopActive={
+                activeSession.sendWhenAllProjectSessionsStopActive
+              }
+              sendWhenAgentStopsActive={activeSession.sendWhenAgentStopsActive}
+              onConfirm={(trigger, delayMs) => void runDelayedSend(trigger, delayMs)}
               onCancelTimer={() => void cancelDelayedSend()}
+              onToggleCloseAfterDone={() => toggleCloseAfterDone()}
               onCancel={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
             />
           ) : null}
