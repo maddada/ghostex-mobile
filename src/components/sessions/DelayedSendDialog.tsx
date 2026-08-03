@@ -199,8 +199,8 @@ export default function DelayedSendDialog({
                     ) : (
                       <Text style={styles.triggerDescription}>
                         {trigger === 'agentStops'
-                          ? 'Enter sends after this agent has finished working for 10 seconds.'
-                          : 'Enter sends after all agents have finished working for 10 seconds.'}
+                          ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
+                          : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
                       </Text>
                     )}
                   </View>
@@ -368,13 +368,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   triggerDetailSlot: {
-    height: 59,
+    height: 86,
     justifyContent: 'center',
   },
   triggerDescription: {
     color: GhostexPalette.MUTED,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 20,
   },
   durationField: {
     flex: 1,
