@@ -25,8 +25,10 @@ import {
 import { runGhostexCli } from '../components/sessions/cli';
 import {
   localPathFromUri,
-  remoteAttachmentPathScript,
+  remoteSessionChatUploadPathScript,
   sanitizeAttachmentFilename,
+  sanitizeSessionChatAttachmentName,
+  sessionChatImageExtension,
 } from '../components/terminal/uploads';
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
@@ -112,26 +114,38 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Composer image paste. gxserver's saveSessionChatImage endpoint has no CLI
- * verb — base64 bytes on an SSH command line would blow past ARG_MAX — so the
- * bytes take the same route as a terminal attachment: decode into an app cache
- * file, stage a temp path on the machine, SFTP the file there, and hand the
- * absolute remote path back for the transcript's `[Image #N](path)` link. The
- * local copy exists only to give the native uploader a path and is deleted
- * either way.
+ * Composer image paste and file attach. gxserver's saveSessionChatImage /
+ * saveSessionChatAttachment endpoints have no CLI verb — base64 bytes on an
+ * SSH command line would blow past ARG_MAX — so the bytes take the terminal
+ * attach flow's route instead: decode into an app cache file, stage a path on
+ * the machine, SFTP the file there, and hand the absolute remote path back for
+ * the transcript's `[Image #N](path)` link. The destination is the one those
+ * endpoints would have used (~/.ghostex/i for images, ~/.ghostex/f for
+ * everything else) so a chat attachment names the same durable Ghostex path on
+ * the machine no matter which client uploaded it. The local copy exists only
+ * to give the native uploader a path and is deleted either way.
  */
 async function saveChatUpload(
   machine: MachineConnectionTarget,
   params: Record<string, unknown>,
-  fallbackName: string,
+  kind: 'image' | 'file',
 ): Promise<{ path: string; bytes: number }> {
   const raw = typeof params.base64Data === 'string' ? params.base64Data : '';
   const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
   if (base64.length === 0) throw new Error('The attachment carried no data.');
-  const suggested = stringParam(params, 'suggestedName') ?? fallbackName;
-  const sanitized = sanitizeAttachmentFilename(suggested);
+  const suggestedName = stringParam(params, 'suggestedName');
+  const sanitized = sanitizeAttachmentFilename(
+    suggestedName ?? (kind === 'image' ? PASTED_IMAGE_FALLBACK_NAME : ATTACHMENT_FALLBACK_NAME),
+  );
+  // Epoch base name, like the server's; the phone's clock only has to make the
+  // name unique within the machine's directory, which the script re-checks.
+  const prefix = String(Date.now());
+  const tail =
+    kind === 'image'
+      ? `.${sessionChatImageExtension(base64, suggestedName)}`
+      : `-${sanitizeSessionChatAttachmentName(suggestedName ?? '') ?? ATTACHMENT_FALLBACK_NAME}`;
 
-  const localFile = new File(Paths.cache, `ghostex-chat-${Date.now()}-${sanitized}`);
+  const localFile = new File(Paths.cache, `ghostex-chat-${prefix}-${sanitized}`);
   try {
     localFile.create({ intermediates: true, overwrite: true });
     localFile.write(base64, { encoding: 'base64' });
@@ -140,7 +154,7 @@ async function saveChatUpload(
     await ensureConnected(machine);
     const exec = await GhostexNative.exec(
       machine.id,
-      remoteAttachmentPathScript(sanitized),
+      remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
       REMOTE_PATH_EXEC_TIMEOUT_MS,
     );
     const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
@@ -284,14 +298,14 @@ export async function runSessionChatBridgeRequest(
         return {
           id: request.id,
           ok: true,
-          result: await saveChatUpload(machine, params, PASTED_IMAGE_FALLBACK_NAME),
+          result: await saveChatUpload(machine, params, 'image'),
         };
       }
       case 'saveAttachment': {
         return {
           id: request.id,
           ok: true,
-          result: await saveChatUpload(machine, params, ATTACHMENT_FALLBACK_NAME),
+          result: await saveChatUpload(machine, params, 'file'),
         };
       }
       case 'loadImage': {

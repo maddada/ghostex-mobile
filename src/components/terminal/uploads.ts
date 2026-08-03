@@ -36,6 +36,90 @@ export function remoteAttachmentPathScript(sanitizedFilename: string): string {
   ].join('\n');
 }
 
+/*
+ * Session Chat upload destinations. The desktop and web hosts reach gxserver
+ * over HTTP, so their chat attachments are written by saveSessionChatImage /
+ * saveSessionChatAttachment into ~/.ghostex/i/<epochMillis>.<ext> and
+ * ~/.ghostex/f/<epochMillis>-<name> on the machine that runs the session. The
+ * phone has no HTTP path to gxserver and SFTPs the bytes itself, so it stages
+ * the same two directories with the same naming instead of dropping chat
+ * attachments in the terminal flow's temp directory — the reference the agent
+ * receives has to name a stable Ghostex path, not a file the OS may reap.
+ */
+
+/** Image extensions gxserver's session_chat_image_extension recognizes. */
+const CHAT_IMAGE_EXTENSIONS = [
+  'avif',
+  'bmp',
+  'gif',
+  'heic',
+  'heif',
+  'ico',
+  'jpeg',
+  'jpg',
+  'png',
+  'svg',
+  'tif',
+  'tiff',
+  'webp',
+];
+
+/**
+ * Extension for a chat image, mirroring gxserver: the suggested name's
+ * extension when it is a known image one (jpeg normalized to jpg), otherwise
+ * sniffed from the payload's leading bytes, otherwise png.
+ */
+export function sessionChatImageExtension(base64Data: string, suggestedName?: string): string {
+  const suggested = suggestedName?.split('.').pop()?.toLowerCase() ?? '';
+  if (CHAT_IMAGE_EXTENSIONS.includes(suggested)) {
+    return suggested === 'jpeg' ? 'jpg' : suggested;
+  }
+  // Base64 is deterministic per leading byte triple, so the magic numbers can
+  // be matched on the encoded prefix without decoding the whole payload.
+  if (base64Data.startsWith('iVBORw0KGgo')) return 'png';
+  if (base64Data.startsWith('/9j/')) return 'jpg';
+  if (base64Data.startsWith('R0lGOD')) return 'gif';
+  if (base64Data.startsWith('UklGR')) return 'webp';
+  if (base64Data.startsWith('Qk')) return 'bmp';
+  return 'png';
+}
+
+/**
+ * Flat, portable file name for a chat attachment, mirroring gxserver's
+ * sanitized_session_chat_attachment_name (path segments dropped, everything
+ * outside [A-Za-z0-9._-] replaced, leading/trailing dots and dashes trimmed,
+ * capped at 80 characters). Returns null when nothing usable remains.
+ */
+export function sanitizeSessionChatAttachmentName(suggestedName: string): string | null {
+  const base = suggestedName.split(/[/\\]/).pop()?.trim() ?? '';
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[.-]+|[.-]+$/g, '');
+  return cleaned.length === 0 ? null : cleaned.slice(0, 80);
+}
+
+/**
+ * Script that creates ~/.ghostex/<directory> on the machine and prints the
+ * first free `<prefix><tail>` path in it, falling back to `<prefix>-<n><tail>`
+ * exactly like gxserver's unique_session_chat_*_path helpers. Both arguments
+ * are already sanitized to [A-Za-z0-9._-], so they interpolate safely.
+ */
+export function remoteSessionChatUploadPathScript(
+  directory: 'i' | 'f',
+  prefix: string,
+  tail: string,
+): string {
+  return [
+    `upload_dir="$HOME/.ghostex/${directory}"`,
+    'mkdir -p "$upload_dir" || exit 1',
+    `target_path="$upload_dir/${prefix}${tail}"`,
+    'index=2',
+    'while [ -e "$target_path" ] && [ "$index" -lt 100 ]; do',
+    `  target_path="$upload_dir/${prefix}-\${index}${tail}"`,
+    '  index=$((index + 1))',
+    'done',
+    `printf '%s\\n' "$target_path"`,
+  ].join('\n');
+}
+
 /** file:// URI → local filesystem path for the native SFTP upload. */
 export function localPathFromUri(uri: string): string {
   const withoutScheme = uri.startsWith('file://') ? uri.slice('file://'.length) : uri;
