@@ -267,6 +267,13 @@ function sessionTitle(session: GhostexSession): string {
   return session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
 }
 
+function quickActionDisplayName(action: GhostexQuickAction): string {
+  if (action.name !== undefined && action.name.length > 0) {
+    return action.name;
+  }
+  return action.actionType === 'browser' ? 'Browser' : 'Terminal';
+}
+
 export default function SessionsScreen({ navigation }: Props) {
   const machines = useMachinesStore((state) => state.machines);
   const machine = useMachinesStore((state) => selectedMachine(state));
@@ -620,7 +627,7 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const runQuickAction = useCallback(
     (target: MachineRecord, projectId: string, projectTitle: string, action: GhostexQuickAction): void => {
-      const name = action.name !== undefined && action.name.length > 0 ? action.name : action.actionType;
+      const name = quickActionDisplayName(action);
       if (action.actionType === 'browser') {
         const url = action.url ?? '';
         if (url.length === 0) return;
@@ -1530,8 +1537,7 @@ export default function SessionsScreen({ navigation }: Props) {
     const selectedCommandId =
       lastActionByProject[lastActionKey(ctx.machine.id, ctx.header.projectId)] ?? '';
     return ctx.header.quickActions.map((action, index) => {
-      const name =
-        action.name !== undefined && action.name.length > 0 ? action.name : action.actionType;
+      const name = quickActionDisplayName(action);
       const commandId = action.commandId ?? '';
       const iconId = resolveAgentIconId(
         action.icon,
