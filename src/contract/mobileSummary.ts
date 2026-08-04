@@ -190,6 +190,10 @@ export type GhostexSession = {
   sessionTag: string;
   /** Live Delayed Send countdown label ('' when no timer / emitter predates it). */
   delayedSendRemainingLabel: string;
+  /** Enter is armed for every agent in the project to finish. */
+  sendWhenAllProjectSessionsStopActive: boolean;
+  /** Enter is armed for this agent to finish. */
+  sendWhenAgentStopsActive: boolean;
   /** Close After Done armed flag (false when unarmed / emitter predates it). */
   closeAfterDone: boolean;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
@@ -722,6 +726,12 @@ export function parseSession(value: unknown): GhostexSession | null {
     isPinned: boolValue(value, 'isPinned', false),
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
+    sendWhenAllProjectSessionsStopActive: boolValue(
+      value,
+      'sendWhenAllProjectSessionsStopActive',
+      false,
+    ),
+    sendWhenAgentStopsActive: boolValue(value, 'sendWhenAgentStopsActive', false),
     closeAfterDone: boolValue(value, 'closeAfterDone', false),
     isSleeping: legacySleeping && !isLive,
     isLive,

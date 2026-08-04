@@ -202,19 +202,28 @@ export function acknowledgeAttentionCommand(sessionId: string): string {
   );
 }
 
+export type DelayedSendTrigger = 'afterDelay' | 'agentStops' | 'allAgentsStop';
+
 /**
- * Delayed Send: `ghostex delayed-send --session-id <id> --delay-ms <n> --json`.
- * Arms a host-side timer on the Mac that presses Enter in the session's
- * terminal after the delay (desktop sidebar "Delayed Send").
+ * Arms one of the gxserver renderer's Session Automations Enter triggers.
  */
-export function delayedSendCommand(sessionId: string, delayMs: number): string {
-  if (!Number.isFinite(delayMs) || !Number.isInteger(delayMs) || delayMs <= 0) {
+export function delayedSendCommand(
+  sessionId: string,
+  trigger: DelayedSendTrigger,
+  delayMs?: number,
+): string {
+  const selector =
+    `ghostex delayed-send --session-id ${shellQuote(requireId(sessionId, 'session id'))}`;
+  if (trigger === 'agentStops') {
+    return `${selector} --when-agent-finishes --json`;
+  }
+  if (trigger === 'allAgentsStop') {
+    return `${selector} --when-all-agents-finish --json`;
+  }
+  if (!Number.isFinite(delayMs) || !Number.isInteger(delayMs) || (delayMs ?? 0) <= 0) {
     throw new Error('Ghostex Delayed Send delay must be a positive whole number of milliseconds.');
   }
-  return (
-    `ghostex delayed-send --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
-    ` --delay-ms ${delayMs} --json`
-  );
+  return `${selector} --delay-ms ${delayMs} --json`;
 }
 
 /** Cancel Delayed Send: `ghostex delayed-send --session-id <id> --cancel --json`. */

@@ -21,19 +21,13 @@ import { GhostexNative, GhostexTerminalView } from '../../modules/ghostex-native
 import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
-import AgentActionsMenu, {
-  type AgentActionId,
-} from '../components/terminal/AgentActionsMenu';
 import EdgeSwipeZones from '../components/terminal/EdgeSwipeZones';
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
-import TerminalOverflowMenu, {
-  type OverflowMenuItem,
-} from '../components/terminal/TerminalOverflowMenu';
+import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
-import { MoreGlyph } from '../components/sessions/icons';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import {
   ChatBubbleIcon,
@@ -47,6 +41,7 @@ import {
   acknowledgeAttentionCommand,
   attachCommand,
   cancelDelayedSendCommand,
+  closeAfterDoneCommand,
   delayedSendCommand,
   forkSessionCommand,
   loginShellCommand,
@@ -85,7 +80,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 /** Which Agent Actions surface (if any) is on top of the terminal screen. */
 type AgentOverlay =
   | { kind: 'none' }
-  | { kind: 'menu' }
   | { kind: 'rename'; error: string | null }
   | { kind: 'delayedSend' }
   | { kind: 'promptEditor'; sending: boolean };
@@ -93,7 +87,7 @@ type AgentOverlay =
 const AGENT_OVERLAY_NONE: AgentOverlay = { kind: 'none' };
 
 const HEADER_HEIGHT = 44;
-/** Deliberate separation between the Android IME boundary and the accessory bar. */
+/** Deliberate separation between the Android IME boundary and the screen's bottom edge. */
 const ANDROID_KEYBOARD_GAP = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
@@ -197,7 +191,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [keyboardOcclusionCorrection, setKeyboardOcclusionCorrection] = useState(0);
-  const keyBarFrameRef = useRef<View>(null);
+  const bottomEdgeFrameRef = useRef<View>(null);
   /** Session keys already auto-focused this visit (hide-keyboard-on-startup off). */
   const autoFocusedSessionsRef = useRef<Set<string>>(new Set());
 
@@ -294,10 +288,19 @@ export default function TerminalScreen({ navigation, route }: Props) {
     void GhostexNative.focusTerminal(activeTab.sessionKey).catch(() => setTapKeyboardHint(false));
   }, [settings.hideKeyboardOnStartup, isFocused, activeTab]);
 
-  const reconcileKeyBarWithVisibleWindow = useCallback((): void => {
+  /*
+   * Android's reported keyboard height can fall short of what actually covers
+   * the window (IME candidate/tool rows, gesture bar), so measure the screen's
+   * own bottom edge — the extra-keys toolbar when it is up, the bottom spacer
+   * otherwise — and fold the residual overlap into the container's padding.
+   * Chat mode has no toolbar, which is why this measures the wrapper rather
+   * than the toolbar itself: without it the composer's last few pixels sit
+   * under the keyboard.
+   */
+  const reconcileBottomEdgeWithVisibleWindow = useCallback((): void => {
     if (!keyboardVisible || visibleWindowBottom === null) return;
     requestAnimationFrame(() => {
-      keyBarFrameRef.current?.measureInWindow((_x, y, _width, height) => {
+      bottomEdgeFrameRef.current?.measureInWindow((_x, y, _width, height) => {
         const signedOcclusion = y + height + ANDROID_KEYBOARD_GAP - visibleWindowBottom;
         if (Math.abs(signedOcclusion) < 0.5) return;
         setKeyboardOcclusionCorrection((current) => {
@@ -313,8 +316,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
       setKeyboardOcclusionCorrection(0);
       return;
     }
-    reconcileKeyBarWithVisibleWindow();
-  }, [keyboardVisible, reconcileKeyBarWithVisibleWindow, visibleWindowBottom]);
+    reconcileBottomEdgeWithVisibleWindow();
+  }, [keyboardVisible, reconcileBottomEdgeWithVisibleWindow, visibleWindowBottom]);
 
   const dismissKeyboard = useCallback((): void => {
     setTapKeyboardHint(false);
@@ -538,11 +541,11 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * of inventing a phone-side timer that would not survive the app closing.
    */
   const runDelayedSend = useCallback(
-    async (delayMs: number): Promise<void> => {
+    async (trigger: Parameters<typeof delayedSendCommand>[1], delayMs: number): Promise<void> => {
       const target = agentTarget();
       if (target === null) return;
       setAgentOverlay(AGENT_OVERLAY_NONE);
-      await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, delayMs), {
+      await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, trigger, delayMs), {
         onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]),
       });
     },
@@ -557,6 +560,17 @@ export default function TerminalScreen({ navigation, route }: Props) {
       target.machine,
       cancelDelayedSendCommand(target.session.sessionId),
       { onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]) },
+    );
+  }, [agentTarget]);
+
+  const toggleCloseAfterDone = useCallback(async (): Promise<void> => {
+    const target = agentTarget();
+    if (target === null) return;
+    setAgentOverlay(AGENT_OVERLAY_NONE);
+    await runSessionCommand(
+      target.machine,
+      closeAfterDoneCommand(target.session.sessionId),
+      { onError: (message) => Alert.alert('Session Automation Failed', message, [{ text: 'OK' }]) },
     );
   }, [agentTarget]);
 
@@ -664,8 +678,31 @@ export default function TerminalScreen({ navigation, route }: Props) {
     }
   }, [chatModeActive, sendChatMessageFromUser, uploading]);
 
-  const handleAgentAction = useCallback(
-    (id: AgentActionId): void => {
+  const handleNewTerminal = useCallback(async (): Promise<void> => {
+    const machineId = activeTab?.machineId ?? useMachinesStore.getState().selectedMachineId;
+    if (machineId === null || machineId === undefined) return;
+    const target = machineTargetFor(machineId);
+    if (target === null) return;
+    try {
+      // New terminals open in the folder of the session being viewed.
+      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
+    } catch {
+      // The store marks the tab failed; the state overlay surfaces it.
+    }
+  }, [activeTab, openShellTab]);
+
+  const handleRefresh = useCallback((): void => {
+    const store = useTerminalStore.getState();
+    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
+    if (tab === undefined || tab.state !== 'open') return;
+    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
+  }, []);
+
+  const handleMenuAction = useCallback(
+    (id: TerminalMenuActionId): void => {
+      // One menu, one dismissal point: every row closes the card before the
+      // action opens its own overlay (or leaves the screen).
+      setMenuVisible(false);
       switch (id) {
         case 'rename':
           setAgentOverlay({ kind: 'rename', error: null });
@@ -689,30 +726,28 @@ export default function TerminalScreen({ navigation, route }: Props) {
           setAgentOverlay(AGENT_OVERLAY_NONE);
           void handleUpload();
           return;
+        case 'newTerminal':
+          void handleNewTerminal();
+          return;
+        case 'settings':
+          navigation.navigate('Settings');
+          return;
+        case 'disconnect':
+          if (activeTab !== null) requestCloseTab(activeTab);
+          return;
       }
     },
-    [handleUpload, runAgentFork, runAgentFullReload, runAgentSleep],
+    [
+      activeTab,
+      handleNewTerminal,
+      handleUpload,
+      navigation,
+      requestCloseTab,
+      runAgentFork,
+      runAgentFullReload,
+      runAgentSleep,
+    ],
   );
-
-  const handleNewTerminal = useCallback(async (): Promise<void> => {
-    const machineId = activeTab?.machineId ?? useMachinesStore.getState().selectedMachineId;
-    if (machineId === null || machineId === undefined) return;
-    const target = machineTargetFor(machineId);
-    if (target === null) return;
-    try {
-      // New terminals open in the folder of the session being viewed.
-      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
-    } catch {
-      // The store marks the tab failed; the state overlay surfaces it.
-    }
-  }, [activeTab, openShellTab]);
-
-  const handleRefresh = useCallback((): void => {
-    const store = useTerminalStore.getState();
-    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
-    if (tab === undefined || tab.state !== 'open') return;
-    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
-  }, []);
 
   const uploadEnabled =
     activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
@@ -720,26 +755,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeSession === null || activeSession.displayTitle.length === 0
       ? SessionCopy.fallbackTitle
       : activeSession.displayTitle;
-
-  const menuItems: OverflowMenuItem[] = [
-    {
-      id: 'upload',
-      label: 'Upload Image or File',
-      disabled: !uploadEnabled || uploading,
-      onPress: () => void handleUpload(),
-    },
-    { id: 'new-terminal', label: 'New Terminal', onPress: () => void handleNewTerminal() },
-    { id: 'settings', label: 'Settings', onPress: () => navigation.navigate('Settings') },
-    {
-      id: 'disconnect',
-      label: 'Disconnect',
-      destructive: true,
-      disabled: activeTab === null,
-      onPress: () => {
-        if (activeTab !== null) requestCloseTab(activeTab);
-      },
-    },
-  ];
+  // Shell tabs have no gxserver session record; the menu still names the thing
+  // it acts on, so fall back to the tab's own title before the generic copy.
+  const menuTitle =
+    activeSession !== null && activeSession.displayTitle.length > 0
+      ? activeSession.displayTitle
+      : activeTab !== null && activeTab.title.length > 0
+        ? activeTab.title
+        : SessionCopy.fallbackTitle;
 
   return (
     <View
@@ -783,17 +806,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
             ) : (
               <ChatBubbleIcon size={19} color={GhostexPalette.FOREGROUND} />
             )}
-          </Pressable>
-        )}
-        {agentActionsCapable && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Agent Actions"
-            hitSlop={8}
-            style={styles.headerButton}
-            onPress={() => setAgentOverlay({ kind: 'menu' })}
-          >
-            <MoreGlyph size={20} color={GhostexPalette.FOREGROUND} />
           </Pressable>
         )}
         <Pressable
@@ -873,42 +885,48 @@ export default function TerminalScreen({ navigation, route }: Props) {
         )}
       </View>
 
-      {keyBarVisible && activeTab !== null && !chatModeActive ? (
-        <View
-          ref={keyBarFrameRef}
-          collapsable={false}
-          onLayout={reconcileKeyBarWithVisibleWindow}
-        >
+      {/*
+        The screen's bottom edge, always mounted and measurable: the extra-keys
+        toolbar while it is up, otherwise the bottom margin.
+      */}
+      <View
+        ref={bottomEdgeFrameRef}
+        collapsable={false}
+        onLayout={reconcileBottomEdgeWithVisibleWindow}
+      >
+        {keyBarVisible && activeTab !== null && !chatModeActive ? (
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
             agentId={activeAgentId}
             onDismissKeyboard={dismissKeyboard}
           />
-        </View>
-      ) : (
-        // With the keyboard up (toolbar hidden), the container's bottom
-        // padding already clears the IME; only add the home-indicator inset
-        // while the keyboard is down.
-        <View style={{ height: keyboardVisible ? 0 : insets.bottom }} />
-      )}
+        ) : (
+          // With the keyboard up the container's bottom padding already clears
+          // the IME, so the terminal surface takes all of it and only adds the
+          // home-indicator inset while the keyboard is down. The chat composer
+          // is a control rather than a full-bleed surface: it keeps the margin
+          // it has with the keyboard down so its bottom row never sits flush
+          // against the keyboard.
+          <View
+            style={{ height: !keyboardVisible || chatModeActive ? insets.bottom : 0 }}
+          />
+        )}
+      </View>
 
-      <TerminalOverflowMenu
+      <TerminalMenu
         visible={menuVisible}
-        topOffset={insets.top + HEADER_HEIGHT + 4}
-        items={menuItems}
-        onDismiss={() => setMenuVisible(false)}
+        sessionTitle={menuTitle}
+        agentActionsEnabled={agentActionsCapable && activeSession !== null}
+        sleeping={activeSession?.isSleeping === true}
+        forkEnabled={FORK_AGENT_ICONS.includes(activeAgentId)}
+        attachEnabled={uploadEnabled && !uploading}
+        disconnectEnabled={activeTab !== null}
+        onSelect={handleMenuAction}
+        onClose={() => setMenuVisible(false)}
       />
 
       {activeSession !== null ? (
         <>
-          <AgentActionsMenu
-            visible={agentOverlay.kind === 'menu'}
-            sessionTitle={agentSessionTitle}
-            sleeping={activeSession.isSleeping}
-            forkEnabled={FORK_AGENT_ICONS.includes(activeAgentId)}
-            onSelect={handleAgentAction}
-            onClose={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
-          />
           {agentOverlay.kind === 'rename' ? (
             <PromptDialog
               visible
@@ -924,11 +942,23 @@ export default function TerminalScreen({ navigation, route }: Props) {
           ) : null}
           {agentOverlay.kind === 'delayedSend' ? (
             <DelayedSendDialog
+              agentIcon={activeSession.agentIcon}
+              agentName={
+                activeSession.agentName.length > 0
+                  ? activeSession.agentName
+                  : activeSession.agent
+              }
+              closeAfterDoneActive={activeSession.closeAfterDone}
               visible
               sessionTitle={agentSessionTitle}
               remainingLabel={activeSession.delayedSendRemainingLabel}
-              onConfirm={(delayMs) => void runDelayedSend(delayMs)}
+              sendWhenAllProjectSessionsStopActive={
+                activeSession.sendWhenAllProjectSessionsStopActive
+              }
+              sendWhenAgentStopsActive={activeSession.sendWhenAgentStopsActive}
+              onConfirm={(trigger, delayMs) => void runDelayedSend(trigger, delayMs)}
               onCancelTimer={() => void cancelDelayedSend()}
+              onToggleCloseAfterDone={() => toggleCloseAfterDone()}
               onCancel={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
             />
           ) : null}
