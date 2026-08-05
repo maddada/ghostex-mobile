@@ -1332,7 +1332,7 @@ export default function SessionsScreen({ navigation }: Props) {
     return items;
   };
 
-  /** COLLECTION "Group color" submenu — desktop 9-color swatch radio list. */
+  /** COLLECTION "Group color" submenu — shared desktop/mobile swatch radio list. */
   const collectionColorItems = (ctx: CollectionContext): ContextMenuItem[] => {
     const summary = summaryFor(ctx.machine.id);
     const state = summary?.projectCollectionsState ?? null;

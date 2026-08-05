@@ -120,7 +120,7 @@ export type GhostexWorkspaceGroups = {
 export type GhostexProjectCollection = {
   collectionId: string;
   title: string;
-  /** "transparent" or "#rrggbb" (desktop SIDEBAR_PROJECT_COLLECTION_COLORS). */
+  /** "#rrggbb" (desktop SIDEBAR_PROJECT_COLLECTION_COLORS). */
   color: string;
   /** Desktop-side collapsed flag; mobile keeps its own local disclosure. */
   collapsed: boolean;
@@ -923,7 +923,7 @@ export function parseProjectCollections(value: unknown): GhostexProjectCollectio
       collectionId,
       title: firstNonEmpty(trimmedValue(entry, 'title')) || collectionId,
       color:
-        rawColor === 'transparent' || /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : 'transparent',
+        rawColor !== 'transparent' && /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#4f5663',
       collapsed: boolValue(entry, 'collapsed', false),
       projectIds,
     });

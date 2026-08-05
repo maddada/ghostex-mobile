@@ -2,7 +2,7 @@
  * Full-state read-modify-write helpers for the durable sidebar project
  * collections ({order, collections, nextCollectionNumber}), mirroring the
  * desktop's project-collections.ts semantics: one project per collection,
- * "Group N" default titles, and the 9-color palette cycled by (N-1) % 9.
+ * "Group N" default titles, and the shared 13-color palette cycled by group number.
  * The modified state is sent whole via
  * `ghostex update-sidebar-project-collections --state-json`; gxserver owns
  * normalization.
@@ -12,7 +12,7 @@ export type CollectionColorOption = { label: string; value: string };
 
 /** Desktop palette (sidebar/project-collections.ts), order preserved. */
 export const COLLECTION_COLOR_OPTIONS: readonly CollectionColorOption[] = [
-  { label: 'Transparent', value: 'transparent' },
+  { label: 'Dark Gray', value: '#4f5663' },
   { label: 'Gray', value: '#808080' },
   { label: 'Violet', value: '#7c6df2' },
   { label: 'Green', value: '#3aa675' },
@@ -21,7 +21,13 @@ export const COLLECTION_COLOR_OPTIONS: readonly CollectionColorOption[] = [
   { label: 'Blue', value: '#3f8fc7' },
   { label: 'Purple', value: '#b36ad4' },
   { label: 'Lime', value: '#8c9b45' },
+  { label: 'Red', value: '#c95353' },
+  { label: 'Gold', value: '#c4a23d' },
+  { label: 'Teal', value: '#2f9b95' },
+  { label: 'Indigo', value: '#596fd1' },
 ];
+
+export const DEFAULT_COLLECTION_COLOR = COLLECTION_COLOR_OPTIONS[0].value;
 
 export type CollectionsState = {
   order: string[];
@@ -57,7 +63,10 @@ export function cloneCollectionsState(raw: unknown): CollectionsState {
         ...entry,
         collectionId: typeof entry.collectionId === 'string' ? entry.collectionId : id,
         title: typeof entry.title === 'string' ? entry.title : '',
-        color: typeof entry.color === 'string' ? entry.color : 'transparent',
+        color:
+          typeof entry.color === 'string' && entry.color !== 'transparent'
+            ? entry.color
+            : DEFAULT_COLLECTION_COLOR,
         collapsed: entry.collapsed === true,
         projectIds: Array.isArray(entry.projectIds)
           ? entry.projectIds.filter((value): value is string => typeof value === 'string')

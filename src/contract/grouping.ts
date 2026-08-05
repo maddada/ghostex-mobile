@@ -61,7 +61,7 @@ export type CollectionHeaderItem = {
   machineId: string;
   collectionId: string;
   title: string;
-  /** "transparent" or "#rrggbb"; drives the tinted header + member rail. */
+  /** "#rrggbb"; drives the tinted header + member rail. */
   color: string;
   collapsed: boolean;
   projectCount: number;
