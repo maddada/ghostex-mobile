@@ -3,7 +3,7 @@
 // hand. Icons without an Android drawable (codebuddy, kiro, omp, qoder,
 // rovo-dev) are ported directly from the desktop src/assets/*.svg set.
 import * as React from 'react';
-import Svg, { G, Path } from 'react-native-svg';
+import Svg, { Defs, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 export type AgentIconProps = { size: number; color: string };
 
@@ -147,10 +147,17 @@ function IconKiro({ size, color }: AgentIconProps) {
   );
 }
 
-function IconOmp({ size, color }: AgentIconProps) {
+function IconOmp({ size }: AgentIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 64 64">
-      <Path d="M32 6c14.4 0 26 11.6 26 26S46.4 58 32 58 6 46.4 6 32 17.6 6 32 6zm0 10c-8.8 0-16 7.2-16 16s7.2 16 16 16 16-7.2 16-16-7.2-16-16-16zm-8 8h7.5c5.4 0 9.5 3.5 9.5 8s-4.1 8-9.5 8H24V24zm7.2 5.6H30v4.8h1.2c2.1 0 3.5-.9 3.5-2.4s-1.4-2.4-3.5-2.4z" fill={color} />
+    <Svg width={size} height={size} viewBox="0 0 189 183">
+      <Defs>
+        <LinearGradient id="ompGradient" x1="0" y1="0" x2="142" y2="183" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#ed4fcb" />
+          <Stop offset="0.5" stopColor="#a663ed" />
+          <Stop offset="1" stopColor="#69b3ed" />
+        </LinearGradient>
+      </Defs>
+      <Path d="M0 0h189v40h-46v143h-41V40H64v95H24V40H0z" fill="url(#ompGradient)" />
     </Svg>
   );
 }
