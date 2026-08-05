@@ -39,9 +39,9 @@ export function remoteAttachmentPathScript(sanitizedFilename: string): string {
 /*
  * Session Chat upload destinations. The desktop and web hosts reach gxserver
  * over HTTP, so their chat attachments are written by saveSessionChatImage /
- * saveSessionChatAttachment into ~/.ghostex/i/<epochMillis>.<ext> and
- * ~/.ghostex/f/<epochMillis>-<name> on the machine that runs the session. The
- * phone has no HTTP path to gxserver and SFTPs the bytes itself, so it stages
+ * saveSessionChatAttachment into the resolved Ghostex data directory's `i`
+ * and `f` folders on the machine that runs the session. The phone has no HTTP
+ * path to gxserver and SFTPs the bytes itself, so it stages
  * the same two directories with the same naming instead of dropping chat
  * attachments in the terminal flow's temp directory — the reference the agent
  * receives has to name a stable Ghostex path, not a file the OS may reap.
@@ -97,8 +97,8 @@ export function sanitizeSessionChatAttachmentName(suggestedName: string): string
 }
 
 /**
- * Script that creates ~/.ghostex/<directory> on the machine and prints the
- * first free `<prefix><tail>` path in it, falling back to `<prefix>-<n><tail>`
+ * Script that creates the resolved Ghostex data subdirectory on the machine
+ * and prints the first free `<prefix><tail>` path in it, falling back to `<prefix>-<n><tail>`
  * exactly like gxserver's unique_session_chat_*_path helpers. Both arguments
  * are already sanitized to [A-Za-z0-9._-], so they interpolate safely.
  */
@@ -108,7 +108,14 @@ export function remoteSessionChatUploadPathScript(
   tail: string,
 ): string {
   return [
-    `upload_dir="$HOME/.ghostex/${directory}"`,
+    'case "${GHOSTEX_HOME:-}" in',
+    '  /*) ghostex_data_dir="${GHOSTEX_HOME%/}" ;;',
+    '  *) case "${XDG_DATA_HOME:-}" in',
+    '       /*) ghostex_data_dir="${XDG_DATA_HOME%/}/ghostex" ;;',
+    '       *) ghostex_data_dir="$HOME/.local/share/ghostex" ;;',
+    '     esac ;;',
+    'esac',
+    `upload_dir="$ghostex_data_dir/${directory}"`,
     'mkdir -p "$upload_dir" || exit 1',
     `target_path="$upload_dir/${prefix}${tail}"`,
     'index=2',

@@ -18,6 +18,7 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import {
   answerSessionChatPromptCommand,
   interruptSessionChatCommand,
+  loginShellCommand,
   readSessionChatCommand,
   sendSessionChatMessageCommand,
   type SessionChatReadOptions,
@@ -120,10 +121,11 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
  * attach flow's route instead: decode into an app cache file, stage a path on
  * the machine, SFTP the file there, and hand the absolute remote path back for
  * the transcript's `[Image #N](path)` link. The destination is the one those
- * endpoints would have used (~/.ghostex/i for images, ~/.ghostex/f for
- * everything else) so a chat attachment names the same durable Ghostex path on
- * the machine no matter which client uploaded it. The local copy exists only
- * to give the native uploader a path and is deleted either way.
+ * endpoints would have used (the resolved Ghostex data directory's `i` folder
+ * for images and `f` folder for everything else), so a chat attachment names
+ * the same durable Ghostex path on the machine no matter which client uploaded
+ * it. The local copy exists only to give the native uploader a path and is
+ * deleted either way.
  */
 async function saveChatUpload(
   machine: MachineConnectionTarget,
@@ -154,7 +156,9 @@ async function saveChatUpload(
     await ensureConnected(machine);
     const exec = await GhostexNative.exec(
       machine.id,
-      remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
+      loginShellCommand(
+        remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
+      ),
       REMOTE_PATH_EXEC_TIMEOUT_MS,
     );
     const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';

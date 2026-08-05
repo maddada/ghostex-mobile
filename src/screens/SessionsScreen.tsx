@@ -158,7 +158,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
-import { GhostexPalette, GhostexRadii } from '../theme/palette';
+import { colorWithOpacity, GhostexPalette, GhostexRadii } from '../theme/palette';
 import { resolveSidebarAppearance } from '../theme/sidebarAppearance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
@@ -293,6 +293,12 @@ export default function SessionsScreen({ navigation }: Props) {
   );
   const sidebarBackgroundTint = useSettingsStore(
     (state) => state.settings.sidebarBackgroundTint,
+  );
+  const sidebarGroupsOpacityPercent = useSettingsStore(
+    (state) => state.settings.sidebarGroupsOpacityPercent,
+  );
+  const sidebarProjectsOpacityPercent = useSettingsStore(
+    (state) => state.settings.sidebarProjectsOpacityPercent,
   );
   const sidebarAppearance = useMemo(
     () => resolveSidebarAppearance(sidebarBackgroundTint, sidebarBackgroundContrast),
@@ -1708,8 +1714,14 @@ export default function SessionsScreen({ navigation }: Props) {
         style={[
           styles.projectCard,
           {
-            backgroundColor: sidebarAppearance.projectCard,
-            borderColor: sidebarAppearance.projectBorder,
+            backgroundColor: colorWithOpacity(
+              sidebarAppearance.projectCard,
+              sidebarProjectsOpacityPercent,
+            ),
+            borderColor: colorWithOpacity(
+              sidebarAppearance.projectBorder,
+              sidebarProjectsOpacityPercent,
+            ),
           },
           inCollection ? styles.projectCardInPanel : styles.projectCardTopLevel,
           inCollection && !header.collapsed ? styles.projectCardExpanded : null,
@@ -1797,13 +1809,17 @@ export default function SessionsScreen({ navigation }: Props) {
           style={[
             styles.collectionPanel,
             {
-              backgroundColor: header.collapsed
-                ? sidebarAppearance.projectCard
-                : expandedGroupSurface,
-              borderColor: collectionPanelBorder(
-                header.color,
-                sidebarAppearance.background,
-                sidebarAppearance.foreground,
+              backgroundColor: colorWithOpacity(
+                header.collapsed ? sidebarAppearance.projectCard : expandedGroupSurface,
+                sidebarGroupsOpacityPercent,
+              ),
+              borderColor: colorWithOpacity(
+                collectionPanelBorder(
+                  header.color,
+                  sidebarAppearance.background,
+                  sidebarAppearance.foreground,
+                ),
+                sidebarGroupsOpacityPercent,
               ),
             },
           ]}

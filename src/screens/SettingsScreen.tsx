@@ -30,6 +30,8 @@ import {
   SCROLLBACK_ROWS_MAX,
   SCROLLBACK_ROWS_MIN,
   SCROLLBACK_ROWS_STEP,
+  SIDEBAR_SURFACE_OPACITY_MAX,
+  SIDEBAR_SURFACE_OPACITY_MIN,
   TERMINAL_FONT_SIZE_MAX,
   TERMINAL_FONT_SIZE_MIN,
   useSettingsStore,
@@ -281,6 +283,27 @@ export default function SettingsScreen() {
         />
         <Text style={styles.sectionCaption}>
           Applies the same calibrated dark tint logic as the GPUI sidebar.
+        </Text>
+        <SteppedSlider
+          label="Sidebar groups opacity"
+          maximumValue={SIDEBAR_SURFACE_OPACITY_MAX}
+          minimumValue={SIDEBAR_SURFACE_OPACITY_MIN}
+          step={1}
+          value={settings.sidebarGroupsOpacityPercent}
+          valueLabel={`${settings.sidebarGroupsOpacityPercent}%`}
+          onValueChange={(value) => setSetting('sidebarGroupsOpacityPercent', value)}
+        />
+        <SteppedSlider
+          label="Sidebar projects opacity"
+          maximumValue={SIDEBAR_SURFACE_OPACITY_MAX}
+          minimumValue={SIDEBAR_SURFACE_OPACITY_MIN}
+          step={1}
+          value={settings.sidebarProjectsOpacityPercent}
+          valueLabel={`${settings.sidebarProjectsOpacityPercent}%`}
+          onValueChange={(value) => setSetting('sidebarProjectsOpacityPercent', value)}
+        />
+        <Text style={styles.sectionCaption}>
+          Changes only group and project backgrounds and borders.
         </Text>
 
         <Text style={styles.sectionHeader}>Terminal behavior</Text>

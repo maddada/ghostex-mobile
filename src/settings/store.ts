@@ -48,6 +48,10 @@ export type GhostexSettings = {
   sidebarBackgroundContrast: number;
   /** GPUI-parity sidebar background tint as a normalized #rrggbb value. */
   sidebarBackgroundTint: string;
+  /** Opacity percentage for sidebar collection-panel backgrounds and borders. */
+  sidebarGroupsOpacityPercent: number;
+  /** Opacity percentage for sidebar project-card backgrounds and borders. */
+  sidebarProjectsOpacityPercent: number;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -67,6 +71,9 @@ export const BELL_BEHAVIOR_OPTIONS: BellBehavior[] = ['vibrate', 'beep', 'ignore
 export const KEEP_ALIVE_INTERVAL_MIN_SEC = 10;
 export const KEEP_ALIVE_INTERVAL_MAX_SEC = 120;
 export const KEEP_ALIVE_INTERVAL_STEP_SEC = 10;
+
+export const SIDEBAR_SURFACE_OPACITY_MIN = 0;
+export const SIDEBAR_SURFACE_OPACITY_MAX = 100;
 
 export function defaultFontSize(): number {
   return Platform.OS === 'ios' ? 10 : 13;
@@ -93,6 +100,8 @@ export function defaultSettings(): GhostexSettings {
     bellBehavior: 'vibrate',
     sidebarBackgroundContrast: DEFAULT_SIDEBAR_BACKGROUND_CONTRAST,
     sidebarBackgroundTint: DEFAULT_SIDEBAR_BACKGROUND_TINT,
+    sidebarGroupsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
+    sidebarProjectsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -103,6 +112,14 @@ function clampKeepAliveInterval(value: number): number {
   const stepped =
     Math.round(value / KEEP_ALIVE_INTERVAL_STEP_SEC) * KEEP_ALIVE_INTERVAL_STEP_SEC;
   return Math.min(KEEP_ALIVE_INTERVAL_MAX_SEC, Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, stepped));
+}
+
+function clampSidebarSurfaceOpacity(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(
+    SIDEBAR_SURFACE_OPACITY_MAX,
+    Math.max(SIDEBAR_SURFACE_OPACITY_MIN, Math.round(value)),
+  );
 }
 
 export function clampScrollbackRows(value: number): number {
@@ -142,6 +159,20 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     typeof record.sidebarBackgroundTint === 'string'
       ? normalizeSidebarTint(record.sidebarBackgroundTint)
       : defaults.sidebarBackgroundTint;
+  const sidebarGroupsOpacityPercent =
+    typeof record.sidebarGroupsOpacityPercent === 'number'
+      ? clampSidebarSurfaceOpacity(
+          record.sidebarGroupsOpacityPercent,
+          defaults.sidebarGroupsOpacityPercent,
+        )
+      : defaults.sidebarGroupsOpacityPercent;
+  const sidebarProjectsOpacityPercent =
+    typeof record.sidebarProjectsOpacityPercent === 'number'
+      ? clampSidebarSurfaceOpacity(
+          record.sidebarProjectsOpacityPercent,
+          defaults.sidebarProjectsOpacityPercent,
+        )
+      : defaults.sidebarProjectsOpacityPercent;
   return {
     autoScroll: bool('autoScroll', defaults.autoScroll),
     extraKeysToolbarVisible: bool('extraKeysToolbarVisible', defaults.extraKeysToolbarVisible),
@@ -162,6 +193,8 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     bellBehavior,
     sidebarBackgroundContrast,
     sidebarBackgroundTint,
+    sidebarGroupsOpacityPercent,
+    sidebarProjectsOpacityPercent,
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

@@ -143,3 +143,24 @@ export function mixHexColors(color: string, base: string, colorPercent: number):
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('')}`;
 }
+
+/** Scale a color's alpha without changing its RGB channels or dimming child content. */
+export function colorWithOpacity(color: string, opacityPercent: number): string {
+  const multiplier = Math.max(0, Math.min(100, opacityPercent)) / 100;
+  const hexMatch = /^#([0-9a-f]{6})$/iu.exec(color.trim());
+  if (hexMatch !== null) {
+    const value = Number.parseInt(hexMatch[1], 16);
+    return `rgba(${(value >> 16) & 0xff},${(value >> 8) & 0xff},${value & 0xff},${multiplier})`;
+  }
+
+  const rgbaMatch =
+    /^rgba\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d*\.?\d+)\s*\)$/iu.exec(
+      color.trim(),
+    );
+  if (rgbaMatch !== null) {
+    const alpha = Math.max(0, Math.min(1, Number.parseFloat(rgbaMatch[4]))) * multiplier;
+    return `rgba(${rgbaMatch[1]},${rgbaMatch[2]},${rgbaMatch[3]},${alpha})`;
+  }
+
+  throw new Error(`Unsupported color format: ${color}`);
+}
