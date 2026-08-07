@@ -326,10 +326,16 @@ const buttonStyles = StyleSheet.create({
 export function MachineHeaderRow({
   title,
   collapsed,
+  workingCount,
+  attentionCount,
+  awakeCount,
   onPress,
 }: {
   title: string;
   collapsed: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
   onPress: () => void;
 }) {
   return (
@@ -337,6 +343,13 @@ export function MachineHeaderRow({
       <Text style={machineHeaderStyles.title} numberOfLines={1}>
         {`${title.toUpperCase()}${collapsed ? ' …' : ''}`}
       </Text>
+      {collapsed ? (
+        <StatusCountPills
+          workingCount={workingCount}
+          attentionCount={attentionCount}
+          awakeCount={awakeCount}
+        />
+      ) : null}
     </Pressable>
   );
 }
@@ -348,13 +361,15 @@ const machineHeaderStyles = StyleSheet.create({
     paddingRight: ds(8),
     paddingBottom: ds(4),
     minHeight: ds(36),
-    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    flexDirection: 'row',
   },
   title: {
     color: GhostexPalette.MUTED,
     fontSize: ds(12),
     fontWeight: '300',
     letterSpacing: 0.9,
+    minWidth: 0,
   },
 });
 
@@ -368,6 +383,9 @@ const machineHeaderStyles = StyleSheet.create({
 export function SectionLabelRow({
   title,
   collapsed,
+  workingCount,
+  attentionCount,
+  awakeCount,
   first,
   onToggle,
   onCreate,
@@ -375,6 +393,9 @@ export function SectionLabelRow({
 }: {
   title: string;
   collapsed: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
   /** First section after the status header uses the tighter top margin. */
   first: boolean;
   onToggle: () => void;
@@ -394,12 +415,21 @@ export function SectionLabelRow({
         <Text style={sectionStyles.title}>{title}</Text>
         <CaretRightGlyph size={ds(13)} color="#727982" rotated={!collapsed} />
       </Pressable>
-      <View style={sectionStyles.actions}>
-        {onCreate !== undefined ? (
-          <HeaderButton accessibilityLabel={`Create a session in ${title}`} onPress={onCreate}>
-            <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
-          </HeaderButton>
+      <View style={sectionStyles.trailing}>
+        {collapsed ? (
+          <StatusCountPills
+            workingCount={workingCount}
+            attentionCount={attentionCount}
+            awakeCount={awakeCount}
+          />
         ) : null}
+        <View style={sectionStyles.actions}>
+          {onCreate !== undefined ? (
+            <HeaderButton accessibilityLabel={`Create a session in ${title}`} onPress={onCreate}>
+              <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
+            </HeaderButton>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -431,10 +461,15 @@ const sectionStyles = StyleSheet.create({
     lineHeight: ds(18),
   },
   actions: {
-    marginStart: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     gap: ds(2),
+  },
+  trailing: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: ds(8),
+    marginStart: 'auto',
   },
 });
 

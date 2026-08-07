@@ -10,6 +10,7 @@
 
 import {
   buildDrawerItems,
+  countSessions,
   machineHeaderItem,
   stateCardItem,
   type CollectionHeaderItem,
@@ -189,8 +190,12 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
   const blocks: DrawerBlock[] = [];
   for (const machine of machines) {
     const collapsed = collapse.collapsedMachineIds.includes(machine.id);
+    const counts = countSessions(inventoriesByMachineId[machine.id]?.summary?.sessions ?? []);
     blocks.push(
-      rowBlock(machine.id, machineHeaderItem(machine.id, machineDisplayLabel(machine), collapsed)),
+      rowBlock(
+        machine.id,
+        machineHeaderItem(machine.id, machineDisplayLabel(machine), collapsed, counts),
+      ),
     );
     if (collapsed) continue;
     blocks.push(...machineBlocks(machine, inventoriesByMachineId[machine.id], collapse));

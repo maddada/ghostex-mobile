@@ -1866,6 +1866,9 @@ export default function SessionsScreen({ navigation }: Props) {
           <MachineHeaderRow
             title={item.title}
             collapsed={item.collapsed}
+            workingCount={item.workingCount}
+            attentionCount={item.attentionCount}
+            awakeCount={item.awakeCount}
             onPress={() => collapse.toggleMachine(item.machineId)}
           />
         );
@@ -1874,6 +1877,9 @@ export default function SessionsScreen({ navigation }: Props) {
           <SectionLabelRow
             title={item.title}
             collapsed={item.collapsed}
+            workingCount={item.workingCount}
+            attentionCount={item.attentionCount}
+            awakeCount={item.awakeCount}
             first={item.section === 'quick'}
             onToggle={() => collapse.toggleSection(block.machineId, item.section)}
             onCreate={

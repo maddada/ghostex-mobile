@@ -40,6 +40,9 @@ export type MachineHeaderItem = {
   machineId: string;
   title: string;
   collapsed: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
 };
 
 /**
@@ -53,6 +56,9 @@ export type SectionLabelItem = {
   section: 'quick' | 'projects';
   title: string;
   collapsed: boolean;
+  workingCount: number;
+  attentionCount: number;
+  awakeCount: number;
 };
 
 export type CollectionHeaderItem = {
@@ -194,8 +200,18 @@ export function machineHeaderItem(
   machineId: string,
   title: string,
   collapsed: boolean,
+  counts: Pick<SessionCounts, 'workingCount' | 'attentionCount' | 'awakeCount'>,
 ): MachineHeaderItem {
-  return { type: 'MACHINE_HEADER', key: `machine:${machineId}`, machineId, title, collapsed };
+  return {
+    type: 'MACHINE_HEADER',
+    key: `machine:${machineId}`,
+    machineId,
+    title,
+    collapsed,
+    workingCount: counts.workingCount,
+    attentionCount: counts.attentionCount,
+    awakeCount: counts.awakeCount,
+  };
 }
 
 function displayProjectName(session: GhostexSession): string {
@@ -292,14 +308,14 @@ function isAwakeSession(session: GhostexSession): boolean {
   return status !== 'sleep' && status !== 'sleeping' && status !== 'done' && status !== 'error';
 }
 
-type SessionCounts = {
+export type SessionCounts = {
   workingCount: number;
   attentionCount: number;
   sleepingCount: number;
   awakeCount: number;
 };
 
-function countSessions(sessions: readonly GhostexSession[]): SessionCounts {
+export function countSessions(sessions: readonly GhostexSession[]): SessionCounts {
   const counts: SessionCounts = {
     workingCount: 0,
     attentionCount: 0,
@@ -549,6 +565,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const emittedProjectKeys = new Set<string>();
   emittedProjectKeys.add(CHATS_PROJECT_KEY);
 
+  const chatSessions = sessionsByProjectKey.get(CHATS_PROJECT_KEY) ?? [];
+  const quickCounts = countSessions(chatSessions);
   const quickCollapsed = collapsedSectionKeys.has('quick');
   items.push({
     type: 'SECTION_LABEL',
@@ -557,9 +575,11 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     section: 'quick',
     title: SessionCopy.quickSectionTitle,
     collapsed: quickCollapsed,
+    workingCount: quickCounts.workingCount,
+    attentionCount: quickCounts.attentionCount,
+    awakeCount: quickCounts.awakeCount,
   });
   if (!quickCollapsed) {
-    const chatSessions = sessionsByProjectKey.get(CHATS_PROJECT_KEY) ?? [];
     if (chatSessions.length === 0) {
       items.push({
         type: 'PROJECT_EMPTY',
@@ -602,6 +622,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     }
   }
 
+  const projectSessions = orderedProjectKeys
+    .filter((projectKey) => projectKey !== CHATS_PROJECT_KEY)
+    .flatMap((projectKey) => sessionsByProjectKey.get(projectKey) ?? []);
+  const projectCounts = countSessions(projectSessions);
   const projectsCollapsed = collapsedSectionKeys.has('projects');
   items.push({
     type: 'SECTION_LABEL',
@@ -610,6 +634,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     section: 'projects',
     title: SessionCopy.projectsSectionTitle,
     collapsed: projectsCollapsed,
+    workingCount: projectCounts.workingCount,
+    attentionCount: projectCounts.attentionCount,
+    awakeCount: projectCounts.awakeCount,
   });
   if (projectsCollapsed) return items;
 
