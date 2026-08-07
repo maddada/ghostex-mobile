@@ -235,7 +235,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const chatModeActive =
     chatCapable && activeTab !== null && chatModeSessionKeys.includes(activeTab.sessionKey);
   const chatMachineTarget =
-    chatModeActive && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
+    chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
 
   // The native nav bar has no styling guarantee here; render our own header.
   useLayoutEffect(() => {
@@ -361,10 +361,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
     const sessionKey = store.selectedSessionKey;
     if (sessionKey === null) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Entering chat parks the terminal (its warm native entry stays alive);
-    // its soft keyboard must not linger over the chat composer.
-    if (!store.chatModeSessionKeys.includes(sessionKey)) {
-      dismissKeyboard();
+    const enteringChat = !store.chatModeSessionKeys.includes(sessionKey);
+    // Each surface owns its own input focus. Dismiss before either direction
+    // so the retained hidden WebView cannot leave its keyboard attached to the
+    // terminal, and the terminal keyboard cannot linger over chat.
+    dismissKeyboard();
+    if (enteringChat) {
       // Desktop parity: reading the session's chat is looking at the session,
       // so it clears attention the same way selecting its tab does.
       const tab = store.tabs.find((entry) => entry.sessionKey === sessionKey);
@@ -770,7 +772,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
         styles.container,
         {
           paddingTop: insets.top,
-          paddingBottom: keyboardVisible ? bottomInset + keyboardOcclusionCorrection : 0,
+          // WKWebView already contracts its visual viewport around the iOS
+          // keyboard. Applying the native keyboard inset to its parent as
+          // well moves the chat composer twice (all the way to the top).
+          paddingBottom:
+            keyboardVisible && (!chatModeActive || Platform.OS === 'android')
+              ? bottomInset + keyboardOcclusionCorrection
+              : 0,
         },
       ]}
     >
@@ -820,38 +828,36 @@ export default function TerminalScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.terminalArea}>
-        {activeTab !== null &&
-          (chatModeActive && chatMachineTarget !== null ? (
-            /*
-             * Chat mode swaps the surface INSIDE the same terminal area: the
-             * tabs bar, header, and layout stay identical (no extra bar), and
-             * the parked terminal's warm native entry survives the detach so
-             * toggling back resumes exactly where it was.
-             */
-            <SessionChatWebView
-              key={activeTab.sessionKey}
-              machine={chatMachineTarget}
-              projectId={activeProjectId}
-              sessionId={activeTab.ghostexSessionId ?? ''}
-              agentId={activeAgentId}
-              // The page cannot see the session's live state; the 5s
-              // inventory poll is the phone's equivalent of the desktop
-              // hosts' workspace session record.
-              working={activeSession?.activity === 'working'}
-              canSend={activeSession !== null && activeSession.isLive && !activeSession.isSleeping}
-              style={styles.terminal}
-            />
-          ) : (
-            // Only the selected tab's view is mounted; the native registry keeps
-            // the other warm entries alive. Keep this host mounted while its
-            // sessionKey changes so closing a tab cannot race native teardown
-            // against destruction of the replacement terminal's host view.
-            <GhostexTerminalView
-              sessionKey={activeTab.sessionKey}
-              style={styles.terminal}
-              onSingleTap={() => setTapKeyboardHint(true)}
-            />
-          ))}
+        {activeTab !== null && !chatModeActive ? (
+          // Only the selected tab's terminal is mounted; the native registry
+          // keeps other entries warm across view detach.
+          <GhostexTerminalView
+            sessionKey={activeTab.sessionKey}
+            style={styles.terminal}
+            onSingleTap={() => setTapKeyboardHint(true)}
+          />
+        ) : null}
+        {activeTab !== null && chatMachineTarget !== null ? (
+          /*
+           * Keep the selected session's chat page mounted while terminal mode
+           * is visible. Its bundle and first transcript read warm in advance,
+           * and its offscreen preload frame owns no input region until the user
+           * switches views. Toggling no longer destroys the conversation.
+           */
+          <SessionChatWebView
+            key={activeTab.sessionKey}
+            machine={chatMachineTarget}
+            projectId={activeProjectId}
+            sessionId={activeTab.ghostexSessionId ?? ''}
+            agentId={activeAgentId}
+            // The page cannot see the session's live state; the 5s inventory
+            // poll is the phone's equivalent of the desktop hosts' record.
+            working={activeSession?.activity === 'working'}
+            canSend={activeSession !== null && activeSession.isLive && !activeSession.isSleeping}
+            visible={chatModeActive}
+            style={styles.terminal}
+          />
+        ) : null}
         {activeTab !== null && !chatModeActive && (
           <TerminalStateOverlay
             tab={activeTab}
