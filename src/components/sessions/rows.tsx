@@ -184,8 +184,8 @@ const pillStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// Header square buttons (desktop .group-add-button): 22×22, radius 6, card
-// fill, blue-tinted 14dp icon. The agent split-button is a 24+17 joined pair.
+// Header square buttons (desktop .group-add-button): 22×22, radius 6, neutral
+// card fill and 14dp icon. The agent split-button is a 24+17 joined pair.
 // ---------------------------------------------------------------------------
 
 function measurePress(
@@ -286,8 +286,8 @@ const buttonStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonPressed: {
-    backgroundColor: 'rgba(125,164,248,0.16)',
-    borderColor: 'rgba(125,164,248,0.54)',
+    backgroundColor: 'rgba(200,205,213,0.10)',
+    borderColor: 'rgba(200,205,213,0.28)',
   },
   split: {
     flexDirection: 'row',

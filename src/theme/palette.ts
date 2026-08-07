@@ -77,8 +77,8 @@ export const SidebarPalette = {
   HEADER_BUTTON_BG: 'rgba(42,42,42,0.88)',
   /** Header square-button border: --app-border (white 11%) at 92%. */
   HEADER_BUTTON_BORDER: 'rgba(255,255,255,0.10)',
-  /** Header button icon: mix(accent 74%, --app-foreground 26%). */
-  HEADER_BUTTON_ICON: '#91AFEF',
+  /** Neutral header button icon. */
+  HEADER_BUTTON_ICON: '#AAB0B8',
   /** Context menu surface: mix(--app-card #252525 92%, #000 8%). */
   MENU_BG: '#222222',
   /** Context menu hover/selected row (--app-context-menu-hover-background). */

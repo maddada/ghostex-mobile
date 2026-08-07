@@ -88,6 +88,7 @@ import {
 } from '../components/sessions/rows';
 import SessionRow from '../components/sessions/SessionRow';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
+import { WarningTriangleIcon } from '../components/terminal/icons';
 import {
   attachCommand,
   cancelDelayedSendCommand,
@@ -312,7 +313,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [progress, setProgress] = useState<string | null>(null);
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
-  const [tailscaleConnected, setTailscaleConnected] = useState(false);
+  const [tailscaleConnected, setTailscaleConnected] = useState<boolean | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Last logged Tailscale state, so the 5s probe logs only transitions. */
   const tailscaleLogged = useRef<boolean | null>(null);
@@ -1954,7 +1955,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh"
-          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
+          style={styles.headerButton}
           onPress={() => void fullReconnect()}
         >
           {refreshing ? (
@@ -1966,7 +1967,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Machines"
-          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
+          style={styles.headerButton}
           onPress={() => navigation.navigate('Machines')}
         >
           <MachinesGlyph size={22} color={sidebarAppearance.foreground} />
@@ -1974,7 +1975,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
+          style={styles.headerButton}
           onPress={() => navigation.navigate('Settings')}
         >
           <SettingsGlyph size={22} color={sidebarAppearance.foreground} />
@@ -1983,7 +1984,7 @@ export default function SessionsScreen({ navigation }: Props) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Quit Ghostex"
-            style={[styles.headerButton, { backgroundColor: sidebarAppearance.cardActive }]}
+            style={styles.headerButton}
             onPress={() =>
               setOverlay({
                 kind: 'confirmAction',
@@ -1998,6 +1999,20 @@ export default function SessionsScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
       </View>
+      {tailscaleConnected === false ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Tailscale is not connected. Open Tailscale"
+          style={styles.tailscaleWarning}
+          onPress={() => void openTailscaleOrDownload()}
+        >
+          <WarningTriangleIcon size={18} color={GhostexPalette.STATUS_WORKING} />
+          <View style={styles.tailscaleWarningCopy}>
+            <Text style={styles.tailscaleWarningTitle}>Tailscale isn’t connected</Text>
+            <Text style={styles.tailscaleWarningBody}>Tap to open Tailscale and reconnect.</Text>
+          </View>
+        </Pressable>
+      ) : null}
       <View style={styles.statusRow}>
         <Pressable
           accessibilityRole="button"
@@ -2014,31 +2029,29 @@ export default function SessionsScreen({ navigation }: Props) {
             {statusLine}
           </Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Tailscale ${tailscaleConnected ? 'connected' : 'not connected'}`}
-          hitSlop={8}
-          style={styles.tailscaleIndicator}
-          onPress={() => void openTailscaleOrDownload()}
-        >
-          <Text
-            style={[
-              styles.tailscaleIndicatorLabel,
-              {
-                color: tailscaleConnected
-                  ? GhostexPalette.STATUS_CONNECTED
-                  : GhostexPalette.STATUS_ERROR,
-              },
-            ]}
+        {tailscaleConnected === true ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tailscale connected"
+            hitSlop={8}
+            style={styles.tailscaleIndicator}
+            onPress={() => void openTailscaleOrDownload()}
           >
-            • Tailscale
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tailscaleIndicatorLabel,
+                { color: GhostexPalette.STATUS_CONNECTED },
+              ]}
+            >
+              • Tailscale
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {recentProjects.length > 0 && machine !== null ? (
         <Pressable
           accessibilityRole="button"
-          style={[styles.recentButton, { backgroundColor: sidebarAppearance.cardActive }]}
+          style={styles.recentButton}
           onPress={() => setOverlay({ kind: 'recentProjects', machine })}
         >
           <Text style={[styles.recentButtonLabel, { color: sidebarAppearance.foreground }]}>
@@ -2409,6 +2422,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     gap: 8,
+  },
+  tailscaleWarning: {
+    minHeight: 54,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: GhostexRadii.card,
+    borderWidth: 1,
+    borderColor: 'rgba(255,180,84,0.35)',
+    backgroundColor: 'rgba(255,180,84,0.10)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tailscaleWarningCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tailscaleWarningTitle: {
+    color: GhostexPalette.FOREGROUND,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  tailscaleWarningBody: {
+    color: GhostexPalette.MUTED,
+    fontSize: 11,
+    lineHeight: 15,
   },
   statusPressable: {
     flex: 1,

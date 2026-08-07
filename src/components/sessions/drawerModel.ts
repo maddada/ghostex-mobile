@@ -1,8 +1,8 @@
 /**
  * Sessions drawer list assembly: stitches per-machine `buildDrawerItems`
  * output into a flat multi-machine list of render BLOCKS matching the desktop
- * layered-panel skin — plain rows (section labels, quick sessions, state
- * cards), project cards (header + child rows in one bordered card), and
+ * layered-panel skin — plain rows (section labels and state cards), project
+ * cards (header + child rows in one bordered card), and
  * collection panels (tinted panel containing member project cards). With a
  * single saved machine the drawer keeps a headerless layout; with two or
  * more, each machine gets a collapsible MACHINE_HEADER.
@@ -63,6 +63,17 @@ function isProjectChild(item: DrawerItem): boolean {
     item.type === 'SESSION' ||
     item.type === 'SESSION_LIST_TOGGLE'
   );
+}
+
+/** The mobile Sessions page starts at Projects; Quick sessions live in Chat. */
+function withoutQuickSection(items: DrawerItem[]): DrawerItem[] {
+  let insideQuickSection = false;
+  return items.filter((item) => {
+    if (item.type === 'SECTION_LABEL') {
+      insideQuickSection = item.section === 'quick';
+    }
+    return !insideQuickSection;
+  });
 }
 
 /** Group the flat builder output into card/panel blocks. */
@@ -145,15 +156,17 @@ function machineBlocks(
       ),
     ];
   }
-  const items = buildDrawerItems({
-    machineId: machine.id,
-    summary: inventory.summary,
-    expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
-    expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
-    expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
-    collapsedSessionListKeys: new Set(collapse.collapsedSessionListsByMachine[machine.id] ?? []),
-    collapsedSectionKeys: new Set(collapse.collapsedSectionsByMachine[machine.id] ?? []),
-  });
+  const items = withoutQuickSection(
+    buildDrawerItems({
+      machineId: machine.id,
+      summary: inventory.summary,
+      expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
+      expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
+      expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
+      collapsedSessionListKeys: new Set(collapse.collapsedSessionListsByMachine[machine.id] ?? []),
+      collapsedSectionKeys: new Set(collapse.collapsedSectionsByMachine[machine.id] ?? []),
+    }),
+  );
   if (items.length === 0) {
     return [
       rowBlock(
