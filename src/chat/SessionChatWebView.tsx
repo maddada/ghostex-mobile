@@ -19,6 +19,7 @@ import {
 import { SESSION_CHAT_HTML } from './session-chat-html.generated';
 
 const CHAT_BACKGROUND = '#0e0e0e';
+const CHAT_SOURCE = { html: SESSION_CHAT_HTML } as const;
 
 /** JSON that is safe to embed inside injected JavaScript source. */
 function injectableJson(value: unknown): string {
@@ -41,6 +42,8 @@ export type SessionChatWebViewProps = {
   working: boolean;
   /** False while the session cannot take input (asleep / not live). */
   canSend: boolean;
+  /** Keeps the page loading offscreen until chat mode is selected. */
+  visible: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -51,6 +54,7 @@ export default function SessionChatWebView({
   projectId,
   sessionId,
   style,
+  visible,
   working,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
@@ -99,10 +103,11 @@ export default function SessionChatWebView({
   return (
     <WebView
       ref={webviewRef}
-      source={{ html: SESSION_CHAT_HTML }}
+      source={CHAT_SOURCE}
       originWhitelist={['about:blank']}
-      style={[styles.webview, style]}
-      containerStyle={styles.container}
+      style={styles.webview}
+      containerStyle={[styles.container, style, !visible && styles.preloading]}
+      pointerEvents={visible ? 'auto' : 'none'}
       injectedJavaScriptBeforeContentLoaded={configScript}
       onLoadEnd={pushHostState}
       onMessage={handleMessage}
@@ -133,5 +138,13 @@ const styles = StyleSheet.create({
   webview: {
     backgroundColor: CHAT_BACKGROUND,
     flex: 1,
+  },
+  preloading: {
+    height: 1,
+    left: -2,
+    opacity: 0,
+    position: 'absolute',
+    top: -2,
+    width: 1,
   },
 });
