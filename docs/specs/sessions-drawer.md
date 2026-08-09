@@ -55,8 +55,8 @@ Active row = warm-attached session key (machineId+sessionId) matches current ter
 Tap → attach. Long-press → context menu.
 
 ### Agent icon registry (icon id → tint; assets `ic_ghostex_agent_*` exist in android fork, copy to RN assets)
-amp-cli #FFFFFF · antigravity-cli #749BFF · browser #82B7FF · claude #D97757 · cursor-cli #EDECEC · codex #FFFFFF · copilot #FFFFFF · factory-droid #FF7A1A · gemini #8B9AFF · grok-build #FFFFFF · hermes-agent #F3C46B · opencode #6D96C0 · pi #C8FF62 · t3 #FF6AF3 · terminal #FAFAFA (fallback).
-Name aliases (lowercased): t3/t3 code→t3; codex/codex cli→codex; claude/claude code→claude; cursor/cursor cli/cursor agent/cursor-agent→cursor-cli; pi/pi agent/π→pi; opencode/open code→opencode; gemini; copilot/github copilot; droid/factory droid→factory-droid; grok/grok build→grok-build; antigravity/antigravity cli/agy→antigravity-cli; amp/amp cli→amp-cli; hermes/hermes agent→hermes-agent; browser. `agentIcon` field wins over `agent` name.
+amp-cli #FFFFFF · antigravity-cli #749BFF · browser #82B7FF · claude #D97757 · cursor-cli #EDECEC · codex #FFFFFF · copilot #FFFFFF · factory-droid #FF7A1A · gemini #8B9AFF · grok-build #FFFFFF · hermes-agent #F3C46B · opencode #6D96C0 · pi #C8FF62 · terminal #FAFAFA (fallback).
+Name aliases (lowercased): codex/codex cli→codex; claude/claude code→claude; cursor/cursor cli/cursor agent/cursor-agent→cursor-cli; pi/pi agent/π→pi; opencode/open code→opencode; gemini; copilot/github copilot; droid/factory droid→factory-droid; grok/grok build→grok-build; antigravity/antigravity cli/agy→antigravity-cli; amp/amp cli→amp-cli; hermes/hermes agent→hermes-agent; browser. `agentIcon` field wins over `agent` name.
 
 ### Session context menu (action sheet)
 Title = displayTitle or "Ghostex Session"; subtitle "Session {alias} · {displayStatus}". Rows:

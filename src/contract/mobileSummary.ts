@@ -453,7 +453,6 @@ export type AgentIconId =
   | 'pi'
   | 'qoder'
   | 'rovo-dev'
-  | 't3'
   | 'terminal';
 
 /** Brand tints mirror the desktop sidebar's AGENT_LOGO_COLORS map. */
@@ -476,14 +475,11 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   pi: '#C8FF62',
   qoder: '#A991FF',
   'rovo-dev': '#4FC3A1',
-  t3: '#FF6AF3',
   terminal: '#FAFAFA',
 };
 
 /** Lowercased name/icon aliases → icon id (spec §2). */
 const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
-  t3: 't3',
-  't3 code': 't3',
   codex: 'codex',
   'codex cli': 'codex',
   claude: 'claude',

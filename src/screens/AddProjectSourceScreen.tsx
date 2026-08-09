@@ -1,5 +1,5 @@
 /**
- * Add Project step 1 — source picker (t3code spec §5.3).
+ * Add Project step 1 — source picker.
  *
  * The machine is already chosen by the Projects context menu that opened this
  * flow, so there is no environment list here. Local folder is offered first,

@@ -1,5 +1,5 @@
 /**
- * Add Project local branch (t3code spec §5.5): error banner → path input →
+ * Add Project local branch: error banner → path input →
  * "Add project" button → folder browser. Nothing is added optimistically; the
  * machine's inventory is refreshed after gxserver confirms the project.
  */

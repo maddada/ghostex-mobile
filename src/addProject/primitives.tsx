@@ -1,6 +1,6 @@
 /**
- * Shared Add Project screen primitives (t3code spec §5.2) rendered with the
- * Ghostex mobile design tokens instead of t3code's Tailwind classes: card /
+ * Shared Add Project screen primitives rendered with the
+ * Ghostex mobile design tokens: card /
  * row / input radii from GhostexRadii, GhostexPalette surfaces, 1dp strokes.
  */
 

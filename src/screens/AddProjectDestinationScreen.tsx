@@ -1,5 +1,5 @@
 /**
- * Add Project clone branch, step 2 (t3code spec §5.7): repository card → path
+ * Add Project clone branch, step 2: repository card → path
  * input → "Clone project" → the same folder browser.
  *
  * gxserver refuses a destination that already exists and is not empty, so a

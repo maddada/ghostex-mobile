@@ -262,7 +262,7 @@ export function addProjectCommand(path: string, options?: { createIfMissing?: bo
  * Directory suggestions for an Add Project path input:
  * `ghostex browse-directories <partialPath> [--limit n] --json`.
  * `--cwd` is never sent: mobile has no active project, so relative paths are
- * not offered at all (t3code spec §5.6).
+ * not offered at all.
  */
 export function browseDirectoriesCommand(
   partialPath: string,

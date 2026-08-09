@@ -1,6 +1,6 @@
 /**
  * Add Project source labels, readiness, and ordering — the mobile port of
- * plans/014-add-project-dialog.t3code-spec.md §§3.2-3.4. Ghostex's discovery
+ * Ghostex's discovery
  * payload keys providers by `provider` and adds a `unsupported` status for
  * providers gxserver has no implementation for (Part A handoff).
  */

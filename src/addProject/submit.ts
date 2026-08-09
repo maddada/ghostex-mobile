@@ -1,6 +1,6 @@
 /**
  * Path-submission rules shared by the local and destination screens
- * (t3code spec §§2.8, 2.9) plus Ghostex's client-known duplicate check.
+ * plus Ghostex's client-known duplicate check.
  */
 
 import type { GhostexProject } from '../contract/mobileSummary';

@@ -137,7 +137,7 @@ export const ProgressCopy = {
 } as const;
 
 /**
- * Add Project flow copy (plans/014-add-project-dialog.t3code-spec.md §§3,5),
+ * Add Project flow copy,
  * adapted to Ghostex mobile: the machine is chosen by the entry-point context
  * menu, and there is no in-app source-control settings screen to deep-link to.
  */

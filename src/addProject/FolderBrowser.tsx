@@ -1,5 +1,5 @@
 /**
- * Folder browser used by both path screens (t3code spec §5.6): a "Browse
+ * Folder browser used by both path screens: a "Browse
  * folders" section with an optional ".." row and one row per directory.
  * Tapping a row REPLACES the input text and never submits; hidden folders are
  * always excluded on mobile.

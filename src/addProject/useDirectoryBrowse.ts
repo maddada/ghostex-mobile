@@ -1,7 +1,7 @@
 /**
  * Directory-suggestion state for an Add Project path input.
  *
- * The fetch is keyed on the DIRECTORY portion of the query only (t3code spec
+ * The fetch is keyed on the DIRECTORY portion of the query only
  * §2.4), so typing a leaf name never refetches and no debounce is needed;
  * crossing a `/` issues exactly one new request. Leaf filtering is client-side
  * and hidden folders are always excluded on mobile (spec §5.6).

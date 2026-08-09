@@ -1,5 +1,5 @@
 /**
- * Add Project clone branch, step 1 (t3code spec §5.4): one input plus a
+ * Add Project clone branch, step 1: one input plus a
  * "Continue" (Git URL) or "Lookup repository" (provider) button. A lookup
  * failure stays on this screen with an inline banner and the typed value
  * preserved.

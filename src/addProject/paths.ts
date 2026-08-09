@@ -1,6 +1,5 @@
 /**
- * POSIX path helpers for the Add Project browser, ported from t3code's
- * client-runtime path utilities (plans/014-add-project-dialog.t3code-spec.md
+ * POSIX path helpers for the Add Project browser
  * §2.3). Mobile only ever browses a Mac or Linux machine over SSH, so there is
  * no Windows separator handling and no relative-path support here: the flow
  * never sends `cwd`, so `./x` has nothing to resolve against.

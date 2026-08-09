@@ -114,14 +114,6 @@ function IconPi({ size, color }: AgentIconProps) {
   );
 }
 
-function IconT3({ size, color }: AgentIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 128 128">
-      <Path d="M 25 34 L 103 34 L 103 48 L 72 48 L 72 95 L 56 95 L 56 48 L 25 48 L 25 34 Z M 44 75 C 44 64.507 52.507 56 63 56 L 90 56 C 98.837 56 106 63.163 106 72 C 106 80.837 98.837 88 90 88 L 58 88 L 58 74 L 88 74 C 91.314 74 94 71.314 94 68 C 94 64.686 91.314 62 88 62 L 63 62 C 60.239 62 58 64.239 58 67 L 58 95 L 44 95 L 44 75 Z" fill={color} />
-    </Svg>
-  );
-}
-
 function IconTerminal({ size, color }: AgentIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -197,6 +189,5 @@ export const AGENT_ICONS: Record<string, (props: AgentIconProps) => React.JSX.El
   'pi': IconPi,
   'qoder': IconQoder,
   'rovo-dev': IconRovoDev,
-  't3': IconT3,
   'terminal': IconTerminal,
 };
