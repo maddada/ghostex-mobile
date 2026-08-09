@@ -12,7 +12,8 @@
  * blue dot for attention/done, red for error, gray for remote sleeping — and
  * the muted Last Active time renders only when neither is present, so the time
  * and the status indicator occupy the same right-aligned area. Sleeping dims
- * only the title, and the active row gets the translucent rounded fill.
+ * only the title, and the active row gets the translucent rounded fill plus a
+ * solid-white outline.
  */
 
 import { useEffect, useRef } from 'react';
@@ -179,6 +180,7 @@ export default function SessionRow({
       onPress={onPress}
       onLongPress={openMenuFromRow}
     >
+      {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
       {session.isPinned ? (
         <View style={[styles.pin, { left: Math.max(0, iconLeft - ds(16)) }]}>
           <PinGlyph size={ds(13)} color="rgba(255,255,255,0.9)" />
@@ -233,6 +235,16 @@ const styles = StyleSheet.create({
   },
   rowQuick: {
     paddingLeft: ds(47),
+  },
+  activeOutline: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderColor: '#FFFFFF',
+    borderRadius: ds(4),
+    borderWidth: ds(2),
   },
   pin: {
     position: 'absolute',
