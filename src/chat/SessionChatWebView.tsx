@@ -18,7 +18,7 @@ import {
 } from './session-chat-bridge';
 import { SESSION_CHAT_HTML } from './session-chat-html.generated';
 
-const CHAT_BACKGROUND = '#0e0e0e';
+const CHAT_BACKGROUNDS = { dark: '#0e0e0e', light: '#fdfdfd' } as const;
 const CHAT_SOURCE = { html: SESSION_CHAT_HTML } as const;
 
 /** JSON that is safe to embed inside injected JavaScript source. */
@@ -44,6 +44,8 @@ export type SessionChatWebViewProps = {
   canSend: boolean;
   /** Keeps the page loading offscreen until chat mode is selected. */
   visible: boolean;
+  /** Chat-only palette. The mobile app chrome remains independently themed. */
+  theme?: 'light' | 'dark';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -54,6 +56,7 @@ export default function SessionChatWebView({
   projectId,
   sessionId,
   style,
+  theme = 'dark',
   visible,
   working,
 }: SessionChatWebViewProps) {
@@ -61,8 +64,8 @@ export default function SessionChatWebView({
 
   const configScript = useMemo(
     () =>
-      `window.__ghostexMobileChatConfig = ${injectableJson({ agentId })}; true;`,
-    [agentId],
+      `window.__ghostexMobileChatConfig = ${injectableJson({ agentId, theme })}; true;`,
+    [agentId, theme],
   );
 
   /*
@@ -105,8 +108,13 @@ export default function SessionChatWebView({
       ref={webviewRef}
       source={CHAT_SOURCE}
       originWhitelist={['about:blank']}
-      style={styles.webview}
-      containerStyle={[styles.container, style, !visible && styles.preloading]}
+      style={[styles.webview, { backgroundColor: CHAT_BACKGROUNDS[theme] }]}
+      containerStyle={[
+        styles.container,
+        { backgroundColor: CHAT_BACKGROUNDS[theme] },
+        style,
+        !visible && styles.preloading,
+      ]}
       pointerEvents={visible ? 'auto' : 'none'}
       injectedJavaScriptBeforeContentLoaded={configScript}
       onLoadEnd={pushHostState}
@@ -133,10 +141,10 @@ export default function SessionChatWebView({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: CHAT_BACKGROUND,
+    backgroundColor: CHAT_BACKGROUNDS.dark,
   },
   webview: {
-    backgroundColor: CHAT_BACKGROUND,
+    backgroundColor: CHAT_BACKGROUNDS.dark,
     flex: 1,
   },
   preloading: {
