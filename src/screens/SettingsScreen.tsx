@@ -27,9 +27,12 @@ import {
   KEEP_ALIVE_INTERVAL_MAX_SEC,
   KEEP_ALIVE_INTERVAL_MIN_SEC,
   KEEP_ALIVE_INTERVAL_STEP_SEC,
+  MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+  MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   SCROLLBACK_ROWS_MAX,
   SCROLLBACK_ROWS_MIN,
   SCROLLBACK_ROWS_STEP,
+  SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP,
   SIDEBAR_SURFACE_OPACITY_MAX,
   SIDEBAR_SURFACE_OPACITY_MIN,
   TERMINAL_FONT_SIZE_MAX,
@@ -37,6 +40,7 @@ import {
   useSettingsStore,
   type BellBehavior,
   type GhostexSettings,
+  type SessionChatTheme,
 } from '../settings/store';
 import { useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
@@ -49,7 +53,7 @@ import {
 } from '../theme/sidebarAppearance';
 
 /** Status line copy, sessions-drawer.md §1 Settings page. */
-const SETTINGS_STATUS_LINE = 'Edit terminal behavior and remote-session alerts.';
+const SETTINGS_STATUS_LINE = 'Edit chat, terminal behavior, and remote-session alerts.';
 
 type BooleanSettingKey = {
   [Key in keyof GhostexSettings]: GhostexSettings[Key] extends boolean ? Key : never;
@@ -81,6 +85,11 @@ const BELL_ROWS: { value: BellBehavior; label: string }[] = [
   { value: 'vibrate', label: 'Vibrate' },
   { value: 'beep', label: 'Beep' },
   { value: 'ignore', label: 'Ignore bell' },
+];
+
+const SESSION_CHAT_THEME_ROWS: { value: SessionChatTheme; label: string }[] = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
 ];
 
 function formatRows(rows: number): string {
@@ -306,6 +315,53 @@ export default function SettingsScreen() {
           Changes only group and project backgrounds and borders.
         </Text>
 
+        <Text style={styles.sectionHeader}>Chat</Text>
+        <Text style={styles.sectionCaption}>
+          These settings change chat content only; the surrounding mobile app remains dark.
+        </Text>
+        {SESSION_CHAT_THEME_ROWS.map((row) =>
+          renderChoice(
+            `chat-theme-${row.value}`,
+            row.label,
+            settings.sessionChatTheme === row.value,
+            () => setSetting('sessionChatTheme', row.value),
+          ),
+        )}
+        <View style={styles.chatFontCard}>
+          <Text style={styles.chatFontLabel}>Font Family</Text>
+          <TextInput
+            accessibilityLabel="Chat font family"
+            autoCapitalize="words"
+            autoCorrect={false}
+            placeholder="App default"
+            placeholderTextColor={GhostexPalette.MUTED}
+            returnKeyType="done"
+            spellCheck={false}
+            style={styles.chatFontInput}
+            value={settings.sessionChatFontFamily}
+            onChangeText={(value) => setSetting('sessionChatFontFamily', value)}
+          />
+        </View>
+        <Text style={styles.sectionCaption}>
+          Type an installed font family name. Leave blank to use the app font.
+        </Text>
+        <SteppedSlider
+          label="Message width"
+          maximumValue={MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
+          minimumValue={MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
+          step={SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP}
+          value={settings.sessionChatTranscriptWidthPercent}
+          valueLabel={`${settings.sessionChatTranscriptWidthPercent}%`}
+          onValueChange={(value) => setSetting('sessionChatTranscriptWidthPercent', value)}
+        />
+        <Text style={styles.sectionCaption}>
+          Adjusts messages only. The prompt composer keeps its current width.
+        </Text>
+        {renderToggle('sessionChatVerboseMode', 'Verbose Mode')}
+        <Text style={styles.sectionCaption}>
+          Expands thinking blocks to show their tool calls by default.
+        </Text>
+
         <Text style={styles.sectionHeader}>Terminal behavior</Text>
         {TERMINAL_BEHAVIOR_TOGGLES.map((toggle) => renderToggle(toggle.key, toggle.label))}
 
@@ -489,6 +545,28 @@ const styles = StyleSheet.create({
     color: GhostexPalette.FOREGROUND,
     fontSize: 14,
     fontFamily: 'monospace',
+  },
+  chatFontCard: {
+    gap: 8,
+    padding: 12,
+    borderRadius: GhostexRadii.row,
+    backgroundColor: GhostexPalette.CARD,
+    borderWidth: GhostexStrokeWidth,
+    borderColor: GhostexPalette.BORDER,
+  },
+  chatFontLabel: {
+    color: GhostexPalette.FOREGROUND,
+    fontSize: 14,
+  },
+  chatFontInput: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: GhostexRadii.row,
+    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
+    borderWidth: GhostexStrokeWidth,
+    borderColor: GhostexPalette.BORDER,
+    color: GhostexPalette.FOREGROUND,
+    fontSize: 14,
   },
   rowChevron: {
     color: GhostexPalette.MUTED,

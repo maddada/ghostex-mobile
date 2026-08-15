@@ -3,7 +3,8 @@
  *
  * The chat page (built from the main repo's mobile-chat/session-chat-main.tsx
  * into src/chat/session-chat-html.generated.ts) posts
- * `{ id, op, params }` requests via window.ReactNativeWebView.postMessage and
+ * `{ id, op, params }` requests (including the read-only `readSkills` catalog)
+ * via window.ReactNativeWebView.postMessage and
  * expects `{ id, ok, result?, error? }` responses delivered through
  * `window.ghostexMobileChatDeliver`. This module maps each op onto the
  * matching `ghostex` Session Chat CLI verb over the machine's SSH channel —
@@ -20,6 +21,7 @@ import {
   interruptSessionChatCommand,
   loginShellCommand,
   readSessionChatCommand,
+  readSessionChatSkillsCommand,
   sendSessionChatMessageCommand,
   type SessionChatReadOptions,
 } from '../commands/ghostexCli';
@@ -50,7 +52,17 @@ export function isSessionChatSupportedAgent(agentId: string): boolean {
 
 export type SessionChatBridgeRequest = {
   id: number;
-  op: 'read' | 'send' | 'answerPrompt' | 'interrupt' | 'saveImage' | 'saveAttachment' | 'loadImage';
+  op:
+    | 'read'
+    | 'readSkills'
+    | 'send'
+    | 'sendKey'
+    | 'switchToTerminalForAgentPicker'
+    | 'answerPrompt'
+    | 'interrupt'
+    | 'saveImage'
+    | 'saveAttachment'
+    | 'loadImage';
   params?: Record<string, unknown>;
 };
 
@@ -88,7 +100,10 @@ export function parseSessionChatBridgeRequest(raw: string): SessionChatBridgeReq
   if (typeof record.id !== 'number') return null;
   if (
     record.op !== 'read' &&
+    record.op !== 'readSkills' &&
     record.op !== 'send' &&
+    record.op !== 'sendKey' &&
+    record.op !== 'switchToTerminalForAgentPicker' &&
     record.op !== 'answerPrompt' &&
     record.op !== 'interrupt' &&
     record.op !== 'saveImage' &&
@@ -272,6 +287,14 @@ export async function runSessionChatBridgeRequest(
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
+      case 'readSkills': {
+        const result = await runGhostexCli(
+          machine,
+          readSessionChatSkillsCommand(sessionId, projectId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
       case 'send': {
         const text = typeof params.text === 'string' ? params.text : '';
         if (text.length === 0) {
@@ -283,6 +306,14 @@ export async function runSessionChatBridgeRequest(
         // Desktop parity: answering a session clears its attention status.
         acknowledgeSessionAttention(machine.id, sessionId);
         return { id: request.id, ok: true, result: { queued: true } };
+      }
+      case 'sendKey':
+      case 'switchToTerminalForAgentPicker': {
+        return {
+          id: request.id,
+          ok: false,
+          error: 'This chat action must be handled by the native WebView host.',
+        };
       }
       case 'answerPrompt': {
         await runGhostexCli(

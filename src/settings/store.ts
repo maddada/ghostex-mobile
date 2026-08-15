@@ -21,6 +21,7 @@ import {
 const SETTINGS_STORAGE_KEY = 'settings.v1';
 
 export type BellBehavior = 'vibrate' | 'beep' | 'ignore';
+export type SessionChatTheme = 'dark' | 'light';
 
 export type GhostexSettings = {
   // Terminal behavior (legacy Android row order).
@@ -52,6 +53,14 @@ export type GhostexSettings = {
   sidebarGroupsOpacityPercent: number;
   /** Opacity percentage for sidebar project-card backgrounds and borders. */
   sidebarProjectsOpacityPercent: number;
+  /** Theme for chat content only; the surrounding mobile app remains dark. */
+  sessionChatTheme: SessionChatTheme;
+  /** CSS font-family used by chat messages and the prompt composer. */
+  sessionChatFontFamily: string;
+  /** Width of the message transcript; the prompt composer keeps its full width. */
+  sessionChatTranscriptWidthPercent: number;
+  /** Reveal thinking-owned tool calls by default. */
+  sessionChatVerboseMode: boolean;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -74,6 +83,23 @@ export const KEEP_ALIVE_INTERVAL_STEP_SEC = 10;
 
 export const SIDEBAR_SURFACE_OPACITY_MIN = 0;
 export const SIDEBAR_SURFACE_OPACITY_MAX = 100;
+
+export const MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 50;
+export const MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 100;
+export const SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP = 5;
+export const DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 75;
+
+export function clampSessionChatTranscriptWidthPercent(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
+  const clamped = Math.min(
+    MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+    Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value),
+  );
+  return (
+    Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) *
+    SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP
+  );
+}
 
 export function defaultFontSize(): number {
   return Platform.OS === 'ios' ? 10 : 13;
@@ -102,6 +128,10 @@ export function defaultSettings(): GhostexSettings {
     sidebarBackgroundTint: DEFAULT_SIDEBAR_BACKGROUND_TINT,
     sidebarGroupsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
     sidebarProjectsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
+    sessionChatTheme: 'dark',
+    sessionChatFontFamily: '',
+    sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+    sessionChatVerboseMode: false,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -173,6 +203,18 @@ function sanitizeSettings(value: unknown): GhostexSettings {
           defaults.sidebarProjectsOpacityPercent,
         )
       : defaults.sidebarProjectsOpacityPercent;
+  const sessionChatTheme =
+    record.sessionChatTheme === 'dark' || record.sessionChatTheme === 'light'
+      ? record.sessionChatTheme
+      : defaults.sessionChatTheme;
+  const sessionChatFontFamily =
+    typeof record.sessionChatFontFamily === 'string'
+      ? record.sessionChatFontFamily
+      : defaults.sessionChatFontFamily;
+  const sessionChatTranscriptWidthPercent =
+    typeof record.sessionChatTranscriptWidthPercent === 'number'
+      ? clampSessionChatTranscriptWidthPercent(record.sessionChatTranscriptWidthPercent)
+      : defaults.sessionChatTranscriptWidthPercent;
   return {
     autoScroll: bool('autoScroll', defaults.autoScroll),
     extraKeysToolbarVisible: bool('extraKeysToolbarVisible', defaults.extraKeysToolbarVisible),
@@ -195,6 +237,10 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sidebarBackgroundTint,
     sidebarGroupsOpacityPercent,
     sidebarProjectsOpacityPercent,
+    sessionChatTheme,
+    sessionChatFontFamily,
+    sessionChatTranscriptWidthPercent,
+    sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

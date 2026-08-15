@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
+import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import {
   parseSessionChatBridgeRequest,
@@ -32,6 +33,10 @@ export type SessionChatWebViewProps = {
   machine: MachineConnectionTarget;
   projectId: string;
   sessionId: string;
+  /** Warm native terminal entry that owns raw Codex effort keystrokes. */
+  terminalSessionKey: string;
+  /** Switches the retained tab from chat back to its terminal model picker. */
+  onSwitchToTerminalForAgentPicker: () => void;
   /** Agent icon id ("claude", "codex", …) for the page's empty state. */
   agentId: string;
   /**
@@ -46,17 +51,28 @@ export type SessionChatWebViewProps = {
   visible: boolean;
   /** Chat-only palette. The mobile app chrome remains independently themed. */
   theme?: 'light' | 'dark';
+  /** Installed CSS font-family name, or blank to use the bundled app font. */
+  fontFamily?: string;
+  /** Width of the message transcript only; the prompt composer stays unchanged. */
+  transcriptWidthPercent?: number;
+  /** Reveal thinking-owned tool calls without requiring a tap. */
+  verboseMode?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
 export default function SessionChatWebView({
   agentId,
   canSend,
+  fontFamily = '',
   machine,
+  onSwitchToTerminalForAgentPicker,
   projectId,
   sessionId,
   style,
   theme = 'dark',
+  transcriptWidthPercent = 75,
+  terminalSessionKey,
+  verboseMode = false,
   visible,
   working,
 }: SessionChatWebViewProps) {
@@ -64,8 +80,15 @@ export default function SessionChatWebView({
 
   const configScript = useMemo(
     () =>
-      `window.__ghostexMobileChatConfig = ${injectableJson({ agentId, theme })}; true;`,
-    [agentId, theme],
+      `window.__ghostexMobileChatConfig = ${injectableJson({
+        agentId,
+        fontFamily,
+        sessionKey: `${machine.id}:${projectId}:${sessionId}`,
+        theme,
+        transcriptWidthPercent,
+        verboseMode,
+      })}; true;`,
+    [agentId, fontFamily, machine.id, projectId, sessionId, theme, transcriptWidthPercent, verboseMode],
   );
 
   /*
@@ -88,6 +111,24 @@ export default function SessionChatWebView({
     pushHostState();
   }, [canSend, working, pushHostState]);
 
+  const presentationRef = useRef({ fontFamily, theme, transcriptWidthPercent, verboseMode });
+  presentationRef.current = { fontFamily, theme, transcriptWidthPercent, verboseMode };
+  const pushPresentation = useCallback((): void => {
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatSetPresentation && window.ghostexMobileChatSetPresentation(' +
+        `${injectableJson(presentationRef.current)}); true;`,
+    );
+  }, []);
+
+  useEffect(() => {
+    pushPresentation();
+  }, [fontFamily, pushPresentation, theme, transcriptWidthPercent, verboseMode]);
+
+  const pushCurrentState = useCallback((): void => {
+    pushHostState();
+    pushPresentation();
+  }, [pushHostState, pushPresentation]);
+
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
       `window.ghostexMobileChatDeliver && window.ghostexMobileChatDeliver(${injectableJson(response)}); true;`,
@@ -98,9 +139,39 @@ export default function SessionChatWebView({
     (event: WebViewMessageEvent): void => {
       const request = parseSessionChatBridgeRequest(event.nativeEvent.data);
       if (request === null) return;
+      if (request.op === 'switchToTerminalForAgentPicker') {
+        onSwitchToTerminalForAgentPicker();
+        deliver({ id: request.id, ok: true, result: { switched: true } });
+        return;
+      }
+      if (request.op === 'sendKey') {
+        const key = request.params?.key;
+        const terminalKey =
+          key === 'shift-up'
+            ? 'up'
+            : key === 'shift-down'
+              ? 'down'
+              : key === 'shift-tab'
+                ? 'tab'
+                : null;
+        if (terminalKey === null) {
+          deliver({ id: request.id, ok: false, error: 'Unknown chat terminal key.' });
+          return;
+        }
+        void GhostexNative.sendKey(terminalSessionKey, terminalKey, { shift: true })
+          .then(() => deliver({ id: request.id, ok: true, result: { sent: true } }))
+          .catch((error: unknown) =>
+            deliver({
+              id: request.id,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        return;
+      }
       void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then(deliver);
     },
-    [machine, projectId, sessionId, deliver],
+    [deliver, machine, onSwitchToTerminalForAgentPicker, projectId, sessionId, terminalSessionKey],
   );
 
   return (
@@ -117,7 +188,7 @@ export default function SessionChatWebView({
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
       injectedJavaScriptBeforeContentLoaded={configScript}
-      onLoadEnd={pushHostState}
+      onLoadEnd={pushCurrentState}
       onMessage={handleMessage}
       // Markdown links in the transcript open in the system browser instead
       // of navigating the chat surface away.

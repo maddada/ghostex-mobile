@@ -419,6 +419,11 @@ export function readSessionChatCommand(
   return parts.filter((part) => part.length > 0).join(' ');
 }
 
+/** List skills resolved by gxserver for the session's stored agent identity. */
+export function readSessionChatSkillsCommand(sessionId: string, projectId: string): string {
+  return `ghostex read-session-chat-skills ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
 /** Send: `ghostex send-session-chat-message --session-id <id> --project-id <id> --text <text> --json`. */
 export function sendSessionChatMessageCommand(
   sessionId: string,

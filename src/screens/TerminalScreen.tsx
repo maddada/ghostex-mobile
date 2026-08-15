@@ -11,7 +11,16 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
@@ -375,6 +384,23 @@ export default function TerminalScreen({ navigation, route }: Props) {
       }
     }
     store.toggleChatMode(sessionKey);
+  }, [dismissKeyboard]);
+
+  const switchToTerminalForAgentPicker = useCallback((): void => {
+    const store = useTerminalStore.getState();
+    const sessionKey = store.selectedSessionKey;
+    if (sessionKey === null) return;
+    dismissKeyboard();
+    if (store.chatModeSessionKeys.includes(sessionKey)) {
+      store.toggleChatMode(sessionKey);
+    }
+    const message =
+      'Please pick the model and effort in the CLI then switch back to the chat view';
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.LONG);
+    } else {
+      Alert.alert(message);
+    }
   }, [dismissKeyboard]);
 
   /** Re-run the open flow for a failed/closed tab (Retry / Reconnect). */
@@ -849,7 +875,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
             machine={chatMachineTarget}
             projectId={activeProjectId}
             sessionId={activeTab.ghostexSessionId ?? ''}
+            terminalSessionKey={activeTab.sessionKey}
+            onSwitchToTerminalForAgentPicker={switchToTerminalForAgentPicker}
             agentId={activeAgentId}
+            fontFamily={settings.sessionChatFontFamily}
+            theme={settings.sessionChatTheme}
+            transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
+            verboseMode={settings.sessionChatVerboseMode}
             // The page cannot see the session's live state; the 5s inventory
             // poll is the phone's equivalent of the desktop hosts' record.
             working={activeSession?.activity === 'working'}
