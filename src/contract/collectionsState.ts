@@ -37,7 +37,6 @@ export type CollectionsState = {
       collectionId: string;
       title: string;
       color: string;
-      collapsed: boolean;
       projectIds: string[];
       [extra: string]: unknown;
     }
@@ -67,7 +66,6 @@ export function cloneCollectionsState(raw: unknown): CollectionsState {
           typeof entry.color === 'string' && entry.color !== 'transparent'
             ? entry.color
             : DEFAULT_COLLECTION_COLOR,
-        collapsed: entry.collapsed === true,
         projectIds: Array.isArray(entry.projectIds)
           ? entry.projectIds.filter((value): value is string => typeof value === 'string')
           : [],
@@ -118,7 +116,6 @@ export function stateWithNewCollection(raw: unknown, projectId: string): Collect
     collectionId,
     title: `Group ${number}`,
     color: COLLECTION_COLOR_OPTIONS[(number - 1) % COLLECTION_COLOR_OPTIONS.length].value,
-    collapsed: false,
     projectIds: [projectId],
   };
   state.order.push(collectionId);

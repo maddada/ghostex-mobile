@@ -122,8 +122,6 @@ export type GhostexProjectCollection = {
   title: string;
   /** "#rrggbb" (desktop SIDEBAR_PROJECT_COLLECTION_COLORS). */
   color: string;
-  /** Desktop-side collapsed flag; mobile keeps its own local disclosure. */
-  collapsed: boolean;
   projectIds: string[];
 };
 
@@ -920,7 +918,6 @@ export function parseProjectCollections(value: unknown): GhostexProjectCollectio
       title: firstNonEmpty(trimmedValue(entry, 'title')) || collectionId,
       color:
         rawColor !== 'transparent' && /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#4f5663',
-      collapsed: boolValue(entry, 'collapsed', false),
       projectIds,
     });
   }

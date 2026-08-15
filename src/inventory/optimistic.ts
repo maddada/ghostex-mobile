@@ -80,7 +80,6 @@ function canonicalCollectionsState(raw: unknown): string {
             collectionId,
             title: collection.title,
             color: collection.color,
-            collapsed: collection.collapsed,
             projectIds: collection.projectIds,
           };
     }),
