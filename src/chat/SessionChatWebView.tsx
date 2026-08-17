@@ -70,7 +70,7 @@ export default function SessionChatWebView({
   sessionId,
   style,
   theme = 'dark',
-  transcriptWidthPercent = 75,
+  transcriptWidthPercent = 100,
   terminalSessionKey,
   verboseMode = false,
   visible,
