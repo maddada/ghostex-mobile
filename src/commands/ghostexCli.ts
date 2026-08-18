@@ -424,6 +424,11 @@ export function readSessionChatSkillsCommand(sessionId: string, projectId: strin
   return `ghostex read-session-chat-skills ${sessionChatSelector(sessionId, projectId)} --json`;
 }
 
+/** List the session project's files for the composer's "@" mentions. */
+export function readSessionChatFilesCommand(sessionId: string, projectId: string): string {
+  return `ghostex read-session-chat-files ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
 /** Send: `ghostex send-session-chat-message --session-id <id> --project-id <id> --text <text> --json`. */
 export function sendSessionChatMessageCommand(
   sessionId: string,

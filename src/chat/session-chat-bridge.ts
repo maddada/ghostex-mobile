@@ -3,7 +3,8 @@
  *
  * The chat page (built from the main repo's mobile-chat/session-chat-main.tsx
  * into src/chat/session-chat-html.generated.ts) posts
- * `{ id, op, params }` requests (including the read-only `readSkills` catalog)
+ * `{ id, op, params }` requests (including the read-only `readSkills` and
+ * `readFiles` catalogs)
  * via window.ReactNativeWebView.postMessage and
  * expects `{ id, ok, result?, error? }` responses delivered through
  * `window.ghostexMobileChatDeliver`. This module maps each op onto the
@@ -21,6 +22,7 @@ import {
   interruptSessionChatCommand,
   loginShellCommand,
   readSessionChatCommand,
+  readSessionChatFilesCommand,
   readSessionChatSkillsCommand,
   sendSessionChatMessageCommand,
   type SessionChatReadOptions,
@@ -55,6 +57,7 @@ export type SessionChatBridgeRequest = {
   op:
     | 'read'
     | 'readSkills'
+    | 'readFiles'
     | 'send'
     | 'sendKey'
     | 'switchToTerminalForAgentPicker'
@@ -101,6 +104,7 @@ export function parseSessionChatBridgeRequest(raw: string): SessionChatBridgeReq
   if (
     record.op !== 'read' &&
     record.op !== 'readSkills' &&
+    record.op !== 'readFiles' &&
     record.op !== 'send' &&
     record.op !== 'sendKey' &&
     record.op !== 'switchToTerminalForAgentPicker' &&
@@ -291,6 +295,14 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           readSessionChatSkillsCommand(sessionId, projectId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'readFiles': {
+        const result = await runGhostexCli(
+          machine,
+          readSessionChatFilesCommand(sessionId, projectId),
           { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
