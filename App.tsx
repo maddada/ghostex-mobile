@@ -21,6 +21,7 @@ import { useAgentHotkeysStore } from './src/settings/agentHotkeys';
 import { useExtraKeysStore } from './src/settings/extraKeys';
 import { initSettingsNativeSync } from './src/settings/nativeSync';
 import { useSettingsStore } from './src/settings/store';
+import { initTerminalKeepAwake } from './src/terminal/keepAwake';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { addProjectSourceLabel } from './src/addProject/sources';
 import { GhostexPalette } from './src/theme/palette';
@@ -63,6 +64,7 @@ export default function App() {
     initDeepLinks();
     initAlerts();
     initAutoReconnect();
+    initTerminalKeepAwake();
     void useMachinesStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();
     void useExtraKeysStore.getState().hydrate();

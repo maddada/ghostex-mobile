@@ -194,6 +194,33 @@ export function forkSessionCommand(sessionId: string): string {
   return `ghostex fork-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
 }
 
+/**
+ * Keep-awake lease: `ghostex hold-sessions-awake --sessions-json <json>
+ * --ttl-ms <n> --holder-id <id> [--release] --json`.
+ *
+ * The machine's Auto Sleep sweep ("Sleep inactive agents") runs in whichever
+ * Ghostex client owns that machine's sidebar, and that client cannot see that
+ * this phone is attached to a session. The lease is how the phone tells the
+ * daemon, so an automatic sleep is declined for as long as the tab is on
+ * screen. One call carries every attached session on the machine.
+ */
+export function holdSessionsAwakeCommand(
+  sessions: readonly { projectId: string; sessionId: string }[],
+  options: { holderId: string; ttlMs?: number; release?: boolean },
+): string {
+  if (sessions.length === 0) throw new Error('Ghostex keep-awake requires at least one session.');
+  const payload = sessions.map((session) => ({
+    projectId: requireId(session.projectId, 'project id'),
+    sessionId: requireId(session.sessionId, 'session id'),
+  }));
+  return (
+    `ghostex hold-sessions-awake --sessions-json ${shellQuote(JSON.stringify(payload))}` +
+    ` --holder-id ${shellQuote(requireId(options.holderId, 'keep-awake holder id'))}` +
+    positiveIntegerFlag('--ttl-ms', options.ttlMs, 'keep-awake TTL') +
+    `${options.release === true ? ' --release' : ''} --json`
+  );
+}
+
 /** Acknowledge attention: `ghostex acknowledge-session-attention --session-id <id> --json`. */
 export function acknowledgeAttentionCommand(sessionId: string): string {
   return (
@@ -461,4 +488,15 @@ export function answerSessionChatPromptCommand(
 /** Interrupt the running turn: `ghostex interrupt-session-chat --session-id <id> --project-id <id> --json`. */
 export function interruptSessionChatCommand(sessionId: string, projectId: string): string {
   return `ghostex interrupt-session-chat ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
+/**
+ * Move the agent CLI's composer draft out of the terminal and print it:
+ * `ghostex handoff-session-chat-draft --session-id <id> --project-id <id> --json`.
+ *
+ * The daemon holds this while the CLI answers its Ctrl+G prompt-editor
+ * handshake, so it is the one chat verb that routinely takes seconds.
+ */
+export function handoffSessionChatDraftCommand(sessionId: string, projectId: string): string {
+  return `ghostex handoff-session-chat-draft ${sessionChatSelector(sessionId, projectId)} --json`;
 }
