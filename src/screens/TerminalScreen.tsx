@@ -246,6 +246,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const chatMachineTarget =
     chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
 
+  /*
+   * Terminal → chat draft transfer counter, per session key. Entering chat
+   * bumps the session's entry, which tells its (already mounted) chat page to
+   * pull whatever the user had typed into the agent CLI into its composer.
+   * Runtime-only: a transfer is a response to one switch, never a stored fact.
+   */
+  const [chatDraftTransferIds, setChatDraftTransferIds] = useState<Record<string, number>>({});
+
   // The native nav bar has no styling guarantee here; render our own header.
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -382,6 +390,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
       if (tab?.ghostexSessionId !== undefined) {
         acknowledgeSessionAttention(tab.machineId, tab.ghostexSessionId);
       }
+      // Anything half-typed in the agent CLI belongs to the surface the user
+      // is moving to, not the one they are leaving.
+      setChatDraftTransferIds((current) => ({
+        ...current,
+        [sessionKey]: (current[sessionKey] ?? 0) + 1,
+      }));
     }
     store.toggleChatMode(sessionKey);
   }, [dismissKeyboard]);
@@ -887,6 +901,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             working={activeSession?.activity === 'working'}
             canSend={activeSession !== null && activeSession.isLive && !activeSession.isSleeping}
             visible={chatModeActive}
+            draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
             style={styles.terminal}
           />
         ) : null}

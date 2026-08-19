@@ -19,6 +19,7 @@ import { File, Paths } from 'expo-file-system';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import {
   answerSessionChatPromptCommand,
+  handoffSessionChatDraftCommand,
   interruptSessionChatCommand,
   loginShellCommand,
   readSessionChatCommand,
@@ -78,6 +79,12 @@ export type SessionChatBridgeResponse = {
 
 /** Exec timeout for non-read ops; sends queue server-side and return fast. */
 const SESSION_CHAT_ACTION_TIMEOUT_MS = 20000;
+/**
+ * The daemon waits on the agent CLI's Ctrl+G prompt-editor handshake (up to
+ * 16s) before it can answer with the draft, so this verb needs far more room
+ * than the queue-and-return ops above.
+ */
+const SESSION_CHAT_DRAFT_HANDOFF_TIMEOUT_MS = 40000;
 /** Margin above a read's long-poll wait before the SSH exec itself times out. */
 const SESSION_CHAT_READ_TIMEOUT_MARGIN_MS = 25000;
 /** Exec timeout for staging a machine-side temp path (mirrors uploads.ts). */
@@ -259,6 +266,35 @@ async function loadChatImage(
     );
   }
   return { base64Data, bytes: Math.floor((base64Data.length * 3) / 4), mediaType };
+}
+
+/**
+ * Move whatever the user typed into the agent CLI out of the terminal and
+ * return it, so the chat composer can take ownership of that draft when the
+ * user switches views. Returns an empty string when the CLI composer was empty
+ * or the transfer could not be made — both leave the terminal untouched, and
+ * neither is worth interrupting a view switch over.
+ *
+ * Unlike every other verb here this is host-initiated, not page-initiated: the
+ * page has no way to know the user just arrived from the terminal.
+ */
+export async function handoffSessionChatDraft(
+  machine: MachineConnectionTarget,
+  projectId: string,
+  sessionId: string,
+): Promise<string> {
+  if (projectId.trim().length === 0 || sessionId.trim().length === 0) return '';
+  try {
+    const result = await runGhostexCli(
+      machine,
+      handoffSessionChatDraftCommand(sessionId, projectId),
+      { timeoutMs: SESSION_CHAT_DRAFT_HANDOFF_TIMEOUT_MS },
+    );
+    const content = (result.json as { content?: unknown } | undefined)?.content;
+    return typeof content === 'string' ? content : '';
+  } catch {
+    return '';
+  }
 }
 
 /**

@@ -13,6 +13,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import {
+  handoffSessionChatDraft,
   parseSessionChatBridgeRequest,
   runSessionChatBridgeRequest,
   type SessionChatBridgeResponse,
@@ -49,6 +50,14 @@ export type SessionChatWebViewProps = {
   canSend: boolean;
   /** Keeps the page loading offscreen until chat mode is selected. */
   visible: boolean;
+  /**
+   * Bumped by the host every time the user enters chat mode for this session.
+   * Each new value runs one terminal → chat draft transfer: whatever was typed
+   * into the agent CLI is moved out of the terminal and dropped into the chat
+   * composer, so switching views never leaves text behind. Starts at 0, which
+   * runs nothing (a preloaded page the user has not switched to yet).
+   */
+  draftTransferRequestId?: number;
   /** Chat-only palette. The mobile app chrome remains independently themed. */
   theme?: 'light' | 'dark';
   /** Installed CSS font-family name, or blank to use the bundled app font. */
@@ -75,6 +84,7 @@ export default function SessionChatWebView({
   verboseMode = false,
   visible,
   working,
+  draftTransferRequestId = 0,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
 
@@ -128,6 +138,33 @@ export default function SessionChatWebView({
     pushHostState();
     pushPresentation();
   }, [pushHostState, pushPresentation]);
+
+  /*
+   * Terminal → chat draft transfer. The CLI's composer is only readable
+   * through the daemon's Ctrl+G prompt-editor handshake, which takes seconds,
+   * so this runs after the switch rather than blocking it, and stays silent on
+   * failure: the user asked to see the chat, not to move text. `insertDraft`
+   * is installed by the page's bundle script, i.e. before load-end, and a
+   * transfer can only be requested once the user has already switched to a
+   * mounted page, so there is no pre-mount ordering to cover here.
+   */
+  const handledDraftTransferRef = useRef(draftTransferRequestId);
+  useEffect(() => {
+    if (draftTransferRequestId === handledDraftTransferRef.current) return;
+    handledDraftTransferRef.current = draftTransferRequestId;
+    if (draftTransferRequestId <= 0 || sessionId.length === 0) return;
+    let cancelled = false;
+    void handoffSessionChatDraft(machine, projectId, sessionId).then((content) => {
+      if (cancelled || content.length === 0) return;
+      webviewRef.current?.injectJavaScript(
+        'window.ghostexMobileChatInsertDraft && window.ghostexMobileChatInsertDraft(' +
+          `${injectableJson(content)}); true;`,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftTransferRequestId, machine, projectId, sessionId]);
 
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
