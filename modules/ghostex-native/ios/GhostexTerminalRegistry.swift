@@ -110,9 +110,18 @@ final class GhostexTerminalRegistry {
     static let shared = GhostexTerminalRegistry()
 
     private(set) var entries: [String: TerminalSessionEntry] = [:]
+    /// Mounted host views by session key, for the whole mounted life of the view —
+    /// not just while it waits for a first entry. A reconnect replaces the entry
+    /// under a key that a host is already showing, and that host has to be moved
+    /// onto the replacement instead of keeping the dead terminal on screen.
+    private var mountedHosts: [String: WeakHostView] = [:]
     private var ghosttyApp: Ghostty.App?
 
     private init() {}
+
+    private struct WeakHostView {
+        weak var value: GhostexTerminalHostView?
+    }
 
     /// Shared libghostty app instance (created lazily on first terminal).
     func sharedGhosttyApp() -> Ghostty.App {
@@ -130,6 +139,22 @@ final class GhostexTerminalRegistry {
 
     func register(_ entry: TerminalSessionEntry) {
         entries[entry.sessionKey] = entry
+        mountedHosts[entry.sessionKey]?.value?.attachIfNeeded()
+    }
+
+    /// Called when a host view takes a session key; it stays tracked until it releases it.
+    func trackHost(_ host: GhostexTerminalHostView, for sessionKey: String) {
+        mountedHosts[sessionKey] = WeakHostView(value: host)
+        host.attachIfNeeded()
+    }
+
+    /// Called when a host view unmounts or switches to another session key.
+    func untrackHost(_ host: GhostexTerminalHostView, for sessionKey: String) {
+        guard let tracked = mountedHosts[sessionKey]?.value else {
+            mountedHosts.removeValue(forKey: sessionKey)
+            return
+        }
+        if tracked === host { mountedHosts.removeValue(forKey: sessionKey) }
     }
 
     func remove(_ sessionKey: String) -> TerminalSessionEntry? {

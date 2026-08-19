@@ -36,14 +36,20 @@ class GhostexTerminalEntry(
 }
 
 /**
- * sessionKey → entry map plus a small "view mounted before openTerminal finished" bridge:
- * a GhostexTerminalView whose sessionKey has no entry yet parks itself here and is attached
- * on the main thread as soon as the entry is registered.
+ * sessionKey → entry map plus the mounted-view index that keeps the two in sync.
+ *
+ * A GhostexTerminalView stays registered here for its whole mounted life, not just
+ * while it is waiting for a first entry, so [register] can hand it EVERY entry that
+ * ever appears under its session key. That matters for reconnect: the entry a view
+ * is showing dies (process exited / channel dropped), openTerminal builds a brand
+ * new entry under the same key, and the still-mounted view has to be moved onto it.
+ * When the index only held not-yet-attached views, that second entry reached nobody
+ * and the view kept rendering the dead terminal until the screen was remounted.
  */
 class GhostexTerminalRegistry {
 
   private val entries = ConcurrentHashMap<String, GhostexTerminalEntry>()
-  private val waitingViews = ConcurrentHashMap<String, WeakReference<GhostexTerminalView>>()
+  private val mountedViews = ConcurrentHashMap<String, WeakReference<GhostexTerminalView>>()
   private val mainHandler = Handler(Looper.getMainLooper())
 
   fun get(sessionKey: String): GhostexTerminalEntry? = entries[sessionKey]
@@ -52,23 +58,22 @@ class GhostexTerminalRegistry {
 
   fun register(entry: GhostexTerminalEntry) {
     entries[entry.sessionKey] = entry
-    val waiting = waitingViews.remove(entry.sessionKey)?.get() ?: return
-    mainHandler.post { waiting.onEntryAvailable(entry) }
+    val mounted = mountedViews[entry.sessionKey]?.get() ?: return
+    mainHandler.post { mounted.onEntryAvailable(entry) }
   }
 
   fun remove(sessionKey: String): GhostexTerminalEntry? = entries.remove(sessionKey)
 
-  fun awaitEntry(sessionKey: String, view: GhostexTerminalView) {
-    waitingViews[sessionKey] = WeakReference(view)
+  /** Called when a view takes a session key; it stays tracked until it releases the key. */
+  fun trackView(sessionKey: String, view: GhostexTerminalView) {
+    mountedViews[sessionKey] = WeakReference(view)
     // The entry may have been registered between the caller's lookup and this call.
-    entries[sessionKey]?.let { entry ->
-      waitingViews.remove(sessionKey)
-      mainHandler.post { view.onEntryAvailable(entry) }
-    }
+    entries[sessionKey]?.let { entry -> mainHandler.post { view.onEntryAvailable(entry) } }
   }
 
-  fun cancelWait(sessionKey: String, view: GhostexTerminalView) {
-    val waiting = waitingViews[sessionKey]?.get()
-    if (waiting == null || waiting === view) waitingViews.remove(sessionKey)
+  /** Called when a view unmounts or switches to another session key. */
+  fun untrackView(sessionKey: String, view: GhostexTerminalView) {
+    val mounted = mountedViews[sessionKey]?.get()
+    if (mounted == null || mounted === view) mountedViews.remove(sessionKey)
   }
 }

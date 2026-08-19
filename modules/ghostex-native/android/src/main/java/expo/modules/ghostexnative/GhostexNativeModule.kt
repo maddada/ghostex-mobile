@@ -436,7 +436,7 @@ class GhostexNativeModule : Module() {
       }
 
       OnViewDestroys { view: GhostexTerminalView ->
-        view.detachFromEntry()
+        view.releaseSessionKey()
       }
     }
 

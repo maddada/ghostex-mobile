@@ -32,18 +32,23 @@ final class GhostexTerminalHostView: ExpoView {
             attachIfNeeded()
             return
         }
-        detachTerminalView()
+        releaseSessionKey()
         sessionKey = newKey
-        attachIfNeeded()
+        // Tracking outlives the current entry: a reconnect registers a NEW entry
+        // under this key, and the registry moves this host onto it.
+        GhostexTerminalRegistry.shared.trackHost(self, for: newKey)
     }
 
-    private func attachIfNeeded() {
+    func attachIfNeeded() {
         guard let sessionKey else { return }
         guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
               let terminalView = entry.view else {
             return
         }
-        guard terminalView.superview !== self else { return }
+        guard attachedTerminalView !== terminalView else { return }
+        // A reconnect leaves the previous entry's (now dead) view mounted here;
+        // comparing against the CURRENT entry's view is what makes the swap happen.
+        detachTerminalView()
 
         // Steal the view from any previous host (a session shows in one place).
         terminalView.removeFromSuperview()
@@ -71,6 +76,16 @@ final class GhostexTerminalHostView: ExpoView {
         if let sessionKey, let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey), entry.hostView === self {
             entry.hostView = nil
         }
+    }
+
+    /// Give up the session key entirely (sessionKey prop change). A host that is
+    /// simply deallocated needs no call: the registry holds it weakly, so its slot
+    /// resolves to nil and is dropped on the next track/untrack for that key.
+    func releaseSessionKey() {
+        if let sessionKey {
+            GhostexTerminalRegistry.shared.untrackHost(self, for: sessionKey)
+        }
+        detachTerminalView()
     }
 
     override func layoutSubviews() {

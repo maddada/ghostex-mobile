@@ -333,11 +333,19 @@ public class GhostexNativeModule: Module {
         }
 
         AsyncFunction("closeTerminal") { (sessionKey: String) async in
-            await MainActor.run {
-                guard let entry = GhostexTerminalRegistry.shared.remove(sessionKey) else { return }
+            let hadEntry = await MainActor.run { () -> Bool in
+                guard let entry = GhostexTerminalRegistry.shared.remove(sessionKey) else {
+                    return false
+                }
                 entry.teardown()
+                return true
             }
-            self.sendTerminalState(sessionKey, state: "closed")
+            // Only a terminal that actually existed just closed. Announcing a
+            // close for a key with no entry walks a tab that is mid-reopen back
+            // to "Disconnected" for the moment before its new attach lands.
+            if hadEntry {
+                self.sendTerminalState(sessionKey, state: "closed")
+            }
         }
 
         AsyncFunction("listTerminals") { () async -> [String] in

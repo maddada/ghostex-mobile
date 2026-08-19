@@ -39,6 +39,14 @@ export type TerminalTab = {
   kind: TerminalTabKind;
   /** Stable Ghostex session id (attach tabs only). */
   ghostexSessionId?: string;
+  /**
+   * Owning gxserver project (attach tabs only), remembered from the row the
+   * tab was opened from. `ghostex attach` and the keep-awake lease both take
+   * project-scoped selectors, so keeping it here spares every later call a
+   * daemon-side lookup of a bare session id — and keeps a reattach targeting
+   * the same project the first attach did.
+   */
+  ghostexProjectId?: string;
   /** Starting directory for shell tabs (unset → login-shell default, ~). */
   cwd?: string;
   state: TerminalTabState;
@@ -248,6 +256,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       if (existing !== undefined) {
+        if (session.projectId !== undefined && session.projectId.length > 0) {
+          patchTab(sessionKey, { ghostexProjectId: session.projectId });
+        }
         // Upgrade a placeholder title (raw session id) when the caller knows
         // the real one (e.g. a notification deep link).
         if (
@@ -267,6 +278,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         title: session.title !== undefined && session.title.length > 0 ? session.title : session.sessionId,
         kind: 'attach',
         ghostexSessionId: session.sessionId,
+        ...(session.projectId !== undefined && session.projectId.length > 0
+          ? { ghostexProjectId: session.projectId }
+          : {}),
         state: 'opening',
       };
       const command = loginShellCommand(attachCommand(session.sessionId, session.projectId));
@@ -325,6 +339,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
 
     reopenTab: async (sessionKey) => {
       const tab = get().tabs.find((entry) => entry.sessionKey === sessionKey);
+      // An open tab is already showing a live terminal, and a tab mid-open has
+      // an attach in flight; reopening either would race two attaches onto one
+      // session key. Everything else is a restart.
       if (tab === undefined || tab.state === 'opening' || tab.state === 'open') return;
       const record = useMachinesStore
         .getState()
@@ -342,6 +359,14 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       zmxRefreshSent.delete(sessionKey);
       touchWarm(sessionKey);
       try {
+        /*
+         * Reconnect means "throw the dead terminal away and start over", so the
+         * native entry goes first. Without this, openTerminal finds a warm entry
+         * under the same session key and resolves as a no-op — which is exactly
+         * how a Reconnect could report success while the user kept staring at
+         * the exited process.
+         */
+        await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
         await ensureConnected(target);
         const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
           fontSize: initialFontSize(sessionKey),
@@ -349,7 +374,12 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
         };
         if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
-          opts.command = loginShellCommand(attachCommand(tab.ghostexSessionId));
+          // Same project-scoped selector the first attach used. A bare session
+          // id still works, but costs the daemon an extra inventory lookup on
+          // every reconnect to rediscover the project this tab already knows.
+          opts.command = loginShellCommand(
+            attachCommand(tab.ghostexSessionId, tab.ghostexProjectId),
+          );
         } else if (tab.kind === 'shell') {
           const command = shellCommandIn(tab.cwd);
           if (command !== null) opts.command = command;

@@ -63,28 +63,33 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   fun setSessionKey(key: String?) {
     if (key == sessionKey) return
     clearKeyModifiers()
-    detachFromEntry()
+    releaseSessionKey()
     sessionKey = key
     if (key == null) return
     val registry = module?.terminalRegistry ?: return
-    val existing = registry.get(key)
-    if (existing != null) {
-      attachEntry(existing)
-    } else {
-      registry.awaitEntry(key, this)
-    }
+    // Tracking is unconditional and outlives the current entry: a reconnect
+    // replaces the entry under this key and the registry has to be able to move
+    // this view onto the replacement. An entry that already exists is attached
+    // here rather than waiting for the registry's posted callback, so a warm tab
+    // has its terminal on the first frame; the callback then no-ops.
+    registry.trackView(key, this)
+    registry.get(key)?.let { attachEntry(it) }
   }
 
-  /** Called on the main thread by the registry when the entry appears after the view mounted. */
+  /** Called on the main thread by the registry when an entry appears for this view's key. */
   internal fun onEntryAvailable(candidate: GhostexTerminalEntry) {
     if (candidate.sessionKey != sessionKey || entry === candidate) return
     attachEntry(candidate)
   }
 
   private fun attachEntry(candidate: GhostexTerminalEntry) {
-    val session = candidate.session ?: run {
-      module?.terminalRegistry?.awaitEntry(candidate.sessionKey, this)
-      return
+    // openTerminal fills in the session before it registers the entry, so this
+    // is defensive: a session-less entry has nothing to render and must not
+    // displace whatever the view is already showing.
+    val session = candidate.session ?: return
+    val previous = entry
+    if (previous !== null && previous !== candidate && previous.attachedView === this) {
+      previous.attachedView = null
     }
     entry = candidate
     candidate.attachedView = this
@@ -95,9 +100,13 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     refreshZmxViewportOnceAfterSessionSwitch(candidate, session, 1)
   }
 
-  /** Detach without killing the warm entry (view unmount / sessionKey change). */
+  /**
+   * Drop this view's binding to its current entry without killing the entry, and
+   * WITHOUT giving up the session key: the module calls this when it discards an
+   * entry (closeTerminal), and the view must still be reachable for the next
+   * entry opened under the same key.
+   */
   internal fun detachFromEntry() {
-    sessionKey?.let { module?.terminalRegistry?.cancelWait(it, this) }
     val current = entry ?: return
     entry = null
     if (current.attachedView === this) current.attachedView = null
@@ -105,6 +114,12 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     terminalView.setTerminalCursorBlinkerState(false, false)
     terminalView.attachSession(null)
     terminalView.invalidate()
+  }
+
+  /** Give up the session key entirely (view unmount / sessionKey prop change). */
+  internal fun releaseSessionKey() {
+    sessionKey?.let { module?.terminalRegistry?.untrackView(it, this) }
+    detachFromEntry()
   }
 
   // endregion
