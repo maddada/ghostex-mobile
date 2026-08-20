@@ -146,11 +146,25 @@ export function createChatCommand(): string {
   return 'ghostex create-chat --json';
 }
 
-/** Agent launch: `ghostex create-agent <agentId> --project-id <id> --json`. */
-export function createAgentCommand(agentId: string, projectId: string): string {
+/**
+ * Agent launch: `ghostex create-agent <agentId> --project-id <id> --json`.
+ *
+ * `firstInputDraft` stages text in the new session's CLI input once the
+ * provider starts and never submits it, so the value is passed verbatim —
+ * including a trailing space, which separates a staged `@path` mention from
+ * whatever the user types next.
+ */
+export function createAgentCommand(
+  agentId: string,
+  projectId: string,
+  firstInputDraft?: string,
+): string {
+  const draft = firstInputDraft ?? '';
   return (
     `ghostex create-agent ${shellQuote(requireId(agentId, 'agent id'))}` +
-    ` --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`
+    ` --project-id ${shellQuote(requireId(projectId, 'project id'))}` +
+    (draft.trim().length === 0 ? '' : ` --first-input-draft ${shellQuote(draft)}`) +
+    ' --json'
   );
 }
 
@@ -499,4 +513,15 @@ export function interruptSessionChatCommand(sessionId: string, projectId: string
  */
 export function handoffSessionChatDraftCommand(sessionId: string, projectId: string): string {
   return `ghostex handoff-session-chat-draft ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
+/**
+ * Export the session's agent transcript to markdown:
+ * `ghostex export-transcript --session-id <id> --project-id <id> --json`.
+ *
+ * The transcript and the exported file both live on the daemon's machine, so
+ * the phone only ever receives the absolute path the daemon wrote to.
+ */
+export function exportSessionTranscriptCommand(sessionId: string, projectId: string): string {
+  return `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)} --json`;
 }

@@ -31,6 +31,7 @@ import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import EdgeSwipeZones from '../components/terminal/EdgeSwipeZones';
+import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
@@ -51,7 +52,9 @@ import {
   attachCommand,
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
+  createAgentCommand,
   delayedSendCommand,
+  exportSessionTranscriptCommand,
   forkSessionCommand,
   loginShellCommand,
   reloadSessionCommand,
@@ -95,11 +98,39 @@ type AgentOverlay =
 
 const AGENT_OVERLAY_NONE: AgentOverlay = { kind: 'none' };
 
+/**
+ * A finished Export Transcript run, as the result sheet needs it. The markdown
+ * file lives on the machine, so everything here describes where it landed and
+ * what a follow-up conversation on that same machine would be started from.
+ */
+type ExportedTranscript = {
+  machine: MachineRecord;
+  projectId: string;
+  /** Session the transcript came from — the sheet's subtitle. */
+  sessionTitle: string;
+  /** Launcher agent id for the follow-up session ('' hides that choice). */
+  agentId: string;
+  /** Human name of that agent, for the follow-up row's description. */
+  agentLabel: string;
+  /** Absolute path of the exported markdown file on the machine. */
+  path: string;
+};
+
 const HEADER_HEIGHT = 44;
 /** Deliberate separation between the Android IME boundary and the screen's bottom edge. */
 const ANDROID_KEYBOARD_GAP = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
 const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
+
+/**
+ * Plan 015 §7: the follow-up session's staged first input. A bare mention of
+ * the exported markdown plus one trailing space — gxserver types it into the
+ * new agent's input and never submits it, so the user writes their own prompt
+ * around it. Nothing is ever sent on their behalf.
+ */
+function transcriptMentionDraft(path: string): string {
+  return `@${path} `;
+}
 
 function machineRecordFor(machineId: string): MachineRecord | null {
   return useMachinesStore.getState().machines.find((machine) => machine.id === machineId) ?? null;
@@ -198,6 +229,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [agentOverlay, setAgentOverlay] = useState<AgentOverlay>(AGENT_OVERLAY_NONE);
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
+  const [exportedTranscript, setExportedTranscript] = useState<ExportedTranscript | null>(null);
+  const [startingTranscriptConversation, setStartingTranscriptConversation] = useState(false);
+  const [exportedTranscriptError, setExportedTranscriptError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [keyboardOcclusionCorrection, setKeyboardOcclusionCorrection] = useState(0);
   const bottomEdgeFrameRef = useRef<View>(null);
@@ -677,6 +711,89 @@ export default function TerminalScreen({ navigation, route }: Props) {
     setAgentProgress(null);
   }, [agentTarget, reportAgentFailure]);
 
+  /*
+   * Export Transcript: the daemon parses the agent's own transcript file and
+   * writes the markdown next to its state, so the phone only carries the
+   * selector out and the absolute path back. Unsupported agents and unreadable
+   * transcripts come back as the daemon's own message.
+   */
+  const runExportTranscript = useCallback(async (): Promise<void> => {
+    const target = agentTarget();
+    if (target === null) return;
+    setAgentOverlay(AGENT_OVERLAY_NONE);
+    const { machine, projectId, session } = target;
+    setAgentProgress('Exporting transcript…');
+    try {
+      const result = await runGhostexCli(
+        machine,
+        exportSessionTranscriptCommand(session.sessionId, projectId),
+      );
+      setAgentProgress(null);
+      const path = typeof result.json?.path === 'string' ? result.json.path.trim() : '';
+      if (path.length === 0) {
+        throw new Error('gxserver exported the transcript without reporting its path.');
+      }
+      setStartingTranscriptConversation(false);
+      setExportedTranscriptError(null);
+      setExportedTranscript({
+        machine,
+        projectId,
+        sessionTitle:
+          session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle,
+        agentId: session.agent.trim(),
+        agentLabel: session.agentName.length > 0 ? session.agentName : session.agent,
+        path,
+      });
+    } catch (error) {
+      setAgentProgress(null);
+      reportAgentFailure('Export Transcript Failed', error);
+    }
+  }, [agentTarget, reportAgentFailure]);
+
+  /**
+   * "Start new conversation": launch the same agent again in the same project
+   * on the same machine, with the exported path staged as the new session's
+   * first input. `create-agent --first-input-draft` has gxserver type that
+   * mention into the agent's own input once the provider starts and stop
+   * there — the phone never sends anything for the user.
+   */
+  const startTranscriptConversation = useCallback(async (): Promise<void> => {
+    if (exportedTranscript === null || startingTranscriptConversation) return;
+    const { machine, projectId, agentId, path } = exportedTranscript;
+    if (agentId.length === 0) return;
+    setStartingTranscriptConversation(true);
+    setExportedTranscriptError(null);
+    try {
+      const created = await runGhostexCli(
+        machine,
+        createAgentCommand(agentId, projectId, transcriptMentionDraft(path)),
+      );
+      const sessionId = createdSessionId(created);
+      if (sessionId === null) {
+        throw new Error('gxserver created the session without reporting its id.');
+      }
+      await useInventoryStore.getState().refreshMachine(machine);
+      // Creation-flow parity with Fork: the new conversation becomes the
+      // visible session instead of leaving the user on the exported one.
+      const record = useInventoryStore
+        .getState()
+        .inventoriesByMachineId[machine.id]?.summary?.sessions.find(
+          (entry) => entry.sessionId === sessionId,
+        );
+      const sessionKey = await useTerminalStore.getState().attachSession(machine, {
+        sessionId,
+        projectId,
+        title: record?.displayTitle,
+      });
+      useTerminalStore.getState().selectTab(sessionKey);
+      setStartingTranscriptConversation(false);
+      setExportedTranscript(null);
+    } catch (error) {
+      setStartingTranscriptConversation(false);
+      setExportedTranscriptError(error instanceof Error ? error.message : String(error));
+    }
+  }, [exportedTranscript, startingTranscriptConversation]);
+
   const submitPromptEditor = useCallback(
     async (text: string): Promise<void> => {
       const target = agentTarget();
@@ -764,6 +881,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
         case 'promptEditor':
           setAgentOverlay({ kind: 'promptEditor', sending: false });
           return;
+        case 'exportTranscript':
+          void runExportTranscript();
+          return;
         case 'attachPath':
           setAgentOverlay(AGENT_OVERLAY_NONE);
           void handleUpload();
@@ -788,6 +908,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       runAgentFork,
       runAgentFullReload,
       runAgentSleep,
+      runExportTranscript,
     ],
   );
 
@@ -972,6 +1093,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
         agentActionsEnabled={agentActionsCapable && activeSession !== null}
         sleeping={activeSession?.isSleeping === true}
         forkEnabled={FORK_AGENT_ICONS.includes(activeAgentId)}
+        // gxserver only parses the transcripts of the agents the chat view
+        // supports, so anything else would only ever get `unsupportedAgent`.
+        exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         onSelect={handleMenuAction}
@@ -1026,6 +1150,19 @@ export default function TerminalScreen({ navigation, route }: Props) {
             />
           ) : null}
         </>
+      ) : null}
+
+      {exportedTranscript !== null ? (
+        <ExportTranscriptSheet
+          visible
+          sessionTitle={exportedTranscript.sessionTitle}
+          path={exportedTranscript.path}
+          agentLabel={exportedTranscript.agentLabel}
+          starting={startingTranscriptConversation}
+          error={exportedTranscriptError}
+          onStartNewConversation={() => void startTranscriptConversation()}
+          onClose={() => setExportedTranscript(null)}
+        />
       ) : null}
 
       <ProgressOverlay visible={agentProgress !== null} message={agentProgress ?? ''} />

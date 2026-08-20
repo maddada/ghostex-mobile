@@ -3,8 +3,8 @@
  * separate trailing buttons: the Agent Actions menu (the phone's copy of the
  * desktop terminal-overlay action strip and the shared chat view's "Agent
  * Actions" cluster — same ids and same order: rename, sleep, delayedActions,
- * fork, fullReload, promptEditor) and the screen's overflow menu (attach,
- * new terminal, settings, disconnect).
+ * fork, fullReload, promptEditor, exportTranscript) and the screen's overflow
+ * menu (attach, new terminal, settings, disconnect).
  *
  * The Agent Actions section is present only for a resolved gxserver session;
  * the screen section is always present, so shell tabs still get the menu. The
@@ -19,6 +19,7 @@ import ContextMenu, { type ContextMenuItem } from '../sessions/ContextMenu';
 import {
   ClockGlyph,
   ExitGlyph,
+  FileExportGlyph,
   GitForkGlyph,
   PencilGlyph,
   PlayGlyph,
@@ -37,6 +38,7 @@ export type TerminalMenuActionId =
   | 'fork'
   | 'fullReload'
   | 'promptEditor'
+  | 'exportTranscript'
   | 'attachPath'
   | 'newTerminal'
   | 'settings'
@@ -52,6 +54,8 @@ export type TerminalMenuProps = {
   sleeping: boolean;
   /** gxserver can only fork agents that keep a resumable session file. */
   forkEnabled: boolean;
+  /** gxserver can only export transcripts of the agents it can decode. */
+  exportTranscriptEnabled: boolean;
   /** Attach needs an open terminal (or, in chat mode, a chat-capable session). */
   attachEnabled: boolean;
   /** Disconnect needs a tab to close. */
@@ -68,6 +72,7 @@ export default function TerminalMenu({
   agentActionsEnabled,
   sleeping,
   forkEnabled,
+  exportTranscriptEnabled,
   attachEnabled,
   disconnectEnabled,
   onSelect,
@@ -129,8 +134,17 @@ export default function TerminalMenu({
         icon: <PencilIcon size={ICON_SIZE} color={iconColor} />,
         onPress: () => onSelect('promptEditor'),
       },
-      { kind: 'separator', key: 'agent-separator' },
     );
+    if (exportTranscriptEnabled) {
+      items.push({
+        kind: 'item',
+        key: 'exportTranscript',
+        label: 'Export Transcript',
+        icon: <FileExportGlyph size={ICON_SIZE} color={iconColor} />,
+        onPress: () => onSelect('exportTranscript'),
+      });
+    }
+    items.push({ kind: 'separator', key: 'agent-separator' });
   }
 
   items.push(

@@ -382,6 +382,28 @@ export function PinGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** File with an out-arrow (desktop IconFileExport, Export Transcript action). */
+export function FileExportGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 14 3 v 4 a 1 1 0 0 0 1 1 h 4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M 11.5 21 H 7 a 2 2 0 0 1 -2 -2 V 5 a 2 2 0 0 1 2 -2 h 7 l 5 5 v 5 m -5 6 h 7 m -3 -3 l 3 3 l -3 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Chevron-down (Show more / expand affordances); rotate for up. */
 export function ChevronDownGlyph({ size, color, rotated }: GlyphProps & { rotated?: boolean }) {
   return (

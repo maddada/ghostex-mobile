@@ -39,7 +39,7 @@ Screen sits in a nav stack with a native nav bar; back button hidden/custom. Zen
 ### Nav bar toolbar
 - Leading: back chevron (`chevron.left`) → dismiss keyboard, then back.
 - Principal: segmented view switcher (Terminal / Files / Stats / Sessions). For the RN v1 we have Terminal + Sessions.
-- Trailing: one overflow menu (`ellipsis.circle`) holding both sections — the Agent Actions section (Rename, Sleep/Wake, Delayed Actions, Fork, Full Reload, Prompt Editor) for resolved gxserver sessions, then the Session section:
+- Trailing: one overflow menu (`ellipsis.circle`) holding both sections — the Agent Actions section (Rename, Sleep/Wake, Delayed Actions, Fork, Full Reload, Prompt Editor, Export Transcript) for resolved gxserver sessions, then the Session section:
   - "Send & Attach File" — `paperclip`; disabled unless connected + terminal view + not uploading.
   - "New Terminal" — `plus`.
   - divider, "Settings" — `gear`, "Find" — `magnifyingglass`, "Edit Server" — `pencil`, "Zen Mode", "Disconnect" (destructive) — `xmark.circle`.
