@@ -7,6 +7,8 @@ export type RootStackParamList = {
   Machines: undefined;
   MachineForm: { machineId?: string } | undefined;
   Terminal: { sessionKey: string; machineId: string; title?: string };
+  /** Find Prompts: search every prompt this machine sent to an agent (`gx f`). */
+  FindPrompts: { machineId: string };
   Settings: undefined;
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;

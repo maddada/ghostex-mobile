@@ -36,6 +36,7 @@ import MachinesScreen from './src/screens/MachinesScreen';
 import SessionsScreen from './src/screens/SessionsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TerminalScreen from './src/screens/TerminalScreen';
+import FindPromptsScreen from './src/screens/FindPromptsScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import { AddProjectCopy, MachineCopy } from './src/copy';
 
@@ -119,6 +120,15 @@ export default function App() {
                   headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
                   contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
                 })}
+              />
+              <Stack.Screen
+                name="FindPrompts"
+                component={FindPromptsScreen}
+                options={{
+                  title: 'Find Prompts',
+                  headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
+                  contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
+                }}
               />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
               <Stack.Screen

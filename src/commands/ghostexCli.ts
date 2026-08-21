@@ -141,6 +141,27 @@ export function createSessionCommand(options?: { projectId?: string; groupId?: s
   return parts.join(' ');
 }
 
+/**
+ * Quick terminal in a folder, optionally running a command:
+ * `ghostex terminal --cwd <dir> [--title <t>] -- <command...>`.
+ *
+ * The daemon registers (or reuses) the project at that folder itself, which is
+ * what lets Find open a resumed agent in a folder the phone has never seen.
+ */
+export function quickTerminalCommand(
+  cwd: string,
+  options?: { command?: string; title?: string },
+): string {
+  const folder = cwd.trim();
+  if (folder.length === 0) throw new Error('Ghostex quick terminal folder is required.');
+  const parts = ['ghostex terminal --json', `--cwd ${shellQuote(folder)}`];
+  const title = options?.title?.trim() ?? '';
+  if (title.length > 0) parts.push(`--title ${shellQuote(title)}`);
+  const command = options?.command?.trim() ?? '';
+  if (command.length > 0) parts.push(`-- ${command}`);
+  return parts.join(' ');
+}
+
 /** Quick chat workspace + first terminal: `ghostex create-chat --json`. */
 export function createChatCommand(): string {
   return 'ghostex create-chat --json';
@@ -524,4 +545,87 @@ export function handoffSessionChatDraftCommand(sessionId: string, projectId: str
  */
 export function exportSessionTranscriptCommand(sessionId: string, projectId: string): string {
   return `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
+/*
+ * Find (the GUI for `gx f`) over SSH. Prompt history lives on the machine that
+ * ran the agent, so the phone reaches it through the same verb-runner pattern
+ * as Session Chat above. Every follow-up verb addresses a result by the stable
+ * `--key` a search row reported, never by a list position, so acting on a row
+ * minutes later still lands on the prompt the phone displayed.
+ */
+
+export type FindPromptsSearchOptions = {
+  agents?: readonly string[];
+  groupByDay?: boolean;
+  includeFacets?: boolean;
+  limit?: number;
+  offset?: number;
+  project?: string;
+  query?: string;
+  refresh?: boolean;
+  textLimit?: number;
+};
+
+function nonNegativeIntegerFlag(name: string, value: number | undefined, label: string): string {
+  if (value === undefined) return '';
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Ghostex ${label} must be a non-negative whole number.`);
+  }
+  return ` ${name} ${value}`;
+}
+
+/** `ghostex search-agent-prompts [...] --json` */
+export function searchAgentPromptsCommand(options?: FindPromptsSearchOptions): string {
+  const parts = ['ghostex search-agent-prompts'];
+  const query = options?.query ?? '';
+  if (query.length > 0) parts.push(`--query ${shellQuote(query)}`);
+  const project = options?.project?.trim() ?? '';
+  if (project.length > 0) parts.push(`--project ${shellQuote(project)}`);
+  const agents = options?.agents ?? [];
+  if (agents.length > 0) parts.push(`--agents ${shellQuote(agents.join(','))}`);
+  if (options?.groupByDay !== undefined) {
+    parts.push(`--group-by-day ${options.groupByDay ? 'true' : 'false'}`);
+  }
+  if (options?.includeFacets !== undefined) {
+    parts.push(`--include-facets ${options.includeFacets ? 'true' : 'false'}`);
+  }
+  if (options?.refresh !== undefined) {
+    parts.push(`--refresh ${options.refresh ? 'true' : 'false'}`);
+  }
+  parts.push(nonNegativeIntegerFlag('--limit', options?.limit, 'prompt search limit').trim());
+  parts.push(nonNegativeIntegerFlag('--offset', options?.offset, 'prompt search offset').trim());
+  parts.push(
+    nonNegativeIntegerFlag('--text-limit', options?.textLimit, 'prompt text limit').trim(),
+  );
+  parts.push('--json');
+  return parts.filter((part) => part.length > 0).join(' ');
+}
+
+function promptKeyFlag(key: string): string {
+  const trimmed = key.trim();
+  if (trimmed.length === 0) throw new Error('Ghostex prompt key is required.');
+  return `--key ${shellQuote(trimmed)}`;
+}
+
+/** `ghostex read-agent-prompt-text --key <key> --json` */
+export function readAgentPromptTextCommand(key: string): string {
+  return `ghostex read-agent-prompt-text ${promptKeyFlag(key)} --json`;
+}
+
+/** `ghostex toggle-agent-prompt-favorite --key <key> [--favorite b] --json` */
+export function toggleAgentPromptFavoriteCommand(key: string, favorite?: boolean): string {
+  const favoriteFlag = favorite === undefined ? '' : ` --favorite ${favorite ? 'true' : 'false'}`;
+  return `ghostex toggle-agent-prompt-favorite ${promptKeyFlag(key)}${favoriteFlag} --json`;
+}
+
+/** `ghostex resolve-agent-prompt-launch --key <key> [--action a] [--fork-agent id] --json` */
+export function resolveAgentPromptLaunchCommand(
+  key: string,
+  action: 'fork' | 'resume',
+  forkAgent?: string,
+): string {
+  const fork = forkAgent?.trim() ?? '';
+  const forkFlag = fork.length > 0 ? ` --fork-agent ${shellQuote(fork)}` : '';
+  return `ghostex resolve-agent-prompt-launch ${promptKeyFlag(key)} --action ${action}${forkFlag} --json`;
 }
