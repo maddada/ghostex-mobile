@@ -18,6 +18,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   ToastAndroid,
   View,
 } from 'react-native';
@@ -63,7 +64,12 @@ import {
   sleepSessionCommand,
   wakeSessionCommand,
 } from '../commands/ghostexCli';
-import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
+import {
+  isSessionChatSupportedAgent,
+  readSessionChatSyncedDraft,
+  writeSessionChatSyncedDraft,
+  type SessionChatSyncedDraft,
+} from '../chat/session-chat-bridge';
 import SessionChatWebView from '../chat/SessionChatWebView';
 import {
   resolveAgentIconId,
@@ -85,7 +91,7 @@ import {
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
-import { GhostexPalette } from '../theme/palette';
+import { GhostexPalette, SidebarPalette } from '../theme/palette';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
@@ -290,6 +296,30 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * Runtime-only: a transfer is a response to one switch, never a stored fact.
    */
   const [chatDraftTransferIds, setChatDraftTransferIds] = useState<Record<string, number>>({});
+
+  /*
+   * CDXC:SessionChatPromptQueue 2026-08-21:
+   * How many prompts are waiting in each session's Ghostex queue. The chat
+   * page is mounted for the selected session even while the terminal is on
+   * screen, and it already long-polls a read whose fingerprint moves on queue
+   * changes, so it reports the count here instead of the app opening a second
+   * polling channel over SSH. Missing (or 0) hides the button.
+   */
+  const [chatQueueCounts, setChatQueueCounts] = useState<Record<string, number>>({});
+  const chatQueueSessionKey = activeTab?.sessionKey ?? null;
+  const activeQueuedPromptCount =
+    chatQueueSessionKey === null ? 0 : (chatQueueCounts[chatQueueSessionKey] ?? 0);
+  const handleChatQueueCount = useCallback(
+    (count: number): void => {
+      if (chatQueueSessionKey === null) return;
+      setChatQueueCounts((current) =>
+        current[chatQueueSessionKey] === count
+          ? current
+          : { ...current, [chatQueueSessionKey]: count },
+      );
+    },
+    [chatQueueSessionKey],
+  );
 
   // The native nav bar has no styling guarantee here; render our own header.
   useLayoutEffect(() => {
@@ -797,6 +827,51 @@ export default function TerminalScreen({ navigation, route }: Props) {
     }
   }, [exportedTranscript, startingTranscriptConversation]);
 
+  /*
+   * CDXC:SessionChatPromptQueue 2026-08-21:
+   * The synced draft the Prompt Editor opens on, and writes back to, in chat
+   * mode. `null` while the read is still in flight (the sheet is already on
+   * screen by then, and seeds when it lands); `supported: false` is a machine
+   * whose Ghostex predates the draft endpoint, and there the sheet behaves
+   * exactly as it did before rather than writing into a verb that does not
+   * exist.
+   */
+  const [promptEditorDraft, setPromptEditorDraft] = useState<SessionChatSyncedDraft | null>(null);
+
+  const seedPromptEditorDraft = useCallback((): void => {
+    setPromptEditorDraft(null);
+    if (!chatModeActive) return;
+    const target = agentTarget();
+    if (target === null) return;
+    void readSessionChatSyncedDraft(
+      target.machine,
+      target.projectId,
+      target.session.sessionId,
+    ).then(setPromptEditorDraft);
+  }, [agentTarget, chatModeActive]);
+
+  /**
+   * Publish what the Prompt Editor is leaving behind. Only in chat mode, only
+   * on a machine that answered the seeding read, and only when the text
+   * actually changed — an unchanged draft is not worth an SSH round trip.
+   */
+  const pushPromptEditorDraft = useCallback(
+    (content: string): void => {
+      const draft = promptEditorDraft;
+      if (draft === null || !draft.supported || content === draft.content) return;
+      const target = agentTarget();
+      if (target === null) return;
+      setPromptEditorDraft({ content, supported: true });
+      void writeSessionChatSyncedDraft(
+        target.machine,
+        target.projectId,
+        target.session.sessionId,
+        content,
+      ).catch((error: unknown) => reportAgentFailure('Draft Not Saved', error));
+    },
+    [agentTarget, promptEditorDraft, reportAgentFailure],
+  );
+
   const submitPromptEditor = useCallback(
     async (text: string): Promise<void> => {
       const target = agentTarget();
@@ -805,6 +880,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
       try {
         if (chatModeActive) {
           await sendChatMessageFromUser(text);
+          // The text left the composer, so the session's draft is empty now —
+          // the same thing sending from the chat composer does.
+          pushPromptEditorDraft('');
         } else {
           // No trailing newline: the prompt lands in the TUI input for the
           // user to review and submit, matching the desktop editor's insert.
@@ -816,7 +894,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
         reportAgentFailure('Send Failed', error);
       }
     },
-    [agentTarget, chatModeActive, reportAgentFailure, sendChatMessageFromUser],
+    [
+      agentTarget,
+      chatModeActive,
+      pushPromptEditorDraft,
+      reportAgentFailure,
+      sendChatMessageFromUser,
+    ],
   );
 
   const handleUpload = useCallback(async (): Promise<void> => {
@@ -883,6 +967,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           return;
         case 'promptEditor':
           setAgentOverlay({ kind: 'promptEditor', sending: false });
+          seedPromptEditorDraft();
           return;
         case 'exportTranscript':
           void runExportTranscript();
@@ -915,6 +1000,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       runAgentFullReload,
       runAgentSleep,
       runExportTranscript,
+      seedPromptEditorDraft,
     ],
   );
 
@@ -1030,6 +1116,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             visible={chatModeActive}
             draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
             openSearchRequestId={chatSearchRequestId}
+            onQueueCountChange={handleChatQueueCount}
             style={styles.terminal}
           />
         ) : null}
@@ -1043,6 +1130,28 @@ export default function TerminalScreen({ navigation, route }: Props) {
             onReconnect={() => void reopenTab(activeTab)}
           />
         )}
+        {/*
+          Queued prompts are invisible from the terminal — they never reach the
+          agent CLI until the server scheduler delivers them — so the terminal
+          view says how many are waiting and takes one tap to the chat view,
+          which is where they can be edited, reordered or sent. Top-left, out of
+          the way of the floating controls at the bottom, and gone at zero.
+        */}
+        {!chatModeActive && activeQueuedPromptCount > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${activeQueuedPromptCount} queued ${
+              activeQueuedPromptCount === 1 ? 'prompt' : 'prompts'
+            }. Show the chat view.`}
+            hitSlop={8}
+            style={({ pressed }) => [styles.queuedPill, pressed ? styles.queuedPillPressed : null]}
+            onPress={() => {
+              if (!chatModeActive) toggleChatView();
+            }}
+          >
+            <Text style={styles.queuedPillLabel}>{`Queued: ${activeQueuedPromptCount}`}</Text>
+          </Pressable>
+        ) : null}
         {tabs.length > 1 && (
           <EdgeSwipeZones onPrev={() => switchTabBy(-1)} onNext={() => switchTabBy(1)} />
         )}
@@ -1153,8 +1262,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
               sessionTitle={agentSessionTitle}
               destination={chatModeActive ? 'chat' : 'terminal'}
               busy={agentOverlay.sending}
+              initialText={promptEditorDraft?.supported === true ? promptEditorDraft.content : undefined}
               onSubmit={(text) => void submitPromptEditor(text)}
-              onCancel={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
+              onCancel={(text) => {
+                // Closing without sending publishes the draft rather than
+                // dropping it: this sheet is the session's composer right now.
+                pushPromptEditorDraft(text);
+                setAgentOverlay(AGENT_OVERLAY_NONE);
+              }}
             />
           ) : null}
         </>
@@ -1201,5 +1316,25 @@ const styles = StyleSheet.create({
   },
   terminal: {
     flex: 1,
+  },
+  queuedPill: {
+    position: 'absolute',
+    top: 8,
+    // Clear of the 32dp left edge-swipe strip, which sits above this and would
+    // otherwise swallow taps on the pill's left edge. Non-overlapping siblings,
+    // not a z-order fight.
+    left: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: SidebarPalette.DELAYED_SEND_CLOCK,
+  },
+  queuedPillPressed: {
+    opacity: 0.75,
+  },
+  queuedPillLabel: {
+    color: '#1A1A1A',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

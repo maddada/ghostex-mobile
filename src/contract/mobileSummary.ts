@@ -46,6 +46,10 @@ export type MobileSummaryWireSession = {
   nativePaneState?: string;
   providerSessionState?: string;
   sortOrder?: number;
+  /** Prompts held in this session's Ghostex queue; absent/0 hides the badge. */
+  queuedPromptCount?: number;
+  /** How many of those failed to deliver; absent/0 keeps the badge yellow. */
+  queuedPromptFailedCount?: number;
   isFocused?: boolean;
   isFavorite?: boolean;
   isPinned?: boolean;
@@ -210,6 +214,20 @@ export type GhostexSession = {
   sessionTag: string;
   /** Live Delayed Send countdown label ('' when no timer / emitter predates it). */
   delayedSendRemainingLabel: string;
+  /**
+   * How many prompts are held in this session's Ghostex prompt queue
+   * (plan 016), `failed` rows included: a queue stalled behind a failed row is
+   * exactly the state that needs the user, so hiding it would make a dead queue
+   * look like no queue. 0 on a daemon that predates the queue, which is also
+   * what hides the row's badge.
+   */
+  queuedPromptCount: number;
+  /**
+   * How many of those rows failed to deliver and are held for the user to retry
+   * or delete. Non-zero paints the badge red instead of yellow. 0 on a daemon
+   * that predates the queue.
+   */
+  queuedPromptFailedCount: number;
   /** Enter is armed for every agent in the project to finish. */
   sendWhenAllProjectSessionsStopActive: boolean;
   /** Enter is armed for this agent to finish. */
@@ -742,6 +760,15 @@ export function parseSession(value: unknown): GhostexSession | null {
     isPinned: boolValue(value, 'isPinned', false),
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
+    queuedPromptCount:
+      typeof value.queuedPromptCount === 'number' && Number.isFinite(value.queuedPromptCount)
+        ? Math.max(0, Math.floor(value.queuedPromptCount))
+        : 0,
+    queuedPromptFailedCount:
+      typeof value.queuedPromptFailedCount === 'number' &&
+      Number.isFinite(value.queuedPromptFailedCount)
+        ? Math.max(0, Math.floor(value.queuedPromptFailedCount))
+        : 0,
     sendWhenAllProjectSessionsStopActive: boolValue(
       value,
       'sendWhenAllProjectSessionsStopActive',

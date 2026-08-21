@@ -8,9 +8,15 @@
  * whose text is delivered to the session on Send: as a chat message when the
  * tab is showing Session Chat, and typed into the terminal (no trailing
  * newline, exactly like an attachment reference) otherwise.
+ *
+ * In chat mode the sheet is a second composer for the same session, so it
+ * takes over that session's SYNCED draft (plan 016) while it is open: it opens
+ * on whatever the last client left there and hands back whatever the user
+ * leaves behind, so closing the sheet never destroys a half-written prompt and
+ * the other clients see it.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
@@ -22,8 +28,16 @@ export type PromptEditorSheetProps = {
   destination: 'chat' | 'terminal';
   /** True while the send is in flight (buttons disabled). */
   busy: boolean;
+  /**
+   * The session's synced draft, which reaches the host over SSH and therefore
+   * usually lands a moment AFTER the sheet is already on screen. It seeds the
+   * field only while the user has not typed, so a slow read can never
+   * overwrite words they are in the middle of writing.
+   */
+  initialText?: string;
   onSubmit: (text: string) => void;
-  onCancel: () => void;
+  /** Carries the unsent text back so a chat draft is published, not dropped. */
+  onCancel: (text: string) => void;
 };
 
 export default function PromptEditorSheet({
@@ -31,22 +45,37 @@ export default function PromptEditorSheet({
   sessionTitle,
   destination,
   busy,
+  initialText,
   onSubmit,
   onCancel,
 }: PromptEditorSheetProps) {
   const [text, setText] = useState('');
+  /** Cleared on every open; set the first time the user changes the field. */
+  const typedRef = useRef(false);
 
   useEffect(() => {
-    if (visible) setText('');
+    if (!visible) return;
+    typedRef.current = false;
+    setText('');
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible || typedRef.current || initialText === undefined) return;
+    setText(initialText);
+  }, [initialText, visible]);
 
   const trimmed = text.trim();
   const canSubmit = trimmed.length > 0 && !busy;
   const title = sessionTitle.trim();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => onCancel(text)}
+    >
+      <Pressable style={styles.backdrop} onPress={() => onCancel(text)}>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
           <Text style={styles.title}>Prompt Editor</Text>
           <Text style={styles.body}>
@@ -65,14 +94,17 @@ export default function PromptEditorSheet({
             placeholder="Write a longer prompt…"
             placeholderTextColor={GhostexPalette.MUTED}
             value={text}
-            onChangeText={setText}
+            onChangeText={(next) => {
+              typedRef.current = true;
+              setText(next);
+            }}
           />
           <View style={styles.buttonRow}>
             <Pressable
               accessibilityRole="button"
               disabled={busy}
               style={[styles.cancelButton, busy ? styles.buttonDisabled : null]}
-              onPress={onCancel}
+              onPress={() => onCancel(text)}
             >
               <Text style={styles.cancelLabel}>Cancel</Text>
             </Pressable>

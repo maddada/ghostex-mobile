@@ -536,6 +536,136 @@ export function handoffSessionChatDraftCommand(sessionId: string, projectId: str
   return `ghostex handoff-session-chat-draft ${sessionChatSelector(sessionId, projectId)} --json`;
 }
 
+// ---------------------------------------------------------------------------
+// Ghostex prompt queue + synced composer draft (plan 016).
+//
+// gxserver owns the queue and drains it one prompt per idle window, so these
+// verbs only ever describe an intent — nothing here waits for an agent. Rows
+// are addressed by the `--prompt-id` the daemon handed out, never by a list
+// position, so acting on a row minutes after it was displayed still lands on
+// the prompt the phone showed.
+// ---------------------------------------------------------------------------
+
+/**
+ * `--name=value` as ONE shell word.
+ *
+ * The Rust CLI keeps the old JS parser's shape: `--name <value>` reads as a
+ * BOOLEAN flag whenever <value> itself starts with `--`, and the value is then
+ * re-parsed as further flags. Every user-authored string here (a queued
+ * prompt, a composer draft) can legitimately open with `--`, so it rides the
+ * `=` form, which also carries the empty string that clears a draft.
+ */
+function inlineTextFlag(name: string, value: string): string {
+  return `${name}=${shellQuote(value)}`;
+}
+
+/** A row id safe to put in a flag: non-empty and free of the reorder separator. */
+function requirePromptId(promptId: string): string {
+  const trimmed = promptId.trim();
+  if (trimmed.length === 0) throw new Error('Ghostex queued prompt id is required.');
+  if (trimmed.includes(',')) {
+    throw new Error('Ghostex queued prompt ids must not contain a comma.');
+  }
+  return trimmed;
+}
+
+/** Read the queue and the synced draft: `ghostex read-session-chat-queue …`. */
+export function readSessionChatQueueCommand(sessionId: string, projectId: string): string {
+  return `ghostex read-session-chat-queue ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
+/** Append one prompt at the END of the queue. */
+export function queueSessionChatPromptCommand(
+  sessionId: string,
+  projectId: string,
+  text: string,
+): string {
+  return (
+    `ghostex queue-session-chat-prompt ${sessionChatSelector(sessionId, projectId)}` +
+    ` ${inlineTextFlag('--text', text)} --json`
+  );
+}
+
+/**
+ * Edit a row's text and/or retry it. `retry` moves a `failed` row back to
+ * `queued` and clears its error so the server scheduler resumes draining.
+ */
+export function updateSessionChatQueuedPromptCommand(
+  sessionId: string,
+  projectId: string,
+  promptId: string,
+  options?: { text?: string; retry?: boolean },
+): string {
+  const parts = [
+    `ghostex update-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}`,
+    inlineTextFlag('--prompt-id', requirePromptId(promptId)),
+  ];
+  if (options?.text !== undefined) parts.push(inlineTextFlag('--text', options.text));
+  if (options?.retry === true) parts.push('--retry');
+  parts.push('--json');
+  return parts.join(' ');
+}
+
+/** Delete a row; the answer carries the removed row so Edit can reuse its text. */
+export function removeSessionChatQueuedPromptCommand(
+  sessionId: string,
+  projectId: string,
+  promptId: string,
+): string {
+  return (
+    `ghostex remove-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}` +
+    ` ${inlineTextFlag('--prompt-id', requirePromptId(promptId))} --json`
+  );
+}
+
+/** Commit a drag-to-reorder with the complete id list, head first. */
+export function reorderSessionChatQueueCommand(
+  sessionId: string,
+  projectId: string,
+  promptIds: readonly string[],
+): string {
+  const ids = promptIds.map(requirePromptId);
+  if (ids.length === 0) throw new Error('Ghostex queue reorder needs at least one prompt id.');
+  return (
+    `ghostex reorder-session-chat-queue ${sessionChatSelector(sessionId, projectId)}` +
+    ` ${inlineTextFlag('--prompt-ids', ids.join(','))} --json`
+  );
+}
+
+/** "Send now": deliver one row immediately, exactly like pressing Enter. */
+export function sendSessionChatQueuedPromptCommand(
+  sessionId: string,
+  projectId: string,
+  promptId: string,
+): string {
+  return (
+    `ghostex send-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}` +
+    ` ${inlineTextFlag('--prompt-id', requirePromptId(promptId))} --json`
+  );
+}
+
+/**
+ * Publish the unsent composer draft for every other client of this session.
+ * An EMPTY `content` is how a draft is cleared, so it is valid input; the
+ * `clientId` comes back as the draft's `originClientId` so the writer can
+ * ignore its own echo.
+ */
+export function setSessionChatDraftCommand(
+  sessionId: string,
+  projectId: string,
+  content: string,
+  clientId: string,
+): string {
+  const trimmedClientId = clientId.trim();
+  if (trimmedClientId.length === 0) {
+    throw new Error('Ghostex chat draft client id is required.');
+  }
+  return (
+    `ghostex set-session-chat-draft ${sessionChatSelector(sessionId, projectId)}` +
+    ` ${inlineTextFlag('--content', content)} ${inlineTextFlag('--client-id', trimmedClientId)} --json`
+  );
+}
+
 /**
  * Export the session's agent transcript to markdown:
  * `ghostex export-transcript --session-id <id> --project-id <id> --json`.

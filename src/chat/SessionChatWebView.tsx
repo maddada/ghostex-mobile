@@ -15,6 +15,7 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import {
   handoffSessionChatDraft,
+  parseSessionChatBridgeNotice,
   parseSessionChatBridgeRequest,
   runSessionChatBridgeRequest,
   type SessionChatBridgeResponse,
@@ -102,6 +103,15 @@ export type SessionChatWebViewProps = {
    * opens nothing.
    */
   openSearchRequestId?: number;
+  /**
+   * How many prompts are waiting in this session's Ghostex queue, reported by
+   * the page every time one of its reads or mutations answers with the list.
+   * The host uses it for the terminal view's "Queued: N" button, which is why
+   * the page keeps running (and keeps long-polling) while terminal mode is
+   * visible. Never called at all by a machine whose Ghostex predates the
+   * queue, so the button stays hidden instead of claiming a queue of zero.
+   */
+  onQueueCountChange?: (count: number) => void;
   /** Chat-only palette. The mobile app chrome remains independently themed. */
   theme?: 'light' | 'dark';
   /** Installed CSS font-family name, or blank to use the bundled app font. */
@@ -118,6 +128,7 @@ export default function SessionChatWebView({
   canSend,
   fontFamily = '',
   machine,
+  onQueueCountChange,
   onSwitchToTerminalForAgentPicker,
   projectId,
   sessionId,
@@ -234,6 +245,12 @@ export default function SessionChatWebView({
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent): void => {
+      // Id-less notices first: they carry no request to answer.
+      const notice = parseSessionChatBridgeNotice(event.nativeEvent.data);
+      if (notice !== null) {
+        onQueueCountChange?.(notice.count);
+        return;
+      }
       const request = parseSessionChatBridgeRequest(event.nativeEvent.data);
       if (request === null) return;
       if (request.op === 'switchToTerminalForAgentPicker') {
@@ -268,7 +285,15 @@ export default function SessionChatWebView({
       }
       void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then(deliver);
     },
-    [deliver, machine, onSwitchToTerminalForAgentPicker, projectId, sessionId, terminalSessionKey],
+    [
+      deliver,
+      machine,
+      onQueueCountChange,
+      onSwitchToTerminalForAgentPicker,
+      projectId,
+      sessionId,
+      terminalSessionKey,
+    ],
   );
 
   return (

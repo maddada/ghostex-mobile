@@ -215,6 +215,27 @@ export default function SessionRow({
           <Icon size={iconSize} color={agentIconTint(iconId)} />
         )}
       </View>
+      {/*
+        Desktop parity (plan 016 §6): prompts waiting in this session's Ghostex
+        queue, as a small filled circle over the agent icon. A SIBLING of the
+        absolutely-placed icon rather than a child of it, so it keeps its own
+        full opacity (the icon slot sits at 48%) and, like the icon, it can
+        never move the row's layout. Hidden at zero.
+      */}
+      {session.queuedPromptCount > 0 ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.queueBadge,
+            session.queuedPromptFailedCount > 0 ? styles.queueBadgeFailed : null,
+            { left: iconLeft + ds(8) },
+          ]}
+        >
+          <Text style={styles.queueBadgeCount} numberOfLines={1}>
+            {session.queuedPromptCount > 9 ? '9+' : String(session.queuedPromptCount)}
+          </Text>
+        </View>
+      ) : null}
       <Text
         style={[
           styles.title,
@@ -277,6 +298,33 @@ const styles = StyleSheet.create({
   },
   iconTimer: {
     opacity: 1,
+  },
+  queueBadge: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -ds(13),
+    minWidth: ds(13),
+    height: ds(13),
+    paddingHorizontal: ds(2),
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SidebarPalette.DELAYED_SEND_CLOCK,
+  },
+  /*
+    A `failed` row holds the queue until the user retries or deletes it, so the
+    badge switches to the sidebar's error red — desktop paints the same badge
+    #ff6b6b for the same reason. Colour only: the box above is untouched, so a
+    red badge can never move the row.
+  */
+  queueBadgeFailed: {
+    backgroundColor: SidebarPalette.ERROR_DOT,
+  },
+  queueBadgeCount: {
+    color: '#1A1A1A',
+    fontSize: ds(9),
+    fontWeight: '700',
+    lineHeight: ds(11),
   },
   title: {
     flex: 1,

@@ -11,9 +11,13 @@
  * matching `ghostex` Session Chat CLI verb over the machine's SSH channel —
  * the phone has no HTTP path to gxserver, and keeping RN a dumb verb runner
  * leaves all chat behavior (long-poll pacing, frame synthesis, UI) in the
- * shared page code.
+ * shared page code. That now includes Ghostex's prompt queue and the
+ * cross-client composer draft (plan 016), whose seven verbs are ordinary ops
+ * here, plus one id-less page → RN notice carrying the live queue count for
+ * the app's own chrome.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -22,10 +26,17 @@ import {
   handoffSessionChatDraftCommand,
   interruptSessionChatCommand,
   loginShellCommand,
+  queueSessionChatPromptCommand,
   readSessionChatCommand,
   readSessionChatFilesCommand,
+  readSessionChatQueueCommand,
   readSessionChatSkillsCommand,
+  removeSessionChatQueuedPromptCommand,
+  reorderSessionChatQueueCommand,
   sendSessionChatMessageCommand,
+  sendSessionChatQueuedPromptCommand,
+  setSessionChatDraftCommand,
+  updateSessionChatQueuedPromptCommand,
   type SessionChatReadOptions,
 } from '../commands/ghostexCli';
 import { runGhostexCli } from '../components/sessions/cli';
@@ -53,22 +64,52 @@ export function isSessionChatSupportedAgent(agentId: string): boolean {
   return SESSION_CHAT_AGENT_IDS.has(agentId);
 }
 
+/**
+ * Every op the page may ask for. Kept as one list so the request type and the
+ * parser's guard can never drift apart — a page op the guard forgot is
+ * silently dropped, which reads in the UI as a control that does nothing.
+ *
+ * The `queue*` / `*QueuedPrompt` / `setDraft` entries are Ghostex's own prompt
+ * queue and the cross-client composer draft (plan 016). They are NOT the agent
+ * CLI's internal queue.
+ */
+const SESSION_CHAT_BRIDGE_OPS = [
+  'read',
+  'readSkills',
+  'readFiles',
+  'send',
+  'sendKey',
+  'switchToTerminalForAgentPicker',
+  'answerPrompt',
+  'interrupt',
+  'saveImage',
+  'saveAttachment',
+  'loadImage',
+  'queuePrompt',
+  'updateQueuedPrompt',
+  'removeQueuedPrompt',
+  'reorderQueue',
+  'sendQueuedPrompt',
+  'setDraft',
+] as const;
+
+export type SessionChatBridgeOp = (typeof SESSION_CHAT_BRIDGE_OPS)[number];
+
 export type SessionChatBridgeRequest = {
   id: number;
-  op:
-    | 'read'
-    | 'readSkills'
-    | 'readFiles'
-    | 'send'
-    | 'sendKey'
-    | 'switchToTerminalForAgentPicker'
-    | 'answerPrompt'
-    | 'interrupt'
-    | 'saveImage'
-    | 'saveAttachment'
-    | 'loadImage';
+  op: SessionChatBridgeOp;
   params?: Record<string, unknown>;
 };
+
+/**
+ * Host notice: an unsolicited page → RN message with no request id.
+ *
+ * The queue lives on gxserver and the page already long-polls for it, so the
+ * app chrome (the terminal view's "Queued: N" button) learns the count from
+ * the page that is already mounted for that session instead of opening a
+ * second polling channel of its own.
+ */
+export type SessionChatBridgeNotice = { notice: 'queueCount'; count: number };
 
 export type SessionChatBridgeResponse = {
   id: number;
@@ -108,26 +149,29 @@ export function parseSessionChatBridgeRequest(raw: string): SessionChatBridgeReq
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
   const record = parsed as Record<string, unknown>;
   if (typeof record.id !== 'number') return null;
-  if (
-    record.op !== 'read' &&
-    record.op !== 'readSkills' &&
-    record.op !== 'readFiles' &&
-    record.op !== 'send' &&
-    record.op !== 'sendKey' &&
-    record.op !== 'switchToTerminalForAgentPicker' &&
-    record.op !== 'answerPrompt' &&
-    record.op !== 'interrupt' &&
-    record.op !== 'saveImage' &&
-    record.op !== 'saveAttachment' &&
-    record.op !== 'loadImage'
-  ) {
-    return null;
-  }
+  const op = SESSION_CHAT_BRIDGE_OPS.find((candidate) => candidate === record.op);
+  if (op === undefined) return null;
   const params =
     typeof record.params === 'object' && record.params !== null && !Array.isArray(record.params)
       ? (record.params as Record<string, unknown>)
       : {};
-  return { id: record.id, op: record.op, params };
+  return { id: record.id, op, params };
+}
+
+/** Id-less page → RN messages (see SessionChatBridgeNotice). */
+export function parseSessionChatBridgeNotice(raw: string): SessionChatBridgeNotice | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  if (record.notice !== 'queueCount') return null;
+  const count = record.count;
+  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) return null;
+  return { notice: 'queueCount', count: Math.floor(count) };
 }
 
 function numberParam(params: Record<string, unknown>, key: string): number | undefined {
@@ -297,6 +341,103 @@ export async function handoffSessionChatDraft(
   }
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * Synced composer draft, for the app's own chrome
+ * ---------------------------------------------------------------------------
+ * The Prompt Editor sheet is a second composer for the same session, so it
+ * takes over the session's synced draft while it is open: it seeds from
+ * whatever the last client wrote and publishes whatever the user leaves
+ * behind. It writes under its OWN client id, which is the honest description
+ * of what it is — the chat page's composer is a different buffer on the same
+ * device, and marking these writes as the page's own echo would make the page
+ * ignore text the user actually typed.
+ */
+
+const PROMPT_EDITOR_CLIENT_ID_STORAGE_KEY = 'sessionChat.promptEditorClient.v1';
+let promptEditorClientId: string | null = null;
+
+/**
+ * Stable per-install id for Prompt Editor draft writes. Persisted, because a
+ * fresh id per app run would make this device's own previous draft look like a
+ * different client every time.
+ */
+async function resolvePromptEditorClientId(): Promise<string> {
+  if (promptEditorClientId !== null) return promptEditorClientId;
+  try {
+    const stored = await AsyncStorage.getItem(PROMPT_EDITOR_CLIENT_ID_STORAGE_KEY);
+    if (stored !== null && stored.trim().length > 0) {
+      promptEditorClientId = stored.trim();
+      return promptEditorClientId;
+    }
+  } catch {
+    // An unreadable store just means a fresh id for this app run.
+  }
+  const generated = `gx-mobile-editor-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  promptEditorClientId = generated;
+  void AsyncStorage.setItem(PROMPT_EDITOR_CLIENT_ID_STORAGE_KEY, generated).catch(() => undefined);
+  return generated;
+}
+
+export type SessionChatSyncedDraft = {
+  /**
+   * False when this machine's Ghostex predates the queue/draft endpoints. The
+   * caller then leaves the draft alone entirely rather than writing back into
+   * a verb that does not exist.
+   */
+  supported: boolean;
+  content: string;
+};
+
+/**
+ * Read the session's synced composer draft. Never throws: a machine without
+ * the verb, or an unreachable one, answers "unsupported" and the Prompt Editor
+ * simply opens empty instead of blocking on an SSH round trip.
+ */
+export async function readSessionChatSyncedDraft(
+  machine: MachineConnectionTarget,
+  projectId: string,
+  sessionId: string,
+): Promise<SessionChatSyncedDraft> {
+  if (projectId.trim().length === 0 || sessionId.trim().length === 0) {
+    return { content: '', supported: false };
+  }
+  try {
+    const result = await runGhostexCli(
+      machine,
+      readSessionChatQueueCommand(sessionId, projectId),
+      { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+    );
+    const draft = (result.json as { draft?: unknown } | null)?.draft;
+    const content =
+      typeof draft === 'object' && draft !== null && !Array.isArray(draft)
+        ? (draft as { content?: unknown }).content
+        : undefined;
+    return { content: typeof content === 'string' ? content : '', supported: true };
+  } catch {
+    return { content: '', supported: false };
+  }
+}
+
+/**
+ * Publish `content` as the session's synced draft. Throws on failure so the
+ * caller can tell the user their words did not leave the phone — silently
+ * swallowing this would lose a long prompt.
+ */
+export async function writeSessionChatSyncedDraft(
+  machine: MachineConnectionTarget,
+  projectId: string,
+  sessionId: string,
+  content: string,
+): Promise<void> {
+  const clientId = await resolvePromptEditorClientId();
+  await runGhostexCli(
+    machine,
+    setSessionChatDraftCommand(sessionId, projectId, content, clientId),
+    { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+  );
+}
+
 /**
  * Run one bridge request against a session's machine. Never throws: failures
  * become `{ ok: false, error }` responses the page surfaces in its own UI.
@@ -393,6 +534,95 @@ export async function runSessionChatBridgeRequest(
       }
       case 'loadImage': {
         return { id: request.id, ok: true, result: await loadChatImage(machine, params) };
+      }
+      /*
+       * Ghostex prompt queue + synced composer draft (plan 016). Each verb
+       * answers with the full authoritative queue, which the page installs in
+       * place of its own list, so a phone that lost a race with another client
+       * self-corrects on the very next call. There is no `readQueue` op: the
+       * page learns the queue from its ordinary chat reads, which carry it.
+       */
+      case 'queuePrompt': {
+        const text = typeof params.text === 'string' ? params.text : '';
+        if (text.trim().length === 0) {
+          return { id: request.id, ok: false, error: 'Nothing to queue.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          queueSessionChatPromptCommand(sessionId, projectId, text),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'updateQueuedPrompt': {
+        const promptId = stringParam(params, 'promptId');
+        if (promptId === undefined) {
+          return { id: request.id, ok: false, error: 'This queued prompt has no id.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          updateSessionChatQueuedPromptCommand(sessionId, projectId, promptId, {
+            ...(typeof params.text === 'string' ? { text: params.text } : {}),
+            ...(params.retry === true ? { retry: true } : {}),
+          }),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'removeQueuedPrompt': {
+        const promptId = stringParam(params, 'promptId');
+        if (promptId === undefined) {
+          return { id: request.id, ok: false, error: 'This queued prompt has no id.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          removeSessionChatQueuedPromptCommand(sessionId, projectId, promptId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'reorderQueue': {
+        const promptIds = Array.isArray(params.promptIds)
+          ? params.promptIds.filter((value): value is string => typeof value === 'string')
+          : [];
+        if (promptIds.length === 0) {
+          return { id: request.id, ok: false, error: 'The queue order carried no rows.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          reorderSessionChatQueueCommand(sessionId, projectId, promptIds),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'sendQueuedPrompt': {
+        const promptId = stringParam(params, 'promptId');
+        if (promptId === undefined) {
+          return { id: request.id, ok: false, error: 'This queued prompt has no id.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          sendSessionChatQueuedPromptCommand(sessionId, projectId, promptId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        // Desktop parity: delivering a prompt is answering the session.
+        acknowledgeSessionAttention(machine.id, sessionId);
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'setDraft': {
+        // An EMPTY content is how a draft is cleared, so it is valid input and
+        // must not be filtered out the way an empty send would be.
+        const content = typeof params.content === 'string' ? params.content : '';
+        const clientId = stringParam(params, 'clientId');
+        if (clientId === undefined) {
+          return { id: request.id, ok: false, error: 'The draft push carried no client id.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          setSessionChatDraftCommand(sessionId, projectId, content, clientId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
       }
     }
   } catch (error) {
