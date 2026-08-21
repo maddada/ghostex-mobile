@@ -4,7 +4,7 @@
  * desktop terminal-overlay action strip and the shared chat view's "Agent
  * Actions" cluster — same ids and same order: rename, sleep, delayedActions,
  * fork, fullReload, promptEditor, exportTranscript) and the screen's overflow
- * menu (attach, new terminal, settings, disconnect).
+ * menu (search conversation, attach, new terminal, settings, disconnect).
  *
  * The Agent Actions section is present only for a resolved gxserver session;
  * the screen section is always present, so shell tabs still get the menu. The
@@ -24,6 +24,7 @@ import {
   PencilGlyph,
   PlayGlyph,
   RefreshGlyph,
+  SearchGlyph,
   SettingsGlyph,
   SleepGlyph,
   TerminalGlyph,
@@ -39,6 +40,7 @@ export type TerminalMenuActionId =
   | 'fullReload'
   | 'promptEditor'
   | 'exportTranscript'
+  | 'searchConversation'
   | 'attachPath'
   | 'newTerminal'
   | 'settings'
@@ -56,6 +58,8 @@ export type TerminalMenuProps = {
   forkEnabled: boolean;
   /** gxserver can only export transcripts of the agents it can decode. */
   exportTranscriptEnabled: boolean;
+  /** Searching the transcript only means anything while chat mode is showing. */
+  searchConversationEnabled: boolean;
   /** Attach needs an open terminal (or, in chat mode, a chat-capable session). */
   attachEnabled: boolean;
   /** Disconnect needs a tab to close. */
@@ -73,6 +77,7 @@ export default function TerminalMenu({
   sleeping,
   forkEnabled,
   exportTranscriptEnabled,
+  searchConversationEnabled,
   attachEnabled,
   disconnectEnabled,
   onSelect,
@@ -147,8 +152,18 @@ export default function TerminalMenu({
     items.push({ kind: 'separator', key: 'agent-separator' });
   }
 
+  items.push({ kind: 'label', key: 'session-label', label: 'Session' });
+  // The chat page has no search button of its own; this row is its entry point.
+  if (searchConversationEnabled) {
+    items.push({
+      kind: 'item',
+      key: 'searchConversation',
+      label: 'Search Conversation',
+      icon: <SearchGlyph size={ICON_SIZE} color={iconColor} />,
+      onPress: () => onSelect('searchConversation'),
+    });
+  }
   items.push(
-    { kind: 'label', key: 'session-label', label: 'Session' },
     {
       kind: 'item',
       key: 'attachPath',

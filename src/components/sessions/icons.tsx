@@ -382,6 +382,16 @@ export function PinGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Magnifier (desktop IconSearch, Search Conversation action). */
+export function SearchGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={10.5} cy={10.5} r={6.5} stroke={color} strokeWidth={2} />
+      <Path d="M 15.3 15.3 L 20 20" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 /** File with an out-arrow (desktop IconFileExport, Export Transcript action). */
 export function FileExportGlyph({ size, color }: GlyphProps) {
   return (

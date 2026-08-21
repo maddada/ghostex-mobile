@@ -227,6 +227,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const isFocused = useIsFocused();
   const [tapKeyboardHint, setTapKeyboardHint] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  // Each pick of the menu's Search Conversation row opens the chat page's own
+  // search box; the page has no search button of its own on this surface.
+  const [chatSearchRequestId, setChatSearchRequestId] = useState(0);
   const [agentOverlay, setAgentOverlay] = useState<AgentOverlay>(AGENT_OVERLAY_NONE);
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [exportedTranscript, setExportedTranscript] = useState<ExportedTranscript | null>(null);
@@ -884,6 +887,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
         case 'exportTranscript':
           void runExportTranscript();
           return;
+        case 'searchConversation':
+          setChatSearchRequestId((current) => current + 1);
+          return;
         case 'attachPath':
           setAgentOverlay(AGENT_OVERLAY_NONE);
           void handleUpload();
@@ -1023,6 +1029,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             canSend={activeSession !== null && activeSession.isLive && !activeSession.isSleeping}
             visible={chatModeActive}
             draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
+            openSearchRequestId={chatSearchRequestId}
             style={styles.terminal}
           />
         ) : null}
@@ -1096,6 +1103,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         // gxserver only parses the transcripts of the agents the chat view
         // supports, so anything else would only ever get `unsupportedAgent`.
         exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
+        searchConversationEnabled={chatModeActive}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         onSelect={handleMenuAction}

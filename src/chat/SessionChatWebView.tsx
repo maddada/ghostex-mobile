@@ -58,6 +58,13 @@ export type SessionChatWebViewProps = {
    * runs nothing (a preloaded page the user has not switched to yet).
    */
   draftTransferRequestId?: number;
+  /**
+   * Bumped by the host every time the user picks Search Conversation from the
+   * terminal header menu. The chat page carries no search button of its own on
+   * this surface, so each new value opens its search box. Starts at 0, which
+   * opens nothing.
+   */
+  openSearchRequestId?: number;
   /** Chat-only palette. The mobile app chrome remains independently themed. */
   theme?: 'light' | 'dark';
   /** Installed CSS font-family name, or blank to use the bundled app font. */
@@ -85,6 +92,7 @@ export default function SessionChatWebView({
   visible,
   working,
   draftTransferRequestId = 0,
+  openSearchRequestId = 0,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
 
@@ -165,6 +173,19 @@ export default function SessionChatWebView({
       cancelled = true;
     };
   }, [draftTransferRequestId, machine, projectId, sessionId]);
+
+  // `ghostexMobileChatOpenSearch` is installed by the page's bundle script,
+  // before load-end, and the page holds a request that lands before its search
+  // box mounts, so this needs no readiness handshake of its own.
+  const handledSearchRequestRef = useRef(openSearchRequestId);
+  useEffect(() => {
+    if (openSearchRequestId === handledSearchRequestRef.current) return;
+    handledSearchRequestRef.current = openSearchRequestId;
+    if (openSearchRequestId <= 0) return;
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatOpenSearch && window.ghostexMobileChatOpenSearch(); true;',
+    );
+  }, [openSearchRequestId]);
 
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
