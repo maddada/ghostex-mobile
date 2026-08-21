@@ -19,7 +19,16 @@ Pod::Spec.new do |s|
   # exclude_files is applied to EVERY attribute's globs (including
   # vendored_frameworks), so it must only match source-like files here.
   s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}']
-  s.resources = 'Fonts/JetBrainsMonoNerdFont-Regular.ttf'
+  # Fonts/…ttf and WebAssets are both git-tracked symlinks into ../../../assets,
+  # so iOS and Android ship byte-identical copies of the same generated files.
+  #
+  # 'WebAssets/session-chat' names a DIRECTORY, which install_resource rsyncs
+  # whole (a '/**/*' glob would flatten it instead). Structure matters here:
+  # the page is loaded as <Bundle.main>/session-chat/index.html and pulls its
+  # Shiki grammars from ./shiki/ next to it. See
+  # src/chat/SessionChatWebView.tsx and scripts/build-mobile-chat.mjs in the
+  # Ghostex main repo.
+  s.resources = ['Fonts/JetBrainsMonoNerdFont-Regular.ttf', 'WebAssets/session-chat']
 
   # -- Vendored native libraries -------------------------------------------
   # GhosttyKit is a proper xcframework (static library + Headers with a

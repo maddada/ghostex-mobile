@@ -6,8 +6,9 @@
  * of the native terminal view while a tab is in chat mode.
  */
 
+import { Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Linking, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -18,10 +19,46 @@ import {
   runSessionChatBridgeRequest,
   type SessionChatBridgeResponse,
 } from './session-chat-bridge';
-import { SESSION_CHAT_HTML } from './session-chat-html.generated';
 
 const CHAT_BACKGROUNDS = { dark: '#0e0e0e', light: '#fdfdfd' } as const;
-const CHAT_SOURCE = { html: SESSION_CHAT_HTML } as const;
+
+/*
+ * The chat page ships as a real directory in the app bundle, not as an HTML
+ * string, so it has a base URL and can pull in its Shiki syntax-highlighting
+ * grammars on demand. `session-chat` is written by `bun run build:mobile-chat`
+ * in the Ghostex main repo and reaches the bundle through
+ * modules/ghostex-native (a gradle assets.srcDir on Android, the podspec's
+ * resources on iOS).
+ */
+const CHAT_ASSET_DIR = 'session-chat';
+
+let cachedChatBaseUri: string | null = null;
+
+/** Resolved once, on first mount rather than at import time. */
+function chatBundleBaseUri(): string {
+  if (cachedChatBaseUri !== null) {
+    return cachedChatBaseUri;
+  }
+  cachedChatBaseUri = resolveChatBundleBaseUri();
+  return cachedChatBaseUri;
+}
+
+function resolveChatBundleBaseUri(): string {
+  if (Platform.OS === 'android') {
+    // Library assets are merged into the APK assets root, which the WebView
+    // always reaches under this URL. (Paths.bundle is `asset://` on Android —
+    // expo-file-system's own scheme for reading the APK, not a loadable URL.)
+    return `file:///android_asset/${CHAT_ASSET_DIR}/`;
+  }
+  // iOS: Paths.bundle wraps `Bundle.main.bundlePath`. It comes back as a file
+  // URL, but normalise the two shape details we depend on rather than assume
+  // them, since this string is concatenated into a URL.
+  const bundle = Paths.bundle.uri;
+  const withScheme = bundle.startsWith('file://') ? bundle : `file://${bundle}`;
+  const withSlash = withScheme.endsWith('/') ? withScheme : `${withScheme}/`;
+  return `${withSlash}${CHAT_ASSET_DIR}/`;
+}
+
 
 /** JSON that is safe to embed inside injected JavaScript source. */
 function injectableJson(value: unknown): string {
@@ -95,6 +132,8 @@ export default function SessionChatWebView({
   openSearchRequestId = 0,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
+  const baseUri = chatBundleBaseUri();
+  const source = useMemo(() => ({ uri: `${baseUri}index.html` }), [baseUri]);
 
   const configScript = useMemo(
     () =>
@@ -235,8 +274,14 @@ export default function SessionChatWebView({
   return (
     <WebView
       ref={webviewRef}
-      source={CHAT_SOURCE}
-      originWhitelist={['about:blank']}
+      source={source}
+      // Only the page's own origin, exactly as when it loaded as an HTML
+      // string under about:blank. Everything else stays with
+      // onShouldStartLoadWithRequest below.
+      originWhitelist={['file://*']}
+      // iOS needs the read scope widened from the single index.html file to
+      // its directory, or the page cannot load ./shiki/*.js beside it.
+      allowingReadAccessToURL={baseUri}
       style={[styles.webview, { backgroundColor: CHAT_BACKGROUNDS[theme] }]}
       containerStyle={[
         styles.container,

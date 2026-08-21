@@ -2,7 +2,7 @@
  * React Native side of the Session Chat webview bridge.
  *
  * The chat page (built from the main repo's mobile-chat/session-chat-main.tsx
- * into src/chat/session-chat-html.generated.ts) posts
+ * into assets/webview/session-chat/) posts
  * `{ id, op, params }` requests (including the read-only `readSkills` and
  * `readFiles` catalogs)
  * via window.ReactNativeWebView.postMessage and
