@@ -4,8 +4,9 @@
  * (collections, projects, named groups) is collapsed, so the store tracks
  * EXPANDED sets — absence means collapsed. Projects, collections, and named
  * groups are persisted per machine (AsyncStorage, v2 key); the flat-project
- * "Show more" collapse keeps desktop semantics (default expanded, presence =
- * collapsed to 6 rows). Machine-section collapse stays in-memory only.
+ * "Show more" collapse and the in-project Browser / Pinned / Sessions kind
+ * disclosures keep desktop semantics (default expanded, presence = collapsed).
+ * Machine-section collapse stays in-memory only.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,6 +21,8 @@ type PersistedMachineDisclosure = {
   collapsedSessionLists: string[];
   /** Collapsed "Quick"/"Projects" section labels (default expanded). */
   collapsedSections?: string[];
+  /** Collapsed in-project Browser/Pinned/Sessions labels (default expanded). */
+  collapsedSessionKinds?: string[];
 };
 
 type PersistedDisclosure = Record<string, PersistedMachineDisclosure>;
@@ -45,6 +48,8 @@ type CollapseState = {
   collapsedSessionListsByMachine: Record<string, string[]>;
   /** Persisted per machine: collapsed 'quick'/'projects' section labels. */
   collapsedSectionsByMachine: Record<string, string[]>;
+  /** Persisted per machine: collapsed in-project kind-disclosure keys. */
+  collapsedSessionKindsByMachine: Record<string, string[]>;
   /** In-memory: collapsed machine section ids (multi-machine drawer). */
   collapsedMachineIds: string[];
 
@@ -54,6 +59,7 @@ type CollapseState = {
   toggleGroup: (machineId: string, groupCollapseKey: string) => void;
   toggleSessionList: (machineId: string, projectKey: string) => void;
   toggleSection: (machineId: string, section: 'quick' | 'projects') => void;
+  toggleSessionKind: (machineId: string, kindCollapseKey: string) => void;
   toggleMachine: (machineId: string) => void;
   /** Projects-section bulk disclosure (desktop Collapse All / Expand). */
   collapseAllProjects: (machineId: string) => void;
@@ -68,6 +74,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       expandedGroupsByMachine,
       collapsedSessionListsByMachine,
       collapsedSectionsByMachine,
+      collapsedSessionKindsByMachine,
     } = get();
     const persisted: PersistedDisclosure = {};
     const machineIds = new Set([
@@ -76,6 +83,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       ...Object.keys(expandedGroupsByMachine),
       ...Object.keys(collapsedSessionListsByMachine),
       ...Object.keys(collapsedSectionsByMachine),
+      ...Object.keys(collapsedSessionKindsByMachine),
     ]);
     for (const machineId of machineIds) {
       persisted[machineId] = {
@@ -84,6 +92,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
         expandedGroups: expandedGroupsByMachine[machineId] ?? [],
         collapsedSessionLists: collapsedSessionListsByMachine[machineId] ?? [],
         collapsedSections: collapsedSectionsByMachine[machineId] ?? [],
+        collapsedSessionKinds: collapsedSessionKindsByMachine[machineId] ?? [],
       };
     }
     void AsyncStorage.setItem(DISCLOSURE_STORAGE_KEY, JSON.stringify(persisted));
@@ -95,7 +104,8 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       | 'expandedCollectionsByMachine'
       | 'expandedGroupsByMachine'
       | 'collapsedSessionListsByMachine'
-      | 'collapsedSectionsByMachine',
+      | 'collapsedSectionsByMachine'
+      | 'collapsedSessionKindsByMachine',
     machineId: string,
     key: string,
   ): void => {
@@ -116,6 +126,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
     expandedGroupsByMachine: {},
     collapsedSessionListsByMachine: {},
     collapsedSectionsByMachine: {},
+    collapsedSessionKindsByMachine: {},
     collapsedMachineIds: [],
 
     hydrate: async () => {
@@ -125,6 +136,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       let expandedGroups: Record<string, string[]> = {};
       let collapsedSessionLists: Record<string, string[]> = {};
       let collapsedSections: Record<string, string[]> = {};
+      let collapsedSessionKinds: Record<string, string[]> = {};
       try {
         const raw = await AsyncStorage.getItem(DISCLOSURE_STORAGE_KEY);
         if (raw !== null) {
@@ -150,6 +162,10 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
                 ...collapsedSections,
                 [machineId]: stringArray(record.collapsedSections),
               };
+              collapsedSessionKinds = {
+                ...collapsedSessionKinds,
+                [machineId]: stringArray(record.collapsedSessionKinds),
+              };
             }
           }
         }
@@ -163,6 +179,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
         expandedGroupsByMachine: expandedGroups,
         collapsedSessionListsByMachine: collapsedSessionLists,
         collapsedSectionsByMachine: collapsedSections,
+        collapsedSessionKindsByMachine: collapsedSessionKinds,
       });
     },
 
@@ -180,6 +197,9 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
 
     toggleSection: (machineId, section) =>
       toggleIn('collapsedSectionsByMachine', machineId, section),
+
+    toggleSessionKind: (machineId, kindCollapseKey) =>
+      toggleIn('collapsedSessionKindsByMachine', machineId, kindCollapseKey),
 
     toggleMachine: (machineId) => {
       set({ collapsedMachineIds: toggled(get().collapsedMachineIds, machineId) });

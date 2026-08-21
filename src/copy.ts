@@ -26,6 +26,13 @@ export const SessionCopy = {
   /** Desktop reference sidebar section labels. */
   quickSectionTitle: 'Quick',
   projectsSectionTitle: 'Projects',
+  /**
+   * Desktop in-project kind disclosures (session-group-section.tsx renders
+   * these as Browser / Pinned / Sessions above the first row of each kind).
+   */
+  browserKindLabel: 'Browser',
+  pinnedKindLabel: 'Pinned',
+  sessionsKindLabel: 'Sessions',
   unknownRecency: 'Unknown',
   attachCommandCopied: 'Attach command copied',
 } as const;

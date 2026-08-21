@@ -43,6 +43,7 @@ export type DrawerCollapseInput = {
   expandedGroupsByMachine: Record<string, string[]>;
   collapsedSessionListsByMachine: Record<string, string[]>;
   collapsedSectionsByMachine: Record<string, string[]>;
+  collapsedSessionKindsByMachine: Record<string, string[]>;
   collapsedMachineIds: string[];
 };
 
@@ -61,6 +62,7 @@ function isProjectChild(item: DrawerItem): boolean {
     item.type === 'PROJECT_EMPTY' ||
     item.type === 'GROUP_HEADER' ||
     item.type === 'SESSION' ||
+    item.type === 'SESSION_KIND_LABEL' ||
     item.type === 'SESSION_LIST_TOGGLE'
   );
 }
@@ -165,6 +167,9 @@ function machineBlocks(
       expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
       collapsedSessionListKeys: new Set(collapse.collapsedSessionListsByMachine[machine.id] ?? []),
       collapsedSectionKeys: new Set(collapse.collapsedSectionsByMachine[machine.id] ?? []),
+      collapsedSessionKindKeys: new Set(
+        collapse.collapsedSessionKindsByMachine[machine.id] ?? [],
+      ),
     }),
   );
   if (items.length === 0) {

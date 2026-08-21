@@ -1,19 +1,26 @@
 /**
  * Non-session drawer row renderers, cloned from the desktop gpui reference
- * sidebar (sidebar/styles/hierarchy-panels.css + group-panels.css layered
- * skin): SECTION_LABEL ("Quick"/"Projects"), collection panel headers, project
- * card headers with the terminal / agent split / actions buttons, empty rows,
- * named-group headers, and MACHINE_HEADER. Every text weight is 300 because
- * the desktop reference layout forces `font-weight: 300 !important` globally.
+ * sidebar (sidebar/styles/hierarchy-panels.css + group-panels.css branched
+ * skin): SECTION_LABEL ("Quick"/"Projects"), collection headers and their
+ * colored rails, project headers with the identity icon plus the terminal /
+ * agent split / actions buttons, empty rows, named-group headers, the
+ * in-project Browser / Pinned / Sessions kind disclosures, and MACHINE_HEADER.
+ *
+ * Row text is weight 300 because the desktop reference layout forces
+ * `font-weight: 300 !important` globally; the collection and project titles
+ * are the documented exceptions (800 and 700 in hierarchy-panels.css), which
+ * is the only thing separating them from a session title of the same size.
  */
 
 import { useRef, type ReactNode, type RefObject } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
+import { COMMAND_ICONS, PROJECT_FALLBACK_ICONS } from '../../assets/tablerIcons.generated';
 import {
   resolveAgentIconId,
   type GhostexAgentLauncher,
+  type GhostexProjectIcon,
   type GhostexQuickAction,
 } from '../../contract/mobileSummary';
 import { GhostexPalette, mixHexColors, SidebarPalette } from '../../theme/palette';
@@ -21,6 +28,7 @@ import type { MenuAnchor } from './ContextMenu';
 import {
   CaretRightGlyph,
   ChevronDownGlyph,
+  ChevronRightGlyph,
   PlayGlyph,
   TerminalGlyph,
   WorldGlyph,
@@ -46,39 +54,108 @@ export function expandedGroupBackground(sidebarBackground: string): string {
   return mixHexColors(sidebarBackground, '#000000', 96);
 }
 
-/** Collection panel fill: mix(color 5%, neutral expanded-group fill). */
-export function collectionPanelBackground(
-  color: string,
-  sidebarBackground: string = SIDEBAR_BACKGROUND,
-): string {
-  const expandedBackground = expandedGroupBackground(sidebarBackground);
-  if (color === 'transparent') return expandedBackground;
-  return mixHexColors(color, expandedBackground, 5);
+// ---------------------------------------------------------------------------
+// Branched project rails (desktop `[data-project-group-style="branched"]` in
+// sidebar/styles/hierarchy-panels.css). A collection is marked by a 2dp rail in
+// its own color at 18%, with a short horizontal branch reaching from that rail
+// to each member project's header; nested cards carry no border or fill of
+// their own. Top-level projects show the same branch marker derived from their
+// workspace theme color without inventing a parent rail.
+//
+// The desktop draws both with negatively-offset ::before pseudo-elements. RN
+// gives no reliable cross-platform guarantee for a child painted outside its
+// parent's box, so the branch is real layout here: a fixed-width leading column
+// beside the card, which lands on the same pixels without any overflow.
+// ---------------------------------------------------------------------------
+
+/** Rail + branch width, and the gutter each reserves. */
+export const PROJECT_RAIL_WIDTH = ds(2);
+export const COLLECTION_BRANCH_WIDTH = ds(18);
+export const TOP_LEVEL_BRANCH_WIDTH = ds(13);
+/** Vertical center of a project header row, where its branch meets the card. */
+const PROJECT_HEADER_CENTER = ds(15);
+
+/** Collection rail / branch color: the collection color at 18% over the page. */
+export function projectRailColor(color: string, sidebarBackground: string): string {
+  if (color === 'transparent') {
+    return mixHexColors(SidebarPalette.FOREGROUND, sidebarBackground, 18);
+  }
+  return mixHexColors(color, sidebarBackground, 18);
+}
+
+/** Collection header chip fill: the collection color at 18%. */
+export function collectionHeaderTint(color: string, sidebarBackground: string): string {
+  return projectRailColor(color, sidebarBackground);
 }
 
 /**
- * Collection panel border: mix(color 28%, mix(fg 14%, sidebar bg)). The 14%
- * neutral base keeps a visible outline even for the transparent group color.
+ * The leading column that carries one project's branch. `trailingGap` keeps the
+ * line from touching the project icon, matching the desktop's 4px stop-short.
  */
-export function collectionPanelBorder(
-  color: string,
-  sidebarBackground: string = SIDEBAR_BACKGROUND,
-  sidebarForeground: string = SidebarPalette.FOREGROUND,
-): string {
-  const base = mixHexColors(sidebarForeground, sidebarBackground, 14);
-  if (color === 'transparent') return base;
-  return mixHexColors(color, base, 28);
+export function ProjectBranch({
+  color,
+  width,
+}: {
+  color: string;
+  width: number;
+}) {
+  return (
+    <View style={{ width }}>
+      <View
+        style={[
+          branchStyles.line,
+          { backgroundColor: color, right: ds(4), top: PROJECT_HEADER_CENTER - ds(1) },
+        ]}
+      />
+    </View>
+  );
 }
 
-/**
- * Project card fill: foreground at 4.5% over the surface beneath it. Keeping
- * this translucent matches CSS color-mix(..., transparent), including cards
- * nested inside a collection panel.
- */
-export const PROJECT_CARD_BACKGROUND = 'rgba(200,205,213,0.045)';
+const branchStyles = StyleSheet.create({
+  line: {
+    position: 'absolute',
+    left: 0,
+    height: ds(2),
+  },
+});
 
-/** Project card border: foreground at 13%, matching the current gpui card. */
-export const PROJECT_CARD_BORDER = 'rgba(200,205,213,0.13)';
+// ---------------------------------------------------------------------------
+// Project identity icon, mirroring SidebarV2ProjectIcon's resolution chain:
+// a user-attached image, then the icon the project's own repository ships,
+// then a typed Tabler glyph, then the folder / worktree fallback.
+// ---------------------------------------------------------------------------
+
+/** Default glyph tint: the same muted header color the desktop glyph uses. */
+const PROJECT_GLYPH_COLOR = mixHexColors(SidebarPalette.FOREGROUND, SidebarPalette.MUTED, 72);
+
+export function ProjectIcon({
+  icon,
+  size = ds(16),
+}: {
+  icon: GhostexProjectIcon;
+  size?: number;
+}) {
+  const imageUri =
+    icon.imageDataUrl.length > 0
+      ? icon.imageDataUrl
+      : icon.discoveredIconDataUrl.length > 0
+        ? icon.discoveredIconDataUrl
+        : '';
+  if (imageUri.length > 0) {
+    return (
+      <Image
+        source={{ uri: imageUri }}
+        style={{ width: size, height: size, borderRadius: ds(3) }}
+        resizeMode="contain"
+      />
+    );
+  }
+  const Glyph =
+    (icon.glyph.length > 0 ? COMMAND_ICONS[icon.glyph] : undefined) ??
+    PROJECT_FALLBACK_ICONS[icon.isWorktree ? 'worktree' : 'folder'];
+  const color = icon.glyphColor.length > 0 ? icon.glyphColor : PROJECT_GLYPH_COLOR;
+  return <Glyph size={size} color={color} strokeWidth={1.8} />;
+}
 
 /** Header/collection title color: mix(fg 92%, white 8%). */
 const TITLE_COLOR = mixHexColors(SidebarPalette.FOREGROUND, '#FFFFFF', 92);
@@ -549,15 +626,16 @@ const collectionStyles = StyleSheet.create({
   title: {
     flex: 1,
     color: TITLE_COLOR,
-    fontSize: ds(13),
-    fontWeight: '300',
-    letterSpacing: 0.16,
+    fontSize: ds(15.55),
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    lineHeight: ds(20),
   },
 });
 
 // ---------------------------------------------------------------------------
 // PROJECT_HEADER (desktop project card .group-head): flat 30dp row at the top
-// of the card — 13dp light title (no leading icon), collapsed count pills,
+// of the card — project identity icon, 15.55dp/700 title, collapsed count pills,
 // and (expanded) the desktop button cluster: Show less chevron, Actions,
 // Create Terminal, and the agent split-button. Long-press opens the project
 // menu (desktop right-click).
@@ -565,6 +643,7 @@ const collectionStyles = StyleSheet.create({
 
 export function ProjectHeaderRow({
   title,
+  icon,
   collapsed,
   workingCount,
   attentionCount,
@@ -582,6 +661,8 @@ export function ProjectHeaderRow({
   onMenu,
 }: {
   title: string;
+  /** Project identity, ranked by ProjectIcon like the desktop header does. */
+  icon: GhostexProjectIcon;
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
@@ -612,6 +693,9 @@ export function ProjectHeaderRow({
       onPress={onToggle}
       onLongPress={() => measurePress(rowRef, onMenu)}
     >
+      <View style={projectHeaderStyles.icon}>
+        <ProjectIcon icon={icon} />
+      </View>
       <Text style={projectHeaderStyles.title} numberOfLines={1}>
         {title}
       </Text>
@@ -671,20 +755,30 @@ const projectHeaderStyles = StyleSheet.create({
     minHeight: ds(30),
     paddingHorizontal: ds(8),
     paddingVertical: ds(2),
-    borderTopLeftRadius: ds(4),
-    borderTopRightRadius: ds(4),
-    gap: ds(6),
+    borderRadius: ds(5),
+    gap: ds(10),
   },
   rowPressed: {
     backgroundColor: 'rgba(200,205,213,0.06)',
   },
+  icon: {
+    width: ds(16),
+    height: ds(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /*
+   * Desktop project titles share the session row's type size and differ only in
+   * weight (hierarchy-panels.css: 15.55px / 700, letter-spacing 0.01em), so the
+   * hierarchy never relies on smaller text.
+   */
   title: {
     flexShrink: 1,
     color: TITLE_COLOR,
-    fontSize: ds(13),
-    fontWeight: '300',
-    letterSpacing: 0.16,
-    lineHeight: ds(18),
+    fontSize: ds(15.55),
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    lineHeight: ds(20),
   },
   trailing: {
     flexDirection: 'row',
@@ -804,6 +898,73 @@ const groupHeaderStyles = StyleSheet.create({
     fontSize: ds(13),
     fontWeight: '300',
     letterSpacing: 0.16,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// SESSION_KIND_LABEL: desktop .session-kind-toggle — an uppercase 8dp/500
+// label at 34% foreground with a trailing chevron that rotates to 90deg when
+// its kind is expanded. The desktop hit target is limited to the label's own
+// content width (`width: max-content`); the phone keeps that but pads the
+// touch area vertically so the 10dp text is still tappable.
+// ---------------------------------------------------------------------------
+
+export function SessionKindLabelRow({
+  label,
+  collapsed,
+  onPress,
+}: {
+  label: string;
+  collapsed: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View style={kindLabelStyles.row}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${label}`}
+        hitSlop={{ top: ds(4), bottom: ds(4), left: ds(6), right: ds(10) }}
+        style={({ pressed }) => [
+          kindLabelStyles.button,
+          pressed ? kindLabelStyles.buttonPressed : null,
+        ]}
+        onPress={onPress}
+      >
+        <Text style={kindLabelStyles.label} numberOfLines={1}>
+          {label.toUpperCase()}
+        </Text>
+        <ChevronRightGlyph size={ds(12)} color={KIND_LABEL_COLOR} rotated={!collapsed} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** Desktop color-mix(fg 34%, transparent) for the kind label + chevron. */
+const KIND_LABEL_COLOR = 'rgba(200,205,213,0.34)';
+
+const kindLabelStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    paddingTop: ds(3),
+    paddingLeft: ds(5),
+    paddingRight: ds(10),
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(5),
+    borderRadius: ds(3),
+  },
+  buttonPressed: {
+    opacity: 0.6,
+  },
+  label: {
+    color: KIND_LABEL_COLOR,
+    fontSize: ds(8),
+    fontWeight: '500',
+    letterSpacing: ds(8) * 0.04,
+    lineHeight: ds(14),
   },
 });
 

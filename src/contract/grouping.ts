@@ -11,6 +11,7 @@ import {
   type GhostexAgentLauncher,
   type GhostexMobileSummary,
   type GhostexProject,
+  type GhostexProjectIcon,
   type GhostexQuickAction,
   type GhostexSession,
   type GhostexSessionGroup,
@@ -97,6 +98,10 @@ export type ProjectHeaderItem = {
   awakeCount: number;
   /** Set when the project renders inside a colored collection panel. */
   collectionColor?: string;
+  /** Identity icon inputs, ranked by the row renderer like the desktop does. */
+  icon: GhostexProjectIcon;
+  /** Workspace theme color ("#rrggbb"), or "" — tints the project's rail. */
+  themeColor: string;
   /**
    * Header launcher data (desktop agent split-button + actions menu): the
    * global agent launcher rows and this project's quick actions. Empty for
@@ -148,6 +153,24 @@ export type SessionItem = {
 };
 
 /**
+ * In-project kind disclosure, mirroring the desktop
+ * ProjectSessionSectionToggle: an uppercase Browser / Pinned / Sessions label
+ * above the first row of that kind, collapsing only its own rows.
+ */
+export type SessionKindLabelItem = {
+  type: 'SESSION_KIND_LABEL';
+  key: string;
+  machineId: string;
+  projectKey: string;
+  section: SessionKindSection;
+  /** Collapse key: `${projectKey}|${section}` (persisted per machine). */
+  kindCollapseKey: string;
+  label: string;
+  collapsed: boolean;
+  collectionColor?: string;
+};
+
+/**
  * "Show N more" reveal row (desktop renders it as a session-styled row) or the
  * Quick section's "Show less" counterpart.
  */
@@ -171,6 +194,7 @@ export type DrawerItem =
   | ProjectHeaderItem
   | ProjectEmptyItem
   | GroupHeaderItem
+  | SessionKindLabelItem
   | SessionItem
   | SessionListToggleItem;
 
@@ -190,6 +214,27 @@ export function projectKeyForSession(session: GhostexSession): string {
 
 export function groupCollapseKey(projectKey: string, groupId: string): string {
   return `${projectKey}|${groupId}`;
+}
+
+/** In-project kind disclosures, mirroring desktop getProjectSessionSection. */
+export type SessionKindSection = 'browser' | 'pinned' | 'sessions';
+
+export const SESSION_KIND_LABELS: Readonly<Record<SessionKindSection, string>> = {
+  browser: SessionCopy.browserKindLabel,
+  pinned: SessionCopy.pinnedKindLabel,
+  sessions: SessionCopy.sessionsKindLabel,
+};
+
+export function sessionKindSection(session: GhostexSession): SessionKindSection {
+  if (session.kind === 'browser' || session.surface === 'browser') return 'browser';
+  return session.isPinned ? 'pinned' : 'sessions';
+}
+
+export function sessionKindCollapseKey(
+  projectKey: string,
+  section: SessionKindSection,
+): string {
+  return `${projectKey}|${section}`;
 }
 
 export function stateCardItem(title: string, body: string, actionHint: string): StateCardItem {
@@ -355,6 +400,12 @@ export type DrawerBuildInput = {
    * both sections default expanded like the desktop reference sidebar.
    */
   collapsedSectionKeys: ReadonlySet<string>;
+  /**
+   * Collapsed in-project Browser / Pinned / Sessions disclosures, keyed by
+   * sessionKindCollapseKey(). Presence = collapsed; all three default expanded
+   * like the desktop sidebar's EXPANDED_PROJECT_SESSION_SECTIONS.
+   */
+  collapsedSessionKindKeys: ReadonlySet<string>;
 };
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
@@ -366,6 +417,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     expandedGroupKeys,
     collapsedSessionListKeys,
     collapsedSectionKeys,
+    collapsedSessionKindKeys,
   } = input;
 
   const projectById = new Map<string, GhostexProject>();
@@ -431,6 +483,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       project !== null ? project.path ?? '' : first === null ? '' : first.projectPath;
     const legacyGroupId = first === null ? '' : first.groupId;
     const counts = countSessions(projectSessions);
+    const icon: GhostexProjectIcon = project !== null
+      ? project.icon
+      : { imageDataUrl: '', discoveredIconDataUrl: '', glyph: '', glyphColor: '', isWorktree: false };
 
     const namedGroups = groupsForProject(summary, projectId);
     const sessionListClipped =
@@ -455,6 +510,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       sleepingCount: counts.sleepingCount,
       awakeCount: counts.awakeCount,
       collectionColor,
+      icon,
+      themeColor: project !== null ? project.themeColor : '',
       agents: projectId.length > 0 ? summary.agents : [],
       quickActions: projectId.length > 0 ? summary.quickActionsByProject[projectId] ?? [] : [],
       sessionListClipped,
@@ -487,15 +544,48 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       collectionColor,
     });
 
+    /*
+     * Desktop parity (session-group-section.tsx ProjectSessionSectionToggle):
+     * a project's own list is three independent disclosures. The uppercase
+     * label sits above the first row of its kind, and collapsing one hides
+     * only that kind's rows — the "Show N more" clip is applied first, exactly
+     * like the desktop sidebar clips before it partitions the rendered ids.
+     */
+    const emitSessionsWithKindLabels = (
+      sessions: readonly GhostexSession[],
+      groupId: string,
+    ): void => {
+      const labelledSections = new Set<SessionKindSection>();
+      for (const session of sessions) {
+        const section = sessionKindSection(session);
+        const kindCollapseKey = sessionKindCollapseKey(projectKey, section);
+        const kindCollapsed = collapsedSessionKindKeys.has(kindCollapseKey);
+        if (!labelledSections.has(section)) {
+          labelledSections.add(section);
+          items.push({
+            type: 'SESSION_KIND_LABEL',
+            key: `kind:${kindCollapseKey}`,
+            machineId,
+            projectKey,
+            section,
+            kindCollapseKey,
+            label: SESSION_KIND_LABELS[section],
+            collapsed: kindCollapsed,
+            collectionColor,
+          });
+        }
+        if (kindCollapsed) continue;
+        items.push(sessionItem(session, groupId));
+      }
+    };
+
     if (namedGroups.length === 0) {
       // Flat project: 6-row collapse; the collapsed reveal is a session-styled
       // "Show N more" row, expanded lists collapse via the header chevron.
       const visibleCount = sessionListCollapsed
         ? PROJECT_SESSION_LIST_COLLAPSED_COUNT
         : projectSessions.length;
-      for (let index = 0; index < visibleCount; index++) {
-        items.push(sessionItem(projectSessions[index], legacyGroupId));
-      }
+      emitSessionsWithKindLabels(projectSessions.slice(0, visibleCount), legacyGroupId);
       if (sessionListCollapsed) {
         items.push({
           type: 'SESSION_LIST_TOGGLE',
@@ -521,10 +611,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     for (const group of namedGroups) {
       for (const sessionId of group.sessionIds) claimedSessionIds.add(sessionId);
     }
-    for (const session of projectSessions) {
-      if (claimedSessionIds.has(session.sessionId)) continue;
-      items.push(sessionItem(session, legacyGroupId));
-    }
+    emitSessionsWithKindLabels(
+      projectSessions.filter((session) => !claimedSessionIds.has(session.sessionId)),
+      legacyGroupId,
+    );
     for (const group of namedGroups) {
       const groupSessions: GhostexSession[] = [];
       for (const sessionId of group.sessionIds) {

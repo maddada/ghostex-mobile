@@ -74,11 +74,33 @@ export type MobileSummaryWireRoot = {
 // Normalized model.
 // ---------------------------------------------------------------------------
 
+/**
+ * The project identity a row renders, mirroring SidebarV2ProjectIcon's
+ * resolution chain: a user-attached image, then the icon the project's own
+ * repository ships (discovered server-side), then a typed Tabler glyph, then a
+ * folder/worktree fallback.
+ */
+export type GhostexProjectIcon = {
+  /** Hand-attached image; wins over everything else. */
+  imageDataUrl: string;
+  /** The repository's own favicon/app icon, discovered by gxserver. */
+  discoveredIconDataUrl: string;
+  /** SIDEBAR_COMMAND_ICON_IDS glyph name, or "" when none is set. */
+  glyph: string;
+  /** "#rrggbb" tint for the glyph, or "" for the default foreground. */
+  glyphColor: string;
+  /** True when the project is a git worktree (changes the fallback glyph). */
+  isWorktree: boolean;
+};
+
 export type GhostexProject = {
   projectId: string;
   name?: string;
   path?: string;
   isChat?: boolean;
+  icon: GhostexProjectIcon;
+  /** Workspace theme color ("#rrggbb"), or "" — tints the project rail. */
+  themeColor: string;
 };
 
 export type GhostexRecentProject = {
@@ -774,9 +796,41 @@ function parseProjects(value: unknown): GhostexProject[] {
       name: trimmedValue(entry, 'name'),
       path,
       isChat: boolValue(entry, 'isChat', false) || isChatStoragePath(path),
+      icon: parseProjectIcon(entry),
+      themeColor: normalizedHexColor(trimmedValue(entry, 'themeColor')),
     });
   }
   return projects;
+}
+
+/**
+ * `identityIcon.icon` on the wire is either { kind: "image", dataUrl } or
+ * { kind: "tabler", icon, color? } (shared/workspace-project-appearance.ts).
+ * The legacy flat `iconDataUrl` is the same user-attached image from older
+ * daemons, so it feeds the same slot.
+ */
+function parseProjectIcon(entry: Record<string, unknown>): GhostexProjectIcon {
+  const icon = isObject(entry.icon) ? entry.icon : null;
+  const kind = icon === null ? '' : trimmedValue(icon, 'kind');
+  const worktree = entry.worktree;
+  return {
+    imageDataUrl: firstNonEmpty(
+      kind === 'image' && icon !== null ? trimmedValue(icon, 'dataUrl') : '',
+      trimmedValue(entry, 'iconDataUrl'),
+    ),
+    discoveredIconDataUrl: trimmedValue(entry, 'discoveredIconDataUrl'),
+    glyph: kind === 'tabler' && icon !== null ? trimmedValue(icon, 'icon') : '',
+    glyphColor:
+      kind === 'tabler' && icon !== null ? normalizedHexColor(trimmedValue(icon, 'color')) : '',
+    isWorktree:
+      isObject(worktree) ||
+      (typeof worktree === 'string' && worktree.trim().length > 0 && worktree.trim() !== 'null'),
+  };
+}
+
+/** "#rgb"/"#rrggbb" only; anything else becomes "" so it can never reach a style. */
+function normalizedHexColor(value: string): string {
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value) ? value : '';
 }
 
 function parseRecentProjects(value: unknown): GhostexRecentProject[] {

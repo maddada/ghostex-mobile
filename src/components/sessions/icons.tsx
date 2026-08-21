@@ -414,6 +414,24 @@ export function FileExportGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/**
+ * Chevron-right (desktop IconChevronRight behind the in-project Browser /
+ * Pinned / Sessions labels); rotate 90deg for the expanded state.
+ */
+export function ChevronRightGlyph({ size, color, rotated }: GlyphProps & { rotated?: boolean }) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={rotated === true ? { transform: [{ rotate: '90deg' }] } : undefined}
+    >
+      <Path d="M 9 6 l 6 6 -6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 /** Chevron-down (Show more / expand affordances); rotate for up. */
 export function ChevronDownGlyph({ size, color, rotated }: GlyphProps & { rotated?: boolean }) {
   return (

@@ -5,7 +5,11 @@
  * icon at 48% opacity (13dp brand masks, 15dp terminal/browser glyphs) that an
  * active Delayed Send (yellow clock) or Close After Done (pastel-red clock)
  * timer replaces at full opacity, 15.5dp weight-300 title (#b4b8c0), and ONE
- * shared trailing slot flush at the row's right edge. Trailing precedence
+ * shared trailing slot flush at the row's right edge. A tagged session paints
+ * its tag glyph in that leading slot instead of the agent icon, at full opacity
+ * in the tag's color (desktop .session-tag-agent-icon, which owns the slot at
+ * rest and only yields to the agent identity on pointer hover — a state the
+ * phone has no equivalent for). Trailing precedence
  * matches the desktop trailing rules: a timer countdown label always wins the
  * text slot (getSessionCardTimerTrailingLabel), then the status indicator —
  * spinning orange ring for working (reference-sidebar-working-spin), static
@@ -26,11 +30,16 @@ import {
   resolveAgentIconId,
   type GhostexSession,
 } from '../../contract/mobileSummary';
+import {
+  effectiveSessionTag,
+  sessionTagColor,
+  sessionTagIcon,
+} from '../../contract/sessionTags';
 import { SessionCopy } from '../../copy';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
-import { ClockGlyph, PinGlyph } from './icons';
+import { ClockGlyph } from './icons';
 
 const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
 const INACTIVE_SURFACED_DARKEN_PERCENT = 40;
@@ -146,8 +155,14 @@ export default function SessionRow({
   const lastActive =
     timerLabel.length === 0 && !working && dotColor === null ? compactLastActive(session) : '';
   const trailingText = timerLabel.length > 0 ? timerLabel : lastActive;
-  // Desktop leading-slot precedence: Delayed Send clock, then Close After Done
-  // clock, then the normal agent icon.
+  /*
+   * Desktop leading-slot order (SessionFloatingAgentIcon): an active Delayed
+   * Send clock, then a Close After Done clock, then the session tag, then the
+   * agent icon.
+   */
+  const tag = effectiveSessionTag(session);
+  const TagIcon = tag === undefined ? undefined : sessionTagIcon(tag);
+  const tagColor = tag === undefined ? null : sessionTagColor(tag);
   const timerClockColor =
     session.delayedSendRemainingLabel.length > 0
       ? SidebarPalette.DELAYED_SEND_CLOCK
@@ -181,20 +196,21 @@ export default function SessionRow({
       onLongPress={openMenuFromRow}
     >
       {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
-      {session.isPinned ? (
-        <View style={[styles.pin, { left: Math.max(0, iconLeft - ds(16)) }]}>
-          <PinGlyph size={ds(13)} color="rgba(255,255,255,0.9)" />
-        </View>
-      ) : null}
       <View
         style={[
           styles.icon,
           { left: iconLeft },
-          timerClockColor !== null ? styles.iconTimer : active ? styles.iconActive : null,
+          timerClockColor !== null || tagColor !== null
+            ? styles.iconTimer
+            : active
+              ? styles.iconActive
+              : null,
         ]}
       >
         {timerClockColor !== null ? (
           <ClockGlyph size={ds(15)} color={timerClockColor} />
+        ) : TagIcon !== undefined && tagColor !== null ? (
+          <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
         ) : (
           <Icon size={iconSize} color={agentIconTint(iconId)} />
         )}
@@ -245,14 +261,6 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     borderRadius: ds(4),
     borderWidth: ds(2),
-  },
-  pin: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -ds(6.5),
-    width: ds(13),
-    height: ds(13),
-    opacity: 0.5,
   },
   icon: {
     position: 'absolute',

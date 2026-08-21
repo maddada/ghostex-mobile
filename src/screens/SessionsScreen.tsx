@@ -54,6 +54,7 @@ import {
   GitForkGlyph,
   InfoGlyph,
   MachinesGlyph,
+  SearchGlyph,
   MessageCircleGlyph,
   PaletteGlyph,
   PencilGlyph,
@@ -72,17 +73,20 @@ import {
 import { useLauncherStore, lastActionKey } from '../components/sessions/launcherStore';
 import {
   CollectionHeaderRow,
-  collectionPanelBackground,
-  collectionPanelBorder,
+  collectionHeaderTint,
+  COLLECTION_BRANCH_WIDTH,
   ds,
   expandedGroupBackground,
   GroupHeaderRow,
   MachineHeaderRow,
-  PROJECT_CARD_BACKGROUND,
-  PROJECT_CARD_BORDER,
+  PROJECT_RAIL_WIDTH,
+  ProjectBranch,
   ProjectEmptyRow,
   ProjectHeaderRow,
+  projectRailColor,
+  TOP_LEVEL_BRANCH_WIDTH,
   SectionLabelRow,
+  SessionKindLabelRow,
   SessionListToggleRow,
   SIDEBAR_BACKGROUND,
 } from '../components/sessions/rows';
@@ -132,7 +136,7 @@ import {
   type ProjectHeaderItem,
   type SessionItem,
 } from '../contract/grouping';
-import { SESSION_TAG_SECTIONS } from '../contract/sessionTags';
+import { SESSION_TAG_SECTIONS, sessionTagIcon } from '../contract/sessionTags';
 import {
   agentIconTint,
   displayStatus,
@@ -410,6 +414,7 @@ export default function SessionsScreen({ navigation }: Props) {
           expandedGroupsByMachine: collapse.expandedGroupsByMachine,
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
+          collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
           collapsedMachineIds: collapse.collapsedMachineIds,
         },
       }),
@@ -421,6 +426,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.expandedGroupsByMachine,
       collapse.collapsedSessionListsByMachine,
       collapse.collapsedSectionsByMachine,
+      collapse.collapsedSessionKindsByMachine,
       collapse.collapsedMachineIds,
     ],
   );
@@ -955,11 +961,19 @@ export default function SessionsScreen({ navigation }: Props) {
         items.push({ kind: 'separator', key: `sep-${section.label}` });
       }
       for (const option of section.options) {
+        const OptionIcon = sessionTagIcon(option.value);
         items.push({
           kind: 'item',
           key: option.value,
           label: option.label,
-          icon: <TagGlyph size={14} color={option.color} />,
+          // Desktop parity: each tag row carries its own glyph in the tag's
+          // color, not one shared tag outline (sidebar/session-tag-ui.tsx).
+          icon:
+            OptionIcon !== undefined ? (
+              <OptionIcon size={14} color={option.color} strokeWidth={1.9} />
+            ) : (
+              <TagGlyph size={14} color={option.color} />
+            ),
           selected: current === option.value,
           onPress: () => applyTag(current === option.value ? 'none' : option.value),
         });
@@ -1681,6 +1695,15 @@ export default function SessionsScreen({ navigation }: Props) {
           />
         );
       }
+      case 'SESSION_KIND_LABEL':
+        return (
+          <SessionKindLabelRow
+            key={child.key}
+            label={child.label}
+            collapsed={child.collapsed}
+            onPress={() => collapse.toggleSessionKind(machineId, child.kindCollapseKey)}
+          />
+        );
       case 'SESSION_LIST_TOGGLE':
         return (
           <SessionListToggleRow
@@ -1709,27 +1732,41 @@ export default function SessionsScreen({ navigation }: Props) {
     const selectedAction =
       header.quickActions.find((action) => (action.commandId ?? '') === selectedActionId) ??
       (header.quickActions.length > 0 ? header.quickActions[0] : null);
+    /*
+     * Branched project rails (desktop [data-project-group-style="branched"]):
+     * the card itself carries no border or fill — its membership is drawn by a
+     * short branch reaching in from the owning collection's rail, or, for a
+     * top-level project, from its own workspace theme color.
+     */
+    const branchColor = inCollection
+      ? colorWithOpacity(
+          projectRailColor(header.collectionColor ?? 'transparent', sidebarAppearance.background),
+          sidebarGroupsOpacityPercent,
+        )
+      : colorWithOpacity(
+          projectRailColor(
+            header.themeColor.length > 0 ? header.themeColor : 'transparent',
+            sidebarAppearance.background,
+          ),
+          sidebarProjectsOpacityPercent,
+        );
     return (
       <View
         key={`card:${header.key}`}
         style={[
           styles.projectCard,
-          {
-            backgroundColor: colorWithOpacity(
-              sidebarAppearance.projectCard,
-              sidebarProjectsOpacityPercent,
-            ),
-            borderColor: colorWithOpacity(
-              sidebarAppearance.projectBorder,
-              sidebarProjectsOpacityPercent,
-            ),
-          },
           inCollection ? styles.projectCardInPanel : styles.projectCardTopLevel,
           inCollection && !header.collapsed ? styles.projectCardExpanded : null,
         ]}
       >
+        <ProjectBranch
+          color={branchColor}
+          width={inCollection ? COLLECTION_BRANCH_WIDTH : TOP_LEVEL_BRANCH_WIDTH}
+        />
+        <View style={styles.projectCardBody}>
         <ProjectHeaderRow
           title={header.title}
+          icon={header.icon}
           collapsed={header.collapsed}
           workingCount={header.workingCount}
           attentionCount={header.attentionCount}
@@ -1784,6 +1821,7 @@ export default function SessionsScreen({ navigation }: Props) {
             )}
           </View>
         ) : null}
+        </View>
       </View>
     );
   };
@@ -1801,30 +1839,41 @@ export default function SessionsScreen({ navigation }: Props) {
     }
     if (block.kind === 'collection') {
       const header = block.header;
-      const expandedGroupSurface = collectionPanelBackground(
-        header.color,
-        sidebarAppearance.background,
+      /*
+       * The branched panel paints no fill of its own any more, so a surfaced
+       * session row inside it sits on the same neutral expanded-group surface
+       * as one in a top-level project. Mixing the collection tint in here would
+       * describe a backing that is no longer drawn.
+       */
+      const expandedGroupSurface = neutralExpandedGroupSurface;
+      const railColor = colorWithOpacity(
+        projectRailColor(header.color, sidebarAppearance.background),
+        sidebarGroupsOpacityPercent,
       );
       return (
-        <View
-          style={[
-            styles.collectionPanel,
-            {
-              backgroundColor: colorWithOpacity(
-                header.collapsed ? sidebarAppearance.projectCard : expandedGroupSurface,
-                sidebarGroupsOpacityPercent,
-              ),
-              borderColor: colorWithOpacity(
-                collectionPanelBorder(
-                  header.color,
-                  sidebarAppearance.background,
-                  sidebarAppearance.foreground,
+        <View style={styles.collectionPanel}>
+          {/*
+            Desktop section.project-collection::after: a 2dp rail in the
+            collection's own color running the height of the panel, replacing
+            the bordered card the panel used to be.
+          */}
+          {!header.collapsed ? (
+            <View
+              pointerEvents="none"
+              style={[styles.collectionRail, { backgroundColor: railColor }]}
+            />
+          ) : null}
+          <View
+            style={[
+              styles.collectionHeaderChip,
+              {
+                backgroundColor: colorWithOpacity(
+                  collectionHeaderTint(header.color, sidebarAppearance.background),
+                  sidebarGroupsOpacityPercent,
                 ),
-                sidebarGroupsOpacityPercent,
-              ),
-            },
-          ]}
-        >
+              },
+            ]}
+          >
           <CollectionHeaderRow
             title={header.title}
             collapsed={header.collapsed}
@@ -1841,6 +1890,7 @@ export default function SessionsScreen({ navigation }: Props) {
               });
             }}
           />
+          </View>
           {!header.collapsed && block.projects.length > 0 ? (
             <View style={styles.collectionProjects}>
               {block.projects.map((card) =>
@@ -1964,6 +2014,20 @@ export default function SessionsScreen({ navigation }: Props) {
             <RefreshGlyph size={22} color={sidebarAppearance.foreground} />
           )}
         </Pressable>
+        {/*
+          Find Prompts searches the selected machine's agent history — the same
+          index `gx f` reads — so it is offered only while a machine is chosen.
+        */}
+        {machine !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Find Prompts"
+            style={styles.headerButton}
+            onPress={() => navigation.navigate('FindPrompts', { machineId: machine.id })}
+          >
+            <SearchGlyph size={22} color={sidebarAppearance.foreground} />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Machines"
@@ -2497,12 +2561,22 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '600',
   },
-  /** Desktop project card (hierarchy-panels.css .group[data-project-group]). */
+  /*
+   * Desktop project group in branched mode (hierarchy-panels.css
+   * .group[data-project-group]): transparent, borderless, and preceded by its
+   * branch column instead of being drawn as a card.
+   */
   projectCard: {
-    backgroundColor: PROJECT_CARD_BACKGROUND,
-    borderWidth: 1,
-    borderColor: PROJECT_CARD_BORDER,
-    borderRadius: ds(5),
+    flexDirection: 'row',
+    /*
+     * The branch column stretches to the whole card so its absolutely placed
+     * line stays inside its parent's box. A zero-height column would leave the
+     * line painting outside its bounds, which Android does not guarantee.
+     */
+    alignItems: 'stretch',
+  },
+  projectCardBody: {
+    flex: 1,
   },
   projectCardTopLevel: {
     marginLeft: ds(3),
@@ -2510,7 +2584,7 @@ const styles = StyleSheet.create({
     marginBottom: ds(10),
   },
   projectCardInPanel: {
-    marginHorizontal: ds(3),
+    marginRight: ds(5),
     marginBottom: ds(5),
   },
   projectCardExpanded: {
@@ -2521,18 +2595,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: ds(3),
     paddingBottom: ds(3),
   },
-  /** Desktop collection panel (section.project-collection). */
+  /*
+   * Desktop collection in branched mode (section.project-collection): no panel
+   * border or fill, a 2dp colored rail down its left edge, and a tinted header
+   * chip. `margin: 0 5px 10px 3px` with the rail sitting at the panel's left.
+   */
   collectionPanel: {
-    borderWidth: 1,
-    borderRadius: ds(5),
+    position: 'relative',
     marginLeft: ds(3),
     marginRight: ds(5),
     marginBottom: ds(10),
+    paddingBottom: ds(5),
   },
-  /** Panel member area (.project-collection-projects). */
+  collectionRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: ds(5),
+    width: PROJECT_RAIL_WIDTH,
+  },
+  collectionHeaderChip: {
+    borderRadius: ds(5),
+    minHeight: ds(30),
+    justifyContent: 'center',
+  },
+  /** Panel member area (.project-collection-projects): starts at the rail. */
   collectionProjects: {
-    paddingHorizontal: ds(3),
-    paddingTop: ds(2),
+    paddingLeft: PROJECT_RAIL_WIDTH,
+    paddingTop: ds(5),
     paddingBottom: ds(3),
   },
 });
