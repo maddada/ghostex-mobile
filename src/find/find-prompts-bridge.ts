@@ -1,7 +1,7 @@
 /**
  * React Native side of the Find webview bridge — the GUI for `gx f`.
  *
- * The Find page (built from the main repo's mobile-find/find-prompts-main.tsx
+ * The Find page (built from the main repo's apps/mobile/views/find/find-prompts-main.tsx
  * into src/find/find-prompts-html.generated.ts) posts `{ id, op, params }`
  * requests via window.ReactNativeWebView.postMessage and expects
  * `{ id, ok, result?, error? }` responses through

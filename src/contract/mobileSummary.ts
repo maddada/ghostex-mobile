@@ -832,7 +832,7 @@ function parseProjects(value: unknown): GhostexProject[] {
 
 /**
  * `identityIcon.icon` on the wire is either { kind: "image", dataUrl } or
- * { kind: "tabler", icon, color? } (shared/workspace-project-appearance.ts).
+ * { kind: "tabler", icon, color? } (packages/shared/workspace-project-appearance.ts).
  * The legacy flat `iconDataUrl` is the same user-attached image from older
  * daemons, so it feeds the same slot.
  */

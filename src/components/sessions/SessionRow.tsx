@@ -1,6 +1,6 @@
 /**
  * SESSION row renderer, cloned from the desktop gpui reference sidebar
- * (sidebar/styles/session-cards.css reference-layout skin +
+ * (packages/core-ui/styles/session-cards.css reference-layout skin +
  * session-card-content.tsx): 34dp flat row, absolutely-placed leading agent
  * icon at 48% opacity (13dp brand masks, 15dp terminal/browser glyphs) that an
  * active Delayed Send (yellow clock) or Close After Done (pastel-red clock)

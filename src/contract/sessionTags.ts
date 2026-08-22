@@ -1,9 +1,9 @@
 /**
- * Session tag catalog, mirroring shared/session-tags.ts (grouped Priority →
+ * Session tag catalog, mirroring packages/shared/session-tags.ts (grouped Priority →
  * Progress → Type) with the desktop sidebar's tag tint colors and glyphs so
  * the mobile "Tag as" menu and the tagged session rows render the same visual
- * state as the gpui sidebar (sidebar/session-tag-ui.tsx +
- * .session-tag-agent-icon in sidebar/styles/session-cards.css).
+ * state as the gpui sidebar (packages/core-ui/session-tag-ui.tsx +
+ * .session-tag-agent-icon in packages/core-ui/styles/session-cards.css).
  */
 
 import { TAG_ICONS, type TablerIconComponent } from '../assets/tablerIcons.generated';

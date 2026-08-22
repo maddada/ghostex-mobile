@@ -972,7 +972,7 @@ export default function SessionsScreen({ navigation }: Props) {
           key: option.value,
           label: option.label,
           // Desktop parity: each tag row carries its own glyph in the tag's
-          // color, not one shared tag outline (sidebar/session-tag-ui.tsx).
+          // color, not one shared tag outline (packages/core-ui/session-tag-ui.tsx).
           icon:
             OptionIcon !== undefined ? (
               <OptionIcon size={14} color={option.color} strokeWidth={1.9} />

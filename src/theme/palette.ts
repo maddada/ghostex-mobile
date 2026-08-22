@@ -39,7 +39,7 @@ export const GhostexPalette = {
 
 /**
  * Sessions-list tokens ported from the desktop gpui sidebar CSS
- * (sidebar/styles/theme.css, groups.css, session-cards.css) so the mobile
+ * (packages/core-ui/styles/theme.css, groups.css, session-cards.css) so the mobile
  * drawer renders the same look as the macOS sidebar.
  */
 export const SidebarPalette = {

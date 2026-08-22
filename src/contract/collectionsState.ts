@@ -10,7 +10,7 @@
 
 export type CollectionColorOption = { label: string; value: string };
 
-/** Desktop palette (sidebar/project-collections.ts), order preserved. */
+/** Desktop palette (packages/core-ui/project-collections.ts), order preserved. */
 export const COLLECTION_COLOR_OPTIONS: readonly CollectionColorOption[] = [
   { label: 'Dark Gray', value: '#4f5663' },
   { label: 'Gray', value: '#808080' },

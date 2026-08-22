@@ -1,6 +1,6 @@
 /**
  * Non-session drawer row renderers, cloned from the desktop gpui reference
- * sidebar (sidebar/styles/hierarchy-panels.css + group-panels.css branched
+ * sidebar (packages/core-ui/styles/hierarchy-panels.css + group-panels.css branched
  * skin): SECTION_LABEL ("Quick"/"Projects"), collection headers and their
  * colored rails, project headers with the identity icon plus the terminal /
  * agent split / actions buttons, empty rows, named-group headers, the
@@ -56,7 +56,7 @@ export function expandedGroupBackground(sidebarBackground: string): string {
 
 // ---------------------------------------------------------------------------
 // Branched project rails (desktop `[data-project-group-style="branched"]` in
-// sidebar/styles/hierarchy-panels.css). A collection is marked by a 2dp rail in
+// packages/core-ui/styles/hierarchy-panels.css). A collection is marked by a 2dp rail in
 // its own color at 18%, with a short horizontal branch reaching from that rail
 // to each member project's header; nested cards carry no border or fill of
 // their own. Top-level projects show the same branch marker derived from their

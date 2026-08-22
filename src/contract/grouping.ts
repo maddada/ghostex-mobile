@@ -289,7 +289,7 @@ function groupsForProject(summary: GhostexMobileSummary, projectId: string): Gho
 
 /**
  * In-project display ordering, mirroring the desktop sidebar's default
- * "lastActivity" layout (shared/active-sessions-sort.ts): browser-kind first →
+ * "lastActivity" layout (packages/shared/active-sessions-sort.ts): browser-kind first →
  * pinned (saved order) → attention(2) > working(1) > idle(0) → most recent
  * lastInteractionAt → stable. The wire order (server sortOrder) is the stable
  * base, which matches the desktop's saved manual order.

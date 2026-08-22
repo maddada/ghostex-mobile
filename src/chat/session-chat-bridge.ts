@@ -1,7 +1,7 @@
 /**
  * React Native side of the Session Chat webview bridge.
  *
- * The chat page (built from the main repo's mobile-chat/session-chat-main.tsx
+ * The chat page (built from the main repo's apps/mobile/views/chat/session-chat-main.tsx
  * into assets/webview/session-chat/) posts
  * `{ id, op, params }` requests (including the read-only `readSkills` and
  * `readFiles` catalogs)
@@ -54,7 +54,7 @@ import { SESSION_CHAT_SUPPORTED_AGENT_IDS } from './session-chat-agents.generate
 
 /**
  * Agent icon ids whose sessions have a chat projection. Generated from
- * SESSION_CHAT_SUPPORTED_AGENTS in the main repo's shared/session-chat.ts by
+ * SESSION_CHAT_SUPPORTED_AGENTS in the main repo's packages/shared/session-chat.ts by
  * `bun run build:mobile-chat` (the shared module itself is outside this
  * submodule's compile scope).
  */
