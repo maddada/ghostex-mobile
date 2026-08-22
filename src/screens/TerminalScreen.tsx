@@ -17,7 +17,6 @@ import {
   Keyboard,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   ToastAndroid,
   View,
@@ -36,189 +35,42 @@ import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet'
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
-import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
+import TerminalMenu from '../components/terminal/TerminalMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
-import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import {
   ChatBubbleIcon,
   ChevronLeftIcon,
   EllipsisIcon,
   TerminalPromptIcon,
 } from '../components/terminal/icons';
-import { pickAndSendAttachment } from '../components/terminal/uploads';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
-import {
-  acknowledgeAttentionCommand,
-  attachCommand,
-  cancelDelayedSendCommand,
-  closeAfterDoneCommand,
-  createAgentCommand,
-  delayedSendCommand,
-  exportSessionTranscriptCommand,
-  forkSessionCommand,
-  loginShellCommand,
-  reloadSessionCommand,
-  requestSessionRenameCommand,
-  sendSessionChatMessageCommand,
-  sleepSessionCommand,
-  wakeSessionCommand,
-} from '../commands/ghostexCli';
-import {
-  isSessionChatSupportedAgent,
-  readSessionChatSyncedDraft,
-  writeSessionChatSyncedDraft,
-  type SessionChatSyncedDraft,
-} from '../chat/session-chat-bridge';
+import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
 import SessionChatWebView from '../chat/SessionChatWebView';
-import {
-  resolveAgentIconId,
-  type GhostexMobileSummary,
-  type GhostexSession,
-} from '../contract/mobileSummary';
-import { ProgressCopy, RenameCopy, SessionCopy } from '../copy';
-import { ensureConnected, summarizeFailure } from '../inventory/client';
+import { RenameCopy, SessionCopy } from '../copy';
+import { summarizeFailure } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
-import type { MachineConnectionTarget } from '../machines/credentials';
-import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
-import {
-  FORK_AGENT_ICONS,
-  lifecycleMutation,
-  renameMutation,
-  runSessionCommand,
-} from '../sessions/sessionCommands';
+import { FORK_AGENT_ICONS } from '../sessions/sessionCommands';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
-import { GhostexPalette, SidebarPalette } from '../theme/palette';
+import { GhostexPalette } from '../theme/palette';
+import {
+  AGENT_OVERLAY_NONE,
+  ANDROID_KEYBOARD_GAP,
+  machineTargetFor,
+  sessionAgentIdFor,
+  sessionProjectIdFor,
+  sessionRecordFor,
+  TAP_KEYBOARD_HINT_TIMEOUT_MS,
+  type AgentOverlay,
+  type ExportedTranscript,
+} from './terminal-screen/session-lookups';
+import { styles } from './terminal-screen/styles';
+import { useTerminalAgentActions } from './terminal-screen/use-agent-actions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
-
-/** Which Agent Actions surface (if any) is on top of the terminal screen. */
-type AgentOverlay =
-  | { kind: 'none' }
-  | { kind: 'rename'; error: string | null }
-  | { kind: 'delayedSend' }
-  | { kind: 'promptEditor'; sending: boolean };
-
-const AGENT_OVERLAY_NONE: AgentOverlay = { kind: 'none' };
-
-/**
- * A finished Export Transcript run, as the result sheet needs it. The markdown
- * file lives on the machine, so everything here describes where it landed and
- * what a follow-up conversation on that same machine would be started from.
- */
-type ExportedTranscript = {
-  machine: MachineRecord;
-  projectId: string;
-  /** Session the transcript came from — the sheet's subtitle. */
-  sessionTitle: string;
-  /** Launcher agent id for the follow-up session ('' hides that choice). */
-  agentId: string;
-  /** Human name of that agent, for the follow-up row's description. */
-  agentLabel: string;
-  /** Absolute path of the exported markdown file on the machine. */
-  path: string;
-};
-
-const HEADER_HEIGHT = 44;
-/** Deliberate separation between the Android IME boundary and the screen's bottom edge. */
-const ANDROID_KEYBOARD_GAP = 3;
-/** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */
-const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
-
-/**
- * Plan 015 §7: the follow-up session's staged first input. A bare mention of
- * the exported markdown plus one trailing space — gxserver types it into the
- * new agent's input and never submits it, so the user writes their own prompt
- * around it. Nothing is ever sent on their behalf.
- */
-function transcriptMentionDraft(path: string): string {
-  return `@${path} `;
-}
-
-function machineRecordFor(machineId: string): MachineRecord | null {
-  return useMachinesStore.getState().machines.find((machine) => machine.id === machineId) ?? null;
-}
-
-function machineTargetFor(machineId: string): MachineConnectionTarget | null {
-  const record = machineRecordFor(machineId);
-  if (record === null) return null;
-  return { id: record.id, host: record.host, username: record.username, port: record.port };
-}
-
-/**
- * Folder of the session shown in `tab` ('' when unknown): a shell tab reuses
- * its own starting directory; an attach tab resolves its session's project
- * path from the machine inventory.
- */
-function sessionFolderFor(tab: TerminalTab | null): string {
-  if (tab === null) return '';
-  if (tab.kind === 'shell') return tab.cwd ?? '';
-  if (tab.ghostexSessionId === undefined) return '';
-  const summary = useInventoryStore.getState().inventoriesByMachineId[tab.machineId]?.summary;
-  if (summary === null || summary === undefined) return '';
-  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
-  if (session === undefined) return '';
-  const project = summary.projects.find((entry) => entry.projectId === session.projectId);
-  return project?.path ?? '';
-}
-
-/**
- * Resolved agent icon id of the session shown in `tab` ('terminal' when it is
- * a shell tab or the session is unknown) — drives the key bar's agent-hotkey
- * page. Pure so the screen can subscribe to it as an inventory selector.
- */
-function sessionAgentIdFor(
-  tab: TerminalTab | null,
-  summary: GhostexMobileSummary | null | undefined,
-): string {
-  if (tab === null || tab.ghostexSessionId === undefined) return 'terminal';
-  if (summary === null || summary === undefined) return 'terminal';
-  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
-  if (session === undefined) return 'terminal';
-  return resolveAgentIconId(
-    session.agentIcon,
-    session.agentName.length > 0 ? session.agentName : session.agent,
-  );
-}
-
-/**
- * gxserver projectId of the session shown in `tab` ('' while the inventory
- * has not resolved it) — the Session Chat CLI verbs address sessions by the
- * (projectId, sessionId) pair.
- */
-function sessionProjectIdFor(
-  tab: TerminalTab | null,
-  summary: GhostexMobileSummary | null | undefined,
-): string {
-  if (tab === null || tab.ghostexSessionId === undefined) return '';
-  if (summary === null || summary === undefined) return '';
-  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
-  return session?.projectId ?? '';
-}
-
-/**
- * Full inventory record of the session shown in `tab` (null while unknown) —
- * the Agent Actions menu needs its live title, sleep state, delayed-send
- * countdown, and activity. Pure so the screen can subscribe to it: the record
- * is the same object identity until the machine's inventory changes.
- */
-function sessionRecordFor(
-  tab: TerminalTab | null,
-  summary: GhostexMobileSummary | null | undefined,
-): GhostexSession | null {
-  if (tab === null || tab.ghostexSessionId === undefined) return null;
-  if (summary === null || summary === undefined) return null;
-  return summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId) ?? null;
-}
-
-function patchTab(sessionKey: string, patch: Partial<TerminalTab>): void {
-  useTerminalStore.setState((state) => ({
-    tabs: state.tabs.map((tab) => (tab.sessionKey === sessionKey ? { ...tab, ...patch } : tab)),
-  }));
-}
 
 export default function TerminalScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -534,475 +386,39 @@ export default function TerminalScreen({ navigation, route }: Props) {
   // gxserver exposes no CLI verb for).
   // ---------------------------------------------------------------------
 
-  /** The (machine, projectId, session) triple the Agent Actions verbs need. */
-  const agentTarget = useCallback((): {
-    machine: MachineRecord;
-    projectId: string;
-    session: GhostexSession;
-    tab: TerminalTab;
-  } | null => {
-    if (activeTab === null || activeProjectId.length === 0 || activeSession === null) return null;
-    const machine = machineRecordFor(activeTab.machineId);
-    if (machine === null) return null;
-    return { machine, projectId: activeProjectId, session: activeSession, tab: activeTab };
-  }, [activeProjectId, activeSession, activeTab]);
-
-  const reportAgentFailure = useCallback((title: string, error: unknown): void => {
-    Alert.alert(title, error instanceof Error ? error.message : String(error), [{ text: 'OK' }]);
-  }, []);
-
-  /** Deliver text to the session through the Session Chat send endpoint. */
-  const sendChatText = useCallback(
-    async (text: string): Promise<void> => {
-      const target = agentTarget();
-      if (target === null) throw new Error('This session has no chat identity yet.');
-      await runGhostexCli(
-        target.machine,
-        sendSessionChatMessageCommand(target.session.sessionId, target.projectId, text),
-      );
-    },
-    [agentTarget],
-  );
-
-  /**
-   * Chat-mode sink for user-authored sends (attachments, Prompt Editor).
-   * Desktop parity: sending to a session is interacting with it, so it also
-   * clears the session's attention status.
-   */
-  const sendChatMessageFromUser = useCallback(
-    async (text: string): Promise<void> => {
-      await sendChatText(text);
-      const target = agentTarget();
-      if (target !== null) {
-        acknowledgeSessionAttention(target.machine.id, target.session.sessionId);
-      }
-    },
-    [agentTarget, sendChatText],
-  );
-
-  const submitAgentRename = useCallback(
-    async (value: string): Promise<void> => {
-      const target = agentTarget();
-      if (target === null) return;
-      const title = value.trim();
-      if (title.length === 0) {
-        setAgentOverlay({ kind: 'rename', error: RenameCopy.emptyTitleError });
-        return;
-      }
-      setAgentOverlay(AGENT_OVERLAY_NONE);
-      const { machine, projectId, session } = target;
-      const result = await runSessionCommand(
-        machine,
-        requestSessionRenameCommand(session.sessionId, projectId, title, activeAgentId),
-        {
-          optimisticChange: renameMutation(session.sessionId, title),
-          onError: (message) => Alert.alert('Rename Failed', message, [{ text: 'OK' }]),
-        },
-      );
-      /*
-       * Agent sessions keep their title inside the agent CLI, so gxserver only
-       * records the request and tells the client to stage the CLI's own rename
-       * command. gpui types it into the mounted terminal; the phone has no
-       * terminal in front of the user in chat mode, so it goes through the
-       * session-chat send endpoint, which reaches the TUI either way.
-       */
-      if (result?.json?.shouldSendAgentRenameCommand !== true) return;
-      const command = activeAgentId === 'pi' ? 'name' : 'rename';
-      try {
-        await sendChatText(`/${command} ${title}`);
-      } catch (error) {
-        reportAgentFailure('Rename Failed', error);
-      }
-    },
-    [activeAgentId, agentTarget, reportAgentFailure, sendChatText],
-  );
-
-  const runAgentSleep = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    const { machine, projectId, session } = target;
-    const sleeping = session.isSleeping;
-    // `closeWarmSessionId` closes this session's tab as part of the sleep, so
-    // the screen's "no tabs left" effect returns to Sessions on its own — a
-    // slept session has no surface left for this screen to show.
-    await runSessionCommand(
-      machine,
-      sleeping
-        ? wakeSessionCommand(session.sessionId, projectId)
-        : sleepSessionCommand(session.sessionId, projectId),
-      sleeping
-        ? {
-            optimisticChange: lifecycleMutation(session.sessionId, false),
-            onError: (message) => Alert.alert('Wake Failed', message, [{ text: 'OK' }]),
-          }
-        : {
-            closeWarmSessionId: session.sessionId,
-            optimisticChange: lifecycleMutation(session.sessionId, true),
-            onError: (message) => Alert.alert('Sleep Failed', message, [{ text: 'OK' }]),
-          },
-    );
-  }, [agentTarget]);
-
-  /*
-   * Delayed Send / Cancel Timer are renderer commands owned by a connected
-   * desktop app. On a headless machine the CLI says so; surface that instead
-   * of inventing a phone-side timer that would not survive the app closing.
-   */
-  const runDelayedSend = useCallback(
-    async (trigger: Parameters<typeof delayedSendCommand>[1], delayMs: number): Promise<void> => {
-      const target = agentTarget();
-      if (target === null) return;
-      setAgentOverlay(AGENT_OVERLAY_NONE);
-      await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, trigger, delayMs), {
-        onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]),
-      });
-    },
-    [agentTarget],
-  );
-
-  const cancelDelayedSend = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    await runSessionCommand(
-      target.machine,
-      cancelDelayedSendCommand(target.session.sessionId),
-      { onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]) },
-    );
-  }, [agentTarget]);
-
-  const toggleCloseAfterDone = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    await runSessionCommand(
-      target.machine,
-      closeAfterDoneCommand(target.session.sessionId),
-      { onError: (message) => Alert.alert('Session Automation Failed', message, [{ text: 'OK' }]) },
-    );
-  }, [agentTarget]);
-
-  const runAgentFork = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    const { machine, session } = target;
-    setAgentProgress(ProgressCopy.creatingTerminal(session.projectName));
-    try {
-      const result = await runGhostexCli(machine, forkSessionCommand(session.sessionId));
-      await useInventoryStore.getState().refreshMachine(machine);
-      setAgentProgress(null);
-      const forkedId = createdSessionId(result);
-      if (forkedId === null) return;
-      // Creation-flow parity with the sessions drawer: the fork becomes the
-      // visible session instead of leaving the user on the original.
-      const forked = useInventoryStore
-        .getState()
-        .inventoriesByMachineId[machine.id]?.summary?.sessions.find(
-          (entry) => entry.sessionId === forkedId,
-        );
-      const sessionKey = await useTerminalStore.getState().attachSession(machine, {
-        sessionId: forkedId,
-        projectId:
-          forked !== undefined && forked.projectId.length > 0 ? forked.projectId : undefined,
-        title: forked?.displayTitle,
-      });
-      useTerminalStore.getState().selectTab(sessionKey);
-    } catch (error) {
-      setAgentProgress(null);
-      reportAgentFailure('Fork Failed', error);
-    }
-  }, [agentTarget, reportAgentFailure]);
-
-  const runAgentFullReload = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    const { machine, projectId, session } = target;
-    setAgentProgress('Reloading session…');
-    try {
-      await runGhostexCli(machine, reloadSessionCommand(session.sessionId));
-    } catch (rendererError) {
-      /*
-       * Full Reload is a renderer command: it only exists while a desktop
-       * Ghostex app is connected to that daemon. Headless machines (the common
-       * case for a phone) have no renderer, so compose the same effect from
-       * the two daemon-owned lifecycle endpoints — exactly what the web app
-       * does unconditionally for this action.
-       */
-      try {
-        await runGhostexCli(machine, sleepSessionCommand(session.sessionId, projectId));
-        await runGhostexCli(machine, wakeSessionCommand(session.sessionId, projectId));
-      } catch {
-        setAgentProgress(null);
-        reportAgentFailure('Full Reload Failed', rendererError);
-        return;
-      }
-    }
-    await useInventoryStore.getState().refreshMachineFresh(machine);
-    setAgentProgress(null);
-  }, [agentTarget, reportAgentFailure]);
-
-  /*
-   * Export Transcript: the daemon parses the agent's own transcript file and
-   * writes the markdown next to its state, so the phone only carries the
-   * selector out and the absolute path back. Unsupported agents and unreadable
-   * transcripts come back as the daemon's own message.
-   */
-  const runExportTranscript = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    const { machine, projectId, session } = target;
-    setAgentProgress('Exporting transcript…');
-    try {
-      const result = await runGhostexCli(
-        machine,
-        exportSessionTranscriptCommand(session.sessionId, projectId),
-      );
-      setAgentProgress(null);
-      const path = typeof result.json?.path === 'string' ? result.json.path.trim() : '';
-      if (path.length === 0) {
-        throw new Error('gxserver exported the transcript without reporting its path.');
-      }
-      setStartingTranscriptConversation(false);
-      setExportedTranscriptError(null);
-      setExportedTranscript({
-        machine,
-        projectId,
-        sessionTitle:
-          session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle,
-        agentId: session.agent.trim(),
-        agentLabel: session.agentName.length > 0 ? session.agentName : session.agent,
-        path,
-      });
-    } catch (error) {
-      setAgentProgress(null);
-      reportAgentFailure('Export Transcript Failed', error);
-    }
-  }, [agentTarget, reportAgentFailure]);
-
-  /**
-   * "Start new conversation": launch the same agent again in the same project
-   * on the same machine, with the exported path staged as the new session's
-   * first input. `create-agent --first-input-draft` has gxserver type that
-   * mention into the agent's own input once the provider starts and stop
-   * there — the phone never sends anything for the user.
-   */
-  const startTranscriptConversation = useCallback(async (): Promise<void> => {
-    if (exportedTranscript === null || startingTranscriptConversation) return;
-    const { machine, projectId, agentId, path } = exportedTranscript;
-    if (agentId.length === 0) return;
-    setStartingTranscriptConversation(true);
-    setExportedTranscriptError(null);
-    try {
-      const created = await runGhostexCli(
-        machine,
-        createAgentCommand(agentId, projectId, transcriptMentionDraft(path)),
-      );
-      const sessionId = createdSessionId(created);
-      if (sessionId === null) {
-        throw new Error('gxserver created the session without reporting its id.');
-      }
-      await useInventoryStore.getState().refreshMachine(machine);
-      // Creation-flow parity with Fork: the new conversation becomes the
-      // visible session instead of leaving the user on the exported one.
-      const record = useInventoryStore
-        .getState()
-        .inventoriesByMachineId[machine.id]?.summary?.sessions.find(
-          (entry) => entry.sessionId === sessionId,
-        );
-      const sessionKey = await useTerminalStore.getState().attachSession(machine, {
-        sessionId,
-        projectId,
-        title: record?.displayTitle,
-      });
-      useTerminalStore.getState().selectTab(sessionKey);
-      setStartingTranscriptConversation(false);
-      setExportedTranscript(null);
-    } catch (error) {
-      setStartingTranscriptConversation(false);
-      setExportedTranscriptError(error instanceof Error ? error.message : String(error));
-    }
-  }, [exportedTranscript, startingTranscriptConversation]);
-
-  /*
-   * CDXC:SessionChatPromptQueue 2026-08-21:
-   * The synced draft the Prompt Editor opens on, and writes back to, in chat
-   * mode. `null` while the read is still in flight (the sheet is already on
-   * screen by then, and seeds when it lands); `supported: false` is a machine
-   * whose Ghostex predates the draft endpoint, and there the sheet behaves
-   * exactly as it did before rather than writing into a verb that does not
-   * exist.
-   */
-  const [promptEditorDraft, setPromptEditorDraft] = useState<SessionChatSyncedDraft | null>(null);
-
-  const seedPromptEditorDraft = useCallback((): void => {
-    setPromptEditorDraft(null);
-    if (!chatModeActive) return;
-    const target = agentTarget();
-    if (target === null) return;
-    void readSessionChatSyncedDraft(
-      target.machine,
-      target.projectId,
-      target.session.sessionId,
-    ).then(setPromptEditorDraft);
-  }, [agentTarget, chatModeActive]);
-
-  /**
-   * Publish what the Prompt Editor is leaving behind. Only in chat mode, only
-   * on a machine that answered the seeding read, and only when the text
-   * actually changed — an unchanged draft is not worth an SSH round trip.
-   */
-  const pushPromptEditorDraft = useCallback(
-    (content: string): void => {
-      const draft = promptEditorDraft;
-      if (draft === null || !draft.supported || content === draft.content) return;
-      const target = agentTarget();
-      if (target === null) return;
-      setPromptEditorDraft({ content, supported: true });
-      void writeSessionChatSyncedDraft(
-        target.machine,
-        target.projectId,
-        target.session.sessionId,
-        content,
-      ).catch((error: unknown) => reportAgentFailure('Draft Not Saved', error));
-    },
-    [agentTarget, promptEditorDraft, reportAgentFailure],
-  );
-
-  const submitPromptEditor = useCallback(
-    async (text: string): Promise<void> => {
-      const target = agentTarget();
-      if (target === null) return;
-      setAgentOverlay({ kind: 'promptEditor', sending: true });
-      try {
-        if (chatModeActive) {
-          await sendChatMessageFromUser(text);
-          // The text left the composer, so the session's draft is empty now —
-          // the same thing sending from the chat composer does.
-          pushPromptEditorDraft('');
-        } else {
-          // No trailing newline: the prompt lands in the TUI input for the
-          // user to review and submit, matching the desktop editor's insert.
-          await GhostexNative.sendText(target.tab.sessionKey, text);
-        }
-        setAgentOverlay(AGENT_OVERLAY_NONE);
-      } catch (error) {
-        setAgentOverlay(AGENT_OVERLAY_NONE);
-        reportAgentFailure('Send Failed', error);
-      }
-    },
-    [
-      agentTarget,
-      chatModeActive,
-      pushPromptEditorDraft,
-      reportAgentFailure,
-      sendChatMessageFromUser,
-    ],
-  );
-
-  const handleUpload = useCallback(async (): Promise<void> => {
-    const store = useTerminalStore.getState();
-    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
-    if (tab === undefined || uploading) return;
-    // Chat mode has the terminal parked behind the chat surface, so the
-    // reference is sent as a message and the native terminal need not be open.
-    if (!chatModeActive && tab.state !== 'open') return;
-    setUploading(true);
-    try {
-      await pickAndSendAttachment(
-        tab.machineId,
-        tab.sessionKey,
-        chatModeActive ? sendChatMessageFromUser : undefined,
-      );
-    } catch {
-      Alert.alert('Upload Failed', undefined, [{ text: 'OK' }]);
-    } finally {
-      setUploading(false);
-    }
-  }, [chatModeActive, sendChatMessageFromUser, uploading]);
-
-  const handleNewTerminal = useCallback(async (): Promise<void> => {
-    const machineId = activeTab?.machineId ?? useMachinesStore.getState().selectedMachineId;
-    if (machineId === null || machineId === undefined) return;
-    const target = machineTargetFor(machineId);
-    if (target === null) return;
-    try {
-      // New terminals open in the folder of the session being viewed.
-      await openShellTab(target, { cwd: sessionFolderFor(activeTab) });
-    } catch {
-      // The store marks the tab failed; the state overlay surfaces it.
-    }
-  }, [activeTab, openShellTab]);
-
-  const handleRefresh = useCallback((): void => {
-    const store = useTerminalStore.getState();
-    const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
-    if (tab === undefined || tab.state !== 'open') return;
-    void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
-  }, []);
-
-  const handleMenuAction = useCallback(
-    (id: TerminalMenuActionId): void => {
-      // One menu, one dismissal point: every row closes the card before the
-      // action opens its own overlay (or leaves the screen).
-      setMenuVisible(false);
-      switch (id) {
-        case 'rename':
-          setAgentOverlay({ kind: 'rename', error: null });
-          return;
-        case 'sleep':
-          void runAgentSleep();
-          return;
-        case 'delayedActions':
-          setAgentOverlay({ kind: 'delayedSend' });
-          return;
-        case 'fork':
-          void runAgentFork();
-          return;
-        case 'fullReload':
-          void runAgentFullReload();
-          return;
-        case 'promptEditor':
-          setAgentOverlay({ kind: 'promptEditor', sending: false });
-          seedPromptEditorDraft();
-          return;
-        case 'exportTranscript':
-          void runExportTranscript();
-          return;
-        case 'searchConversation':
-          setChatSearchRequestId((current) => current + 1);
-          return;
-        case 'attachPath':
-          setAgentOverlay(AGENT_OVERLAY_NONE);
-          void handleUpload();
-          return;
-        case 'newTerminal':
-          void handleNewTerminal();
-          return;
-        case 'settings':
-          navigation.navigate('Settings');
-          return;
-        case 'disconnect':
-          if (activeTab !== null) requestCloseTab(activeTab);
-          return;
-      }
-    },
-    [
-      activeTab,
-      handleNewTerminal,
-      handleUpload,
-      navigation,
-      requestCloseTab,
-      runAgentFork,
-      runAgentFullReload,
-      runAgentSleep,
-      runExportTranscript,
-      seedPromptEditorDraft,
-    ],
-  );
+  const {
+    submitAgentRename,
+    runDelayedSend,
+    cancelDelayedSend,
+    toggleCloseAfterDone,
+    startTranscriptConversation,
+    promptEditorDraft,
+    pushPromptEditorDraft,
+    submitPromptEditor,
+    handleUpload,
+    handleRefresh,
+    handleMenuAction,
+  } = useTerminalAgentActions({
+    activeTab,
+    activeProjectId,
+    activeSession,
+    activeAgentId,
+    chatModeActive,
+    uploading,
+    setUploading,
+    setAgentOverlay,
+    setAgentProgress,
+    exportedTranscript,
+    setExportedTranscript,
+    startingTranscriptConversation,
+    setStartingTranscriptConversation,
+    setExportedTranscriptError,
+    setMenuVisible,
+    setChatSearchRequestId,
+    navigation,
+    requestCloseTab,
+    openShellTab,
+  });
 
   const uploadEnabled =
     activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
@@ -1293,48 +709,3 @@ export default function TerminalScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
-  },
-  header: {
-    height: HEADER_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
-  },
-  headerButton: {
-    width: 44,
-    height: HEADER_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  terminalArea: {
-    flex: 1,
-  },
-  terminal: {
-    flex: 1,
-  },
-  queuedPill: {
-    position: 'absolute',
-    top: 8,
-    // Clear of the 32dp left edge-swipe strip, which sits above this and would
-    // otherwise swallow taps on the pill's left edge. Non-overlapping siblings,
-    // not a z-order fight.
-    left: 40,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: SidebarPalette.DELAYED_SEND_CLOCK,
-  },
-  queuedPillPressed: {
-    opacity: 0.75,
-  },
-  queuedPillLabel: {
-    color: '#1A1A1A',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});
