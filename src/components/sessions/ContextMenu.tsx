@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SidebarPalette } from '../../theme/palette';
+import { GhostexPalette, SidebarPalette } from '../../theme/palette';
 
 /** Window-coordinate frame of the pressed button (measureInWindow). */
 export type MenuAnchor = { x: number; y: number; width: number; height: number };
@@ -30,6 +30,11 @@ type ContextMenuAction = {
   label: string;
   /** Trailing IconCheck on the currently-selected row. */
   selected?: boolean;
+  /** Selected agent rows use brighter, bolder text instead of a check. */
+  selectedPresentation?: 'check' | 'emphasis';
+  /** Optional right-aligned informational glyph. */
+  trailingIcon?: ReactElement;
+  trailingIconLabel?: string;
   /** Trailing chevron marking a submenu row. */
   submenu?: boolean;
   destructive?: boolean;
@@ -157,7 +162,12 @@ export default function ContextMenu({
               return (
                 <Pressable
                   key={item.key}
+                  accessibilityHint={item.trailingIconLabel}
                   accessibilityRole="menuitem"
+                  accessibilityState={{
+                    disabled: item.disabled === true,
+                    selected: item.selected === true,
+                  }}
                   disabled={item.disabled === true}
                   style={({ pressed }) => [
                     styles.item,
@@ -181,12 +191,18 @@ export default function ContextMenu({
                   <Text
                     style={[
                       styles.itemLabel,
+                      item.selected === true && item.selectedPresentation === 'emphasis'
+                        ? styles.itemLabelSelected
+                        : null,
                       item.destructive === true ? styles.itemLabelDanger : null,
                     ]}
                   >
                     {item.label}
                   </Text>
-                  {item.selected === true ? (
+                  {item.trailingIcon !== undefined ? (
+                    <View style={styles.itemTrailingIcon}>{item.trailingIcon}</View>
+                  ) : null}
+                  {item.selected === true && item.selectedPresentation !== 'emphasis' ? (
                     <View style={styles.itemCheck}>
                       <CheckGlyph color={SidebarPalette.FOREGROUND} />
                     </View>
@@ -274,12 +290,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  itemLabelSelected: {
+    color: GhostexPalette.FOREGROUND,
+    fontWeight: '600',
+  },
   itemLabelDanger: {
     color: SidebarPalette.MENU_DANGER,
   },
   itemCheck: {
     width: 14,
     height: 14,
+  },
+  itemTrailingIcon: {
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.58,
   },
   itemChevron: {
     color: SidebarPalette.MUTED,
