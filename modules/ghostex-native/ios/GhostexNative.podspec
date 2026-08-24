@@ -26,7 +26,7 @@ Pod::Spec.new do |s|
   # whole (a '/**/*' glob would flatten it instead). Structure matters here:
   # the page is loaded as <Bundle.main>/session-chat/index.html and pulls its
   # Shiki grammars from ./shiki/ next to it. See
-  # src/chat/SessionChatWebView.tsx and scripts/build-mobile-chat.mjs in the
+  # src/chat/SessionChatWebView.tsx and tooling/build-mobile-chat.mjs in the
   # Ghostex main repo.
   s.resources = ['Fonts/JetBrainsMonoNerdFont-Regular.ttf', 'WebAssets/session-chat']
 
