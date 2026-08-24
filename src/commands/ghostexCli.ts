@@ -214,6 +214,44 @@ export function tagSessionCommand(sessionId: string, tag: string): string {
   );
 }
 
+/*
+ * Session note ("what to do next in this thread"). gxserver keys the note by
+ * the session's agent conversation id, not by the ghostex session id, so the
+ * phone only ever names the session and lets the daemon resolve the identity —
+ * a note written here is the same note the desktop sidebar shows.
+ *
+ * `read` / `save` are always sent as explicit subactions. Without one the CLI
+ * decides from the presence of `--note`, and a note that legitimately starts
+ * with `--` must never be able to change which endpoint runs.
+ */
+
+/** Read: `ghostex session-note read --session-id <id> --project-id <id> --json`. */
+export function sessionNoteReadCommand(sessionId: string, projectId: string): string {
+  return (
+    `ghostex session-note read --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`
+  );
+}
+
+/**
+ * Save: `ghostex session-note save --session-id <id> --project-id <id>
+ * --note=<text> --json`. An EMPTY note clears it, so it is valid input and must
+ * not be filtered out. The note rides `inlineTextFlag`'s `=` form for the
+ * reason documented there: user prose can open with `--`, and multi-line notes
+ * are carried verbatim by the single-quoted shell wrapper.
+ */
+export function sessionNoteSaveCommand(
+  sessionId: string,
+  projectId: string,
+  note: string,
+): string {
+  return (
+    `ghostex session-note save --session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
+    ` --project-id ${shellQuote(requireId(projectId, 'project id'))}` +
+    ` ${inlineTextFlag('--note', note)} --json`
+  );
+}
+
 /** Full reload: `ghostex reload-session --session-id <id> --json`. */
 export function reloadSessionCommand(sessionId: string): string {
   return `ghostex reload-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;

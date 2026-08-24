@@ -15,6 +15,11 @@ export type PromptDialogProps = {
   body?: string;
   placeholder: string;
   initialValue?: string;
+  /**
+   * Multi-line body input (session notes) instead of the single-line default.
+   * Off for every existing caller, whose values are all one-line titles.
+   */
+  multiline?: boolean;
   secureTextEntry?: boolean;
   /** When set, renders a checkbox row under the input. */
   checkboxLabel?: string;
@@ -32,6 +37,7 @@ export default function PromptDialog({
   body,
   placeholder,
   initialValue = '',
+  multiline = false,
   secureTextEntry = false,
   checkboxLabel,
   initialCheckboxValue = false,
@@ -58,11 +64,13 @@ export default function PromptDialog({
           <Text style={styles.title}>{title}</Text>
           {body !== undefined && body.length > 0 ? <Text style={styles.body}>{body}</Text> : null}
           <TextInput
-            style={styles.input}
+            style={[styles.input, multiline ? styles.inputMultiline : null]}
             placeholder={placeholder}
             placeholderTextColor={GhostexPalette.MUTED}
-            autoCapitalize="none"
-            autoCorrect={false}
+            autoCapitalize={multiline ? 'sentences' : 'none'}
+            autoCorrect={multiline}
+            multiline={multiline}
+            textAlignVertical={multiline ? 'top' : 'center'}
             secureTextEntry={secureTextEntry}
             value={value}
             onChangeText={setValue}
@@ -125,6 +133,17 @@ const styles = StyleSheet.create({
     color: GhostexPalette.FOREGROUND,
     paddingHorizontal: 12,
     height: 44,
+  },
+  /*
+    A note is prose, so the box grows with it instead of scrolling one line:
+    fixed height gives way to a min/max range that still leaves the confirm row
+    on screen above the keyboard.
+  */
+  inputMultiline: {
+    height: undefined,
+    minHeight: 112,
+    maxHeight: 220,
+    paddingVertical: 10,
   },
   checkboxRow: {
     flexDirection: 'row',

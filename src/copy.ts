@@ -192,3 +192,14 @@ export const RenameCopy = {
   inputHint: 'Session title',
   emptyTitleError: 'Enter a session title.',
 } as const;
+
+/**
+ * Session note prompt copy. The body says "conversation", not "session",
+ * because that is literally what the note is attached to: it survives closing
+ * the session and resuming the same agent thread later.
+ */
+export const SessionNoteCopy = {
+  title: 'Session note',
+  body: 'Attached to this agent conversation, so it comes back when you resume it. Clear the text to remove the note.',
+  inputHint: "What's next in this thread…",
+} as const;

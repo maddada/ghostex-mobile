@@ -79,6 +79,7 @@ import {
   renameSessionCommand,
   restoreRecentProjectCommand,
   runActionCommand,
+  sessionNoteSaveCommand,
 } from '../commands/ghostexCli';
 import { stateWithCollectionTitle } from '../contract/collectionsState';
 import {
@@ -93,12 +94,13 @@ import {
   type GhostexQuickAction,
   type GhostexSession,
 } from '../contract/mobileSummary';
-import { ProgressCopy, RenameCopy, StateCardCopy } from '../copy';
+import { ProgressCopy, RenameCopy, SessionNoteCopy, StateCardCopy } from '../copy';
 import type { OptimisticInventoryChange } from '../inventory/optimistic';
 import {
   enqueueRemoteMutation,
   renameMutation,
   runSessionCommand as runSessionCommandOnMachine,
+  sessionNoteMutation,
 } from '../sessions/sessionCommands';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, selectedMachine, useMachinesStore, type MachineRecord } from '../machines/store';
@@ -479,6 +481,24 @@ export default function SessionsScreen({ navigation }: Props) {
           session.projectId.length > 0 ? session.projectId : undefined,
         ),
         { optimisticChange: renameMutation(session.sessionId, title) },
+      );
+    },
+    [runSessionCommand],
+  );
+
+  /**
+   * Save (or, with all-whitespace text, clear) the note on the session's agent
+   * conversation. An empty value is a real edit here, so unlike Rename it is
+   * submitted rather than rejected.
+   */
+  const submitSessionNote = useCallback(
+    async (ctx: SessionContext, value: string): Promise<void> => {
+      const { session } = ctx.item;
+      const note = value.trim();
+      await runSessionCommand(
+        ctx.machine,
+        sessionNoteSaveCommand(session.sessionId, session.projectId, note),
+        { optimisticChange: sessionNoteMutation(session.sessionId, note) },
       );
     },
     [runSessionCommand],
@@ -1154,6 +1174,20 @@ export default function SessionsScreen({ navigation }: Props) {
           error={overlay.error}
           confirmLabel="Rename"
           onSubmit={(value) => void submitRename(overlay.ctx, value)}
+          onCancel={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'sessionNote' ? (
+        <PromptDialog
+          visible
+          multiline
+          title={SessionNoteCopy.title}
+          body={SessionNoteCopy.body}
+          placeholder={SessionNoteCopy.inputHint}
+          initialValue={overlay.ctx.item.session.sessionNote}
+          confirmLabel="Save"
+          onSubmit={(value) => void submitSessionNote(overlay.ctx, value)}
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}

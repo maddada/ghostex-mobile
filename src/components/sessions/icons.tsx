@@ -392,6 +392,21 @@ export function SearchGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Dog-eared note page (desktop IconNote, Session note action). */
+export function NoteGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 13 20 H 7 a 2 2 0 0 1 -2 -2 V 6 a 2 2 0 0 1 2 -2 h 10 a 2 2 0 0 1 2 2 v 7 h -5 a 1 1 0 0 0 -1 1 v 6 z M 13 20 l 6 -7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** File with an out-arrow (desktop IconFileExport, Export Transcript action). */
 export function FileExportGlyph({ size, color }: GlyphProps) {
   return (

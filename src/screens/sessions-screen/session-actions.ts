@@ -40,6 +40,7 @@ export type Overlay =
   | { kind: 'sessionMenu'; ctx: SessionContext; view: 'root' | 'tags' }
   | { kind: 'sessionDetails'; ctx: SessionContext }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
+  | { kind: 'sessionNote'; ctx: SessionContext }
   | { kind: 'delayedSend'; ctx: SessionContext }
   | { kind: 'closeConfirm'; ctx: SessionContext }
   | { kind: 'copyText'; title: string; text: string }

@@ -59,6 +59,24 @@ export function tagMutation(sessionId: string, tag: string): OptimisticInventory
   };
 }
 
+/**
+ * Session note write. The saved note is trimmed by gxserver before it reaches
+ * presentation, so the optimistic row has to carry the trimmed text or the
+ * confirmation would never match the server's own answer.
+ */
+export function sessionNoteMutation(
+  sessionId: string,
+  note: string,
+): OptimisticInventoryChange {
+  const sessionNote = note.trim();
+  return {
+    kind: 'sessionPatch',
+    sessionId,
+    patch: { sessionNote },
+    confirmPatch: { sessionNote },
+  };
+}
+
 export function renameMutation(sessionId: string, title: string): OptimisticInventoryChange {
   return {
     kind: 'sessionPatch',

@@ -23,6 +23,7 @@ import {
   GitForkGlyph,
   InfoGlyph,
   MessageCircleGlyph,
+  NoteGlyph,
   PaletteGlyph,
   PencilGlyph,
   PinGlyph,
@@ -228,6 +229,21 @@ export function useSessionsScreenMenus({
         label: 'Rename',
         icon: <PencilGlyph size={14} color={menuIconColor} />,
         onPress: () => setOverlay({ kind: 'rename', ctx, error: null }),
+      });
+    }
+    /*
+      Session note (desktop sortable-session-card parity). The note is keyed by
+      the session's agent conversation id, so a session that has not started one
+      — and a session whose project the summary never named — has nothing to
+      attach a note to and does not get the item at all.
+    */
+    if (session.agentSessionId.length > 0 && session.projectId.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'session-note',
+        label: 'Session note',
+        icon: <NoteGlyph size={14} color={menuIconColor} />,
+        onPress: () => setOverlay({ kind: 'sessionNote', ctx }),
       });
     }
     items.push({

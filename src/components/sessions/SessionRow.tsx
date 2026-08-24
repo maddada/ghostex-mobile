@@ -216,6 +216,20 @@ export default function SessionRow({
         )}
       </View>
       {/*
+        Desktop parity: a session carrying a note gets a small white dot just
+        left of the leading agent icon, vertically centered on it. A SIBLING of
+        the absolutely-placed icon, never a wrapper around it, so it keeps its
+        own full opacity (the icon slot sits at 48%) and cannot move the row.
+        In-card rows put the icon only 5dp from the row edge, so the offset is
+        clamped rather than letting the dot fall outside the row and vanish.
+      */}
+      {session.sessionNote.length > 0 ? (
+        <View
+          pointerEvents="none"
+          style={[styles.noteDot, { left: Math.max(ds(1), iconLeft - ds(7)) }]}
+        />
+      ) : null}
+      {/*
         Desktop parity (plan 016 §6): prompts waiting in this session's Ghostex
         queue, as a small filled circle over the agent icon. A SIBLING of the
         absolutely-placed icon rather than a child of it, so it keeps its own
@@ -298,6 +312,15 @@ const styles = StyleSheet.create({
   },
   iconTimer: {
     opacity: 1,
+  },
+  noteDot: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -ds(2),
+    width: ds(4),
+    height: ds(4),
+    borderRadius: ds(2),
+    backgroundColor: '#FFFFFF',
   },
   queueBadge: {
     position: 'absolute',

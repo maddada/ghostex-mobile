@@ -35,6 +35,8 @@ import {
   reorderSessionChatQueueCommand,
   sendSessionChatMessageCommand,
   sendSessionChatQueuedPromptCommand,
+  sessionNoteReadCommand,
+  sessionNoteSaveCommand,
   setSessionChatDraftCommand,
   updateSessionChatQueuedPromptCommand,
   type SessionChatReadOptions,
@@ -72,6 +74,9 @@ export function isSessionChatSupportedAgent(agentId: string): boolean {
  * The `queue*` / `*QueuedPrompt` / `setDraft` entries are Ghostex's own prompt
  * queue and the cross-client composer draft (plan 016). They are NOT the agent
  * CLI's internal queue.
+ *
+ * The `sessionNote*` entries back the composer's note panel; the note itself is
+ * keyed by the session's agent conversation id on the daemon side.
  */
 const SESSION_CHAT_BRIDGE_OPS = [
   'read',
@@ -91,6 +96,8 @@ const SESSION_CHAT_BRIDGE_OPS = [
   'reorderQueue',
   'sendQueuedPrompt',
   'setDraft',
+  'sessionNoteRead',
+  'sessionNoteSave',
 ] as const;
 
 export type SessionChatBridgeOp = (typeof SESSION_CHAT_BRIDGE_OPS)[number];
@@ -620,6 +627,29 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           setSessionChatDraftCommand(sessionId, projectId, content, clientId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      /*
+       * Session note. The read answers `{ agentSessionId?, note? }` verbatim —
+       * both keys are absent when the session has no provider conversation yet,
+       * which is how the page knows to hide the control. An EMPTY note is how a
+       * note is cleared, so it is valid input on the save.
+       */
+      case 'sessionNoteRead': {
+        const result = await runGhostexCli(
+          machine,
+          sessionNoteReadCommand(sessionId, projectId),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'sessionNoteSave': {
+        const note = typeof params.note === 'string' ? params.note : '';
+        const result = await runGhostexCli(
+          machine,
+          sessionNoteSaveCommand(sessionId, projectId, note),
           { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
         );
         return { id: request.id, ok: true, result: result.json ?? {} };

@@ -50,6 +50,10 @@ export type MobileSummaryWireSession = {
   queuedPromptCount?: number;
   /** How many of those failed to deliver; absent/0 keeps the badge yellow. */
   queuedPromptFailedCount?: number;
+  /** Note attached to the session's agent conversation; absent when there is none. */
+  sessionNote?: string;
+  /** The provider resume id the note is keyed by; absent before the agent starts. */
+  agentSessionId?: string;
   isFocused?: boolean;
   isFavorite?: boolean;
   isPinned?: boolean;
@@ -228,6 +232,19 @@ export type GhostexSession = {
    * that predates the queue.
    */
   queuedPromptFailedCount: number;
+  /**
+   * Free-text note the user attached to this session's agent conversation
+   * ('' when there is none). gxserver keys it by `agentSessionId`, so the same
+   * note follows the conversation across resumes and across clients.
+   */
+  sessionNote: string;
+  /**
+   * The provider conversation id the note is keyed by ('' before the agent has
+   * started one, or on a daemon that predates the field). Non-empty is what
+   * gates the "Session note" long-press item: a session with no conversation
+   * has nothing to attach a note to.
+   */
+  agentSessionId: string;
   /** Enter is armed for every agent in the project to finish. */
   sendWhenAllProjectSessionsStopActive: boolean;
   /** Enter is armed for this agent to finish. */
@@ -769,6 +786,8 @@ export function parseSession(value: unknown): GhostexSession | null {
       Number.isFinite(value.queuedPromptFailedCount)
         ? Math.max(0, Math.floor(value.queuedPromptFailedCount))
         : 0,
+    sessionNote: trimmedValue(value, 'sessionNote'),
+    agentSessionId: trimmedValue(value, 'agentSessionId'),
     sendWhenAllProjectSessionsStopActive: boolValue(
       value,
       'sendWhenAllProjectSessionsStopActive',
