@@ -45,7 +45,10 @@ class GhostexSshAttachProcess(
     try {
       val channel = connection.openShellChannel(termType, columns, rows, cellWidthPixels, cellHeightPixels)
       if (!command.isNullOrEmpty()) {
-        val shellCommand = "exec $command\n"
+        // This is Ghostex-injected terminal input, not a command the user typed.
+        // Keep the leading space so Atuin and shells configured with ignore-space
+        // history rules do not persist attach/reconnect bootstrap commands.
+        val shellCommand = " exec $command\n"
         channel.shell.outputStream.write(shellCommand.toByteArray(StandardCharsets.UTF_8))
         channel.shell.outputStream.flush()
       }
