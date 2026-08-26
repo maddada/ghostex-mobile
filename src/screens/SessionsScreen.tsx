@@ -586,6 +586,7 @@ export default function SessionsScreen({ navigation }: Props) {
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
+    machineMenuItems,
     sectionMenuItems,
     resolvePrimaryAgent,
     launchAgent,
@@ -893,6 +894,10 @@ export default function SessionsScreen({ navigation }: Props) {
             attentionCount={item.attentionCount}
             awakeCount={item.awakeCount}
             onPress={() => collapse.toggleMachine(item.machineId)}
+            onMenu={() => {
+              if (target === null) return;
+              setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
+            }}
           />
         );
       case 'SECTION_LABEL':
@@ -1308,6 +1313,16 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
 
+      {overlay.kind === 'machineMenu' ? (
+        <ContextMenu
+          visible
+          title={machineDisplayLabel(overlay.ctx.machine)}
+          subtitle="Remote machine"
+          items={machineMenuItems(overlay.ctx.machine)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
       {overlay.kind === 'sectionMenu' ? (
         <ContextMenu
           visible
@@ -1441,4 +1456,3 @@ export default function SessionsScreen({ navigation }: Props) {
     </SafeAreaView>
   );
 }
-

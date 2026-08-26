@@ -731,13 +731,11 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   if (projectsCollapsed) return items;
 
   for (const collection of summary.projectCollections) {
-    const memberKeys = orderedProjectKeys.filter(
-      (key) =>
-        key !== CHATS_PROJECT_KEY &&
-        key.startsWith('id:') &&
-        collection.projectIds.includes(key.slice(3)) &&
-        !emittedProjectKeys.has(key),
-    );
+    const memberKeys = collection.projectIds
+      .map((projectId) => `id:${projectId}`)
+      .filter(
+        (key) => sessionsByProjectKey.has(key) && !emittedProjectKeys.has(key),
+      );
     if (memberKeys.length === 0) continue;
     const collectionSessions: GhostexSession[] = [];
     for (const key of memberKeys) {

@@ -34,6 +34,7 @@ export type ProjectContext = { machine: MachineRecord; header: ProjectHeaderItem
 
 export type CollectionContext = { machine: MachineRecord; header: CollectionHeaderItem };
 export type GroupContext = { machine: MachineRecord; item: GroupHeaderItem };
+export type MachineContext = { machine: MachineRecord };
 
 export type Overlay =
   | { kind: 'none' }
@@ -52,6 +53,7 @@ export type Overlay =
   | { kind: 'collectionMenu'; ctx: CollectionContext; view: 'root' | 'colors' }
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
   | { kind: 'groupMenu'; ctx: GroupContext }
+  | { kind: 'machineMenu'; ctx: MachineContext }
   | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects' }
   | {
       kind: 'confirmAction';

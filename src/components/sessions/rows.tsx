@@ -29,6 +29,7 @@ import {
   CaretRightGlyph,
   ChevronDownGlyph,
   ChevronRightGlyph,
+  MoreGlyph,
   PlayGlyph,
   TerminalGlyph,
   WorldGlyph,
@@ -396,7 +397,8 @@ const buttonStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// MACHINE_HEADER: muted 12dp ALL-CAPS; " …" suffix when collapsed (mobile-only
+// MACHINE_HEADER: muted 12dp ALL-CAPS; " …" suffix when collapsed, collapsed
+// status counts, and an always-visible trailing overflow button (mobile-only
 // multi-machine construct, kept from the previous drawer).
 // ---------------------------------------------------------------------------
 
@@ -407,6 +409,7 @@ export function MachineHeaderRow({
   attentionCount,
   awakeCount,
   onPress,
+  onMenu,
 }: {
   title: string;
   collapsed: boolean;
@@ -414,19 +417,32 @@ export function MachineHeaderRow({
   attentionCount: number;
   awakeCount: number;
   onPress: () => void;
+  onMenu: (anchor: MenuAnchor) => void;
 }) {
+  const rowRef = useRef<View | null>(null);
   return (
-    <Pressable accessibilityRole="button" style={machineHeaderStyles.row} onPress={onPress}>
+    <Pressable
+      ref={rowRef}
+      accessibilityRole="button"
+      style={machineHeaderStyles.row}
+      onPress={onPress}
+      onLongPress={() => measurePress(rowRef, onMenu)}
+    >
       <Text style={machineHeaderStyles.title} numberOfLines={1}>
         {`${title.toUpperCase()}${collapsed ? ' …' : ''}`}
       </Text>
-      {collapsed ? (
-        <StatusCountPills
-          workingCount={workingCount}
-          attentionCount={attentionCount}
-          awakeCount={awakeCount}
-        />
-      ) : null}
+      <View style={machineHeaderStyles.trailing}>
+        {collapsed ? (
+          <StatusCountPills
+            workingCount={workingCount}
+            attentionCount={attentionCount}
+            awakeCount={awakeCount}
+          />
+        ) : null}
+        <HeaderButton accessibilityLabel={`${title} options`} onAnchorPress={onMenu}>
+          <MoreGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
+        </HeaderButton>
+      </View>
     </Pressable>
   );
 }
@@ -447,6 +463,13 @@ const machineHeaderStyles = StyleSheet.create({
     fontWeight: '300',
     letterSpacing: 0.9,
     minWidth: 0,
+    flexShrink: 1,
+  },
+  trailing: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: ds(8),
+    marginStart: 'auto',
   },
 });
 
@@ -637,8 +660,8 @@ const collectionStyles = StyleSheet.create({
 // PROJECT_HEADER (desktop project card .group-head): flat 30dp row at the top
 // of the card — project identity icon, 15.55dp/700 title, collapsed count pills,
 // and (expanded) the desktop button cluster: Show less chevron, Actions,
-// Create Terminal, and the agent split-button. Long-press opens the project
-// menu (desktop right-click).
+// Create Terminal, and the agent split-button. The always-visible overflow
+// button and a long-press both open the project menu (desktop right-click).
 // ---------------------------------------------------------------------------
 
 export function ProjectHeaderRow({
@@ -743,6 +766,9 @@ export function ProjectHeaderRow({
             ) : null}
           </View>
         )}
+        <HeaderButton accessibilityLabel={`${title} options`} onAnchorPress={onMenu}>
+          <MoreGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
+        </HeaderButton>
       </View>
     </Pressable>
   );
@@ -842,8 +868,8 @@ const emptyStyles = StyleSheet.create({
 
 // ---------------------------------------------------------------------------
 // GROUP_HEADER (named workspace session group inside a project card): caret +
-// light muted title, "(count)" suffix when collapsed. Long-press opens the
-// group menu (desktop right-click).
+// light muted title, trailing "(count)" when collapsed, and an always-visible
+// overflow button. Long-press also opens the group menu (desktop right-click).
 // ---------------------------------------------------------------------------
 
 export function GroupHeaderRow({
@@ -873,8 +899,14 @@ export function GroupHeaderRow({
     >
       <CaretRightGlyph size={ds(12)} color={SidebarPalette.MUTED} rotated={!collapsed} />
       <Text style={groupHeaderStyles.title} numberOfLines={1}>
-        {collapsed ? `${title} (${count})` : title}
+        {title}
       </Text>
+      <View style={groupHeaderStyles.trailing}>
+        {collapsed ? <Text style={groupHeaderStyles.count}>({count})</Text> : null}
+        <HeaderButton accessibilityLabel={`${title} options`} onAnchorPress={onMenu}>
+          <MoreGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
+        </HeaderButton>
+      </View>
     </Pressable>
   );
 }
@@ -897,6 +929,19 @@ const groupHeaderStyles = StyleSheet.create({
     color: SidebarPalette.MUTED,
     fontSize: ds(13),
     fontWeight: '300',
+    letterSpacing: 0.16,
+  },
+  trailing: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: ds(6),
+    marginStart: 'auto',
+  },
+  count: {
+    color: SidebarPalette.MUTED,
+    fontSize: ds(13),
+    fontWeight: '300',
+    fontVariant: ['tabular-nums'],
     letterSpacing: 0.16,
   },
 });

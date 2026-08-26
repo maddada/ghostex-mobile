@@ -22,6 +22,7 @@ import {
   CopyGlyph,
   GitForkGlyph,
   InfoGlyph,
+  MachinesGlyph,
   MessageCircleGlyph,
   NoteGlyph,
   PaletteGlyph,
@@ -966,6 +967,51 @@ export function useSessionsScreenMenus({
     ];
   };
 
+  /** Remote-machine section menu — the mobile counterpart to desktop header actions. */
+  const machineMenuItems = (target: MachineRecord): ContextMenuItem[] => [
+    {
+      kind: 'item',
+      key: 'add-project',
+      label: 'Add Project',
+      icon: <PlusGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('AddProjectSource', { machineId: target.id });
+      },
+    },
+    {
+      kind: 'item',
+      key: 'refresh',
+      label: 'Refresh Sessions',
+      icon: <RefreshGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        void refreshMachine(target);
+      },
+    },
+    { kind: 'separator', key: 'sep-1' },
+    {
+      kind: 'item',
+      key: 'edit',
+      label: 'Edit Machine',
+      icon: <PencilGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('MachineForm', { machineId: target.id });
+      },
+    },
+    {
+      kind: 'item',
+      key: 'manage',
+      label: 'Manage Machines',
+      icon: <MachinesGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('Machines');
+      },
+    },
+  ];
+
   // Desktop agent split-button + actions button menus -----------------------
 
   const resolvePrimaryAgent = useCallback(
@@ -1117,6 +1163,7 @@ export function useSessionsScreenMenus({
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
+    machineMenuItems,
     sectionMenuItems,
     resolvePrimaryAgent,
     launchAgent,
