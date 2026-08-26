@@ -51,6 +51,10 @@ class GhostexSshConnection(
   @Volatile
   private var client: SSHClient? = null
 
+  /** Darwin's SSH server is more reliable with a streamed exec upload than SFTP. */
+  @Volatile
+  private var execUploadPreferred: Boolean? = null
+
   fun isConnected(): Boolean {
     val ssh = client ?: return false
     return ssh.isConnected && ssh.isAuthenticated
@@ -157,7 +161,10 @@ class GhostexSshConnection(
     }
   }
 
-  /** SFTP upload with 0600 permissions. Accepts `file://` URIs and plain paths. */
+  /**
+   * Upload with 0600 permissions. Darwin uses a streamed exec channel, matching the iOS
+   * transport; other hosts use SFTP. Accepts `file://` URIs and plain paths.
+   */
   fun upload(localPath: String, remotePath: String) {
     val ssh = client ?: throw notConnectedException(machineId)
     val localFile = resolveLocalFile(localPath)
@@ -165,14 +172,83 @@ class GhostexSshConnection(
       throw GhostexException(GhostexErrorCode.SFTP_FAILED, "Local file not found: $localPath")
     }
     try {
-      ssh.newSFTPClient().use { sftp ->
-        makeRemoteDirectories(sftp, remoteDirectory(remotePath))
-        sftp.put(FileSystemFile(localFile), remotePath)
-        sftp.chmod(remotePath, OWNER_READ_WRITE_PERMISSIONS)
-      }
+      if (prefersExecUpload()) uploadViaExec(ssh, localFile, remotePath)
+      else uploadViaSftp(ssh, localFile, remotePath)
     } catch (error: Exception) {
       if (error is GhostexException) throw error
       throw mapSshError(error, fallbackCode = GhostexErrorCode.SFTP_FAILED)
+    }
+  }
+
+  /** Cache the remote platform after the first upload; session identity does not change. */
+  private fun prefersExecUpload(): Boolean {
+    execUploadPreferred?.let { return it }
+    val outcome = exec("uname -s", REMOTE_PLATFORM_DETECTION_TIMEOUT_MS)
+    val preferred = outcome.exitCode == 0 && outcome.stdout.trim() == "Darwin"
+    execUploadPreferred = preferred
+    return preferred
+  }
+
+  /**
+   * Stream bytes over an exec channel on Darwin. The remote shell verifies the exact byte
+   * count before keeping the file, so a broken channel cannot leave a truncated attachment.
+   */
+  private fun uploadViaExec(ssh: SSHClient, localFile: File, remotePath: String) {
+    if (remotePath.isEmpty()) {
+      throw GhostexException(GhostexErrorCode.SFTP_FAILED, "Upload path is empty.")
+    }
+    val quotedPath = shellQuote(remotePath)
+    val expectedBytes = localFile.length()
+    val command = listOf(
+      "upload_path=$quotedPath",
+      "cleanup() { rm -f \"\$upload_path\"; }",
+      "trap cleanup EXIT HUP INT TERM",
+      "cat > \"\$upload_path\" || exit 1",
+      "actual_bytes=\$(wc -c < \"\$upload_path\" | tr -d '[:space:]')",
+      "[ \"\$actual_bytes\" = \"$expectedBytes\" ] || exit 1",
+      "chmod 600 \"\$upload_path\" || exit 1",
+      "trap - EXIT HUP INT TERM"
+    ).joinToString("\n")
+
+    ssh.startSession().use { session ->
+      val cmd = session.exec(command)
+      val stdout = StreamCollector(cmd.inputStream)
+      val stderr = StreamCollector(cmd.errorStream)
+      localFile.inputStream().use { input ->
+        cmd.outputStream.use { output -> input.copyTo(output) }
+      }
+      cmd.join(UPLOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+      stdout.await(STREAM_DRAIN_TIMEOUT_MS)
+      stderr.await(STREAM_DRAIN_TIMEOUT_MS)
+      val exitStatus = cmd.exitStatus
+        ?: throw GhostexException(
+          GhostexErrorCode.TIMEOUT,
+          "Upload did not finish within ${UPLOAD_TIMEOUT_MS}ms on $machineId."
+        )
+      if (exitStatus != 0) {
+        val detail = stderr.text().trim().takeIf { it.isNotEmpty() }
+          ?: stdout.text().trim().takeIf { it.isNotEmpty() }
+          ?: "Remote upload command exited with status $exitStatus."
+        throw GhostexException(GhostexErrorCode.SFTP_FAILED, detail)
+      }
+    }
+  }
+
+  /** SFTP upload for non-Darwin hosts; remove the reserved path if any phase fails. */
+  private fun uploadViaSftp(ssh: SSHClient, localFile: File, remotePath: String) {
+    ssh.newSFTPClient().use { sftp ->
+      try {
+        makeRemoteDirectories(sftp, remoteDirectory(remotePath))
+        sftp.put(FileSystemFile(localFile), remotePath)
+        sftp.chmod(remotePath, OWNER_READ_WRITE_PERMISSIONS)
+      } catch (error: Exception) {
+        try {
+          sftp.rm(remotePath)
+        } catch (ignored: Exception) {
+          // Preserve the transfer error; cleanup can also fail when the channel is gone.
+        }
+        throw error
+      }
     }
   }
 
@@ -262,6 +338,8 @@ class GhostexSshConnection(
   companion object {
     const val CONNECT_TIMEOUT_MS = 8_000
     const val DEFAULT_EXEC_TIMEOUT_MS = 20_000L
+    private const val REMOTE_PLATFORM_DETECTION_TIMEOUT_MS = 5_000L
+    private const val UPLOAD_TIMEOUT_MS = 120_000L
     private const val MIN_KEEP_ALIVE_INTERVAL_SECONDS = 10
     private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
@@ -279,6 +357,10 @@ class GhostexSshConnection(
       }
       return File(localPath)
     }
+
+    /** POSIX single-quote escaping for the Darwin exec-upload path. */
+    private fun shellQuote(value: String): String =
+      "'" + value.replace("'", "'\"'\"'") + "'"
 
     /**
      * Ported from the fork's GhostexSshTransport: replace Android's stale platform "BC"
