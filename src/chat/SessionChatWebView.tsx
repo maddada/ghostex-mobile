@@ -8,15 +8,19 @@
 
 import { Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Linking, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Alert, Linking, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { useInventoryStore } from '../inventory/store';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { useMachinesStore } from '../machines/store';
+import { useTerminalStore } from '../terminal/sessions';
 import {
   handoffSessionChatDraft,
   parseSessionChatBridgeNotice,
   parseSessionChatBridgeRequest,
+  releaseSessionChatDraftHandoffStash,
   runSessionChatBridgeRequest,
   type SessionChatBridgeResponse,
 } from './session-chat-bridge';
@@ -84,8 +88,6 @@ export type SessionChatWebViewProps = {
    * the host pushes it in like the desktop and web hosts do.
    */
   working: boolean;
-  /** False while the session cannot take input (asleep / not live). */
-  canSend: boolean;
   /** Keeps the page loading offscreen until chat mode is selected. */
   visible: boolean;
   /**
@@ -97,12 +99,23 @@ export type SessionChatWebViewProps = {
    */
   draftTransferRequestId?: number;
   /**
+   * Bumped by the host every time the user leaves chat mode for this session,
+   * running the same transfer the other way: whatever is in the chat composer
+   * is parked in Saved Prompts, typed into the agent CLI, and then unparked.
+   * Starts at 0, which runs nothing.
+   */
+  handoffToTerminalRequestId?: number;
+  /**
    * Bumped by the host every time the user picks Search Conversation from the
    * terminal header menu. The chat page carries no search button of its own on
    * this surface, so each new value opens its search box. Starts at 0, which
    * opens nothing.
    */
   openSearchRequestId?: number;
+  /** Bumped when native chrome asks the shared page to reveal Session Note. */
+  openSessionNoteRequestId?: number;
+  /** Bumped when native chrome asks the shared page to reveal Saved Prompts. */
+  openSavedPromptsRequestId?: number;
   /**
    * How many prompts are waiting in this session's Ghostex queue, reported by
    * the page every time one of its reads or mutations answers with the list.
@@ -125,7 +138,6 @@ export type SessionChatWebViewProps = {
 
 export default function SessionChatWebView({
   agentId,
-  canSend,
   fontFamily = '',
   machine,
   onQueueCountChange,
@@ -140,7 +152,10 @@ export default function SessionChatWebView({
   visible,
   working,
   draftTransferRequestId = 0,
+  handoffToTerminalRequestId = 0,
   openSearchRequestId = 0,
+  openSessionNoteRequestId = 0,
+  openSavedPromptsRequestId = 0,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
   const baseUri = chatBundleBaseUri();
@@ -151,6 +166,8 @@ export default function SessionChatWebView({
       `window.__ghostexMobileChatConfig = ${injectableJson({
         agentId,
         fontFamily,
+        projectId,
+        sessionId,
         sessionKey: `${machine.id}:${projectId}:${sessionId}`,
         theme,
         transcriptWidthPercent,
@@ -166,8 +183,8 @@ export default function SessionChatWebView({
    * the page was ready, and state changing afterwards) without either push
    * being dropped.
    */
-  const hostStateRef = useRef({ canSend, working });
-  hostStateRef.current = { canSend, working };
+  const hostStateRef = useRef({ working });
+  hostStateRef.current = { working };
   const pushHostState = useCallback((): void => {
     webviewRef.current?.injectJavaScript(
       'window.ghostexMobileChatSetHostState && window.ghostexMobileChatSetHostState(' +
@@ -177,7 +194,7 @@ export default function SessionChatWebView({
 
   useEffect(() => {
     pushHostState();
-  }, [canSend, working, pushHostState]);
+  }, [working, pushHostState]);
 
   const presentationRef = useRef({ fontFamily, theme, transcriptWidthPercent, verboseMode });
   presentationRef.current = { fontFamily, theme, transcriptWidthPercent, verboseMode };
@@ -224,6 +241,22 @@ export default function SessionChatWebView({
     };
   }, [draftTransferRequestId, machine, projectId, sessionId]);
 
+  /*
+   * Chat → terminal draft transfer. The page has to make the draft durable
+   * before it can let go of it, so this only asks; the text comes back later as
+   * the `draftHandoffToTerminal` notice handled in handleMessage below, and a
+   * composer that held nothing answers with no notice at all.
+   */
+  const handledHandoffToTerminalRef = useRef(handoffToTerminalRequestId);
+  useEffect(() => {
+    if (handoffToTerminalRequestId === handledHandoffToTerminalRef.current) return;
+    handledHandoffToTerminalRef.current = handoffToTerminalRequestId;
+    if (handoffToTerminalRequestId <= 0) return;
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatHandoffToTerminal && window.ghostexMobileChatHandoffToTerminal(); true;',
+    );
+  }, [handoffToTerminalRequestId]);
+
   // `ghostexMobileChatOpenSearch` is installed by the page's bundle script,
   // before load-end, and the page holds a request that lands before its search
   // box mounts, so this needs no readiness handshake of its own.
@@ -237,18 +270,87 @@ export default function SessionChatWebView({
     );
   }, [openSearchRequestId]);
 
+  const handledSessionNoteRequestRef = useRef(openSessionNoteRequestId);
+  useEffect(() => {
+    if (openSessionNoteRequestId === handledSessionNoteRequestRef.current) return;
+    handledSessionNoteRequestRef.current = openSessionNoteRequestId;
+    if (openSessionNoteRequestId <= 0) return;
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatOpenSessionNote && window.ghostexMobileChatOpenSessionNote(); true;',
+    );
+  }, [openSessionNoteRequestId]);
+
+  const handledSavedPromptsRequestRef = useRef(openSavedPromptsRequestId);
+  useEffect(() => {
+    if (openSavedPromptsRequestId === handledSavedPromptsRequestRef.current) return;
+    handledSavedPromptsRequestRef.current = openSavedPromptsRequestId;
+    if (openSavedPromptsRequestId <= 0) return;
+    webviewRef.current?.injectJavaScript(
+      'window.ghostexMobileChatOpenSavedPrompts && window.ghostexMobileChatOpenSavedPrompts(); true;',
+    );
+  }, [openSavedPromptsRequestId]);
+
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
       `window.ghostexMobileChatDeliver && window.ghostexMobileChatDeliver(${injectableJson(response)}); true;`,
     );
   }, []);
 
+  const focusSavedPromptSession = useCallback(
+    async (params: Record<string, unknown>): Promise<void> => {
+      const machineRecord = useMachinesStore.getState().machines.find(
+        (entry) => entry.id === machine.id,
+      );
+      if (machineRecord !== undefined) {
+        await useInventoryStore.getState().refreshMachine(machineRecord);
+      }
+      const agentSessionId =
+        typeof params.agentSessionId === 'string' ? params.agentSessionId.trim() : '';
+      const targetProjectId =
+        typeof params.projectId === 'string' ? params.projectId.trim() : '';
+      const targetSessionId =
+        typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
+      const sessions =
+        useInventoryStore.getState().inventoriesByMachineId[machine.id]?.summary?.sessions ?? [];
+      const target = sessions.find(
+        (candidate) =>
+          (agentSessionId.length > 0 && candidate.agentSessionId === agentSessionId) ||
+          (targetSessionId.length > 0 &&
+            candidate.sessionId === targetSessionId &&
+            (targetProjectId.length === 0 || candidate.projectId === targetProjectId)),
+      );
+      if (target === undefined) {
+        throw new Error('That saved prompt’s session is no longer available on this machine.');
+      }
+      const sessionKey = await useTerminalStore.getState().attachSession(machine, {
+        projectId: target.projectId || undefined,
+        sessionId: target.sessionId,
+        title: target.displayTitle,
+      });
+      useTerminalStore.getState().selectTab(sessionKey);
+    },
+    [machine],
+  );
+
   const handleMessage = useCallback(
     (event: WebViewMessageEvent): void => {
       // Id-less notices first: they carry no request to answer.
       const notice = parseSessionChatBridgeNotice(event.nativeEvent.data);
       if (notice !== null) {
-        onQueueCountChange?.(notice.count);
+        if (notice.notice === 'queueCount') {
+          onQueueCountChange?.(notice.count);
+          return;
+        }
+        // The handed-off draft. No trailing newline: it lands in the agent
+        // CLI's input for the user to review and submit, like the Prompt
+        // Editor's insert. Its Saved Prompts row is dropped only once the
+        // terminal has taken the text, so a refused send stays recoverable.
+        const { content, promptId } = notice;
+        void GhostexNative.sendText(terminalSessionKey, content)
+          .then(() => {
+            if (promptId !== undefined) void releaseSessionChatDraftHandoffStash(machine, promptId);
+          })
+          .catch(() => undefined);
         return;
       }
       const request = parseSessionChatBridgeRequest(event.nativeEvent.data);
@@ -283,10 +385,21 @@ export default function SessionChatWebView({
           );
         return;
       }
+      if (request.op === 'jumpToSavedPromptSession') {
+        void focusSavedPromptSession(request.params ?? {})
+          .then(() => deliver({ id: request.id, ok: true, result: { focused: true } }))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            Alert.alert('Saved Prompt Session', message, [{ text: 'OK' }]);
+            deliver({ id: request.id, ok: false, error: message });
+          });
+        return;
+      }
       void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then(deliver);
     },
     [
       deliver,
+      focusSavedPromptSession,
       machine,
       onQueueCountChange,
       onSwitchToTerminalForAgentPicker,

@@ -33,12 +33,14 @@ import {
   readSessionChatSkillsCommand,
   removeSessionChatQueuedPromptCommand,
   reorderSessionChatQueueCommand,
+  savedPromptsCommand,
   sendSessionChatMessageCommand,
   sendSessionChatQueuedPromptCommand,
   sessionNoteReadCommand,
   sessionNoteSaveCommand,
   setSessionChatDraftCommand,
   updateSessionChatQueuedPromptCommand,
+  type SavedPromptsAction,
   type SessionChatReadOptions,
 } from '../commands/ghostexCli';
 import { runGhostexCli } from '../components/sessions/cli';
@@ -98,6 +100,8 @@ const SESSION_CHAT_BRIDGE_OPS = [
   'setDraft',
   'sessionNoteRead',
   'sessionNoteSave',
+  'savedPrompts',
+  'jumpToSavedPromptSession',
 ] as const;
 
 export type SessionChatBridgeOp = (typeof SESSION_CHAT_BRIDGE_OPS)[number];
@@ -109,14 +113,21 @@ export type SessionChatBridgeRequest = {
 };
 
 /**
- * Host notice: an unsolicited page → RN message with no request id.
+ * Host notices: unsolicited page → RN messages with no request id.
  *
- * The queue lives on gxserver and the page already long-polls for it, so the
- * app chrome (the terminal view's "Queued: N" button) learns the count from
- * the page that is already mounted for that session instead of opening a
- * second polling channel of its own.
+ * `queueCount`: the queue lives on gxserver and the page already long-polls
+ * for it, so the app chrome (the terminal view's "Queued: N" button) learns the
+ * count from the page that is already mounted for that session instead of
+ * opening a second polling channel of its own.
+ *
+ * `draftHandoffToTerminal`: the answer to a host-initiated chat → terminal
+ * draft handoff. The page has already parked `content` in Saved Prompts as
+ * `promptId` before releasing it, so the host types it into the agent CLI and
+ * drops that row only once the terminal has taken it.
  */
-export type SessionChatBridgeNotice = { notice: 'queueCount'; count: number };
+export type SessionChatBridgeNotice =
+  | { notice: 'queueCount'; count: number }
+  | { notice: 'draftHandoffToTerminal'; content: string; promptId?: string };
 
 export type SessionChatBridgeResponse = {
   id: number;
@@ -175,10 +186,23 @@ export function parseSessionChatBridgeNotice(raw: string): SessionChatBridgeNoti
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
   const record = parsed as Record<string, unknown>;
-  if (record.notice !== 'queueCount') return null;
-  const count = record.count;
-  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) return null;
-  return { notice: 'queueCount', count: Math.floor(count) };
+  if (record.notice === 'queueCount') {
+    const count = record.count;
+    if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) return null;
+    return { notice: 'queueCount', count: Math.floor(count) };
+  }
+  if (record.notice === 'draftHandoffToTerminal') {
+    const content = record.content;
+    // The page never announces an empty handoff: nothing moved out of chat.
+    if (typeof content !== 'string' || content.length === 0) return null;
+    const promptId = record.promptId;
+    return {
+      notice: 'draftHandoffToTerminal',
+      content,
+      ...(typeof promptId === 'string' && promptId.length > 0 ? { promptId } : {}),
+    };
+  }
+  return null;
 }
 
 function numberParam(params: Record<string, unknown>, key: string): number | undefined {
@@ -348,6 +372,27 @@ export async function handoffSessionChatDraft(
   }
 }
 
+/**
+ * Drop the Saved Prompts row a chat → terminal handoff parked its draft in.
+ * Called only once the agent CLI has actually taken the text, so a row that
+ * outlives its handoff is the user's copy of a prompt that never landed.
+ *
+ * Host-initiated like the handoff above, and silent for the same reason: the
+ * user asked to see the terminal, not to tidy up Saved Prompts.
+ */
+export async function releaseSessionChatDraftHandoffStash(
+  machine: MachineConnectionTarget,
+  promptId: string,
+): Promise<void> {
+  try {
+    await runGhostexCli(machine, savedPromptsCommand('delete', { promptId }), {
+      timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+    });
+  } catch {
+    // The row stays in Saved Prompts, which is where the text is recoverable.
+  }
+}
+
 /*
  * ---------------------------------------------------------------------------
  * Synced composer draft, for the app's own chrome
@@ -504,7 +549,8 @@ export async function runSessionChatBridgeRequest(
         return { id: request.id, ok: true, result: { queued: true } };
       }
       case 'sendKey':
-      case 'switchToTerminalForAgentPicker': {
+      case 'switchToTerminalForAgentPicker':
+      case 'jumpToSavedPromptSession': {
         return {
           id: request.id,
           ok: false,
@@ -650,6 +696,30 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           sessionNoteSaveCommand(sessionId, projectId, note),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'savedPrompts': {
+        const action = stringParam(params, 'action');
+        const supportedActions: readonly SavedPromptsAction[] = [
+          'list',
+          'save',
+          'delete',
+          'save-tag',
+          'delete-tag',
+          'set-tags',
+        ];
+        if (action === undefined || !supportedActions.includes(action as SavedPromptsAction)) {
+          return { id: request.id, ok: false, error: 'Unknown Saved Prompts action.' };
+        }
+        const payload =
+          typeof params.payload === 'object' && params.payload !== null && !Array.isArray(params.payload)
+            ? (params.payload as Record<string, unknown>)
+            : {};
+        const result = await runGhostexCli(
+          machine,
+          savedPromptsCommand(action as SavedPromptsAction, payload),
           { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
         );
         return { id: request.id, ok: true, result: result.json ?? {} };

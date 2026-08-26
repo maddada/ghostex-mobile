@@ -715,6 +715,26 @@ export function exportSessionTranscriptCommand(sessionId: string, projectId: str
   return `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)} --json`;
 }
 
+export type SavedPromptsAction =
+  | 'list'
+  | 'save'
+  | 'delete'
+  | 'save-tag'
+  | 'delete-tag'
+  | 'set-tags';
+
+/**
+ * Daemon-owned Saved Prompts RPC over the mobile SSH transport. The action is
+ * an allowlisted CLI subcommand and the payload is the desktop modal's exact
+ * JSON contract, so the React view stays shared between hosts.
+ */
+export function savedPromptsCommand(
+  action: SavedPromptsAction,
+  payload: Record<string, unknown>,
+): string {
+  return `ghostex saved-prompts ${action} --payload-json ${shellQuote(JSON.stringify(payload))} --json`;
+}
+
 /*
  * Find (the GUI for `gx f`) over SSH. Prompt history lives on the machine that
  * ran the agent, so the phone reaches it through the same verb-runner pattern
