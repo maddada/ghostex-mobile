@@ -20,6 +20,7 @@ import {
   delayedSendCommand,
   exportSessionTranscriptCommand,
   forkSessionCommand,
+  killSessionCommand,
   reloadSessionCommand,
   requestSessionRenameCommand,
   sendSessionChatMessageCommand,
@@ -512,6 +513,39 @@ export function useTerminalAgentActions({
     void GhostexNative.refreshTerminalViewport(tab.sessionKey).catch(() => undefined);
   }, []);
 
+  const requestKillSession = useCallback((): void => {
+    if (activeTab === null || activeSession === null) return;
+    const machine = machineRecordFor(activeTab.machineId);
+    if (machine === null) return;
+    const session = activeSession;
+    const projectId = session.projectId.length > 0 ? session.projectId : undefined;
+    const title =
+      session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
+    Alert.alert(
+      'Kill Session?',
+      `This permanently ends "${title}" on the connected machine.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Kill Session',
+          style: 'destructive',
+          onPress: () => {
+            void runSessionCommand(
+              machine,
+              killSessionCommand(session.sessionId, projectId),
+              {
+                closeWarmSessionId: session.sessionId,
+                optimisticChange: { kind: 'sessionClose', sessionId: session.sessionId },
+                onError: (message) =>
+                  Alert.alert('Kill Session Failed', message, [{ text: 'OK' }]),
+              },
+            );
+          },
+        },
+      ],
+    );
+  }, [activeSession, activeTab]);
+
   const handleMenuAction = useCallback(
     (id: TerminalMenuActionId): void => {
       // One menu, one dismissal point: every row closes the card before the
@@ -556,6 +590,9 @@ export function useTerminalAgentActions({
         case 'disconnect':
           if (activeTab !== null) requestCloseTab(activeTab);
           return;
+        case 'killSession':
+          requestKillSession();
+          return;
       }
     },
     [
@@ -564,6 +601,7 @@ export function useTerminalAgentActions({
       handleUpload,
       navigation,
       requestCloseTab,
+      requestKillSession,
       runAgentFork,
       runAgentFullReload,
       runAgentSleep,

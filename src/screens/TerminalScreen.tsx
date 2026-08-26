@@ -88,6 +88,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
   // Each pick of the menu's Search Conversation row opens the chat page's own
   // search box; the page has no search button of its own on this surface.
   const [chatSearchRequestId, setChatSearchRequestId] = useState(0);
+  const [chatSessionNoteRequestId, setChatSessionNoteRequestId] = useState(0);
+  const [chatSavedPromptsRequestId, setChatSavedPromptsRequestId] = useState(0);
   const [agentOverlay, setAgentOverlay] = useState<AgentOverlay>(AGENT_OVERLAY_NONE);
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [exportedTranscript, setExportedTranscript] = useState<ExportedTranscript | null>(null);
@@ -148,6 +150,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * Runtime-only: a transfer is a response to one switch, never a stored fact.
    */
   const [chatDraftTransferIds, setChatDraftTransferIds] = useState<Record<string, number>>({});
+
+  /*
+   * Chat → terminal draft transfer counter, per session key, and the exact
+   * mirror of the one above: leaving chat bumps the session's entry, which
+   * tells its chat page to park whatever is in the composer and hand it back
+   * for the agent CLI. Runtime-only for the same reason.
+   */
+  const [handoffToTerminalIds, setHandoffToTerminalIds] = useState<Record<string, number>>({});
 
   /*
    * CDXC:SessionChatPromptQueue 2026-08-21:
@@ -315,6 +325,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
         ...current,
         [sessionKey]: (current[sessionKey] ?? 0) + 1,
       }));
+    } else {
+      // Same rule, other direction: anything half-typed in the chat composer
+      // belongs to the agent CLI the user is moving to.
+      setHandoffToTerminalIds((current) => ({
+        ...current,
+        [sessionKey]: (current[sessionKey] ?? 0) + 1,
+      }));
     }
     store.toggleChatMode(sessionKey);
   }, [dismissKeyboard]);
@@ -419,6 +436,25 @@ export default function TerminalScreen({ navigation, route }: Props) {
     requestCloseTab,
     openShellTab,
   });
+
+  const handleTerminalMenuAction = useCallback(
+    (id: Parameters<typeof handleMenuAction>[0]): void => {
+      if (id === 'sessionNote' || id === 'savedPrompts') {
+        setMenuVisible(false);
+        if (!chatModeActive) {
+          toggleChatView();
+        }
+        if (id === 'sessionNote') {
+          setChatSessionNoteRequestId((current) => current + 1);
+        } else {
+          setChatSavedPromptsRequestId((current) => current + 1);
+        }
+        return;
+      }
+      handleMenuAction(id);
+    },
+    [chatModeActive, handleMenuAction, toggleChatView],
+  );
 
   const uploadEnabled =
     activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
@@ -525,13 +561,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
             theme={settings.sessionChatTheme}
             transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
             verboseMode={settings.sessionChatVerboseMode}
-            // The page cannot see the session's live state; the 5s inventory
-            // poll is the phone's equivalent of the desktop hosts' record.
+            // The page cannot see live activity; the inventory poll supplies
+            // that hint without acting as an input-availability lock.
             working={activeSession?.activity === 'working'}
-            canSend={activeSession !== null && activeSession.isLive && !activeSession.isSleeping}
             visible={chatModeActive}
             draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
+            handoffToTerminalRequestId={handoffToTerminalIds[activeTab.sessionKey] ?? 0}
             openSearchRequestId={chatSearchRequestId}
+            openSessionNoteRequestId={chatSessionNoteRequestId}
+            openSavedPromptsRequestId={chatSavedPromptsRequestId}
             onQueueCountChange={handleChatQueueCount}
             style={styles.terminal}
           />
@@ -628,10 +666,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
         // gxserver only parses the transcripts of the agents the chat view
         // supports, so anything else would only ever get `unsupportedAgent`.
         exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
+        sessionNoteEnabled={chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
+        savedPromptsEnabled={chatCapable}
         searchConversationEnabled={chatModeActive}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
-        onSelect={handleMenuAction}
+        killSessionEnabled={activeTab !== null && activeSession !== null}
+        onSelect={handleTerminalMenuAction}
         onClose={() => setMenuVisible(false)}
       />
 
@@ -708,4 +749,3 @@ export default function TerminalScreen({ navigation, route }: Props) {
     </View>
   );
 }
-

@@ -3,13 +3,12 @@
  * separate trailing buttons: the Agent Actions menu (the phone's copy of the
  * desktop terminal-overlay action strip and the shared chat view's "Agent
  * Actions" cluster — same ids and same order: rename, sleep, delayedActions,
- * fork, fullReload, promptEditor, exportTranscript) and the screen's overflow
- * menu (search conversation, attach, new terminal, settings, disconnect).
+ * fork, fullReload, promptEditor, Session Note, Saved Prompts,
+ * exportTranscript) and the screen's overflow menu (search conversation,
+ * attach, new terminal, settings, disconnect, kill session).
  *
  * The Agent Actions section is present only for a resolved gxserver session;
- * the screen section is always present, so shell tabs still get the menu. The
- * two Stash Prompt entries stay desktop-only because gxserver exposes no CLI
- * verb for them, and the phone reaches gxserver over SSH only.
+ * the screen section is always present, so shell tabs still get the menu.
  *
  * Presentation reuses the sessions-drawer ContextMenu so this menu looks and
  * behaves exactly like the session context menu one screen back.
@@ -17,16 +16,19 @@
 
 import ContextMenu, { type ContextMenuItem } from '../sessions/ContextMenu';
 import {
+  AxeGlyph,
   ClockGlyph,
   ExitGlyph,
   FileExportGlyph,
   GitForkGlyph,
+  NoteGlyph,
   PencilGlyph,
   PlayGlyph,
   RefreshGlyph,
   SearchGlyph,
   SettingsGlyph,
   SleepGlyph,
+  StackPushGlyph,
   TerminalGlyph,
 } from '../sessions/icons';
 import { PaperclipIcon, PencilIcon } from './icons';
@@ -39,12 +41,15 @@ export type TerminalMenuActionId =
   | 'fork'
   | 'fullReload'
   | 'promptEditor'
+  | 'sessionNote'
+  | 'savedPrompts'
   | 'exportTranscript'
   | 'searchConversation'
   | 'attachPath'
   | 'newTerminal'
   | 'settings'
-  | 'disconnect';
+  | 'disconnect'
+  | 'killSession';
 
 export type TerminalMenuProps = {
   visible: boolean;
@@ -58,12 +63,18 @@ export type TerminalMenuProps = {
   forkEnabled: boolean;
   /** gxserver can only export transcripts of the agents it can decode. */
   exportTranscriptEnabled: boolean;
+  /** Session Note needs a provider conversation and the shared chat page. */
+  sessionNoteEnabled: boolean;
+  /** Saved Prompts is hosted by the shared chat page. */
+  savedPromptsEnabled: boolean;
   /** Searching the transcript only means anything while chat mode is showing. */
   searchConversationEnabled: boolean;
   /** Attach needs an open terminal (or, in chat mode, a chat-capable session). */
   attachEnabled: boolean;
   /** Disconnect needs a tab to close. */
   disconnectEnabled: boolean;
+  /** Kill Session needs a resolved gxserver session identity. */
+  killSessionEnabled: boolean;
   onSelect: (id: TerminalMenuActionId) => void;
   onClose: () => void;
 };
@@ -77,9 +88,12 @@ export default function TerminalMenu({
   sleeping,
   forkEnabled,
   exportTranscriptEnabled,
+  sessionNoteEnabled,
+  savedPromptsEnabled,
   searchConversationEnabled,
   attachEnabled,
   disconnectEnabled,
+  killSessionEnabled,
   onSelect,
   onClose,
 }: TerminalMenuProps) {
@@ -140,6 +154,24 @@ export default function TerminalMenu({
         onPress: () => onSelect('promptEditor'),
       },
     );
+    if (sessionNoteEnabled) {
+      items.push({
+        kind: 'item',
+        key: 'sessionNote',
+        label: 'Session Note',
+        icon: <NoteGlyph size={ICON_SIZE} color={iconColor} />,
+        onPress: () => onSelect('sessionNote'),
+      });
+    }
+    if (savedPromptsEnabled) {
+      items.push({
+        kind: 'item',
+        key: 'savedPrompts',
+        label: 'Saved Prompts',
+        icon: <StackPushGlyph size={ICON_SIZE} color={iconColor} />,
+        onPress: () => onSelect('savedPrompts'),
+      });
+    }
     if (exportTranscriptEnabled) {
       items.push({
         kind: 'item',
@@ -196,6 +228,17 @@ export default function TerminalMenu({
       onPress: () => onSelect('disconnect'),
     },
   );
+
+  if (killSessionEnabled) {
+    items.push({
+      kind: 'item',
+      key: 'killSession',
+      label: 'Kill Session',
+      icon: <AxeGlyph size={ICON_SIZE} color={GhostexPalette.DANGER} />,
+      destructive: true,
+      onPress: () => onSelect('killSession'),
+    });
+  }
 
   return <ContextMenu visible={visible} title={sessionTitle} items={items} onClose={onClose} />;
 }
