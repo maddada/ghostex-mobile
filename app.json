@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ghostex",
     "slug": "ghostex-mobile",
-    "version": "8.0.0",
+    "version": "8.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -22,12 +22,8 @@
       "infoPlist": {
         "UIUserInterfaceStyle": "Dark",
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": [
-          "tailscale"
-        ],
-        "UIAppFonts": [
-          "JetBrainsMonoNerdFont-Regular.ttf"
-        ]
+        "LSApplicationQueriesSchemes": ["tailscale"],
+        "UIAppFonts": ["JetBrainsMonoNerdFont-Regular.ttf"]
       }
     },
     "android": {
