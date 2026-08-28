@@ -22,6 +22,8 @@ const SETTINGS_STORAGE_KEY = 'settings.v1';
 
 export type BellBehavior = 'vibrate' | 'beep' | 'ignore';
 export type SessionChatTheme = 'dark' | 'light';
+/** Same value space as the desktop app's global Default Agent View setting. */
+export type PreferredAgentInterface = 'terminal' | 'chat';
 
 export type GhostexSettings = {
   // Terminal behavior (legacy Android row order).
@@ -53,6 +55,11 @@ export type GhostexSettings = {
   sidebarGroupsOpacityPercent: number;
   /** Opacity percentage for sidebar project-card backgrounds and borders. */
   sidebarProjectsOpacityPercent: number;
+  /**
+   * Which view chat-capable agent sessions open in when the user has not
+   * flipped that session's own toggle yet (desktop-parity Default Agent View).
+   */
+  preferredAgentInterface: PreferredAgentInterface;
   /** Theme for chat content only; the surrounding mobile app remains dark. */
   sessionChatTheme: SessionChatTheme;
   /** CSS font-family used by chat messages and the prompt composer. */
@@ -128,6 +135,7 @@ export function defaultSettings(): GhostexSettings {
     sidebarBackgroundTint: DEFAULT_SIDEBAR_BACKGROUND_TINT,
     sidebarGroupsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
     sidebarProjectsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
+    preferredAgentInterface: 'chat',
     sessionChatTheme: 'dark',
     sessionChatFontFamily: '',
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
@@ -203,6 +211,10 @@ function sanitizeSettings(value: unknown): GhostexSettings {
           defaults.sidebarProjectsOpacityPercent,
         )
       : defaults.sidebarProjectsOpacityPercent;
+  const preferredAgentInterface =
+    record.preferredAgentInterface === 'terminal' || record.preferredAgentInterface === 'chat'
+      ? record.preferredAgentInterface
+      : defaults.preferredAgentInterface;
   const sessionChatTheme =
     record.sessionChatTheme === 'dark' || record.sessionChatTheme === 'light'
       ? record.sessionChatTheme
@@ -237,6 +249,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sidebarBackgroundTint,
     sidebarGroupsOpacityPercent,
     sidebarProjectsOpacityPercent,
+    preferredAgentInterface,
     sessionChatTheme,
     sessionChatFontFamily,
     sessionChatTranscriptWidthPercent,

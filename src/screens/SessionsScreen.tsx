@@ -321,10 +321,21 @@ export default function SessionsScreen({ navigation }: Props) {
   const attachInChatMode = useCallback(
     async (target: MachineRecord, session: GhostexSession): Promise<void> => {
       const sessionKey = attachSessionKey(target.id, session.sessionId);
-      const terminal = useTerminalStore.getState();
-      if (!terminal.chatModeSessionKeys.includes(sessionKey)) {
-        terminal.toggleChatMode(sessionKey);
-      }
+      useTerminalStore.getState().setSessionViewMode(sessionKey, 'chat');
+      await attach(target, session);
+    },
+    [attach],
+  );
+
+  /**
+   * Open a session straight onto its terminal. Pins the tab's explicit
+   * terminal choice so a chat-first Default Agent View cannot override the
+   * menu's Attach action.
+   */
+  const attachInTerminalMode = useCallback(
+    async (target: MachineRecord, session: GhostexSession): Promise<void> => {
+      const sessionKey = attachSessionKey(target.id, session.sessionId);
+      useTerminalStore.getState().setSessionViewMode(sessionKey, 'terminal');
       await attach(target, session);
     },
     [attach],
@@ -599,8 +610,8 @@ export default function SessionsScreen({ navigation }: Props) {
     lastActionByProject,
     navigation,
     primaryAgentId,
-    attach,
     attachInChatMode,
+    attachInTerminalMode,
     refreshAll,
     refreshMachine,
     runBulkSessionActions,

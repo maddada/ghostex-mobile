@@ -18,7 +18,7 @@ import { attachCommand, loginShellCommand, shellQuote } from '../commands/ghoste
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
-import { useSettingsStore } from '../settings/store';
+import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
 
 export const MAX_WARM_SESSIONS = 7;
 /**
@@ -27,7 +27,9 @@ export const MAX_WARM_SESSIONS = 7;
 export const ATTACH_VIEWPORT_REFRESH_DELAY_MS = 2000;
 
 const FONT_SIZES_STORAGE_KEY = 'terminal.fontSizes.v1';
-const CHAT_MODE_STORAGE_KEY = 'terminal.chatMode.v1';
+const SESSION_VIEW_MODES_STORAGE_KEY = 'terminal.sessionViewModes.v1';
+/** Pre-Default-Agent-View persistence: a plain array of chat-mode session keys. */
+const LEGACY_CHAT_MODE_STORAGE_KEY = 'terminal.chatMode.v1';
 
 export type TerminalTabKind = 'attach' | 'shell';
 export type TerminalTabState = 'opening' | 'open' | 'closed' | 'failed';
@@ -105,13 +107,15 @@ type TerminalState = {
   /** Per-session font size overrides, persisted. */
   fontSizeBySessionKey: Record<string, number>;
   /**
-   * Tabs currently showing the Session Chat surface instead of the terminal.
-   * Per tab by design: toggling one tab never affects the others. Persisted:
-   * a session reopened after a restart (or after its tab was closed) comes
-   * back in whichever view it last used. Attach-tab keys are stable
-   * `${machineId}:${sessionId}`, so entries survive restarts correctly.
+   * Per-tab chat/terminal view choice. Desktop-parity inherit semantics: a
+   * session the user never flipped has no entry and follows the global
+   * `preferredAgentInterface` setting (including later changes to it); an
+   * explicit flip is persisted, so a session reopened after a restart (or
+   * after its tab was closed) comes back in whichever view it last used.
+   * Attach-tab keys are stable `${machineId}:${sessionId}`, so entries
+   * survive restarts correctly.
    */
-  chatModeSessionKeys: string[];
+  sessionViewModeBySessionKey: Record<string, PreferredAgentInterface>;
 
   hydrate: () => Promise<void>;
   /** Open (or re-select) an attach tab for a remote Ghostex session. */
@@ -137,6 +141,13 @@ type TerminalState = {
   setFontSizeForSession: (sessionKey: string, size: number) => void;
   /** Drop all pinch-zoom overrides and re-apply the global default everywhere. */
   clearFontSizeOverrides: () => void;
+  /**
+   * Effective view for one tab: its explicit choice when it has one,
+   * otherwise the global Default Agent View setting.
+   */
+  chatModeArmed: (sessionKey: string) => boolean;
+  /** Pin one tab to an explicit chat or terminal view. */
+  setSessionViewMode: (sessionKey: string, mode: PreferredAgentInterface) => void;
   /** Flip one tab between terminal and Session Chat view. */
   toggleChatMode: (sessionKey: string) => void;
 };
@@ -148,6 +159,11 @@ function isFontSizeMap(value: unknown): value is Record<string, number> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isSessionViewModeMap(value: unknown): value is Record<string, PreferredAgentInterface> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every((entry) => entry === 'terminal' || entry === 'chat');
 }
 
 export const useTerminalStore = create<TerminalState>()((set, get) => {
@@ -225,7 +241,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     selectedSessionKey: null,
     warmOrder: [],
     fontSizeBySessionKey: {},
-    chatModeSessionKeys: [],
+    sessionViewModeBySessionKey: {},
 
     hydrate: async () => {
       if (get().hydrated) return;
@@ -239,17 +255,32 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       } catch {
         // Corrupt persisted sizes fall back to the global default.
       }
-      let chatModeSessionKeys: string[] = [];
+      let sessionViewModeBySessionKey: Record<string, PreferredAgentInterface> = {};
       try {
-        const raw = await AsyncStorage.getItem(CHAT_MODE_STORAGE_KEY);
+        const raw = await AsyncStorage.getItem(SESSION_VIEW_MODES_STORAGE_KEY);
         if (raw !== null) {
           const parsed: unknown = JSON.parse(raw);
-          if (isStringArray(parsed)) chatModeSessionKeys = parsed;
+          if (isSessionViewModeMap(parsed)) sessionViewModeBySessionKey = parsed;
+        } else {
+          // One-time migration: sessions the user had switched to chat under
+          // the old array format keep chat as their explicit choice.
+          const legacyRaw = await AsyncStorage.getItem(LEGACY_CHAT_MODE_STORAGE_KEY);
+          if (legacyRaw !== null) {
+            const legacy: unknown = JSON.parse(legacyRaw);
+            if (isStringArray(legacy)) {
+              for (const sessionKey of legacy) sessionViewModeBySessionKey[sessionKey] = 'chat';
+            }
+            await AsyncStorage.setItem(
+              SESSION_VIEW_MODES_STORAGE_KEY,
+              JSON.stringify(sessionViewModeBySessionKey),
+            );
+            await AsyncStorage.removeItem(LEGACY_CHAT_MODE_STORAGE_KEY);
+          }
         }
       } catch {
-        // Corrupt persisted chat modes fall back to terminal view everywhere.
+        // Corrupt persisted view modes fall back to the global default everywhere.
       }
-      set({ hydrated: true, fontSizeBySessionKey, chatModeSessionKeys });
+      set({ hydrated: true, fontSizeBySessionKey, sessionViewModeBySessionKey });
     },
 
     attachSession: async (machine, session) => {
@@ -408,13 +439,26 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       }
     },
 
+    chatModeArmed: (sessionKey) => {
+      const explicit = get().sessionViewModeBySessionKey[sessionKey];
+      const mode = explicit ?? useSettingsStore.getState().settings.preferredAgentInterface;
+      return mode === 'chat';
+    },
+
+    setSessionViewMode: (sessionKey, mode) => {
+      const sessionViewModeBySessionKey = {
+        ...get().sessionViewModeBySessionKey,
+        [sessionKey]: mode,
+      };
+      set({ sessionViewModeBySessionKey });
+      void AsyncStorage.setItem(
+        SESSION_VIEW_MODES_STORAGE_KEY,
+        JSON.stringify(sessionViewModeBySessionKey),
+      );
+    },
+
     toggleChatMode: (sessionKey) => {
-      const current = get().chatModeSessionKeys;
-      const chatModeSessionKeys = current.includes(sessionKey)
-        ? current.filter((key) => key !== sessionKey)
-        : [...current, sessionKey];
-      set({ chatModeSessionKeys });
-      void AsyncStorage.setItem(CHAT_MODE_STORAGE_KEY, JSON.stringify(chatModeSessionKeys));
+      get().setSessionViewMode(sessionKey, get().chatModeArmed(sessionKey) ? 'terminal' : 'chat');
     },
   };
 });

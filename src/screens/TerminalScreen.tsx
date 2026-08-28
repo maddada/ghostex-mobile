@@ -120,7 +120,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
       activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
     ),
   );
-  const chatModeSessionKeys = useTerminalStore((state) => state.chatModeSessionKeys);
+  const sessionViewModeBySessionKey = useTerminalStore(
+    (state) => state.sessionViewModeBySessionKey,
+  );
 
   // Agent Actions apply to a gxserver session, so shell tabs and tabs whose
   // session identity has not resolved yet do not get the button at all.
@@ -139,7 +141,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeProjectId.length > 0 &&
     isSessionChatSupportedAgent(activeAgentId);
   const chatModeActive =
-    chatCapable && activeTab !== null && chatModeSessionKeys.includes(activeTab.sessionKey);
+    chatCapable &&
+    activeTab !== null &&
+    (sessionViewModeBySessionKey[activeTab.sessionKey] ?? settings.preferredAgentInterface) ===
+      'chat';
   const chatMachineTarget =
     chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
 
@@ -307,7 +312,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
     const sessionKey = store.selectedSessionKey;
     if (sessionKey === null) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const enteringChat = !store.chatModeSessionKeys.includes(sessionKey);
+    const enteringChat = !store.chatModeArmed(sessionKey);
     // Each surface owns its own input focus. Dismiss before either direction
     // so the retained hidden WebView cannot leave its keyboard attached to the
     // terminal, and the terminal keyboard cannot linger over chat.
@@ -341,8 +346,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
     const sessionKey = store.selectedSessionKey;
     if (sessionKey === null) return;
     dismissKeyboard();
-    if (store.chatModeSessionKeys.includes(sessionKey)) {
-      store.toggleChatMode(sessionKey);
+    if (store.chatModeArmed(sessionKey)) {
+      store.setSessionViewMode(sessionKey, 'terminal');
     }
     const message =
       'Please pick the model and effort in the CLI then switch back to the chat view';

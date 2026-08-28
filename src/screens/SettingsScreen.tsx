@@ -40,6 +40,7 @@ import {
   useSettingsStore,
   type BellBehavior,
   type GhostexSettings,
+  type PreferredAgentInterface,
   type SessionChatTheme,
 } from '../settings/store';
 import { useTerminalStore } from '../terminal/sessions';
@@ -90,6 +91,12 @@ const BELL_ROWS: { value: BellBehavior; label: string }[] = [
 const SESSION_CHAT_THEME_ROWS: { value: SessionChatTheme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
   { value: 'light', label: 'Light' },
+];
+
+/** Same option order as the desktop app's Default Agent View control. */
+const PREFERRED_AGENT_INTERFACE_ROWS: { value: PreferredAgentInterface; label: string }[] = [
+  { value: 'terminal', label: 'Terminal' },
+  { value: 'chat', label: 'Chat' },
 ];
 
 function formatRows(rows: number): string {
@@ -313,6 +320,20 @@ export default function SettingsScreen() {
         />
         <Text style={styles.sectionCaption}>
           Changes only group and project backgrounds and borders.
+        </Text>
+
+        <Text style={styles.sectionHeader}>Default agent view</Text>
+        {PREFERRED_AGENT_INTERFACE_ROWS.map((row) =>
+          renderChoice(
+            `agent-view-${row.value}`,
+            row.label,
+            settings.preferredAgentInterface === row.value,
+            () => setSetting('preferredAgentInterface', row.value),
+          ),
+        )}
+        <Text style={styles.sectionCaption}>
+          Agent sessions that support chat open in this view. Each tab can still be switched
+          between chat and terminal at any time, and a switched tab remembers its own choice.
         </Text>
 
         <Text style={styles.sectionHeader}>Chat</Text>

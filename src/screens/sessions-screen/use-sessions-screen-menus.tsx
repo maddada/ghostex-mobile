@@ -111,8 +111,8 @@ export type SessionsScreenMenusDeps = {
   lastActionByProject: Record<string, string>;
   navigation: SessionsNavigation;
   primaryAgentId: string;
-  attach: (target: MachineRecord, session: GhostexSession) => Promise<void>;
   attachInChatMode: (target: MachineRecord, session: GhostexSession) => Promise<void>;
+  attachInTerminalMode: (target: MachineRecord, session: GhostexSession) => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshMachine: (machine: MachineRecord) => Promise<void>;
   runBulkSessionActions: (
@@ -145,8 +145,8 @@ export function useSessionsScreenMenus({
   lastActionByProject,
   navigation,
   primaryAgentId,
-  attach,
   attachInChatMode,
+  attachInTerminalMode,
   refreshAll,
   refreshMachine,
   runBulkSessionActions,
@@ -301,7 +301,7 @@ export function useSessionsScreenMenus({
       key: 'attach',
       label: 'Attach',
       icon: <TerminalGlyph size={14} color={menuIconColor} />,
-      onPress: () => void attach(ctx.machine, session),
+      onPress: () => void attachInTerminalMode(ctx.machine, session),
     });
     if (
       session.projectId.length > 0 &&
