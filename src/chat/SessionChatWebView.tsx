@@ -39,6 +39,16 @@ const CHAT_ASSET_DIR = 'session-chat';
 
 let cachedChatBaseUri: string | null = null;
 
+/*
+ * A send can finish after navigation has destroyed the WebView that issued it.
+ * In that case the page cannot receive the success response that clears its
+ * retained local draft. Keep only that acknowledged text until this session's
+ * next page mount; the page clears it with the same exact-match rule used by a
+ * live composer, so text typed after the send is never removed.
+ */
+const acknowledgedDraftsBySessionKey = new Map<string, string>();
+const activeDraftAcknowledgersBySessionKey = new Map<string, (content: string) => boolean>();
+
 /** Resolved once, on first mount rather than at import time. */
 function chatBundleBaseUri(): string {
   if (cachedChatBaseUri !== null) {
@@ -158,22 +168,77 @@ export default function SessionChatWebView({
   openSavedPromptsRequestId = 0,
 }: SessionChatWebViewProps) {
   const webviewRef = useRef<WebView>(null);
+  const mountedRef = useRef(true);
   const baseUri = chatBundleBaseUri();
   const source = useMemo(() => ({ uri: `${baseUri}index.html` }), [baseUri]);
+  const chatSessionKey = `${machine.id}:${projectId}:${sessionId}`;
+  const acknowledgedDraftAtMountRef = useRef(acknowledgedDraftsBySessionKey.get(chatSessionKey));
+  const acknowledgedDraftAtMount = acknowledgedDraftAtMountRef.current;
+
+  const acknowledgeDraftInPage = useCallback((content: string): boolean => {
+    const webview = webviewRef.current;
+    if (webview === null) {
+      return false;
+    }
+    const encodedContent = injectableJson(content);
+    webview.injectJavaScript(
+      `window.__ghostexMobileChatPendingAcknowledgedDraft = ${encodedContent};` +
+        `if (window.ghostexMobileChatAcknowledgeDraft) {` +
+        `window.ghostexMobileChatAcknowledgeDraft(${encodedContent});` +
+        `window.__ghostexMobileChatPendingAcknowledgedDraft = undefined;` +
+        `} true;`,
+    );
+    return true;
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    activeDraftAcknowledgersBySessionKey.set(chatSessionKey, acknowledgeDraftInPage);
+    const pendingAcknowledgment = acknowledgedDraftsBySessionKey.get(chatSessionKey);
+    if (
+      pendingAcknowledgment !== undefined &&
+      pendingAcknowledgment !== acknowledgedDraftAtMount &&
+      acknowledgeDraftInPage(pendingAcknowledgment)
+    ) {
+      acknowledgedDraftsBySessionKey.delete(chatSessionKey);
+    }
+    return () => {
+      if (activeDraftAcknowledgersBySessionKey.get(chatSessionKey) === acknowledgeDraftInPage) {
+        activeDraftAcknowledgersBySessionKey.delete(chatSessionKey);
+      }
+    };
+  }, [acknowledgeDraftInPage, acknowledgedDraftAtMount, chatSessionKey]);
 
   const configScript = useMemo(
     () =>
       `window.__ghostexMobileChatConfig = ${injectableJson({
+        acknowledgedDraft: acknowledgedDraftAtMount,
         agentId,
         fontFamily,
         projectId,
         sessionId,
-        sessionKey: `${machine.id}:${projectId}:${sessionId}`,
+        sessionKey: chatSessionKey,
         theme,
         transcriptWidthPercent,
         verboseMode,
       })}; true;`,
-    [agentId, fontFamily, machine.id, projectId, sessionId, theme, transcriptWidthPercent, verboseMode],
+    [
+      acknowledgedDraftAtMount,
+      agentId,
+      chatSessionKey,
+      fontFamily,
+      projectId,
+      sessionId,
+      theme,
+      transcriptWidthPercent,
+      verboseMode,
+    ],
   );
 
   /*
@@ -214,6 +279,26 @@ export default function SessionChatWebView({
     pushPresentation();
   }, [pushHostState, pushPresentation]);
 
+  const handleLoadEnd = useCallback((): void => {
+    pushCurrentState();
+    if (
+      acknowledgedDraftAtMount !== undefined &&
+      acknowledgedDraftsBySessionKey.get(chatSessionKey) === acknowledgedDraftAtMount
+    ) {
+      acknowledgedDraftsBySessionKey.delete(chatSessionKey);
+    }
+  }, [acknowledgedDraftAtMount, chatSessionKey, pushCurrentState]);
+
+  /*
+   * TerminalScreen resolves this target from the machine store on every
+   * render, so its object identity is intentionally not part of a transfer's
+   * lifetime. A transfer belongs to the request id that started it and must
+   * survive unrelated keyboard, inventory, and presentation renders while
+   * the daemon waits for the agent CLI's prompt-editor handshake.
+   */
+  const latestMachineRef = useRef(machine);
+  latestMachineRef.current = machine;
+
   /*
    * Terminal → chat draft transfer. The CLI's composer is only readable
    * through the daemon's Ctrl+G prompt-editor handshake, which takes seconds,
@@ -229,7 +314,7 @@ export default function SessionChatWebView({
     handledDraftTransferRef.current = draftTransferRequestId;
     if (draftTransferRequestId <= 0 || sessionId.length === 0) return;
     let cancelled = false;
-    void handoffSessionChatDraft(machine, projectId, sessionId).then((content) => {
+    void handoffSessionChatDraft(latestMachineRef.current, projectId, sessionId).then((content) => {
       if (cancelled || content.length === 0) return;
       webviewRef.current?.injectJavaScript(
         'window.ghostexMobileChatInsertDraft && window.ghostexMobileChatInsertDraft(' +
@@ -239,7 +324,7 @@ export default function SessionChatWebView({
     return () => {
       cancelled = true;
     };
-  }, [draftTransferRequestId, machine, projectId, sessionId]);
+  }, [draftTransferRequestId, projectId, sessionId]);
 
   /*
    * Chat → terminal draft transfer. The page has to make the draft durable
@@ -395,9 +480,25 @@ export default function SessionChatWebView({
           });
         return;
       }
-      void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then(deliver);
+      void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then((response) => {
+        if (
+          request.op === 'send' &&
+          response.ok &&
+          (!mountedRef.current || webviewRef.current === null)
+        ) {
+          const content = request.params?.text;
+          if (typeof content === 'string' && content.length > 0) {
+            acknowledgedDraftsBySessionKey.set(chatSessionKey, content);
+            if (activeDraftAcknowledgersBySessionKey.get(chatSessionKey)?.(content) === true) {
+              acknowledgedDraftsBySessionKey.delete(chatSessionKey);
+            }
+          }
+        }
+        deliver(response);
+      });
     },
     [
+      chatSessionKey,
       deliver,
       focusSavedPromptSession,
       machine,
@@ -429,7 +530,7 @@ export default function SessionChatWebView({
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
       injectedJavaScriptBeforeContentLoaded={configScript}
-      onLoadEnd={pushCurrentState}
+      onLoadEnd={handleLoadEnd}
       onMessage={handleMessage}
       // Markdown links in the transcript open in the system browser instead
       // of navigating the chat surface away.
