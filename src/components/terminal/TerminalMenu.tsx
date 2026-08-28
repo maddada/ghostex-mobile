@@ -176,7 +176,7 @@ export default function TerminalMenu({
       items.push({
         kind: 'item',
         key: 'exportTranscript',
-        label: 'Export Transcript',
+        label: 'Handoff / Export',
         icon: <FileExportGlyph size={ICON_SIZE} color={iconColor} />,
         onPress: () => onSelect('exportTranscript'),
       });

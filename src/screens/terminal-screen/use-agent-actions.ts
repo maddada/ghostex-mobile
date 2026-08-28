@@ -348,7 +348,7 @@ export function useTerminalAgentActions({
       });
     } catch (error) {
       setAgentProgress(null);
-      reportAgentFailure('Export Transcript Failed', error);
+      reportAgentFailure('Handoff / Export Failed', error);
     }
   }, [agentTarget, reportAgentFailure]);
 
