@@ -9,7 +9,7 @@ This whole directory is merged into the app bundle by BOTH native projects:
   `assets.srcDir`, so `session-chat/` lands at the APK assets root and the
   page is reachable at `file:///android_asset/session-chat/index.html`.
 - iOS: `modules/ghostex-native/ios/GhostexNative.podspec` copies it through
-  the `WebAssets` symlink, so the page is at
+  the `WebAssets/session-chat` symlink, so the page is at
   `<Bundle.main>/session-chat/index.html`.
 
 `src/chat/SessionChatWebView.tsx` resolves those two URLs.
