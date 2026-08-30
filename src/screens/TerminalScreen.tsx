@@ -598,7 +598,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             bottomOffset={16}
             onKeyboard={showKeyboard}
             onDismissKeyboard={dismissKeyboard}
-            onUpload={() => void handleUpload()}
+            onUpload={() => void handleUpload('file')}
             onRefresh={handleRefresh}
           />
         )}

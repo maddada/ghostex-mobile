@@ -23,7 +23,10 @@
         "UIUserInterfaceStyle": "Dark",
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationQueriesSchemes": ["tailscale"],
-        "UIAppFonts": ["JetBrainsMonoNerdFont-Regular.ttf"]
+        "UIAppFonts": ["JetBrainsMonoNerdFont-Regular.ttf"],
+        "NSPhotoLibraryUsageDescription": "Ghostex uses your photo library so you can attach images to your sessions.",
+        "NSCameraUsageDescription": "Ghostex uses the camera when you capture a photo to attach to a session.",
+        "NSMicrophoneUsageDescription": "Ghostex uses the microphone when you record a video to attach to a session."
       }
     },
     "android": {

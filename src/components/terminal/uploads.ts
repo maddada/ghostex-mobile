@@ -1,12 +1,14 @@
 /**
  * File attach & send flow (terminal-screen.md §5):
- * document picker → remote temp path via `GhostexNative.exec` (exact script
- * from the spec, sanitized filename) → SFTP upload → insert
- * `[<title>](<remotePath>)` into the terminal, where title = "Image #N" /
- * "File #N" with module-scoped per-kind counters.
+ * document picker (Files) or image picker (photo library) → remote temp path
+ * via `GhostexNative.exec` (exact script from the spec, sanitized filename) →
+ * SFTP upload → insert `[<title>](<remotePath>)` into the terminal, where
+ * title = "Image #N" / "File #N" with module-scoped per-kind counters. Both
+ * pickers share the same post-pick pipeline; only the source differs.
  */
 
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
 
@@ -147,6 +149,42 @@ export type AttachmentUploadResult = 'sent' | 'cancelled';
 export type AttachmentReferenceSink = (reference: string) => Promise<void>;
 
 /**
+ * Everything after a picker hands back one local asset: stage the remote path,
+ * upload the bytes, and deliver the markdown-style reference. Shared by the
+ * document-picker and photo-library entry points so both produce identical
+ * references and share the per-kind title counters.
+ */
+async function sendPickedAttachment(
+  machineId: string,
+  sessionKey: string,
+  picked: { localUri: string; name: string; isImage: boolean },
+  deliver?: AttachmentReferenceSink,
+): Promise<AttachmentUploadResult> {
+  const sanitized = sanitizeAttachmentFilename(picked.name);
+  const exec = await GhostexNative.exec(
+    machineId,
+    remoteAttachmentPathScript(sanitized),
+    REMOTE_PATH_EXEC_TIMEOUT_MS,
+  );
+  const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
+  if (exec.exitCode !== 0 || remotePath.length === 0) {
+    throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
+  }
+
+  await GhostexNative.uploadFile(machineId, localPathFromUri(picked.localUri), remotePath);
+
+  const title = picked.isImage ? `Image #${++imageCounter}` : `File #${++fileCounter}`;
+  const reference = `[${title}](${remotePath})`;
+  if (deliver !== undefined) {
+    await deliver(reference);
+  } else {
+    // No trailing newline, per spec.
+    await GhostexNative.sendText(sessionKey, reference);
+  }
+  return 'sent';
+}
+
+/**
  * Pick one document, stage a remote path, upload, and deliver the
  * markdown-style reference through `deliver` (default: type it into the
  * terminal). Throws on failure (caller shows "Upload Failed"); resolves
@@ -165,27 +203,53 @@ export async function pickAndSendAttachment(
   const asset = result.assets[0];
   if (asset === undefined) return 'cancelled';
 
-  const sanitized = sanitizeAttachmentFilename(asset.name);
-  const exec = await GhostexNative.exec(
+  return sendPickedAttachment(
     machineId,
-    remoteAttachmentPathScript(sanitized),
-    REMOTE_PATH_EXEC_TIMEOUT_MS,
+    sessionKey,
+    {
+      localUri: asset.uri,
+      name: asset.name,
+      isImage: asset.mimeType?.startsWith('image/') === true,
+    },
+    deliver,
   );
-  const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
-  if (exec.exitCode !== 0 || remotePath.length === 0) {
-    throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
-  }
+}
 
-  await GhostexNative.uploadFile(machineId, localPathFromUri(asset.uri), remotePath);
+/** Extension for a photo-library asset whose name the picker did not supply. */
+function imageAssetExtension(mimeType: string | undefined): string {
+  const subtype = mimeType?.startsWith('image/') === true ? mimeType.slice('image/'.length) : '';
+  const cleaned = subtype.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (cleaned.length === 0 || !/^[a-z0-9]+$/.test(cleaned)) return 'jpg';
+  return cleaned === 'jpeg' ? 'jpg' : cleaned;
+}
 
-  const isImage = asset.mimeType?.startsWith('image/') === true;
-  const title = isImage ? `Image #${++imageCounter}` : `File #${++fileCounter}`;
-  const reference = `[${title}](${remotePath})`;
-  if (deliver !== undefined) {
-    await deliver(reference);
-  } else {
-    // No trailing newline, per spec.
-    await GhostexNative.sendText(sessionKey, reference);
-  }
-  return 'sent';
+/**
+ * Photo-library counterpart of `pickAndSendAttachment`. iOS presents PHPicker,
+ * which runs out of process and needs no photo-library permission request;
+ * Android presents the system photo picker. Single selection, no editing, so
+ * the asset arrives as the original file.
+ */
+export async function pickAndSendImageAttachment(
+  machineId: string,
+  sessionKey: string,
+  deliver?: AttachmentReferenceSink,
+): Promise<AttachmentUploadResult> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsMultipleSelection: false,
+    allowsEditing: false,
+  });
+  if (result.canceled) return 'cancelled';
+  const asset = result.assets?.[0];
+  if (asset === undefined) return 'cancelled';
+
+  const uriName = asset.uri.split('?')[0]?.split('/').pop()?.trim() ?? '';
+  const name =
+    asset.fileName !== null && asset.fileName !== undefined && asset.fileName.trim().length > 0
+      ? asset.fileName
+      : uriName.length > 0
+        ? uriName
+        : `image.${imageAssetExtension(asset.mimeType)}`;
+
+  return sendPickedAttachment(machineId, sessionKey, { localUri: asset.uri, name, isImage: true }, deliver);
 }

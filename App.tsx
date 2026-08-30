@@ -40,6 +40,11 @@ import FindPromptsScreen from './src/screens/FindPromptsScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import { AddProjectCopy, MachineCopy } from './src/copy';
 
+// TEMPORARY verification gate (must be reverted): renders the attach chooser
+// repro harness instead of the app.
+import AttachChooserRepro from './src/AttachChooserRepro';
+const ATTACH_CHOOSER_REPRO = true;
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const navigationTheme: Theme = {
@@ -55,6 +60,7 @@ const navigationTheme: Theme = {
 };
 
 export default function App() {
+  if (ATTACH_CHOOSER_REPRO) return <AttachChooserRepro />;
   const hydrated = useMachinesStore((state) => state.hydrated);
   const hasSeenWelcome = useMachinesStore((state) => state.hasSeenWelcome);
 

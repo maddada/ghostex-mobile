@@ -12,7 +12,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { GhostexNative } from '../../../modules/ghostex-native/src';
 import { createdSessionId, runGhostexCli } from '../../components/sessions/cli';
 import { type TerminalMenuActionId } from '../../components/terminal/TerminalMenu';
-import { pickAndSendAttachment } from '../../components/terminal/uploads';
+import {
+  pickAndSendAttachment,
+  pickAndSendImageAttachment,
+} from '../../components/terminal/uploads';
 import {
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
@@ -472,7 +475,8 @@ export function useTerminalAgentActions({
     ],
   );
 
-  const handleUpload = useCallback(async (): Promise<void> => {
+  /** Attach from the Files browser ('file') or the photo library ('image'). */
+  const handleUpload = useCallback(async (source: 'file' | 'image'): Promise<void> => {
     const store = useTerminalStore.getState();
     const tab = store.tabs.find((entry) => entry.sessionKey === store.selectedSessionKey);
     if (tab === undefined || uploading) return;
@@ -481,7 +485,8 @@ export function useTerminalAgentActions({
     if (!chatModeActive && tab.state !== 'open') return;
     setUploading(true);
     try {
-      await pickAndSendAttachment(
+      const pick = source === 'image' ? pickAndSendImageAttachment : pickAndSendAttachment;
+      await pick(
         tab.machineId,
         tab.sessionKey,
         chatModeActive ? sendChatMessageFromUser : undefined,
@@ -552,6 +557,19 @@ export function useTerminalAgentActions({
    */
   const pendingAfterMenuDismiss = useRef<(() => void) | null>(null);
 
+  /**
+   * "Send & Attach File" covers both sources: iOS's Files browser cannot see
+   * the photo library, so the row asks which one to open instead of hard-wiring
+   * the document picker.
+   */
+  const promptAttachmentSource = useCallback((): void => {
+    Alert.alert('Send & Attach File', undefined, [
+      { text: 'Photo Library', onPress: () => void handleUpload('image') },
+      { text: 'Choose File', onPress: () => void handleUpload('file') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [handleUpload]);
+
   const handleMenuAction = useCallback(
     (id: TerminalMenuActionId): void => {
       // One menu, one dismissal point: every row closes the card before the
@@ -585,23 +603,26 @@ export function useTerminalAgentActions({
           return;
         case 'attachPath':
           /*
-           * iOS presents the document picker from the top view controller, and
-           * the menu modal closed just above is still that controller until its
-           * dismissal completes: picking then either rejects
-           * ("Calling the 'getDocumentAsync' function has failed") or hangs on
-           * a promise that never settles, so no picker appears at all
-           * (reproduced on iOS 26/27). Wait for the menu's `onDismiss` instead.
-           * Android's picker is an Activity intent and is unaffected.
+           * iOS presents the document picker, the photo picker, and the source
+           * chooser alert from the top view controller, and the menu modal
+           * closed just above is still that controller until its dismissal
+           * completes: picking then either rejects ("Calling the
+           * 'getDocumentAsync' function has failed") or hangs on a promise that
+           * never settles, so no picker appears at all (reproduced on iOS
+           * 26/27); an alert presented that early is silently dropped the same
+           * way. So the whole chooser flow — not just the picker — waits for
+           * the menu's `onDismiss`. Android's pickers are Activity intents and
+           * its alert is a Dialog, so neither is affected.
            */
           if (Platform.OS === 'ios') {
             pendingAfterMenuDismiss.current = () => {
               setAgentOverlay(AGENT_OVERLAY_NONE);
-              void handleUpload();
+              promptAttachmentSource();
             };
             return;
           }
           setAgentOverlay(AGENT_OVERLAY_NONE);
-          void handleUpload();
+          promptAttachmentSource();
           return;
         case 'newTerminal':
           void handleNewTerminal();
@@ -620,8 +641,8 @@ export function useTerminalAgentActions({
     [
       activeTab,
       handleNewTerminal,
-      handleUpload,
       navigation,
+      promptAttachmentSource,
       requestCloseTab,
       requestKillSession,
       runAgentFork,
