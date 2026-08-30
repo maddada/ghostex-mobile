@@ -67,6 +67,14 @@ export type ContextMenuProps = {
   subtitle?: string;
   items: ContextMenuItem[];
   onClose: () => void;
+  /**
+   * Fires once the modal's dismissal has fully completed. iOS only — this is
+   * RN `Modal`'s `onDismiss`, which has no Android counterpart. Callers need
+   * it because a native presentation started while the modal is still
+   * dismissing (the document picker, above all) either throws or never
+   * settles, so such work has to wait for the dismissal to finish.
+   */
+  onDismissed?: () => void;
 };
 
 /** Comfortable reading width; the card shrinks on narrow screens. */
@@ -113,10 +121,10 @@ export default function ContextMenu({
   subtitle,
   items,
   onClose,
+  onDismissed,
 }: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
-  if (!visible) return null;
 
   const horizontalRoom =
     screenWidth - Math.max(EDGE_MARGIN, safeArea.left) - Math.max(EDGE_MARGIN, safeArea.right);
@@ -125,8 +133,17 @@ export default function ContextMenu({
     screenHeight - Math.max(EDGE_MARGIN, safeArea.top) - Math.max(EDGE_MARGIN, safeArea.bottom);
   const maxHeight = Math.max(1, verticalRoom * MAX_HEIGHT_RATIO);
 
+  // The Modal stays mounted while `visible` is false (it renders nothing then,
+  // exactly like the old early return) so `onDismiss` can still fire after a
+  // close instead of being unmounted out from under the dismissal.
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      onDismiss={onDismissed}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Swallows presses on the card itself so only the backdrop closes. */}
         <Pressable

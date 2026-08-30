@@ -11,16 +11,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  BackHandler,
-  Keyboard,
-  Platform,
-  Pressable,
-  Text,
-  ToastAndroid,
-  View,
-} from 'react-native';
+import { Alert, BackHandler, Keyboard, Platform, Pressable, Text, ToastAndroid, View } from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
@@ -38,12 +29,7 @@ import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
 import TerminalMenu from '../components/terminal/TerminalMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
-import {
-  ChatBubbleIcon,
-  ChevronLeftIcon,
-  EllipsisIcon,
-  TerminalPromptIcon,
-} from '../components/terminal/icons';
+import { ChatBubbleIcon, ChevronLeftIcon, EllipsisIcon, TerminalPromptIcon } from '../components/terminal/icons';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
 import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
 import SessionChatWebView from '../chat/SessionChatWebView';
@@ -105,24 +91,22 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const activeAgentId = useInventoryStore((state) =>
     sessionAgentIdFor(
       activeTab,
-      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
-    ),
+      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary
+    )
   );
   const activeProjectId = useInventoryStore((state) =>
     sessionProjectIdFor(
       activeTab,
-      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
-    ),
+      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary
+    )
   );
   const activeSession = useInventoryStore((state) =>
     sessionRecordFor(
       activeTab,
-      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
-    ),
+      activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary
+    )
   );
-  const sessionViewModeBySessionKey = useTerminalStore(
-    (state) => state.sessionViewModeBySessionKey,
-  );
+  const sessionViewModeBySessionKey = useTerminalStore((state) => state.sessionViewModeBySessionKey);
 
   // Agent Actions apply to a gxserver session, so shell tabs and tabs whose
   // session identity has not resolved yet do not get the button at all.
@@ -143,10 +127,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const chatModeActive =
     chatCapable &&
     activeTab !== null &&
-    (sessionViewModeBySessionKey[activeTab.sessionKey] ?? settings.preferredAgentInterface) ===
-      'chat';
-  const chatMachineTarget =
-    chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
+    (sessionViewModeBySessionKey[activeTab.sessionKey] ?? settings.preferredAgentInterface) === 'chat';
+  const chatMachineTarget = chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
 
   /*
    * Terminal → chat draft transfer counter, per session key. Entering chat
@@ -174,18 +156,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
    */
   const [chatQueueCounts, setChatQueueCounts] = useState<Record<string, number>>({});
   const chatQueueSessionKey = activeTab?.sessionKey ?? null;
-  const activeQueuedPromptCount =
-    chatQueueSessionKey === null ? 0 : (chatQueueCounts[chatQueueSessionKey] ?? 0);
+  const activeQueuedPromptCount = chatQueueSessionKey === null ? 0 : (chatQueueCounts[chatQueueSessionKey] ?? 0);
   const handleChatQueueCount = useCallback(
     (count: number): void => {
       if (chatQueueSessionKey === null) return;
       setChatQueueCounts((current) =>
-        current[chatQueueSessionKey] === count
-          ? current
-          : { ...current, [chatQueueSessionKey]: count },
+        current[chatQueueSessionKey] === count ? current : { ...current, [chatQueueSessionKey]: count }
       );
     },
-    [chatQueueSessionKey],
+    [chatQueueSessionKey]
   );
 
   // The native nav bar has no styling guarantee here; render our own header.
@@ -197,10 +176,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   useEffect(() => {
     const store = useTerminalStore.getState();
     const routed = route.params.sessionKey;
-    if (
-      store.tabs.some((tab) => tab.sessionKey === routed) &&
-      store.selectedSessionKey !== routed
-    ) {
+    if (store.tabs.some((tab) => tab.sessionKey === routed) && store.selectedSessionKey !== routed) {
       store.selectTab(routed);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -292,7 +268,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         return true;
       });
       return () => subscription.remove();
-    }, [showSessions]),
+    }, [showSessions])
   );
 
   // No tabs left (last one closed) → leave the terminal screen.
@@ -349,8 +325,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
     if (store.chatModeArmed(sessionKey)) {
       store.setSessionViewMode(sessionKey, 'terminal');
     }
-    const message =
-      'Please pick the model and effort in the CLI then switch back to the chat view';
+    const message = 'Please pick the model and effort in the CLI then switch back to the chat view';
     if (Platform.OS === 'android') {
       ToastAndroid.show(message, ToastAndroid.LONG);
     } else {
@@ -374,7 +349,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         { text: 'Close', style: 'destructive', onPress: () => void closeTab(tab.sessionKey) },
       ]);
     },
-    [closeTab, settings.confirmTabClose],
+    [closeTab, settings.confirmTabClose]
   );
 
   const handleSelectTab = useCallback(
@@ -390,7 +365,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       }
       selectTab(sessionKey);
     },
-    [selectTab],
+    [selectTab]
   );
 
   const switchTabBy = useCallback((delta: -1 | 1): void => {
@@ -420,6 +395,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
     handleUpload,
     handleRefresh,
     handleMenuAction,
+    handleMenuDismissed,
   } = useTerminalAgentActions({
     activeTab,
     activeProjectId,
@@ -458,11 +434,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
       }
       handleMenuAction(id);
     },
-    [chatModeActive, handleMenuAction, toggleChatView],
+    [chatModeActive, handleMenuAction, toggleChatView]
   );
 
-  const uploadEnabled =
-    activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
+  const uploadEnabled = activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
   const agentSessionTitle =
     activeSession === null || activeSession.displayTitle.length === 0
       ? SessionCopy.fallbackTitle
@@ -494,8 +469,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
     >
       <View style={styles.header}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityRole='button'
+          accessibilityLabel='Back'
           hitSlop={8}
           style={styles.headerButton}
           onPress={showSessions}
@@ -513,7 +488,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         />
         {chatCapable && (
           <Pressable
-            accessibilityRole="button"
+            accessibilityRole='button'
             accessibilityLabel={chatModeActive ? 'Terminal view' : 'Chat view'}
             hitSlop={8}
             style={styles.headerButton}
@@ -527,8 +502,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
           </Pressable>
         )}
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More options"
+          accessibilityRole='button'
+          accessibilityLabel='More options'
           hitSlop={8}
           style={styles.headerButton}
           onPress={() => setMenuVisible(true)}
@@ -562,6 +537,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             terminalSessionKey={activeTab.sessionKey}
             onSwitchToTerminalForAgentPicker={switchToTerminalForAgentPicker}
             agentId={activeAgentId}
+            customTranscriptWidthEnabled={settings.sessionChatCustomTranscriptWidthEnabled}
             fontFamily={settings.sessionChatFontFamily}
             theme={settings.sessionChatTheme}
             transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
@@ -582,9 +558,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         {activeTab !== null && !chatModeActive && (
           <TerminalStateOverlay
             tab={activeTab}
-            errorCaption={
-              activeTab.error !== undefined ? summarizeFailure(activeTab.error, true) : null
-            }
+            errorCaption={activeTab.error !== undefined ? summarizeFailure(activeTab.error, true) : null}
             onRetry={() => void reopenTab(activeTab)}
             onReconnect={() => void reopenTab(activeTab)}
           />
@@ -598,7 +572,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         */}
         {!chatModeActive && activeQueuedPromptCount > 0 ? (
           <Pressable
-            accessibilityRole="button"
+            accessibilityRole='button'
             accessibilityLabel={`${activeQueuedPromptCount} queued ${
               activeQueuedPromptCount === 1 ? 'prompt' : 'prompts'
             }. Show the chat view.`}
@@ -611,16 +585,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
             <Text style={styles.queuedPillLabel}>{`Queued: ${activeQueuedPromptCount}`}</Text>
           </Pressable>
         ) : null}
-        {tabs.length > 1 && (
-          <EdgeSwipeZones onPrev={() => switchTabBy(-1)} onNext={() => switchTabBy(1)} />
-        )}
+        {tabs.length > 1 && <EdgeSwipeZones onPrev={() => switchTabBy(-1)} onNext={() => switchTabBy(1)} />}
         {!keyBarVisible && !chatModeActive && (
           <TerminalFloatingControls
             showKeyboardButton={settings.keyboardButtonVisible}
             showUploadButton={settings.fileUploadButtonVisible}
-            showRefreshButton={
-              settings.refreshButtonVisible && activeTab?.kind === 'attach'
-            }
+            showRefreshButton={settings.refreshButtonVisible && activeTab?.kind === 'attach'}
             uploadEnabled={uploadEnabled}
             uploading={uploading}
             refreshEnabled={activeTab?.state === 'open'}
@@ -638,11 +608,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         The screen's bottom edge, always mounted and measurable: the extra-keys
         toolbar while it is up, otherwise the bottom margin.
       */}
-      <View
-        ref={bottomEdgeFrameRef}
-        collapsable={false}
-        onLayout={reconcileBottomEdgeWithVisibleWindow}
-      >
+      <View ref={bottomEdgeFrameRef} collapsable={false} onLayout={reconcileBottomEdgeWithVisibleWindow}>
         {keyBarVisible && activeTab !== null && !chatModeActive ? (
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
@@ -656,9 +622,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           // is a control rather than a full-bleed surface: it keeps the margin
           // it has with the keyboard down so its bottom row never sits flush
           // against the keyboard.
-          <View
-            style={{ height: !keyboardVisible || chatModeActive ? insets.bottom : 0 }}
-          />
+          <View style={{ height: !keyboardVisible || chatModeActive ? insets.bottom : 0 }} />
         )}
       </View>
 
@@ -679,6 +643,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         killSessionEnabled={activeTab !== null && activeSession !== null}
         onSelect={handleTerminalMenuAction}
         onClose={() => setMenuVisible(false)}
+        onDismissed={handleMenuDismissed}
       />
 
       {activeSession !== null ? (
@@ -691,7 +656,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
               placeholder={RenameCopy.inputHint}
               initialValue={activeSession.title}
               error={agentOverlay.error}
-              confirmLabel="Rename"
+              confirmLabel='Rename'
               onSubmit={(value) => void submitAgentRename(value)}
               onCancel={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
             />
@@ -699,18 +664,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
           {agentOverlay.kind === 'delayedSend' ? (
             <DelayedSendDialog
               agentIcon={activeSession.agentIcon}
-              agentName={
-                activeSession.agentName.length > 0
-                  ? activeSession.agentName
-                  : activeSession.agent
-              }
+              agentName={activeSession.agentName.length > 0 ? activeSession.agentName : activeSession.agent}
               closeAfterDoneActive={activeSession.closeAfterDone}
               visible
               sessionTitle={agentSessionTitle}
               remainingLabel={activeSession.delayedSendRemainingLabel}
-              sendWhenAllProjectSessionsStopActive={
-                activeSession.sendWhenAllProjectSessionsStopActive
-              }
+              sendWhenAllProjectSessionsStopActive={activeSession.sendWhenAllProjectSessionsStopActive}
               sendWhenAgentStopsActive={activeSession.sendWhenAgentStopsActive}
               onConfirm={(trigger, delayMs) => void runDelayedSend(trigger, delayMs)}
               onCancelTimer={() => void cancelDelayedSend()}

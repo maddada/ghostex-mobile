@@ -77,6 +77,12 @@ export type TerminalMenuProps = {
   killSessionEnabled: boolean;
   onSelect: (id: TerminalMenuActionId) => void;
   onClose: () => void;
+  /**
+   * Fires once the menu's dismissal has fully completed (iOS only). Actions
+   * that present something natively — the document picker behind Send & Attach
+   * File — have to run from here, never from `onSelect`.
+   */
+  onDismissed?: () => void;
 };
 
 const ICON_SIZE = 14;
@@ -96,6 +102,7 @@ export default function TerminalMenu({
   killSessionEnabled,
   onSelect,
   onClose,
+  onDismissed,
 }: TerminalMenuProps) {
   const iconColor = GhostexPalette.FOREGROUND;
   const items: ContextMenuItem[] = [];
@@ -240,5 +247,13 @@ export default function TerminalMenu({
     });
   }
 
-  return <ContextMenu visible={visible} title={sessionTitle} items={items} onClose={onClose} />;
+  return (
+    <ContextMenu
+      visible={visible}
+      title={sessionTitle}
+      items={items}
+      onClose={onClose}
+      onDismissed={onDismissed}
+    />
+  );
 }

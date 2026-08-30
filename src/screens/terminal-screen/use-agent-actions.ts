@@ -5,8 +5,8 @@
  * the promptEditorDraft useState) run in their original relative order.
  */
 
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
-import { Alert } from 'react-native';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { Alert, Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
@@ -546,6 +546,12 @@ export function useTerminalAgentActions({
     );
   }, [activeSession, activeTab]);
 
+  /**
+   * Work a menu row deferred until the menu modal has finished dismissing.
+   * See the `attachPath` case below for why anything needs to wait.
+   */
+  const pendingAfterMenuDismiss = useRef<(() => void) | null>(null);
+
   const handleMenuAction = useCallback(
     (id: TerminalMenuActionId): void => {
       // One menu, one dismissal point: every row closes the card before the
@@ -578,6 +584,22 @@ export function useTerminalAgentActions({
           setChatSearchRequestId((current) => current + 1);
           return;
         case 'attachPath':
+          /*
+           * iOS presents the document picker from the top view controller, and
+           * the menu modal closed just above is still that controller until its
+           * dismissal completes: picking then either rejects
+           * ("Calling the 'getDocumentAsync' function has failed") or hangs on
+           * a promise that never settles, so no picker appears at all
+           * (reproduced on iOS 26/27). Wait for the menu's `onDismiss` instead.
+           * Android's picker is an Activity intent and is unaffected.
+           */
+          if (Platform.OS === 'ios') {
+            pendingAfterMenuDismiss.current = () => {
+              setAgentOverlay(AGENT_OVERLAY_NONE);
+              void handleUpload();
+            };
+            return;
+          }
           setAgentOverlay(AGENT_OVERLAY_NONE);
           void handleUpload();
           return;
@@ -610,6 +632,13 @@ export function useTerminalAgentActions({
     ],
   );
 
+  /** Runs whatever the last menu row deferred until the card was fully gone. */
+  const handleMenuDismissed = useCallback((): void => {
+    const pending = pendingAfterMenuDismiss.current;
+    pendingAfterMenuDismiss.current = null;
+    if (pending !== null) pending();
+  }, []);
+
   return {
     submitAgentRename,
     runDelayedSend,
@@ -622,5 +651,6 @@ export function useTerminalAgentActions({
     handleUpload,
     handleRefresh,
     handleMenuAction,
+    handleMenuDismissed,
   };
 }
