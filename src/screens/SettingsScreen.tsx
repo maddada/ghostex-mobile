@@ -7,15 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -138,7 +130,7 @@ function SidebarTintControl({
           return (
             <Pressable
               key={option.value}
-              accessibilityRole="radio"
+              accessibilityRole='radio'
               accessibilityLabel={`${option.label} sidebar tint`}
               accessibilityState={{ selected }}
               hitSlop={3}
@@ -153,13 +145,13 @@ function SidebarTintControl({
         })}
       </View>
       <TextInput
-        accessibilityLabel="Sidebar background tint hex color"
-        autoCapitalize="characters"
+        accessibilityLabel='Sidebar background tint hex color'
+        autoCapitalize='characters'
         autoCorrect={false}
         maxLength={7}
-        placeholder="#808080"
+        placeholder='#808080'
         placeholderTextColor={GhostexPalette.MUTED}
-        returnKeyType="done"
+        returnKeyType='done'
         spellCheck={false}
         style={styles.tintInput}
         value={draft}
@@ -180,22 +172,17 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const settings = useSettingsStore((state) => state.settings);
   const setSetting = useSettingsStore((state) => state.setSetting);
-  const hasFontOverrides = useTerminalStore(
-    (state) => Object.keys(state.fontSizeBySessionKey).length > 0,
-  );
+  const hasFontOverrides = useTerminalStore((state) => Object.keys(state.fontSizeBySessionKey).length > 0);
 
   const stepFontSize = (delta: number): void => {
-    const next = Math.min(
-      TERMINAL_FONT_SIZE_MAX,
-      Math.max(TERMINAL_FONT_SIZE_MIN, settings.fontSize + delta),
-    );
+    const next = Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, settings.fontSize + delta));
     setSetting('fontSize', next);
   };
 
   const stepKeepAliveInterval = (delta: number): void => {
     const next = Math.min(
       KEEP_ALIVE_INTERVAL_MAX_SEC,
-      Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, settings.keepAliveIntervalSec + delta),
+      Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, settings.keepAliveIntervalSec + delta)
     );
     setSetting('keepAliveIntervalSec', next);
   };
@@ -203,10 +190,7 @@ export default function SettingsScreen() {
   const stepSidebarContrast = (delta: number): void => {
     const next = Math.min(
       SIDEBAR_BACKGROUND_CONTRAST_MAX,
-      Math.max(
-        SIDEBAR_BACKGROUND_CONTRAST_MIN,
-        settings.sidebarBackgroundContrast + delta,
-      ),
+      Math.max(SIDEBAR_BACKGROUND_CONTRAST_MIN, settings.sidebarBackgroundContrast + delta)
     );
     setSetting('sidebarBackgroundContrast', next);
   };
@@ -219,7 +203,7 @@ export default function SettingsScreen() {
         onValueChange={(value) => setSetting(key, value)}
         trackColor={{ false: '#3A3A3A', true: GhostexPalette.ACCENT }}
         thumbColor={settings[key] ? GhostexPalette.FOREGROUND : '#A8A8A8'}
-        ios_backgroundColor="#3A3A3A"
+        ios_backgroundColor='#3A3A3A'
       />
     </View>
   );
@@ -227,7 +211,7 @@ export default function SettingsScreen() {
   const renderChoice = (key: string, label: string, selected: boolean, onPress: () => void) => (
     <Pressable
       key={key}
-      accessibilityRole="radio"
+      accessibilityRole='radio'
       accessibilityState={{ selected }}
       style={styles.row}
       onPress={onPress}
@@ -245,13 +229,13 @@ export default function SettingsScreen() {
     canDecrease: boolean,
     canIncrease: boolean,
     onStep: (delta: 1 | -1) => void,
-    disabled = false,
+    disabled = false
   ) => (
     <View style={[styles.row, disabled && styles.rowDisabled]}>
       <Text style={styles.rowLabel}>{label}</Text>
       <View style={styles.stepper}>
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole='button'
           accessibilityLabel={`Decrease ${label.toLowerCase()}`}
           style={[styles.stepperButton, (disabled || !canDecrease) && styles.stepperButtonDisabled]}
           disabled={disabled || !canDecrease}
@@ -261,7 +245,7 @@ export default function SettingsScreen() {
         </Pressable>
         <Text style={styles.stepperValue}>{value}</Text>
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole='button'
           accessibilityLabel={`Increase ${label.toLowerCase()}`}
           style={[styles.stepperButton, (disabled || !canIncrease) && styles.stepperButtonDisabled]}
           disabled={disabled || !canIncrease}
@@ -284,7 +268,7 @@ export default function SettingsScreen() {
           `${settings.sidebarBackgroundContrast}`,
           settings.sidebarBackgroundContrast > SIDEBAR_BACKGROUND_CONTRAST_MIN,
           settings.sidebarBackgroundContrast < SIDEBAR_BACKGROUND_CONTRAST_MAX,
-          stepSidebarContrast,
+          stepSidebarContrast
         )}
         <Text style={styles.sectionCaption}>
           85 is softer gray; 100 is black. Drawer surfaces adjust automatically.
@@ -293,15 +277,13 @@ export default function SettingsScreen() {
           value={settings.sidebarBackgroundTint}
           resolvedBackground={sidebarBackgroundForSettings(
             settings.sidebarBackgroundTint,
-            settings.sidebarBackgroundContrast,
+            settings.sidebarBackgroundContrast
           )}
           onChange={(value) => setSetting('sidebarBackgroundTint', value)}
         />
-        <Text style={styles.sectionCaption}>
-          Applies the same calibrated dark tint logic as the GPUI sidebar.
-        </Text>
+        <Text style={styles.sectionCaption}>Applies the same calibrated dark tint logic as the GPUI sidebar.</Text>
         <SteppedSlider
-          label="Sidebar groups opacity"
+          label='Sidebar groups opacity'
           maximumValue={SIDEBAR_SURFACE_OPACITY_MAX}
           minimumValue={SIDEBAR_SURFACE_OPACITY_MIN}
           step={1}
@@ -310,7 +292,7 @@ export default function SettingsScreen() {
           onValueChange={(value) => setSetting('sidebarGroupsOpacityPercent', value)}
         />
         <SteppedSlider
-          label="Sidebar projects opacity"
+          label='Sidebar projects opacity'
           maximumValue={SIDEBAR_SURFACE_OPACITY_MAX}
           minimumValue={SIDEBAR_SURFACE_OPACITY_MIN}
           step={1}
@@ -318,22 +300,17 @@ export default function SettingsScreen() {
           valueLabel={`${settings.sidebarProjectsOpacityPercent}%`}
           onValueChange={(value) => setSetting('sidebarProjectsOpacityPercent', value)}
         />
-        <Text style={styles.sectionCaption}>
-          Changes only group and project backgrounds and borders.
-        </Text>
+        <Text style={styles.sectionCaption}>Changes only group and project backgrounds and borders.</Text>
 
         <Text style={styles.sectionHeader}>Default agent view</Text>
         {PREFERRED_AGENT_INTERFACE_ROWS.map((row) =>
-          renderChoice(
-            `agent-view-${row.value}`,
-            row.label,
-            settings.preferredAgentInterface === row.value,
-            () => setSetting('preferredAgentInterface', row.value),
-          ),
+          renderChoice(`agent-view-${row.value}`, row.label, settings.preferredAgentInterface === row.value, () =>
+            setSetting('preferredAgentInterface', row.value)
+          )
         )}
         <Text style={styles.sectionCaption}>
-          Agent sessions that support chat open in this view. Each tab can still be switched
-          between chat and terminal at any time, and a switched tab remembers its own choice.
+          Agent sessions that support chat open in this view. Each tab can still be switched between chat and terminal
+          at any time, and a switched tab remembers its own choice.
         </Text>
 
         <Text style={styles.sectionHeader}>Chat</Text>
@@ -341,62 +318,57 @@ export default function SettingsScreen() {
           These settings change chat content only; the surrounding mobile app remains dark.
         </Text>
         {SESSION_CHAT_THEME_ROWS.map((row) =>
-          renderChoice(
-            `chat-theme-${row.value}`,
-            row.label,
-            settings.sessionChatTheme === row.value,
-            () => setSetting('sessionChatTheme', row.value),
-          ),
+          renderChoice(`chat-theme-${row.value}`, row.label, settings.sessionChatTheme === row.value, () =>
+            setSetting('sessionChatTheme', row.value)
+          )
         )}
         <View style={styles.chatFontCard}>
           <Text style={styles.chatFontLabel}>Font Family</Text>
           <TextInput
-            accessibilityLabel="Chat font family"
-            autoCapitalize="words"
+            accessibilityLabel='Chat font family'
+            autoCapitalize='words'
             autoCorrect={false}
-            placeholder="App default"
+            placeholder='App default'
             placeholderTextColor={GhostexPalette.MUTED}
-            returnKeyType="done"
+            returnKeyType='done'
             spellCheck={false}
             style={styles.chatFontInput}
             value={settings.sessionChatFontFamily}
             onChangeText={(value) => setSetting('sessionChatFontFamily', value)}
           />
         </View>
-        <Text style={styles.sectionCaption}>
-          Type an installed font family name. Leave blank to use the app font.
-        </Text>
-        <SteppedSlider
-          label="Message width"
-          maximumValue={MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
-          minimumValue={MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
-          step={SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP}
-          value={settings.sessionChatTranscriptWidthPercent}
-          valueLabel={`${settings.sessionChatTranscriptWidthPercent}%`}
-          onValueChange={(value) => setSetting('sessionChatTranscriptWidthPercent', value)}
-        />
-        <Text style={styles.sectionCaption}>
-          Adjusts messages only. The prompt composer keeps its current width.
-        </Text>
+        <Text style={styles.sectionCaption}>Type an installed font family name. Leave blank to use the app font.</Text>
+        {renderToggle('sessionChatCustomTranscriptWidthEnabled', 'Custom Transcript Width')}
+        <Text style={styles.sectionCaption}>Lets the transcript use a different width from the prompt composer.</Text>
+        {settings.sessionChatCustomTranscriptWidthEnabled ? (
+          <>
+            <SteppedSlider
+              label='Transcript width'
+              maximumValue={MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
+              minimumValue={MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
+              step={SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP}
+              value={settings.sessionChatTranscriptWidthPercent}
+              valueLabel={`${settings.sessionChatTranscriptWidthPercent}%`}
+              onValueChange={(value) => setSetting('sessionChatTranscriptWidthPercent', value)}
+            />
+            <Text style={styles.sectionCaption}>
+              Adjusts messages only. The prompt composer keeps its current width.
+            </Text>
+          </>
+        ) : null}
         {renderToggle('sessionChatVerboseMode', 'Verbose Mode')}
-        <Text style={styles.sectionCaption}>
-          Expands thinking blocks to show their tool calls by default.
-        </Text>
+        <Text style={styles.sectionCaption}>Expands thinking blocks to show their tool calls by default.</Text>
 
         <Text style={styles.sectionHeader}>Terminal behavior</Text>
         {TERMINAL_BEHAVIOR_TOGGLES.map((toggle) => renderToggle(toggle.key, toggle.label))}
 
         <Text style={styles.sectionHeader}>Extra keys</Text>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.row}
-          onPress={() => navigation.navigate('ExtraKeysEditor')}
-        >
+        <Pressable accessibilityRole='button' style={styles.row} onPress={() => navigation.navigate('ExtraKeysEditor')}>
           <Text style={styles.rowLabel}>Extra keys layout</Text>
           <Text style={styles.rowChevron}>›</Text>
         </Pressable>
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole='button'
           style={styles.row}
           onPress={() => navigation.navigate('AgentHotkeysEditor')}
         >
@@ -410,14 +382,14 @@ export default function SettingsScreen() {
           `${settings.fontSize}`,
           settings.fontSize > TERMINAL_FONT_SIZE_MIN,
           settings.fontSize < TERMINAL_FONT_SIZE_MAX,
-          stepFontSize,
+          stepFontSize
         )}
         <Text style={styles.sectionCaption}>
           Applies immediately to terminals without a pinch-zoom size of their own.
         </Text>
         {hasFontOverrides && (
           <Pressable
-            accessibilityRole="button"
+            accessibilityRole='button'
             style={styles.row}
             onPress={() => useTerminalStore.getState().clearFontSizeOverrides()}
           >
@@ -427,7 +399,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionHeader}>Scrollback</Text>
         <SteppedSlider
-          label="Scrollback"
+          label='Scrollback'
           maximumValue={SCROLLBACK_ROWS_MAX}
           minimumValue={SCROLLBACK_ROWS_MIN}
           step={SCROLLBACK_ROWS_STEP}
@@ -440,16 +412,16 @@ export default function SettingsScreen() {
         <Text style={styles.sectionHeader}>Cursor</Text>
         {CURSOR_STYLE_ROWS.map((row) =>
           renderChoice(`cursor-${row.value}`, row.label, settings.cursorStyle === row.value, () =>
-            setSetting('cursorStyle', row.value),
-          ),
+            setSetting('cursorStyle', row.value)
+          )
         )}
         {renderToggle('cursorBlink', 'Blink')}
 
         <Text style={styles.sectionHeader}>Alerts and hardware keys</Text>
         {BELL_ROWS.map((row) =>
           renderChoice(`bell-${row.value}`, row.label, settings.bellBehavior === row.value, () =>
-            setSetting('bellBehavior', row.value),
-          ),
+            setSetting('bellBehavior', row.value)
+          )
         )}
 
         <Text style={styles.sectionHeader}>SSH connection</Text>
@@ -461,11 +433,9 @@ export default function SettingsScreen() {
           settings.keepAliveIntervalSec > KEEP_ALIVE_INTERVAL_MIN_SEC,
           settings.keepAliveIntervalSec < KEEP_ALIVE_INTERVAL_MAX_SEC,
           (delta) => stepKeepAliveInterval(delta * KEEP_ALIVE_INTERVAL_STEP_SEC),
-          !settings.keepAliveEnabled,
+          !settings.keepAliveEnabled
         )}
-        <Text style={styles.sectionCaption}>
-          Connection settings apply the next time a machine connects.
-        </Text>
+        <Text style={styles.sectionCaption}>Connection settings apply the next time a machine connects.</Text>
       </ScrollView>
     </SafeAreaView>
   );

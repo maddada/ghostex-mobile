@@ -74,7 +74,6 @@ function resolveChatBundleBaseUri(): string {
   return `${withSlash}${CHAT_ASSET_DIR}/`;
 }
 
-
 /** JSON that is safe to embed inside injected JavaScript source. */
 function injectableJson(value: unknown): string {
   return JSON.stringify(value)
@@ -139,6 +138,8 @@ export type SessionChatWebViewProps = {
   theme?: 'light' | 'dark';
   /** Installed CSS font-family name, or blank to use the bundled app font. */
   fontFamily?: string;
+  /** Let the transcript use its configured percentage instead of the composer column. */
+  customTranscriptWidthEnabled?: boolean;
   /** Width of the message transcript only; the prompt composer stays unchanged. */
   transcriptWidthPercent?: number;
   /** Reveal thinking-owned tool calls without requiring a tap. */
@@ -148,6 +149,7 @@ export type SessionChatWebViewProps = {
 
 export default function SessionChatWebView({
   agentId,
+  customTranscriptWidthEnabled = false,
   fontFamily = '',
   machine,
   onQueueCountChange,
@@ -186,7 +188,7 @@ export default function SessionChatWebView({
         `if (window.ghostexMobileChatAcknowledgeDraft) {` +
         `window.ghostexMobileChatAcknowledgeDraft(${encodedContent});` +
         `window.__ghostexMobileChatPendingAcknowledgedDraft = undefined;` +
-        `} true;`,
+        `} true;`
     );
     return true;
   }, []);
@@ -220,6 +222,7 @@ export default function SessionChatWebView({
       `window.__ghostexMobileChatConfig = ${injectableJson({
         acknowledgedDraft: acknowledgedDraftAtMount,
         agentId,
+        customTranscriptWidthEnabled,
         fontFamily,
         projectId,
         sessionId,
@@ -232,13 +235,14 @@ export default function SessionChatWebView({
       acknowledgedDraftAtMount,
       agentId,
       chatSessionKey,
+      customTranscriptWidthEnabled,
       fontFamily,
       projectId,
       sessionId,
       theme,
       transcriptWidthPercent,
       verboseMode,
-    ],
+    ]
   );
 
   /*
@@ -253,7 +257,7 @@ export default function SessionChatWebView({
   const pushHostState = useCallback((): void => {
     webviewRef.current?.injectJavaScript(
       'window.ghostexMobileChatSetHostState && window.ghostexMobileChatSetHostState(' +
-        `${injectableJson(hostStateRef.current)}); true;`,
+        `${injectableJson(hostStateRef.current)}); true;`
     );
   }, []);
 
@@ -261,18 +265,24 @@ export default function SessionChatWebView({
     pushHostState();
   }, [working, pushHostState]);
 
-  const presentationRef = useRef({ fontFamily, theme, transcriptWidthPercent, verboseMode });
-  presentationRef.current = { fontFamily, theme, transcriptWidthPercent, verboseMode };
+  const presentationRef = useRef({
+    customTranscriptWidthEnabled,
+    fontFamily,
+    theme,
+    transcriptWidthPercent,
+    verboseMode,
+  });
+  presentationRef.current = { customTranscriptWidthEnabled, fontFamily, theme, transcriptWidthPercent, verboseMode };
   const pushPresentation = useCallback((): void => {
     webviewRef.current?.injectJavaScript(
       'window.ghostexMobileChatSetPresentation && window.ghostexMobileChatSetPresentation(' +
-        `${injectableJson(presentationRef.current)}); true;`,
+        `${injectableJson(presentationRef.current)}); true;`
     );
   }, []);
 
   useEffect(() => {
     pushPresentation();
-  }, [fontFamily, pushPresentation, theme, transcriptWidthPercent, verboseMode]);
+  }, [customTranscriptWidthEnabled, fontFamily, pushPresentation, theme, transcriptWidthPercent, verboseMode]);
 
   const pushCurrentState = useCallback((): void => {
     pushHostState();
@@ -318,7 +328,7 @@ export default function SessionChatWebView({
       if (cancelled || content.length === 0) return;
       webviewRef.current?.injectJavaScript(
         'window.ghostexMobileChatInsertDraft && window.ghostexMobileChatInsertDraft(' +
-          `${injectableJson(content)}); true;`,
+          `${injectableJson(content)}); true;`
       );
     });
     return () => {
@@ -338,7 +348,7 @@ export default function SessionChatWebView({
     handledHandoffToTerminalRef.current = handoffToTerminalRequestId;
     if (handoffToTerminalRequestId <= 0) return;
     webviewRef.current?.injectJavaScript(
-      'window.ghostexMobileChatHandoffToTerminal && window.ghostexMobileChatHandoffToTerminal(); true;',
+      'window.ghostexMobileChatHandoffToTerminal && window.ghostexMobileChatHandoffToTerminal(); true;'
     );
   }, [handoffToTerminalRequestId]);
 
@@ -351,7 +361,7 @@ export default function SessionChatWebView({
     handledSearchRequestRef.current = openSearchRequestId;
     if (openSearchRequestId <= 0) return;
     webviewRef.current?.injectJavaScript(
-      'window.ghostexMobileChatOpenSearch && window.ghostexMobileChatOpenSearch(); true;',
+      'window.ghostexMobileChatOpenSearch && window.ghostexMobileChatOpenSearch(); true;'
     );
   }, [openSearchRequestId]);
 
@@ -361,7 +371,7 @@ export default function SessionChatWebView({
     handledSessionNoteRequestRef.current = openSessionNoteRequestId;
     if (openSessionNoteRequestId <= 0) return;
     webviewRef.current?.injectJavaScript(
-      'window.ghostexMobileChatOpenSessionNote && window.ghostexMobileChatOpenSessionNote(); true;',
+      'window.ghostexMobileChatOpenSessionNote && window.ghostexMobileChatOpenSessionNote(); true;'
     );
   }, [openSessionNoteRequestId]);
 
@@ -371,38 +381,32 @@ export default function SessionChatWebView({
     handledSavedPromptsRequestRef.current = openSavedPromptsRequestId;
     if (openSavedPromptsRequestId <= 0) return;
     webviewRef.current?.injectJavaScript(
-      'window.ghostexMobileChatOpenSavedPrompts && window.ghostexMobileChatOpenSavedPrompts(); true;',
+      'window.ghostexMobileChatOpenSavedPrompts && window.ghostexMobileChatOpenSavedPrompts(); true;'
     );
   }, [openSavedPromptsRequestId]);
 
   const deliver = useCallback((response: SessionChatBridgeResponse): void => {
     webviewRef.current?.injectJavaScript(
-      `window.ghostexMobileChatDeliver && window.ghostexMobileChatDeliver(${injectableJson(response)}); true;`,
+      `window.ghostexMobileChatDeliver && window.ghostexMobileChatDeliver(${injectableJson(response)}); true;`
     );
   }, []);
 
   const focusSavedPromptSession = useCallback(
     async (params: Record<string, unknown>): Promise<void> => {
-      const machineRecord = useMachinesStore.getState().machines.find(
-        (entry) => entry.id === machine.id,
-      );
+      const machineRecord = useMachinesStore.getState().machines.find((entry) => entry.id === machine.id);
       if (machineRecord !== undefined) {
         await useInventoryStore.getState().refreshMachine(machineRecord);
       }
-      const agentSessionId =
-        typeof params.agentSessionId === 'string' ? params.agentSessionId.trim() : '';
-      const targetProjectId =
-        typeof params.projectId === 'string' ? params.projectId.trim() : '';
-      const targetSessionId =
-        typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
-      const sessions =
-        useInventoryStore.getState().inventoriesByMachineId[machine.id]?.summary?.sessions ?? [];
+      const agentSessionId = typeof params.agentSessionId === 'string' ? params.agentSessionId.trim() : '';
+      const targetProjectId = typeof params.projectId === 'string' ? params.projectId.trim() : '';
+      const targetSessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
+      const sessions = useInventoryStore.getState().inventoriesByMachineId[machine.id]?.summary?.sessions ?? [];
       const target = sessions.find(
         (candidate) =>
           (agentSessionId.length > 0 && candidate.agentSessionId === agentSessionId) ||
           (targetSessionId.length > 0 &&
             candidate.sessionId === targetSessionId &&
-            (targetProjectId.length === 0 || candidate.projectId === targetProjectId)),
+            (targetProjectId.length === 0 || candidate.projectId === targetProjectId))
       );
       if (target === undefined) {
         throw new Error('That saved prompt’s session is no longer available on this machine.');
@@ -414,7 +418,7 @@ export default function SessionChatWebView({
       });
       useTerminalStore.getState().selectTab(sessionKey);
     },
-    [machine],
+    [machine]
   );
 
   const handleMessage = useCallback(
@@ -448,13 +452,7 @@ export default function SessionChatWebView({
       if (request.op === 'sendKey') {
         const key = request.params?.key;
         const terminalKey =
-          key === 'shift-up'
-            ? 'up'
-            : key === 'shift-down'
-              ? 'down'
-              : key === 'shift-tab'
-                ? 'tab'
-                : null;
+          key === 'shift-up' ? 'up' : key === 'shift-down' ? 'down' : key === 'shift-tab' ? 'tab' : null;
         if (terminalKey === null) {
           deliver({ id: request.id, ok: false, error: 'Unknown chat terminal key.' });
           return;
@@ -466,7 +464,7 @@ export default function SessionChatWebView({
               id: request.id,
               ok: false,
               error: error instanceof Error ? error.message : String(error),
-            }),
+            })
           );
         return;
       }
@@ -481,11 +479,7 @@ export default function SessionChatWebView({
         return;
       }
       void runSessionChatBridgeRequest(machine, projectId, sessionId, request).then((response) => {
-        if (
-          request.op === 'send' &&
-          response.ok &&
-          (!mountedRef.current || webviewRef.current === null)
-        ) {
+        if (request.op === 'send' && response.ok && (!mountedRef.current || webviewRef.current === null)) {
           const content = request.params?.text;
           if (typeof content === 'string' && content.length > 0) {
             acknowledgedDraftsBySessionKey.set(chatSessionKey, content);
@@ -507,7 +501,7 @@ export default function SessionChatWebView({
       projectId,
       sessionId,
       terminalSessionKey,
-    ],
+    ]
   );
 
   return (
@@ -546,7 +540,7 @@ export default function SessionChatWebView({
       setSupportMultipleWindows={false}
       hideKeyboardAccessoryView
       webviewDebuggingEnabled={__DEV__}
-      contentInsetAdjustmentBehavior="never"
+      contentInsetAdjustmentBehavior='never'
       automaticallyAdjustContentInsets={false}
     />
   );

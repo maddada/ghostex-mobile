@@ -64,6 +64,8 @@ export type GhostexSettings = {
   sessionChatTheme: SessionChatTheme;
   /** CSS font-family used by chat messages and the prompt composer. */
   sessionChatFontFamily: string;
+  /** Whether the transcript uses a custom width instead of the composer column. */
+  sessionChatCustomTranscriptWidthEnabled: boolean;
   /** Width of the message transcript; the prompt composer keeps its full width. */
   sessionChatTranscriptWidthPercent: number;
   /** Reveal thinking-owned tool calls by default. */
@@ -100,12 +102,9 @@ export function clampSessionChatTranscriptWidthPercent(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
   const clamped = Math.min(
     MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
-    Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value),
+    Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value)
   );
-  return (
-    Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) *
-    SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP
-  );
+  return Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) * SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
 }
 
 export function defaultFontSize(): number {
@@ -138,6 +137,7 @@ export function defaultSettings(): GhostexSettings {
     preferredAgentInterface: 'chat',
     sessionChatTheme: 'dark',
     sessionChatFontFamily: '',
+    sessionChatCustomTranscriptWidthEnabled: false,
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
     autoReconnect: true,
@@ -147,17 +147,13 @@ export function defaultSettings(): GhostexSettings {
 }
 
 function clampKeepAliveInterval(value: number): number {
-  const stepped =
-    Math.round(value / KEEP_ALIVE_INTERVAL_STEP_SEC) * KEEP_ALIVE_INTERVAL_STEP_SEC;
+  const stepped = Math.round(value / KEEP_ALIVE_INTERVAL_STEP_SEC) * KEEP_ALIVE_INTERVAL_STEP_SEC;
   return Math.min(KEEP_ALIVE_INTERVAL_MAX_SEC, Math.max(KEEP_ALIVE_INTERVAL_MIN_SEC, stepped));
 }
 
 function clampSidebarSurfaceOpacity(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
-  return Math.min(
-    SIDEBAR_SURFACE_OPACITY_MAX,
-    Math.max(SIDEBAR_SURFACE_OPACITY_MIN, Math.round(value)),
-  );
+  return Math.min(SIDEBAR_SURFACE_OPACITY_MAX, Math.max(SIDEBAR_SURFACE_OPACITY_MIN, Math.round(value)));
 }
 
 export function clampScrollbackRows(value: number): number {
@@ -199,17 +195,11 @@ function sanitizeSettings(value: unknown): GhostexSettings {
       : defaults.sidebarBackgroundTint;
   const sidebarGroupsOpacityPercent =
     typeof record.sidebarGroupsOpacityPercent === 'number'
-      ? clampSidebarSurfaceOpacity(
-          record.sidebarGroupsOpacityPercent,
-          defaults.sidebarGroupsOpacityPercent,
-        )
+      ? clampSidebarSurfaceOpacity(record.sidebarGroupsOpacityPercent, defaults.sidebarGroupsOpacityPercent)
       : defaults.sidebarGroupsOpacityPercent;
   const sidebarProjectsOpacityPercent =
     typeof record.sidebarProjectsOpacityPercent === 'number'
-      ? clampSidebarSurfaceOpacity(
-          record.sidebarProjectsOpacityPercent,
-          defaults.sidebarProjectsOpacityPercent,
-        )
+      ? clampSidebarSurfaceOpacity(record.sidebarProjectsOpacityPercent, defaults.sidebarProjectsOpacityPercent)
       : defaults.sidebarProjectsOpacityPercent;
   const preferredAgentInterface =
     record.preferredAgentInterface === 'terminal' || record.preferredAgentInterface === 'chat'
@@ -220,9 +210,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
       ? record.sessionChatTheme
       : defaults.sessionChatTheme;
   const sessionChatFontFamily =
-    typeof record.sessionChatFontFamily === 'string'
-      ? record.sessionChatFontFamily
-      : defaults.sessionChatFontFamily;
+    typeof record.sessionChatFontFamily === 'string' ? record.sessionChatFontFamily : defaults.sessionChatFontFamily;
   const sessionChatTranscriptWidthPercent =
     typeof record.sessionChatTranscriptWidthPercent === 'number'
       ? clampSessionChatTranscriptWidthPercent(record.sessionChatTranscriptWidthPercent)
@@ -252,6 +240,10 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     preferredAgentInterface,
     sessionChatTheme,
     sessionChatFontFamily,
+    sessionChatCustomTranscriptWidthEnabled: bool(
+      'sessionChatCustomTranscriptWidthEnabled',
+      defaults.sessionChatCustomTranscriptWidthEnabled
+    ),
     sessionChatTranscriptWidthPercent,
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
