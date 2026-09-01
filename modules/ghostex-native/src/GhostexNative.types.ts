@@ -9,6 +9,13 @@ export type SshConfig = {
   keepAliveEnabled?: boolean;
   /** Keep-alive interval in seconds (10-120). Ignored when keepAliveEnabled is false. */
   keepAliveIntervalSec?: number;
+  /**
+   * tailcat peer token. When set, the native layer starts (or reuses) a tailcat
+   * loopback forward keyed on the machineId and dials 127.0.0.1 through it
+   * instead of host:port. Host-key identity stays keyed on host:port, so the
+   * caller must pass a stable synthetic host for tailcat machines.
+   */
+  tailcatToken?: string;
 };
 
 export type ExecResult = {

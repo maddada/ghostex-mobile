@@ -18,6 +18,7 @@
 import Foundation
 import os.log
 import libssh2
+import Tailcatbridge
 
 // MARK: - libssh2 Runtime
 
@@ -48,6 +49,8 @@ struct SSHCredentials: Sendable {
 }
 
 struct SSHConnectionConfig: Sendable {
+    /// Identifies the machine this connection belongs to; also keys its tailcat forward.
+    var machineId: String
     var host: String
     var port: Int
     var username: String
@@ -57,6 +60,9 @@ struct SSHConnectionConfig: Sendable {
     var keepAliveEnabled: Bool = true
     /// Keep-alive interval in seconds; clamped to 10...120 when enabled.
     var keepAliveIntervalSec: Int = 30
+    /// tailcat peer token. Non-empty means dial the tailcat loopback forward for
+    /// `machineId` instead of `host`:`port`. Host-key identity stays `host`:`port`.
+    var tailcatToken: String = ""
 }
 
 struct SSHExecResult: Sendable {
@@ -305,10 +311,13 @@ actor SSHConnection {
         hints.ai_protocol = IPPROTO_TCP
         var result: UnsafeMutablePointer<addrinfo>?
 
-        let portString = String(config.port)
-        let resolveResult = getaddrinfo(config.host, portString, &hints, &result)
+        // Plain SSH resolves the configured host; tailcat resolves the loopback
+        // forward for this machine. Host-key pinning below stays on config.host.
+        let (dialHost, dialPort) = try resolveDialTarget()
+        let portString = String(dialPort)
+        let resolveResult = getaddrinfo(dialHost, portString, &hints, &result)
         guard resolveResult == 0, let addrInfo = result else {
-            throw SSHError.connectionFailed("Failed to resolve host: \(config.host)")
+            throw SSHError.connectionFailed("Failed to resolve host: \(dialHost)")
         }
         defer { freeaddrinfo(result) }
 
@@ -425,6 +434,41 @@ actor SSHConnection {
         transportDead = false
         startKeepAliveLoop()
         logger.info("SSH session established")
+    }
+
+    /// tailcat forwards listen on loopback only; the tunnel itself carries the traffic.
+    private static let tailcatLoopbackHost = "127.0.0.1"
+
+    /**
+     * Where the TCP connection actually goes. A tailcat machine dials the loopback
+     * port of the forward the bridge keeps for `config.machineId`; starting it is
+     * idempotent, so a reconnect reuses the already-established tunnel. The very
+     * first call per machine performs the peer rendezvous and blocks for seconds —
+     * acceptable here because `connect()` already blocks the actor on the socket
+     * connect and the libssh2 handshake.
+     */
+    private func resolveDialTarget() throws -> (String, Int) {
+        let token = config.tailcatToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return (config.host, config.port) }
+
+        var localPort = 0
+        var bridgeError: NSError?
+        let started = TailcatbridgeStartForward(
+            config.machineId,
+            token,
+            config.port,
+            &localPort,
+            &bridgeError
+        )
+        guard started, localPort > 0 else {
+            let detail = bridgeError?.localizedDescription ?? "the bridge returned no local port"
+            throw SSHError.connectionFailed(
+                "tailcat could not reach \(config.machineId). Check that the remote's tailcat "
+                    + "sidecar is enabled and that its token is current. (\(detail))"
+            )
+        }
+        logger.info("tailcat forward for \(self.config.machineId) listening on port \(localPort)")
+        return (Self.tailcatLoopbackHost, localPort)
     }
 
     private func authenticate() throws {

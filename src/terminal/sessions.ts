@@ -383,6 +383,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         host: record.host,
         username: record.username,
         port: record.port,
+        transport: record.transport,
       };
       patchTab(sessionKey, { state: 'opening', error: undefined });
       // A fresh attach gets a fresh native viewport refresh.

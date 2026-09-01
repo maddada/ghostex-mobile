@@ -123,12 +123,17 @@ export function reloadSessionAction(session: GhostexSession): BulkSessionAction 
   };
 }
 
-/** `ssh -tt [-p port] user@host '<login-shell attach command>'` (§2 row 7). */
+/**
+ * `ssh -tt [-p port] user@host '<login-shell attach command>'` (§2 row 7). A
+ * tailcat machine has no address to ssh to — its host is a synthetic host-key
+ * identity — so the copied command is the attach command to run on the machine.
+ */
 export function attachSshCommand(machine: MachineRecord, session: GhostexSession): string {
-  const portFlag = machine.port === 22 ? '' : ` -p ${machine.port}`;
   const remote = loginShellCommand(
     attachCommand(session.sessionId, session.projectId.length > 0 ? session.projectId : undefined),
   );
+  if (machine.transport === 'tailcat') return remote;
+  const portFlag = machine.port === 22 ? '' : ` -p ${machine.port}`;
   return `ssh -tt${portFlag} ${machine.username}@${machine.host} ${shellQuote(remote)}`;
 }
 

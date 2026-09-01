@@ -63,7 +63,13 @@ export function machineRecordFor(machineId: string): MachineRecord | null {
 export function machineTargetFor(machineId: string): MachineConnectionTarget | null {
   const record = machineRecordFor(machineId);
   if (record === null) return null;
-  return { id: record.id, host: record.host, username: record.username, port: record.port };
+  return {
+    id: record.id,
+    host: record.host,
+    username: record.username,
+    port: record.port,
+    transport: record.transport,
+  };
 }
 
 /**

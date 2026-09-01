@@ -69,7 +69,13 @@ function handleUrl(url: string | null): void {
     void useTerminalStore
       .getState()
       .attachSession(
-        { id: machine.id, host: machine.host, username: machine.username, port: machine.port },
+        {
+          id: machine.id,
+          host: machine.host,
+          username: machine.username,
+          port: machine.port,
+          transport: machine.transport,
+        },
         { sessionId, title },
       )
       .then((sessionKey) => {

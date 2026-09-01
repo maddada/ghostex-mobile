@@ -28,6 +28,7 @@ import { useInventoryStore } from '../inventory/store';
 import {
   clearSessionPassword,
   deleteSavedPassword,
+  getTailcatToken,
   hasPassword,
   setSavedPassword,
   setSessionPassword,
@@ -53,12 +54,22 @@ type Overlay =
   | { kind: 'resetHostKey'; machine: MachineRecord }
   | { kind: 'delete'; machine: MachineRecord }
   | { kind: 'details'; machine: MachineRecord }
-  | { kind: 'copyTarget'; machine: MachineRecord }
+  | { kind: 'copyTarget'; title: string; body: string }
   | { kind: 'message'; title: string; message: string };
 
 const NONE: Overlay = { kind: 'none' };
 
+const NO_TAILCAT_TOKEN = 'No tailcat token is saved for this machine.';
+
+/**
+ * One-line target summary. A tailcat machine's host is a synthetic host-key
+ * identity rather than an address, so it is never shown to the user.
+ */
 function sshTarget(machine: MachineRecord): string {
+  if (machine.transport === 'tailcat') {
+    const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
+    return `${machine.username}@tailcat${portSuffix}`;
+  }
   return `${machine.username}@${machine.host}:${machine.port}`;
 }
 
@@ -177,6 +188,19 @@ export default function MachinesScreen({ navigation }: Props) {
     [refreshMachine],
   );
 
+  const showCopyTarget = useCallback(async (machine: MachineRecord): Promise<void> => {
+    if (machine.transport !== 'tailcat') {
+      setOverlay({ kind: 'copyTarget', title: 'Copy SSH target', body: sshTarget(machine) });
+      return;
+    }
+    const token = await getTailcatToken(machine.id);
+    setOverlay({
+      kind: 'copyTarget',
+      title: 'Copy tailcat token',
+      body: token === null || token.length === 0 ? NO_TAILCAT_TOKEN : token,
+    });
+  }, []);
+
   const deleteMachine = useCallback(
     async (machine: MachineRecord): Promise<void> => {
       setOverlay(NONE);
@@ -216,8 +240,8 @@ export default function MachinesScreen({ navigation }: Props) {
     { key: 'details', label: 'Details', onPress: () => setOverlay({ kind: 'details', machine }) },
     {
       key: 'copy-target',
-      label: 'Copy SSH target',
-      onPress: () => setOverlay({ kind: 'copyTarget', machine }),
+      label: machine.transport === 'tailcat' ? 'Copy tailcat token' : 'Copy SSH target',
+      onPress: () => void showCopyTarget(machine),
     },
     {
       key: 'forget-password',
@@ -237,14 +261,20 @@ export default function MachinesScreen({ navigation }: Props) {
       destructive: true,
       onPress: () => setOverlay({ kind: 'delete', machine }),
     },
-    {
-      key: 'tailscale',
-      label: 'Open Tailscale',
-      onPress: () => {
-        setOverlay(NONE);
-        void openTailscaleOrDownload();
-      },
-    },
+    // A tailcat machine is reached by its pairing token, with no VPN on this
+    // phone, so the Tailscale app has nothing to do with it.
+    ...(machine.transport === 'tailcat'
+      ? []
+      : [
+          {
+            key: 'tailscale',
+            label: 'Open Tailscale',
+            onPress: () => {
+              setOverlay(NONE);
+              void openTailscaleOrDownload();
+            },
+          },
+        ]),
   ];
 
   const renderMachine = ({ item }: { item: MachineRecord }) => {
@@ -443,7 +473,13 @@ export default function MachinesScreen({ navigation }: Props) {
           title={machineDisplayLabel(overlay.machine)}
           entries={[
             { label: 'Name', value: overlay.machine.name },
-            { label: 'Host', value: overlay.machine.host },
+            {
+              label: 'Connection',
+              value: overlay.machine.transport === 'tailcat' ? 'Tailcat token' : 'SSH host',
+            },
+            ...(overlay.machine.transport === 'tailcat'
+              ? []
+              : [{ label: 'Host', value: overlay.machine.host }]),
             { label: 'Username', value: overlay.machine.username },
             { label: 'Port', value: String(overlay.machine.port) },
             { label: 'Save password', value: overlay.machine.savePassword ? 'Yes' : 'No' },
@@ -462,8 +498,8 @@ export default function MachinesScreen({ navigation }: Props) {
       {overlay.kind === 'copyTarget' ? (
         <ConfirmDialog
           visible
-          title="Copy SSH target"
-          body={sshTarget(overlay.machine)}
+          title={overlay.title}
+          body={overlay.body}
           selectableBody
           confirmLabel="Close"
           cancelLabel={null}

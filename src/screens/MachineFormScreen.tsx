@@ -2,7 +2,8 @@
  * Add/Edit machine form: VVTerm add-server structure (onboarding.md §2, §5)
  * merged with the Android password-save semantics (sessions-drawer.md §4).
  *
- * - Server: name, host + port row, username (blank → "root" on save).
+ * - Server: name, connection type (SSH host / tailcat token), host + port row or
+ *   token + port, username (blank → "root" on save).
  * - Authentication: Password / SSH Key / SSH Key + Passphrase, paste-or-generate
  *   key source, Android save-password checkbox wired to credentials.ts.
  * - Connection: optional Test Connection via GhostexNative.connect + disconnect.
@@ -32,14 +33,18 @@ import {
   getPassphrase,
   getPublicKey,
   getSshKey,
+  getTailcatToken,
   resolvePassword,
   setPassphrase,
   setPublicKey,
   setSshKey,
 } from '../machines/credentials';
 import {
+  tailcatSyntheticHost,
   useMachinesStore,
+  TAILCAT_TOKEN_PREFIX,
   type MachineInput,
+  type MachineTransport,
   type MachineValidationErrors,
 } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -59,6 +64,11 @@ const AUTH_METHOD_OPTIONS: readonly SegmentOption<AuthMethod>[] = [
   { value: 'password', label: 'Password' },
   { value: 'key', label: 'SSH Key' },
   { value: 'keyPassphrase', label: 'SSH Key + Passphrase' },
+];
+
+const TRANSPORT_OPTIONS: readonly SegmentOption<MachineTransport>[] = [
+  { value: 'ssh', label: 'SSH host' },
+  { value: 'tailcat', label: 'Tailcat token' },
 ];
 
 const ALGORITHM_OPTIONS: readonly SegmentOption<SshKeyType>[] = [
@@ -84,7 +94,10 @@ export default function MachineFormScreen({ navigation, route }: Props) {
 
   // Server section.
   const [name, setName] = useState(existing?.name ?? '');
-  const [host, setHost] = useState(existing?.host ?? '');
+  const [transport, setTransport] = useState<MachineTransport>(existing?.transport ?? 'ssh');
+  // A tailcat machine's stored host is a synthetic identity, never a real one.
+  const [host, setHost] = useState(existing?.transport === 'tailcat' ? '' : (existing?.host ?? ''));
+  const [tailcatToken, setTailcatToken] = useState('');
   const [port, setPort] = useState(existing === null ? '22' : String(existing.port));
   const [username, setUsername] = useState(existing?.username ?? '');
 
@@ -114,12 +127,14 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     if (machineId === null) return;
     let cancelled = false;
     void (async () => {
-      const [key, passphrase, storedPublicKey] = await Promise.all([
+      const [key, passphrase, storedPublicKey, storedToken] = await Promise.all([
         getSshKey(machineId),
         getPassphrase(machineId),
         getPublicKey(machineId),
+        getTailcatToken(machineId),
       ]);
       if (cancelled) return;
+      if (storedToken !== null && storedToken.length > 0) setTailcatToken(storedToken);
       if (key !== null && key.length > 0) {
         setPrivateKey(key);
         if (passphrase !== null && passphrase.length > 0) {
@@ -156,14 +171,21 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       : method === 'key'
         ? privateKey.trim().length > 0
         : privateKey.trim().length > 0 && keyPassphrase.length > 0;
-  const canSave =
-    host.trim().length > 0 && parsedPort !== null && credentialsValid;
-  const canTest = host.trim().length > 0 && parsedPort !== null && credentialsValid;
+  const trimmedToken = tailcatToken.trim();
+  /** The token replaces the host as the thing that makes the machine reachable. */
+  const targetValid =
+    transport === 'tailcat'
+      ? trimmedToken.length > 0 && trimmedToken.startsWith(TAILCAT_TOKEN_PREFIX)
+      : host.trim().length > 0;
+  const canSave = targetValid && parsedPort !== null && credentialsValid;
+  const canTest = targetValid && parsedPort !== null && credentialsValid;
 
   useEffect(() => {
     console.log('[GXDBG_ADD_SERVER] validation-v2', {
       nameLength: name.trim().length,
+      transport,
       hostLength: host.trim().length,
+      tokenLength: trimmedToken.length,
       parsedPort,
       credentialsValid,
       canTest,
@@ -178,14 +200,24 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     name,
     parsedPort,
     testState.kind,
+    trimmedToken,
+    transport,
   ]);
 
-  const buildTestConfig = async (): Promise<{ config: SshConfig; hasPassword: boolean }> => {
+  const buildTestConfig = async (
+    tempId: string,
+  ): Promise<{ config: SshConfig; hasPassword: boolean }> => {
+    // Editing a saved tailcat machine tests against its real pinned identity;
+    // an unsaved one gets a throwaway identity so a first-connect host key is
+    // never pinned under an id that will not exist after save.
+    const pinnedId = existing !== null && existing.transport === 'tailcat' ? existing.id : tempId;
+    const testHost = transport === 'tailcat' ? tailcatSyntheticHost(pinnedId) : host.trim();
     const config: SshConfig = {
-      host: host.trim(),
+      host: testHost,
       port: parsedPort ?? 22,
       username: username.trim().length > 0 ? username.trim() : 'root',
     };
+    if (transport === 'tailcat') config.tailcatToken = trimmedToken;
     if (method === 'password') {
       // A blank field while editing keeps the stored password, so test with it.
       const effective =
@@ -207,7 +239,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     setTestState({ kind: 'testing' });
     const tempId = `machine-form-test-${Date.now()}`;
     try {
-      const { config, hasPassword } = await buildTestConfig();
+      const { config, hasPassword } = await buildTestConfig(tempId);
       try {
         await GhostexNative.connect(tempId, config);
         await GhostexNative.disconnect(tempId);
@@ -268,6 +300,8 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       port,
       savePassword: method === 'password' ? savePassword : false,
       password: method === 'password' ? password : '',
+      transport,
+      tailcatToken: transport === 'tailcat' ? trimmedToken : '',
     };
     const result =
       existing === null ? await addMachine(input) : await updateMachine(existing.id, input);
@@ -324,26 +358,64 @@ export default function MachineFormScreen({ navigation, route }: Props) {
           value={name}
           onChangeText={setName}
         />
-        <View style={styles.hostRow}>
-          <TextInput
-            style={[styles.input, styles.hostInput]}
-            placeholder="203.0.113.10"
-            placeholderTextColor={GhostexPalette.MUTED}
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={host}
-            onChangeText={editField(setHost)}
-          />
-          <TextInput
-            style={[styles.input, styles.portInput]}
-            placeholder="22"
-            placeholderTextColor={GhostexPalette.MUTED}
-            keyboardType="number-pad"
-            value={port}
-            onChangeText={editField(setPort)}
-          />
-        </View>
+        <SegmentedControl
+          options={TRANSPORT_OPTIONS}
+          value={transport}
+          onChange={editField(setTransport)}
+        />
+        {transport === 'ssh' ? (
+          <View style={styles.hostRow}>
+            <TextInput
+              style={[styles.input, styles.hostInput]}
+              placeholder="203.0.113.10"
+              placeholderTextColor={GhostexPalette.MUTED}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={host}
+              onChangeText={editField(setHost)}
+            />
+            <TextInput
+              style={[styles.input, styles.portInput]}
+              placeholder="22"
+              placeholderTextColor={GhostexPalette.MUTED}
+              keyboardType="number-pad"
+              value={port}
+              onChangeText={editField(setPort)}
+            />
+          </View>
+        ) : (
+          <>
+            <TextInput
+              style={[styles.input, styles.tokenInput]}
+              placeholder="Paste the tailcat pairing token (tc…)"
+              placeholderTextColor={GhostexPalette.MUTED}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              value={tailcatToken}
+              onChangeText={editField(setTailcatToken)}
+            />
+            <Text style={styles.footerText}>
+              The token reaches the machine on its own, so no host address and no VPN are needed on
+              this phone. Tokens are case-sensitive and start with {'"tc"'}.
+            </Text>
+            <View style={styles.hostRow}>
+              <TextInput
+                style={[styles.input, styles.portInput]}
+                placeholder="22"
+                placeholderTextColor={GhostexPalette.MUTED}
+                keyboardType="number-pad"
+                value={port}
+                onChangeText={editField(setPort)}
+              />
+              <Text style={styles.portHint}>
+                {"SSH port on the machine itself (usually 22), not a tunnel port."}
+              </Text>
+            </View>
+          </>
+        )}
         <TextInput
           style={styles.input}
           placeholder="root"
@@ -523,6 +595,9 @@ export default function MachineFormScreen({ navigation, route }: Props) {
             {errors.duplicate !== undefined ? (
               <Text style={styles.errorText}>{errors.duplicate}</Text>
             ) : null}
+            {errors.tailcatToken !== undefined ? (
+              <Text style={styles.errorText}>{errors.tailcatToken}</Text>
+            ) : null}
             {errors.password !== undefined ? (
               <Text style={styles.errorText}>{errors.password}</Text>
             ) : null}
@@ -586,6 +661,20 @@ const styles = StyleSheet.create({
   portInput: {
     width: 76,
     textAlign: 'center',
+  },
+  portHint: {
+    flex: 1,
+    alignSelf: 'center',
+    color: GhostexPalette.MUTED,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  tokenInput: {
+    height: 92,
+    paddingTop: 12,
+    textAlignVertical: 'top',
+    fontFamily: MONOSPACE,
+    fontSize: 12,
   },
   keyInput: {
     height: 112,

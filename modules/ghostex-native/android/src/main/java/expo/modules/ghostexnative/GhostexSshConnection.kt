@@ -2,6 +2,7 @@ package expo.modules.ghostexnative
 
 import android.content.Context
 import android.net.Uri
+import dev.ghostex.tailcatbridge.Tailcatbridge
 import java.io.File
 import java.io.InputStream
 import java.security.KeyFactory
@@ -68,10 +69,13 @@ class GhostexSshConnection(
     // This client is long-lived and multiplexes idle terminal channels, so unlike the fork's
     // per-command clients it must not have a socket read timeout; keep-alives detect dead peers.
     ssh.timeout = 0
+    // Host-key identity is always config.host:config.port, never the dial target, so a
+    // tailcat machine keeps one pinned fingerprint across every loopback port it gets.
     val verifier = GhostexPersistedHostKeyVerifier(config.host, config.port, hostKeys)
     ssh.addHostKeyVerifier(verifier)
     try {
-      ssh.connect(config.host, config.port)
+      val (dialHost, dialPort) = resolveDialTarget()
+      ssh.connect(dialHost, dialPort)
       authenticate(ssh)
       // 0 disables SSHJ's keep-alive thread; the thread dies with the transport on disconnect.
       ssh.connection.keepAlive.keepAliveInterval =
@@ -93,6 +97,28 @@ class GhostexSshConnection(
       }
       throw mapSshError(error, fallbackCode = GhostexErrorCode.UNREACHABLE)
     }
+  }
+
+  /**
+   * Where the TCP connection actually goes. Plain SSH dials the configured host; a tailcat
+   * machine dials the loopback port of the forward the bridge keeps for this machineId.
+   * The first call per machine performs the peer rendezvous and can block for seconds; it
+   * runs on [workExecutor], never the main thread.
+   */
+  private fun resolveDialTarget(): Pair<String, Int> {
+    val token = config.tailcatToken.trim()
+    if (token.isEmpty()) return config.host to config.port
+    val localPort = try {
+      Tailcatbridge.startForward(machineId, token, config.port.toLong()).toInt()
+    } catch (error: Exception) {
+      throw GhostexException(
+        GhostexErrorCode.UNREACHABLE,
+        "tailcat could not reach $machineId. Check that the remote's tailcat sidecar is " +
+          "enabled and that its token is current. (${error.message ?: error.javaClass.simpleName})",
+        error
+      )
+    }
+    return TAILCAT_LOOPBACK_HOST to localPort
   }
 
   private fun authenticate(ssh: SSHClient) {
@@ -344,6 +370,9 @@ class GhostexSshConnection(
     private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
     private const val OWNER_READ_WRITE_PERMISSIONS = 0b110_000_000 // 0600
+
+    /** tailcat forwards listen on loopback only; the tunnel itself carries the traffic. */
+    private const val TAILCAT_LOOPBACK_HOST = "127.0.0.1"
 
     private fun remoteDirectory(remotePath: String): String {
       val slashIndex = remotePath.lastIndexOf('/')

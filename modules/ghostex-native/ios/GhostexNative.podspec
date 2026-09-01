@@ -45,7 +45,11 @@ Pod::Spec.new do |s|
   # GhosttyKit is a proper xcframework (static library + Headers with a
   # module.modulemap exposing `module GhosttyKit`). CocoaPods selects the
   # right slice and links the static library automatically.
-  s.vendored_frameworks = 'Vendor/GhosttyKit.xcframework'
+  #
+  # Tailcatbridge is the gomobile-built tailcat tunnel bridge, also a proper
+  # xcframework (static library + Headers/Modules with a `module Tailcatbridge`
+  # map), so `import Tailcatbridge` works the same way.
+  s.vendored_frameworks = ['Vendor/GhosttyKit.xcframework', 'Vendor/Tailcatbridge.xcframework']
 
   # libssh2 (+ statically built OpenSSL libssl/libcrypto) ships as plain
   # per-SDK static libs mirroring the VVTerm Xcode project layout:

@@ -13,9 +13,25 @@ import {
   deleteAllCredentials,
   deleteSavedPassword,
   getSavedPassword,
+  getTailcatToken,
   setSavedPassword,
   setSessionPassword,
+  setTailcatToken,
+  type MachineTransport,
 } from './credentials';
+
+export type { MachineTransport };
+
+/** Tailcat tokens are opaque peer tokens; every one starts with this prefix. */
+export const TAILCAT_TOKEN_PREFIX = 'tc';
+
+/**
+ * Stable, never-resolved identity for a tailcat machine. Native pins host keys
+ * by host:port, so this has to be derived from the machine id and never change.
+ */
+export function tailcatSyntheticHost(machineId: string): string {
+  return `tailcat-${machineId}`;
+}
 
 const MACHINES_STORAGE_KEY = 'machines.v1';
 const SELECTED_MACHINE_STORAGE_KEY = 'machines.selectedId';
@@ -24,16 +40,21 @@ const HAS_SEEN_WELCOME_STORAGE_KEY = 'hasSeenWelcome';
 export type MachineRecord = {
   id: string;
   name: string;
+  /** Real hostname for `ssh`; the synthetic `tailcat-<id>` identity for `tailcat`. */
   host: string;
   username: string;
+  /** The machine's own SSH port in both transports. */
   port: number;
   savePassword: boolean;
+  /** Absent means `ssh` (every record written before tailcat existed). */
+  transport?: MachineTransport;
   /** ISO timestamp of the last successful connection, or null. */
   lastConnectedAt: string | null;
 };
 
 export type MachineInput = {
   name: string;
+  /** Ignored for `tailcat`, which derives its synthetic host from the machine id. */
   host: string;
   username: string;
   /** Raw form value; validated as an integer 1-65535. */
@@ -41,6 +62,10 @@ export type MachineInput = {
   savePassword: boolean;
   /** Optional password captured by the editor form. */
   password?: string;
+  /** Absent means `ssh`. */
+  transport?: MachineTransport;
+  /** Required for `tailcat`; persisted to the secure store, never to the record. */
+  tailcatToken?: string;
 };
 
 export type MachineValidationErrors = {
@@ -49,6 +74,7 @@ export type MachineValidationErrors = {
   port?: string;
   duplicate?: string;
   password?: string;
+  tailcatToken?: string;
   /** Form-level message: "Fix the highlighted machine details." */
   general: string;
 };
@@ -57,8 +83,16 @@ export type MachineSaveResult =
   | { ok: true; machine: MachineRecord }
   | { ok: false; errors: MachineValidationErrors };
 
-/** displayLabel = name or `user@host[:port]` (port shown when not 22). */
+/**
+ * displayLabel = name or `user@host[:port]` (port shown when not 22). A tailcat
+ * machine's host is a synthetic identity, so it is never shown: the label falls
+ * back to the username and is always tagged with the transport.
+ */
 export function machineDisplayLabel(machine: MachineRecord): string {
+  if (machine.transport === 'tailcat') {
+    const base = machine.name.length > 0 ? machine.name : machine.username;
+    return `${base} · tailcat`;
+  }
   if (machine.name.length > 0) return machine.name;
   const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
   return `${machine.username}@${machine.host}${portSuffix}`;
@@ -77,6 +111,8 @@ function normalizedInput(input: MachineInput): {
   port: number | null;
   savePassword: boolean;
   password: string;
+  transport: MachineTransport;
+  tailcatToken: string;
 } {
   return {
     name: input.name.trim(),
@@ -85,6 +121,8 @@ function normalizedInput(input: MachineInput): {
     port: parsePort(input.port),
     savePassword: input.savePassword,
     password: input.password ?? '',
+    transport: input.transport ?? 'ssh',
+    tailcatToken: (input.tailcatToken ?? '').trim(),
   };
 }
 
@@ -116,11 +154,26 @@ async function validateInput(
   editingId: string | null,
 ): Promise<MachineValidationErrors | null> {
   const normalized = normalizedInput(input);
+  const isTailcat = normalized.transport === 'tailcat';
   const errors: Omit<MachineValidationErrors, 'general'> = {};
-  if (normalized.host.length === 0) errors.host = MachineCopy.validation.general;
+  if (isTailcat) {
+    // Editing keeps an already-saved token when the field stays blank.
+    const storedToken = editingId === null ? null : await getTailcatToken(editingId);
+    const effectiveToken =
+      normalized.tailcatToken.length > 0 ? normalized.tailcatToken : (storedToken ?? '');
+    if (effectiveToken.length === 0) errors.tailcatToken = MachineCopy.validation.tailcatTokenEmpty;
+    else if (!effectiveToken.startsWith(TAILCAT_TOKEN_PREFIX)) {
+      errors.tailcatToken = MachineCopy.validation.tailcatTokenPrefix;
+    }
+  } else if (normalized.host.length === 0) {
+    errors.host = MachineCopy.validation.general;
+  }
   if (normalized.username.length === 0) errors.username = MachineCopy.validation.general;
   if (normalized.port === null) errors.port = MachineCopy.validation.port;
   if (
+    // Tailcat hosts are per-machine synthetic identities, so host+user+port can
+    // never be a meaningful duplicate signal for them.
+    !isTailcat &&
     normalized.host.length > 0 &&
     normalized.username.length > 0 &&
     normalized.port !== null &&
@@ -151,6 +204,22 @@ async function persistPassword(machineId: string, savePassword: boolean, passwor
   if (password.length > 0) setSessionPassword(machineId, password);
 }
 
+/**
+ * Tokens live in the secure store, never in the persisted record. A blank token
+ * while editing a tailcat machine keeps the stored one; leaving tailcat drops it.
+ */
+async function persistTailcatToken(
+  machineId: string,
+  transport: MachineTransport,
+  token: string,
+): Promise<void> {
+  if (transport !== 'tailcat') {
+    await setTailcatToken(machineId, '');
+    return;
+  }
+  if (token.length > 0) await setTailcatToken(machineId, token);
+}
+
 type MachinesState = {
   hydrated: boolean;
   machines: MachineRecord[];
@@ -175,6 +244,9 @@ function isMachineRecord(value: unknown): value is MachineRecord {
     typeof record.username === 'string' &&
     typeof record.port === 'number' &&
     typeof record.savePassword === 'boolean' &&
+    (record.transport === undefined ||
+      record.transport === 'ssh' ||
+      record.transport === 'tailcat') &&
     (record.lastConnectedAt === null || typeof record.lastConnectedAt === 'string')
   );
 }
@@ -227,16 +299,19 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     const errors = await validateInput(machines, input, null);
     if (errors !== null) return { ok: false, errors };
     const normalized = normalizedInput(input);
+    const id = generateMachineId();
     const machine: MachineRecord = {
-      id: generateMachineId(),
+      id,
       name: normalized.name,
-      host: normalized.host,
+      host: normalized.transport === 'tailcat' ? tailcatSyntheticHost(id) : normalized.host,
       username: normalized.username,
       port: normalized.port as number,
       savePassword: normalized.savePassword,
+      transport: normalized.transport,
       lastConnectedAt: null,
     };
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
+    await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
     const nextMachines = [...get().machines, machine];
     const selectedMachineId = get().selectedMachineId ?? machine.id;
     set({ machines: nextMachines, selectedMachineId });
@@ -260,12 +335,17 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     const machine: MachineRecord = {
       ...existing,
       name: normalized.name,
-      host: normalized.host,
+      // The synthetic identity is derived from the id, so it survives edits and
+      // is re-derived identically when an ssh machine is switched to tailcat.
+      host:
+        normalized.transport === 'tailcat' ? tailcatSyntheticHost(existing.id) : normalized.host,
       username: normalized.username,
       port: normalized.port as number,
       savePassword: normalized.savePassword,
+      transport: normalized.transport,
     };
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
+    await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
     const nextMachines = get().machines.map((entry) => (entry.id === id ? machine : entry));
     set({ machines: nextMachines });
     persistMachines(nextMachines);

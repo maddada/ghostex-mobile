@@ -120,6 +120,8 @@ export const MachineCopy = {
     savePasswordWithoutPassword: 'Enter a password or uncheck Save password.',
     general: 'Fix the highlighted machine details.',
     emptyPassword: 'Enter the SSH password.',
+    tailcatTokenEmpty: 'Paste the tailcat pairing token for this machine.',
+    tailcatTokenPrefix: 'A tailcat pairing token starts with "tc".',
   },
   card: {
     neverConnected: 'Never connected',

@@ -14,6 +14,11 @@ class SshConfigRecord : Record {
   @Field var keepAliveEnabled: Boolean = true
   /** Seconds between SSH keep-alive packets; clamped to 10-120 at connect time. */
   @Field var keepAliveIntervalSec: Int = 30
+  /**
+   * tailcat peer token. When non-blank the connection dials a tailcat loopback
+   * forward instead of [host]:[port]; host-key identity still uses [host]:[port].
+   */
+  @Field var tailcatToken: String = ""
 }
 
 /** Mirrors `OpenTerminalOptions` in GhostexNative.types.ts. */

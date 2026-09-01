@@ -77,7 +77,13 @@ async function resolveHolderId(): Promise<string> {
 function machineTarget(machineId: string): MachineConnectionTarget | null {
   const record = useMachinesStore.getState().machines.find((machine) => machine.id === machineId);
   if (record === undefined) return null;
-  return { id: record.id, host: record.host, username: record.username, port: record.port };
+  return {
+    id: record.id,
+    host: record.host,
+    username: record.username,
+    port: record.port,
+    transport: record.transport,
+  };
 }
 
 /**

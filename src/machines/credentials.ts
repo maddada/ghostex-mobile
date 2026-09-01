@@ -2,7 +2,7 @@
  * Machine credential storage.
  * - Saved credentials live in the platform secure store (Keychain/Keystore via
  *   expo-secure-store), keyed `machine.<id>.password` / `.sshkey` /
- *   `.passphrase` / `.publickey`.
+ *   `.passphrase` / `.publickey` / `.tailcattoken`.
  * - Passwords entered with savePassword=false live only in an in-memory map
  *   for this app run.
  */
@@ -12,7 +12,14 @@ import * as SecureStore from 'expo-secure-store';
 import type { SshConfig } from '../../modules/ghostex-native/src';
 import { useSettingsStore } from '../settings/store';
 
-type CredentialKind = 'password' | 'sshkey' | 'passphrase' | 'publickey';
+type CredentialKind = 'password' | 'sshkey' | 'passphrase' | 'publickey' | 'tailcattoken';
+
+/**
+ * How the phone reaches a machine. `ssh` (or absent) dials host:port directly;
+ * `tailcat` tunnels to the pairing token's peer and dials the machine's SSH
+ * port on it, with host:port kept as the stable host-key identity.
+ */
+export type MachineTransport = 'ssh' | 'tailcat';
 
 function credentialKey(machineId: string, kind: CredentialKind): string {
   return `machine.${machineId}.${kind}`;
@@ -98,6 +105,14 @@ export function setPublicKey(machineId: string, publicKey: string): Promise<void
   return setCredential(machineId, 'publickey', publicKey);
 }
 
+export function getTailcatToken(machineId: string): Promise<string | null> {
+  return getCredential(machineId, 'tailcattoken');
+}
+
+export function setTailcatToken(machineId: string, token: string): Promise<void> {
+  return setCredential(machineId, 'tailcattoken', token);
+}
+
 /** Remove every stored credential for a machine (used when deleting it). */
 export async function deleteAllCredentials(machineId: string): Promise<void> {
   clearSessionPassword(machineId);
@@ -106,6 +121,7 @@ export async function deleteAllCredentials(machineId: string): Promise<void> {
     deleteCredential(machineId, 'sshkey'),
     deleteCredential(machineId, 'passphrase'),
     deleteCredential(machineId, 'publickey'),
+    deleteCredential(machineId, 'tailcattoken'),
   ]);
 }
 
@@ -127,6 +143,8 @@ export type MachineConnectionTarget = {
   host: string;
   username: string;
   port: number;
+  /** Absent means `ssh`. */
+  transport?: MachineTransport;
 };
 
 /** Build the native SshConfig for a machine from its stored credentials. */
@@ -147,5 +165,16 @@ export async function resolveSshConfig(machine: MachineConnectionTarget): Promis
   if (password !== null && password.length > 0) config.password = password;
   if (privateKey !== null && privateKey.length > 0) config.privateKey = privateKey;
   if (passphrase !== null && passphrase.length > 0) config.passphrase = passphrase;
+  if (machine.transport === 'tailcat') {
+    // The synthetic host of a tailcat machine is not routable, so a missing
+    // token must surface as an error instead of a bogus direct dial.
+    const token = await getTailcatToken(machine.id);
+    if (token === null || token.length === 0) {
+      throw new Error(
+        'No tailcat token is saved for this machine. Edit the machine and paste its pairing token again.',
+      );
+    }
+    config.tailcatToken = token;
+  }
   return config;
 }

@@ -26,6 +26,9 @@ struct SshConfigRecord: Record {
     @Field var keepAliveEnabled: Bool = true
     /// Keep-alive interval in seconds (10-120). Ignored when disabled.
     @Field var keepAliveIntervalSec: Int = 30
+    /// tailcat peer token. When non-empty the connection dials a tailcat loopback
+    /// forward instead of host:port; host-key identity still uses host:port.
+    @Field var tailcatToken: String = ""
 }
 
 struct OpenTerminalOptionsRecord: Record {
@@ -82,12 +85,14 @@ public class GhostexNativeModule: Module {
                 passphrase: config.passphrase
             )
             let connectionConfig = SSHConnectionConfig(
+                machineId: machineId,
                 host: config.host,
                 port: config.port,
                 username: config.username,
                 credentials: credentials,
                 keepAliveEnabled: config.keepAliveEnabled,
-                keepAliveIntervalSec: config.keepAliveIntervalSec
+                keepAliveIntervalSec: config.keepAliveIntervalSec,
+                tailcatToken: config.tailcatToken
             )
 
             self.sendConnectionState(machineId, state: "connecting")

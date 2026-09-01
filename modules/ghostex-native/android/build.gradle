@@ -45,4 +45,12 @@ dependencies {
 
   // NotificationCompat/ContextCompat for the persistent foreground-service notification.
   implementation "androidx.core:core-ktx:1.15.0"
+
+  // tailcat control-plane-free tunnel bridge (gomobile `bind` output, built in
+  // the Ghostex main repo and staged unpacked: AGP refuses local .aar deps in a
+  // library module, so the bridge ships as libs/tailcatbridge.jar (classes,
+  // embedded into this module's AAR) + src/main/jniLibs/<abi>/libgojni.so.
+  // GhostexSshConnection uses dev.ghostex.tailcatbridge.Tailcatbridge to dial
+  // SSH over tailcat.
+  implementation files("libs/tailcatbridge.jar")
 }
