@@ -40,3 +40,10 @@ yarn-error.*
 /ios
 /android
 modules/ghostex-native/android/build/
+
+# gomobile tailcat bridge output, built by apps/mobile/tailcat-bridge/build.sh
+# and by the Android release job. Never commit these: the .so files are ~35 MB
+# per ABI and are reproducible from the committed Go source.
+modules/ghostex-native/android/libs/tailcatbridge.jar
+modules/ghostex-native/android/src/main/jniLibs/
+modules/ghostex-native/ios/Vendor/Tailcatbridge.xcframework/
