@@ -34,13 +34,16 @@ import {
   removeSessionChatQueuedPromptCommand,
   reorderSessionChatQueueCommand,
   savedPromptsCommand,
+  sendSessionChatKeyCommand,
   sendSessionChatMessageCommand,
   sendSessionChatQueuedPromptCommand,
   sessionNoteReadCommand,
   sessionNoteSaveCommand,
   setSessionChatDraftCommand,
+  switchDraftAgentCommand,
   updateSessionChatQueuedPromptCommand,
   type SavedPromptsAction,
+  type SessionChatKey,
   type SessionChatReadOptions,
 } from '../commands/ghostexCli';
 import { runGhostexCli } from '../components/sessions/cli';
@@ -65,7 +68,10 @@ import { SESSION_CHAT_SUPPORTED_AGENT_IDS } from './session-chat-agents.generate
 const SESSION_CHAT_AGENT_IDS = new Set(SESSION_CHAT_SUPPORTED_AGENT_IDS);
 
 export function isSessionChatSupportedAgent(agentId: string): boolean {
-  return SESSION_CHAT_AGENT_IDS.has(agentId);
+  const normalized = agentId.trim().toLowerCase();
+  const transcriptAgentId =
+    normalized === 'cursor-cli' || normalized === 'cursor-agent' || normalized === 'cursor cli' ? 'cursor' : normalized;
+  return SESSION_CHAT_AGENT_IDS.has(transcriptAgentId);
 }
 
 /**
@@ -84,6 +90,7 @@ const SESSION_CHAT_BRIDGE_OPS = [
   'read',
   'readSkills',
   'readFiles',
+  'switchDraftAgent',
   'send',
   'sendKey',
   'switchToTerminalForAgentPicker',
@@ -126,8 +133,7 @@ export type SessionChatBridgeRequest = {
  * drops that row only once the terminal has taken it.
  */
 export type SessionChatBridgeNotice =
-  | { notice: 'queueCount'; count: number }
-  | { notice: 'draftHandoffToTerminal'; content: string; promptId?: string };
+  { notice: 'queueCount'; count: number } | { notice: 'draftHandoffToTerminal'; content: string; promptId?: string };
 
 export type SessionChatBridgeResponse = {
   id: number;
@@ -231,14 +237,14 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
 async function saveChatUpload(
   machine: MachineConnectionTarget,
   params: Record<string, unknown>,
-  kind: 'image' | 'file',
+  kind: 'image' | 'file'
 ): Promise<{ path: string; bytes: number }> {
   const raw = typeof params.base64Data === 'string' ? params.base64Data : '';
   const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
   if (base64.length === 0) throw new Error('The attachment carried no data.');
   const suggestedName = stringParam(params, 'suggestedName');
   const sanitized = sanitizeAttachmentFilename(
-    suggestedName ?? (kind === 'image' ? PASTED_IMAGE_FALLBACK_NAME : ATTACHMENT_FALLBACK_NAME),
+    suggestedName ?? (kind === 'image' ? PASTED_IMAGE_FALLBACK_NAME : ATTACHMENT_FALLBACK_NAME)
   );
   // Epoch base name, like the server's; the phone's clock only has to make the
   // name unique within the machine's directory, which the script re-checks.
@@ -257,16 +263,12 @@ async function saveChatUpload(
     await ensureConnected(machine);
     const exec = await GhostexNative.exec(
       machine.id,
-      loginShellCommand(
-        remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
-      ),
-      REMOTE_PATH_EXEC_TIMEOUT_MS,
+      loginShellCommand(remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail)),
+      REMOTE_PATH_EXEC_TIMEOUT_MS
     );
     const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
     if (exec.exitCode !== 0 || remotePath.length === 0) {
-      throw new Error(
-        exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.',
-      );
+      throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
     }
 
     await GhostexNative.uploadFile(machine.id, localPathFromUri(localFile.uri), remotePath);
@@ -315,7 +317,7 @@ function imageMediaTypeForPath(path: string): string | null {
  */
 async function loadChatImage(
   machine: MachineConnectionTarget,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): Promise<{ base64Data: string; mediaType: string; bytes: number }> {
   const path = stringParam(params, 'path') ?? '';
   if (!path.startsWith('/')) throw new Error('Image reads need an absolute path.');
@@ -336,9 +338,7 @@ async function loadChatImage(
   // Linux base64 wraps lines; strip all whitespace either way.
   const base64Data = exec.stdout.replace(/\s+/g, '');
   if (exec.exitCode !== 0 || base64Data.length === 0) {
-    throw new Error(
-      exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Could not read the image file.',
-    );
+    throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Could not read the image file.');
   }
   return { base64Data, bytes: Math.floor((base64Data.length * 3) / 4), mediaType };
 }
@@ -356,15 +356,13 @@ async function loadChatImage(
 export async function handoffSessionChatDraft(
   machine: MachineConnectionTarget,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<string> {
   if (projectId.trim().length === 0 || sessionId.trim().length === 0) return '';
   try {
-    const result = await runGhostexCli(
-      machine,
-      handoffSessionChatDraftCommand(sessionId, projectId),
-      { timeoutMs: SESSION_CHAT_DRAFT_HANDOFF_TIMEOUT_MS },
-    );
+    const result = await runGhostexCli(machine, handoffSessionChatDraftCommand(sessionId, projectId), {
+      timeoutMs: SESSION_CHAT_DRAFT_HANDOFF_TIMEOUT_MS,
+    });
     const content = (result.json as { content?: unknown } | undefined)?.content;
     return typeof content === 'string' ? content : '';
   } catch {
@@ -382,7 +380,7 @@ export async function handoffSessionChatDraft(
  */
 export async function releaseSessionChatDraftHandoffStash(
   machine: MachineConnectionTarget,
-  promptId: string,
+  promptId: string
 ): Promise<void> {
   try {
     await runGhostexCli(machine, savedPromptsCommand('delete', { promptId }), {
@@ -449,17 +447,15 @@ export type SessionChatSyncedDraft = {
 export async function readSessionChatSyncedDraft(
   machine: MachineConnectionTarget,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<SessionChatSyncedDraft> {
   if (projectId.trim().length === 0 || sessionId.trim().length === 0) {
     return { content: '', supported: false };
   }
   try {
-    const result = await runGhostexCli(
-      machine,
-      readSessionChatQueueCommand(sessionId, projectId),
-      { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-    );
+    const result = await runGhostexCli(machine, readSessionChatQueueCommand(sessionId, projectId), {
+      timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+    });
     const draft = (result.json as { draft?: unknown } | null)?.draft;
     const content =
       typeof draft === 'object' && draft !== null && !Array.isArray(draft)
@@ -480,14 +476,12 @@ export async function writeSessionChatSyncedDraft(
   machine: MachineConnectionTarget,
   projectId: string,
   sessionId: string,
-  content: string,
+  content: string
 ): Promise<void> {
   const clientId = await resolvePromptEditorClientId();
-  await runGhostexCli(
-    machine,
-    setSessionChatDraftCommand(sessionId, projectId, content, clientId),
-    { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-  );
+  await runGhostexCli(machine, setSessionChatDraftCommand(sessionId, projectId, content, clientId), {
+    timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+  });
 }
 
 /**
@@ -498,7 +492,7 @@ export async function runSessionChatBridgeRequest(
   machine: MachineConnectionTarget,
   projectId: string,
   sessionId: string,
-  request: SessionChatBridgeRequest,
+  request: SessionChatBridgeRequest
 ): Promise<SessionChatBridgeResponse> {
   const params = request.params ?? {};
   try {
@@ -510,28 +504,32 @@ export async function runSessionChatBridgeRequest(
           waitMs: numberParam(params, 'waitMs'),
           fingerprint: stringParam(params, 'fingerprint'),
         };
-        const waitMs = options.waitMs !== undefined && options.fingerprint !== undefined
-          ? options.waitMs
-          : 0;
-        const result = await runGhostexCli(
-          machine,
-          readSessionChatCommand(sessionId, projectId, options),
-          { timeoutMs: waitMs + SESSION_CHAT_READ_TIMEOUT_MARGIN_MS },
-        );
+        const waitMs = options.waitMs !== undefined && options.fingerprint !== undefined ? options.waitMs : 0;
+        const result = await runGhostexCli(machine, readSessionChatCommand(sessionId, projectId, options), {
+          timeoutMs: waitMs + SESSION_CHAT_READ_TIMEOUT_MARGIN_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'readSkills': {
-        const result = await runGhostexCli(
-          machine,
-          readSessionChatSkillsCommand(sessionId, projectId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, readSessionChatSkillsCommand(sessionId, projectId), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'readFiles': {
+        const result = await runGhostexCli(machine, readSessionChatFilesCommand(sessionId, projectId), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
+      case 'switchDraftAgent': {
+        const agentId = stringParam(params, 'agentId');
+        if (agentId === undefined) {
+          return { id: request.id, ok: false, error: 'The draft-agent switch carried no agent id.' };
+        }
         const result = await runGhostexCli(
           machine,
-          readSessionChatFilesCommand(sessionId, projectId),
+          switchDraftAgentCommand(sessionId, projectId, agentId),
           { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
@@ -548,7 +546,19 @@ export async function runSessionChatBridgeRequest(
         acknowledgeSessionAttention(machine.id, sessionId);
         return { id: request.id, ok: true, result: { queued: true } };
       }
-      case 'sendKey':
+      case 'sendKey': {
+        const key = stringParam(params, 'key');
+        const supportedKeys: readonly SessionChatKey[] = ['enter', 'shift-tab', 'shift-up', 'shift-down'];
+        if (key === undefined || !supportedKeys.includes(key as SessionChatKey)) {
+          return { id: request.id, ok: false, error: 'Unknown chat terminal key.' };
+        }
+        const result = await runGhostexCli(
+          machine,
+          sendSessionChatKeyCommand(sessionId, projectId, key as SessionChatKey),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
+      }
       case 'switchToTerminalForAgentPicker':
       case 'jumpToSavedPromptSession': {
         return {
@@ -558,11 +568,9 @@ export async function runSessionChatBridgeRequest(
         };
       }
       case 'answerPrompt': {
-        await runGhostexCli(
-          machine,
-          answerSessionChatPromptCommand(sessionId, projectId, params),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        await runGhostexCli(machine, answerSessionChatPromptCommand(sessionId, projectId, params), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: { queued: true } };
       }
       case 'interrupt': {
@@ -600,11 +608,9 @@ export async function runSessionChatBridgeRequest(
         if (text.trim().length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to queue.' };
         }
-        const result = await runGhostexCli(
-          machine,
-          queueSessionChatPromptCommand(sessionId, projectId, text),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, queueSessionChatPromptCommand(sessionId, projectId, text), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'updateQueuedPrompt': {
@@ -618,7 +624,7 @@ export async function runSessionChatBridgeRequest(
             ...(typeof params.text === 'string' ? { text: params.text } : {}),
             ...(params.retry === true ? { retry: true } : {}),
           }),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
@@ -630,7 +636,7 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           removeSessionChatQueuedPromptCommand(sessionId, projectId, promptId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
@@ -641,11 +647,9 @@ export async function runSessionChatBridgeRequest(
         if (promptIds.length === 0) {
           return { id: request.id, ok: false, error: 'The queue order carried no rows.' };
         }
-        const result = await runGhostexCli(
-          machine,
-          reorderSessionChatQueueCommand(sessionId, projectId, promptIds),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, reorderSessionChatQueueCommand(sessionId, projectId, promptIds), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'sendQueuedPrompt': {
@@ -656,7 +660,7 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           sendSessionChatQueuedPromptCommand(sessionId, projectId, promptId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         // Desktop parity: delivering a prompt is answering the session.
         acknowledgeSessionAttention(machine.id, sessionId);
@@ -673,7 +677,7 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           setSessionChatDraftCommand(sessionId, projectId, content, clientId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
@@ -684,20 +688,16 @@ export async function runSessionChatBridgeRequest(
        * note is cleared, so it is valid input on the save.
        */
       case 'sessionNoteRead': {
-        const result = await runGhostexCli(
-          machine,
-          sessionNoteReadCommand(sessionId, projectId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, sessionNoteReadCommand(sessionId, projectId), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'sessionNoteSave': {
         const note = typeof params.note === 'string' ? params.note : '';
-        const result = await runGhostexCli(
-          machine,
-          sessionNoteSaveCommand(sessionId, projectId, note),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, sessionNoteSaveCommand(sessionId, projectId, note), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'savedPrompts': {
@@ -717,11 +717,9 @@ export async function runSessionChatBridgeRequest(
           typeof params.payload === 'object' && params.payload !== null && !Array.isArray(params.payload)
             ? (params.payload as Record<string, unknown>)
             : {};
-        const result = await runGhostexCli(
-          machine,
-          savedPromptsCommand(action as SavedPromptsAction, payload),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, savedPromptsCommand(action as SavedPromptsAction, payload), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
     }

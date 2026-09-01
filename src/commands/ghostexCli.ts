@@ -519,6 +519,32 @@ export function readSessionChatCommand(
   return parts.filter((part) => part.length > 0).join(' ');
 }
 
+/** Switch an unprompted draft to another agent from its daemon-published catalog. */
+export function switchDraftAgentCommand(
+  sessionId: string,
+  projectId: string,
+  agentId: string,
+): string {
+  return (
+    `ghostex switch-draft-agent ${sessionChatSelector(sessionId, projectId)}` +
+    ` --agent-id ${shellQuote(requireId(agentId, 'agent id'))} --json`
+  );
+}
+
+export type SessionChatKey = 'enter' | 'shift-tab' | 'shift-up' | 'shift-down';
+
+/** Queue one raw option key through gxserver's per-session chat writer. */
+export function sendSessionChatKeyCommand(
+  sessionId: string,
+  projectId: string,
+  key: SessionChatKey,
+): string {
+  return (
+    `ghostex send-session-chat-key ${sessionChatSelector(sessionId, projectId)}` +
+    ` --key ${shellQuote(key)} --json`
+  );
+}
+
 /** List skills resolved by gxserver for the session's stored agent identity. */
 export function readSessionChatSkillsCommand(sessionId: string, projectId: string): string {
   return `ghostex read-session-chat-skills ${sessionChatSelector(sessionId, projectId)} --json`;

@@ -449,25 +449,6 @@ export default function SessionChatWebView({
         deliver({ id: request.id, ok: true, result: { switched: true } });
         return;
       }
-      if (request.op === 'sendKey') {
-        const key = request.params?.key;
-        const terminalKey =
-          key === 'shift-up' ? 'up' : key === 'shift-down' ? 'down' : key === 'shift-tab' ? 'tab' : null;
-        if (terminalKey === null) {
-          deliver({ id: request.id, ok: false, error: 'Unknown chat terminal key.' });
-          return;
-        }
-        void GhostexNative.sendKey(terminalSessionKey, terminalKey, { shift: true })
-          .then(() => deliver({ id: request.id, ok: true, result: { sent: true } }))
-          .catch((error: unknown) =>
-            deliver({
-              id: request.id,
-              ok: false,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          );
-        return;
-      }
       if (request.op === 'jumpToSavedPromptSession') {
         void focusSavedPromptSession(request.params ?? {})
           .then(() => deliver({ id: request.id, ok: true, result: { focused: true } }))
