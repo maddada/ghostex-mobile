@@ -2,4 +2,4 @@
 // edit by hand. Source: SESSION_CHAT_SUPPORTED_AGENTS in packages/shared/session-chat.ts.
 // Regenerate with `bun run build:mobile-chat` there.
 
-export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ["claude","openclaude","codex","cursor","grok","grok-build","hermes","hermes-agent","pi","omp"];
+export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ["antigravity","antigravity-cli","agy","claude","openclaude","codex","cursor","grok","grok-build","hermes","hermes-agent","pi","omp"];
