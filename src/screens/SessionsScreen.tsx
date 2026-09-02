@@ -1,6 +1,6 @@
 /**
  * Sessions drawer as the app's home page (docs/specs/sessions-drawer.md §§1-6):
- * header + status line + Recent Projects + flat drawer list built from
+ * header + status line + flat drawer list built from
  * buildDrawerItems, with session/project context menus, creation flows,
  * recovery sheet, and focus-scoped 5s inventory polling.
  */
@@ -156,9 +156,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const sidebarBackgroundContrast = useSettingsStore(
     (state) => state.settings.sidebarBackgroundContrast,
   );
-  const sidebarBackgroundTint = useSettingsStore(
-    (state) => state.settings.sidebarBackgroundTint,
-  );
+  const sidebarBackgroundTint = useSettingsStore((state) => state.settings.sidebarBackgroundTint);
   const sidebarGroupsOpacityPercent = useSettingsStore(
     (state) => state.settings.sidebarGroupsOpacityPercent,
   );
@@ -337,7 +335,11 @@ export default function SessionsScreen({ navigation }: Props) {
               : inventory.summary === null
                 ? 'disconnected'
                 : 'connected';
-        return { id: entry.id, label: machineDisplayLabel(entry), connectionState };
+        return {
+          id: entry.id,
+          label: machineDisplayLabel(entry),
+          connectionState,
+        };
       }),
     [machines, inventoriesByMachineId],
   );
@@ -413,7 +415,8 @@ export default function SessionsScreen({ navigation }: Props) {
         );
       const sessionKey = await useTerminalStore.getState().attachSession(target, {
         sessionId,
-        projectId: created !== undefined && created.projectId.length > 0 ? created.projectId : undefined,
+        projectId:
+          created !== undefined && created.projectId.length > 0 ? created.projectId : undefined,
         title: created !== undefined ? sessionTitle(created) : undefined,
       });
       navigation.navigate('Terminal', {
@@ -450,9 +453,7 @@ export default function SessionsScreen({ navigation }: Props) {
       const changes = actions.flatMap((action) =>
         action.optimisticChange === undefined ? [] : [action.optimisticChange],
       );
-      const mutationIds = useInventoryStore
-        .getState()
-        .beginOptimisticMutations(target.id, changes);
+      const mutationIds = useInventoryStore.getState().beginOptimisticMutations(target.id, changes);
       let mutationIndex = 0;
       const prepared = actions.map((action) => {
         const mutationId =
@@ -470,9 +471,7 @@ export default function SessionsScreen({ navigation }: Props) {
             `session:${action.sessionId}`,
             async (): Promise<void> => {
               if (action.closeWarmSession) {
-                await useTerminalStore
-                  .getState()
-                  .closeWarmSessionFor(target.id, action.sessionId);
+                await useTerminalStore.getState().closeWarmSessionFor(target.id, action.sessionId);
               }
               await runGhostexCli(target, action.command);
               if (actionMutationIds.length > 0) {
@@ -485,9 +484,7 @@ export default function SessionsScreen({ navigation }: Props) {
           successCount++;
         } catch (error) {
           if (actionMutationIds.length > 0) {
-            useInventoryStore
-              .getState()
-              .rollbackOptimisticMutations(target.id, actionMutationIds);
+            useInventoryStore.getState().rollbackOptimisticMutations(target.id, actionMutationIds);
           }
           failures.push(error instanceof Error ? error.message : String(error));
         }
@@ -498,7 +495,9 @@ export default function SessionsScreen({ navigation }: Props) {
       }
       if (failures.length > 0) {
         const prefix =
-          failures.length === 1 ? '1 session action failed' : `${failures.length} session actions failed`;
+          failures.length === 1
+            ? '1 session action failed'
+            : `${failures.length} session actions failed`;
         setTransientStatus(`${prefix}: ${failures[0]}`);
       }
     },
@@ -577,14 +576,21 @@ export default function SessionsScreen({ navigation }: Props) {
       await runSessionCommand(
         ctx.machine,
         sessionNoteSaveCommand(session.sessionId, session.projectId, note),
-        { optimisticChange: sessionNoteMutation(session.sessionId, note) },
+        {
+          optimisticChange: sessionNoteMutation(session.sessionId, note),
+        },
       );
     },
     [runSessionCommand],
   );
 
   const runQuickAction = useCallback(
-    (target: MachineRecord, projectId: string, projectTitle: string, action: GhostexQuickAction): void => {
+    (
+      target: MachineRecord,
+      projectId: string,
+      projectTitle: string,
+      action: GhostexQuickAction,
+    ): void => {
       const name = quickActionDisplayName(action);
       if (action.actionType === 'browser') {
         const url = action.url ?? '';
@@ -734,7 +740,10 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => collapse.toggleGroup(machineId, child.groupCollapseKey)}
             onMenu={() => {
               if (target === null) return;
-              setOverlay({ kind: 'groupMenu', ctx: { machine: target, item: child } });
+              setOverlay({
+                kind: 'groupMenu',
+                ctx: { machine: target, item: child },
+              });
             }}
           />
         );
@@ -835,63 +844,73 @@ export default function SessionsScreen({ navigation }: Props) {
           width={inCollection ? COLLECTION_BRANCH_WIDTH : TOP_LEVEL_BRANCH_WIDTH}
         />
         <View style={styles.projectCardBody}>
-        <ProjectHeaderRow
-          title={header.title}
-          icon={header.icon}
-          collapsed={header.collapsed}
-          workingCount={header.workingCount}
-          attentionCount={header.attentionCount}
-          awakeCount={header.awakeCount}
-          hasActions={header.quickActions.length > 0}
-          selectedActionType={
-            selectedAction === null
-              ? null
-              : selectedAction.actionType === 'browser'
-                ? 'browser'
-                : 'terminal'
-          }
-          primaryAgent={primaryAgent}
-          showSessionListCollapse={header.sessionListClipped && !header.sessionListCollapsed}
-          onToggle={() => collapse.toggleProject(machineId, header.projectKey)}
-          onMenu={() => {
-            if (target === null) return;
-            setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, view: 'root' });
-          }}
-          onCreateTerminal={() => {
-            if (target === null) return;
-            void runCreationFlow(
-              target,
-              createSessionCommand({
-                projectId: header.projectId.length > 0 ? header.projectId : undefined,
-                groupId:
-                  header.projectId.length === 0 && header.legacyGroupId.length > 0
-                    ? header.legacyGroupId
-                    : undefined,
-              }),
-              ProgressCopy.creatingTerminal(header.title),
-            );
-          }}
-          onLaunchPrimary={() => {
-            if (target === null || primaryAgent === null) return;
-            launchAgent(target, header, primaryAgent);
-          }}
-          onOpenAgentMenu={() => {
-            if (target === null) return;
-            setOverlay({ kind: 'agentMenu', ctx: { machine: target, header } });
-          }}
-          onOpenActionsMenu={() => {
-            if (target === null) return;
-            setOverlay({ kind: 'actionsMenu', ctx: { machine: target, header } });
-          }}
-          onCollapseSessionList={() => collapse.toggleSessionList(machineId, header.projectKey)}
-        />
-        {!header.collapsed && card.children.length > 0 ? (
-          <View style={styles.cardSessions}>
-            {card.children.map((child) =>
-              renderChildItem(target, machineId, child, expandedGroupSurface),
-            )}
-          </View>
-        ) : null}
+          <ProjectHeaderRow
+            title={header.title}
+            icon={header.icon}
+            collapsed={header.collapsed}
+            workingCount={header.workingCount}
+            attentionCount={header.attentionCount}
+            awakeCount={header.awakeCount}
+            hasActions={header.quickActions.length > 0}
+            selectedActionType={
+              selectedAction === null
+                ? null
+                : selectedAction.actionType === 'browser'
+                  ? 'browser'
+                  : 'terminal'
+            }
+            primaryAgent={primaryAgent}
+            showSessionListCollapse={header.sessionListClipped && !header.sessionListCollapsed}
+            onToggle={() => collapse.toggleProject(machineId, header.projectKey)}
+            onMenu={() => {
+              if (target === null) return;
+              setOverlay({
+                kind: 'projectMenu',
+                ctx: { machine: target, header },
+                view: 'root',
+              });
+            }}
+            onCreateTerminal={() => {
+              if (target === null) return;
+              void runCreationFlow(
+                target,
+                createSessionCommand({
+                  projectId: header.projectId.length > 0 ? header.projectId : undefined,
+                  groupId:
+                    header.projectId.length === 0 && header.legacyGroupId.length > 0
+                      ? header.legacyGroupId
+                      : undefined,
+                }),
+                ProgressCopy.creatingTerminal(header.title),
+              );
+            }}
+            onLaunchPrimary={() => {
+              if (target === null || primaryAgent === null) return;
+              launchAgent(target, header, primaryAgent);
+            }}
+            onOpenAgentMenu={() => {
+              if (target === null) return;
+              setOverlay({
+                kind: 'agentMenu',
+                ctx: { machine: target, header },
+              });
+            }}
+            onOpenActionsMenu={() => {
+              if (target === null) return;
+              setOverlay({
+                kind: 'actionsMenu',
+                ctx: { machine: target, header },
+              });
+            }}
+            onCollapseSessionList={() => collapse.toggleSessionList(machineId, header.projectKey)}
+          />
+          {!header.collapsed && card.children.length > 0 ? (
+            <View style={styles.cardSessions}>
+              {card.children.map((child) =>
+                renderChildItem(target, machineId, child, expandedGroupSurface),
+              )}
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -945,22 +964,22 @@ export default function SessionsScreen({ navigation }: Props) {
               },
             ]}
           >
-          <CollectionHeaderRow
-            title={header.title}
-            collapsed={header.collapsed}
-            workingCount={header.workingCount}
-            attentionCount={header.attentionCount}
-            awakeCount={header.awakeCount}
-            onPress={() => collapse.toggleCollection(block.machineId, header.collectionId)}
-            onMenu={() => {
-              if (target === null) return;
-              setOverlay({
-                kind: 'collectionMenu',
-                ctx: { machine: target, header },
-                view: 'root',
-              });
-            }}
-          />
+            <CollectionHeaderRow
+              title={header.title}
+              collapsed={header.collapsed}
+              workingCount={header.workingCount}
+              attentionCount={header.attentionCount}
+              awakeCount={header.awakeCount}
+              onPress={() => collapse.toggleCollection(block.machineId, header.collectionId)}
+              onMenu={() => {
+                if (target === null) return;
+                setOverlay({
+                  kind: 'collectionMenu',
+                  ctx: { machine: target, header },
+                  view: 'root',
+                });
+              }}
+            />
           </View>
           {!header.collapsed && block.projects.length > 0 ? (
             <View style={styles.collectionProjects}>
@@ -1002,7 +1021,10 @@ export default function SessionsScreen({ navigation }: Props) {
               item.section === 'projects'
                 ? () => {
                     if (target === null) return;
-                    setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
+                    setOverlay({
+                      kind: 'machineMenu',
+                      ctx: { machine: target },
+                    });
                   }
                 : undefined
             }
@@ -1020,7 +1042,11 @@ export default function SessionsScreen({ navigation }: Props) {
             }
             onMenu={() => {
               if (target === null) return;
-              setOverlay({ kind: 'sectionMenu', machine: target, section: item.section });
+              setOverlay({
+                kind: 'sectionMenu',
+                machine: target,
+                section: item.section,
+              });
             }}
           />
         );
@@ -1129,7 +1155,7 @@ export default function SessionsScreen({ navigation }: Props) {
         */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Menu"
+          accessibilityLabel="More options"
           style={styles.headerButton}
           onPress={() => setOverlay({ kind: 'appMenu' })}
         >
@@ -1175,10 +1201,7 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => void openTailscaleOrDownload()}
           >
             <Text
-              style={[
-                styles.tailscaleIndicatorLabel,
-                { color: GhostexPalette.STATUS_CONNECTED },
-              ]}
+              style={[styles.tailscaleIndicatorLabel, { color: GhostexPalette.STATUS_CONNECTED }]}
             >
               • Tailscale
             </Text>
@@ -1208,17 +1231,6 @@ export default function SessionsScreen({ navigation }: Props) {
           selectedSpaceId={selectedSpaceId}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
         />
-      ) : null}
-      {recentProjects.length > 0 && machine !== null ? (
-        <Pressable
-          accessibilityRole="button"
-          style={styles.recentButton}
-          onPress={() => setOverlay({ kind: 'recentProjects', machine })}
-        >
-          <Text style={[styles.recentButtonLabel, { color: sidebarAppearance.foreground }]}>
-            Recent Projects
-          </Text>
-        </Pressable>
       ) : null}
       <FlatList
         data={entries}
@@ -1263,11 +1275,17 @@ export default function SessionsScreen({ navigation }: Props) {
           title={sessionTitle(overlay.ctx.item.session)}
           subtitle="Remote session metadata from the Ghostex CLI."
           entries={[
-            { label: 'Machine', value: machineDisplayLabel(overlay.ctx.machine) },
+            {
+              label: 'Machine',
+              value: machineDisplayLabel(overlay.ctx.machine),
+            },
             { label: 'Project', value: overlay.ctx.item.projectTitle },
             { label: 'Project path', value: overlay.ctx.item.projectPath },
             { label: 'Status', value: displayStatus(overlay.ctx.item.session) },
-            { label: 'Focused on Mac', value: overlay.ctx.item.session.isFocused ? 'Yes' : 'No' },
+            {
+              label: 'Focused on Mac',
+              value: overlay.ctx.item.session.isFocused ? 'Yes' : 'No',
+            },
             {
               label: 'Last active',
               value: formatLastActive(
@@ -1484,7 +1502,11 @@ export default function SessionsScreen({ navigation }: Props) {
           onSubmit={(value) => {
             const title = value.trim();
             if (title.length === 0) {
-              setOverlay({ kind: 'collectionRename', ctx: overlay.ctx, error: 'Enter a title.' });
+              setOverlay({
+                kind: 'collectionRename',
+                ctx: overlay.ctx,
+                error: 'Enter a title.',
+              });
               return;
             }
             const state = summaryFor(overlay.ctx.machine.id)?.projectCollectionsState ?? null;
@@ -1548,10 +1570,22 @@ export default function SessionsScreen({ navigation }: Props) {
           subtitle="Project summary from the remote sidebar list."
           entries={[
             { label: 'Path', value: overlay.ctx.header.projectPath },
-            { label: 'Sessions', value: String(overlay.ctx.header.sessionCount) },
-            { label: 'Working', value: String(overlay.ctx.header.workingCount) },
-            { label: 'Attention', value: String(overlay.ctx.header.attentionCount) },
-            { label: 'Sleeping', value: String(overlay.ctx.header.sleepingCount) },
+            {
+              label: 'Sessions',
+              value: String(overlay.ctx.header.sessionCount),
+            },
+            {
+              label: 'Working',
+              value: String(overlay.ctx.header.workingCount),
+            },
+            {
+              label: 'Attention',
+              value: String(overlay.ctx.header.attentionCount),
+            },
+            {
+              label: 'Sleeping',
+              value: String(overlay.ctx.header.sleepingCount),
+            },
           ]}
           onClose={() => setOverlay(NONE)}
         />

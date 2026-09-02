@@ -4,11 +4,7 @@
 
 import { StyleSheet } from 'react-native';
 
-import {
-  ds,
-  PROJECT_RAIL_WIDTH,
-  SIDEBAR_BACKGROUND,
-} from '../../components/sessions/rows';
+import { ds, PROJECT_RAIL_WIDTH, SIDEBAR_BACKGROUND } from '../../components/sessions/rows';
 import { GhostexPalette, GhostexRadii } from '../../theme/palette';
 
 export const styles = StyleSheet.create({
@@ -84,22 +80,9 @@ export const styles = StyleSheet.create({
     color: GhostexPalette.MUTED,
     fontSize: 12,
   },
-  recentButton: {
-    marginTop: 8,
-    height: 44,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.CARD_ACTIVE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recentButtonLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   /*
-   * The list owns every point the header, the machine strip, the Space row and
-   * the Recent Projects button do not. A ScrollView (which a FlatList is) ships
+   * The list owns every point the header, the machine strip, and the Space row
+   * do not. A ScrollView (which a FlatList is) ships
    * `flexGrow: 1, flexShrink: 1` with a content-sized basis, so without an
    * explicit `flex: 1` a long session list overflows the column and Yoga takes
    * the difference back out of its shrinkable siblings — which is what used to

@@ -4,20 +4,20 @@ Extracted from `/Users/madda/dev/_active/Ghostex/android` (Termux fork). This is
 
 ## 0. Design tokens (GhostexPalette)
 
-| Token | Hex | Usage |
-|---|---|---|
-| BACKGROUND | `#181818` | drawer + dialog surface; pill chip fill |
-| FOREGROUND | `#FAFAFA` | primary text, icons |
-| MUTED | `#B5B5B5` | secondary text, headers, empty rows |
-| BORDER | `#33FFFFFF` (white 20%) | 1dp strokes on cards/pills |
-| CARD | `#1F1F1F` | session row bg (inactive) |
-| CARD_ACTIVE | `#262626` | active row fill, state cards, buttons |
-| INPUT_BACKGROUND | `#0E0E0E` | inputs |
-| BUTTON (accent) | `#7DD3FC` | active-row stroke, focused dot, primary buttons (text `#181818`) |
-| DANGER | `#E85C5C` | destructive labels |
-| STATUS_ATTENTION | `#95D7F6` | attention + done dot (blue, NOT green) |
-| STATUS_WORKING | `#F59E0B` | working dot (amber) |
-| STATUS_SLEEPING | `#6E7684` | sleep icon tint |
+| Token            | Hex                     | Usage                                                            |
+| ---------------- | ----------------------- | ---------------------------------------------------------------- |
+| BACKGROUND       | `#181818`               | drawer + dialog surface; pill chip fill                          |
+| FOREGROUND       | `#FAFAFA`               | primary text, icons                                              |
+| MUTED            | `#B5B5B5`               | secondary text, headers, empty rows                              |
+| BORDER           | `#33FFFFFF` (white 20%) | 1dp strokes on cards/pills                                       |
+| CARD             | `#1F1F1F`               | session row bg (inactive)                                        |
+| CARD_ACTIVE      | `#262626`               | active row fill, state cards, buttons                            |
+| INPUT_BACKGROUND | `#0E0E0E`               | inputs                                                           |
+| BUTTON (accent)  | `#7DD3FC`               | active-row stroke, focused dot, primary buttons (text `#181818`) |
+| DANGER           | `#E85C5C`               | destructive labels                                               |
+| STATUS_ATTENTION | `#95D7F6`               | attention + done dot (blue, NOT green)                           |
+| STATUS_WORKING   | `#F59E0B`               | working dot (amber)                                              |
+| STATUS_SLEEPING  | `#6E7684`               | sleep icon tint                                                  |
 
 Radius: cards/rows/inputs 8dp; pills/chips fully rounded. Strokes 1dp BORDER (active row: BUTTON).
 
@@ -26,18 +26,21 @@ Radius: cards/rows/inputs 8dp; pills/chips fully rounded. Strokes 1dp BORDER (ac
 Width 336dp (RN: use as drawer width on tablets/side panel; can be full-screen page on phones), bg `#181818`, padding 12. Three pages toggled: **Sessions** (default), **Machines**, **Settings**.
 
 ### Sessions page
+
 1. Header row: Android Exit (48×48 icon btn, bg #262626) | Title "Ghostex" (18sp bold, weight 1) | Refresh | Machines | Settings — 8dp gaps. Refresh = full reconnect. Android Exit = quit app; iOS omits it because iOS apps do not expose a quit action.
 2. Status row: 12sp muted, marginTop 4. Initial: "Connect to a ZMX machine". The tappable Tailscale indicator is green while connected and red while disconnected.
-3. "Recent Projects" button: full width, 44dp, marginTop 8, bg #262626 — hidden unless recentProjects non-empty.
+3. The top-right More options menu includes "Recent Projects" when the selected machine has recent projects.
 4. Session list: flat list, 10dp transparent gaps between top-level project
    cards and collection panels, marginTop 12.
 
 On Android, Back from a terminal shows Sessions and Back from Sessions returns to the selected warm terminal. Back is consumed when no terminal is open, so the explicit top-left Exit control is the only app-exit path.
 
 ### Machines page
+
 Header "Machines" + "Sessions" back button. Status line. Machine cards list. Footer rows: [Retry (accent #7DD3FC/#181818 text) | Add] and [Tailscale | Setup].
 
 ### Settings page
+
 Header "Settings" + back. Status "Edit chat, terminal behavior, and remote-session alerts." Theming starts with GPUI-parity Background Contrast (85–100, default 90) and Background Tint: the same calibrated preset swatches plus a custom `#RRGGBB` field. These settings recolor the drawer backing and its derived group, project, border, header-button, and session surfaces while leaving menus and Settings surfaces untinted. Chat settings select light/dark chat appearance, an installed font family, and message width from 50–100% in 5% steps (default 100%); width affects only transcript messages, with a 40px minimum side margin on viewports 500px and wider and 20px below 500px. Toggles: Auto scroll, Extra keys toolbar, Soft keyboard, Keep screen on, Show refresh/upload/keyboard button, Attention notification sound, Fullscreen, Hide keyboard on startup, Open URLs on tap, Confirm before closing tabs, Disable session change toasts; font size. Tab-close confirmation defaults to off. The file-upload floating button defaults on; the refresh and keyboard floating buttons default off.
 
 ## 2. Row types
@@ -45,7 +48,9 @@ Header "Settings" + back. Status "Edit chat, terminal behavior, and remote-sessi
 Flat list items: STATE_CARD, MACHINE_HEADER, PROJECT_HEADER, PROJECT_AGENTS_ROW, PROJECT_EMPTY, GROUP_HEADER, PROJECT_SESSION_LIST_TOGGLE, SESSION. Collapsed session list shows 6 (`PROJECT_SESSION_LIST_COLLAPSED_COUNT = 6`).
 
 ### SESSION row
+
 Horizontal, padding 10/9/10/9, minHeight 44, radius 8, bg CARD + 1 BORDER; active: CARD_ACTIVE + 1 BUTTON stroke.
+
 - Agent icon 18×18, marginEnd 10, tinted.
 - Title: weight 1, #FAFAFA 14sp bold, 1 line ellipsize. displayTitle or "Ghostex Session".
 - Status dot 8×8 circle marginStart 10 — OR sleeping icon 16×16 (ic sleep, tinted STATUS_SLEEPING) when sleeping (mutually exclusive).
@@ -55,11 +60,14 @@ Active row = warm-attached session key (machineId+sessionId) matches current ter
 Tap → attach. Long-press → context menu.
 
 ### Agent icon registry (icon id → tint; assets `ic_ghostex_agent_*` exist in android fork, copy to RN assets)
+
 amp-cli #FFFFFF · antigravity-cli #749BFF · browser #82B7FF · claude #D97757 · cursor-cli #EDECEC · codex #FFFFFF · copilot #FFFFFF · factory-droid #FF7A1A · gemini #8B9AFF · grok-build #FFFFFF · hermes-agent #F3C46B · opencode #6D96C0 · pi #C8FF62 · terminal #FAFAFA (fallback).
 Name aliases (lowercased): codex/codex cli→codex; claude/claude code→claude; cursor/cursor cli/cursor agent/cursor-agent→cursor-cli; pi/pi agent/π→pi; opencode/open code→opencode; gemini; copilot/github copilot; droid/factory droid→factory-droid; grok/grok build→grok-build; antigravity/antigravity cli/agy→antigravity-cli; amp/amp cli→amp-cli; hermes/hermes agent→hermes-agent; browser. `agentIcon` field wins over `agent` name.
 
 ### Session context menu (action sheet)
+
 Title = displayTitle or "Ghostex Session"; subtitle "Session {alias} · {displayStatus}". Rows:
+
 1. Attach — "Open this ZMX session in the terminal."
 2. Focus on Mac — "Focus this session in the running Ghostex app."
 3. Rename — "Update this session title in Ghostex." → prompt: title "Rename session", body "This updates the session title in Ghostex on the connected Mac.", input hint "Session title" (prefill raw title), Cancel/Rename; empty → "Enter a session title."
@@ -82,14 +90,19 @@ inventory converges; repeated authoritative disagreement restores server truth.
 ### MACHINE_HEADER (only when ≥2 machines): muted 12sp bold ALL-CAPS letterSpacing 0.06, padding 8/18/8/4, minHeight 36; " …" suffix when collapsed; tap toggles machine section collapse.
 
 ### PROJECT_HEADER
+
 Padding 6/14/6/6, minHeight 52. Title 15sp bold #FAFAFA weight 1. "+" button 32×32 pill (bg #181818, stroke BORDER) — create session, cd "Create a session in {title}". Overflow ⋮ 32×32 pill (hidden for Chats) — project menu. Row tap toggles expand/collapse. No session-count pill.
 
 ### PROJECT_AGENTS_ROW ("agents isle")
+
 Horizontal scroll chips under project header (not for Chats; needs stable projectId; only if agents or quickActions exist). Global agent chips first, then project quick actions. Chip: pill, padding 10/6/10/6, minHeight 32, optional 15×15 icon + label 12sp #FAFAFA. Agent chip → create agent session. Quick action: browser type opens URL on device; terminal type runs `ghostex run-action '<commandId>' --project-id '<projectId>'` then attach.
 
 ### PROJECT_EMPTY: muted 12sp, "No sessions yet. Tap + to create one."
+
 ### GROUP_HEADER: muted 13sp bold, padding 14/10/12/4; "{title}" or "{title} ({count})" collapsed; tap toggles (in-memory).
+
 ### TOGGLE: muted 13sp "Show more"/"Show less" (>6 sessions in flat project).
+
 ### STATE_CARD: padding 12, minHeight 104, radius 8, bg #262626 + BORDER. Title 15sp bold; body 12sp muted marginTop 6; action hint 12sp bold #7DD3FC marginTop 10. Tap → recovery actions sheet.
 
 ## 3. Grouping & ordering
@@ -102,6 +115,7 @@ Horizontal scroll chips under project header (not for Chats; needs stable projec
 - Recent Projects modal: title "Recent Projects", subtitle "Choose a parked project to restore to the active sidebar.", rows title + "{path} · {n session(s)}", tap → `ghostex restore-recent-project --project-id '<id>' --json`; status "Restoring {title}..." → "Restored {title}."
 
 ### Project context menu
+
 Title projectTitle, subtitle "{n} ZMX session(s)". Move project up/down (edge-gated) → `ghostex move-project --json --project-id '<id>' --direction 'up|down'`; Refresh sessions; Wake/Sleep project sessions; Kill project sessions (destructive; confirm "Kill project sessions?" / "This stops {n} Ghostex sessions in this project on the connected machine."); Copy project path; Details (Path, Sessions, Working, Attention, Sleeping; subtitle "Project summary from the remote sidebar list.").
 
 ## 4. Machines
@@ -135,6 +149,7 @@ Recovery matching: message contains "SSH needs a key or password" or "SSH reject
 ## 6. Creation flows
 
 All: close drawer → progress dialog (spinner + message) → run command → refresh inventory → auto-attach created session (`{ok:true, session:{sessionId}}`). Failure: dismiss, error, reopen drawer.
+
 - Project "+": `ghostex create-session --json [--project-id '<id>'] [--group-id '<id>']` — "Creating a terminal in {project}…". Chats "+": `ghostex create-chat --json` — "Creating a Quick session…".
 - Agent chip: `ghostex create-agent '<agentId>' --project-id '<projectId>' --json` — "Starting {agent} in {project}…". No stable projectId → "This project has no stable project id, so agent sessions cannot be started here."
 - Quick action: terminal → `ghostex run-action '<commandId>' --project-id '<projectId>'`; browser → open URL on device, status "Opened {name} in the browser."
@@ -150,6 +165,7 @@ Session (sessionId required; provider must normalize to "zmx"): alias (derives f
 displayStatus(): sleeping&&!live → "sleep"; else first actionable (attention|working|done|error) from normalized activity then status; else !live && sleepish → "sleep"; else first non-empty non-"running" activity/status; else "idle". Normalize: needs-attention/attention-required→attention; active/busy/processing→working; sleeping→sleep; `_`/space→`-`; lowercase.
 
 ## 8. Notifications (later milestone)
+
 Foreground service (Android) with custom rows: bold title + muted project + status dot; sorted done→working→running; summary "{n} remote terminal(s)"; sound on transition into attention/done (setting-gated). iOS: no direct equivalent in v1.
 
 ## 9. Desktop gpui-sidebar parity amendment (2026-07-22)
@@ -160,7 +176,7 @@ older groups.css look); where this section conflicts with §§0-7, it wins.
 Second pass on 2026-07-22 replaced the agent/action chips with header menus
 and recloned every surface from the live CSS cascade.
 
-- **Structure**: "Quick" section label → chat sessions as bare rows → 
+- **Structure**: "Quick" section label → chat sessions as bare rows →
   "Projects" section label → colored collection PANELS (tinted bg mix(color
   5%, mix(bg 96%, black 4%)), border mix(color 28%, mix(fg 14%, bg)), radius
   5; the fg-14% base keeps a visible outline for the transparent color)

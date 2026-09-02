@@ -261,7 +261,9 @@ export function useSessionsScreenMenus({
         void runSessionCommand(
           ctx.machine,
           pinSessionCommand(session.sessionId, !session.isPinned),
-          { optimisticChange: pinMutation(session.sessionId, !session.isPinned) },
+          {
+            optimisticChange: pinMutation(session.sessionId, !session.isPinned),
+          },
         ),
     });
     if (!browser) {
@@ -289,7 +291,9 @@ export function useSessionsScreenMenus({
             ? void runSessionCommand(
                 ctx.machine,
                 wakeSessionCommand(session.sessionId, projectId),
-                { optimisticChange: lifecycleMutation(session.sessionId, false) },
+                {
+                  optimisticChange: lifecycleMutation(session.sessionId, false),
+                },
               )
             : void runSessionCommand(
                 ctx.machine,
@@ -313,7 +317,10 @@ export function useSessionsScreenMenus({
     if (
       session.projectId.length > 0 &&
       isSessionChatSupportedAgent(
-        resolveAgentIconId(session.agentIcon, session.agentName.length > 0 ? session.agentName : session.agent),
+        resolveAgentIconId(
+          session.agentIcon,
+          session.agentName.length > 0 ? session.agentName : session.agent,
+        ),
       )
     ) {
       items.push({
@@ -374,8 +381,7 @@ export function useSessionsScreenMenus({
         key: 'full-reload',
         label: 'Full reload',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
-        onPress: () =>
-          void runSessionCommand(ctx.machine, reloadSessionCommand(session.sessionId)),
+        onPress: () => void runSessionCommand(ctx.machine, reloadSessionCommand(session.sessionId)),
       });
     }
     items.push({
@@ -489,7 +495,11 @@ export function useSessionsScreenMenus({
         label: 'Copy Path',
         icon: <CopyGlyph size={14} color={menuIconColor} />,
         onPress: () =>
-          setOverlay({ kind: 'copyText', title: 'Copy project path', text: header.projectPath }),
+          setOverlay({
+            kind: 'copyText',
+            title: 'Copy project path',
+            text: header.projectPath,
+          }),
       },
     ];
     if (header.projectId.length > 0) {
@@ -535,11 +545,7 @@ export function useSessionsScreenMenus({
       label: 'Full reload',
       icon: <RefreshGlyph size={14} color={menuIconColor} />,
       disabled: nonBrowser.length === 0,
-      onPress: () =>
-        void runBulkSessionActions(
-          ctx.machine,
-          nonBrowser.map(reloadSessionAction),
-        ),
+      onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
     });
     items.push({ kind: 'separator', key: 'sep-2' });
     items.push({
@@ -555,11 +561,7 @@ export function useSessionsScreenMenus({
           title: 'Close inactive sessions?',
           body: `This stops ${inactive.length} inactive session(s) in ${header.title} on the connected machine.`,
           confirmLabel: 'Close',
-          run: () =>
-            void runBulkSessionActions(
-              ctx.machine,
-              inactive.map(closeSessionAction),
-            ),
+          run: () => void runBulkSessionActions(ctx.machine, inactive.map(closeSessionAction)),
         }),
     });
     items.push({
@@ -586,16 +588,12 @@ export function useSessionsScreenMenus({
       icon: <ArrowGlyph size={14} color={menuIconColor} direction="up" />,
       disabled: !canMove || projectIndex <= 0,
       onPress: () =>
-        void runSessionCommand(
-          ctx.machine,
-          moveProjectCommand(header.projectId, 'up'),
-          {
-            optimisticChange: {
-              kind: 'projectOrder',
-              projectOrder: movedProjectOrder('up'),
-            },
+        void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'up'), {
+          optimisticChange: {
+            kind: 'projectOrder',
+            projectOrder: movedProjectOrder('up'),
           },
-        ),
+        }),
     });
     items.push({
       kind: 'item',
@@ -604,16 +602,12 @@ export function useSessionsScreenMenus({
       icon: <ArrowGlyph size={14} color={menuIconColor} direction="down" />,
       disabled: !canMove || projectIndex >= orderedProjectIds.length - 1,
       onPress: () =>
-        void runSessionCommand(
-          ctx.machine,
-          moveProjectCommand(header.projectId, 'down'),
-          {
-            optimisticChange: {
-              kind: 'projectOrder',
-              projectOrder: movedProjectOrder('down'),
-            },
+        void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'down'), {
+          optimisticChange: {
+            kind: 'projectOrder',
+            projectOrder: movedProjectOrder('down'),
           },
-        ),
+        }),
     });
     items.push({
       kind: 'item',
@@ -755,11 +749,7 @@ export function useSessionsScreenMenus({
         key: 'full-reload',
         label: 'Full reload sessions',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
-        onPress: () =>
-          void runBulkSessionActions(
-            ctx.machine,
-            nonBrowser.map(reloadSessionAction),
-          ),
+        onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
       });
     }
     if (items.length > 0) items.push({ kind: 'separator', key: 'sep-1' });
@@ -791,7 +781,10 @@ export function useSessionsScreenMenus({
           body: `This removes the ${ctx.header.title} group. Its projects stay in the sidebar.`,
           confirmLabel: 'Delete',
           run: () =>
-            runCollectionsUpdate(ctx.machine, stateWithoutCollection(state, ctx.header.collectionId)),
+            runCollectionsUpdate(
+              ctx.machine,
+              stateWithoutCollection(state, ctx.header.collectionId),
+            ),
         }),
     });
     items.push({
@@ -807,11 +800,7 @@ export function useSessionsScreenMenus({
           title: 'Close all sessions?',
           body: `This stops ${sessions.length} session(s) in ${ctx.header.title} on the connected machine.`,
           confirmLabel: 'Close',
-          run: () =>
-            void runBulkSessionActions(
-              ctx.machine,
-              sessions.map(closeSessionAction),
-            ),
+          run: () => void runBulkSessionActions(ctx.machine, sessions.map(closeSessionAction)),
         }),
     });
     return items;
@@ -862,11 +851,7 @@ export function useSessionsScreenMenus({
         key: 'full-reload',
         label: 'Full reload',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
-        onPress: () =>
-          void runBulkSessionActions(
-            ctx.machine,
-            nonBrowser.map(reloadSessionAction),
-          ),
+        onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
       });
     }
     items.push({
@@ -901,11 +886,7 @@ export function useSessionsScreenMenus({
           title: 'Close group?',
           body: `This stops ${sessions.length} session(s) in ${ctx.item.title} on the connected machine.`,
           confirmLabel: 'Close Group',
-          run: () =>
-            void runBulkSessionActions(
-              ctx.machine,
-              sessions.map(closeSessionAction),
-            ),
+          run: () => void runBulkSessionActions(ctx.machine, sessions.map(closeSessionAction)),
         }),
     });
     return items;
@@ -1046,10 +1027,10 @@ export function useSessionsScreenMenus({
   ];
 
   /**
-   * Header hamburger menu: the app-level actions that used to each own a
-   * header button. Search Prompts reads the selected machine's agent history,
-   * so it needs a machine; Logout closes the app and its live connections,
-   * which only Android lets an app do.
+   * Header hamburger menu: app-level actions and Recent Projects, which moved
+   * here from its full-width sessions-list button. Machine-scoped actions are
+   * available only when the selected machine has the required data. Logout
+   * closes the app and its live connections, which only Android lets an app do.
    */
   const appMenuItems = (target: MachineRecord | null): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [
@@ -1065,17 +1046,26 @@ export function useSessionsScreenMenus({
           navigation.navigate('FindPrompts', { machineId: target.id });
         },
       },
-      {
-        kind: 'item',
-        key: 'settings',
-        label: 'Settings',
-        icon: <SettingsGlyph size={14} color={menuIconColor} />,
-        onPress: () => {
-          setOverlay(NONE);
-          navigation.navigate('Settings');
-        },
-      },
     ];
+    if (target !== null && (summaryFor(target.id)?.recentProjects.length ?? 0) > 0) {
+      items.push({
+        kind: 'item',
+        key: 'recent-projects',
+        label: 'Recent Projects',
+        icon: <ClockGlyph size={14} color={menuIconColor} />,
+        onPress: () => setOverlay({ kind: 'recentProjects', machine: target }),
+      });
+    }
+    items.push({
+      kind: 'item',
+      key: 'settings',
+      label: 'Settings',
+      icon: <SettingsGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('Settings');
+      },
+    });
     if (Platform.OS === 'android') {
       items.push({ kind: 'separator', key: 'sep-1' });
       items.push({
@@ -1113,7 +1103,8 @@ export function useSessionsScreenMenus({
         setTransientStatus(ProgressCopy.noStableProjectId);
         return;
       }
-      const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+      const agentName =
+        agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       void runCreationFlow(
         target,
         createAgentCommand(agent.agentId, header.projectId),
@@ -1178,7 +1169,9 @@ export function useSessionsScreenMenus({
         onPress: () => {
           setOverlay(NONE);
           if (commandId.length > 0) {
-            useLauncherStore.getState().setLastAction(ctx.machine.id, ctx.header.projectId, commandId);
+            useLauncherStore
+              .getState()
+              .setLastAction(ctx.machine.id, ctx.header.projectId, commandId);
           }
           runQuickAction(ctx.machine, ctx.header.projectId, ctx.header.title, action);
         },
