@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import com.termux.terminal.TerminalEmulator
+import dev.ghostex.tailcatbridge.Tailcatbridge
 import com.termux.terminal.TerminalSession
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -96,6 +97,12 @@ class GhostexNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("GhostexNative")
 
+    // Android denies Go's netlink interface lookup, so the tailcat bridge has to be handed a
+    // Java enumerator before it builds its first client (see GhostexTailcatInterfaces). This
+    // runs while the native module registry is being assembled, ahead of any JavaScript call,
+    // so every tailcat entry point below is guaranteed to find the lister already installed.
+    OnCreate { GhostexTailcatInterfaces.register() }
+
     Events(
       "onTerminalState",
       "onTerminalTitle",
@@ -137,6 +144,15 @@ class GhostexNativeModule : Module() {
       connections[machineId]?.isConnected() ?: false
     }
 
+    // Saved machines keep their forward alive across disconnects so reconnects skip the
+    // rendezvous; only throwaway callers (Test Connection) stop theirs explicitly.
+    AsyncFunction("stopTailcatForward") { machineId: String, promise: Promise ->
+      backgroundExecutor.execute {
+        Tailcatbridge.stopForward(machineId)
+        promise.resolve(null)
+      }
+    }
+
     AsyncFunction("exec") { machineId: String, command: String, timeoutMs: Int?, promise: Promise ->
       val connection = connections[machineId]
       if (connection == null) {
@@ -157,6 +173,46 @@ class GhostexNativeModule : Module() {
         } catch (error: Throwable) {
           promise.reject(mapSshError(error, GhostexErrorCode.CHANNEL_FAILED))
         }
+      }
+    }
+
+    // endregion
+
+    // region local port forwarding
+
+    // SSH local port forwarding over the machine's existing connection: a loopback listener
+    // here, one direct-tcpip channel per accepted connection. Nothing is configured on the PC.
+    AsyncFunction("startPortForward") { machineId: String, remotePort: Int, promise: Promise ->
+      val connection = connections[machineId]
+      if (connection == null) {
+        promise.reject(notConnectedException(machineId))
+        return@AsyncFunction
+      }
+      connection.workExecutor.execute {
+        try {
+          promise.resolve(mapOf("localPort" to connection.startPortForward(remotePort)))
+        } catch (error: Throwable) {
+          promise.reject(mapPortForwardOpenError(error, remotePort))
+        }
+      }
+    }
+
+    // Teardown, so a machine with no connection resolves instead of failing the caller.
+    AsyncFunction("stopPortForward") { machineId: String, remotePort: Int, promise: Promise ->
+      val connection = connections[machineId]
+      if (connection == null) {
+        promise.resolve(null)
+        return@AsyncFunction
+      }
+      backgroundExecutor.execute {
+        connection.stopPortForward(remotePort)
+        promise.resolve(null)
+      }
+    }
+
+    AsyncFunction("listPortForwards") { machineId: String ->
+      connections[machineId]?.listPortForwards().orEmpty().map { (remotePort, localPort) ->
+        mapOf("remotePort" to remotePort, "localPort" to localPort)
       }
     }
 

@@ -12,6 +12,7 @@ import UIKit
 import ExpoModulesCore
 import Darwin
 import AudioToolbox
+import Tailcatbridge
 
 // MARK: - Records
 
@@ -147,6 +148,12 @@ public class GhostexNativeModule: Module {
             return await connection.isConnected
         }
 
+        // Saved machines keep their forward alive across disconnects so reconnects skip the
+        // rendezvous; only throwaway callers (Test Connection) stop theirs explicitly.
+        AsyncFunction("stopTailcatForward") { (machineId: String) in
+            TailcatbridgeStopForward(machineId)
+        }
+
         AsyncFunction("isTailscaleConnected") { () -> Bool in
             self.hasTailscaleNetworkAddress()
         }
@@ -167,6 +174,54 @@ public class GhostexNativeModule: Module {
                 ]
             } catch {
                 throw ghostexException(from: error)
+            }
+        }
+
+        // MARK: Local port forwarding
+
+        // SSH local port forwarding over the machine's existing connection: a loopback
+        // listener here, one direct-tcpip channel per accepted connection. Nothing is
+        // configured on the PC.
+        /*
+         * Rejected through the promise, not by throwing. Expo wraps a thrown
+         * exception in a FunctionCallException whose `code` is
+         * ERR_FUNCTION_CALL, which would hide E_PORT_NOT_LISTENING and
+         * E_FORWARDING_PROHIBITED from JS and leave it matching on message text
+         * that differs from Android's. `promise.reject` passes the exception —
+         * and its contract code — through untouched, exactly as the Android
+         * module does.
+         */
+        AsyncFunction("startPortForward") { (machineId: String, remotePort: Int, promise: Promise) in
+            guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else {
+                promise.reject(
+                    GhostexException(code: .notConnected, reason: "No connection for machine \(machineId)")
+                )
+                return
+            }
+            Task {
+                do {
+                    let localPort = try await connection.startPortForward(remotePort: remotePort)
+                    promise.resolve(["localPort": localPort])
+                } catch {
+                    promise.reject(ghostexException(from: error))
+                }
+            }
+        }
+
+        // Teardown, so a machine with no connection resolves instead of failing the caller.
+        AsyncFunction("stopPortForward") { (machineId: String, remotePort: Int) async in
+            guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else {
+                return
+            }
+            await connection.stopPortForward(remotePort: remotePort)
+        }
+
+        AsyncFunction("listPortForwards") { (machineId: String) async -> [[String: Any]] in
+            guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else {
+                return []
+            }
+            return await connection.listPortForwards().map {
+                ["remotePort": $0.remotePort, "localPort": $0.localPort]
             }
         }
 

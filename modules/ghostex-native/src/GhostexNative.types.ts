@@ -114,7 +114,23 @@ export type GhostexErrorCode =
   | 'E_NOT_CONNECTED'
   | 'E_CHANNEL_FAILED'
   | 'E_SFTP_FAILED'
-  | 'E_KEYGEN_FAILED';
+  | 'E_KEYGEN_FAILED'
+  /** startPortForward: the remote accepted the channel request but nothing listens on that port. */
+  | 'E_PORT_NOT_LISTENING'
+  /** startPortForward: the remote sshd refuses direct-tcpip channels (AllowTcpForwarding no). */
+  | 'E_FORWARDING_PROHIBITED';
+
+/**
+ * One live SSH local port forward: a loopback listener on the phone whose
+ * accepted connections are piped, one direct-tcpip channel each, to
+ * `localhost:remotePort` on the machine.
+ */
+export type PortForward = {
+  /** Port the web app listens on, on the remote machine's loopback. */
+  remotePort: number;
+  /** OS-assigned port on the phone's 127.0.0.1 that mirrors it. */
+  localPort: number;
+};
 
 export type TerminalStateEvent = {
   sessionKey: string;

@@ -94,6 +94,12 @@ enum SSHError: LocalizedError {
     case hostKeyVerificationFailed
     case sftpFailed(String)
     case socketError(String)
+    /// direct-tcpip open rejected with SSH_OPEN_CONNECT_FAILED: nothing is bound there.
+    case portForwardNotListening(Int)
+    /// direct-tcpip open rejected with SSH_OPEN_ADMINISTRATIVELY_PROHIBITED.
+    case portForwardingProhibited
+    /// startPortForward was asked for a number that is not a TCP port.
+    case portOutOfRange(Int)
     case unknown(String)
 
     var errorDescription: String? {
@@ -109,6 +115,15 @@ enum SSHError: LocalizedError {
             return "Host key verification failed. The saved SSH host fingerprint does not match the server's current key."
         case .sftpFailed(let msg): return "Upload failed: \(msg)"
         case .socketError(let msg): return "Socket error: \(msg)"
+        // The machine id is an internal identifier and stays in the log lines; the user
+        // already knows which machine they asked to forward from.
+        case .portForwardNotListening(let port):
+            return "Nothing is listening on port \(port) on the remote machine."
+        case .portForwardingProhibited:
+            return "The remote SSH server does not allow port forwarding (AllowTcpForwarding)."
+        // Same wording and same contract code as the Android transport.
+        case .portOutOfRange(let port):
+            return "Port \(port) is outside the valid TCP port range."
         case .unknown(let msg): return "Unknown error: \(msg)"
         }
     }
@@ -247,7 +262,8 @@ actor SSHConnection {
     }
 
     let config: SSHConnectionConfig
-    private var libssh2Session: OpaquePointer?
+    /// Non-private so the port-forward extension in SSHPortForward.swift can open channels.
+    var libssh2Session: OpaquePointer?
     private var shellChannels: [UUID: ShellChannelState] = [:]
     private var socket: Int32 = -1
     private var isActive = false
@@ -260,7 +276,38 @@ actor SSHConnection {
     private var ioTask: Task<Void, Never>?
     private var keepAliveTask: Task<Void, Never>?
     private var execRequests: [UUID: ExecRequest] = [:]
-    private let logger = Logger(
+
+    /// Local port forwards owned by this connection, keyed by remote port.
+    var portForwards: [Int: PortForwardListener] = [:]
+
+    /// Every accepted forward connection's direct-tcpip channel, serviced by `ioLoop`.
+    var forwardChannels: [UUID: PortForwardChannel] = [:]
+
+    /**
+     * Channels whose close is still being driven. A non-blocking
+     * `libssh2_channel_close` answers EAGAIN until the remote's CHANNEL_CLOSE
+     * arrives, so `ioLoop` finishes them (see `drainClosingChannels`); dropping
+     * the pointer at the first EAGAIN would leak the channel for the life of the
+     * session.
+     */
+    var closingForwardChannels: [ClosingChannel] = []
+
+    /**
+     * Bumped by every teardown. `startPortForward` suspends twice (the probe and
+     * the listener), and a stop or a disconnect that lands in between must not
+     * be undone by the start publishing its listener afterwards.
+     */
+    var portForwardTeardownGeneration = 0
+
+    /**
+     * libssh2 keeps channel-open state on the SESSION, not on the channel, so two opens
+     * that overlap across a suspension point clobber each other. Every opener claims this
+     * token first and holds it until its open finishes — including across the EAGAIN
+     * retries a non-blocking open needs.
+     */
+    private var channelOpenClaim: UUID?
+
+    let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "app.ghostex.mobile",
         category: "SSHConnection"
     )
@@ -284,11 +331,22 @@ actor SSHConnection {
 
     /// Flag the whole connection dead on socket-level libssh2 errors so
     /// callers (ensureConnected / reopen flows) actually reconnect.
-    private func noteTransportError(_ code: Int) {
-        if code == Int(LIBSSH2_ERROR_SOCKET_SEND) || code == Int(LIBSSH2_ERROR_SOCKET_RECV)
+    func noteTransportError(_ code: Int) {
+        guard code == Int(LIBSSH2_ERROR_SOCKET_SEND) || code == Int(LIBSSH2_ERROR_SOCKET_RECV)
             || code == Int(LIBSSH2_ERROR_SOCKET_DISCONNECT)
-            || code == Int(LIBSSH2_ERROR_SOCKET_TIMEOUT) {
-            transportDead = true
+            || code == Int(LIBSSH2_ERROR_SOCKET_TIMEOUT) else {
+            return
+        }
+        let wasAlive = !transportDead
+        transportDead = true
+        /*
+         * Forwards dial through this session. With the transport gone every
+         * socket the loopback listeners accept would be dropped without a byte,
+         * so they come down with it — `listPortForwards` promises never to name
+         * a forward whose channels can no longer be opened.
+         */
+        if wasAlive {
+            closeAllPortForwards()
         }
     }
 
@@ -296,6 +354,59 @@ actor SSHConnection {
     nonisolated func abort() {
         atomicSocket.closeImmediately()
     }
+
+    // MARK: - Channel-open serialization
+
+    /// True once `owner` holds the session's channel-open state (already holding it counts).
+    func claimChannelOpen(_ owner: UUID) -> Bool {
+        guard let current = channelOpenClaim else {
+            channelOpenClaim = owner
+            return true
+        }
+        return current == owner
+    }
+
+    func releaseChannelOpen(_ owner: UUID) {
+        if channelOpenClaim == owner {
+            channelOpenClaim = nil
+        }
+    }
+
+    /// Wait until a fresh opener owns the session's channel-open state; the caller releases it.
+    func awaitChannelOpenClaim() async throws -> UUID {
+        let owner = UUID()
+        while !claimChannelOpen(owner) {
+            try Task.checkCancellation()
+            try await Task.sleep(nanoseconds: Self.channelOpenClaimPollNanoseconds)
+        }
+        return owner
+    }
+
+    /**
+     * As above, but giving up after `timeout` seconds. Openers that a user is
+     * waiting on take this one, so a stuck opener ahead of them surfaces as a
+     * timeout instead of an unbounded wait.
+     */
+    func awaitChannelOpenClaim(timeout: TimeInterval) async throws -> UUID {
+        let owner = UUID()
+        let deadline = Date().addingTimeInterval(timeout)
+        while !claimChannelOpen(owner) {
+            try Task.checkCancellation()
+            if Date() >= deadline { throw SSHError.timeout }
+            try await Task.sleep(nanoseconds: Self.channelOpenClaimPollNanoseconds)
+        }
+        return owner
+    }
+
+    /// Wait until this opener owns the session's channel-open state, then run `body`.
+    func withChannelOpenClaim<T>(_ body: () async throws -> T) async throws -> T {
+        let owner = try await awaitChannelOpenClaim()
+        defer { releaseChannelOpen(owner) }
+        return try await body()
+    }
+
+    /// Cadence for waiting on the channel-open claim (2ms).
+    private static let channelOpenClaimPollNanoseconds: UInt64 = 2_000_000
 
     // MARK: - Connection
 
@@ -324,6 +435,10 @@ actor SSHConnection {
         // Connect socket (try all resolved addresses so IPv6-only hosts work)
         var lastConnectError: Int32 = 0
         var candidate: UnsafeMutablePointer<addrinfo>? = addrInfo
+        let socketConnectStartedAt = Date()
+        logger.info(
+            "connect \(self.config.machineId, privacy: .public) -> \(dialHost, privacy: .public):\(dialPort)"
+        )
 
         while let current = candidate {
             try Task.checkCancellation()
@@ -351,6 +466,9 @@ actor SSHConnection {
 
         guard socket >= 0 else {
             let message = lastConnectError == 0 ? "Unknown connect failure" : String(cString: strerror(lastConnectError))
+            logger.error(
+                "connect \(self.config.machineId, privacy: .public) socket failed: \(message, privacy: .public)"
+            )
             if lastConnectError == ECONNREFUSED {
                 throw SSHError.connectionRefused(message)
             }
@@ -359,6 +477,9 @@ actor SSHConnection {
             }
             throw SSHError.connectionFailed(message)
         }
+        logger.info(
+            "connect \(self.config.machineId, privacy: .public) socket up in \(Int(Date().timeIntervalSince(socketConnectStartedAt) * 1000))ms"
+        )
 
         // Disable Nagle's algorithm for low-latency interactive typing
         var noDelay: Int32 = 1
@@ -403,6 +524,27 @@ actor SSHConnection {
         let handshakeResult = libssh2_session_handshake(session, socket)
         guard handshakeResult == 0 else {
             cleanup()
+            // A tunnel dial that fails once the loopback socket is accepted can only reach
+            // libssh2 as a socket error; the bridge kept the cause, so report that.
+            if let tunnelFailure = tailcatDialFailure() {
+                logger.error(
+                    "handshake \(self.config.machineId, privacy: .public) failed inside the tailcat tunnel: \(tunnelFailure, privacy: .public)"
+                )
+                throw SSHError.connectionFailed(
+                    "tailcat could not reach the paired machine: \(tunnelFailure)"
+                )
+            }
+            logger.error(
+                "handshake \(self.config.machineId, privacy: .public) failed: \(handshakeResult)"
+            )
+            if handshakeResult == LIBSSH2_ERROR_SOCKET_RECV
+                || handshakeResult == LIBSSH2_ERROR_SOCKET_SEND
+                || handshakeResult == LIBSSH2_ERROR_SOCKET_DISCONNECT {
+                throw SSHError.connectionRefused(
+                    "the SSH server closed the connection (connection reset). The machine was "
+                        + "reached, but its SSH server dropped the TCP connection."
+                )
+            }
             throw SSHError.connectionFailed("SSH handshake failed: \(handshakeResult)")
         }
 
@@ -453,6 +595,10 @@ actor SSHConnection {
 
         var localPort = 0
         var bridgeError: NSError?
+        let startedAt = Date()
+        logger.info(
+            "tailcat startForward \(self.config.machineId, privacy: .public) remotePort=\(self.config.port) tokenLength=\(token.count)"
+        )
         let started = TailcatbridgeStartForward(
             config.machineId,
             token,
@@ -460,15 +606,35 @@ actor SSHConnection {
             &localPort,
             &bridgeError
         )
+        let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         guard started, localPort > 0 else {
             let detail = bridgeError?.localizedDescription ?? "the bridge returned no local port"
+            logger.error(
+                "tailcat startForward \(self.config.machineId, privacy: .public) failed after \(elapsedMs)ms: \(detail, privacy: .public)"
+            )
+            // The machine id is an internal identifier: it stays in the log lines above,
+            // never in text the app shows, where the user already knows which machine
+            // they are connecting to.
             throw SSHError.connectionFailed(
-                "tailcat could not reach \(config.machineId). Check that the remote's tailcat "
+                "tailcat could not reach the paired machine. Check that the remote's tailcat "
                     + "sidecar is enabled and that its token is current. (\(detail))"
             )
         }
-        logger.info("tailcat forward for \(self.config.machineId) listening on port \(localPort)")
+        logger.info(
+            "tailcat forward for \(self.config.machineId, privacy: .public) listening on port \(localPort) after \(elapsedMs)ms"
+        )
         return (Self.tailcatLoopbackHost, localPort)
+    }
+
+    /// The tunnel's own last dial failure for this machine, or nil when there is none.
+    /// A dial that fails once the loopback socket is already accepted can only reach
+    /// libssh2 as a reset, so the bridge keeps the real cause for exactly this read.
+    private func tailcatDialFailure() -> String? {
+        guard !config.tailcatToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let detail = TailcatbridgeLastError(config.machineId)
+        return detail.isEmpty ? nil : detail
     }
 
     private func authenticate() throws {
@@ -613,6 +779,10 @@ actor SSHConnection {
         // Finish shell streams first to unblock any waiting consumers
         closeAllShellChannels()
 
+        // Forwards dial through this session, so they die with it: listPortForwards must
+        // never report a forward whose channels can no longer be opened.
+        closeAllPortForwards()
+
         // Cancel IO task
         ioTask?.cancel()
         ioTask = nil
@@ -636,6 +806,11 @@ actor SSHConnection {
 
         closeAllShellChannels()
         closeAllExecChannels()
+        closeAllPortForwards()
+        // libssh2_session_free below frees whatever channels the session still
+        // owns, so a close that never finished draining is released with it.
+        closingForwardChannels.removeAll()
+        channelOpenClaim = nil
 
         if let session = libssh2Session {
             libssh2_session_disconnect_ex(session, 11, "Normal shutdown", "")
@@ -662,6 +837,12 @@ actor SSHConnection {
         guard let session = libssh2Session else {
             throw SSHError.notConnected
         }
+
+        // Claim the session's channel-open state BEFORE switching to blocking mode, so a
+        // non-blocking exec/forward open parked on EAGAIN cannot have its state taken over
+        // here, and so the io loop never runs while the session is blocking.
+        let opener = try await awaitChannelOpenClaim()
+        defer { releaseChannelOpen(opener) }
 
         // Set blocking for channel setup
         libssh2_session_set_blocking(session, 1)
@@ -753,7 +934,7 @@ actor SSHConnection {
         return ShellHandle(id: shellId, stream: stream)
     }
 
-    private func startIOLoop() {
+    func startIOLoop() {
         guard ioTask == nil else { return }
         ioTask = Task { [weak self] in
             await self?.ioLoop()
@@ -879,7 +1060,14 @@ actor SSHConnection {
                 }
             }
 
-            if shellChannels.isEmpty, execRequests.isEmpty {
+            if pumpPortForwardChannels() {
+                didWork = true
+            }
+
+            // Channels still being closed keep the loop alive: nothing else
+            // drives their EAGAIN retries.
+            if shellChannels.isEmpty, execRequests.isEmpty, forwardChannels.isEmpty,
+                closingForwardChannels.isEmpty {
                 break
             }
 
@@ -937,6 +1125,7 @@ actor SSHConnection {
         let requests = execRequests
         execRequests.removeAll()
         for request in requests.values {
+            releaseChannelOpen(request.id)
             if let channel = request.channel {
                 libssh2_channel_close(channel)
                 libssh2_channel_free(channel)
@@ -953,6 +1142,8 @@ actor SSHConnection {
         }
 
         if request.channel == nil {
+            // Another opener owns the session's channel-open state; retry on a later pass.
+            guard claimChannelOpen(request.id) else { return false }
             let newChannel = libssh2_channel_open_ex(
                 session,
                 "session",
@@ -964,11 +1155,14 @@ actor SSHConnection {
             )
             if let newChannel = newChannel {
                 request.channel = newChannel
+                releaseChannelOpen(request.id)
             } else {
                 let lastError = libssh2_session_last_errno(session)
                 if lastError == LIBSSH2_ERROR_EAGAIN {
+                    // The open is mid-flight; keep the claim until it settles.
                     return false
                 }
+                releaseChannelOpen(request.id)
                 finishExecRequest(request.id, error: SSHError.channelOpenFailed)
                 return false
             }
@@ -1002,6 +1196,8 @@ actor SSHConnection {
 
     private func finishExecRequest(_ requestId: UUID, error: Error?) {
         guard let request = execRequests.removeValue(forKey: requestId) else { return }
+        // A request abandoned mid-open (timeout, cancellation) must not strand the claim.
+        releaseChannelOpen(requestId)
 
         var exitCode: Int32 = 0
         if let channel = request.channel {
@@ -1022,7 +1218,7 @@ actor SSHConnection {
         }
     }
 
-    private func waitForSocket() async {
+    func waitForSocket() async {
         guard let session = libssh2Session, socket >= 0 else { return }
 
         let direction = libssh2_session_block_directions(session)

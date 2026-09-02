@@ -18,6 +18,10 @@ enum GhostexErrorCode: String {
     case notConnected = "E_NOT_CONNECTED"
     case channelFailed = "E_CHANNEL_FAILED"
     case sftpFailed = "E_SFTP_FAILED"
+    /// startPortForward: the remote accepted the request but nothing listens on that port.
+    case portNotListening = "E_PORT_NOT_LISTENING"
+    /// startPortForward: the remote sshd refuses direct-tcpip channels.
+    case forwardingProhibited = "E_FORWARDING_PROHIBITED"
 }
 
 /// Expo exception carrying a contract error code.
@@ -57,10 +61,14 @@ extension GhostexErrorCode {
             return .notConnected
         case .connectionFailed, .unknown:
             return .unreachable
-        case .channelOpenFailed, .shellRequestFailed, .socketError:
+        case .channelOpenFailed, .shellRequestFailed, .socketError, .portOutOfRange:
             return .channelFailed
         case .sftpFailed:
             return .sftpFailed
+        case .portForwardNotListening:
+            return .portNotListening
+        case .portForwardingProhibited:
+            return .forwardingProhibited
         }
     }
 }

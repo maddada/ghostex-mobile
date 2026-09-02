@@ -60,7 +60,8 @@ Pod::Spec.new do |s|
   # library search paths visible at the final (app) link step.
   s.preserve_paths = 'Vendor/**/*'
 
-  s.frameworks = 'Metal', 'QuartzCore', 'UIKit', 'IOSurface', 'Security', 'AudioToolbox'
+  # Network is NWListener/NWConnection, the loopback side of SSH local port forwarding.
+  s.frameworks = 'Metal', 'QuartzCore', 'UIKit', 'IOSurface', 'Security', 'AudioToolbox', 'Network'
   s.libraries = 'z', 'c++'
 
   s.pod_target_xcconfig = {

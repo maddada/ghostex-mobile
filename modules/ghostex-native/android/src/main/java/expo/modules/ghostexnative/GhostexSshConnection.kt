@@ -2,6 +2,7 @@ package expo.modules.ghostexnative
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import dev.ghostex.tailcatbridge.Tailcatbridge
 import java.io.File
 import java.io.InputStream
@@ -9,9 +10,11 @@ import java.security.KeyFactory
 import java.security.Provider
 import java.security.Security
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import net.schmizz.keepalive.KeepAliveProvider
 import net.schmizz.sshj.AndroidConfig
@@ -21,6 +24,7 @@ import net.schmizz.sshj.common.Factory
 import net.schmizz.sshj.common.SecurityUtils
 import net.schmizz.sshj.connection.channel.direct.PTYMode
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.transport.kex.KeyExchange
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
@@ -56,6 +60,12 @@ class GhostexSshConnection(
   @Volatile
   private var execUploadPreferred: Boolean? = null
 
+  /** Live local port forwards keyed by remote port; owned by this connection. */
+  private val portForwards = ConcurrentHashMap<Int, GhostexPortForward>()
+
+  /** Serializes start so two concurrent starts for one port cannot both bind a listener. */
+  private val portForwardLock = Any()
+
   fun isConnected(): Boolean {
     val ssh = client ?: return false
     return ssh.isConnected && ssh.isAuthenticated
@@ -75,12 +85,19 @@ class GhostexSshConnection(
     ssh.addHostKeyVerifier(verifier)
     try {
       val (dialHost, dialPort) = resolveDialTarget()
+      val connectStartedAt = System.currentTimeMillis()
+      Log.i(LOG_TAG, "connect $machineId -> $dialHost:$dialPort")
       ssh.connect(dialHost, dialPort)
+      Log.i(
+        LOG_TAG,
+        "transport up for $machineId in ${System.currentTimeMillis() - connectStartedAt}ms"
+      )
       authenticate(ssh)
       // 0 disables SSHJ's keep-alive thread; the thread dies with the transport on disconnect.
       ssh.connection.keepAlive.keepAliveInterval =
         if (config.keepAliveEnabled) config.keepAliveIntervalSec.coerceIn(MIN_KEEP_ALIVE_INTERVAL_SECONDS, MAX_KEEP_ALIVE_INTERVAL_SECONDS)
         else 0
+      installPortForwardTeardownOnTransportDeath(ssh)
       client = ssh
     } catch (error: Exception) {
       try {
@@ -95,6 +112,19 @@ class GhostexSshConnection(
           error
         )
       }
+      // A tunnel dial that fails after the loopback socket is already up can only reach
+      // SSHJ as a reset; the bridge kept the cause, so report that instead. A
+      // GhostexException already carries a precise message (e.g. from startForward).
+      val tunnelFailure = if (error is GhostexException) null else tailcatDialFailure()
+      if (tunnelFailure != null) {
+        Log.w(LOG_TAG, "connect $machineId failed inside the tailcat tunnel: $tunnelFailure")
+        throw GhostexException(
+          GhostexErrorCode.UNREACHABLE,
+          "tailcat could not reach the paired machine: $tunnelFailure",
+          error
+        )
+      }
+      Log.w(LOG_TAG, "connect $machineId failed: ${error.message ?: error.javaClass.simpleName}")
       throw mapSshError(error, fallbackCode = GhostexErrorCode.UNREACHABLE)
     }
   }
@@ -108,17 +138,37 @@ class GhostexSshConnection(
   private fun resolveDialTarget(): Pair<String, Int> {
     val token = config.tailcatToken.trim()
     if (token.isEmpty()) return config.host to config.port
+    val startedAt = System.currentTimeMillis()
+    Log.i(LOG_TAG, "startForward $machineId remotePort=${config.port} tokenLength=${token.length}")
     val localPort = try {
       Tailcatbridge.startForward(machineId, token, config.port.toLong()).toInt()
     } catch (error: Exception) {
+      Log.w(
+        LOG_TAG,
+        "startForward $machineId failed after ${System.currentTimeMillis() - startedAt}ms: " +
+          (error.message ?: error.javaClass.simpleName)
+      )
+      // The machine id is an internal identifier: it stays in the log lines above, never in
+      // text the app shows, where the user already knows which machine they are connecting to.
       throw GhostexException(
         GhostexErrorCode.UNREACHABLE,
-        "tailcat could not reach $machineId. Check that the remote's tailcat sidecar is " +
-          "enabled and that its token is current. (${error.message ?: error.javaClass.simpleName})",
+        "tailcat could not reach the paired machine. Check that the remote's tailcat sidecar " +
+          "is enabled and that its token is current. (${error.message ?: error.javaClass.simpleName})",
         error
       )
     }
+    Log.i(
+      LOG_TAG,
+      "startForward $machineId ready on 127.0.0.1:$localPort in " +
+        "${System.currentTimeMillis() - startedAt}ms"
+    )
     return TAILCAT_LOOPBACK_HOST to localPort
+  }
+
+  /** The tunnel's own last dial failure for this machine, or null when there is none. */
+  private fun tailcatDialFailure(): String? {
+    if (config.tailcatToken.trim().isEmpty()) return null
+    return Tailcatbridge.lastError(machineId)?.takeIf { it.isNotBlank() }
   }
 
   private fun authenticate(ssh: SSHClient) {
@@ -151,11 +201,22 @@ class GhostexSshConnection(
   fun closeQuietly() {
     val ssh = client
     client = null
+    /*
+     * The transport goes first. Closing a direct-tcpip channel on a live session
+     * makes sshj wait up to 30s for the remote's close confirmation, once per
+     * channel, which is long enough to stall the reconnect that follows a
+     * disconnect; with the transport already gone those closes return at once.
+     * It also releases a startPortForward that is holding the port-forward lock
+     * while it waits on a probe, so the teardown below cannot block behind it.
+     */
     try {
       ssh?.disconnect()
     } catch (ignored: Exception) {
       // Closing a dead SSH connection can throw; there is nothing actionable here.
     }
+    // Forwards dial through this client, so they die with it: listPortForwards must never
+    // report a forward whose channels can no longer be opened.
+    closeAllPortForwards()
     workExecutor.shutdown()
   }
 
@@ -306,6 +367,118 @@ class GhostexSshConnection(
     }
   }
 
+  // region local port forwarding
+
+  /**
+   * Start (or reuse) the loopback forward for `localhost:[remotePort]` on the machine and
+   * return the port it listens on here. One probe channel is opened and closed first so a
+   * port nothing is bound to, and an sshd that refuses forwarding, fail here instead of
+   * leaving the app with a listener that can never carry a byte.
+   */
+  fun startPortForward(remotePort: Int): Int {
+    if (remotePort !in MIN_TCP_PORT..MAX_TCP_PORT) {
+      throw GhostexException(
+        GhostexErrorCode.CHANNEL_FAILED,
+        "Port $remotePort is outside the valid TCP port range."
+      )
+    }
+    val ssh = client?.takeIf { isConnected() } ?: throw notConnectedException(machineId)
+    portForwards[remotePort]?.let { return it.localPort }
+    synchronized(portForwardLock) {
+      portForwards[remotePort]?.let { return it.localPort }
+      Log.i(LOG_TAG, "startPortForward $machineId remotePort=$remotePort")
+      probeRemotePort(ssh, remotePort)
+      val forward = try {
+        GhostexPortForward(machineId, remotePort) { client }
+      } catch (error: Exception) {
+        throw GhostexException(
+          GhostexErrorCode.CHANNEL_FAILED,
+          "Could not open a local listener for port $remotePort: " +
+            (error.message ?: error.javaClass.simpleName),
+          error
+        )
+      }
+      forward.start()
+      portForwards[remotePort] = forward
+      return forward.localPort
+    }
+  }
+
+  /**
+   * Close the forward for [remotePort], including its in-flight channels. No-op when absent.
+   *
+   * Takes the same lock as [startPortForward]: a stop that overlaps a start for
+   * the same port has to see the listener the start is about to publish, or the
+   * start would insert it straight after the removal and leave it bound forever.
+   */
+  fun stopPortForward(remotePort: Int) {
+    synchronized(portForwardLock) {
+      portForwards.remove(remotePort)?.close()
+    }
+  }
+
+  /** Live forwards as (remotePort, localPort) pairs. */
+  fun listPortForwards(): List<Pair<Int, Int>> =
+    portForwards.values.map { it.remotePort to it.localPort }.sortedBy { it.first }
+
+  /**
+   * A forward is only reachable while the transport that carries its channels is
+   * alive, and the transport can die on its own — a keep-alive that goes
+   * unanswered, or the OS tearing TCP down while the app is suspended — without
+   * anyone calling [closeQuietly]. Without this, [listPortForwards] would keep
+   * naming loopback listeners whose every accepted socket is dropped, which is
+   * exactly what its contract says it never reports.
+   */
+  private fun installPortForwardTeardownOnTransportDeath(ssh: SSHClient) {
+    ssh.transport.disconnectListener = DisconnectListener { reason, message ->
+      Log.i(LOG_TAG, "transport for $machineId went down ($reason): ${message.orEmpty()}")
+      /*
+       * Never inline: this runs on sshj's reader thread, and the teardown takes
+       * the port-forward lock that an in-flight start holds while it waits for a
+       * channel-open reply that only this thread can deliver.
+       */
+      try {
+        workExecutor.execute { closeAllPortForwards() }
+      } catch (ignored: RejectedExecutionException) {
+        // The executor is only shut down by closeQuietly, which closes them itself.
+      }
+    }
+  }
+
+  /** Same lock as [stopPortForward], for the same reason. */
+  private fun closeAllPortForwards() {
+    synchronized(portForwardLock) {
+      val forwards = portForwards.values.toList()
+      portForwards.clear()
+      for (forward in forwards) forward.close()
+    }
+  }
+
+  /**
+   * Open one direct-tcpip channel to the remote's `localhost:[remotePort]` and close it
+   * immediately, purely to turn the SSH_MSG_CHANNEL_OPEN_FAILURE reason into a specific
+   * error before the caller believes the forward works.
+   */
+  private fun probeRemotePort(ssh: SSHClient, remotePort: Int) {
+    val probe = try {
+      ssh.newDirectConnection(REMOTE_LOOPBACK_HOST, remotePort)
+    } catch (error: Exception) {
+      Log.w(
+        LOG_TAG,
+        "startPortForward $machineId remotePort=$remotePort probe failed: " +
+          (error.message ?: error.javaClass.simpleName)
+      )
+      throw mapPortForwardOpenError(error, remotePort)
+    }
+    try {
+      probe.close()
+    } catch (ignored: Exception) {
+      // The probe already proved the remote accepts the channel; closing it is best effort.
+    }
+  }
+
+  // endregion
+
   private fun makeRemoteDirectories(sftp: net.schmizz.sshj.sftp.SFTPClient, remoteDirectory: String) {
     if (remoteDirectory.isEmpty() || remoteDirectory == "." || remoteDirectory == "/") return
     val current = StringBuilder(if (remoteDirectory.startsWith("/")) "/" else "")
@@ -362,6 +535,8 @@ class GhostexSshConnection(
   }
 
   companion object {
+    /** Connection diagnostics land in logcat under this tag, next to "GhostexTerminal". */
+    private const val LOG_TAG = "GhostexSsh"
     const val CONNECT_TIMEOUT_MS = 8_000
     const val DEFAULT_EXEC_TIMEOUT_MS = 20_000L
     private const val REMOTE_PLATFORM_DETECTION_TIMEOUT_MS = 5_000L
@@ -373,6 +548,11 @@ class GhostexSshConnection(
 
     /** tailcat forwards listen on loopback only; the tunnel itself carries the traffic. */
     private const val TAILCAT_LOOPBACK_HOST = "127.0.0.1"
+
+    /** direct-tcpip target host for port forwards, resolved on the remote machine. */
+    private const val REMOTE_LOOPBACK_HOST = "localhost"
+    private const val MIN_TCP_PORT = 1
+    private const val MAX_TCP_PORT = 65_535
 
     private fun remoteDirectory(remotePath: String): String {
       val slashIndex = remotePath.lastIndexOf('/')
