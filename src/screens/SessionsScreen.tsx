@@ -7,13 +7,13 @@
 
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
-  ActivityIndicator,
   AppState,
   BackHandler,
   FlatList,
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   Text,
   View,
 } from 'react-native';
@@ -42,13 +42,9 @@ import {
   type DrawerBlock,
   type ProjectCardBlock,
 } from '../components/sessions/drawerModel';
-import {
-  ExitGlyph,
-  MachinesGlyph,
-  SearchGlyph,
-  RefreshGlyph,
-  SettingsGlyph,
-} from '../components/sessions/icons';
+import { MachinesGlyph, MenuGlyph, WorldGlyph } from '../components/sessions/icons';
+import MachineTabs, { type MachineTabItem } from '../components/sessions/MachineTabs';
+import SpaceTabs from '../components/sessions/SpaceTabs';
 import { useLauncherStore, lastActionKey } from '../components/sessions/launcherStore';
 import {
   CollectionHeaderRow,
@@ -56,7 +52,6 @@ import {
   COLLECTION_BRANCH_WIDTH,
   expandedGroupBackground,
   GroupHeaderRow,
-  MachineHeaderRow,
   ProjectBranch,
   ProjectEmptyRow,
   ProjectHeaderRow,
@@ -90,11 +85,12 @@ import {
 } from '../contract/grouping';
 import {
   displayStatus,
+  EMPTY_SIDEBAR_SPACES,
   formatLastActive,
   type GhostexQuickAction,
   type GhostexSession,
 } from '../contract/mobileSummary';
-import { ProgressCopy, RenameCopy, SessionNoteCopy, StateCardCopy } from '../copy';
+import { ProgressCopy, RenameCopy, SessionNoteCopy, StateCardCopy, WebPreviewCopy } from '../copy';
 import type { OptimisticInventoryChange } from '../inventory/optimistic';
 import {
   enqueueRemoteMutation,
@@ -103,13 +99,22 @@ import {
   sessionNoteMutation,
 } from '../sessions/sessionCommands';
 import { useInventoryStore } from '../inventory/store';
-import { machineDisplayLabel, selectedMachine, useMachinesStore, type MachineRecord } from '../machines/store';
+import {
+  isMachineEnabled,
+  machineDisplayLabel,
+  selectedMachine,
+  useMachinesStore,
+  type MachineRecord,
+} from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
+import { resolveSelectedSpaceId, spaceRowItems } from '../spaces/spaceFilter';
+import { useSpacesStore } from '../spaces/store';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
 import { colorWithOpacity, GhostexPalette } from '../theme/palette';
 import { resolveSidebarAppearance } from '../theme/sidebarAppearance';
+import { webPreviewTargetForUrl } from '../webPreview/routing';
 import {
   closeMutation,
   closeSessionAction,
@@ -128,13 +133,20 @@ import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-me
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 
 export default function SessionsScreen({ navigation }: Props) {
-  const machines = useMachinesStore((state) => state.machines);
+  const savedMachines = useMachinesStore((state) => state.machines);
+  // Only machines the user keeps visible reach the tab strip, the drawer, and
+  // the polling loop; hidden ones stay in Machines and are never connected to.
+  const machines = useMemo(() => savedMachines.filter(isMachineEnabled), [savedMachines]);
   const machine = useMachinesStore((state) => selectedMachine(state));
+  const selectMachine = useMachinesStore((state) => state.selectMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
   const refreshMachine = useInventoryStore((state) => state.refreshMachine);
+  const refreshMachineFresh = useInventoryStore((state) => state.refreshMachineFresh);
   const refreshAll = useInventoryStore((state) => state.refreshAll);
   const startPolling = useInventoryStore((state) => state.startPolling);
   const stopPolling = useInventoryStore((state) => state.stopPolling);
+  const selectedSpaceIdByMachine = useSpacesStore((state) => state.selectedSpaceIdByMachine);
+  const selectSpace = useSpacesStore((state) => state.selectSpace);
 
   const collapse = useCollapseStore();
   const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
@@ -164,6 +176,12 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [progress, setProgress] = useState<string | null>(null);
+  /*
+   * Pull-to-refresh replaces the old header Refresh button, and owns its own
+   * spinner state: the 5s poll flips the inventory's `refreshing` flag on every
+   * tick, so driving the control from that would blink it forever.
+   */
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [statusOverride, setStatusOverride] = useState<string | null>(null);
   const [tailscaleConnected, setTailscaleConnected] = useState<boolean | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,6 +210,7 @@ export default function SessionsScreen({ navigation }: Props) {
     useCallback(() => {
       void useCollapseStore.getState().hydrate();
       void useLauncherStore.getState().hydrate();
+      void useSpacesStore.getState().hydrate();
       if (machine !== null) startPolling();
       return () => stopPolling();
     }, [machine !== null, startPolling, stopPolling]),
@@ -251,11 +270,26 @@ export default function SessionsScreen({ navigation }: Props) {
     }, [navigation]),
   );
 
+  const selectedInventory = machine === null ? undefined : inventoriesByMachineId[machine.id];
+  const machineSpaces = selectedInventory?.summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
+  /*
+   * A Space id is only ever resolved against the machine that owns it, so a
+   * stored id from another machine — or one this daemon has since deleted —
+   * falls back to the first Space, then to the built-in Other.
+   */
+  const selectedSpaceId = resolveSelectedSpaceId(
+    machineSpaces,
+    machine === null ? undefined : selectedSpaceIdByMachine[machine.id],
+  );
+  const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
+
   const entries = useMemo(
     () =>
       buildDrawerList({
         machines,
+        selectedMachineId: machine === null ? null : machine.id,
         inventoriesByMachineId,
+        selectedSpaceId,
         collapse: {
           expandedProjectsByMachine: collapse.expandedProjectsByMachine,
           expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
@@ -263,23 +297,51 @@ export default function SessionsScreen({ navigation }: Props) {
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
-          collapsedMachineIds: collapse.collapsedMachineIds,
         },
       }),
     [
       machines,
+      machine,
       inventoriesByMachineId,
+      selectedSpaceId,
       collapse.expandedProjectsByMachine,
       collapse.expandedCollectionsByMachine,
       collapse.expandedGroupsByMachine,
       collapse.collapsedSessionListsByMachine,
       collapse.collapsedSectionsByMachine,
       collapse.collapsedSessionKindsByMachine,
-      collapse.collapsedMachineIds,
     ],
   );
 
-  const selectedInventory = machine === null ? undefined : inventoriesByMachineId[machine.id];
+  const pullRefresh = useCallback((): void => {
+    if (machine === null) return;
+    setPullRefreshing(true);
+    const done = (): void => setPullRefreshing(false);
+    void refreshMachineFresh(machine).then(done, done);
+  }, [machine, refreshMachineFresh]);
+
+  /*
+   * One tab per visible machine, in saved order. The strip is hidden at one
+   * machine (the drawer is unambiguous without it) and at zero (the "no
+   * machines" state card is the whole page).
+   */
+  const machineTabs = useMemo(
+    (): MachineTabItem[] =>
+      machines.map((entry): MachineTabItem => {
+        const inventory = inventoriesByMachineId[entry.id];
+        const connectionState =
+          inventory === undefined || !inventory.hasLoaded
+            ? 'busy'
+            : inventory.lastError !== null
+              ? 'failed'
+              : inventory.summary === null
+                ? 'disconnected'
+                : 'connected';
+        return { id: entry.id, label: machineDisplayLabel(entry), connectionState };
+      }),
+    [machines, inventoriesByMachineId],
+  );
+
   const statusLine = statusOverride ?? drawerStatusLine(machine, selectedInventory);
   const recentProjects = selectedInventory?.summary?.recentProjects ?? [];
 
@@ -464,17 +526,23 @@ export default function SessionsScreen({ navigation }: Props) {
     [attachCreated, refreshMachine, setTransientStatus],
   );
 
-  const fullReconnect = useCallback(async (): Promise<void> => {
-    for (const target of machines) {
+  /**
+   * Drop the machine's SSH connection and reconnect it. This is what the old
+   * header Refresh button did, narrowed to one machine because it is now
+   * reached from that machine's own tab menu.
+   */
+  const reconnectMachine = useCallback(
+    async (target: MachineRecord): Promise<void> => {
       try {
         markManualDisconnect(target.id);
         await GhostexNative.disconnect(target.id);
       } catch {
-        // Not connected is fine; refresh reconnects below.
+        // Not connected is fine; the refresh below reconnects.
       }
-    }
-    await refreshAll();
-  }, [machines, refreshAll]);
+      await refreshMachine(target);
+    },
+    [refreshMachine],
+  );
 
   const submitRename = useCallback(
     async (ctx: SessionContext, value: string): Promise<void> => {
@@ -521,6 +589,23 @@ export default function SessionsScreen({ navigation }: Props) {
       if (action.actionType === 'browser') {
         const url = action.url ?? '';
         if (url.length === 0) return;
+        /*
+         * The action's URL was written for the computer, so a loopback address
+         * names a listener there and not on the phone. Those open in the Web
+         * preview, which forwards the port; every other address is a real
+         * internet address and goes to the phone's browser as before.
+         */
+        const previewTarget = webPreviewTargetForUrl(url);
+        if (previewTarget !== null) {
+          setOverlay(NONE);
+          navigation.navigate('WebPreview', {
+            machineId: target.id,
+            remotePort: previewTarget.remotePort,
+            path: previewTarget.path,
+            scheme: previewTarget.scheme,
+          });
+          return;
+        }
         void Linking.openURL(url)
           .then(() => setTransientStatus(ProgressCopy.openedInBrowser(name)))
           .catch(() => setTransientStatus(ProgressCopy.openedInBrowser(name)));
@@ -534,7 +619,7 @@ export default function SessionsScreen({ navigation }: Props) {
         ProgressCopy.startingAgent(name, projectTitle),
       );
     },
-    [runCreationFlow, setTransientStatus],
+    [navigation, runCreationFlow, setTransientStatus],
   );
 
   const restoreRecentProject = useCallback(
@@ -598,6 +683,7 @@ export default function SessionsScreen({ navigation }: Props) {
     collectionColorItems,
     groupMenuItems,
     machineMenuItems,
+    appMenuItems,
     sectionMenuItems,
     resolvePrimaryAgent,
     launchAgent,
@@ -612,6 +698,7 @@ export default function SessionsScreen({ navigation }: Props) {
     primaryAgentId,
     attachInChatMode,
     attachInTerminalMode,
+    reconnectMachine,
     refreshAll,
     refreshMachine,
     runBulkSessionActions,
@@ -896,21 +983,6 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress={() => setOverlay({ kind: 'recovery', machine: target })}
           />
         );
-      case 'MACHINE_HEADER':
-        return (
-          <MachineHeaderRow
-            title={item.title}
-            collapsed={item.collapsed}
-            workingCount={item.workingCount}
-            attentionCount={item.attentionCount}
-            awakeCount={item.awakeCount}
-            onPress={() => collapse.toggleMachine(item.machineId)}
-            onMenu={() => {
-              if (target === null) return;
-              setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
-            }}
-          />
-        );
       case 'SECTION_LABEL':
         return (
           <SectionLabelRow
@@ -920,7 +992,20 @@ export default function SessionsScreen({ navigation }: Props) {
             attentionCount={item.attentionCount}
             awakeCount={item.awakeCount}
             first={item.section === 'quick'}
-            onToggle={() => collapse.toggleSection(block.machineId, item.section)}
+            /* Projects is always open (grouping.ts), so it draws no caret. */
+            onToggle={
+              item.section === 'projects'
+                ? undefined
+                : () => collapse.toggleSection(block.machineId, item.section)
+            }
+            onMoreMenu={
+              item.section === 'projects'
+                ? () => {
+                    if (target === null) return;
+                    setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
+                  }
+                : undefined
+            }
             onCreate={
               item.section === 'quick'
                 ? () => {
@@ -981,7 +1066,13 @@ export default function SessionsScreen({ navigation }: Props) {
     }
   };
 
-  const refreshing = selectedInventory?.refreshing === true;
+  /**
+   * Tailcat machines reach the computer through the in-app bridge, so the
+   * Tailscale app's VPN state says nothing about whether they can connect.
+   * Only plain-SSH machines (and the not-yet-added case, whose SSH host is
+   * normally a tailnet name) depend on it.
+   */
+  const tailscaleApplies = machine === null || machine.transport !== 'tailcat';
 
   return (
     <SafeAreaView
@@ -989,31 +1080,37 @@ export default function SessionsScreen({ navigation }: Props) {
       edges={['top', 'bottom']}
     >
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: sidebarAppearance.foreground }]}>Ghostex</Text>
+        {/*
+          Manual refresh is pull-to-refresh on the list below, so the title has
+          the header row's leading space to itself. Long-pressing it opens the
+          selected machine's menu, which is the only way to reach it while a
+          single visible machine keeps the tab strip hidden.
+        */}
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh"
-          style={styles.headerButton}
-          onPress={() => void fullReconnect()}
+          accessibilityRole="header"
+          onLongPress={() => {
+            if (machine === null) return;
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setOverlay({ kind: 'machineMenu', ctx: { machine } });
+          }}
+          style={styles.titlePressable}
         >
-          {refreshing ? (
-            <ActivityIndicator size="small" color={sidebarAppearance.foreground} />
-          ) : (
-            <RefreshGlyph size={22} color={sidebarAppearance.foreground} />
-          )}
+          <Text style={[styles.title, { color: sidebarAppearance.foreground }]}>Ghostex</Text>
         </Pressable>
         {/*
-          Find Prompts searches the selected machine's agent history — the same
-          index `gx f` reads — so it is offered only while a machine is chosen.
+          Web Preview forwards a port from the selected machine, so it is
+          offered whenever a machine is chosen. It is also in the machine menu,
+          but that is a long press on a machine tab (or on the page title), so
+          this button is the entry point that is always visible.
         */}
         {machine !== null ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Find Prompts"
+            accessibilityLabel={WebPreviewCopy.menuLabel}
             style={styles.headerButton}
-            onPress={() => navigation.navigate('FindPrompts', { machineId: machine.id })}
+            onPress={() => navigation.navigate('WebPreviewPorts', { machineId: machine.id })}
           >
-            <SearchGlyph size={22} color={sidebarAppearance.foreground} />
+            <WorldGlyph size={22} color={sidebarAppearance.foreground} />
           </Pressable>
         ) : null}
         <Pressable
@@ -1024,34 +1121,22 @@ export default function SessionsScreen({ navigation }: Props) {
         >
           <MachinesGlyph size={22} color={sidebarAppearance.foreground} />
         </Pressable>
+        {/*
+          Search Prompts, Settings and Logout each used to own a header button.
+          They are one-off destinations rather than things the list is read
+          against, so they live behind this menu and give the header back to
+          the surfaces that stay on screen.
+        */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Settings"
+          accessibilityLabel="Menu"
           style={styles.headerButton}
-          onPress={() => navigation.navigate('Settings')}
+          onPress={() => setOverlay({ kind: 'appMenu' })}
         >
-          <SettingsGlyph size={22} color={sidebarAppearance.foreground} />
+          <MenuGlyph size={22} color={sidebarAppearance.foreground} />
         </Pressable>
-        {Platform.OS === 'android' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Quit Ghostex"
-            style={styles.headerButton}
-            onPress={() =>
-              setOverlay({
-                kind: 'confirmAction',
-                title: 'Quit Ghostex?',
-                body: 'This fully closes Ghostex and all active mobile terminal connections.',
-                confirmLabel: 'Quit',
-                run: () => void GhostexNative.quitApp(),
-              })
-            }
-          >
-            <ExitGlyph size={22} color={sidebarAppearance.foreground} />
-          </Pressable>
-        ) : null}
       </View>
-      {tailscaleConnected === false ? (
+      {tailscaleApplies && tailscaleConnected === false ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Tailscale is not connected. Open Tailscale"
@@ -1081,7 +1166,7 @@ export default function SessionsScreen({ navigation }: Props) {
             {statusLine}
           </Text>
         </Pressable>
-        {tailscaleConnected === true ? (
+        {tailscaleApplies && tailscaleConnected === true ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Tailscale connected"
@@ -1100,6 +1185,30 @@ export default function SessionsScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
       </View>
+      {machineTabs.length > 1 ? (
+        <MachineTabs
+          items={machineTabs}
+          selectedMachineId={machine === null ? null : machine.id}
+          onSelect={(machineId) => selectMachine(machineId)}
+          onLongPress={(machineId) => {
+            const target = machineById(machineId);
+            if (target === null) return;
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
+          }}
+        />
+      ) : null}
+      {/*
+        A machine with no Spaces has nothing to switch between — Other alone
+        would be every project — so the row appears only once it has one.
+      */}
+      {machine !== null && spaceItems.length > 0 ? (
+        <SpaceTabs
+          spaces={spaceItems}
+          selectedSpaceId={selectedSpaceId}
+          onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
+        />
+      ) : null}
       {recentProjects.length > 0 && machine !== null ? (
         <Pressable
           accessibilityRole="button"
@@ -1117,9 +1226,18 @@ export default function SessionsScreen({ navigation }: Props) {
         renderItem={renderBlock}
         style={styles.list}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            colors={[GhostexPalette.ACCENT]}
+            tintColor={sidebarAppearance.muted}
+            progressBackgroundColor={sidebarAppearance.background}
+            refreshing={pullRefreshing}
+            onRefresh={pullRefresh}
+          />
+        }
         ListFooterComponent={
-          <Text style={styles.longPressHint}>
-            Long press a section, group, project, or session for more options
+          <Text style={styles.longPressHint} numberOfLines={1}>
+            Long-press any item for more options.
           </Text>
         }
       />
@@ -1330,6 +1448,16 @@ export default function SessionsScreen({ navigation }: Props) {
           title={machineDisplayLabel(overlay.ctx.machine)}
           subtitle="Remote machine"
           items={machineMenuItems(overlay.ctx.machine)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'appMenu' ? (
+        <ContextMenu
+          visible
+          title="Ghostex"
+          subtitle={machine === null ? undefined : machineDisplayLabel(machine)}
+          items={appMenuItems(machine)}
           onClose={() => setOverlay(NONE)}
         />
       ) : null}

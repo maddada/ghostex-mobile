@@ -26,6 +26,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative, type SshConfig, type SshKeyType } from '../../modules/ghostex-native/src';
+import TailcatQrScanButton from '../components/machines/TailcatQrScanButton';
 import SegmentedControl, { type SegmentOption } from '../components/onboarding/SegmentedControl';
 import { MachineCopy } from '../copy';
 import { summarizeFailure } from '../inventory/client';
@@ -75,6 +76,12 @@ const ALGORITHM_OPTIONS: readonly SegmentOption<SshKeyType>[] = [
   { value: 'ed25519', label: 'Ed25519' },
   { value: 'rsa4096', label: 'RSA 4096' },
 ];
+
+/**
+ * Machine id every Test Connection runs under. It is stable on purpose: a fresh id per
+ * press would leave one tailcat forward — a whole tunnel stack — behind for each press.
+ */
+const TEST_MACHINE_ID = 'machine-form-test';
 
 const SUCCESS_GREEN = '#22C55E';
 const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
@@ -237,7 +244,13 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const runTest = async (): Promise<void> => {
     if (!canTest || testState.kind === 'testing') return;
     setTestState({ kind: 'testing' });
-    const tempId = `machine-form-test-${Date.now()}`;
+    const tempId = TEST_MACHINE_ID;
+    // The pinned identity a throwaway test would create, so it can be dropped again
+    // (buildTestConfig only reuses a saved tailcat machine's real identity).
+    const throwawayPinnedHost =
+      transport === 'tailcat' && !(existing !== null && existing.transport === 'tailcat')
+        ? tailcatSyntheticHost(tempId)
+        : null;
     try {
       const { config, hasPassword } = await buildTestConfig(tempId);
       try {
@@ -256,6 +269,17 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setTestState({ kind: 'failure', message: summarizeFailure(message, false) });
+    } finally {
+      if (transport === 'tailcat') {
+        // Unlike a saved machine, the test forward must not outlive the test: it owns a
+        // full tunnel stack, and the next press reuses this same id.
+        await GhostexNative.stopTailcatForward(tempId);
+      }
+      if (throwawayPinnedHost !== null) {
+        // Drop the host key this test pinned under the shared test identity, so testing a
+        // different machine next cannot be rejected as a host-key mismatch.
+        await GhostexNative.resetHostKey(throwawayPinnedHost, parsedPort ?? 22);
+      }
     }
   };
 
@@ -386,20 +410,24 @@ export default function MachineFormScreen({ navigation, route }: Props) {
           </View>
         ) : (
           <>
-            <TextInput
-              style={[styles.input, styles.tokenInput]}
-              placeholder="Paste the tailcat pairing token (tc…)"
-              placeholderTextColor={GhostexPalette.MUTED}
-              multiline
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              value={tailcatToken}
-              onChangeText={editField(setTailcatToken)}
-            />
+            <View style={styles.tokenRow}>
+              <TextInput
+                style={[styles.input, styles.tokenInput, styles.tokenInputField]}
+                placeholder="Paste the tailcat pairing token (tc…)"
+                placeholderTextColor={GhostexPalette.MUTED}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                value={tailcatToken}
+                onChangeText={editField(setTailcatToken)}
+              />
+              <TailcatQrScanButton onToken={editField(setTailcatToken)} />
+            </View>
             <Text style={styles.footerText}>
-              The token reaches the machine on its own, so no host address and no VPN are needed on
-              this phone. Tokens are case-sensitive and start with {'"tc"'}.
+              Scan the pairing QR code from Settings → Remote → Tailcat on the machine, or paste the
+              token. The token reaches the machine on its own, so no host address and no VPN are
+              needed on this phone. Tokens are case-sensitive and start with {'"tc"'}.
             </Text>
             <View style={styles.hostRow}>
               <TextInput
@@ -668,6 +696,14 @@ const styles = StyleSheet.create({
     color: GhostexPalette.MUTED,
     fontSize: 12,
     lineHeight: 17,
+  },
+  tokenRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  tokenInputField: {
+    flex: 1,
   },
   tokenInput: {
     height: 92,

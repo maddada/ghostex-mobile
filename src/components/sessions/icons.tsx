@@ -104,6 +104,20 @@ export function MachinesGlyph({ size, color }: GlyphProps) {
 }
 
 /** Gear glyph for the Settings button. */
+/** Three-line hamburger for the sessions header's app menu. */
+export function MenuGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 4 7 h 16 M 4 12 h 16 M 4 17 h 16"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 export function SettingsGlyph({ size, color }: GlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

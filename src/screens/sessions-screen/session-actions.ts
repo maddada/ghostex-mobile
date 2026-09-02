@@ -54,6 +54,8 @@ export type Overlay =
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
   | { kind: 'groupMenu'; ctx: GroupContext }
   | { kind: 'machineMenu'; ctx: MachineContext }
+  /** Header hamburger: Search Prompts, Settings, Logout. */
+  | { kind: 'appMenu' }
   | { kind: 'sectionMenu'; machine: MachineRecord; section: 'quick' | 'projects' }
   | {
       kind: 'confirmAction';

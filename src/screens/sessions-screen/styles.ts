@@ -22,8 +22,14 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  title: {
+  /** Owns the header row's leading space so the title can be long-pressed. */
+  titlePressable: {
     flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  title: {
     color: GhostexPalette.FOREGROUND,
     fontSize: 18,
     fontWeight: 'bold',
@@ -91,7 +97,16 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  /*
+   * The list owns every point the header, the machine strip, the Space row and
+   * the Recent Projects button do not. A ScrollView (which a FlatList is) ships
+   * `flexGrow: 1, flexShrink: 1` with a content-sized basis, so without an
+   * explicit `flex: 1` a long session list overflows the column and Yoga takes
+   * the difference back out of its shrinkable siblings — which is what used to
+   * squeeze the Space row flat.
+   */
   list: {
+    flex: 1,
     marginTop: 12,
   },
   listContent: {

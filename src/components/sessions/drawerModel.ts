@@ -1,17 +1,17 @@
 /**
- * Sessions drawer list assembly: stitches per-machine `buildDrawerItems`
- * output into a flat multi-machine list of render BLOCKS matching the desktop
+ * Sessions drawer list assembly: turns the selected machine's
+ * `buildDrawerItems` output into a list of render BLOCKS matching the desktop
  * layered-panel skin — plain rows (section labels and state cards), project
- * cards (header + child rows in one bordered card), and
- * collection panels (tinted panel containing member project cards). With a
- * single saved machine the drawer keeps a headerless layout; with two or
- * more, each machine gets a collapsible MACHINE_HEADER.
+ * cards (header + child rows in one bordered card), and collection panels
+ * (tinted panel containing member project cards).
+ *
+ * The drawer shows ONE machine, the one its tab strip has selected (desktop
+ * parity: packages/core-ui/sidebar-app/machine-tabs.tsx), filtered to the
+ * Space that machine's Space row has selected.
  */
 
 import {
   buildDrawerItems,
-  countSessions,
-  machineHeaderItem,
   stateCardItem,
   type CollectionHeaderItem,
   type DrawerItem,
@@ -20,6 +20,7 @@ import {
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
+import { filterSummaryForSpace } from '../../spaces/spaceFilter';
 
 export type ProjectCardBlock = {
   header: ProjectHeaderItem;
@@ -44,12 +45,16 @@ export type DrawerCollapseInput = {
   collapsedSessionListsByMachine: Record<string, string[]>;
   collapsedSectionsByMachine: Record<string, string[]>;
   collapsedSessionKindsByMachine: Record<string, string[]>;
-  collapsedMachineIds: string[];
 };
 
 export type DrawerListInput = {
+  /** Enabled machines only; empty means the "no machines" state card. */
   machines: MachineRecord[];
+  /** The machine whose content the drawer renders; null falls back to the first. */
+  selectedMachineId: string | null;
   inventoriesByMachineId: Record<string, MachineInventory>;
+  /** Resolved Space id for the selected machine (a Space id, or "other"). */
+  selectedSpaceId: string;
   collapse: DrawerCollapseInput;
 };
 
@@ -131,6 +136,7 @@ export function blocksFromItems(machineId: string, items: DrawerItem[]): DrawerB
 function machineBlocks(
   machine: MachineRecord,
   inventory: MachineInventory | undefined,
+  selectedSpaceId: string,
   collapse: DrawerCollapseInput,
 ): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
@@ -161,7 +167,7 @@ function machineBlocks(
   const items = withoutQuickSection(
     buildDrawerItems({
       machineId: machine.id,
-      summary: inventory.summary,
+      summary: filterSummaryForSpace(inventory.summary, selectedSpaceId),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
       expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
@@ -188,7 +194,7 @@ function machineBlocks(
 }
 
 export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
-  const { machines, inventoriesByMachineId, collapse } = input;
+  const { machines, selectedMachineId, inventoriesByMachineId, selectedSpaceId, collapse } = input;
   if (machines.length === 0) {
     return [
       rowBlock(
@@ -201,24 +207,14 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
       ),
     ];
   }
-  if (machines.length === 1) {
-    const machine = machines[0];
-    return machineBlocks(machine, inventoriesByMachineId[machine.id], collapse);
-  }
-  const blocks: DrawerBlock[] = [];
-  for (const machine of machines) {
-    const collapsed = collapse.collapsedMachineIds.includes(machine.id);
-    const counts = countSessions(inventoriesByMachineId[machine.id]?.summary?.sessions ?? []);
-    blocks.push(
-      rowBlock(
-        machine.id,
-        machineHeaderItem(machine.id, machineDisplayLabel(machine), collapsed, counts),
-      ),
-    );
-    if (collapsed) continue;
-    blocks.push(...machineBlocks(machine, inventoriesByMachineId[machine.id], collapse));
-  }
-  return blocks;
+  const machine =
+    machines.find((entry) => entry.id === selectedMachineId) ?? machines[0];
+  return machineBlocks(
+    machine,
+    inventoriesByMachineId[machine.id],
+    selectedSpaceId,
+    collapse,
+  );
 }
 
 /** Status line per sessions-drawer.md §5 for the selected machine. */

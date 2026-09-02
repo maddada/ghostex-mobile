@@ -464,6 +464,14 @@ export function androidCheckCommand(): string {
   return 'ghostex android-check --json';
 }
 
+/**
+ * Web preview port discovery: `ghostex ports --json`. Lists every listening TCP
+ * socket on the machine, one entry per (port, address), sorted by port.
+ */
+export function portsListCommand(): string {
+  return 'ghostex ports --json';
+}
+
 // ---------------------------------------------------------------------------
 // Session Chat (chat view of an agent session over SSH; the daemon owns all
 // transcript decoding — these verbs are thin wrappers over its chat endpoints).

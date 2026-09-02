@@ -34,12 +34,14 @@ import {
   setSessionPassword,
 } from '../machines/credentials';
 import {
+  isMachineEnabled,
   machineDisplayLabel,
   selectedMachine,
   useMachinesStore,
   type MachineRecord,
 } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
+import { useSpacesStore } from '../spaces/store';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Machines'>;
@@ -78,10 +80,12 @@ export default function MachinesScreen({ navigation }: Props) {
   const selectedMachineId = useMachinesStore((state) => state.selectedMachineId);
   const selected = useMachinesStore((state) => selectedMachine(state));
   const selectMachine = useMachinesStore((state) => state.selectMachine);
+  const setMachineDisabled = useMachinesStore((state) => state.setMachineDisabled);
   const removeMachine = useMachinesStore((state) => state.removeMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
   const refreshMachine = useInventoryStore((state) => state.refreshMachine);
   const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
+  const clearMachineSpace = useSpacesStore((state) => state.clearMachine);
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [progress, setProgress] = useState<string | null>(null);
@@ -93,10 +97,26 @@ export default function MachinesScreen({ navigation }: Props) {
 
   const switchToMachine = useCallback(
     (machine: MachineRecord): void => {
+      // A machine hidden from Sessions is not a switch target; showing it again
+      // is the Show in Sessions action below.
+      if (!isMachineEnabled(machine)) return;
       selectMachine(machine.id);
       void refreshMachine(machine);
     },
     [refreshMachine, selectMachine],
+  );
+
+  /**
+   * Show/hide a machine on the Sessions screen. Hiding only stops the tab, the
+   * drawer content, and the polling loop: any terminal already attached to the
+   * machine keeps its connection, so hiding can never drop live work.
+   */
+  const setMachineVisible = useCallback(
+    (machine: MachineRecord, visible: boolean): void => {
+      setOverlay(NONE);
+      setMachineDisabled(machine.id, !visible);
+    },
+    [setMachineDisabled],
   );
 
   const connectMachine = useCallback(
@@ -205,6 +225,7 @@ export default function MachinesScreen({ navigation }: Props) {
     async (machine: MachineRecord): Promise<void> => {
       setOverlay(NONE);
       clearMachineInventory(machine.id);
+      clearMachineSpace(machine.id);
       try {
         markManualDisconnect(machine.id);
         await GhostexNative.disconnect(machine.id);
@@ -213,11 +234,17 @@ export default function MachinesScreen({ navigation }: Props) {
       }
       await removeMachine(machine.id);
     },
-    [clearMachineInventory, removeMachine],
+    [clearMachineInventory, clearMachineSpace, removeMachine],
   );
 
   const menuItems = (machine: MachineRecord): ActionSheetItem[] => [
     { key: 'connect', label: 'Connect', onPress: () => void connectMachine(machine) },
+    {
+      key: 'visibility',
+      label: isMachineEnabled(machine) ? 'Hide from Sessions' : 'Show in Sessions',
+      detail: 'Hidden machines get no tab, no sessions, and are never connected to.',
+      onPress: () => setMachineVisible(machine, !isMachineEnabled(machine)),
+    },
     {
       key: 'check',
       label: 'Check connection',
@@ -279,6 +306,7 @@ export default function MachinesScreen({ navigation }: Props) {
 
   const renderMachine = ({ item }: { item: MachineRecord }) => {
     const isSelected = item.id === selectedMachineId;
+    const visible = isMachineEnabled(item);
     const lastConnected =
       item.lastConnectedAt === null
         ? MachineCopy.card.neverConnected
@@ -293,8 +321,17 @@ export default function MachinesScreen({ navigation }: Props) {
           {sshTarget(item)}
         </Text>
         <Text style={styles.cardBody}>{lastConnected}</Text>
-        <Text style={styles.cardBody}>{MachineCopy.card.switchHint}</Text>
+        <Text style={styles.cardBody}>
+          {visible ? MachineCopy.card.switchHint : 'Hidden from Sessions.'}
+        </Text>
         <View style={styles.pillRow}>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.pill}
+            onPress={() => setMachineVisible(item, !visible)}
+          >
+            <Text style={styles.pillLabel}>{visible ? 'Hide' : 'Show'}</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             style={styles.pill}

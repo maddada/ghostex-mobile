@@ -35,6 +35,12 @@ export type StateCardItem = {
   actionHint: string;
 };
 
+/**
+ * No longer emitted: the sessions drawer shows ONE machine, chosen by the
+ * machine tab strip (src/components/sessions/MachineTabs.tsx), instead of
+ * stacking every machine behind collapsible headers. Kept as part of the item
+ * contract; do not reintroduce the stacked layout.
+ */
 export type MachineHeaderItem = {
   type: 'MACHINE_HEADER';
   key: string;
@@ -716,19 +722,22 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     .filter((projectKey) => projectKey !== CHATS_PROJECT_KEY)
     .flatMap((projectKey) => sessionsByProjectKey.get(projectKey) ?? []);
   const projectCounts = countSessions(projectSessions);
-  const projectsCollapsed = collapsedSectionKeys.has('projects');
+  /*
+   * Projects is the page itself, not a disclosure: collapsing it would leave
+   * the drawer empty, so the header carries no caret and this section is
+   * always emitted expanded.
+   */
   items.push({
     type: 'SECTION_LABEL',
     key: 'section:projects',
     machineId,
     section: 'projects',
     title: SessionCopy.projectsSectionTitle,
-    collapsed: projectsCollapsed,
+    collapsed: false,
     workingCount: projectCounts.workingCount,
     attentionCount: projectCounts.attentionCount,
     awakeCount: projectCounts.awakeCount,
   });
-  if (projectsCollapsed) return items;
 
   for (const collection of summary.projectCollections) {
     const memberKeys = collection.projectIds

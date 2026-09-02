@@ -48,6 +48,12 @@ export type MachineRecord = {
   savePassword: boolean;
   /** Absent means `ssh` (every record written before tailcat existed). */
   transport?: MachineTransport;
+  /**
+   * Hidden from the Sessions screen: no tab, no drawer content, no connection
+   * attempt, no polling. Absent means enabled (every record written before the
+   * machine tab strip existed).
+   */
+  disabled?: boolean;
   /** ISO timestamp of the last successful connection, or null. */
   lastConnectedAt: string | null;
 };
@@ -96,6 +102,36 @@ export function machineDisplayLabel(machine: MachineRecord): string {
   if (machine.name.length > 0) return machine.name;
   const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
   return `${machine.username}@${machine.host}${portSuffix}`;
+}
+
+/** Records written before the machine tab strip existed have no flag at all. */
+export function isMachineEnabled(machine: MachineRecord): boolean {
+  return machine.disabled !== true;
+}
+
+/** Machines the Sessions screen shows tabs, content, and connections for. */
+export function enabledMachines(state: Pick<MachinesState, 'machines'>): MachineRecord[] {
+  return state.machines.filter(isMachineEnabled);
+}
+
+/**
+ * The selection the Sessions screen can actually render: the candidate when it
+ * is still an enabled machine, else the first enabled one, else nothing.
+ */
+function resolveSelectedMachineId(
+  machines: readonly MachineRecord[],
+  candidateId: string | null,
+): string | null {
+  const enabled = machines.filter(isMachineEnabled);
+  if (candidateId !== null && enabled.some((machine) => machine.id === candidateId)) {
+    return candidateId;
+  }
+  return enabled.length > 0 ? enabled[0].id : null;
+}
+
+function persistSelectedMachineId(machineId: string | null): void {
+  if (machineId === null) void AsyncStorage.removeItem(SELECTED_MACHINE_STORAGE_KEY);
+  else void AsyncStorage.setItem(SELECTED_MACHINE_STORAGE_KEY, machineId);
 }
 
 function parsePort(value: string | number): number | null {
@@ -229,6 +265,8 @@ type MachinesState = {
   addMachine: (input: MachineInput) => Promise<MachineSaveResult>;
   updateMachine: (id: string, input: MachineInput) => Promise<MachineSaveResult>;
   removeMachine: (id: string) => Promise<void>;
+  /** Show/hide a machine on the Sessions screen; reselects when needed. */
+  setMachineDisabled: (id: string, disabled: boolean) => void;
   selectMachine: (id: string | null) => void;
   markConnected: (id: string) => void;
   setHasSeenWelcome: (value: boolean) => void;
@@ -247,6 +285,7 @@ function isMachineRecord(value: unknown): value is MachineRecord {
     (record.transport === undefined ||
       record.transport === 'ssh' ||
       record.transport === 'tailcat') &&
+    (record.disabled === undefined || typeof record.disabled === 'boolean') &&
     (record.lastConnectedAt === null || typeof record.lastConnectedAt === 'string')
   );
 }
@@ -280,12 +319,7 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       AsyncStorage.getItem(SELECTED_MACHINE_STORAGE_KEY),
       AsyncStorage.getItem(HAS_SEEN_WELCOME_STORAGE_KEY),
     ]);
-    const selectedMachineId =
-      selectedId !== null && machines.some((machine) => machine.id === selectedId)
-        ? selectedId
-        : machines.length > 0
-          ? machines[0].id
-          : null;
+    const selectedMachineId = resolveSelectedMachineId(machines, selectedId);
     set({
       hydrated: true,
       machines,
@@ -316,7 +350,7 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     const selectedMachineId = get().selectedMachineId ?? machine.id;
     set({ machines: nextMachines, selectedMachineId });
     persistMachines(nextMachines);
-    void AsyncStorage.setItem(SELECTED_MACHINE_STORAGE_KEY, selectedMachineId);
+    persistSelectedMachineId(selectedMachineId);
     return { ok: true, machine };
   },
 
@@ -355,23 +389,37 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
   removeMachine: async (id) => {
     await deleteAllCredentials(id);
     const nextMachines = get().machines.filter((machine) => machine.id !== id);
-    const selectedMachineId =
-      get().selectedMachineId === id
-        ? nextMachines.length > 0
-          ? nextMachines[0].id
-          : null
-        : get().selectedMachineId;
+    const selectedMachineId = resolveSelectedMachineId(
+      nextMachines,
+      get().selectedMachineId === id ? null : get().selectedMachineId,
+    );
     set({ machines: nextMachines, selectedMachineId });
     persistMachines(nextMachines);
-    if (selectedMachineId === null) void AsyncStorage.removeItem(SELECTED_MACHINE_STORAGE_KEY);
-    else void AsyncStorage.setItem(SELECTED_MACHINE_STORAGE_KEY, selectedMachineId);
+    persistSelectedMachineId(selectedMachineId);
+  },
+
+  setMachineDisabled: (id, disabled) => {
+    const nextMachines = get().machines.map((machine) =>
+      machine.id === id ? { ...machine, disabled } : machine,
+    );
+    // Hiding the machine the drawer is showing hands the drawer to the next
+    // enabled one, so the Sessions screen never renders a hidden machine.
+    const selectedMachineId = resolveSelectedMachineId(nextMachines, get().selectedMachineId);
+    set({ machines: nextMachines, selectedMachineId });
+    persistMachines(nextMachines);
+    persistSelectedMachineId(selectedMachineId);
   },
 
   selectMachine: (id) => {
-    if (id !== null && !get().machines.some((machine) => machine.id === id)) return;
+    // A hidden machine is not a Sessions target, so it can never be selected.
+    if (
+      id !== null &&
+      !get().machines.some((machine) => machine.id === id && isMachineEnabled(machine))
+    ) {
+      return;
+    }
     set({ selectedMachineId: id });
-    if (id === null) void AsyncStorage.removeItem(SELECTED_MACHINE_STORAGE_KEY);
-    else void AsyncStorage.setItem(SELECTED_MACHINE_STORAGE_KEY, id);
+    persistSelectedMachineId(id);
   },
 
   markConnected: (id) => {

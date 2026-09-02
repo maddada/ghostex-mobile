@@ -9,6 +9,19 @@ export type RootStackParamList = {
   Terminal: { sessionKey: string; machineId: string; title?: string };
   /** Find Prompts: search every prompt this machine sent to an agent (`gx f`). */
   FindPrompts: { machineId: string };
+  /** Web preview step 1: pick which of the computer's ports to forward. */
+  WebPreviewPorts: { machineId: string };
+  /**
+   * Web preview: browse `localhost:<remotePort>` on the computer through an SSH
+   * forward. `path` and `scheme` come from a followed link; they default to the
+   * site root over http.
+   */
+  WebPreview: {
+    machineId: string;
+    remotePort: number;
+    path?: string;
+    scheme?: 'http' | 'https';
+  };
   Settings: undefined;
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;

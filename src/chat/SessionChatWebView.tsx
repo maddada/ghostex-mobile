@@ -8,6 +8,8 @@
 
 import { Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Alert, Linking, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
@@ -15,7 +17,9 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import { useInventoryStore } from '../inventory/store';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
+import type { RootStackParamList } from '../navigation/types';
 import { useTerminalStore } from '../terminal/sessions';
+import { webPreviewTargetForUrl } from '../webPreview/routing';
 import {
   handoffSessionChatDraft,
   parseSessionChatBridgeNotice,
@@ -169,6 +173,7 @@ export default function SessionChatWebView({
   openSessionNoteRequestId = 0,
   openSavedPromptsRequestId = 0,
 }: SessionChatWebViewProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const webviewRef = useRef<WebView>(null);
   const mountedRef = useRef(true);
   const baseUri = chatBundleBaseUri();
@@ -508,9 +513,21 @@ export default function SessionChatWebView({
       onLoadEnd={handleLoadEnd}
       onMessage={handleMessage}
       // Markdown links in the transcript open in the system browser instead
-      // of navigating the chat surface away.
+      // of navigating the chat surface away — except loopback links, which name
+      // a listener on the machine this session runs on and therefore open in
+      // the Web preview, which forwards the port.
       onShouldStartLoadWithRequest={(request) => {
         if (request.url.startsWith('http://') || request.url.startsWith('https://')) {
+          const previewTarget = webPreviewTargetForUrl(request.url);
+          if (previewTarget !== null) {
+            navigation.navigate('WebPreview', {
+              machineId: machine.id,
+              remotePort: previewTarget.remotePort,
+              path: previewTarget.path,
+              scheme: previewTarget.scheme,
+            });
+            return false;
+          }
           void Linking.openURL(request.url).catch(() => undefined);
           return false;
         }

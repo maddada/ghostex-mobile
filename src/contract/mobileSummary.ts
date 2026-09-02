@@ -76,6 +76,8 @@ export type MobileSummaryWireRoot = {
   workspaceGroups?: GhostexWorkspaceGroups;
   /** Server-normalized colored "Group N" overlay: {order, collections}. */
   sidebarProjectCollections?: unknown;
+  /** Server-normalized saved sidebar filters: {order, spaces}. */
+  sidebarSpaces?: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,12 @@ export type GhostexProject = {
   icon: GhostexProjectIcon;
   /** Workspace theme color ("#rrggbb"), or "" — tints the project rail. */
   themeColor: string;
+  /**
+   * `worktree.parentProjectId` for a git worktree, "" otherwise. Space
+   * membership is never assigned to a worktree directly: it defers to this
+   * parent (see src/spaces/otherSpace.ts).
+   */
+  worktreeParentProjectId: string;
 };
 
 export type GhostexRecentProject = {
@@ -154,6 +162,32 @@ export type GhostexProjectCollection = {
   color: string;
   projectIds: string[];
 };
+
+/**
+ * One saved sidebar filter, mirroring `SidebarSpace` in
+ * packages/core-ui/spaces.ts. Members are project collections ("groups") and
+ * ungrouped projects; either may belong to any number of Spaces, and member ids
+ * that resolve to nothing are tolerated because gxserver prunes them
+ * asynchronously.
+ */
+export type GhostexSidebarSpace = {
+  spaceId: string;
+  name: string;
+  /** SIDEBAR_COMMAND_ICON_IDS glyph name; the server defaults it to "stack". */
+  icon: string;
+  /** "#rrggbb"; the server defaults it to "#4f5663". */
+  color: string;
+  memberCollectionIds: string[];
+  memberProjectIds: string[];
+};
+
+/** Ordered Space set for one machine. Empty `order` means the daemon has none. */
+export type GhostexSidebarSpaces = {
+  order: string[];
+  spaces: Record<string, GhostexSidebarSpace>;
+};
+
+export const EMPTY_SIDEBAR_SPACES: GhostexSidebarSpaces = { order: [], spaces: {} };
 
 export type GhostexSessionActions = {
   acknowledgeAttention: boolean;
@@ -279,6 +313,8 @@ export type GhostexMobileSummary = {
    * `ghostex update-sidebar-project-collections`; null when absent.
    */
   projectCollectionsState: unknown;
+  /** Ordered saved sidebar filters; empty when the daemon has no Spaces. */
+  sidebarSpaces: GhostexSidebarSpaces;
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not
@@ -844,6 +880,9 @@ function parseProjects(value: unknown): GhostexProject[] {
       isChat: boolValue(entry, 'isChat', false) || isChatStoragePath(path),
       icon: parseProjectIcon(entry),
       themeColor: normalizedHexColor(trimmedValue(entry, 'themeColor')),
+      worktreeParentProjectId: isObject(entry.worktree)
+        ? trimmedValue(entry.worktree, 'parentProjectId')
+        : '',
     });
   }
   return projects;
@@ -1024,6 +1063,55 @@ export function parseProjectCollections(value: unknown): GhostexProjectCollectio
   return collections;
 }
 
+/**
+ * Parse the `sidebarSpaces` wire key ({order, spaces}) emitted by
+ * `to_mobile_sidebar_spaces` in server/src/ghostex_cli/sessions.rs. The server
+ * already normalizes names, icons, colors, and the order array; this re-narrows
+ * the shape at the parse boundary and appends any Space the order array missed
+ * so a Space can never become invisible.
+ */
+export function parseSidebarSpaces(value: unknown): GhostexSidebarSpaces {
+  if (!isObject(value) || !isObject(value.spaces)) return { order: [], spaces: {} };
+  const bySpaceId = value.spaces as JsonObject;
+  const spaces: Record<string, GhostexSidebarSpace> = {};
+  const stringArray = (entry: JsonObject, key: string): string[] => {
+    const raw = entry[key];
+    if (!Array.isArray(raw)) return [];
+    const ids: string[] = [];
+    for (const idValue of raw) {
+      if (typeof idValue !== 'string') continue;
+      const id = idValue.trim();
+      if (id.length > 0 && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  };
+  for (const spaceId of Object.keys(bySpaceId)) {
+    const entry = bySpaceId[spaceId];
+    if (spaceId.trim().length === 0 || !isObject(entry)) continue;
+    const rawColor = trimmedValue(entry, 'color');
+    spaces[spaceId] = {
+      spaceId,
+      name: firstNonEmpty(trimmedValue(entry, 'name')) || spaceId,
+      icon: firstNonEmpty(trimmedValue(entry, 'icon')) || 'stack',
+      color: /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#4f5663',
+      memberCollectionIds: stringArray(entry, 'memberCollectionIds'),
+      memberProjectIds: stringArray(entry, 'memberProjectIds'),
+    };
+  }
+  const order: string[] = [];
+  if (Array.isArray(value.order)) {
+    for (const entry of value.order) {
+      if (typeof entry !== 'string') continue;
+      const spaceId = entry.trim();
+      if (spaceId in spaces && !order.includes(spaceId)) order.push(spaceId);
+    }
+  }
+  for (const spaceId of Object.keys(spaces)) {
+    if (!order.includes(spaceId)) order.push(spaceId);
+  }
+  return { order, spaces };
+}
+
 function normalizeRoot(root: JsonObject): GhostexMobileSummary {
   const rawSessions = Array.isArray(root.sessions) ? root.sessions : [];
   const sessions: GhostexSession[] = [];
@@ -1047,6 +1135,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     projectCollectionsState: isObject(root.sidebarProjectCollections)
       ? root.sidebarProjectCollections
       : null,
+    sidebarSpaces: parseSidebarSpaces(root.sidebarSpaces),
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
   };
 }

@@ -7,7 +7,10 @@
  */
 
 import { useCallback } from 'react';
+import { Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
+import { GhostexNative } from '../../../modules/ghostex-native/src';
 
 import { openTailscaleOrDownload } from '../../app/tailscale';
 import type { ActionSheetItem } from '../../components/common/ActionSheet';
@@ -20,6 +23,7 @@ import {
   ChevronDownGlyph,
   ClockGlyph,
   CopyGlyph,
+  ExitGlyph,
   GitForkGlyph,
   InfoGlyph,
   MachinesGlyph,
@@ -31,6 +35,8 @@ import {
   PlayGlyph,
   PlusGlyph,
   RefreshGlyph,
+  SearchGlyph,
+  SettingsGlyph,
   SleepGlyph,
   TagGlyph,
   TerminalGlyph,
@@ -72,7 +78,7 @@ import {
   type GhostexQuickAction,
   type GhostexSession,
 } from '../../contract/mobileSummary';
-import { ProgressCopy } from '../../copy';
+import { ProgressCopy, WebPreviewCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import {
   FORK_AGENT_ICONS,
@@ -113,6 +119,8 @@ export type SessionsScreenMenusDeps = {
   primaryAgentId: string;
   attachInChatMode: (target: MachineRecord, session: GhostexSession) => Promise<void>;
   attachInTerminalMode: (target: MachineRecord, session: GhostexSession) => Promise<void>;
+  /** Drop and re-establish one machine's SSH connection, then refresh it. */
+  reconnectMachine: (target: MachineRecord) => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshMachine: (machine: MachineRecord) => Promise<void>;
   runBulkSessionActions: (
@@ -147,6 +155,7 @@ export function useSessionsScreenMenus({
   primaryAgentId,
   attachInChatMode,
   attachInTerminalMode,
+  reconnectMachine,
   refreshAll,
   refreshMachine,
   runBulkSessionActions,
@@ -165,16 +174,12 @@ export function useSessionsScreenMenus({
   const isBrowserSession = (session: GhostexSession): boolean =>
     session.kind === 'browser' || session.surface === 'browser';
 
+  const isRunningSession = (session: GhostexSession): boolean => session.status === 'running';
+
   /** Sleepable-now sessions (awake, not working/attention) — "inactive". */
   const isInactiveAwake = (session: GhostexSession): boolean => {
     const status = displayStatus(session);
-    return (
-      !session.isSleeping &&
-      status !== 'sleep' &&
-      status !== 'sleeping' &&
-      status !== 'working' &&
-      status !== 'attention'
-    );
+    return isRunningSession(session) && status !== 'working' && status !== 'attention';
   };
 
   const isSleepingSession = (session: GhostexSession): boolean => {
@@ -269,31 +274,33 @@ export function useSessionsScreenMenus({
         onPress: () => setOverlay({ kind: 'sessionMenu', ctx, view: 'tags' }),
       });
     }
-    items.push({
-      kind: 'item',
-      key: 'sleep',
-      label: sleeping ? 'Wake' : 'Sleep',
-      icon: sleeping ? (
-        <PlayGlyph size={14} color={menuIconColor} />
-      ) : (
-        <SleepGlyph size={14} color={menuIconColor} />
-      ),
-      onPress: () =>
-        sleeping
-          ? void runSessionCommand(
-              ctx.machine,
-              wakeSessionCommand(session.sessionId, projectId),
-              { optimisticChange: lifecycleMutation(session.sessionId, false) },
-            )
-          : void runSessionCommand(
-              ctx.machine,
-              sleepSessionCommand(session.sessionId, projectId),
-              {
-                closeWarmSessionId: session.sessionId,
-                optimisticChange: lifecycleMutation(session.sessionId, true),
-              },
-            ),
-    });
+    if (sleeping || isRunningSession(session)) {
+      items.push({
+        kind: 'item',
+        key: 'sleep',
+        label: sleeping ? 'Wake' : 'Sleep',
+        icon: sleeping ? (
+          <PlayGlyph size={14} color={menuIconColor} />
+        ) : (
+          <SleepGlyph size={14} color={menuIconColor} />
+        ),
+        onPress: () =>
+          sleeping
+            ? void runSessionCommand(
+                ctx.machine,
+                wakeSessionCommand(session.sessionId, projectId),
+                { optimisticChange: lifecycleMutation(session.sessionId, false) },
+              )
+            : void runSessionCommand(
+                ctx.machine,
+                sleepSessionCommand(session.sessionId, projectId),
+                {
+                  closeWarmSessionId: session.sessionId,
+                  optimisticChange: lifecycleMutation(session.sessionId, true),
+                },
+              ),
+      });
+    }
 
     items.push({ kind: 'separator', key: 'sep-1' });
     items.push({
@@ -471,7 +478,8 @@ export function useSessionsScreenMenus({
     const sessions = sessionsForProject(ctx.machine, header);
     const inactive = sessions.filter(isInactiveAwake);
     const sleeping = sessions.filter(isSleepingSession);
-    const allSleeping = sessions.length > 0 && sleeping.length === sessions.length;
+    const running = sessions.filter(isRunningSession);
+    const allSleeping = running.length === 0 && sleeping.length > 0;
     const nonBrowser = sessions.filter((session) => !isBrowserSession(session));
 
     const items: ContextMenuItem[] = [
@@ -682,7 +690,7 @@ export function useSessionsScreenMenus({
     const summary = summaryFor(ctx.machine.id);
     const state = summary?.projectCollectionsState ?? null;
     const sessions = collectionMemberSessions(ctx);
-    const awake = sessions.filter((session) => !isSleepingSession(session));
+    const awake = sessions.filter(isRunningSession);
     const sleeping = sessions.filter(isSleepingSession);
     const unpinned = sessions.filter((session) => !session.isPinned);
     const pinned = sessions.filter((session) => session.isPinned);
@@ -843,8 +851,9 @@ export function useSessionsScreenMenus({
   /** Named session-group header menu — desktop group-head menu. */
   const groupMenuItems = (ctx: GroupContext): ContextMenuItem[] => {
     const sessions = groupMemberSessions(ctx);
+    const running = sessions.filter(isRunningSession);
     const sleeping = sessions.filter(isSleepingSession);
-    const allSleeping = sessions.length > 0 && sleeping.length === sessions.length;
+    const allSleeping = running.length === 0 && sleeping.length > 0;
     const nonBrowser = sessions.filter((session) => !isBrowserSession(session));
     const items: ContextMenuItem[] = [];
     if (nonBrowser.length > 0) {
@@ -869,9 +878,9 @@ export function useSessionsScreenMenus({
       ) : (
         <SleepGlyph size={14} color={menuIconColor} />
       ),
-      disabled: sessions.length === 0,
+      disabled: allSleeping ? sleeping.length === 0 : running.length === 0,
       onPress: () => {
-        const targets = allSleeping ? sleeping : sessions.filter((s) => !isSleepingSession(s));
+        const targets = allSleeping ? sleeping : running;
         void runBulkSessionActions(
           ctx.machine,
           targets.map((session) => lifecycleSessionAction(session, !allSleeping)),
@@ -967,7 +976,11 @@ export function useSessionsScreenMenus({
     ];
   };
 
-  /** Remote-machine section menu — the mobile counterpart to desktop header actions. */
+  /**
+   * Machine menu — the mobile counterpart to the desktop header actions,
+   * reached by long-pressing the machine's tab (or the page title when a single
+   * machine leaves the tab strip hidden).
+   */
   const machineMenuItems = (target: MachineRecord): ContextMenuItem[] => [
     {
       kind: 'item',
@@ -987,6 +1000,26 @@ export function useSessionsScreenMenus({
       onPress: () => {
         setOverlay(NONE);
         void refreshMachine(target);
+      },
+    },
+    {
+      kind: 'item',
+      key: 'reconnect',
+      label: 'Reconnect',
+      icon: <RefreshGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        void reconnectMachine(target);
+      },
+    },
+    {
+      kind: 'item',
+      key: 'web-preview',
+      label: WebPreviewCopy.menuLabel,
+      icon: <WorldGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('WebPreviewPorts', { machineId: target.id });
       },
     },
     { kind: 'separator', key: 'sep-1' },
@@ -1011,6 +1044,58 @@ export function useSessionsScreenMenus({
       },
     },
   ];
+
+  /**
+   * Header hamburger menu: the app-level actions that used to each own a
+   * header button. Search Prompts reads the selected machine's agent history,
+   * so it needs a machine; Logout closes the app and its live connections,
+   * which only Android lets an app do.
+   */
+  const appMenuItems = (target: MachineRecord | null): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      {
+        kind: 'item',
+        key: 'search-prompts',
+        label: 'Search Prompts',
+        icon: <SearchGlyph size={14} color={menuIconColor} />,
+        disabled: target === null,
+        onPress: () => {
+          if (target === null) return;
+          setOverlay(NONE);
+          navigation.navigate('FindPrompts', { machineId: target.id });
+        },
+      },
+      {
+        kind: 'item',
+        key: 'settings',
+        label: 'Settings',
+        icon: <SettingsGlyph size={14} color={menuIconColor} />,
+        onPress: () => {
+          setOverlay(NONE);
+          navigation.navigate('Settings');
+        },
+      },
+    ];
+    if (Platform.OS === 'android') {
+      items.push({ kind: 'separator', key: 'sep-1' });
+      items.push({
+        kind: 'item',
+        key: 'logout',
+        label: 'Logout',
+        icon: <ExitGlyph size={14} color={menuIconColor} />,
+        destructive: true,
+        onPress: () =>
+          setOverlay({
+            kind: 'confirmAction',
+            title: 'Quit Ghostex?',
+            body: 'This fully closes Ghostex and all active mobile terminal connections.',
+            confirmLabel: 'Quit',
+            run: () => void GhostexNative.quitApp(),
+          }),
+      });
+    }
+    return items;
+  };
 
   // Desktop agent split-button + actions button menus -----------------------
 
@@ -1164,6 +1249,7 @@ export function useSessionsScreenMenus({
     collectionColorItems,
     groupMenuItems,
     machineMenuItems,
+    appMenuItems,
     sectionMenuItems,
     resolvePrimaryAgent,
     launchAgent,

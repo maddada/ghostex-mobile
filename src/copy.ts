@@ -114,6 +114,22 @@ export const MachineCopy = {
     passwordHintNew: 'SSH password (optional)',
     passwordHintEdit: 'SSH password (leave blank to keep saved password)',
   },
+  /** Tailcat pairing-QR camera scanner, opened from the token field. */
+  scanner: {
+    buttonLabel: 'Scan',
+    buttonAccessibilityLabel: 'Scan the tailcat pairing QR code',
+    title: 'Scan pairing code',
+    cancel: 'Cancel',
+    aimHint:
+      'Point the camera at the QR code in Ghostex on your computer, under Settings → Remote → Tailcat.',
+    foreignCode: 'That code is not a tailcat pairing token. Keep the pairing QR code in frame.',
+    deniedTitle: 'Camera access is off',
+    deniedRetry: 'Ghostex needs the camera to read the pairing QR code.',
+    deniedSettings:
+      'Allow camera access for Ghostex in Settings, then come back and scan the pairing QR code.',
+    allowButton: 'Allow camera',
+    openSettingsButton: 'Open Settings',
+  },
   validation: {
     port: 'Use a port from 1 to 65535.',
     duplicate: 'This SSH target is already saved.',
@@ -204,4 +220,62 @@ export const SessionNoteCopy = {
   title: 'Session note',
   body: 'Attached to this agent conversation, so it comes back when you resume it. Clear the text to remove the note.',
   inputHint: "What's next in this thread…",
+} as const;
+
+/**
+ * Web preview copy: forwarding a port the computer is listening on and browsing
+ * it on the phone. The user's mental model is the computer's own address bar,
+ * so every string here names `localhost:<port>` on the computer and never the
+ * phone-side forwarded port or the machine id.
+ */
+export const WebPreviewCopy = {
+  menuLabel: 'Web Preview',
+  pickerTitle: 'Web Preview',
+  previewTitle: 'Web Preview',
+  /** Picker intro; `label` is the machine's display label, never its id. */
+  pickerIntro: (label: string) => `Open a web app running on ${label} in a preview here on the phone.`,
+  manualSection: 'Port',
+  manualPlaceholder: '3000',
+  manualHint: 'Enter the port your web app listens on, as you would open it on the computer.',
+  openButton: 'Open',
+  invalidPort: 'Use a port from 1 to 65535.',
+  listeningSection: 'Listening now',
+  listeningLoading: 'Asking the computer which ports are listening…',
+  listeningEmpty: 'Nothing is listening on the computer right now.',
+  refreshButton: 'Refresh',
+  /** Row title: exactly what the same page would be at on the computer. */
+  portRowTitle: (port: number) => `localhost:${port}`,
+  portRowUnknownCommand: 'Unknown process',
+  listeningFailedTitle: 'Could not list the computer’s ports',
+  listeningFailedHint: 'Enter the port above to open it anyway.',
+  oldCli:
+    'The computer’s ghostex CLI is too old to list ports. Update Ghostex on the computer, or enter a port manually.',
+  machineMissing: 'This machine is no longer saved on this device.',
+  connecting: (port: number) => `Forwarding localhost:${port} from the computer…`,
+  errorTitle: 'Web preview needs attention',
+  notListening: (port: number) => `Nothing is listening on port ${port} on the computer.`,
+  notListeningHint: 'Start the web app on the computer, then tap Retry.',
+  forwardingProhibited:
+    'The computer’s SSH server does not allow port forwarding. Set AllowTcpForwarding yes in its sshd config, then tap Retry.',
+  connectionLost: 'The SSH connection to the computer dropped, so the forwarded port closed.',
+  connectionLostHint: 'Tap Retry to reconnect and forward the port again.',
+  /**
+   * A page on a forwarded port that would not load. The tunnel is plain TCP, so
+   * an https address only works when the computer's server actually speaks TLS
+   * on that port — the preview cannot tell the two causes apart from here, so
+   * both are named.
+   */
+  httpsTunnelFailed: (port: number) =>
+    `Could not load https://localhost:${port} — the tunnel carries the connection as-is, so check that the server speaks HTTPS on that port.`,
+  forwardedPageFailed: (port: number) => `Could not load localhost:${port} from the computer.`,
+  /** A page the preview followed off the computer and onto the open web. */
+  externalPageFailed: (url: string) => `Could not load ${url}.`,
+  externalPageFailedHint: 'Check this phone’s internet connection, then tap Retry.',
+  retryButton: 'Retry',
+  closeLabel: 'Close preview',
+  backLabel: 'Back',
+  forwardLabel: 'Forward',
+  reloadLabel: 'Reload',
+  openInBrowserLabel: 'Open in browser',
+  openInBrowserFailed: 'No app on this phone could open that address.',
 } as const;

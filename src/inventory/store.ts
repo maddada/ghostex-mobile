@@ -11,7 +11,12 @@ import { create } from 'zustand';
 import { logAppEvent } from '../app/appLog';
 import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import { hasPassword } from '../machines/credentials';
-import { machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
+import {
+  enabledMachines,
+  machineDisplayLabel,
+  useMachinesStore,
+  type MachineRecord,
+} from '../machines/store';
 import { fetchInventory, summarizeFailure } from './client';
 import {
   applyOptimisticMutations,
@@ -211,7 +216,9 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
     },
 
     refreshAll: async () => {
-      const { machines } = useMachinesStore.getState();
+      // Machines hidden from the Sessions screen are never connected to, so a
+      // hidden machine costs no SSH connection and no poll.
+      const machines = enabledMachines(useMachinesStore.getState());
       await Promise.all(machines.map((machine) => get().refreshMachine(machine)));
     },
 

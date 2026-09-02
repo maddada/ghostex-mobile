@@ -37,8 +37,11 @@ import SessionsScreen from './src/screens/SessionsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TerminalScreen from './src/screens/TerminalScreen';
 import FindPromptsScreen from './src/screens/FindPromptsScreen';
+import WebPreviewPortsScreen from './src/screens/WebPreviewPortsScreen';
+import WebPreviewScreen from './src/screens/WebPreviewScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
-import { AddProjectCopy, MachineCopy } from './src/copy';
+import { useWebPreviewStore } from './src/webPreview/store';
+import { AddProjectCopy, MachineCopy, WebPreviewCopy } from './src/copy';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -70,6 +73,7 @@ export default function App() {
     void useTerminalStore.getState().hydrate();
     void useExtraKeysStore.getState().hydrate();
     void useAgentHotkeysStore.getState().hydrate();
+    void useWebPreviewStore.getState().hydrate();
     // Native sync installs after hydration so it pushes the persisted values.
     void useSettingsStore
       .getState()
@@ -129,6 +133,16 @@ export default function App() {
                   headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
                   contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
                 }}
+              />
+              <Stack.Screen
+                name="WebPreviewPorts"
+                component={WebPreviewPortsScreen}
+                options={{ title: WebPreviewCopy.pickerTitle }}
+              />
+              <Stack.Screen
+                name="WebPreview"
+                component={WebPreviewScreen}
+                options={{ headerShown: false }}
               />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
               <Stack.Screen

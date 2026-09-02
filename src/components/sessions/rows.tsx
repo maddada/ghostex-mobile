@@ -490,6 +490,7 @@ export function SectionLabelRow({
   onToggle,
   onCreate,
   onMenu,
+  onMoreMenu,
 }: {
   title: string;
   collapsed: boolean;
@@ -498,22 +499,29 @@ export function SectionLabelRow({
   awakeCount: number;
   /** First section after the status header uses the tighter top margin. */
   first: boolean;
-  onToggle: () => void;
+  /** Omitted by sections that are always open, which then draw no caret. */
+  onToggle?: () => void;
   onCreate?: () => void;
   onMenu?: (anchor: MenuAnchor) => void;
+  /** Trailing "⋮" button; the section's discoverable action menu. */
+  onMoreMenu?: (anchor: MenuAnchor) => void;
 }) {
   const rowRef = useRef<View | null>(null);
   return (
     <View ref={rowRef} style={[sectionStyles.row, first ? sectionStyles.rowFirst : null]}>
       <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
+        accessibilityRole={onToggle === undefined ? 'header' : 'button'}
+        accessibilityLabel={
+          onToggle === undefined ? title : `${collapsed ? 'Expand' : 'Collapse'} ${title}`
+        }
         style={sectionStyles.heading}
         onPress={onToggle}
         onLongPress={onMenu === undefined ? undefined : () => measurePress(rowRef, onMenu)}
       >
         <Text style={sectionStyles.title}>{title}</Text>
-        <CaretRightGlyph size={ds(13)} color="#727982" rotated={!collapsed} />
+        {onToggle !== undefined ? (
+          <CaretRightGlyph size={ds(13)} color="#727982" rotated={!collapsed} />
+        ) : null}
       </Pressable>
       <View style={sectionStyles.trailing}>
         {collapsed ? (
@@ -527,6 +535,11 @@ export function SectionLabelRow({
           {onCreate !== undefined ? (
             <HeaderButton accessibilityLabel={`Create a session in ${title}`} onPress={onCreate}>
               <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
+            </HeaderButton>
+          ) : null}
+          {onMoreMenu !== undefined ? (
+            <HeaderButton accessibilityLabel={`${title} options`} onAnchorPress={onMoreMenu}>
+              <MoreGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
             </HeaderButton>
           ) : null}
         </View>

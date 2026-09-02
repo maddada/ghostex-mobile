@@ -113,11 +113,34 @@ export function isOutdatedMachineFailure(text: string | null | undefined): boole
 }
 
 /**
+ * Expo wraps every native throw in its own exception chain before it reaches JS:
+ * `FunctionCallException: Calling the 'connect' function has failed (at
+ * ExpoModulesCore/ConcurrentFunctionDefinition.swift:88)\n→ Caused by:
+ * GhostexException: <the real message>`. Both platforms build that chain with the
+ * exact same fixed separator (`Exception.swift` on iOS, `CodedException.kt` on
+ * Android), so the innermost cause is recoverable by splitting on it. Everything
+ * above the last separator is bridge plumbing that no user can act on, and it eats
+ * ~110 characters of the 220-character summary budget below.
+ */
+const EXPO_CAUSE_SEPARATOR = /\n?→ Caused by: /;
+/** The chain also prefixes each link with its native class name... */
+const NATIVE_EXCEPTION_PREFIX = /^[A-Za-z_][A-Za-z0-9_.]*Exception: /;
+/** ...and appends the source location the link was thrown from. */
+const NATIVE_EXCEPTION_ORIGIN = / \(at [^()\s]+:\d+\)$/;
+
+/** The innermost cause of an Expo bridge exception chain, or `text` unchanged. */
+export function unwrapNativeException(text: string): string {
+  const links = text.split(EXPO_CAUSE_SEPARATOR);
+  const innermost = links[links.length - 1]?.trim() ?? text;
+  return innermost.replace(NATIVE_EXCEPTION_PREFIX, '').replace(NATIVE_EXCEPTION_ORIGIN, '').trim();
+}
+
+/**
  * Map raw SSH/CLI failure text to actionable copy (sessions-drawer.md §5).
  * Unmatched text is truncated to 220 chars + "...".
  */
 export function summarizeFailure(raw: string | null | undefined, hasPassword: boolean): string {
-  let text = (raw ?? '').trim();
+  let text = unwrapNativeException((raw ?? '').trim());
   const cliError = extractCliError(text);
   if (cliError !== null) text = cliError;
   const lowerText = text.toLowerCase();
