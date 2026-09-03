@@ -17,7 +17,7 @@ import {
   useMachinesStore,
   type MachineRecord,
 } from '../machines/store';
-import { fetchInventory, summarizeFailure } from './client';
+import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
 import {
   applyOptimisticMutations,
   reconcileOptimisticMutations,
@@ -34,9 +34,17 @@ export type MachineInventory = {
   serverSummary: GhostexMobileSummary | null;
   /** Summarized failure copy (sessions-drawer.md §5), null when healthy. */
   lastError: string | null;
+  /** Why `lastError` happened (native error code first, message second); null when healthy. */
+  lastErrorCode: FailureReasonCode | null;
   /** True once any load (success or failure) has completed. */
   hasLoaded: boolean;
   refreshing: boolean;
+  /**
+   * True while a user-initiated retry (tab glyph, failed card) is in flight.
+   * Separate from `refreshing`, which the 5s poll flips on every tick, so the
+   * tab spinner shows for an explicit retry even when a summary is retained.
+   */
+  retrying: boolean;
   fingerprint: string | null;
 };
 
@@ -45,8 +53,10 @@ export function emptyMachineInventory(): MachineInventory {
     summary: null,
     serverSummary: null,
     lastError: null,
+    lastErrorCode: null,
     hasLoaded: false,
     refreshing: false,
+    retrying: false,
     fingerprint: null,
   };
 }
@@ -61,6 +71,13 @@ type InventoryState = {
    * caller's mutation command completed.
    */
   refreshMachineFresh: (machine: MachineRecord) => Promise<void>;
+  /**
+   * Retry one machine's connection from its tab glyph or menu, by id, without
+   * touching the selection: the drawer keeps showing whatever machine it was
+   * showing, exactly like clicking the cloud on a desktop machine tab. Hidden
+   * or unknown ids are ignored because they have no tab to retry from.
+   */
+  retryMachine: (machineId: string) => Promise<void>;
   /** Refresh every saved machine concurrently. */
   refreshAll: () => Promise<void>;
   startPolling: () => void;
@@ -150,6 +167,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
               refreshing: false,
               hasLoaded: true,
               lastError: null,
+              lastErrorCode: null,
             });
             return;
           }
@@ -165,6 +183,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
                 refreshing: false,
                 hasLoaded: true,
                 lastError: null,
+                lastErrorCode: null,
               },
             },
             pendingMutationsByMachineId: setPendingMutations(
@@ -173,22 +192,22 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
             ),
           });
         } catch (error) {
-          const raw = error instanceof Error ? error.message : String(error);
           let machineHasPassword = false;
           try {
             machineHasPassword = await hasPassword(machine.id);
           } catch {
             // Credential lookup failure must not leave inventory refreshing.
           }
-          const failure = summarizeFailure(raw, machineHasPassword);
+          const failure = summarizeFailureDetailed(error, machineHasPassword);
           // 5s polling repeats the same failure; log only new failure text.
-          if (get().inventoriesByMachineId[machine.id]?.lastError !== failure) {
-            logAppEvent(`${machineDisplayLabel(machine)}: ${failure}`);
+          if (get().inventoriesByMachineId[machine.id]?.lastError !== failure.message) {
+            logAppEvent(`${machineDisplayLabel(machine)}: ${failure.message}`);
           }
           patchMachine(machine.id, {
             refreshing: false,
             hasLoaded: true,
-            lastError: failure,
+            lastError: failure.message,
+            lastErrorCode: failure.reasonCode,
           });
         }
       })();
@@ -213,6 +232,19 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
         }
       }
       await get().refreshMachine(machine);
+    },
+
+    retryMachine: async (machineId) => {
+      const machine = enabledMachines(useMachinesStore.getState()).find(
+        (entry) => entry.id === machineId,
+      );
+      if (machine === undefined) return;
+      patchMachine(machine.id, { retrying: true });
+      try {
+        await get().refreshMachineFresh(machine);
+      } finally {
+        patchMachine(machine.id, { retrying: false });
+      }
     },
 
     refreshAll: async () => {

@@ -136,56 +136,151 @@ export function unwrapNativeException(text: string): string {
 }
 
 /**
- * Map raw SSH/CLI failure text to actionable copy (sessions-drawer.md §5).
- * Unmatched text is truncated to 220 chars + "...".
+ * Why a connection failed, coarse enough to pick a checklist on the "Can't
+ * reach" screen and the "Other reasons" rows under it.
  */
-export function summarizeFailure(raw: string | null | undefined, hasPassword: boolean): string {
-  let text = unwrapNativeException((raw ?? '').trim());
+export type FailureReasonCode =
+  | 'timeout'
+  | 'noRoute'
+  | 'sshRefused'
+  | 'authFailed'
+  | 'hostKeyChanged'
+  | 'ghostexMissing'
+  | 'unknown';
+
+export type FailureSummary = {
+  /** Actionable copy (sessions-drawer.md §5); unmatched text is truncated to 220 chars. */
+  message: string;
+  reasonCode: FailureReasonCode;
+  /** ISO timestamp of the last successful connection, when the caller knows it. */
+  lastReachedAt?: string;
+};
+
+/**
+ * Contract error codes (GhostexErrors.kt / GhostexErrors.swift) a rejected
+ * native call carries as `error.code`; the primary reason signal.
+ */
+const NATIVE_CODE_REASONS: Readonly<Record<string, FailureReasonCode>> = {
+  E_AUTH_FAILED: 'authFailed',
+  E_HOST_KEY_MISMATCH: 'hostKeyChanged',
+  E_REFUSED: 'sshRefused',
+  E_UNREACHABLE: 'noRoute',
+  E_TIMEOUT: 'timeout',
+};
+
+function nativeReasonCode(error: unknown): FailureReasonCode | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? (NATIVE_CODE_REASONS[code] ?? null) : null;
+}
+
+function errorText(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return error === null || error === undefined ? '' : String(error);
+}
+
+/**
+ * Map a failure (a rejected native call, an Error, or raw CLI text) to
+ * actionable copy plus a reason code. The native `code` decides the reason when
+ * present; the message regexes below only classify text that carries no code.
+ * Pass `lastReachedAt` (the machine's `lastConnectedAt`) so the summary can say
+ * when the computer last answered.
+ */
+export function summarizeFailureDetailed(
+  error: unknown,
+  hasPassword: boolean,
+  lastReachedAt?: string | null,
+): FailureSummary {
+  const classified = classifyFailure(error, hasPassword);
+  return lastReachedAt === undefined || lastReachedAt === null
+    ? classified
+    : { ...classified, lastReachedAt };
+}
+
+/** Map raw SSH/CLI failure text to actionable copy (sessions-drawer.md §5). */
+export function summarizeFailure(raw: unknown, hasPassword: boolean): string {
+  return classifyFailure(raw, hasPassword).message;
+}
+
+/** "Connection timed out" / "Operation timed out" / "connect timed out"; never `--timeout` from a usage dump. */
+const TIMED_OUT_TEXT = /\b(?:connection|operation|connect|read|dial|handshake)\s+timed out\b/iu;
+
+function classifyFailure(
+  error: unknown,
+  hasPassword: boolean,
+): Pick<FailureSummary, 'message' | 'reasonCode'> {
+  let text = unwrapNativeException(errorText(error).trim());
   const cliError = extractCliError(text);
   if (cliError !== null) text = cliError;
   const lowerText = text.toLowerCase();
+  const nativeCode = nativeReasonCode(error);
+  const reason = (byText: FailureReasonCode): FailureReasonCode => nativeCode ?? byText;
+
   if (
+    nativeCode === 'hostKeyChanged' ||
     text.includes('Host key verification failed') ||
     text.includes('REMOTE HOST IDENTIFICATION HAS CHANGED')
   ) {
-    return FailureCopy.hostKey;
+    return { message: FailureCopy.hostKey, reasonCode: 'hostKeyChanged' };
   }
-  if (text.includes('Permission denied')) {
-    return hasPassword
-      ? FailureCopy.permissionDeniedWithPassword
-      : FailureCopy.permissionDeniedWithoutPassword;
+  if (nativeCode === 'authFailed' || text.includes('Permission denied')) {
+    return {
+      message: hasPassword
+        ? FailureCopy.permissionDeniedWithPassword
+        : FailureCopy.permissionDeniedWithoutPassword,
+      reasonCode: 'authFailed',
+    };
   }
-  if (text.includes('Connection refused')) return FailureCopy.refused;
-  if (
-    text.includes('Could not resolve') ||
-    text.includes('Name or service not known') ||
-    text.includes('No address associated with hostname') ||
-    text.includes('No route to host') ||
-    text.includes('Connection timed out') ||
-    text.includes('Operation timed out')
-  ) {
-    return FailureCopy.unreachable;
+  if (nativeCode === 'sshRefused' || text.includes('Connection refused')) {
+    return { message: FailureCopy.refused, reasonCode: 'sshRefused' };
   }
+  // CLI-side failures come as plain text (no native code) and can embed a usage
+  // dump, so they are recognised before any substring match on the transport words.
   if (
     lowerText.includes('ghostex: command not found') ||
     lowerText.includes('command not found: ghostex') ||
     lowerText.includes('ghostex not found')
   ) {
-    return FailureCopy.noCli;
+    return { message: FailureCopy.noCli, reasonCode: 'ghostexMissing' };
   }
-  if (lowerText.includes('unknown command: android-check')) return FailureCopy.oldCli;
-  if (isOutdatedMachineFailure(text)) return FailureCopy.outdatedForFeature;
+  if (lowerText.includes('unknown command: android-check')) {
+    return { message: FailureCopy.oldCli, reasonCode: 'ghostexMissing' };
+  }
+  if (isOutdatedMachineFailure(text)) {
+    return { message: FailureCopy.outdatedForFeature, reasonCode: 'ghostexMissing' };
+  }
+  if (nativeCode === 'timeout' || TIMED_OUT_TEXT.test(text)) {
+    return { message: FailureCopy.timedOut, reasonCode: 'timeout' };
+  }
+  if (
+    nativeCode === 'noRoute' ||
+    text.includes('Could not resolve') ||
+    text.includes('Name or service not known') ||
+    text.includes('No address associated with hostname') ||
+    text.includes('No route to host') ||
+    lowerText.includes('network is unreachable')
+  ) {
+    return { message: FailureCopy.unreachable, reasonCode: 'noRoute' };
+  }
   if (
     lowerText.includes('session persistence is set to') &&
     !lowerText.includes('session persistence is set to zmx')
   ) {
-    return FailureCopy.persistenceNotZmx;
+    return { message: FailureCopy.persistenceNotZmx, reasonCode: reason('unknown') };
   }
   if (lowerText.includes('zmx') && (lowerText.includes('not found') || lowerText.includes('not configured'))) {
-    return FailureCopy.zmxMissing;
+    return { message: FailureCopy.zmxMissing, reasonCode: reason('unknown') };
   }
-  if (text.length === 0) return FailureCopy.emptyOutput;
-  return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+  if (text.length === 0) return { message: FailureCopy.emptyOutput, reasonCode: reason('unknown') };
+  return {
+    message: text.length > 220 ? `${text.slice(0, 220)}...` : text,
+    reasonCode: reason('unknown'),
+  };
 }
 
 /** Recovery matcher: summarized message asks for a password (sessions-drawer.md §4). */
