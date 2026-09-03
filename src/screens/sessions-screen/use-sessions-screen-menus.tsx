@@ -24,6 +24,7 @@ import {
   ClockGlyph,
   CopyGlyph,
   ExitGlyph,
+  EyeOffGlyph,
   GitForkGlyph,
   InfoGlyph,
   MachinesGlyph,
@@ -78,7 +79,7 @@ import {
   type GhostexQuickAction,
   type GhostexSession,
 } from '../../contract/mobileSummary';
-import { ProgressCopy, WebPreviewCopy } from '../../copy';
+import { ProgressCopy, StripCopy, WebPreviewCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import {
   FORK_AGENT_ICONS,
@@ -87,7 +88,7 @@ import {
   tagMutation,
 } from '../../sessions/sessionCommands';
 import { useInventoryStore } from '../../inventory/store';
-import type { MachineRecord } from '../../machines/store';
+import { useMachinesStore, type MachineRecord } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
 import {
@@ -575,7 +576,7 @@ export function useSessionsScreenMenus({
         setOverlay({
           kind: 'confirmAction',
           title: 'Close project?',
-          body: `This parks ${header.title} (and its ${sessions.length} session(s)) into Recent Projects on the Mac.`,
+          body: `This parks ${header.title} (and its ${sessions.length} session(s)) into Recent Projects on the computer.`,
           confirmLabel: 'Close Project',
           run: () => void runSessionCommand(ctx.machine, removeProjectCommand(header.projectId)),
         }),
@@ -958,39 +959,76 @@ export function useSessionsScreenMenus({
   };
 
   /**
-   * Machine menu — the mobile counterpart to the desktop header actions,
-   * reached by long-pressing the machine's tab (or the page title when a single
-   * machine leaves the tab strip hidden).
+   * Machine tab long-press menu (mobile-06-sessions.html): the four rows the
+   * mockup lists, then the machine-scoped entry points that have no other
+   * always-visible home. Retry drops and re-establishes the connection, like
+   * the desktop tab glyph; Hide flips the same "Show in Sessions" switch the
+   * Machines list and Edit machine expose, without touching live terminals.
    */
   const machineMenuItems = (target: MachineRecord): ContextMenuItem[] => [
+    ...(useInventoryStore.getState().inventoriesByMachineId[target.id]?.lastError != null
+      ? [
+          {
+            kind: 'item' as const,
+            key: 'what-can-i-check',
+            label: StripCopy.menu.whatCanICheck,
+            icon: <InfoGlyph size={14} color={menuIconColor} />,
+            onPress: () => {
+              setOverlay(NONE);
+              navigation.navigate('CantReach', { machineId: target.id });
+            },
+          },
+        ]
+      : []),
     {
       kind: 'item',
-      key: 'add-project',
-      label: 'Add Project',
-      icon: <PlusGlyph size={14} color={menuIconColor} />,
-      onPress: () => {
-        setOverlay(NONE);
-        navigation.navigate('AddProjectSource', { machineId: target.id });
-      },
-    },
-    {
-      kind: 'item',
-      key: 'refresh',
-      label: 'Refresh Sessions',
-      icon: <RefreshGlyph size={14} color={menuIconColor} />,
-      onPress: () => {
-        setOverlay(NONE);
-        void refreshMachine(target);
-      },
-    },
-    {
-      kind: 'item',
-      key: 'reconnect',
-      label: 'Reconnect',
+      key: 'retry',
+      label: StripCopy.menu.retry,
       icon: <RefreshGlyph size={14} color={menuIconColor} />,
       onPress: () => {
         setOverlay(NONE);
         void reconnectMachine(target);
+      },
+    },
+    {
+      kind: 'item',
+      key: 'edit',
+      label: StripCopy.menu.edit,
+      icon: <PencilGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('MachineForm', { machineId: target.id });
+      },
+    },
+    {
+      kind: 'item',
+      key: 'hide',
+      label: StripCopy.menu.hide,
+      icon: <EyeOffGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        useMachinesStore.getState().setMachineDisabled(target.id, true);
+      },
+    },
+    {
+      kind: 'item',
+      key: 'all-machines',
+      label: StripCopy.menu.allMachines,
+      icon: <MachinesGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('Machines');
+      },
+    },
+    { kind: 'separator', key: 'sep-1' },
+    {
+      kind: 'item',
+      key: 'add-project',
+      label: StripCopy.menu.addProject,
+      icon: <PlusGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        navigation.navigate('AddProjectSource', { machineId: target.id });
       },
     },
     {
@@ -1001,27 +1039,6 @@ export function useSessionsScreenMenus({
       onPress: () => {
         setOverlay(NONE);
         navigation.navigate('WebPreviewPorts', { machineId: target.id });
-      },
-    },
-    { kind: 'separator', key: 'sep-1' },
-    {
-      kind: 'item',
-      key: 'edit',
-      label: 'Edit Machine',
-      icon: <PencilGlyph size={14} color={menuIconColor} />,
-      onPress: () => {
-        setOverlay(NONE);
-        navigation.navigate('MachineForm', { machineId: target.id });
-      },
-    },
-    {
-      kind: 'item',
-      key: 'manage',
-      label: 'Manage Machines',
-      icon: <MachinesGlyph size={14} color={menuIconColor} />,
-      onPress: () => {
-        setOverlay(NONE);
-        navigation.navigate('Machines');
       },
     },
   ];
@@ -1207,10 +1224,10 @@ export function useSessionsScreenMenus({
     },
     {
       key: 'add',
-      label: 'Add SSH machine',
+      label: 'Add a computer',
       onPress: () => {
         setOverlay(NONE);
-        navigation.navigate('MachineForm');
+        navigation.navigate('ConnectChoose');
       },
     },
     {

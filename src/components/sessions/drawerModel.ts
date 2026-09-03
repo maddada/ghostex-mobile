@@ -145,6 +145,7 @@ function machineBlocks(
       rowBlock(
         machine.id,
         stateCardItem(
+          'connecting',
           StateCardCopy.connecting.title,
           StateCardCopy.connecting.body(label),
           StateCardCopy.connecting.actionHint,
@@ -157,6 +158,7 @@ function machineBlocks(
       rowBlock(
         machine.id,
         stateCardItem(
+          'failure',
           StateCardCopy.failure.title,
           inventory.lastError ?? StateCardCopy.failure.fallbackBody,
           StateCardCopy.failure.actionHint,
@@ -183,6 +185,7 @@ function machineBlocks(
       rowBlock(
         machine.id,
         stateCardItem(
+          'empty',
           StateCardCopy.empty.title,
           StateCardCopy.empty.body,
           StateCardCopy.empty.actionHint,
@@ -200,6 +203,7 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
       rowBlock(
         '',
         stateCardItem(
+          'noMachines',
           StateCardCopy.noMachines.title,
           StateCardCopy.noMachines.body,
           StateCardCopy.noMachines.actionHint,

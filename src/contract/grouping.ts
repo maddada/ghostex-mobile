@@ -27,12 +27,16 @@ export const CHATS_PROJECT_KEY = 'chats';
 // Item types.
 // ---------------------------------------------------------------------------
 
+/** Which drawer state a STATE_CARD stands in for; the screen picks the renderer by it. */
+export type StateCardVariant = 'noMachines' | 'connecting' | 'failure' | 'empty';
+
 export type StateCardItem = {
   type: 'STATE_CARD';
   key: string;
   title: string;
   body: string;
   actionHint: string;
+  variant: StateCardVariant;
 };
 
 /**
@@ -243,8 +247,13 @@ export function sessionKindCollapseKey(
   return `${projectKey}|${section}`;
 }
 
-export function stateCardItem(title: string, body: string, actionHint: string): StateCardItem {
-  return { type: 'STATE_CARD', key: 'state-card', title, body, actionHint };
+export function stateCardItem(
+  variant: StateCardVariant,
+  title: string,
+  body: string,
+  actionHint: string,
+): StateCardItem {
+  return { type: 'STATE_CARD', key: 'state-card', title, body, actionHint, variant };
 }
 
 export function machineHeaderItem(
@@ -381,6 +390,15 @@ export function countSessions(sessions: readonly GhostexSession[]): SessionCount
     if (isAwakeSession(session)) counts.awakeCount++;
   }
   return counts;
+}
+
+/**
+ * Per-machine roll-up for the machine tab strip: the working and attention
+ * counts of every session the machine reports, before any Space filter, so an
+ * unselected tab still says something needs the user (desktop machine-tabs.tsx).
+ */
+export function machineSessionCounts(summary: GhostexMobileSummary | null): SessionCounts {
+  return countSessions(summary === null ? [] : summary.sessions);
 }
 
 export type DrawerBuildInput = {

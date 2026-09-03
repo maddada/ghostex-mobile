@@ -43,7 +43,11 @@ import {
   type ProjectCardBlock,
 } from '../components/sessions/drawerModel';
 import { MachinesGlyph, MenuGlyph, WorldGlyph } from '../components/sessions/icons';
-import MachineTabs, { type MachineTabItem } from '../components/sessions/MachineTabs';
+import MachineTabs, {
+  MACHINE_TAB_ADD,
+  type MachineTabItem,
+  type MachineTabStripItem,
+} from '../components/sessions/MachineTabs';
 import SpaceTabs from '../components/sessions/SpaceTabs';
 import { useLauncherStore, lastActionKey } from '../components/sessions/launcherStore';
 import {
@@ -79,6 +83,7 @@ import {
 import { stateWithCollectionTitle } from '../contract/collectionsState';
 import {
   CHATS_PROJECT_KEY,
+  machineSessionCounts,
   projectKeyForSession,
   type DrawerItem,
   type ProjectHeaderItem,
@@ -90,7 +95,15 @@ import {
   type GhostexQuickAction,
   type GhostexSession,
 } from '../contract/mobileSummary';
-import { ProgressCopy, RenameCopy, SessionNoteCopy, StateCardCopy, WebPreviewCopy } from '../copy';
+import {
+  ProgressCopy,
+  RenameCopy,
+  SessionNoteCopy,
+  StateCardCopy,
+  StripCopy,
+  WebPreviewCopy,
+} from '../copy';
+import MachineFailedCard from './sessions-screen/MachineFailedCard';
 import type { OptimisticInventoryChange } from '../inventory/optimistic';
 import {
   enqueueRemoteMutation,
@@ -142,6 +155,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
   const refreshMachine = useInventoryStore((state) => state.refreshMachine);
   const refreshMachineFresh = useInventoryStore((state) => state.refreshMachineFresh);
+  const retryMachine = useInventoryStore((state) => state.retryMachine);
   const refreshAll = useInventoryStore((state) => state.refreshAll);
   const startPolling = useInventoryStore((state) => state.startPolling);
   const stopPolling = useInventoryStore((state) => state.stopPolling);
@@ -319,29 +333,67 @@ export default function SessionsScreen({ navigation }: Props) {
   }, [machine, refreshMachineFresh]);
 
   /*
-   * One tab per visible machine, in saved order. The strip is hidden at one
-   * machine (the drawer is unambiguous without it) and at zero (the "no
-   * machines" state card is the whole page).
+   * Glyph / failed-card retry. The store flips `retrying` synchronously before
+   * its first await, so the tab spins for as long as the attempt really takes;
+   * the status line says the same thing in words for the same span, then goes
+   * back to the truthful connection line the moment the attempt settles.
    */
-  const machineTabs = useMemo(
-    (): MachineTabItem[] =>
-      machines.map((entry): MachineTabItem => {
-        const inventory = inventoriesByMachineId[entry.id];
-        const connectionState =
-          inventory === undefined || !inventory.hasLoaded
-            ? 'busy'
-            : inventory.lastError !== null
-              ? 'failed'
-              : inventory.summary === null
-                ? 'disconnected'
-                : 'connected';
-        return {
-          id: entry.id,
-          label: machineDisplayLabel(entry),
-          connectionState,
-        };
-      }),
-    [machines, inventoriesByMachineId],
+  const retryMachineWithStatus = useCallback(
+    (target: MachineRecord): void => {
+      setTransientStatus(StripCopy.retryingStatus(machineDisplayLabel(target)));
+      void retryMachine(target.id).finally(() => setTransientStatus(null));
+    },
+    [retryMachine, setTransientStatus],
+  );
+
+  /*
+   * One tab per visible machine, in saved order, then the "+" tab. The strip
+   * shows whenever a machine exists (the "+" and the connection glyph are
+   * useful even with one). The glyph's retry goes through the inventory store
+   * by id and never touches the selection, so retrying an unselected machine
+   * leaves the drawer on the machine it was showing.
+   */
+  const machineTabs = useMemo((): MachineTabStripItem[] => {
+    const tabs = machines.map((entry): MachineTabItem => {
+      const inventory = inventoriesByMachineId[entry.id];
+      const connectionState =
+        inventory === undefined ||
+        !inventory.hasLoaded ||
+        inventory.retrying ||
+        (inventory.refreshing && inventory.summary === null)
+          ? 'busy'
+          : inventory.lastError !== null
+            ? 'failed'
+            : inventory.summary === null
+              ? 'disconnected'
+              : 'connected';
+      const counts = machineSessionCounts(inventory?.summary ?? null);
+      const retryable = connectionState === 'failed' || connectionState === 'disconnected';
+      return {
+        id: entry.id,
+        label: machineDisplayLabel(entry),
+        connectionState,
+        connectionLabel:
+          connectionState === 'failed' && inventory?.lastError
+            ? inventory.lastError
+            : StripCopy.connection[connectionState],
+        onConnect: retryable ? () => retryMachineWithStatus(entry) : undefined,
+        workingCount: counts.workingCount,
+        attentionCount: counts.attentionCount,
+      };
+    });
+    return [...tabs, MACHINE_TAB_ADD];
+  }, [machines, inventoriesByMachineId, retryMachineWithStatus]);
+
+  /** The tab's connection line (the failure reason when failed): the long-press menu subtitle. */
+  const machineConnectionLine = useCallback(
+    (machineId: string): string | undefined => {
+      const tab = machineTabs.find(
+        (item): item is MachineTabItem => !('kind' in item) && item.id === machineId,
+      );
+      return tab?.connectionLabel;
+    },
+    [machineTabs],
   );
 
   const statusLine = statusOverride ?? drawerStatusLine(machine, selectedInventory);
@@ -994,6 +1046,18 @@ export default function SessionsScreen({ navigation }: Props) {
     const { item } = block;
     switch (item.type) {
       case 'STATE_CARD':
+        if (item.variant === 'failure' && target !== null) {
+          const inventory = inventoriesByMachineId[target.id];
+          return (
+            <MachineFailedCard
+              machineName={target.name.length > 0 ? target.name : machineDisplayLabel(target)}
+              reason={item.body}
+              retrying={inventory?.retrying === true}
+              onRetry={() => retryMachineWithStatus(target)}
+              onWhatCanICheck={() => navigation.navigate('CantReach', { machineId: target.id })}
+            />
+          );
+        }
         return (
           <StateCard
             title={item.title}
@@ -1109,8 +1173,7 @@ export default function SessionsScreen({ navigation }: Props) {
         {/*
           Manual refresh is pull-to-refresh on the list below, so the title has
           the header row's leading space to itself. Long-pressing it opens the
-          selected machine's menu, which is the only way to reach it while a
-          single visible machine keeps the tab strip hidden.
+          selected machine's menu, the same menu a long press on its tab opens.
         */}
         <Pressable
           accessibilityRole="header"
@@ -1162,6 +1225,20 @@ export default function SessionsScreen({ navigation }: Props) {
           <MenuGlyph size={22} color={sidebarAppearance.foreground} />
         </Pressable>
       </View>
+      {machines.length > 0 ? (
+        <MachineTabs
+          items={machineTabs}
+          selectedMachineId={machine === null ? null : machine.id}
+          onSelect={(machineId) => selectMachine(machineId)}
+          onLongPress={(machineId) => {
+            const target = machineById(machineId);
+            if (target === null) return;
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
+          }}
+          onAdd={() => navigation.navigate('ConnectChoose')}
+        />
+      ) : null}
       {tailscaleApplies && tailscaleConnected === false ? (
         <Pressable
           accessibilityRole="button"
@@ -1208,19 +1285,6 @@ export default function SessionsScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
       </View>
-      {machineTabs.length > 1 ? (
-        <MachineTabs
-          items={machineTabs}
-          selectedMachineId={machine === null ? null : machine.id}
-          onSelect={(machineId) => selectMachine(machineId)}
-          onLongPress={(machineId) => {
-            const target = machineById(machineId);
-            if (target === null) return;
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
-          }}
-        />
-      ) : null}
       {/*
         A machine with no Spaces has nothing to switch between — Other alone
         would be every project — so the row appears only once it has one.
@@ -1283,7 +1347,7 @@ export default function SessionsScreen({ navigation }: Props) {
             { label: 'Project path', value: overlay.ctx.item.projectPath },
             { label: 'Status', value: displayStatus(overlay.ctx.item.session) },
             {
-              label: 'Focused on Mac',
+              label: 'Focused on the computer',
               value: overlay.ctx.item.session.isFocused ? 'Yes' : 'No',
             },
             {
@@ -1356,6 +1420,7 @@ export default function SessionsScreen({ navigation }: Props) {
           visible
           sessionTitle={sessionTitle(overlay.ctx.item.session)}
           remainingLabel={overlay.ctx.item.session.delayedSendRemainingLabel}
+          delayedSendDeadlineAt={overlay.ctx.item.session.delayedSendDeadlineAt}
           sendWhenAllProjectSessionsStopActive={
             overlay.ctx.item.session.sendWhenAllProjectSessionsStopActive
           }
@@ -1464,7 +1529,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <ContextMenu
           visible
           title={machineDisplayLabel(overlay.ctx.machine)}
-          subtitle="Remote machine"
+          subtitle={machineConnectionLine(overlay.ctx.machine.id)}
           items={machineMenuItems(overlay.ctx.machine)}
           onClose={() => setOverlay(NONE)}
         />
