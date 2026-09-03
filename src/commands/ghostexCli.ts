@@ -459,11 +459,6 @@ export function restoreRecentProjectCommand(projectId: string): string {
   return `ghostex restore-recent-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
 }
 
-/** Machine health: `ghostex android-check --json` (works for any mobile client). */
-export function androidCheckCommand(): string {
-  return 'ghostex android-check --json';
-}
-
 /**
  * Web preview port discovery: `ghostex ports --json`. Lists every listening TCP
  * socket on the machine, one entry per (port, address), sorted by port.
