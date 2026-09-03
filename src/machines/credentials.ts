@@ -145,6 +145,8 @@ export type MachineConnectionTarget = {
   port: number;
   /** Absent means `ssh`. */
   transport?: MachineTransport;
+  /** Tailscale SSH: connect with the "none" auth method and send no password or key. */
+  tailscaleSsh?: boolean;
 };
 
 /** Build the native SshConfig for a machine from its stored credentials. */
@@ -162,9 +164,13 @@ export async function resolveSshConfig(machine: MachineConnectionTarget): Promis
     keepAliveEnabled,
     keepAliveIntervalSec,
   };
-  if (password !== null && password.length > 0) config.password = password;
-  if (privateKey !== null && privateKey.length > 0) config.privateKey = privateKey;
-  if (passphrase !== null && passphrase.length > 0) config.passphrase = passphrase;
+  if (machine.tailscaleSsh === true) {
+    config.authMethod = 'none';
+  } else {
+    if (password !== null && password.length > 0) config.password = password;
+    if (privateKey !== null && privateKey.length > 0) config.privateKey = privateKey;
+    if (passphrase !== null && passphrase.length > 0) config.passphrase = passphrase;
+  }
   if (machine.transport === 'tailcat') {
     // The synthetic host of a tailcat machine is not routable, so a missing
     // token must surface as an error instead of a bogus direct dial.

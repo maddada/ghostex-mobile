@@ -27,6 +27,7 @@ import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.transport.kex.KeyExchange
 import net.schmizz.sshj.userauth.UserAuthException
+import net.schmizz.sshj.userauth.method.AuthNone
 import net.schmizz.sshj.userauth.password.PasswordUtils
 import net.schmizz.sshj.xfer.FileSystemFile
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -172,6 +173,11 @@ class GhostexSshConnection(
   }
 
   private fun authenticate(ssh: SSHClient) {
+    if (config.authMethod == "none") {
+      // Tailscale SSH: the tailnet policy authenticates, so only the "none" method is offered.
+      ssh.auth(config.username, AuthNone())
+      return
+    }
     val privateKey = config.privateKey?.takeIf { it.isNotBlank() }
     val password = config.password?.takeIf { it.isNotEmpty() }
     if (privateKey == null && password == null) {

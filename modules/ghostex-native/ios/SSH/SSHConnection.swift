@@ -46,6 +46,8 @@ struct SSHCredentials: Sendable {
     var password: String?
     var privateKey: String?
     var passphrase: String?
+    /// Tailscale SSH: offer only the "none" method and let the tailnet policy decide.
+    var noneAuthOnly: Bool = false
 }
 
 struct SSHConnectionConfig: Sendable {
@@ -656,6 +658,12 @@ actor SSHConnection {
         if authList == nil, libssh2_userauth_authenticated(session) != 0 {
             logger.info("Already authenticated")
             return
+        }
+
+        if config.credentials.noneAuthOnly {
+            // libssh2_userauth_list already attempted the "none" method; the server declined it.
+            logger.error("Server did not accept \"none\" authentication for user: \(username)")
+            throw SSHError.authenticationFailed
         }
 
         if let keyString = config.credentials.privateKey, !keyString.isEmpty {
