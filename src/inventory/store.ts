@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 
+import { reportClientHello } from '../analytics/clientHello';
 import { logAppEvent } from '../app/appLog';
 import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import { hasPassword } from '../machines/credentials';
@@ -148,6 +149,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
             refreshRevision,
           );
           useMachinesStore.getState().markConnected(machine.id);
+          reportClientHello(machine);
           // Log only connect transitions (first load or recovery), not every poll.
           if (previous === undefined || !previous.hasLoaded || previous.lastError !== null) {
             logAppEvent(`${machineDisplayLabel(machine)}: connected`);

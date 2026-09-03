@@ -294,6 +294,38 @@ export function holdSessionsAwakeCommand(
   );
 }
 
+export type ClientHelloPlatform = {
+  os: 'android' | 'ios';
+  osVersion?: string;
+  appVersion?: string;
+};
+
+/** A version token the daemon's analytics taxonomy accepts: `[0-9A-Za-z.-]{1,32}`. */
+function versionFlag(name: string, value: string | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed.length === 0 || trimmed.length > 32 || !/^[0-9A-Za-z.-]+$/.test(trimmed)) return '';
+  return ` ${name} ${trimmed}`;
+}
+
+/**
+ * Analytics hello: `ghostex client-hello --client mobile --os <android|ios>
+ * [--os-version <v>] [--app-version <v>] --json`.
+ *
+ * The phone never talks to any analytics service itself. It tells the machine's
+ * gxserver that a mobile client attached, on which OS and app version, and the
+ * machine's own usage-analytics setting decides whether anything is recorded.
+ * Nothing about the phone, the machine, or the session is carried beyond those
+ * three enum/version tokens.
+ */
+export function clientHelloCommand(platform: ClientHelloPlatform): string {
+  return (
+    `ghostex client-hello --client mobile --os ${platform.os}` +
+    versionFlag('--os-version', platform.osVersion) +
+    versionFlag('--app-version', platform.appVersion) +
+    ' --json'
+  );
+}
+
 /** Acknowledge attention: `ghostex acknowledge-session-attention --session-id <id> --json`. */
 export function acknowledgeAttentionCommand(sessionId: string): string {
   return (
