@@ -19,6 +19,8 @@ class SshConfigRecord : Record {
    * forward instead of [host]:[port]; host-key identity still uses [host]:[port].
    */
   @Field var tailcatToken: String = ""
+  /** `none` authenticates with the SSH "none" method only (Tailscale SSH); else `credentials`. */
+  @Field var authMethod: String = "credentials"
 }
 
 /** Mirrors `OpenTerminalOptions` in GhostexNative.types.ts. */

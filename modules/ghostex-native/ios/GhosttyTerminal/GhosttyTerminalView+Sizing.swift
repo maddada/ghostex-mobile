@@ -22,10 +22,9 @@ extension GhosttyTerminalView {
         configureIOSurfaceLayers(size: size)
 
         let scale = self.contentScaleFactor
-        let pixelWidth = floor(size.width * scale)
-        let pixelHeight = floor(size.height * scale)
-        guard pixelWidth > 0 && pixelHeight > 0 else { return }
-        let pixelSize = CGSize(width: pixelWidth, height: pixelHeight)
+        guard let pixelSize = surfacePixelSize(forBounds: size, scale: scale) else { return }
+        let pixelWidth = pixelSize.width
+        let pixelHeight = pixelSize.height
 
         let sizeChanged = pixelSize != lastPixelSize || scale != lastContentScale
         if sizeChanged {
@@ -76,6 +75,41 @@ extension GhosttyTerminalView {
     /// (cursor style/blink) take effect on an already-open terminal.
     func reapplySurfaceConfig() {
         applyPresentationOverrides(surfacePresentationOverrides)
+    }
+
+    /// Pixel size the surface takes: the view's bounds, or, while a grid is pinned,
+    /// that many cells plus whatever padding the surface currently carries.
+    func surfacePixelSize(forBounds size: CGSize, scale: CGFloat) -> CGSize? {
+        if let pinned = pinnedGrid,
+           let current = terminalSize(),
+           current.cellWidthPx > 0, current.cellHeightPx > 0 {
+            let paddingWidth = max(Int(current.widthPx) - Int(current.columns) * Int(current.cellWidthPx), 0)
+            let paddingHeight = max(Int(current.heightPx) - Int(current.rows) * Int(current.cellHeightPx), 0)
+            return CGSize(
+                width: pinned.cols * Int(current.cellWidthPx) + paddingWidth,
+                height: pinned.rows * Int(current.cellHeightPx) + paddingHeight
+            )
+        }
+        let pixelWidth = floor(size.width * scale)
+        let pixelHeight = floor(size.height * scale)
+        guard pixelWidth > 0 && pixelHeight > 0 else { return nil }
+        return CGSize(width: pixelWidth, height: pixelHeight)
+    }
+
+    /// setTerminalGrid(cols > 0): resize the surface (and, through onResize, the pty) to
+    /// an explicit grid and ignore bounds changes until `unpinGrid`.
+    func pinGrid(cols: Int, rows: Int) {
+        pinnedGrid = (cols, rows)
+        lastPixelSize = .zero
+        sizeDidChange(bounds.size)
+    }
+
+    /// setTerminalGrid(0, 0): size from bounds again and always report the resulting grid.
+    func unpinGrid() {
+        pinnedGrid = nil
+        lastPixelSize = .zero
+        lastReportedGrid = (0, 0)
+        sizeDidChange(bounds.size)
     }
 
     private func reportGridResizeIfNeeded() {

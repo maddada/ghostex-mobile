@@ -33,7 +33,24 @@ class GhostexTerminalEntry(
   /** Set once a terminal-state terminal event of `closed` or `failed` has been emitted. */
   @Volatile
   var lifecycleEnded = false
+
+  /**
+   * Grid pinned by setTerminalGrid (a hidden zmx client resting wide); null while the
+   * attached view sizes the session from its own layout. Main thread only.
+   */
+  @Volatile
+  var explicitGrid: TerminalGrid? = null
+
+  /** Cell metrics of the last view-driven resize, reused for explicit grids with no view attached. */
+  @Volatile
+  var cellWidthPx: Int = 12
+
+  @Volatile
+  var cellHeightPx: Int = 24
 }
+
+/** Terminal grid in cells. */
+data class TerminalGrid(val columns: Int, val rows: Int)
 
 /**
  * sessionKey → entry map plus the mounted-view index that keeps the two in sync.

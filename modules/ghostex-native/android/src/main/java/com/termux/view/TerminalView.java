@@ -61,6 +61,9 @@ public final class TerminalView extends View {
 
     private Handler mTerminalCursorBlinkerHandler;
     private TerminalCursorBlinkerRunnable mTerminalCursorBlinkerRunnable;
+
+    /** Ghostex: see {@link #setViewDrivenResizeSuppressed(boolean)}. */
+    private boolean mViewDrivenResizeSuppressed;
     private int mTerminalCursorBlinkerRate;
     private boolean mCursorInvisibleIgnoreOnce;
     public static final int TERMINAL_CURSOR_BLINK_RATE_MIN = 100;
@@ -1011,19 +1014,40 @@ public final class TerminalView extends View {
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
 
+        // Ghostex: while the session is pinned to an explicit grid (a hidden zmx client resting
+        // wide, see GhostexNativeModule.setTerminalGrid) a layout or font pass must not push the
+        // view's own geometry back onto the session. The view still adopts the session's emulator
+        // so it keeps rendering; the module resizes it back to view metrics when the pin lifts.
+        if (mViewDrivenResizeSuppressed && mTermSession.getEmulator() != null) {
+            if (mEmulator != mTermSession.getEmulator()) adoptSessionEmulator();
+            return;
+        }
+
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(), mRenderer.getFontLineSpacing());
-            mEmulator = mTermSession.getEmulator();
-            mClient.onEmulatorSet();
-
-            // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
-            if (mTerminalCursorBlinkerRunnable != null)
-                mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
-
-            mTopRow = 0;
-            scrollTo(0, 0);
-            invalidate();
+            adoptSessionEmulator();
         }
+    }
+
+    /**
+     * Ghostex: pin/unpin the session grid. While suppressed, {@link #updateSize()} never calls
+     * {@link TerminalSession#updateSize(int, int, int, int)}; the module owns the grid.
+     */
+    public void setViewDrivenResizeSuppressed(boolean suppressed) {
+        mViewDrivenResizeSuppressed = suppressed;
+    }
+
+    private void adoptSessionEmulator() {
+        mEmulator = mTermSession.getEmulator();
+        mClient.onEmulatorSet();
+
+        // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
+        if (mTerminalCursorBlinkerRunnable != null)
+            mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
+
+        mTopRow = 0;
+        scrollTo(0, 0);
+        invalidate();
     }
 
     @Override

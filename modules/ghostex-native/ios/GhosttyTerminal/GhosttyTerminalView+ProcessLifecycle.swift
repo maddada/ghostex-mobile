@@ -36,10 +36,10 @@ extension GhosttyTerminalView {
         configureIOSurfaceLayers(size: bounds.size)
 
         let scale = self.contentScaleFactor
-        let pixelWidth = floor(bounds.width * scale)
-        let pixelHeight = floor(bounds.height * scale)
-        guard pixelWidth > 0 && pixelHeight > 0 else { return }
-        lastPixelSize = CGSize(width: pixelWidth, height: pixelHeight)
+        guard let pixelSize = surfacePixelSize(forBounds: bounds.size, scale: scale) else { return }
+        let pixelWidth = pixelSize.width
+        let pixelHeight = pixelSize.height
+        lastPixelSize = pixelSize
         lastContentScale = scale
         ghostty_surface_set_content_scale(surface, scale, scale)
         ghostty_surface_set_size(surface, UInt32(pixelWidth), UInt32(pixelHeight))

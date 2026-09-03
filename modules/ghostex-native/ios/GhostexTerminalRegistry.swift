@@ -59,6 +59,8 @@ final class TerminalSessionEntry {
 
     var view: GhosttyTerminalView?
     var shellId: UUID?
+    /// Grid pinned by setTerminalGrid; nil while the view sizes the surface itself.
+    var explicitGrid: (cols: Int, rows: Int)?
     var fontSize: Double
     var pumpTask: Task<Void, Never>?
     weak var hostView: GhostexTerminalHostView?

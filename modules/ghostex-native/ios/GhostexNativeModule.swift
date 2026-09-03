@@ -30,6 +30,8 @@ struct SshConfigRecord: Record {
     /// tailcat peer token. When non-empty the connection dials a tailcat loopback
     /// forward instead of host:port; host-key identity still uses host:port.
     @Field var tailcatToken: String = ""
+    /// `none` authenticates with the SSH "none" method only (Tailscale SSH); else `credentials`.
+    @Field var authMethod: String = "credentials"
 }
 
 struct OpenTerminalOptionsRecord: Record {
@@ -74,6 +76,7 @@ public class GhostexNativeModule: Module {
             "onTerminalBell",
             "onFontSizeChange",
             "onKeyModifiersConsumed",
+            "onTerminalGridChange",
             "onConnectionState"
         )
 
@@ -83,7 +86,8 @@ public class GhostexNativeModule: Module {
             let credentials = SSHCredentials(
                 password: config.password,
                 privateKey: config.privateKey,
-                passphrase: config.passphrase
+                passphrase: config.passphrase,
+                noneAuthOnly: config.authMethod == "none"
             )
             let connectionConfig = SSHConnectionConfig(
                 machineId: machineId,
@@ -152,6 +156,23 @@ public class GhostexNativeModule: Module {
         // rendezvous; only throwaway callers (Test Connection) stop theirs explicitly.
         AsyncFunction("stopTailcatForward") { (machineId: String) in
             TailcatbridgeStopForward(machineId)
+        }
+
+        // Easy Connect pairing reaches the computer's gxserver API port through the
+        // tunnel before any SSH machine exists, so it needs the forward on its own.
+        // The rendezvous blocks for seconds on a cold start; keep it off the main thread.
+        AsyncFunction("startTailcatForward") { (forwardId: String, address: String, remotePort: Int) async throws -> [String: Any] in
+            var localPort = 0
+            var bridgeError: NSError?
+            let started = TailcatbridgeStartForward(forwardId, address, remotePort, &localPort, &bridgeError)
+            guard started, localPort > 0 else {
+                let detail = bridgeError?.localizedDescription ?? "the bridge returned no local port"
+                throw GhostexException(
+                    code: .unreachable,
+                    reason: "Could not reach the computer through Easy Connect. (\(detail))"
+                )
+            }
+            return ["localPort": localPort]
         }
 
         AsyncFunction("isTailscaleConnected") { () -> Bool in
@@ -316,11 +337,18 @@ public class GhostexNativeModule: Module {
                         effectiveFontSize: overrides.resolvedFontSize()
                     )
                 }
-                view.onResize = { [weak entry] cols, rows in
+                view.onResize = { [weak self, weak entry] cols, rows in
                     guard let entry, let shellId = entry.shellId else { return }
                     let connection = entry.connection
                     Task {
                         try? await connection.resize(cols: cols, rows: rows, for: shellId)
+                    }
+                    if entry.explicitGrid == nil {
+                        self?.sendEvent("onTerminalGridChange", [
+                            "sessionKey": entry.sessionKey,
+                            "cols": cols,
+                            "rows": rows,
+                        ])
                     }
                 }
 
@@ -426,6 +454,23 @@ public class GhostexNativeModule: Module {
             }
         }
 
+        // Bytes straight to the SSH channel: no bracketed-paste wrapping, no key
+        // translation. The zmx display announcements (ZMX_VISIBLE / ZMX_HIDDEN)
+        // must arrive verbatim on the attach client's stdin.
+        AsyncFunction("sendRawInput") { (sessionKey: String, text: String) async throws in
+            try await MainActor.run {
+                guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
+                      let shellId = entry.shellId else {
+                    throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
+                }
+                let connection = entry.connection
+                let data = Data(text.utf8)
+                Task {
+                    try? await connection.write(data, to: shellId)
+                }
+            }
+        }
+
         AsyncFunction("sendKey") { (sessionKey: String, key: String, mods: KeyModifiersRecord?) async throws in
             try await MainActor.run {
                 guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
@@ -505,6 +550,33 @@ public class GhostexNativeModule: Module {
                 let clamped = TerminalDefaults.clampedFontSize(size)
                 entry.fontSize = clamped
                 view.applyPresentationOverrides(TerminalPresentationOverrides(fontSize: clamped))
+            }
+        }
+
+        AsyncFunction("getTerminalGrid") { (sessionKey: String) async throws -> [String: Any]? in
+            try await MainActor.run {
+                guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
+                      let view = entry.view else {
+                    throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
+                }
+                guard let size = view.terminalSize(), size.columns > 0, size.rows > 0 else { return nil }
+                return ["cols": Int(size.columns), "rows": Int(size.rows)]
+            }
+        }
+
+        AsyncFunction("setTerminalGrid") { (sessionKey: String, cols: Int, rows: Int) async throws in
+            try await MainActor.run {
+                guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
+                      let view = entry.view else {
+                    throw GhostexException(code: .notConnected, reason: "No terminal for session \(sessionKey)")
+                }
+                if cols <= 0 || rows <= 0 {
+                    entry.explicitGrid = nil
+                    view.unpinGrid()
+                } else {
+                    entry.explicitGrid = (cols, rows)
+                    view.pinGrid(cols: cols, rows: rows)
+                }
             }
         }
 

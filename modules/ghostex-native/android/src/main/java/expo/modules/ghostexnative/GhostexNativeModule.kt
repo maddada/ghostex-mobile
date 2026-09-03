@@ -110,6 +110,7 @@ class GhostexNativeModule : Module() {
       "onFontSizeChange",
       "onKeyModifiersConsumed",
       "onVisibleWindowFrameChange",
+      "onTerminalGridChange",
       "onConnectionState"
     )
 
@@ -150,6 +151,26 @@ class GhostexNativeModule : Module() {
       backgroundExecutor.execute {
         Tailcatbridge.stopForward(machineId)
         promise.resolve(null)
+      }
+    }
+
+    // Easy Connect pairing reaches the computer's gxserver API port through the tunnel
+    // before any SSH machine exists, so it needs the forward on its own. The rendezvous
+    // blocks for seconds on a cold start; it runs on the background executor.
+    AsyncFunction("startTailcatForward") { forwardId: String, address: String, remotePort: Int, promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          val localPort = Tailcatbridge.startForward(forwardId, address, remotePort.toLong()).toInt()
+          promise.resolve(mapOf("localPort" to localPort))
+        } catch (error: Exception) {
+          promise.reject(
+            GhostexException(
+              GhostexErrorCode.UNREACHABLE,
+              "Could not reach the computer through Easy Connect. (${error.message ?: error.javaClass.simpleName})",
+              error
+            )
+          )
+        }
       }
     }
 
@@ -254,6 +275,16 @@ class GhostexNativeModule : Module() {
       promise.resolve(null)
     }
 
+    // Same raw byte write as sendText on this platform; the separate name exists because the
+    // iOS sendText goes through Ghostty's paste path (bracketed-paste wrapping) and the zmx
+    // display announcements must reach the attach client's stdin verbatim.
+    AsyncFunction("sendRawInput") { sessionKey: String, text: String, promise: Promise ->
+      val session = runningSession(sessionKey, promise) ?: return@AsyncFunction
+      val bytes = text.toByteArray(Charsets.UTF_8)
+      session.write(bytes, 0, bytes.size)
+      promise.resolve(null)
+    }
+
     AsyncFunction("sendKey") { sessionKey: String, key: String, mods: KeyModifiersRecord?, promise: Promise ->
       val session = runningSession(sessionKey, promise) ?: return@AsyncFunction
       terminalRegistry.get(sessionKey)?.attachedView?.consumeKeyModifiersForAccessoryKey()
@@ -300,6 +331,42 @@ class GhostexNativeModule : Module() {
       entry.fontSizeDp = clamped
       mainHandler.post { entry.attachedView?.applyFontSize(clamped) }
       promise.resolve(null)
+    }
+
+    AsyncFunction("getTerminalGrid") { sessionKey: String, promise: Promise ->
+      val entry = terminalRegistry.get(sessionKey)
+      if (entry == null) {
+        promise.reject(noTerminalException(sessionKey))
+        return@AsyncFunction
+      }
+      mainHandler.post {
+        val emulator = entry.session?.emulator
+        promise.resolve(
+          if (emulator == null) null else mapOf("cols" to emulator.mColumns, "rows" to emulator.mRows)
+        )
+      }
+    }
+
+    // cols/rows > 0 pins the emulator and the SSH pty to that grid and blocks the attached
+    // view's layout-driven resizes; 0 hands sizing back to the view (which then reports the
+    // grid it settled on through onTerminalGridChange).
+    AsyncFunction("setTerminalGrid") { sessionKey: String, cols: Int, rows: Int, promise: Promise ->
+      val entry = terminalRegistry.get(sessionKey)
+      if (entry == null) {
+        promise.reject(noTerminalException(sessionKey))
+        return@AsyncFunction
+      }
+      mainHandler.post {
+        if (cols <= 0 || rows <= 0) {
+          entry.explicitGrid = null
+          entry.attachedView?.resumeViewDrivenSizing()
+        } else {
+          entry.explicitGrid = TerminalGrid(cols, rows)
+          entry.attachedView?.suspendViewDrivenSizing()
+          entry.session?.updateSize(cols, rows, entry.cellWidthPx, entry.cellHeightPx)
+        }
+        promise.resolve(null)
+      }
     }
 
     AsyncFunction("scrollToBottom") { sessionKey: String, promise: Promise ->
@@ -744,6 +811,10 @@ class GhostexNativeModule : Module() {
 
   internal fun emitKeyModifiersConsumed(sessionKey: String) {
     sendEvent("onKeyModifiersConsumed", mapOf("sessionKey" to sessionKey))
+  }
+
+  internal fun emitTerminalGridChange(sessionKey: String, cols: Int, rows: Int) {
+    sendEvent("onTerminalGridChange", mapOf("sessionKey" to sessionKey, "cols" to cols, "rows" to rows))
   }
 
   // endregion

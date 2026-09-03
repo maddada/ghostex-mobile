@@ -19,6 +19,7 @@ import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
+import { forgetAttach, noteAttachOpened } from './zmxDisplay';
 
 export const MAX_WARM_SESSIONS = 7;
 /**
@@ -347,6 +348,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     closeTab: async (sessionKey) => {
       cancelZmxRefresh(sessionKey);
       zmxRefreshSent.delete(sessionKey);
+      forgetAttach(sessionKey);
       dropWarm(sessionKey);
       removeTab(sessionKey);
       // Chat mode is intentionally NOT cleared here: the persisted last-used
@@ -386,9 +388,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         transport: record.transport,
       };
       patchTab(sessionKey, { state: 'opening', error: undefined });
-      // A fresh attach gets a fresh native viewport refresh.
+      // A fresh attach gets a fresh native viewport refresh and display announcement.
       cancelZmxRefresh(sessionKey);
       zmxRefreshSent.delete(sessionKey);
+      forgetAttach(sessionKey);
       touchWarm(sessionKey);
       try {
         /*
@@ -488,12 +491,18 @@ export function initTerminalEvents(): void {
     if (event.state === 'open' && tab.kind === 'attach' && Platform.OS === 'ios') {
       scheduleZmxRefresh(event.sessionKey);
     }
-    // Auto scroll: newly opened/reattached terminals start at the live bottom.
-    if (event.state === 'open' && useSettingsStore.getState().settings.autoScroll) {
-      void GhostexNative.scrollToBottom(event.sessionKey).catch(() => undefined);
+    // zmx display policy (zmxDisplay.ts): announce visible/hidden once the
+    // attach client can read stdin; closed/failed entries are forgotten.
+    if (event.state === 'open' && tab.kind === 'attach') {
+      noteAttachOpened(event.sessionKey);
     }
     if (event.state === 'closed' || event.state === 'failed') {
       cancelZmxRefresh(event.sessionKey);
+      forgetAttach(event.sessionKey);
+    }
+    // Auto scroll: newly opened/reattached terminals start at the live bottom.
+    if (event.state === 'open' && useSettingsStore.getState().settings.autoScroll) {
+      void GhostexNative.scrollToBottom(event.sessionKey).catch(() => undefined);
     }
   });
 

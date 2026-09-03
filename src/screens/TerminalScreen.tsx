@@ -41,6 +41,7 @@ import { FORK_AGENT_ICONS } from '../sessions/sessionCommands';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
+import { setMountedTerminalSessionKey } from '../terminal/zmxDisplay';
 import { GhostexPalette } from '../theme/palette';
 import {
   AGENT_OVERLAY_NONE,
@@ -129,6 +130,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeTab !== null &&
     (sessionViewModeBySessionKey[activeTab.sessionKey] ?? settings.preferredAgentInterface) === 'chat';
   const chatMachineTarget = chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
+
+  // zmx display policy: the terminal view is on screen for exactly one session
+  // key (or none, in chat view / when another screen is on top).
+  const mountedTerminalSessionKey =
+    activeTab !== null && !chatModeActive && isFocused ? activeTab.sessionKey : null;
+  useEffect(() => {
+    setMountedTerminalSessionKey(mountedTerminalSessionKey);
+  }, [mountedTerminalSessionKey]);
+  useEffect(() => () => setMountedTerminalSessionKey(null), []);
 
   /*
    * Terminal → chat draft transfer counter, per session key. Entering chat
@@ -669,6 +679,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
               visible
               sessionTitle={agentSessionTitle}
               remainingLabel={activeSession.delayedSendRemainingLabel}
+              delayedSendDeadlineAt={activeSession.delayedSendDeadlineAt}
               sendWhenAllProjectSessionsStopActive={activeSession.sendWhenAllProjectSessionsStopActive}
               sendWhenAgentStopsActive={activeSession.sendWhenAgentStopsActive}
               onConfirm={(trigger, delayMs) => void runDelayedSend(trigger, delayMs)}

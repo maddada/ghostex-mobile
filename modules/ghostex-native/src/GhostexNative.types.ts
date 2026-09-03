@@ -16,6 +16,12 @@ export type SshConfig = {
    * caller must pass a stable synthetic host for tailcat machines.
    */
   tailcatToken?: string;
+  /**
+   * `none`: authenticate with the SSH "none" method only (Tailscale SSH, where
+   * the tailnet policy decides). Password and key material are ignored. Absent
+   * or `credentials` uses the password / private key above.
+   */
+  authMethod?: 'credentials' | 'none';
 };
 
 export type ExecResult = {
@@ -157,6 +163,19 @@ export type KeyModifiersConsumedEvent = {
   sessionKey: string;
 };
 
+/** Terminal grid in cells. */
+export type TerminalGrid = {
+  cols: number;
+  rows: number;
+};
+
+/** A view-driven resize settled on a new grid (never fired while a grid is pinned). */
+export type TerminalGridChangeEvent = {
+  sessionKey: string;
+  cols: number;
+  rows: number;
+};
+
 export type VisibleWindowFrameChangeEvent = {
   /** Bottom edge of the unobscured native window, in React Native layout points. */
   bottom: number;
@@ -176,6 +195,7 @@ export type GhostexNativeEvents = {
   onFontSizeChange: (event: FontSizeChangeEvent) => void;
   onKeyModifiersConsumed: (event: KeyModifiersConsumedEvent) => void;
   onVisibleWindowFrameChange: (event: VisibleWindowFrameChangeEvent) => void;
+  onTerminalGridChange: (event: TerminalGridChangeEvent) => void;
   onConnectionState: (event: ConnectionStateEvent) => void;
 };
 

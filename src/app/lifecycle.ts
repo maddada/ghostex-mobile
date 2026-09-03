@@ -3,6 +3,10 @@
  * foreground, re-establish machine connections and reattach any terminal
  * tabs whose native entries died while backgrounded — the user should never
  * have to tap "Reconnect" after simply reopening the app.
+ *
+ * Foreground/background is also what flips attach tabs between the zmx
+ * visible and hidden client states; that policy lives in
+ * `src/terminal/zmxDisplay.ts`, which watches AppState itself.
  */
 
 import { AppState, type AppStateStatus } from 'react-native';

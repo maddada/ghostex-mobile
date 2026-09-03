@@ -94,6 +94,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     entry = candidate
     candidate.attachedView = this
     terminalView.setTextSize(dpToPx(candidate.fontSizeDp))
+    // A pinned grid must survive the attach: attachSession runs a layout-driven updateSize.
+    terminalView.setViewDrivenResizeSuppressed(candidate.explicitGrid != null)
     terminalView.attachSession(session)
     module?.terminalSettings?.let { applyTerminalSettings(it) }
     terminalView.invalidate()
@@ -110,6 +112,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     val current = entry ?: return
     entry = null
     if (current.attachedView === this) current.attachedView = null
+    terminalView.setViewDrivenResizeSuppressed(false)
     // Cancel the blinker runnable so it cannot keep toggling a detached emulator.
     terminalView.setTerminalCursorBlinkerState(false, false)
     terminalView.attachSession(null)
@@ -128,6 +131,31 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
 
   internal fun applyFontSize(sizeDp: Int) {
     terminalView.setTextSize(dpToPx(sizeDp))
+  }
+
+  /** setTerminalGrid(cols > 0): the module owns the grid until [resumeViewDrivenSizing]. */
+  internal fun suspendViewDrivenSizing() {
+    terminalView.setViewDrivenResizeSuppressed(true)
+  }
+
+  /**
+   * setTerminalGrid(0, 0): size the session from the view again and report the grid it
+   * settled on. When the view has no layout yet, the report comes from the layout pass.
+   */
+  internal fun resumeViewDrivenSizing() {
+    terminalView.setViewDrivenResizeSuppressed(false)
+    terminalView.updateSize()
+    if (terminalView.width > 0 && terminalView.height > 0) reportGrid()
+  }
+
+  /** Emit onTerminalGridChange for the session's current (view-driven) grid. */
+  private fun reportGrid() {
+    val current = entry ?: return
+    if (current.explicitGrid != null) return
+    val emulator = current.session?.emulator ?: return
+    current.cellWidthPx = terminalView.mRenderer.fontWidth.toInt().coerceAtLeast(1)
+    current.cellHeightPx = terminalView.mRenderer.fontLineSpacing.coerceAtLeast(1)
+    module?.emitTerminalGridChange(current.sessionKey, emulator.mColumns, emulator.mRows)
   }
 
   internal fun scrollTerminalToBottom() {
@@ -447,6 +475,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     // The blinker only arms once TerminalView has an emulator (see its API contract), so
     // settings applied during attach must be re-applied when the emulator appears.
     module?.terminalSettings?.let { applyTerminalSettings(it) }
+    // Every view-driven resize lands here; JS re-announces ZMX_VISIBLE from it.
+    reportGrid()
   }
 
   override fun logError(tag: String?, message: String?) {

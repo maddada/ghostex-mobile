@@ -88,6 +88,10 @@ class GhosttyTerminalView: UIView {
     var lastContentScale: CGFloat = 0
     var lastReportedGrid: (cols: Int, rows: Int) = (0, 0)
 
+    /// Grid pinned by setTerminalGrid (hidden zmx client resting wide); while set,
+    /// bounds changes do not resize the surface. See GhosttyTerminalView+Sizing.
+    var pinnedGrid: (cols: Int, rows: Int)?
+
     /// Cell size in points, reported by Ghostty (CELL_SIZE action)
     var cellSize: CGSize = .zero
 
