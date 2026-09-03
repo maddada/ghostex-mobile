@@ -11,6 +11,7 @@ import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { DelayedSendTrigger } from '../../commands/ghostexCli';
 import { agentIconTint, resolveAgentIconId } from '../../contract/mobileSummary';
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
+import { formatDeadlineCountdown, remainingMsUntil, useNowTick } from './timerCountdown';
 
 /** Desktop bounds: whole minutes between 1 minute and 24 days. */
 export const DELAYED_SEND_MIN_DELAY_MS = 60_000;
@@ -24,6 +25,12 @@ export type DelayedSendDialogProps = {
   sessionTitle: string;
   /** Countdown label of the armed timer, '' when none is known. */
   remainingLabel: string;
+  /**
+   * Absolute deadline of the armed timer, '' when none. Prefills the duration
+   * fields from the time left (desktop parity) and keeps the "Enter sends in"
+   * countdown ticking while the dialog is open.
+   */
+  delayedSendDeadlineAt: string;
   sendWhenAllProjectSessionsStopActive: boolean;
   sendWhenAgentStopsActive: boolean;
   onConfirm: (trigger: DelayedSendTrigger, delayMs: number) => void | Promise<void>;
@@ -38,6 +45,16 @@ function parseDurationPart(value: string): number {
   return parsed;
 }
 
+/**
+ * Desktop durationPartsFromMs: whole hours and minutes, rounding an active
+ * remainder up to the next minute so editing an existing timer cannot silently
+ * shorten a sub-minute remainder.
+ */
+function durationPartsFromMs(delayMs: number): { hours: number; minutes: number } {
+  const totalMinutes = Math.max(1, Math.ceil(delayMs / 60_000));
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
+}
+
 export default function DelayedSendDialog({
   agentIcon,
   agentName,
@@ -45,6 +62,7 @@ export default function DelayedSendDialog({
   visible,
   sessionTitle,
   remainingLabel,
+  delayedSendDeadlineAt,
   sendWhenAllProjectSessionsStopActive,
   sendWhenAgentStopsActive,
   onConfirm,
@@ -60,8 +78,10 @@ export default function DelayedSendDialog({
 
   useEffect(() => {
     if (visible) {
-      setHours('0');
-      setMinutes('5');
+      const remainingMs = remainingMsUntil(delayedSendDeadlineAt, Date.now());
+      const duration = remainingMs > 0 ? durationPartsFromMs(remainingMs) : undefined;
+      setHours(String(duration?.hours ?? 0));
+      setMinutes(String(duration?.minutes ?? 5));
       setSendEnterEnabled(true);
       setCloseAfterDoneEnabled(closeAfterDoneActive);
       setTrigger(
@@ -72,7 +92,19 @@ export default function DelayedSendDialog({
             : 'afterDelay',
       );
     }
-  }, [closeAfterDoneActive, sendWhenAgentStopsActive, sendWhenAllProjectSessionsStopActive, visible]);
+  }, [
+    closeAfterDoneActive,
+    delayedSendDeadlineAt,
+    sendWhenAgentStopsActive,
+    sendWhenAllProjectSessionsStopActive,
+    visible,
+  ]);
+
+  // The daemon's label is a snapshot from the last poll; tick the countdown from
+  // the phone clock while a deadline is known, like the desktop sidebar row.
+  const nowMs = useNowTick(visible && delayedSendDeadlineAt.length > 0);
+  const liveCountdown = formatDeadlineCountdown(delayedSendDeadlineAt, nowMs);
+  const liveRemainingLabel = liveCountdown.length > 0 ? liveCountdown : remainingLabel;
 
   const delayMs = parseDurationPart(hours) * 3_600_000 + parseDurationPart(minutes) * 60_000;
   const isValidDelay =
@@ -128,8 +160,8 @@ export default function DelayedSendDialog({
                         ? 'Active when all agents finish working.'
                         : sendWhenAgentStopsActive
                           ? 'Active when this agent finishes working.'
-                          : remainingLabel.length > 0
-                            ? `Active. Enter sends in ${remainingLabel}.`
+                          : liveRemainingLabel.length > 0
+                            ? `Active. Enter sends in ${liveRemainingLabel}.`
                             : 'Press Enter later using the selected trigger.'}
                   </Text>
                 </View>

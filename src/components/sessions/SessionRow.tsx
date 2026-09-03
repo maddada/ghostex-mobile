@@ -40,19 +40,36 @@ import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
 import { ClockGlyph } from './icons';
+import { delayedSendCountdownLabel, useNowTick } from './timerCountdown';
 
 const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
 const INACTIVE_SURFACED_DARKEN_PERCENT = 40;
 
 /**
  * Desktop timer-label precedence (session-card-content.tsx
- * getSessionCardTimerTrailingLabel): a live Delayed Send countdown wins, then
- * an armed Close After Done shows the constant 03:00 label. The mobile summary
- * carries only the live remaining label and the armed flag.
+ * getSessionCardTimerTrailingLabel): a live Delayed Send countdown wins (ticked
+ * from the phone clock when gxserver published the deadline, and never the
+ * "Waiting for agent(s)" prose, which stays on the clock icon), then an armed
+ * Close After Done shows the constant 03:00 label.
  */
-function timerTrailingLabel(session: GhostexSession): string {
-  if (session.delayedSendRemainingLabel.length > 0) return session.delayedSendRemainingLabel;
+function timerTrailingLabel(session: GhostexSession, nowMs: number): string {
+  const delayedSend = delayedSendCountdownLabel(session, nowMs);
+  if (delayedSend.length > 0) return delayedSend;
+  if (hasActiveDelayedSend(session)) return '';
   return session.closeAfterDone ? '03:00' : '';
+}
+
+/**
+ * Desktop SessionFloatingAgentIcon: the deadline alone is enough to show the
+ * yellow clock, so a missing countdown label cannot hide an active timer.
+ */
+function hasActiveDelayedSend(session: GhostexSession): boolean {
+  return (
+    session.delayedSendRemainingLabel.length > 0 ||
+    session.delayedSendDeadlineAt.length > 0 ||
+    session.sendWhenAgentStopsActive ||
+    session.sendWhenAllProjectSessionsStopActive
+  );
 }
 
 /** Compact desktop-style relative time: 32s / 5m / 3h / 2d (relative-time.ts). */
@@ -149,7 +166,8 @@ export default function SessionRow({
   const sleeping = status === 'sleep' || status === 'sleeping';
   const working = status === 'working';
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
-  const timerLabel = timerTrailingLabel(session);
+  const nowMs = useNowTick(session.delayedSendDeadlineAt.length > 0);
+  const timerLabel = timerTrailingLabel(session, nowMs);
   const dotColor = working ? null : referenceDotColor(status);
   // The time yields the trailing slot to a timer countdown or status indicator.
   const lastActive =
@@ -163,12 +181,11 @@ export default function SessionRow({
   const tag = effectiveSessionTag(session);
   const TagIcon = tag === undefined ? undefined : sessionTagIcon(tag);
   const tagColor = tag === undefined ? null : sessionTagColor(tag);
-  const timerClockColor =
-    session.delayedSendRemainingLabel.length > 0
-      ? SidebarPalette.DELAYED_SEND_CLOCK
-      : session.closeAfterDone
-        ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
-        : null;
+  const timerClockColor = hasActiveDelayedSend(session)
+    ? SidebarPalette.DELAYED_SEND_CLOCK
+    : session.closeAfterDone
+      ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
+      : null;
   const iconLeft = inCard ? ds(5) : ds(26);
   const lightSurfacedBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
   const surfacedBackground = active

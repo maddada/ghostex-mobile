@@ -253,6 +253,13 @@ export type GhostexSession = {
   /** Live Delayed Send countdown label ('' when no timer / emitter predates it). */
   delayedSendRemainingLabel: string;
   /**
+   * Absolute RFC 3339 deadline of an armed Delayed Send ('' when none, when the
+   * send-when-finished trigger is still waiting for its agents, or when the
+   * emitter predates it). The row ticks its countdown from this between polls,
+   * exactly like the desktop sidebar does; the label above is only a snapshot.
+   */
+  delayedSendDeadlineAt: string;
+  /**
    * How many prompts are held in this session's Ghostex prompt queue
    * (plan 016), `failed` rows included: a queue stalled behind a failed row is
    * exactly the state that needs the user, so hiding it would make a dead queue
@@ -813,6 +820,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     isPinned: boolValue(value, 'isPinned', false),
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
+    delayedSendDeadlineAt: trimmedValue(value, 'delayedSendDeadlineAt'),
     queuedPromptCount:
       typeof value.queuedPromptCount === 'number' && Number.isFinite(value.queuedPromptCount)
         ? Math.max(0, Math.floor(value.queuedPromptCount))
