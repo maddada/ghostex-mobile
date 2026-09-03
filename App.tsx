@@ -28,6 +28,7 @@ import { useSettingsStore } from './src/settings/store';
 import { initTerminalKeepAwake } from './src/terminal/keepAwake';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { initZmxDisplayPolicy } from './src/terminal/zmxDisplay';
+import { initAndroidSelfUpdate } from './src/updates/androidSelfUpdateStore';
 import { addProjectSourceLabel } from './src/addProject/sources';
 import { GhostexPalette } from './src/theme/palette';
 import ExtraKeysEditorScreen from './src/screens/ExtraKeysEditorScreen';
@@ -86,6 +87,7 @@ export default function App() {
     initAlerts();
     initAutoReconnect();
     initTerminalKeepAwake();
+    initAndroidSelfUpdate();
     void useMachinesStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();
     void useExtraKeysStore.getState().hydrate();

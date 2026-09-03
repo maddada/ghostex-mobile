@@ -14,7 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { CursorStyle } from '../../modules/ghostex-native/src/GhostexNative.types';
 import SteppedSlider from '../components/common/SteppedSlider';
+import { ANDROID_SELF_UPDATE_ENABLED } from '../config/featureFlags';
 import type { RootStackParamList } from '../navigation/types';
+import UpdatesSection from './settings/UpdatesSection';
 import {
   KEEP_ALIVE_INTERVAL_MAX_SEC,
   KEEP_ALIVE_INTERVAL_MIN_SEC,
@@ -261,6 +263,8 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.list}>
         <Text style={styles.statusLine}>{SETTINGS_STATUS_LINE}</Text>
+
+        {ANDROID_SELF_UPDATE_ENABLED ? <UpdatesSection /> : null}
 
         <Text style={styles.sectionHeader}>Theming</Text>
         {renderStepper(

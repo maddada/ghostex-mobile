@@ -91,6 +91,7 @@ import { useInventoryStore } from '../../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
+import { availableUpdate, useAndroidSelfUpdateStore } from '../../updates/androidSelfUpdateStore';
 import {
   attachSshCommand,
   closeSessionAction,
@@ -168,6 +169,12 @@ export function useSessionsScreenMenus({
   setTransientStatus,
 }: SessionsScreenMenusDeps) {
   // Desktop-parity context menus ---------------------------------------------
+
+  // Newer Android release known from the last self-update check; the Settings
+  // menu item carries it as a one-line notice.
+  const availableUpdateVersion = useAndroidSelfUpdateStore(
+    (state) => availableUpdate(state.check)?.version ?? null,
+  );
 
   const summaryFor = (machineId: string) =>
     useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
@@ -1076,7 +1083,10 @@ export function useSessionsScreenMenus({
     items.push({
       kind: 'item',
       key: 'settings',
-      label: 'Settings',
+      label:
+        availableUpdateVersion === null
+          ? 'Settings'
+          : `Settings · Update available: Ghostex ${availableUpdateVersion}`,
       icon: <SettingsGlyph size={14} color={menuIconColor} />,
       onPress: () => {
         setOverlay(NONE);
