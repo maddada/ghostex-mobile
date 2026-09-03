@@ -3,6 +3,9 @@
  * - docs/specs/sessions-drawer.md (§§2,4,5,6)
  * - docs/specs/onboarding.md (§1)
  * Keep these strings exactly as specified; screens must import from here.
+ *
+ * CDXC:Copy 2026-09-03:
+ * User decision: Ghostex-owned user-facing copy in the desktop, web, and mobile apps uses no em dashes; use punctuation that preserves the sentence's natural reading instead.
  */
 
 /**
@@ -418,7 +421,7 @@ export const WebPreviewCopy = {
    * both are named.
    */
   httpsTunnelFailed: (port: number) =>
-    `Could not load https://localhost:${port} — the tunnel carries the connection as-is, so check that the server speaks HTTPS on that port.`,
+    `Could not load https://localhost:${port}. The tunnel carries the connection as-is, so check that the server speaks HTTPS on that port.`,
   forwardedPageFailed: (port: number) => `Could not load localhost:${port} from the computer.`,
   /** A page the preview followed off the computer and onto the open web. */
   externalPageFailed: (url: string) => `Could not load ${url}.`,

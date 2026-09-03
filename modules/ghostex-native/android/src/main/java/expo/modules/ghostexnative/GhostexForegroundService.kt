@@ -148,7 +148,7 @@ class GhostexForegroundService : Service() {
       views.setViewVisibility(rowId, android.view.View.VISIBLE)
       views.setTextViewText(dotId, "●")
       views.setTextColor(dotId, dotColor(row.status))
-      val suffix = if (row.project.isNotEmpty()) " — ${row.project}" else ""
+      val suffix = if (row.project.isNotEmpty()) ": ${row.project}" else ""
       views.setTextViewText(textId, "${row.title}$suffix")
       rowPendingIntent(row, slot)?.let { views.setOnClickPendingIntent(rowId, it) }
     }

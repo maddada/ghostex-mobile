@@ -416,7 +416,7 @@ export default function TerminalKeyBar({
             else if (item.kind === 'text') handleTextActionPress(item);
             else sendItemKeyOnce(item);
           }}
-          onLongPress={() => showPageHint(`${item.label}  —  ${item.description}`)}
+          onLongPress={() => showPageHint(`${item.label}: ${item.description}`)}
         >
           <Text style={styles.pillLabel} numberOfLines={1}>
             {item.label}
