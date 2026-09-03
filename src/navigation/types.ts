@@ -1,11 +1,37 @@
 import type { AddProjectSourceId } from '../addProject/client';
 
+/**
+ * Add/edit machine form params. `tailcatToken` prefills the Easy Connect
+ * address when the scanner read a bare legacy address.
+ */
+export type MachineFormParams = { machineId?: string; tailcatToken?: string } | undefined;
+
 /** Root native-stack route map. */
 export type RootStackParamList = {
+  /** First launch: shown only while no machine is saved. */
   Welcome: undefined;
+  /** "How does your phone reach your computer?": Easy Connect vs Tailscale. */
+  ConnectChoose: undefined;
+  /**
+   * One scanner for both pairing codes. `rePairMachineId` makes an Easy Connect
+   * code replace that machine's address and key instead of adding a machine.
+   */
+  ScanCode: { rePairMachineId?: string } | undefined;
+  /** The Tailscale (plain SSH over the tailnet) form: the manual "type the details" path. */
+  TailscaleForm: MachineFormParams;
+  /** End of setup: names the computer, the user and the live session count. */
+  Connected: { machineId: string };
+  /** The "Can't reach <computer>" checklist screen (registered once a machine exists). */
+  CantReach: { machineId: string };
+  /** Per-OS "turn on SSH access" instructions as a full screen. */
+  SshAccessHelp: { platform?: 'macos' | 'windows' | 'linux' } | undefined;
   Sessions: undefined;
   Machines: undefined;
-  MachineForm: { machineId?: string } | undefined;
+  /**
+   * Add/edit form. `tailcatToken` prefills the Easy Connect address when the
+   * scanner read a bare legacy address (the Advanced "Pairing address" row).
+   */
+  MachineForm: MachineFormParams;
   Terminal: { sessionKey: string; machineId: string; title?: string };
   /** Find Prompts: search every prompt this machine sent to an agent (`gx f`). */
   FindPrompts: { machineId: string };

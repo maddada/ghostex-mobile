@@ -93,11 +93,52 @@ export const SidebarPalette = {
 
 export type GhostexPaletteToken = keyof typeof GhostexPalette;
 
+/**
+ * Setup-flow tokens (Welcome, Choose, Scan, Connected and the machine screens
+ * that follow them), ported from docs/2026-09-03/mobile-setup/shared.css so
+ * the phone matches the desktop Kanban / Automate look: near-black page,
+ * #161616 panels, #1d1d1d cards, hairline borders, one accent used sparingly.
+ * Kept separate from GhostexPalette so screens that were not restyled keep
+ * their exact look.
+ */
+export const SetupPalette = {
+  PAGE: '#0f0f0f',
+  PANEL: '#161616',
+  CARD: '#1d1d1d',
+  CARD_HOVER: '#232323',
+  /** Filled chip / step-number background. */
+  MUTED_BG: '#242424',
+  BORDER: 'rgba(255,255,255,0.08)',
+  BORDER_STRONG: 'rgba(255,255,255,0.14)',
+  FOREGROUND: '#f4f4f5',
+  MUTED: '#a3a3a3',
+  DIM: '#6f6f74',
+  ACCENT: '#86d3f8',
+  /** Accent at 12% / 30%: the recommended card's icon fill and border. */
+  ACCENT_FILL: 'rgba(134,211,248,0.12)',
+  ACCENT_BORDER: 'rgba(134,211,248,0.3)',
+  OK: '#63d17a',
+  WARN: '#ffb454',
+  ERROR: '#ff6b6b',
+  ERROR_BORDER: 'rgba(255,107,107,0.4)',
+  /** Primary button: white fill, near-black label. */
+  PRIMARY_BUTTON: '#f4f4f5',
+  PRIMARY_BUTTON_FOREGROUND: '#111111',
+  /** Bottom-sheet backdrop. */
+  BACKDROP: 'rgba(0,0,0,0.55)',
+  /** Sheet grabber pill. */
+  GRABBER: '#3a3a3a',
+} as const;
+
 /** Radii per spec §0: cards/rows/inputs 8dp; pills/chips fully rounded. */
 export const GhostexRadii = {
   card: 8,
   row: 8,
   input: 8,
+  /** Setup-flow controls (buttons, inputs, small icon tiles). */
+  control: 8,
+  /** Setup-flow sections (cards, row groups, callouts). */
+  section: 12,
   /** "Fully rounded" pill/chip radius. */
   pill: 999,
 } as const;

@@ -1,35 +1,32 @@
 /**
- * Add/Edit machine form: VVTerm add-server structure (onboarding.md §2, §5)
- * merged with the Android password-save semantics (sessions-drawer.md §4).
+ * Machine form, three shapes on one screen (docs/2026-09-03/mobile-setup/
+ * mobile-04-tailscale.html and mobile-08-edit-machine.html):
  *
- * - Server: name, connection type (SSH host / tailcat token), host + port row or
- *   token + port, username (blank → "root" on save).
- * - Authentication: Password / SSH Key / SSH Key + Passphrase, paste-or-generate
- *   key source, Android save-password checkbox wired to credentials.ts.
- * - Connection: optional Test Connection via GhostexNative.connect + disconnect.
- * - Save goes through the machines store (validation + password persistence),
- *   then key credentials are written per machine id. Does NOT auto-connect.
+ * - Add over Tailscale (`TailscaleForm`, the manual "type the details" path):
+ *   two prechecks, a scan shortcut, name / address / username / password,
+ *   Advanced (port, SSH key, Tailscale SSH, host key), Test connection below
+ *   Advanced, and Connect = save + select + Connected.
+ * - Add over Easy Connect with a bare pairing address (`MachineForm` with
+ *   `tailcatToken`, the legacy "paste the address" path from the scanner).
+ * - Edit (`machineId`): name, a Connection block per transport (Easy Connect
+ *   summary + Re-pair, or the Tailscale fields), Show in Sessions, Advanced,
+ *   Test connection, then Remove with a name confirm.
+ *
+ * Sections live in ./machine-form/; this file owns the state and the save.
  */
 
 import { useEffect, useLayoutEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GhostexNative, type SshConfig, type SshKeyType } from '../../modules/ghostex-native/src';
-import TailcatQrScanButton from '../components/machines/TailcatQrScanButton';
-import SegmentedControl, { type SegmentOption } from '../components/onboarding/SegmentedControl';
-import { MachineCopy } from '../copy';
-import { summarizeFailure } from '../inventory/client';
+import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src';
+import { markManualDisconnect } from '../app/autoReconnect';
+import PromptDialog from '../components/common/PromptDialog';
+import { SetupButton, setupText } from '../components/onboarding/SetupPrimitives';
+import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
+import { EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
+import { useInventoryStore } from '../inventory/store';
 import {
   getPassphrase,
   getPublicKey,
@@ -41,50 +38,30 @@ import {
   setSshKey,
 } from '../machines/credentials';
 import {
+  TAILCAT_TOKEN_PREFIX,
+  isMachineEnabled,
   tailcatSyntheticHost,
   useMachinesStore,
-  TAILCAT_TOKEN_PREFIX,
   type MachineInput,
   type MachineTransport,
   type MachineValidationErrors,
 } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
-import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
+import { useSpacesStore } from '../spaces/store';
+import { useWebPreviewStore } from '../webPreview/store';
+import { SetupPalette } from '../theme/palette';
+import AdvancedSection from './machine-form/AdvancedSection';
+import EasyConnectSummary from './machine-form/EasyConnectSummary';
+import PrecheckList from './machine-form/PrecheckList';
+import { formStyles } from './machine-form/styles';
+import TailscaleFields, { NameField, PairingAddressField, FormField } from './machine-form/TailscaleFields';
+import { TEST_MACHINE_ID, type ConnectionTestPlan } from './machine-form/testConnection';
+import TestConnectionButton, { useTestState } from './machine-form/TestConnectionButton';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MachineForm'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'MachineForm' | 'TailscaleForm'>;
 
-type AuthMethod = 'password' | 'key' | 'keyPassphrase';
-
-type TestState =
-  | { kind: 'idle' }
-  | { kind: 'testing' }
-  | { kind: 'success' }
-  | { kind: 'failure'; message: string };
-
-const AUTH_METHOD_OPTIONS: readonly SegmentOption<AuthMethod>[] = [
-  { value: 'password', label: 'Password' },
-  { value: 'key', label: 'SSH Key' },
-  { value: 'keyPassphrase', label: 'SSH Key + Passphrase' },
-];
-
-const TRANSPORT_OPTIONS: readonly SegmentOption<MachineTransport>[] = [
-  { value: 'ssh', label: 'SSH host' },
-  { value: 'tailcat', label: 'Tailcat token' },
-];
-
-const ALGORITHM_OPTIONS: readonly SegmentOption<SshKeyType>[] = [
-  { value: 'ed25519', label: 'Ed25519' },
-  { value: 'rsa4096', label: 'RSA 4096' },
-];
-
-/**
- * Machine id every Test Connection runs under. It is stable on purpose: a fresh id per
- * press would leave one tailcat forward — a whole tunnel stack — behind for each press.
- */
-const TEST_MACHINE_ID = 'machine-form-test';
-
-const SUCCESS_GREEN = '#22C55E';
-const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
+/** "Connected now" on the Easy Connect summary: the machine answered within the last 3 minutes. */
+const CONNECTED_NOW_WINDOW_MS = 3 * 60 * 1000;
 
 function parsePort(value: string): number | null {
   const parsed = Number.parseInt(value.trim(), 10);
@@ -94,76 +71,90 @@ function parsePort(value: string): number | null {
 
 export default function MachineFormScreen({ navigation, route }: Props) {
   const machineId = route.params?.machineId ?? null;
+  const scannedToken = route.params?.tailcatToken;
   const machines = useMachinesStore((state) => state.machines);
   const addMachine = useMachinesStore((state) => state.addMachine);
   const updateMachine = useMachinesStore((state) => state.updateMachine);
-  const existing = machineId === null ? null : machines.find((m) => m.id === machineId) ?? null;
+  const removeMachine = useMachinesStore((state) => state.removeMachine);
+  const setMachineDisabled = useMachinesStore((state) => state.setMachineDisabled);
+  const selectMachine = useMachinesStore((state) => state.selectMachine);
+  const inventory = useInventoryStore((state) =>
+    machineId === null ? undefined : state.inventoriesByMachineId[machineId],
+  );
+  const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
+  const clearMachineSpace = useSpacesStore((state) => state.clearMachine);
+  const webPreviewPort = useWebPreviewStore((state) =>
+    machineId === null ? undefined : state.lastPortByMachine[machineId],
+  );
+  const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
+  const editing = existing !== null;
 
-  // Server section.
+  const [transport, setTransport] = useState<MachineTransport>(
+    existing?.transport ?? (scannedToken !== undefined ? 'tailcat' : 'ssh'),
+  );
+  const easyConnect = transport === 'tailcat';
   const [name, setName] = useState(existing?.name ?? '');
-  const [transport, setTransport] = useState<MachineTransport>(existing?.transport ?? 'ssh');
   // A tailcat machine's stored host is a synthetic identity, never a real one.
-  const [host, setHost] = useState(existing?.transport === 'tailcat' ? '' : (existing?.host ?? ''));
-  const [tailcatToken, setTailcatToken] = useState('');
-  const [port, setPort] = useState(existing === null ? '22' : String(existing.port));
+  const [address, setAddress] = useState(existing?.transport === 'tailcat' ? '' : (existing?.host ?? ''));
   const [username, setUsername] = useState(existing?.username ?? '');
-
-  // Authentication section.
-  const [method, setMethod] = useState<AuthMethod>('password');
   const [password, setPassword] = useState('');
-  const [savePassword, setSavePassword] = useState(existing?.savePassword ?? false);
+  const [sshPort, setSshPort] = useState(existing === null ? '22' : String(existing.port));
+  const [tailcatToken, setTailcatToken] = useState(scannedToken ?? '');
+  const [gxserverPort, setGxserverPort] = useState(
+    existing?.gxserverPort === undefined ? '' : String(existing.gxserverPort),
+  );
+  const [tailscaleSsh, setTailscaleSsh] = useState(existing?.tailscaleSsh ?? false);
   const [privateKey, setPrivateKey] = useState('');
-  const [keyPassphrase, setKeyPassphrase] = useState('');
   const [publicKey, setPublicKeyText] = useState<string | null>(null);
-
-  // Inline generate panel.
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [genName, setGenName] = useState('');
-  const [genAlgorithm, setGenAlgorithm] = useState<SshKeyType>('ed25519');
-  const [genPassphrase, setGenPassphrase] = useState('');
-  const [genConfirm, setGenConfirm] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-
-  const [testState, setTestState] = useState<TestState>({ kind: 'idle' });
+  const [keyPassphrase, setKeyPassphrase] = useState('');
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [testState, setTestState, resetTest] = useTestState();
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<MachineValidationErrors | null>(null);
+  const [helpOs, setHelpOs] = useState<SshOs | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  /**
+   * Set once the machine is gone. Navigation waits for the next commit because
+   * App.tsx swaps the navigator's route set when the last machine is removed
+   * (Welcome replaces Sessions/Machines), so a route named during the same
+   * tick as the store update may not exist yet.
+   */
+  const [removed, setRemoved] = useState<'no' | 'someRemain' | 'noneRemain'>('no');
 
-  // Edit mode: infer the auth method from stored key credentials.
+  // The Scan code screen hands a bare pairing address back through this
+  // route's params (merge navigate), so a later scan updates the open form.
+  useEffect(() => {
+    if (scannedToken === undefined || scannedToken.length === 0) return;
+    setTransport('tailcat');
+    setTailcatToken(scannedToken);
+    resetTest();
+    // resetTest is stable for the life of the screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scannedToken]);
+
+  // Edit mode: load the stored key and pairing address.
   useEffect(() => {
     if (machineId === null) return;
     let cancelled = false;
     void (async () => {
-      const [key, passphrase, storedPublicKey, storedToken] = await Promise.all([
+      const [key, storedPublicKey, storedToken, storedPassphrase] = await Promise.all([
         getSshKey(machineId),
-        getPassphrase(machineId),
         getPublicKey(machineId),
         getTailcatToken(machineId),
+        getPassphrase(machineId),
       ]);
       if (cancelled) return;
       if (storedToken !== null && storedToken.length > 0) setTailcatToken(storedToken);
-      if (key !== null && key.length > 0) {
-        setPrivateKey(key);
-        if (passphrase !== null && passphrase.length > 0) {
-          setKeyPassphrase(passphrase);
-          setMethod('keyPassphrase');
-        } else {
-          setMethod('key');
-        }
-      }
-      if (storedPublicKey !== null && storedPublicKey.length > 0) {
-        setPublicKeyText(storedPublicKey);
-      }
+      if (key !== null && key.length > 0) setPrivateKey(key);
+      if (storedPassphrase !== null && storedPassphrase.length > 0) setKeyPassphrase(storedPassphrase);
+      if (storedPublicKey !== null && storedPublicKey.length > 0) setPublicKeyText(storedPublicKey);
     })();
     return () => {
       cancelled = true;
     };
   }, [machineId]);
 
-  /** Any edit to a connection-affecting field invalidates the last test. */
-  const resetTest = (): void => {
-    setTestState((current) => (current.kind === 'idle' ? current : { kind: 'idle' }));
-  };
   const editField =
     <T,>(setter: (value: T) => void) =>
     (value: T): void => {
@@ -171,663 +162,373 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       resetTest();
     };
 
-  const parsedPort = parsePort(port);
-  const credentialsValid =
-    method === 'password'
-      ? true // Android semantics: password is optional (SSH keys / Tailscale SSH).
-      : method === 'key'
-        ? privateKey.trim().length > 0
-        : privateKey.trim().length > 0 && keyPassphrase.length > 0;
+  const parsedPort = parsePort(sshPort);
   const trimmedToken = tailcatToken.trim();
-  /** The token replaces the host as the thing that makes the machine reachable. */
-  const targetValid =
-    transport === 'tailcat'
-      ? trimmedToken.length > 0 && trimmedToken.startsWith(TAILCAT_TOKEN_PREFIX)
-      : host.trim().length > 0;
-  const canSave = targetValid && parsedPort !== null && credentialsValid;
-  const canTest = targetValid && parsedPort !== null && credentialsValid;
+  const targetValid = easyConnect
+    ? trimmedToken.length > 0 && trimmedToken.startsWith(TAILCAT_TOKEN_PREFIX)
+    : address.trim().length > 0;
+  const canSave = targetValid && username.trim().length > 0 && parsedPort !== null;
+  const computerName = name.trim().length > 0 ? name.trim() : username.trim();
 
-  useEffect(() => {
-    console.log('[GXDBG_ADD_SERVER] validation-v2', {
-      nameLength: name.trim().length,
-      transport,
-      hostLength: host.trim().length,
-      tokenLength: trimmedToken.length,
-      parsedPort,
-      credentialsValid,
-      canTest,
-      canSave,
-      testState: testState.kind,
-    });
-  }, [
-    canSave,
-    canTest,
-    credentialsValid,
-    host,
-    name,
-    parsedPort,
-    testState.kind,
-    trimmedToken,
-    transport,
-  ]);
-
-  const buildTestConfig = async (
-    tempId: string,
-  ): Promise<{ config: SshConfig; hasPassword: boolean }> => {
+  const buildPlan = async (): Promise<ConnectionTestPlan> => {
     // Editing a saved tailcat machine tests against its real pinned identity;
     // an unsaved one gets a throwaway identity so a first-connect host key is
     // never pinned under an id that will not exist after save.
-    const pinnedId = existing !== null && existing.transport === 'tailcat' ? existing.id : tempId;
-    const testHost = transport === 'tailcat' ? tailcatSyntheticHost(pinnedId) : host.trim();
+    const reusesPinnedIdentity = existing !== null && existing.transport === 'tailcat';
+    const pinnedId = reusesPinnedIdentity ? existing.id : TEST_MACHINE_ID;
     const config: SshConfig = {
-      host: testHost,
+      host: easyConnect ? tailcatSyntheticHost(pinnedId) : address.trim(),
       port: parsedPort ?? 22,
-      username: username.trim().length > 0 ? username.trim() : 'root',
+      username: username.trim(),
     };
-    if (transport === 'tailcat') config.tailcatToken = trimmedToken;
-    if (method === 'password') {
+    if (easyConnect) config.tailcatToken = trimmedToken;
+    if (tailscaleSsh) {
+      config.authMethod = 'none';
+    } else {
+      if (privateKey.length > 0) {
+        config.privateKey = privateKey;
+        if (keyPassphrase.length > 0) config.passphrase = keyPassphrase;
+      }
       // A blank field while editing keeps the stored password, so test with it.
       const effective =
-        password.length > 0
-          ? password
-          : existing !== null
-            ? await resolvePassword(existing.id)
-            : null;
+        password.length > 0 ? password : existing !== null ? await resolvePassword(existing.id) : null;
       if (effective !== null && effective.length > 0) config.password = effective;
-    } else {
-      config.privateKey = privateKey.trim();
-      if (method === 'keyPassphrase') config.passphrase = keyPassphrase;
     }
-    return { config, hasPassword: config.password !== undefined };
+    return {
+      config,
+      hasPassword: config.password !== undefined,
+      throwawayPinnedHost: easyConnect && !reusesPinnedIdentity ? tailcatSyntheticHost(TEST_MACHINE_ID) : null,
+      tailcat: easyConnect,
+    };
   };
 
-  const runTest = async (): Promise<void> => {
-    if (!canTest || testState.kind === 'testing') return;
-    setTestState({ kind: 'testing' });
-    const tempId = TEST_MACHINE_ID;
-    // The pinned identity a throwaway test would create, so it can be dropped again
-    // (buildTestConfig only reuses a saved tailcat machine's real identity).
-    const throwawayPinnedHost =
-      transport === 'tailcat' && !(existing !== null && existing.transport === 'tailcat')
-        ? tailcatSyntheticHost(tempId)
-        : null;
+  const generateKey = async (): Promise<void> => {
+    if (generatingKey) return;
+    setGeneratingKey(true);
     try {
-      const { config, hasPassword } = await buildTestConfig(tempId);
-      try {
-        await GhostexNative.connect(tempId, config);
-        await GhostexNative.disconnect(tempId);
-        setTestState({ kind: 'success' });
-      } catch (error) {
-        try {
-          await GhostexNative.disconnect(tempId);
-        } catch {
-          // The test client may never have registered; nothing to clean up.
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        setTestState({ kind: 'failure', message: summarizeFailure(message, hasPassword) });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setTestState({ kind: 'failure', message: summarizeFailure(message, false) });
-    } finally {
-      if (transport === 'tailcat') {
-        // Unlike a saved machine, the test forward must not outlive the test: it owns a
-        // full tunnel stack, and the next press reuses this same id.
-        await GhostexNative.stopTailcatForward(tempId);
-      }
-      if (throwawayPinnedHost !== null) {
-        // Drop the host key this test pinned under the shared test identity, so testing a
-        // different machine next cannot be rejected as a host-key mismatch.
-        await GhostexNative.resetHostKey(throwawayPinnedHost, parsedPort ?? 22);
-      }
-    }
-  };
-
-  const runGenerate = async (): Promise<void> => {
-    if (generating) return;
-    if (genPassphrase !== genConfirm) {
-      setGenError('Passphrases do not match.');
-      return;
-    }
-    setGenError(null);
-    setGenerating(true);
-    try {
-      const comment = genName.trim().replace(/\s+/g, '_');
-      const generated = await GhostexNative.generateSshKey(
-        genAlgorithm,
-        comment,
-        genPassphrase.length > 0 ? genPassphrase : undefined,
-      );
+      const generated = await GhostexNative.generateSshKey('ed25519', 'ghostex-phone');
       setPrivateKey(generated.privateKey);
       setPublicKeyText(generated.publicKey);
-      if (genPassphrase.length > 0) {
-        // An encrypted key needs its passphrase to connect.
-        setKeyPassphrase(genPassphrase);
-        setMethod('keyPassphrase');
-      }
       resetTest();
-    } catch (error) {
-      setGenError(error instanceof Error ? error.message : String(error));
     } finally {
-      setGenerating(false);
+      setGeneratingKey(false);
     }
   };
+
+  // Only a saved machine has a pinned identity to reset; an Easy Connect
+  // machine's identity is its synthetic host, a Tailscale one is the address.
+  const resetHostKey =
+    existing === null
+      ? null
+      : easyConnect
+        ? () => GhostexNative.resetHostKey(existing.host, existing.port)
+        : () => GhostexNative.resetHostKey(address.trim(), parsedPort ?? existing.port);
 
   const save = async (): Promise<void> => {
     if (!canSave || saving) return;
     setSaving(true);
     setErrors(null);
+    // A saved password is never wiped by turning on Tailscale SSH or adding a
+    // key: the flag decides what is sent, the record keeps what the user typed.
     const input: MachineInput = {
       name: name.trim(),
-      host: host.trim(),
-      username: username.trim().length > 0 ? username.trim() : 'root',
-      port,
-      savePassword: method === 'password' ? savePassword : false,
-      password: method === 'password' ? password : '',
+      host: address.trim(),
+      username: username.trim(),
+      port: sshPort,
+      savePassword: password.length > 0 || (existing?.savePassword ?? false),
+      password,
       transport,
-      tailcatToken: transport === 'tailcat' ? trimmedToken : '',
+      tailcatToken: easyConnect ? trimmedToken : '',
+      tailscaleSsh,
     };
-    const result =
-      existing === null ? await addMachine(input) : await updateMachine(existing.id, input);
+    const parsedGxserverPort = parsePort(gxserverPort);
+    if (easyConnect && parsedGxserverPort !== null) input.gxserverPort = parsedGxserverPort;
+    const result = existing === null ? await addMachine(input) : await updateMachine(existing.id, input);
     if (!result.ok) {
       setErrors(result.errors);
       setSaving(false);
       return;
     }
     const id = result.machine.id;
-    if (method === 'password') {
-      // Switching to password auth clears any previously stored key material.
-      await Promise.all([setSshKey(id, ''), setPassphrase(id, ''), setPublicKey(id, '')]);
-    } else {
-      await Promise.all([
-        setSshKey(id, privateKey.trim()),
-        setPassphrase(id, method === 'keyPassphrase' ? keyPassphrase : ''),
-        setPublicKey(id, publicKey ?? ''),
-      ]);
+    // The passphrase state was seeded from the store, so an untouched one is written back unchanged.
+    await Promise.all([
+      setSshKey(id, privateKey),
+      setPassphrase(id, privateKey.length > 0 ? keyPassphrase : ''),
+      setPublicKey(id, publicKey ?? ''),
+    ]);
+    if (existing === null) {
+      selectMachine(id);
+      navigation.navigate('Connected', { machineId: id });
+      return;
     }
     navigation.goBack();
   };
 
+  const remove = async (typedName: string): Promise<void> => {
+    if (existing === null) return;
+    const expected = existing.name.length > 0 ? existing.name : existing.username;
+    if (typedName.trim() !== expected) {
+      setRemoveError(EditMachineCopy.remove.mismatch);
+      return;
+    }
+    setRemoveOpen(false);
+    clearMachineInventory(existing.id);
+    clearMachineSpace(existing.id);
+    try {
+      markManualDisconnect(existing.id);
+      await GhostexNative.disconnect(existing.id);
+    } catch {
+      // Not connected is fine.
+    }
+    await removeMachine(existing.id);
+    setRemoved(useMachinesStore.getState().machines.length === 0 ? 'noneRemain' : 'someRemain');
+  };
+
+  useEffect(() => {
+    if (removed === 'no') return;
+    if (removed === 'noneRemain') {
+      // The same reset pattern ConnectedScreen uses for "Open sessions".
+      navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+      return;
+    }
+    // Back to wherever the edit was opened from: the Machines list or Sessions.
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.reset({ index: 0, routes: [{ name: 'Sessions' }] });
+  }, [navigation, removed]);
+
   useLayoutEffect(() => {
+    if (removed !== 'no') return;
+    if (!editing) {
+      navigation.setOptions({ title: easyConnect ? MachineCopy.editor.addTitle : TailscaleFormCopy.navTitle });
+      return;
+    }
     navigation.setOptions({
-      title: existing === null ? 'Add Server' : MachineCopy.editor.editTitle,
-      headerLeft: () => (
-        <Pressable accessibilityRole="button" disabled={saving} onPress={() => navigation.goBack()}>
-          <Text style={headerStyles.cancel}>Cancel</Text>
+      title: existing.name.length > 0 ? existing.name : MachineCopy.editor.editTitle,
+      headerRight: () => (
+        <Pressable accessibilityRole="button" disabled={!canSave || saving} onPress={() => void save()}>
+          <Text style={[setupText.accent, styles.headerAction, !canSave || saving ? setupText.dim : null]}>
+            {EditMachineCopy.save}
+          </Text>
         </Pressable>
       ),
-      headerRight: () =>
-        saving || testState.kind === 'testing' ? (
-          <ActivityIndicator size="small" color={GhostexPalette.ACCENT} />
-        ) : (
-          <Pressable accessibilityRole="button" disabled={!canSave} onPress={() => void save()}>
-            <Text style={[headerStyles.action, !canSave && headerStyles.actionDisabled]}>
-              {existing === null ? 'Add' : 'Save'}
-            </Text>
-          </Pressable>
-        ),
     });
   });
 
-  const testDisabled = !canTest || testState.kind === 'testing';
+  const connectedNow =
+    existing !== null &&
+    inventory?.lastError === null &&
+    inventory.summary !== null &&
+    existing.lastConnectedAt !== null &&
+    Date.now() - new Date(existing.lastConnectedAt).getTime() < CONNECTED_NOW_WINDOW_MS;
+
+  const advanced = (
+    <AdvancedSection
+      transport={transport}
+      editing={editing}
+      sshPort={sshPort}
+      onSshPortChange={editField(setSshPort)}
+      sshPortError={errors?.port}
+      publicKey={publicKey}
+      keyPassphrase={keyPassphrase}
+      onKeyPassphraseChange={editField(setKeyPassphrase)}
+      onGenerateKey={() => void generateKey()}
+      generatingKey={generatingKey}
+      tailscaleSsh={tailscaleSsh}
+      onTailscaleSshChange={editField(setTailscaleSsh)}
+      onResetHostKey={resetHostKey}
+      pairingAddress={easyConnect ? trimmedToken : null}
+      gxserverPort={gxserverPort}
+      onGxserverPortChange={setGxserverPort}
+      webPreviewPorts={webPreviewPort === undefined ? null : String(webPreviewPort)}
+    />
+  );
+
+  const test = (
+    <TestConnectionButton
+      disabled={!canSave || saving}
+      buildPlan={buildPlan}
+      computerName={computerName}
+      username={username.trim()}
+      state={testState}
+      onStateChange={setTestState}
+    />
+  );
+
+  const showInSessionsRow =
+    existing === null ? null : (
+      <View style={[formStyles.row, easyConnect ? null : formStyles.rowFirst]}>
+        <View style={formStyles.rowMain}>
+          <Text style={formStyles.rowLabel}>{EditMachineCopy.showInSessions}</Text>
+          <Text style={formStyles.rowDetail}>{EditMachineCopy.showInSessionsDetail}</Text>
+        </View>
+        <Switch
+          value={isMachineEnabled(existing)}
+          onValueChange={(shown) => setMachineDisabled(existing.id, !shown)}
+          trackColor={{ false: SetupPalette.MUTED_BG, true: SetupPalette.ACCENT }}
+          thumbColor={SetupPalette.FOREGROUND}
+        />
+      </View>
+    );
+
+  const tailscaleFields = (
+    <TailscaleFields
+      address={address}
+      onAddressChange={editField(setAddress)}
+      addressError={errors?.host ?? errors?.duplicate}
+      username={username}
+      onUsernameChange={editField(setUsername)}
+      usernameError={errors?.username}
+      password={password}
+      onPasswordChange={editField(setPassword)}
+      passwordError={errors?.password}
+      editing={editing}
+      passwordDisabled={tailscaleSsh}
+    />
+  );
+
+  const errorBanner =
+    errors === null ? null : (
+      <View style={formStyles.errorCallout}>
+        <Text style={formStyles.errorCalloutText}>
+          {[errors.tailcatToken, errors.port, errors.duplicate, errors.password].find(
+            (message) => message !== undefined,
+          ) ?? errors.general}
+        </Text>
+      </View>
+    );
+
+  if (removed !== 'no') {
+    // The record is gone; never re-render its values as an add form while leaving.
+    return <SafeAreaView style={formStyles.page} edges={['bottom']} />;
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionHeader}>Server</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="My Server"
-          placeholderTextColor={GhostexPalette.MUTED}
-          value={name}
-          onChangeText={setName}
-        />
-        <SegmentedControl
-          options={TRANSPORT_OPTIONS}
-          value={transport}
-          onChange={editField(setTransport)}
-        />
-        {transport === 'ssh' ? (
-          <View style={styles.hostRow}>
-            <TextInput
-              style={[styles.input, styles.hostInput]}
-              placeholder="203.0.113.10"
-              placeholderTextColor={GhostexPalette.MUTED}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={host}
-              onChangeText={editField(setHost)}
-            />
-            <TextInput
-              style={[styles.input, styles.portInput]}
-              placeholder="22"
-              placeholderTextColor={GhostexPalette.MUTED}
-              keyboardType="number-pad"
-              value={port}
-              onChangeText={editField(setPort)}
-            />
-          </View>
-        ) : (
+    <SafeAreaView style={formStyles.page} edges={['bottom']}>
+      <ScrollView contentContainerStyle={formStyles.scroll} keyboardShouldPersistTaps="handled">
+        {existing !== null ? (
           <>
-            <View style={styles.tokenRow}>
-              <TextInput
-                style={[styles.input, styles.tokenInput, styles.tokenInputField]}
-                placeholder="Paste the tailcat pairing token (tc…)"
-                placeholderTextColor={GhostexPalette.MUTED}
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                value={tailcatToken}
-                onChangeText={editField(setTailcatToken)}
-              />
-              <TailcatQrScanButton onToken={editField(setTailcatToken)} />
-            </View>
-            <Text style={styles.footerText}>
-              Scan the pairing QR code from Settings → Remote → Tailcat on the machine, or paste the
-              token. The token reaches the machine on its own, so no host address and no VPN are
-              needed on this phone. Tokens are case-sensitive and start with {'"tc"'}.
-            </Text>
-            <View style={styles.hostRow}>
-              <TextInput
-                style={[styles.input, styles.portInput]}
-                placeholder="22"
-                placeholderTextColor={GhostexPalette.MUTED}
-                keyboardType="number-pad"
-                value={port}
-                onChangeText={editField(setPort)}
-              />
-              <Text style={styles.portHint}>
-                {"SSH port on the machine itself (usually 22), not a tunnel port."}
-              </Text>
-            </View>
-          </>
-        )}
-        <TextInput
-          style={styles.input}
-          placeholder="root"
-          placeholderTextColor={GhostexPalette.MUTED}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={username}
-          onChangeText={editField(setUsername)}
-        />
-
-        <Text style={styles.sectionHeader}>Authentication</Text>
-        <SegmentedControl
-          options={AUTH_METHOD_OPTIONS}
-          value={method}
-          onChange={editField(setMethod)}
-        />
-
-        {method === 'password' ? (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder={
-                existing === null
-                  ? MachineCopy.editor.passwordHintNew
-                  : MachineCopy.editor.passwordHintEdit
-              }
-              placeholderTextColor={GhostexPalette.MUTED}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={password}
-              onChangeText={editField(setPassword)}
-            />
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: savePassword }}
-              style={styles.checkboxRow}
-              onPress={() => setSavePassword(!savePassword)}
-            >
-              <View style={[styles.checkbox, savePassword && styles.checkboxChecked]}>
-                {savePassword ? <Text style={styles.checkboxMark}>{'✓'}</Text> : null}
+            {inventory?.lastError !== undefined && inventory.lastError !== null ? (
+              <View style={formStyles.errorCallout}>
+                <Text style={formStyles.errorCalloutText}>
+                  {EditMachineCopy.errorPrefix(existing.name.length > 0 ? existing.name : existing.username)}
+                  {inventory.lastError}{' '}
+                  <Text
+                    style={formStyles.link}
+                    onPress={() => navigation.navigate('CantReach', { machineId: existing.id })}
+                  >
+                    {EditMachineCopy.whatCanICheck}
+                  </Text>
+                </Text>
               </View>
-              <Text style={styles.checkboxLabel}>{MachineCopy.editor.savePasswordCheckbox}</Text>
-            </Pressable>
-            <Text style={styles.footerText}>{MachineCopy.editor.passwordBody}</Text>
-          </>
-        ) : (
-          <>
-            <TextInput
-              style={[styles.input, styles.keyInput]}
-              placeholder="Paste an OpenSSH private key"
-              placeholderTextColor={GhostexPalette.MUTED}
-              multiline
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={privateKey}
-              onChangeText={editField(setPrivateKey)}
-            />
-            {method === 'keyPassphrase' ? (
-              <TextInput
-                style={styles.input}
-                placeholder="Optional"
-                placeholderTextColor={GhostexPalette.MUTED}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={keyPassphrase}
-                onChangeText={editField(setKeyPassphrase)}
-              />
             ) : null}
+            <NameField value={name} onChangeText={setName} hint={false} />
+            <Text style={formStyles.sectionLabel}>
+              {easyConnect ? EditMachineCopy.connectionLabel : EditMachineCopy.connectionTailscaleLabel}
+            </Text>
+            {easyConnect ? (
+              <View style={formStyles.rowsCard}>
+                <EasyConnectSummary
+                  machine={existing}
+                  connectedNow={connectedNow}
+                  onRePair={() => navigation.navigate('ScanCode', { rePairMachineId: existing.id })}
+                />
+                {showInSessionsRow}
+              </View>
+            ) : (
+              <>
+                {tailscaleFields}
+                <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
+              </>
+            )}
+            {advanced}
+            {test}
+            {errorBanner}
+            <View style={formStyles.divider} />
             <Pressable
               accessibilityRole="button"
-              style={styles.borderedButton}
-              onPress={() => setGenerateOpen(!generateOpen)}
+              style={styles.removeButton}
+              onPress={() => {
+                setRemoveError(null);
+                setRemoveOpen(true);
+              }}
             >
-              <Text style={styles.borderedButtonLabel}>Generate New Key</Text>
+              <Text style={[styles.removeLabel, formStyles.danger]}>{EditMachineCopy.remove.button}</Text>
             </Pressable>
-
-            {generateOpen ? (
-              <View style={styles.generatePanel}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Personal MacBook, Work Key"
-                  placeholderTextColor={GhostexPalette.MUTED}
-                  value={genName}
-                  onChangeText={setGenName}
-                />
-                <SegmentedControl
-                  options={ALGORITHM_OPTIONS}
-                  value={genAlgorithm}
-                  onChange={setGenAlgorithm}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Passphrase (optional)"
-                  placeholderTextColor={GhostexPalette.MUTED}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  value={genPassphrase}
-                  onChangeText={setGenPassphrase}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirm passphrase"
-                  placeholderTextColor={GhostexPalette.MUTED}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  value={genConfirm}
-                  onChangeText={setGenConfirm}
-                />
-                <Text style={styles.footerText}>
-                  Protect your key with a passphrase. Leave empty for no protection.
-                </Text>
-                {genError !== null ? <Text style={styles.errorText}>{genError}</Text> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.primaryButton, generating && styles.buttonDisabled]}
-                  disabled={generating}
-                  onPress={() => void runGenerate()}
-                >
-                  {generating ? (
-                    <ActivityIndicator size="small" color={GhostexPalette.ACCENT_FOREGROUND} />
-                  ) : (
-                    <Text style={styles.primaryButtonLabel}>Generate</Text>
-                  )}
-                </Pressable>
-              </View>
-            ) : null}
-
-            {publicKey !== null ? (
-              <View style={styles.publicKeyBlock}>
-                <Text style={styles.footerText}>
-                  {"Add this to your server's ~/.ssh/authorized_keys file:"}
-                </Text>
-                <View style={styles.publicKeyCard}>
-                  <Text selectable style={styles.publicKeyText}>
-                    {publicKey}
-                  </Text>
-                </View>
-                <Text style={styles.footerText}>
-                  Copy to clipboard is not available in this build. Long-press the key above to
-                  select and copy it.
-                </Text>
-              </View>
-            ) : null}
+          </>
+        ) : easyConnect ? (
+          <>
+            <NameField value={name} onChangeText={setName} />
+            <FormField
+              label={TailscaleFormCopy.fields.username}
+              value={username}
+              onChangeText={editField(setUsername)}
+              placeholder={TailscaleFormCopy.fields.usernamePlaceholder}
+              error={errors?.username}
+              mono
+            />
+            <PairingAddressField
+              value={tailcatToken}
+              onChangeText={editField(setTailcatToken)}
+              error={errors?.tailcatToken}
+            />
+            {advanced}
+            {test}
+            {errorBanner}
+          </>
+        ) : (
+          <>
+            <View style={styles.hero}>
+              <Text style={setupText.eyebrow}>{TailscaleFormCopy.eyebrow}</Text>
+              <Text style={setupText.titleLg}>{TailscaleFormCopy.title}</Text>
+              <Text style={setupText.lede}>{TailscaleFormCopy.lede}</Text>
+            </View>
+            <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.prechecksLabel}</Text>
+            <PrecheckList onSelectOs={setHelpOs} currentOs={helpOs} />
+            <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.computerLabel}</Text>
+            <SetupButton label={TailscaleFormCopy.scanInstead} onPress={() => navigation.navigate('ScanCode')} />
+            <NameField value={name} onChangeText={setName} />
+            {tailscaleFields}
+            {advanced}
+            {test}
+            {errorBanner}
           </>
         )}
-
-        <Text style={styles.sectionHeader}>Connection</Text>
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.borderedButton, testDisabled && styles.buttonDisabled]}
-          disabled={testDisabled}
-          onPress={() => void runTest()}
-        >
-          {testState.kind === 'testing' ? (
-            <View style={styles.testingRow}>
-              <ActivityIndicator size="small" color={GhostexPalette.ACCENT} />
-              <Text style={styles.borderedButtonLabel}>Testing...</Text>
-            </View>
-          ) : (
-            <Text style={styles.borderedButtonLabel}>Test Connection</Text>
-          )}
-        </Pressable>
-        {testState.kind === 'success' ? (
-          <Text style={styles.successText}>{'✓'} Connection successful</Text>
-        ) : null}
-        {testState.kind === 'failure' ? (
-          <Text style={styles.errorText}>{testState.message}</Text>
-        ) : null}
-
-        {errors !== null ? (
-          <View style={styles.errorBanner}>
-            {errors.port !== undefined ? <Text style={styles.errorText}>{errors.port}</Text> : null}
-            {errors.duplicate !== undefined ? (
-              <Text style={styles.errorText}>{errors.duplicate}</Text>
-            ) : null}
-            {errors.tailcatToken !== undefined ? (
-              <Text style={styles.errorText}>{errors.tailcatToken}</Text>
-            ) : null}
-            {errors.password !== undefined ? (
-              <Text style={styles.errorText}>{errors.password}</Text>
-            ) : null}
-            <Text style={styles.errorText}>{errors.general}</Text>
-          </View>
-        ) : null}
       </ScrollView>
+
+      {existing === null ? (
+        <View style={formStyles.footer}>
+          <SetupButton
+            variant="primary"
+            large
+            label={TailscaleFormCopy.connect}
+            disabled={!canSave}
+            busy={saving}
+            onPress={() => void save()}
+          />
+        </View>
+      ) : null}
+
+      <SshAccessHelpSheet os={helpOs} onClose={() => setHelpOs(null)} />
+
+      {existing !== null ? (
+        <PromptDialog
+          visible={removeOpen}
+          title={EditMachineCopy.remove.title}
+          body={EditMachineCopy.remove.body(existing.name.length > 0 ? existing.name : existing.username)}
+          placeholder={EditMachineCopy.remove.placeholder}
+          error={removeError}
+          confirmLabel={EditMachineCopy.remove.confirm}
+          onSubmit={(value) => void remove(value)}
+          onCancel={() => setRemoveOpen(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
 
-const headerStyles = StyleSheet.create({
-  cancel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 16,
-  },
-  action: {
-    color: GhostexPalette.ACCENT,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  actionDisabled: {
-    color: GhostexPalette.MUTED,
-  },
-});
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GhostexPalette.BACKGROUND,
-  },
-  form: {
-    padding: 16,
-    gap: 10,
-  },
-  sectionHeader: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
-    borderRadius: GhostexRadii.input,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    color: GhostexPalette.FOREGROUND,
-    paddingHorizontal: 12,
-    height: 44,
-    fontSize: 15,
-  },
-  hostRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  hostInput: {
-    flex: 1,
-  },
-  portInput: {
-    width: 76,
-    textAlign: 'center',
-  },
-  portHint: {
-    flex: 1,
-    alignSelf: 'center',
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  tokenRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-  },
-  tokenInputField: {
-    flex: 1,
-  },
-  tokenInput: {
-    height: 92,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-    fontFamily: MONOSPACE,
-    fontSize: 12,
-  },
-  keyInput: {
-    height: 112,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-    fontFamily: MONOSPACE,
-    fontSize: 12,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: GhostexPalette.ACCENT,
-    borderColor: GhostexPalette.ACCENT,
-  },
-  checkboxMark: {
-    color: GhostexPalette.ACCENT_FOREGROUND,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  checkboxLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-    flex: 1,
-  },
-  footerText: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  borderedButton: {
-    height: 44,
-    borderRadius: GhostexRadii.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    backgroundColor: GhostexPalette.CARD,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  borderedButtonLabel: {
-    color: GhostexPalette.ACCENT,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  primaryButton: {
-    height: 44,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.ACCENT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonLabel: {
-    color: GhostexPalette.ACCENT_FOREGROUND,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.45,
-  },
-  testingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  generatePanel: {
-    borderRadius: GhostexRadii.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    backgroundColor: GhostexPalette.CARD,
-    padding: 12,
-    gap: 10,
-  },
-  publicKeyBlock: {
-    gap: 8,
-  },
-  publicKeyCard: {
-    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
-    borderRadius: GhostexRadii.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    padding: 12,
-  },
-  publicKeyText: {
-    color: GhostexPalette.FOREGROUND,
-    fontFamily: MONOSPACE,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  successText: {
-    color: SUCCESS_GREEN,
-    fontSize: 13,
-  },
-  errorText: {
-    color: GhostexPalette.DANGER,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  errorBanner: {
-    marginTop: 8,
-    borderRadius: GhostexRadii.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.DANGER,
-    backgroundColor: 'rgba(232,92,92,0.08)',
-    padding: 12,
-    gap: 6,
-  },
-});
+const styles = {
+  headerAction: { fontSize: 16, fontWeight: '600' as const },
+  hero: { gap: 6 },
+  removeButton: { paddingVertical: 12, alignItems: 'center' as const },
+  removeLabel: { fontSize: 14, fontWeight: '600' as const },
+};

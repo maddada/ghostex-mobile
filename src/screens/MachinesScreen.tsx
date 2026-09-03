@@ -1,225 +1,56 @@
 /**
- * Machines page (docs/specs/sessions-drawer.md §4): machine cards with
- * Edit/Remove/Password/More pills, footer rows [Retry | Add] and
- * [Tailscale | Setup], machine actions sheet, password prompt, host-key
- * reset/delete/forget-password confirms, and android-check health check.
+ * Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): one
+ * card per saved computer with a status badge and a one-line "how / what's
+ * wrong" detail, tap → Edit machine, swipe left → Edit / Remove (Remove
+ * confirms with the computer's name), and "Add a computer" with the two
+ * onboarding path cards. Hidden machines stay here with a Hidden badge; the
+ * Sessions strip shows only visible ones. Passwords, host keys, details and
+ * diagnostics moved to Edit machine, so this page has no per-card menu.
  */
 
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { markManualDisconnect } from '../app/autoReconnect';
-import { openTailscaleOrDownload } from '../app/tailscale';
-import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
-import DetailsSheet from '../components/common/DetailsSheet';
-import ProgressOverlay from '../components/common/ProgressOverlay';
-import PromptDialog from '../components/common/PromptDialog';
-import { runGhostexCli } from '../components/sessions/cli';
-import { drawerStatusLine } from '../components/sessions/drawerModel';
-import { androidCheckCommand } from '../commands/ghostexCli';
-import { formatLastActive } from '../contract/mobileSummary';
-import { MachineCopy, StateCardCopy } from '../copy';
-import { ensureConnected, summarizeFailure } from '../inventory/client';
+import PathCard from '../components/onboarding/PathCard';
+import { CameraGlyph, QrcodeGlyph, ShieldGlyph } from '../components/onboarding/SetupIcons';
+import { setupText } from '../components/onboarding/SetupPrimitives';
+import { MachinesCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
-import {
-  clearSessionPassword,
-  deleteSavedPassword,
-  getTailcatToken,
-  hasPassword,
-  setSavedPassword,
-  setSessionPassword,
-} from '../machines/credentials';
-import {
-  isMachineEnabled,
-  machineDisplayLabel,
-  selectedMachine,
-  useMachinesStore,
-  type MachineRecord,
-} from '../machines/store';
+import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useSpacesStore } from '../spaces/store';
-import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
+import { SetupPalette } from '../theme/palette';
+import MachineCard from './machines-screen/MachineCard';
+import {
+  machineCardDetail,
+  machineCardStatus,
+  machineCardTitle,
+} from './machines-screen/machineCardModel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Machines'>;
 
-const CHECK_CONNECTION_DETAIL = 'Verify SSH reachability, credentials, Ghostex CLI, and zmx.';
-
-type Overlay =
-  | { kind: 'none' }
-  | { kind: 'menu'; machine: MachineRecord }
-  | { kind: 'password'; machine: MachineRecord; error: string | null }
-  | { kind: 'forgetPassword'; machine: MachineRecord }
-  | { kind: 'resetHostKey'; machine: MachineRecord }
-  | { kind: 'delete'; machine: MachineRecord }
-  | { kind: 'details'; machine: MachineRecord }
-  | { kind: 'copyTarget'; title: string; body: string }
-  | { kind: 'message'; title: string; message: string };
+type Overlay = { kind: 'none' } | { kind: 'remove'; machine: MachineRecord };
 
 const NONE: Overlay = { kind: 'none' };
 
-const NO_TAILCAT_TOKEN = 'No tailcat token is saved for this machine.';
-
-/**
- * One-line target summary. A tailcat machine's host is a synthetic host-key
- * identity rather than an address, so it is never shown to the user.
- */
-function sshTarget(machine: MachineRecord): string {
-  if (machine.transport === 'tailcat') {
-    const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
-    return `${machine.username}@tailcat${portSuffix}`;
-  }
-  return `${machine.username}@${machine.host}:${machine.port}`;
-}
-
 export default function MachinesScreen({ navigation }: Props) {
   const machines = useMachinesStore((state) => state.machines);
-  const selectedMachineId = useMachinesStore((state) => state.selectedMachineId);
-  const selected = useMachinesStore((state) => selectedMachine(state));
-  const selectMachine = useMachinesStore((state) => state.selectMachine);
-  const setMachineDisabled = useMachinesStore((state) => state.setMachineDisabled);
   const removeMachine = useMachinesStore((state) => state.removeMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
-  const refreshMachine = useInventoryStore((state) => state.refreshMachine);
   const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
   const clearMachineSpace = useSpacesStore((state) => state.clearMachine);
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
-  const [progress, setProgress] = useState<string | null>(null);
 
-  const statusLine = drawerStatusLine(
-    selected,
-    selected === null ? undefined : inventoriesByMachineId[selected.id],
+  const editMachine = useCallback(
+    (machine: MachineRecord): void => navigation.navigate('MachineForm', { machineId: machine.id }),
+    [navigation],
   );
-
-  const switchToMachine = useCallback(
-    (machine: MachineRecord): void => {
-      // A machine hidden from Sessions is not a switch target; showing it again
-      // is the Show in Sessions action below.
-      if (!isMachineEnabled(machine)) return;
-      selectMachine(machine.id);
-      void refreshMachine(machine);
-    },
-    [refreshMachine, selectMachine],
-  );
-
-  /**
-   * Show/hide a machine on the Sessions screen. Hiding only stops the tab, the
-   * drawer content, and the polling loop: any terminal already attached to the
-   * machine keeps its connection, so hiding can never drop live work.
-   */
-  const setMachineVisible = useCallback(
-    (machine: MachineRecord, visible: boolean): void => {
-      setOverlay(NONE);
-      setMachineDisabled(machine.id, !visible);
-    },
-    [setMachineDisabled],
-  );
-
-  const connectMachine = useCallback(
-    async (machine: MachineRecord): Promise<void> => {
-      setOverlay(NONE);
-      selectMachine(machine.id);
-      try {
-        await ensureConnected(machine);
-        await refreshMachine(machine);
-      } catch (error) {
-        const raw = error instanceof Error ? error.message : String(error);
-        const machineHasPassword = await hasPassword(machine.id);
-        setOverlay({
-          kind: 'message',
-          title: machineDisplayLabel(machine),
-          message: summarizeFailure(raw, machineHasPassword),
-        });
-      }
-    },
-    [refreshMachine, selectMachine],
-  );
-
-  const checkConnection = useCallback(async (machine: MachineRecord): Promise<void> => {
-    setOverlay(NONE);
-    setProgress(CHECK_CONNECTION_DETAIL);
-    try {
-      await runGhostexCli(machine, androidCheckCommand());
-      setProgress(null);
-      setOverlay({
-        kind: 'message',
-        title: machineDisplayLabel(machine),
-        message: StateCardCopy.success.status(machineDisplayLabel(machine)),
-      });
-    } catch (error) {
-      setProgress(null);
-      setOverlay({
-        kind: 'message',
-        title: machineDisplayLabel(machine),
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, []);
-
-  const submitPassword = useCallback(
-    async (machine: MachineRecord, password: string, save: boolean): Promise<void> => {
-      if (password.trim().length === 0) {
-        setOverlay({ kind: 'password', machine, error: MachineCopy.validation.emptyPassword });
-        return;
-      }
-      if (save) {
-        await setSavedPassword(machine.id, password);
-        clearSessionPassword(machine.id);
-      } else {
-        setSessionPassword(machine.id, password);
-      }
-      setOverlay(NONE);
-      // New credentials should immediately be retried against the machine.
-      try {
-        markManualDisconnect(machine.id);
-        await GhostexNative.disconnect(machine.id);
-      } catch {
-        // Not connected is fine.
-      }
-      void refreshMachine(machine);
-    },
-    [refreshMachine],
-  );
-
-  const forgetPassword = useCallback(async (machine: MachineRecord): Promise<void> => {
-    await deleteSavedPassword(machine.id);
-    clearSessionPassword(machine.id);
-    setOverlay(NONE);
-  }, []);
-
-  const resetHostKey = useCallback(
-    async (machine: MachineRecord): Promise<void> => {
-      setOverlay(NONE);
-      try {
-        await GhostexNative.resetHostKey(machine.host, machine.port);
-        void refreshMachine(machine);
-      } catch (error) {
-        setOverlay({
-          kind: 'message',
-          title: machineDisplayLabel(machine),
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-    },
-    [refreshMachine],
-  );
-
-  const showCopyTarget = useCallback(async (machine: MachineRecord): Promise<void> => {
-    if (machine.transport !== 'tailcat') {
-      setOverlay({ kind: 'copyTarget', title: 'Copy SSH target', body: sshTarget(machine) });
-      return;
-    }
-    const token = await getTailcatToken(machine.id);
-    setOverlay({
-      kind: 'copyTarget',
-      title: 'Copy tailcat token',
-      body: token === null || token.length === 0 ? NO_TAILCAT_TOKEN : token,
-    });
-  }, []);
 
   const deleteMachine = useCallback(
     async (machine: MachineRecord): Promise<void> => {
@@ -237,322 +68,72 @@ export default function MachinesScreen({ navigation }: Props) {
     [clearMachineInventory, clearMachineSpace, removeMachine],
   );
 
-  const menuItems = (machine: MachineRecord): ActionSheetItem[] => [
-    { key: 'connect', label: 'Connect', onPress: () => void connectMachine(machine) },
-    {
-      key: 'visibility',
-      label: isMachineEnabled(machine) ? 'Hide from Sessions' : 'Show in Sessions',
-      detail: 'Hidden machines get no tab, no sessions, and are never connected to.',
-      onPress: () => setMachineVisible(machine, !isMachineEnabled(machine)),
-    },
-    {
-      key: 'check',
-      label: 'Check connection',
-      detail: CHECK_CONNECTION_DETAIL,
-      onPress: () => void checkConnection(machine),
-    },
-    {
-      key: 'password',
-      label: 'Enter password',
-      onPress: () => setOverlay({ kind: 'password', machine, error: null }),
-    },
-    {
-      key: 'edit',
-      label: 'Edit',
-      onPress: () => {
-        setOverlay(NONE);
-        navigation.navigate('MachineForm', { machineId: machine.id });
-      },
-    },
-    { key: 'details', label: 'Details', onPress: () => setOverlay({ kind: 'details', machine }) },
-    {
-      key: 'copy-target',
-      label: machine.transport === 'tailcat' ? 'Copy tailcat token' : 'Copy SSH target',
-      onPress: () => void showCopyTarget(machine),
-    },
-    {
-      key: 'forget-password',
-      label: 'Forget saved password',
-      destructive: true,
-      onPress: () => setOverlay({ kind: 'forgetPassword', machine }),
-    },
-    {
-      key: 'reset-host-key',
-      label: 'Reset SSH host key',
-      destructive: true,
-      onPress: () => setOverlay({ kind: 'resetHostKey', machine }),
-    },
-    {
-      key: 'delete',
-      label: 'Delete',
-      destructive: true,
-      onPress: () => setOverlay({ kind: 'delete', machine }),
-    },
-    // A tailcat machine is reached by its pairing token, with no VPN on this
-    // phone, so the Tailscale app has nothing to do with it.
-    ...(machine.transport === 'tailcat'
-      ? []
-      : [
-          {
-            key: 'tailscale',
-            label: 'Open Tailscale',
-            onPress: () => {
-              setOverlay(NONE);
-              void openTailscaleOrDownload();
-            },
-          },
-        ]),
-  ];
-
-  const renderMachine = ({ item }: { item: MachineRecord }) => {
-    const isSelected = item.id === selectedMachineId;
-    const visible = isMachineEnabled(item);
-    const lastConnected =
-      item.lastConnectedAt === null
-        ? MachineCopy.card.neverConnected
-        : MachineCopy.card.lastConnected(formatLastActive(item.lastConnectedAt, new Date()));
-    return (
-      <Pressable style={styles.machineCard} onPress={() => switchToMachine(item)}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {machineDisplayLabel(item)}
-          {isSelected ? MachineCopy.card.selectedSuffix : ''}
-        </Text>
-        <Text style={styles.cardBody} numberOfLines={1}>
-          {sshTarget(item)}
-        </Text>
-        <Text style={styles.cardBody}>{lastConnected}</Text>
-        <Text style={styles.cardBody}>
-          {visible ? MachineCopy.card.switchHint : 'Hidden from Sessions.'}
-        </Text>
-        <View style={styles.pillRow}>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.pill}
-            onPress={() => setMachineVisible(item, !visible)}
-          >
-            <Text style={styles.pillLabel}>{visible ? 'Hide' : 'Show'}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.pill}
-            onPress={() => navigation.navigate('MachineForm', { machineId: item.id })}
-          >
-            <Text style={styles.pillLabel}>Edit</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.pill}
-            onPress={() => setOverlay({ kind: 'delete', machine: item })}
-          >
-            <Text style={styles.pillLabel}>Remove</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.pill}
-            onPress={() => setOverlay({ kind: 'password', machine: item, error: null })}
-          >
-            <Text style={styles.pillLabel}>Password</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.pill}
-            onPress={() => setOverlay({ kind: 'menu', machine: item })}
-          >
-            <Text style={styles.pillLabel}>More</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    );
-  };
+  const now = new Date();
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <Text style={styles.statusLine} numberOfLines={2}>
-        {statusLine}
-      </Text>
-      {machines.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.cardTitle}>{MachineCopy.emptyCard.title}</Text>
-          <Text style={styles.cardBody}>{MachineCopy.emptyCard.body}</Text>
-          <View style={styles.pillRow}>
-            <Pressable
-              accessibilityRole="button"
-              style={styles.pill}
-              onPress={() => navigation.navigate('MachineForm')}
-            >
-              <Text style={styles.pillLabel}>Add</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              style={styles.pill}
-              onPress={() => navigation.navigate('MachineForm')}
-            >
-              <Text style={styles.pillLabel}>Setup</Text>
-            </Pressable>
-          </View>
+      <ScrollView contentContainerStyle={styles.content}>
+        {machines.length > 0 ? (
+          <>
+            <View style={styles.cards}>
+              {machines.map((machine) => {
+                const inventory = inventoriesByMachineId[machine.id];
+                const status = machineCardStatus(machine, inventory);
+                return (
+                  <MachineCard
+                    key={machine.id}
+                    title={machineCardTitle(machine)}
+                    detail={machineCardDetail(machine, status, inventory, now)}
+                    status={status}
+                    onPress={() => editMachine(machine)}
+                    onEdit={() => editMachine(machine)}
+                    onRemove={() => setOverlay({ kind: 'remove', machine })}
+                  />
+                );
+              })}
+            </View>
+            <Text style={[setupText.small, setupText.dim, styles.swipeHint]}>
+              {MachinesCopy.swipe.hint}
+            </Text>
+          </>
+        ) : null}
+
+        <Text style={[styles.sectionLabel, machines.length > 0 ? styles.sectionLabelSpaced : null]}>
+          {MachinesCopy.add.sectionLabel}
+        </Text>
+        <View style={styles.cards}>
+          <PathCard
+            recommended
+            icon={<QrcodeGlyph size={20} color={SetupPalette.ACCENT} />}
+            title={MachinesCopy.add.easyConnect.title}
+            subtitle={MachinesCopy.add.easyConnect.subtitle}
+            button={{
+              label: MachinesCopy.add.easyConnect.button,
+              icon: <CameraGlyph size={14} color={SetupPalette.PRIMARY_BUTTON_FOREGROUND} />,
+              onPress: () => navigation.navigate('ScanCode'),
+            }}
+          />
+          <PathCard
+            icon={<ShieldGlyph size={20} color={SetupPalette.FOREGROUND} />}
+            title={MachinesCopy.add.tailscale.title}
+            subtitle={MachinesCopy.add.tailscale.subtitle}
+            button={{
+              label: MachinesCopy.add.tailscale.button,
+              onPress: () => navigation.navigate('TailscaleForm'),
+            }}
+          />
         </View>
-      ) : (
-        <FlatList
-          data={machines}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={renderMachine}
-          style={styles.listContainer}
-        />
-      )}
-      <View style={styles.footerRow}>
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.footerButton, styles.footerButtonAccent]}
-          onPress={() => {
-            if (selected !== null) void refreshMachine(selected);
-          }}
-        >
-          <Text style={styles.footerAccentLabel}>Retry</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.footerButton}
-          onPress={() => navigation.navigate('MachineForm')}
-        >
-          <Text style={styles.footerLabel}>Add</Text>
-        </Pressable>
-      </View>
-      <View style={styles.footerRow}>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.footerButton}
-          onPress={() => void openTailscaleOrDownload()}
-        >
-          <Text style={styles.footerLabel}>Tailscale</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.footerButton}
-          onPress={() => {
-            if (selected !== null) setOverlay({ kind: 'menu', machine: selected });
-            else navigation.navigate('MachineForm');
-          }}
-        >
-          <Text style={styles.footerLabel}>Setup</Text>
-        </Pressable>
-      </View>
+      </ScrollView>
 
-      <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
-
-      {overlay.kind === 'menu' ? (
-        <ActionSheet
-          visible
-          title={machineDisplayLabel(overlay.machine)}
-          subtitle={sshTarget(overlay.machine)}
-          items={menuItems(overlay.machine)}
-          onClose={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'password' ? (
-        <PromptDialog
-          visible
-          title="Enter password"
-          body="Saved passwords use Android Keystore. Unchecked passwords are used only until Ghostex Android is closed."
-          placeholder="SSH password"
-          secureTextEntry
-          checkboxLabel={MachineCopy.editor.savePasswordCheckbox}
-          initialCheckboxValue={overlay.machine.savePassword}
-          error={overlay.error}
-          confirmLabel="Save"
-          onSubmit={(value, save) => void submitPassword(overlay.machine, value, save)}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'forgetPassword' ? (
+      {overlay.kind === 'remove' ? (
         <ConfirmDialog
           visible
-          title="Forget saved password?"
-          targetLine={machineDisplayLabel(overlay.machine)}
-          confirmLabel="Forget"
-          destructive
-          onConfirm={() => void forgetPassword(overlay.machine)}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'resetHostKey' ? (
-        <ConfirmDialog
-          visible
-          title="Reset SSH host key?"
-          body="This removes only this phone's saved SSH host key for the selected machine."
-          targetLine={machineDisplayLabel(overlay.machine)}
-          confirmLabel="Reset"
-          destructive
-          onConfirm={() => void resetHostKey(overlay.machine)}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'delete' ? (
-        <ConfirmDialog
-          visible
-          title="Delete SSH machine?"
-          body="This removes the machine from Ghostex Android on this device. Remote Ghostex sessions on the Mac are not changed."
-          targetLine={machineDisplayLabel(overlay.machine)}
-          confirmLabel="Delete"
+          title={MachinesCopy.remove.title}
+          body={MachinesCopy.remove.body(machineCardTitle(overlay.machine))}
+          targetLine={machineCardTitle(overlay.machine)}
+          confirmLabel={MachinesCopy.remove.confirm}
           destructive
           onConfirm={() => void deleteMachine(overlay.machine)}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'details' ? (
-        <DetailsSheet
-          visible
-          title={machineDisplayLabel(overlay.machine)}
-          entries={[
-            { label: 'Name', value: overlay.machine.name },
-            {
-              label: 'Connection',
-              value: overlay.machine.transport === 'tailcat' ? 'Tailcat token' : 'SSH host',
-            },
-            ...(overlay.machine.transport === 'tailcat'
-              ? []
-              : [{ label: 'Host', value: overlay.machine.host }]),
-            { label: 'Username', value: overlay.machine.username },
-            { label: 'Port', value: String(overlay.machine.port) },
-            { label: 'Save password', value: overlay.machine.savePassword ? 'Yes' : 'No' },
-            {
-              label: 'Last connected',
-              value:
-                overlay.machine.lastConnectedAt === null
-                  ? MachineCopy.card.neverConnected
-                  : formatLastActive(overlay.machine.lastConnectedAt, new Date()),
-            },
-          ]}
-          onClose={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'copyTarget' ? (
-        <ConfirmDialog
-          visible
-          title={overlay.title}
-          body={overlay.body}
-          selectableBody
-          confirmLabel="Close"
-          cancelLabel={null}
-          onConfirm={() => setOverlay(NONE)}
-          onCancel={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'message' ? (
-        <ConfirmDialog
-          visible
-          title={overlay.title}
-          body={overlay.message}
-          confirmLabel="Close"
-          cancelLabel={null}
-          onConfirm={() => setOverlay(NONE)}
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}
@@ -563,96 +144,29 @@ export default function MachinesScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GhostexPalette.BACKGROUND,
-    padding: 12,
+    backgroundColor: SetupPalette.PAGE,
   },
-  statusLine: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    marginBottom: 8,
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  listContainer: {
-    flex: 1,
+  cards: {
+    gap: 10,
   },
-  list: {
-    gap: 8,
-    paddingBottom: 12,
+  swipeHint: {
+    marginTop: 12,
+    paddingHorizontal: 4,
   },
-  emptyCard: {
-    padding: 12,
-    minHeight: 104,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.CARD_ACTIVE,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    marginBottom: 8,
-    flexGrow: 0,
-  },
-  machineCard: {
-    padding: 12,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  cardTitle: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  cardBody: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    marginTop: 6,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  pill: {
-    paddingHorizontal: 14,
-    minHeight: 32,
-    borderRadius: GhostexRadii.pill,
-    backgroundColor: GhostexPalette.BACKGROUND,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillLabel: {
-    color: GhostexPalette.FOREGROUND,
+  sectionLabel: {
+    color: SetupPalette.MUTED,
     fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 10,
   },
-  footerRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  footerButton: {
-    flex: 1,
-    height: 44,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.CARD_ACTIVE,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerButtonAccent: {
-    backgroundColor: GhostexPalette.ACCENT,
-    borderColor: GhostexPalette.ACCENT,
-  },
-  footerLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  footerAccentLabel: {
-    color: GhostexPalette.ACCENT_FOREGROUND,
-    fontSize: 14,
-    fontWeight: '600',
+  sectionLabelSpaced: {
+    marginTop: 24,
   },
 });

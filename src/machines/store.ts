@@ -1,7 +1,11 @@
 /**
- * SSH machine store: persisted machine list (AsyncStorage), selection, and the
- * `hasSeenWelcome` onboarding flag. Validation per docs/specs/sessions-drawer.md §4.
- * Credentials live in ./credentials (expo-secure-store + in-memory).
+ * SSH machine store: persisted machine list (AsyncStorage) and selection.
+ * Validation per docs/specs/sessions-drawer.md §4. Credentials live in
+ * ./credentials (expo-secure-store + in-memory). Welcome is gated on
+ * `machines.length === 0`, so there is no separate onboarding flag.
+ *
+ * `transport: 'tailcat'` stays the persisted value for Easy Connect machines
+ * (no `machines.v1` migration); only the labels say "Easy Connect".
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -35,7 +39,14 @@ export function tailcatSyntheticHost(machineId: string): string {
 
 const MACHINES_STORAGE_KEY = 'machines.v1';
 const SELECTED_MACHINE_STORAGE_KEY = 'machines.selectedId';
-const HAS_SEEN_WELCOME_STORAGE_KEY = 'hasSeenWelcome';
+
+/** User-facing name of the `tailcat` transport. */
+export const EASY_CONNECT_LABEL = 'Easy Connect';
+
+/** How a machine is reached, in the words the app uses for it. */
+export function machineTransportLabel(machine: Pick<MachineRecord, 'transport'>): string {
+  return machine.transport === 'tailcat' ? EASY_CONNECT_LABEL : 'Tailscale';
+}
 
 export type MachineRecord = {
   id: string;
@@ -56,9 +67,28 @@ export type MachineRecord = {
   disabled?: boolean;
   /** ISO timestamp of the last successful connection, or null. */
   lastConnectedAt: string | null;
+  /** Id `/api/pairDevice` assigned to this phone on the computer (Easy Connect). */
+  deviceId?: string;
+  /** ISO timestamp of the Easy Connect pairing. */
+  pairedAt?: string;
+  /** The computer's display name as the pairing code / registration reported it. */
+  computerName?: string;
+  /** gxserver API port reachable through the Easy Connect tunnel. */
+  gxserverPort?: number;
+  /**
+   * Tailscale SSH: the tailnet's SSH policy authenticates, so the phone sends
+   * no password and no key. Absent means off.
+   */
+  tailscaleSsh?: boolean;
 };
 
-export type MachineInput = {
+/** Pairing metadata written by Easy Connect registration; never edited by hand. */
+export type MachinePairingFields = Pick<
+  MachineRecord,
+  'deviceId' | 'pairedAt' | 'computerName' | 'gxserverPort'
+>;
+
+export type MachineInput = MachinePairingFields & {
   name: string;
   /** Ignored for `tailcat`, which derives its synthetic host from the machine id. */
   host: string;
@@ -72,6 +102,8 @@ export type MachineInput = {
   transport?: MachineTransport;
   /** Required for `tailcat`; persisted to the secure store, never to the record. */
   tailcatToken?: string;
+  /** Tailscale SSH flag; absent leaves the stored value untouched. */
+  tailscaleSsh?: boolean;
 };
 
 export type MachineValidationErrors = {
@@ -97,7 +129,7 @@ export type MachineSaveResult =
 export function machineDisplayLabel(machine: MachineRecord): string {
   if (machine.transport === 'tailcat') {
     const base = machine.name.length > 0 ? machine.name : machine.username;
-    return `${base} · tailcat`;
+    return `${base} · ${EASY_CONNECT_LABEL}`;
   }
   if (machine.name.length > 0) return machine.name;
   const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
@@ -260,7 +292,6 @@ type MachinesState = {
   hydrated: boolean;
   machines: MachineRecord[];
   selectedMachineId: string | null;
-  hasSeenWelcome: boolean;
   hydrate: () => Promise<void>;
   addMachine: (input: MachineInput) => Promise<MachineSaveResult>;
   updateMachine: (id: string, input: MachineInput) => Promise<MachineSaveResult>;
@@ -269,8 +300,22 @@ type MachinesState = {
   setMachineDisabled: (id: string, disabled: boolean) => void;
   selectMachine: (id: string | null) => void;
   markConnected: (id: string) => void;
-  setHasSeenWelcome: (value: boolean) => void;
 };
+
+/** The pairing fields present on an input, so an edit never clears them by omission. */
+function pairingFieldsOf(input: MachinePairingFields): MachinePairingFields {
+  const fields: MachinePairingFields = {};
+  if (input.deviceId !== undefined) fields.deviceId = input.deviceId;
+  if (input.pairedAt !== undefined) fields.pairedAt = input.pairedAt;
+  if (input.computerName !== undefined) fields.computerName = input.computerName;
+  if (input.gxserverPort !== undefined) fields.gxserverPort = input.gxserverPort;
+  return fields;
+}
+
+/** The Tailscale SSH flag when the input carries one, so an edit never clears it by omission. */
+function tailscaleSshOf(input: MachineInput): Pick<MachineRecord, 'tailscaleSsh'> {
+  return input.tailscaleSsh === undefined ? {} : { tailscaleSsh: input.tailscaleSsh };
+}
 
 function isMachineRecord(value: unknown): value is MachineRecord {
   if (typeof value !== 'object' || value === null) return false;
@@ -286,7 +331,12 @@ function isMachineRecord(value: unknown): value is MachineRecord {
       record.transport === 'ssh' ||
       record.transport === 'tailcat') &&
     (record.disabled === undefined || typeof record.disabled === 'boolean') &&
-    (record.lastConnectedAt === null || typeof record.lastConnectedAt === 'string')
+    (record.lastConnectedAt === null || typeof record.lastConnectedAt === 'string') &&
+    (record.deviceId === undefined || typeof record.deviceId === 'string') &&
+    (record.pairedAt === undefined || typeof record.pairedAt === 'string') &&
+    (record.computerName === undefined || typeof record.computerName === 'string') &&
+    (record.gxserverPort === undefined || typeof record.gxserverPort === 'number') &&
+    (record.tailscaleSsh === undefined || typeof record.tailscaleSsh === 'boolean')
   );
 }
 
@@ -310,22 +360,15 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
   hydrated: false,
   machines: [],
   selectedMachineId: null,
-  hasSeenWelcome: false,
 
   hydrate: async () => {
     if (get().hydrated) return;
-    const [machines, selectedId, hasSeenWelcomeRaw] = await Promise.all([
+    const [machines, selectedId] = await Promise.all([
       loadPersistedMachines(),
       AsyncStorage.getItem(SELECTED_MACHINE_STORAGE_KEY),
-      AsyncStorage.getItem(HAS_SEEN_WELCOME_STORAGE_KEY),
     ]);
     const selectedMachineId = resolveSelectedMachineId(machines, selectedId);
-    set({
-      hydrated: true,
-      machines,
-      selectedMachineId,
-      hasSeenWelcome: hasSeenWelcomeRaw === 'true',
-    });
+    set({ hydrated: true, machines, selectedMachineId });
   },
 
   addMachine: async (input) => {
@@ -343,6 +386,8 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       savePassword: normalized.savePassword,
       transport: normalized.transport,
       lastConnectedAt: null,
+      ...pairingFieldsOf(input),
+      ...tailscaleSshOf(input),
     };
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
     await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
@@ -377,6 +422,8 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       port: normalized.port as number,
       savePassword: normalized.savePassword,
       transport: normalized.transport,
+      ...pairingFieldsOf(input),
+      ...tailscaleSshOf(input),
     };
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
     await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
@@ -428,11 +475,6 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     );
     set({ machines: nextMachines });
     persistMachines(nextMachines);
-  },
-
-  setHasSeenWelcome: (value) => {
-    set({ hasSeenWelcome: value });
-    void AsyncStorage.setItem(HAS_SEEN_WELCOME_STORAGE_KEY, value ? 'true' : 'false');
   },
 }));
 
