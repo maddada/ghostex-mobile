@@ -2,8 +2,9 @@
  * "Can't reach <computer>" (docs/2026-09-03/mobile-setup/mobile-09-cant-reach.html):
  * the sanitized reason and when the computer was last reached, then one
  * checklist per transport ordered by likelihood. Steps the phone can verify are
- * ticked live, steps with an in-app fix get a button, rarer SSH errors are
- * listed separately for Tailscale, and the primary action is always Retry.
+ * ticked live, steps with an in-app fix get a button, rarer SSH errors are an
+ * accordion of their own for Tailscale (one row per reason: cause, fix and the
+ * fix's button), and the primary action is always Retry.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +13,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GhostexNative } from '../../modules/ghostex-native/src';
 import { formatAppLog, useAppLogStore } from '../app/appLog';
+import { Accordion, type AccordionItem } from '../components/common/Collapsible';
 import { SetupButton, StatusDot, setupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, {
   SshOsButtons,
@@ -22,7 +25,7 @@ import { CantReachCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, machineTransportLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
-import { GhostexRadii, GhostexStrokeWidth, SetupPalette } from '../theme/palette';
+import { SetupPalette } from '../theme/palette';
 import { checklistFor, type ChecklistAction, type ChecklistStep } from './cant-reach/checklists';
 import { formatRecency } from './machine-form/dates';
 import { PrecheckStep, useTailscalePhoneState } from './machine-form/PrecheckList';
@@ -43,6 +46,7 @@ export default function CantReachScreen({ navigation, route }: Props) {
   const [helpOs, setHelpOs] = useState<SshOs | null>(null);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hostKeyReset, setHostKeyReset] = useState<'idle' | 'resetting' | 'done'>('idle');
 
   useEffect(
     () => () => {
@@ -100,6 +104,80 @@ export default function CantReachScreen({ navigation, route }: Props) {
     });
   };
 
+  // The same identity the machine form's Advanced → Host key → Reset clears.
+  const resetHostKey = (): void => {
+    if (hostKeyReset === 'resetting') return;
+    setHostKeyReset('resetting');
+    void GhostexNative.resetHostKey(machine.host, machine.port).then(
+      () => setHostKeyReset('done'),
+      () => setHostKeyReset('idle'),
+    );
+  };
+
+  const otherReasons = CantReachCopy.tailscale.otherReasons;
+  // The row for the error that actually happened is titled in the error colour.
+  const currentReason = (code: string): string | undefined =>
+    reasonCode === code ? SetupPalette.ERROR : undefined;
+  const otherReasonItems: readonly AccordionItem[] = [
+    {
+      id: 'sshRefused',
+      title: otherReasons.sshRefused.title,
+      titleColor: currentReason('sshRefused'),
+      body: (
+        <>
+          <Text style={styles.reasonText}>
+            {otherReasons.sshRefused.cause} {otherReasons.sshRefused.fix}
+          </Text>
+          <SshOsButtons current={helpOs} onSelect={setHelpOs} />
+        </>
+      ),
+    },
+    {
+      id: 'authFailed',
+      title: otherReasons.wrongPassword.title,
+      titleColor: currentReason('authFailed'),
+      body: (
+        <>
+          <Text style={styles.reasonText}>
+            {otherReasons.wrongPassword.cause} {otherReasons.wrongPassword.fix}
+          </Text>
+          <View style={styles.reasonAction}>
+            <SetupButton
+              small
+              label={otherReasons.wrongPassword.button}
+              onPress={() => navigation.navigate('MachineForm', { machineId: machine.id, focus: 'password' })}
+            />
+          </View>
+        </>
+      ),
+    },
+    {
+      id: 'hostKeyChanged',
+      title: otherReasons.hostKeyChanged.title,
+      titleColor: currentReason('hostKeyChanged'),
+      body: (
+        <>
+          <Text style={styles.reasonText}>
+            {otherReasons.hostKeyChanged.cause} {otherReasons.hostKeyChanged.fix}
+          </Text>
+          {hostKeyReset === 'done' ? (
+            <Text style={[setupText.small, styles.reasonDone]}>{otherReasons.hostKeyChanged.done}</Text>
+          ) : (
+            <View style={styles.reasonAction}>
+              <SetupButton
+                small
+                label={otherReasons.hostKeyChanged.button}
+                busy={hostKeyReset === 'resetting'}
+                onPress={resetHostKey}
+              />
+            </View>
+          )}
+        </>
+      ),
+    },
+  ];
+  const currentReasonItem = otherReasonItems.find((item) => item.id === reasonCode);
+
   const stepState = (step: ChecklistStep): { done: boolean; detail: string } => {
     if (step.verify === 'tailscaleOnPhone') {
       const copy = CantReachCopy.tailscale.tailscaleOnPhone;
@@ -154,24 +232,8 @@ export default function CantReachScreen({ navigation, route }: Props) {
 
         {easyConnect ? null : (
           <View style={styles.otherReasons}>
-            <Text style={styles.otherTitle}>{CantReachCopy.tailscale.otherReasons.title}</Text>
-            <Text style={[setupText.small, reasonCode === 'sshRefused' ? styles.otherCurrent : null]}>
-              {CantReachCopy.tailscale.otherReasons.sshRefused}
-            </Text>
-            <SshOsButtons current={helpOs} onSelect={setHelpOs} />
-            <Text style={[setupText.small, reasonCode === 'authFailed' ? styles.otherCurrent : null]}>
-              {CantReachCopy.tailscale.otherReasons.wrongPassword}
-            </Text>
-            <Text style={[setupText.small, reasonCode === 'hostKeyChanged' ? styles.otherCurrent : null]}>
-              {CantReachCopy.tailscale.otherReasons.hostKeyChanged}
-            </Text>
-            <SetupButton
-              small
-              variant="ghost"
-              label={CantReachCopy.tailscale.otherReasons.editMachine}
-              style={styles.editMachine}
-              onPress={() => navigation.navigate('MachineForm', { machineId: machine.id })}
-            />
+            <Text style={styles.otherTitle}>{otherReasons.title}</Text>
+            <Accordion items={otherReasonItems} initiallyOpenId={currentReasonItem?.id ?? null} />
           </View>
         )}
 
@@ -212,21 +274,21 @@ const styles = StyleSheet.create({
   },
   otherReasons: {
     gap: 10,
-    padding: 14,
-    borderRadius: GhostexRadii.section,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: SetupPalette.BORDER,
-    backgroundColor: SetupPalette.PANEL,
   },
   otherTitle: {
     color: SetupPalette.MUTED,
     fontSize: 12.5,
     fontWeight: '600',
   },
-  otherCurrent: {
-    color: SetupPalette.FOREGROUND,
+  reasonText: {
+    color: SetupPalette.MUTED,
+    fontSize: 13,
+    lineHeight: 19,
   },
-  editMachine: {
-    alignSelf: 'flex-start',
+  reasonAction: {
+    flexDirection: 'row',
+  },
+  reasonDone: {
+    color: SetupPalette.OK,
   },
 });

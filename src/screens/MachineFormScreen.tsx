@@ -383,6 +383,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       passwordError={errors?.password}
       editing={editing}
       passwordDisabled={tailscaleSsh}
+      focusPassword={route.params?.focus === 'password'}
     />
   );
 

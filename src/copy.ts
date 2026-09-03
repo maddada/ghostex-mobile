@@ -674,19 +674,21 @@ export const CantReachCopy = {
     },
     easyConnectOn: {
       title: 'Is Easy Connect still on?',
-      detail: 'On the computer: Settings → Remote → Easy Connect should say Running, with SSH access on.',
+      detail:
+        'On the computer, open Settings → Remote and check that Easy Connect says Running and SSH access is on.',
     },
     unpaired: {
       title: 'Was this phone unpaired?',
-      detail: 'If it was removed from Paired devices on the computer, scan a new code.',
+      detail:
+        'A phone removed from Paired devices on the computer can no longer connect. Scan a new code to pair it again.',
       button: 'Scan a new code',
     },
   },
   tailscale: {
     tailscaleOnPhone: {
       title: 'Tailscale is connected on this phone',
-      detailOn: 'Connected.',
-      detailOff: 'Open Tailscale on this phone and sign in.',
+      detailOn: 'Tailscale is connected on this phone.',
+      detailOff: 'Tailscale is not connected on this phone. Open Tailscale and sign in.',
       detailChecking: 'Checking…',
       detailError: (reason: string) => `Could not read Tailscale's state on this phone: ${reason}`,
     },
@@ -706,13 +708,28 @@ export const CantReachCopy = {
         'Tailscale IPs rarely change, but a re-added computer gets a new one. The MagicDNS name is safer.',
       button: 'Edit address',
     },
+    /** One accordion row per rarer SSH error: a short title, then a cause sentence, a fix sentence and the fix itself. */
     otherReasons: {
       title: 'Other reasons you might see here',
-      sshRefused: 'SSH refused · SSH access is off on the computer. How to turn it on:',
-      wrongPassword: 'Wrong password · the computer password changed. Edit machine → Password.',
-      hostKeyChanged:
-        'Host key changed · the computer was reinstalled. Edit machine → Advanced → Host key → Reset.',
-      editMachine: 'Edit machine',
+      sshRefused: {
+        title: 'SSH refused',
+        cause: 'The computer answered but refused the connection, which means SSH access is turned off on it.',
+        fix: "Turn SSH access on, then retry. Pick the computer's system for the steps:",
+      },
+      wrongPassword: {
+        title: 'Wrong password',
+        cause: 'The computer rejected the password saved on this phone, usually because the account password was changed.',
+        fix: 'Enter the current password in Edit machine, then retry.',
+        button: 'Edit machine',
+      },
+      hostKeyChanged: {
+        title: 'Host key changed',
+        cause:
+          "The computer's identity no longer matches the one this phone pinned, which happens after a reinstall or when another computer took over the address.",
+        fix: 'If you expected that change, reset the pinned key so the next connection trusts the new one.',
+        button: 'Reset host key',
+        done: 'Host key cleared. Retry to pin the new one.',
+      },
     },
   },
   stillStuck: 'Still stuck? ',

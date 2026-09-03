@@ -2,9 +2,12 @@ import type { AddProjectSourceId } from '../addProject/client';
 
 /**
  * Add/edit machine form params. `tailcatToken` prefills the Easy Connect
- * address when the scanner read a bare legacy address.
+ * address when the scanner read a bare legacy address. `focus` opens the
+ * editor with that field focused (Can't reach → Wrong password → Edit machine).
  */
-export type MachineFormParams = { machineId?: string; tailcatToken?: string } | undefined;
+export type MachineFormParams =
+  | { machineId?: string; tailcatToken?: string; focus?: 'password' }
+  | undefined;
 
 /** Root native-stack route map. */
 export type RootStackParamList = {

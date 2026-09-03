@@ -22,6 +22,7 @@ export type FormFieldProps = {
   secureTextEntry?: boolean;
   keyboardType?: TextInputProps['keyboardType'];
   autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoFocus?: boolean;
 };
 
 export function FormField({
@@ -36,6 +37,7 @@ export function FormField({
   secureTextEntry = false,
   keyboardType,
   autoCapitalize = 'none',
+  autoFocus = false,
 }: FormFieldProps) {
   return (
     <View style={formStyles.field}>
@@ -57,6 +59,7 @@ export function FormField({
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         spellCheck={false}
+        autoFocus={autoFocus}
       />
       {error !== undefined ? (
         <Text style={formStyles.fieldError}>{error}</Text>
@@ -102,6 +105,8 @@ export type TailscaleFieldsProps = {
   editing: boolean;
   /** Tailscale SSH is on, so the password is not used. */
   passwordDisabled?: boolean;
+  /** Open with the keyboard on the password (Can't reach → Wrong password). */
+  focusPassword?: boolean;
 };
 
 export default function TailscaleFields({
@@ -116,6 +121,7 @@ export default function TailscaleFields({
   passwordError,
   editing,
   passwordDisabled = false,
+  focusPassword = false,
 }: TailscaleFieldsProps) {
   const copy = TailscaleFormCopy.fields;
   return (
@@ -147,6 +153,7 @@ export default function TailscaleFields({
           hint={copy.passwordHint}
           error={passwordError}
           secureTextEntry
+          autoFocus={focusPassword}
         />
       )}
     </>
