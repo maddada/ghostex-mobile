@@ -27,6 +27,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.maddada.ghostex.ios",
       "appleTeamId": "KTKP595G3B",
+      "entitlements": {
+        "application-identifier": "$(AppIdentifierPrefix)com.maddada.ghostex.ios",
+        "keychain-access-groups": ["$(AppIdentifierPrefix)com.maddada.ghostex.ios"]
+      },
       "infoPlist": {
         "UIUserInterfaceStyle": "Dark",
         "ITSAppUsesNonExemptEncryption": false,
