@@ -3,20 +3,20 @@
  * Source of truth: docs/specs/sessions-drawer.md §0.
  */
 export const GhostexPalette = {
-  /** Drawer + dialog surface; pill chip fill. */
-  BACKGROUND: '#181818',
+  /** Page, navigation header, drawer + dialog surface; pill chip fill. */
+  BACKGROUND: '#0B0B0B',
   /** Primary text, icons. */
   FOREGROUND: '#FAFAFA',
   /** Secondary text, headers, empty rows. */
   MUTED: '#B5B5B5',
-  /** 1dp strokes on cards/pills (white 20%). */
-  BORDER: 'rgba(255,255,255,0.2)',
+  /** 1dp strokes on cards/pills (white 14%). */
+  BORDER: 'rgba(255,255,255,0.14)',
   /** Session row bg (inactive). */
-  CARD: '#1F1F1F',
+  CARD: '#191919',
   /** Active row fill, state cards, buttons. */
   CARD_ACTIVE: '#262626',
-  /** Inputs. */
-  INPUT_BACKGROUND: '#0E0E0E',
+  /** Inputs: one step above the page so the field edge reads. */
+  INPUT_BACKGROUND: '#141414',
   /** Accent (BUTTON): active-row stroke, focused dot, primary buttons. */
   ACCENT: '#7DD3FC',
   /** Text color on accent-filled primary buttons. */
@@ -96,16 +96,16 @@ export type GhostexPaletteToken = keyof typeof GhostexPalette;
 /**
  * Setup-flow tokens (Welcome, Choose, Scan, Connected and the machine screens
  * that follow them), ported from docs/2026-09-03/mobile-setup/shared.css so
- * the phone matches the desktop Kanban / Automate look: near-black page,
- * #161616 panels, #1d1d1d cards, hairline borders, one accent used sparingly.
+ * the phone matches the desktop Kanban / Automate look: #0b0b0b page,
+ * #141414 panels, #191919 cards, hairline borders, one accent used sparingly.
  * Kept separate from GhostexPalette so screens that were not restyled keep
  * their exact look.
  */
 export const SetupPalette = {
-  PAGE: '#0f0f0f',
-  PANEL: '#161616',
-  CARD: '#1d1d1d',
-  CARD_HOVER: '#232323',
+  PAGE: '#0b0b0b',
+  PANEL: '#141414',
+  CARD: '#191919',
+  CARD_HOVER: '#202020',
   /** Filled chip / step-number background. */
   MUTED_BG: '#242424',
   BORDER: 'rgba(255,255,255,0.08)',

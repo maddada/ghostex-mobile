@@ -35,8 +35,8 @@ import {
   WorldGlyph,
 } from './icons';
 
-/** Desktop sidebar background (--app-background). */
-export const SIDEBAR_BACKGROUND = '#0E0E0E';
+/** Sessions page base surface (the resolved sidebar appearance paints over it). */
+export const SIDEBAR_BACKGROUND = '#0B0B0B';
 
 /**
  * Sessions-list density scale: every font/control/spacing in the drawer list

@@ -5,8 +5,12 @@ export const SIDEBAR_BACKGROUND_CONTRAST_MAX = 100;
 export const DEFAULT_SIDEBAR_BACKGROUND_CONTRAST = 90;
 export const DEFAULT_SIDEBAR_BACKGROUND_TINT = '#808080';
 
-const SCALE_REFERENCE_CONTRAST = 95;
-const DEFAULT_UNCALIBRATED_BACKGROUND = '#1C1C1C';
+/**
+ * The calibrated table below holds each tint's background at the default
+ * contrast (90); the slider scales it linearly from there, so 100 is black.
+ */
+const SCALE_REFERENCE_CONTRAST = DEFAULT_SIDEBAR_BACKGROUND_CONTRAST;
+const DEFAULT_UNCALIBRATED_BACKGROUND = '#383838';
 const LIGHT_FOREGROUND = '#D8D8D8';
 const DARK_FOREGROUND = '#262626';
 
@@ -34,22 +38,23 @@ export const SIDEBAR_BACKGROUND_TINT_OPTIONS: ReadonlyArray<{
 
 const CALIBRATED_DARK_TINTS: Readonly<Record<string, string>> = {
   '#000000': '#000000',
-  '#ffffff': '#0e0e0e',
-  '#808080': '#0e0e0e',
-  '#88d7ff': '#0a0f12',
-  '#4f6672': '#0c0e10',
-  '#884444': '#0d0005',
-  '#8a5330': '#100502',
-  '#8a6a2f': '#110a02',
-  '#657a3f': '#0c1005',
-  '#3f7a5f': '#031006',
-  '#2f7d66': '#03100c',
-  '#287c7f': '#031011',
-  '#336699': '#0c0e11',
-  '#4f5f96': '#080912',
-  '#6c4f8f': '#0a0611',
-  '#854f7a': '#100611',
-  '#8a4f5f': '#100409',
+  /* Neutral tints resolve to the app's #0b0b0b page at the default contrast. */
+  '#ffffff': '#0b0b0b',
+  '#808080': '#0b0b0b',
+  '#88d7ff': '#141e24',
+  '#4f6672': '#181c20',
+  '#884444': '#1a000a',
+  '#8a5330': '#200a04',
+  '#8a6a2f': '#221404',
+  '#657a3f': '#18200a',
+  '#3f7a5f': '#06200c',
+  '#2f7d66': '#062018',
+  '#287c7f': '#062022',
+  '#336699': '#181c22',
+  '#4f5f96': '#101224',
+  '#6c4f8f': '#140c22',
+  '#854f7a': '#200c22',
+  '#8a4f5f': '#200812',
 };
 
 type Rgb = { red: number; green: number; blue: number };
@@ -116,9 +121,9 @@ function defaultDarkTintBackground(tint: string): Rgb {
 
   const base = parseHex(DEFAULT_UNCALIBRATED_BACKGROUND);
   return {
-    red: base.red + (direction.red / magnitude) * 4,
-    green: base.green + (direction.green / magnitude) * 4,
-    blue: base.blue + (direction.blue / magnitude) * 4,
+    red: base.red + (direction.red / magnitude) * 8,
+    green: base.green + (direction.green / magnitude) * 8,
+    blue: base.blue + (direction.blue / magnitude) * 8,
   };
 }
 
