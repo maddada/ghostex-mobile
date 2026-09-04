@@ -1,40 +1,12 @@
 /**
- * zmx client display policy for attach tabs.
- *
- * zmx sizes a session's PTY only from a client that is *displaying* it. The
- * phone tells the attach client which of the two it is with in-band sequences
- * on its stdin (zmx consumes them; they never reach the shell):
- *
- * - `ESC ] 1337 ; ZMX_VISIBLE=<rows>,<cols> BEL`: this client is displaying —
- *   take the grid at rows×cols.
- * - `ESC ] 1337 ; ZMX_HIDDEN=<rows>,<cols> BEL`: this client is not displaying;
- *   its local grid is rows×cols — hand the grid to whoever is displaying, or
- *   rest wide (200 columns).
- *
- * An entry is DISPLAYED only when its terminal view is on screen (it is the
- * selected tab, in terminal — not chat — view, on the focused Terminal screen)
- * AND the app is in the foreground. Everything else — warm background tabs, a
- * session shown in chat view, the app backgrounded — is HIDDEN. A hidden client
- * would otherwise keep the phone's narrow width as the PTY size, truncating
- * every line the chat view (on any device) reads from the terminal screen.
- *
- * Transitions:
- * - to hidden: pin the native emulator + SSH pty to 200×<current rows>
- *   (`setTerminalGrid`) and announce ZMX_HIDDEN=<rows>,200. The pin is what
- *   keeps the local grid honest: a hidden client must never receive output
- *   rendered for a width it does not have.
- * - to visible: hand sizing back to the view (`setTerminalGrid(key, 0, 0)`)
- *   and announce ZMX_VISIBLE with the real grid. If the view has not laid out
- *   yet, the announcement waits for the native `onTerminalGridChange` report;
- *   every later view-driven resize (keyboard, font size) re-announces.
- * - newly opened attach: nothing is sent until the attach has had
- *   `ATTACH_VIEWPORT_REFRESH_DELAY_MS` to start reading stdin (the same anchor
- *   the viewport refresh uses); the first announcement is whichever state the
- *   entry is in by then.
- * - closed/evicted tabs need nothing: detach handles it.
- *
- * Only `kind === 'attach'` tabs that are `open` take part; a plain shell tab
- * would just see the sequence typed into the shell.
+ * CDXC:Zmx 2026-09-05 WHY:
+ * A foreground, focused, selected terminal reports ZMX_VISIBLE and owns its real grid.
+ * The same on-screen slot in chat mode reports ZMX_CHAT, claiming a wide resting grid only when no terminal is visible.
+ * Background tabs, screens and apps report ZMX_HIDDEN (parked), retaining the daemon grid when no chat claim exists.
+ * Both non-visible states pin the local emulator and SSH PTY to 200 columns because another client's chat may widen the daemon.
+ * Announcements wait for attach readiness; visible transitions unpin and wait for a real layout grid.
+ * Only open attach tabs participate. Raw input avoids iOS bracketed-paste wrapping.
+ * SEE-ALSO: .dependencies/zmx/src/loop.zig, apps/desktop/src/terminal_model.rs, server/src/terminal_ws.rs, apps/web/src/terminal/session-terminal.tsx.
  */
 
 import { AppState, type AppStateStatus } from 'react-native';
@@ -46,11 +18,12 @@ import { ATTACH_VIEWPORT_REFRESH_DELAY_MS, useTerminalStore } from './sessions';
 /** Width a hidden client rests at, matching zmx's resting width. */
 export const ZMX_HIDDEN_COLUMNS = 200;
 
-type DisplayState = 'visible' | 'hidden';
+type DisplayState = 'visible' | 'chat' | 'parked';
 type Announced = { state: DisplayState; cols: number; rows: number };
 
 /** Session key whose GhostexTerminalView is mounted on the focused Terminal screen. */
 let mountedTerminalSessionKey: string | null = null;
+let mountedChatSessionKey: string | null = null;
 let appState: AppStateStatus = AppState.currentState;
 let installed = false;
 
@@ -84,8 +57,9 @@ function visibleSequence(grid: TerminalGrid): string {
   return `\x1b]1337;ZMX_VISIBLE=${grid.rows},${grid.cols}\x07`;
 }
 
-function hiddenSequence(grid: TerminalGrid): string {
-  return `\x1b]1337;ZMX_HIDDEN=${grid.rows},${grid.cols}\x07`;
+function parkedSequence(state: 'chat' | 'parked', grid: TerminalGrid): string {
+  const body = state === 'chat' ? 'ZMX_CHAT' : 'ZMX_HIDDEN';
+  return `\x1b]1337;${body}=${grid.rows},${grid.cols}\x07`;
 }
 
 /** Desired state for an entry, or null when it must not be announced to at all. */
@@ -93,7 +67,9 @@ function desiredState(sessionKey: string): DisplayState | null {
   if (!ready.has(sessionKey)) return null;
   const tab = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === sessionKey);
   if (tab === undefined || tab.kind !== 'attach' || tab.state !== 'open') return null;
-  return mountedTerminalSessionKey === sessionKey && isForeground(appState) ? 'visible' : 'hidden';
+  if (!isForeground(appState)) return 'parked';
+  if (mountedTerminalSessionKey === sessionKey) return 'visible';
+  return mountedChatSessionKey === sessionKey ? 'chat' : 'parked';
 }
 
 function enqueue(sessionKey: string, work: () => Promise<void>): void {
@@ -122,18 +98,18 @@ async function transition(sessionKey: string): Promise<void> {
   const stale = (): boolean => generation.get(sessionKey) !== opened;
   const last = announced.get(sessionKey);
   const pin = pinned.get(sessionKey);
-  if (desired === 'hidden') {
-    if (last?.state === 'hidden' && pin !== undefined) return;
+  if (desired !== 'visible') {
+    if (last?.state === desired && pin !== undefined) return;
     const current = await GhostexNative.getTerminalGrid(sessionKey);
     if (stale() || current === null) return;
     const grid: TerminalGrid = { cols: ZMX_HIDDEN_COLUMNS, rows: current.rows };
     await GhostexNative.setTerminalGrid(sessionKey, grid.cols, grid.rows);
     if (stale()) return;
     pinned.set(sessionKey, grid);
-    if (last?.state === 'hidden' && last.cols === grid.cols && last.rows === grid.rows) return;
-    await GhostexNative.sendRawInput(sessionKey, hiddenSequence(grid));
+    if (last?.state === desired && last.cols === grid.cols && last.rows === grid.rows) return;
+    await GhostexNative.sendRawInput(sessionKey, parkedSequence(desired, grid));
     if (stale()) return;
-    announced.set(sessionKey, { state: 'hidden', cols: grid.cols, rows: grid.rows });
+    announced.set(sessionKey, { state: desired, cols: grid.cols, rows: grid.rows });
     return;
   }
   if (last?.state === 'visible' && pin === undefined) return;
@@ -153,9 +129,10 @@ function reconcile(): void {
 }
 
 /** Called by the Terminal screen with the session key whose terminal view it shows. */
-export function setMountedTerminalSessionKey(sessionKey: string | null): void {
-  if (mountedTerminalSessionKey === sessionKey) return;
-  mountedTerminalSessionKey = sessionKey;
+export function setMountedSessionKeys(terminalKey: string | null, chatKey: string | null): void {
+  if (mountedTerminalSessionKey === terminalKey && mountedChatSessionKey === chatKey) return;
+  mountedTerminalSessionKey = terminalKey;
+  mountedChatSessionKey = chatKey;
   reconcile();
 }
 
