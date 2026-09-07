@@ -47,13 +47,20 @@ export const ANDROID_KEYBOARD_GAP = 3;
 export const TAP_KEYBOARD_HINT_TIMEOUT_MS = 1500;
 
 /**
- * Plan 015 §7: the follow-up session's staged first input. A bare mention of
- * the exported markdown plus one trailing space — gxserver types it into the
+ * Plan 015 §7: the follow-up session's staged first input. A descriptive link to
+ * the exported markdown plus one trailing space. gxserver types it into the
  * new agent's input and never submits it, so the user writes their own prompt
  * around it. Nothing is ever sent on their behalf.
+ *
+ * CDXC:SessionChat 2026-09-06 SEE-ALSO:
+ * packages/shared/session-chat-file-references.ts owns the descriptive handoff-link format, mirrored here for the standalone mobile app.
  */
-export function transcriptMentionDraft(path: string): string {
-  return `@${path} `;
+export function transcriptMentionDraft(path: string, sessionTitle: string): string {
+  const label = `${sessionTitle} Handoff`.replace(/\s+/g, ' ').trim().replace(/[\\\[\]]/g, '\\$&');
+  const destination = /[\s<>]/.test(path)
+    ? `<${path.replace(/[\\<>]/g, '\\$&')}>`
+    : path.replace(/[\\()]/g, '\\$&');
+  return `[${label}](${destination}) `;
 }
 
 export function machineRecordFor(machineId: string): MachineRecord | null {

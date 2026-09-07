@@ -364,14 +364,14 @@ export function useTerminalAgentActions({
    */
   const startTranscriptConversation = useCallback(async (): Promise<void> => {
     if (exportedTranscript === null || startingTranscriptConversation) return;
-    const { machine, projectId, agentId, path } = exportedTranscript;
+    const { machine, projectId, agentId, path, sessionTitle } = exportedTranscript;
     if (agentId.length === 0) return;
     setStartingTranscriptConversation(true);
     setExportedTranscriptError(null);
     try {
       const created = await runGhostexCli(
         machine,
-        createAgentCommand(agentId, projectId, transcriptMentionDraft(path)),
+        createAgentCommand(agentId, projectId, transcriptMentionDraft(path, sessionTitle)),
       );
       const sessionId = createdSessionId(created);
       if (sessionId === null) {
