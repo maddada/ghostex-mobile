@@ -172,7 +172,7 @@ export function createChatCommand(): string {
  *
  * `firstInputDraft` stages text in the new session's CLI input once the
  * provider starts and never submits it, so the value is passed verbatim —
- * including a trailing space, which separates a staged `@path` mention from
+ * including a trailing space, which separates a staged handoff link from
  * whatever the user types next.
  */
 export function createAgentCommand(
@@ -590,15 +590,20 @@ export function readSessionChatFilesCommand(sessionId: string, projectId: string
   return `ghostex read-session-chat-files ${sessionChatSelector(sessionId, projectId)} --json`;
 }
 
+function draftVersionFlag(version?: unknown): string {
+  return version === undefined ? '' : ` --draft-version-json ${shellQuote(JSON.stringify(version))}`;
+}
+
 /** Send: `ghostex send-session-chat-message --session-id <id> --project-id <id> --text <text> --json`. */
 export function sendSessionChatMessageCommand(
   sessionId: string,
   projectId: string,
   text: string,
+  draftVersion?: unknown,
 ): string {
   return (
     `ghostex send-session-chat-message ${sessionChatSelector(sessionId, projectId)}` +
-    ` --text ${shellQuote(text)} --json`
+    ` --text ${shellQuote(text)}${draftVersionFlag(draftVersion)} --json`
   );
 }
 
@@ -678,10 +683,11 @@ export function queueSessionChatPromptCommand(
   sessionId: string,
   projectId: string,
   text: string,
+  draftVersion?: unknown,
 ): string {
   return (
     `ghostex queue-session-chat-prompt ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--text', text)} --json`
+    ` ${inlineTextFlag('--text', text)}${draftVersionFlag(draftVersion)} --json`
   );
 }
 
@@ -754,6 +760,7 @@ export function setSessionChatDraftCommand(
   projectId: string,
   content: string,
   clientId: string,
+  draftVersion?: unknown,
 ): string {
   const trimmedClientId = clientId.trim();
   if (trimmedClientId.length === 0) {
@@ -761,7 +768,7 @@ export function setSessionChatDraftCommand(
   }
   return (
     `ghostex set-session-chat-draft ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--content', content)} ${inlineTextFlag('--client-id', trimmedClientId)} --json`
+    ` ${inlineTextFlag('--content', content)} ${inlineTextFlag('--client-id', trimmedClientId)}${draftVersionFlag(draftVersion)} --json`
   );
 }
 

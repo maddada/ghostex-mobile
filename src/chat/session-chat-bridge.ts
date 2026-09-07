@@ -539,7 +539,7 @@ export async function runSessionChatBridgeRequest(
         if (text.length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to send.' };
         }
-        await runGhostexCli(machine, sendSessionChatMessageCommand(sessionId, projectId, text), {
+        await runGhostexCli(machine, sendSessionChatMessageCommand(sessionId, projectId, text, params.draftVersion), {
           timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
         });
         // Desktop parity: answering a session clears its attention status.
@@ -608,7 +608,7 @@ export async function runSessionChatBridgeRequest(
         if (text.trim().length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to queue.' };
         }
-        const result = await runGhostexCli(machine, queueSessionChatPromptCommand(sessionId, projectId, text), {
+        const result = await runGhostexCli(machine, queueSessionChatPromptCommand(sessionId, projectId, text, params.draftVersion), {
           timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
         });
         return { id: request.id, ok: true, result: result.json ?? {} };
@@ -676,7 +676,7 @@ export async function runSessionChatBridgeRequest(
         }
         const result = await runGhostexCli(
           machine,
-          setSessionChatDraftCommand(sessionId, projectId, content, clientId),
+          setSessionChatDraftCommand(sessionId, projectId, content, clientId, params.draftVersion),
           { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
