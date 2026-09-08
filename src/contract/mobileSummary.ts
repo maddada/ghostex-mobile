@@ -232,6 +232,8 @@ export type GhostexSession = {
   globalRef: string;
   kind: string;
   surface: string;
+  createdAt: string;
+  isDraft?: true;
   lastInteractionAt: string;
   lastActiveAt: string;
   primaryTitle: string;
@@ -804,6 +806,8 @@ export function parseSession(value: unknown): GhostexSession | null {
     globalRef: trimmedValue(value, 'globalRef'),
     kind: trimmedValue(value, 'kind'),
     surface: trimmedValue(value, 'surface'),
+    createdAt: trimmedValue(value, 'createdAt'),
+    isDraft: value.isDraft === true ? true : undefined,
     lastInteractionAt: trimmedValue(value, 'lastInteractionAt'),
     lastActiveAt: trimmedValue(value, 'lastActiveAt'),
     primaryTitle: trimmedValue(value, 'primaryTitle'),
@@ -1116,6 +1120,22 @@ export function parseSidebarSpaces(value: unknown): GhostexSidebarSpaces {
   }
   for (const spaceId of Object.keys(spaces)) {
     if (!order.includes(spaceId)) order.push(spaceId);
+  }
+  // CDXC:Spaces 2026-09-07 SEE-ALSO: Match packages/core-ui/spaces.ts and gxserver: each member keeps its first Space in sidebar order.
+  const assignedCollections = new Set<string>();
+  const assignedProjects = new Set<string>();
+  for (const spaceId of order) {
+    const space = spaces[spaceId];
+    space.memberCollectionIds = space.memberCollectionIds.filter((id) => {
+      if (assignedCollections.has(id)) return false;
+      assignedCollections.add(id);
+      return true;
+    });
+    space.memberProjectIds = space.memberProjectIds.filter((id) => {
+      if (assignedProjects.has(id)) return false;
+      assignedProjects.add(id);
+      return true;
+    });
   }
   return { order, spaces };
 }
