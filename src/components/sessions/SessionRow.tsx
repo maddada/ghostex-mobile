@@ -39,7 +39,7 @@ import { SessionCopy } from '../../copy';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
-import { ClockGlyph } from './icons';
+import { ClockGlyph, PencilGlyph } from './icons';
 import { delayedSendCountdownLabel, useNowTick } from './timerCountdown';
 
 const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
@@ -228,6 +228,8 @@ export default function SessionRow({
           <ClockGlyph size={ds(15)} color={timerClockColor} />
         ) : TagIcon !== undefined && tagColor !== null ? (
           <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
+        ) : session.isDraft && iconId !== 'browser' ? (
+          <PencilGlyph size={ds(14)} color={sidebarForeground} />
         ) : (
           <Icon size={iconSize} color={agentIconTint(iconId)} />
         )}

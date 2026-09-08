@@ -304,12 +304,18 @@ function groupsForProject(summary: GhostexMobileSummary, projectId: string): Gho
 
 /**
  * In-project display ordering, mirroring the desktop sidebar's default
- * "lastActivity" layout (packages/shared/active-sessions-sort.ts): browser-kind first →
+ * "lastActivity" layout (packages/shared/active-sessions-sort.ts): drafts newest-first → browser-kind →
  * pinned (saved order) → attention(2) > working(1) > idle(0) → most recent
  * lastInteractionAt → stable. The wire order (server sortOrder) is the stable
  * base, which matches the desktop's saved manual order.
  */
 export function compareForSidebarOrder(left: GhostexSession, right: GhostexSession): number {
+  // CDXC:Sessions 2026-09-08 SEE-ALSO: packages/shared/active-sessions-sort.ts owns the user decision to place drafts first by creation time on every app.
+  const draftDelta = Number(right.isDraft === true) - Number(left.isDraft === true);
+  if (draftDelta !== 0) return draftDelta;
+  if (left.isDraft && right.isDraft) {
+    return parseTimestamp(right.createdAt) - parseTimestamp(left.createdAt);
+  }
   const kindDelta = sessionKindRank(left) - sessionKindRank(right);
   if (kindDelta !== 0) return kindDelta;
   const pinnedDelta = pinnedRank(left) - pinnedRank(right);
@@ -465,7 +471,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   }
 
   // Desktop display layout: the wire order (server sortOrder) is the stable
-  // manual base; browser-first/pinned-first/activity sorting is applied on top
+  // manual base; draft-first/browser-first/pinned-first/activity sorting is applied on top
   // exactly like the gpui sidebar's default "lastActivity" mode.
   for (const [key, bucket] of sessionsByProjectKey) {
     sessionsByProjectKey.set(key, stableSort(bucket, compareForSidebarOrder));
@@ -581,6 +587,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     ): void => {
       const labelledSections = new Set<SessionKindSection>();
       for (const session of sessions) {
+        if (session.isDraft) {
+          items.push(sessionItem(session, groupId));
+          continue;
+        }
         const section = sessionKindSection(session);
         const kindCollapseKey = sessionKindCollapseKey(projectKey, section);
         const kindCollapsed = collapsedSessionKindKeys.has(kindCollapseKey);
@@ -628,7 +638,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     }
 
     // Grouped project: ungrouped "main" sessions first, then named groups in
-    // order with members in sessionIds order; empty groups are skipped.
+    // order with drafts first and other members in sessionIds order; empty groups are skipped.
     const sessionsById = new Map<string, GhostexSession>();
     for (const session of projectSessions) sessionsById.set(session.sessionId, session);
     const claimedSessionIds = new Set<string>();
@@ -646,6 +656,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         if (session !== undefined) groupSessions.push(session);
       }
       if (groupSessions.length === 0) continue;
+      groupSessions.sort((left, right) =>
+        left.isDraft || right.isDraft ? compareForSidebarOrder(left, right) : 0,
+      );
       const collapseKey = groupCollapseKey(projectKey, group.groupId);
       const groupCollapsed = !expandedGroupKeys.has(collapseKey);
       items.push({
