@@ -387,7 +387,7 @@ export function useSessionsScreenMenus({
       items.push({
         kind: 'item',
         key: 'full-reload',
-        label: 'Full reload',
+        label: 'Full Reload',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () => void runSessionCommand(ctx.machine, reloadSessionCommand(session.sessionId)),
       });
@@ -550,7 +550,7 @@ export function useSessionsScreenMenus({
     items.push({
       kind: 'item',
       key: 'full-reload',
-      label: 'Full reload',
+      label: 'Full Reload',
       icon: <RefreshGlyph size={14} color={menuIconColor} />,
       disabled: nonBrowser.length === 0,
       onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
@@ -755,7 +755,7 @@ export function useSessionsScreenMenus({
       items.push({
         kind: 'item',
         key: 'full-reload',
-        label: 'Full reload sessions',
+        label: 'Full Reload sessions',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
       });
@@ -857,7 +857,7 @@ export function useSessionsScreenMenus({
       items.push({
         kind: 'item',
         key: 'full-reload',
-        label: 'Full reload',
+        label: 'Full Reload',
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () => void runBulkSessionActions(ctx.machine, nonBrowser.map(reloadSessionAction)),
       });
