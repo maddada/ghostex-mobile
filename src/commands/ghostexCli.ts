@@ -508,6 +508,7 @@ export function portsListCommand(): string {
 const SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS = 15000;
 
 export type SessionChatReadOptions = {
+  subagent?: string;
   limit?: number;
   beforeOffset?: number;
   /** Long-poll: hold until the chat changes or this many ms pass. */
@@ -535,6 +536,7 @@ export function readSessionChatCommand(
   options?: SessionChatReadOptions,
 ): string {
   const parts = [`ghostex read-session-chat ${sessionChatSelector(sessionId, projectId)}`];
+  if (options?.subagent) parts.push(`--subagent ${shellQuote(options.subagent)}`);
   parts.push(positiveIntegerFlag('--limit', options?.limit, 'chat read limit').trim());
   const beforeOffset = options?.beforeOffset;
   if (beforeOffset !== undefined) {
