@@ -50,6 +50,8 @@ export type TerminalTab = {
    * the same project the first attach did.
    */
   ghostexProjectId?: string;
+  /** Launcher identity available before the inventory catches up with creation. */
+  ghostexAgentId?: string;
   /** Starting directory for shell tabs (unset → login-shell default, ~). */
   cwd?: string;
   state: TerminalTabState;
@@ -122,7 +124,7 @@ type TerminalState = {
   /** Open (or re-select) an attach tab for a remote Ghostex session. */
   attachSession: (
     machine: MachineConnectionTarget,
-    session: { sessionId: string; projectId?: string; title?: string },
+    session: { sessionId: string; projectId?: string; title?: string; agentId?: string },
   ) => Promise<string>;
   /** Open an interactive login-shell tab on a machine (in `cwd` when given). */
   openShellTab: (
@@ -218,6 +220,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     await evictExcessWarmEntries();
     try {
       await ensureConnected(machine);
+      if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
       const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
         fontSize: initialFontSize(tab.sessionKey),
         zmxBacked: tab.kind === 'attach',
@@ -225,6 +228,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       };
       if (command !== null) opts.command = command;
       await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
+      if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
+        await GhostexNative.closeTerminal(tab.sessionKey);
+      }
     } catch (error) {
       patchTab(tab.sessionKey, {
         state: 'failed',
@@ -288,6 +294,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       if (existing !== undefined) {
+        if (session.agentId) patchTab(sessionKey, { ghostexAgentId: session.agentId });
         if (session.projectId !== undefined && session.projectId.length > 0) {
           patchTab(sessionKey, { ghostexProjectId: session.projectId });
         }
@@ -310,6 +317,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         title: session.title !== undefined && session.title.length > 0 ? session.title : session.sessionId,
         kind: 'attach',
         ghostexSessionId: session.sessionId,
+        ghostexAgentId: session.agentId,
         ...(session.projectId !== undefined && session.projectId.length > 0
           ? { ghostexProjectId: session.projectId }
           : {}),

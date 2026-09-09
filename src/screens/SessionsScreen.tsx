@@ -459,25 +459,34 @@ export default function SessionsScreen({ navigation }: Props) {
 
   /** Attach a session that only exists as an id (creation flows, §6). */
   const attachCreated = useCallback(
-    async (target: MachineRecord, sessionId: string): Promise<void> => {
+    async (target: MachineRecord, sessionId: string, chatLaunch?: { agentId: string; projectId: string; title: string }): Promise<void> => {
       const created = useInventoryStore
         .getState()
         .inventoriesByMachineId[target.id]?.summary?.sessions.find(
           (session) => session.sessionId === sessionId,
         );
-      const sessionKey = await useTerminalStore.getState().attachSession(target, {
+      const sessionKey = attachSessionKey(target.id, sessionId);
+      if (chatLaunch) useTerminalStore.getState().setSessionViewMode(sessionKey, 'chat');
+      const attaching = useTerminalStore.getState().attachSession(target, {
         sessionId,
         projectId:
-          created !== undefined && created.projectId.length > 0 ? created.projectId : undefined,
-        title: created !== undefined ? sessionTitle(created) : undefined,
+          chatLaunch?.projectId ?? (created !== undefined && created.projectId.length > 0 ? created.projectId : undefined),
+        title: chatLaunch?.title ?? (created !== undefined ? sessionTitle(created) : undefined),
+        agentId: chatLaunch?.agentId,
       });
+      // CDXC:SessionChat 2026-09-09 DECISION:
+      // User: open chat immediately while the terminal starts in the background. Creation supplies the identity, so inventory and SSH attachment do not gate navigation.
+      if (!chatLaunch) await attaching;
       navigation.navigate('Terminal', {
         sessionKey,
         machineId: target.id,
-        title: created !== undefined ? sessionTitle(created) : undefined,
+        title: chatLaunch?.title ?? (created !== undefined ? sessionTitle(created) : undefined),
+      });
+      if (chatLaunch) void attaching.catch((error: unknown) => {
+        setTransientStatus(error instanceof Error ? error.message : String(error));
       });
     },
-    [navigation],
+    [navigation, setTransientStatus],
   );
 
   const runSessionCommand = useCallback(
@@ -556,19 +565,22 @@ export default function SessionsScreen({ navigation }: Props) {
     [setTransientStatus],
   );
 
-  /** Creation flow (§6): progress overlay → CLI → refresh → auto-attach. */
+  /** Chat creation opens from the returned identity; inventory and attachment finish in the background. */
   const runCreationFlow = useCallback(
-    async (target: MachineRecord, command: string, message: string): Promise<void> => {
+    async (target: MachineRecord, command: string, message: string, chatLaunch?: { agentId: string; projectId: string; title: string }): Promise<void> => {
       setOverlay(NONE);
       setProgress(message);
       try {
         const result = await runGhostexCli(target, command);
-        await refreshMachine(target);
+        if (!chatLaunch) await refreshMachine(target);
         setProgress(null);
         const sessionId = createdSessionId(result);
         if (sessionId !== null) {
-          await attachCreated(target, sessionId);
+          await attachCreated(target, sessionId, chatLaunch);
         }
+        if (chatLaunch) void refreshMachine(target).catch((error: unknown) => {
+          setTransientStatus(error instanceof Error ? error.message : String(error));
+        });
       } catch (error) {
         setProgress(null);
         setTransientStatus(error instanceof Error ? error.message : String(error));

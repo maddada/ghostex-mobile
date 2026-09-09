@@ -540,12 +540,12 @@ export async function runSessionChatBridgeRequest(
         if (text.length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to send.' };
         }
-        await runGhostexCli(machine, sendSessionChatMessageCommand(sessionId, projectId, text, params.draftVersion), {
+        const result = await runGhostexCli(machine, sendSessionChatMessageCommand(sessionId, projectId, text, params.draftVersion), {
           timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
         });
         // Desktop parity: answering a session clears its attention status.
         acknowledgeSessionAttention(machine.id, sessionId);
-        return { id: request.id, ok: true, result: { queued: true } };
+        return { id: request.id, ok: true, result: result.json ?? { queued: true } };
       }
       case 'sendKey': {
         const key = stringParam(params, 'key');

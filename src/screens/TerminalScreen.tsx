@@ -524,6 +524,18 @@ export default function TerminalScreen({ navigation, route }: Props) {
         </Pressable>
       </View>
 
+      {chatModeActive && activeTab?.state === 'failed' ? (
+        <Pressable
+          accessibilityRole='button'
+          accessibilityLabel='Retry agent startup'
+          style={styles.chatStartupError}
+          onPress={() => void reopenTab(activeTab)}
+        >
+          <Text style={styles.chatStartupErrorText}>
+            {activeTab.error ? summarizeFailure(activeTab.error, true) : 'Agent startup failed.'} Tap to retry.
+          </Text>
+        </Pressable>
+      ) : null}
       <View style={styles.terminalArea}>
         {activeTab !== null && !chatModeActive ? (
           // Only the selected tab's terminal is mounted; the native registry
@@ -554,6 +566,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             theme={settings.sessionChatTheme}
             transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
             verboseMode={settings.sessionChatVerboseMode}
+            fileEditPreviews={settings.sessionChatFileEditPreviews}
             // The page cannot see live activity; the inventory poll supplies
             // that hint without acting as an input-availability lock.
             working={activeSession?.activity === 'working'}

@@ -28,6 +28,14 @@ export const styles = StyleSheet.create({
   terminalArea: {
     flex: 1,
   },
+  chatStartupError: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chatStartupErrorText: {
+    color: GhostexPalette.STATUS_ERROR,
+    fontSize: 13,
+  },
   terminal: {
     flex: 1,
   },

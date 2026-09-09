@@ -179,12 +179,14 @@ export function createAgentCommand(
   agentId: string,
   projectId: string,
   firstInputDraft?: string,
+  deferStart = false,
 ): string {
   const draft = firstInputDraft ?? '';
   return (
     `ghostex create-agent ${shellQuote(requireId(agentId, 'agent id'))}` +
     ` --project-id ${shellQuote(requireId(projectId, 'project id'))}` +
     (draft.trim().length === 0 ? '' : ` --first-input-draft ${shellQuote(draft)}`) +
+    (deferStart ? ' --defer-start' : '') +
     ' --json'
   );
 }

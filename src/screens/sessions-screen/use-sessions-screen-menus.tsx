@@ -89,6 +89,7 @@ import {
 } from '../../sessions/sessionCommands';
 import { useInventoryStore } from '../../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../../machines/store';
+import { useSettingsStore } from '../../settings/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
 import { availableUpdate, useAndroidSelfUpdateStore } from '../../updates/androidSelfUpdateStore';
@@ -129,7 +130,7 @@ export type SessionsScreenMenusDeps = {
     target: MachineRecord,
     actions: readonly BulkSessionAction[],
   ) => Promise<void>;
-  runCreationFlow: (target: MachineRecord, command: string, message: string) => Promise<void>;
+  runCreationFlow: (target: MachineRecord, command: string, message: string, chatLaunch?: { agentId: string; projectId: string; title: string }) => Promise<void>;
   runQuickAction: (
     target: MachineRecord,
     projectId: string,
@@ -1132,10 +1133,14 @@ export function useSessionsScreenMenus({
       }
       const agentName =
         agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+      const iconId = resolveAgentIconId(agent.icon, agentName);
+      const chatFirst = useSettingsStore.getState().settings.preferredAgentInterface === 'chat'
+        && isSessionChatSupportedAgent(iconId);
       void runCreationFlow(
         target,
-        createAgentCommand(agent.agentId, header.projectId),
+        createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst),
         ProgressCopy.startingAgent(agentName, header.title),
+        chatFirst ? { agentId: iconId, projectId: header.projectId, title: agentName } : undefined,
       );
     },
     [runCreationFlow, setTransientStatus],

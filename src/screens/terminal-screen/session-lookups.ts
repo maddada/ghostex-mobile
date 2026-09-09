@@ -106,9 +106,8 @@ export function sessionAgentIdFor(
   summary: GhostexMobileSummary | null | undefined,
 ): string {
   if (tab === null || tab.ghostexSessionId === undefined) return 'terminal';
-  if (summary === null || summary === undefined) return 'terminal';
-  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
-  if (session === undefined) return 'terminal';
+  const session = summary?.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
+  if (session === undefined) return tab.ghostexAgentId ?? 'terminal';
   return resolveAgentIconId(
     session.agentIcon,
     session.agentName.length > 0 ? session.agentName : session.agent,
@@ -125,9 +124,8 @@ export function sessionProjectIdFor(
   summary: GhostexMobileSummary | null | undefined,
 ): string {
   if (tab === null || tab.ghostexSessionId === undefined) return '';
-  if (summary === null || summary === undefined) return '';
-  const session = summary.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
-  return session?.projectId ?? '';
+  const session = summary?.sessions.find((entry) => entry.sessionId === tab.ghostexSessionId);
+  return session?.projectId ?? tab.ghostexProjectId ?? '';
 }
 
 /**
