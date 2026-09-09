@@ -70,6 +70,7 @@ export type GhostexSettings = {
   sessionChatTranscriptWidthPercent: number;
   /** Reveal thinking-owned tool calls by default. */
   sessionChatVerboseMode: boolean;
+  sessionChatFileEditPreviews: boolean;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -140,6 +141,7 @@ export function defaultSettings(): GhostexSettings {
     sessionChatCustomTranscriptWidthEnabled: false,
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
+    sessionChatFileEditPreviews: false,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -245,6 +247,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
       defaults.sessionChatCustomTranscriptWidthEnabled
     ),
     sessionChatTranscriptWidthPercent,
+    sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),

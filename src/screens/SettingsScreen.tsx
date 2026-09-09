@@ -360,6 +360,8 @@ export default function SettingsScreen() {
             </Text>
           </>
         ) : null}
+        {renderToggle('sessionChatFileEditPreviews', 'Show file edit previews')}
+        <Text style={styles.sectionCaption}>Show the first seven code lines instead of only the path and change counts.</Text>
         {renderToggle('sessionChatVerboseMode', 'Verbose Mode')}
         <Text style={styles.sectionCaption}>Expands thinking blocks to show their tool calls by default.</Text>
 

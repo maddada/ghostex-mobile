@@ -148,6 +148,7 @@ export type SessionChatWebViewProps = {
   transcriptWidthPercent?: number;
   /** Reveal thinking-owned tool calls without requiring a tap. */
   verboseMode?: boolean;
+  fileEditPreviews?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -165,6 +166,7 @@ export default function SessionChatWebView({
   transcriptWidthPercent = 100,
   terminalSessionKey,
   verboseMode = false,
+  fileEditPreviews = false,
   visible,
   working,
   draftTransferRequestId = 0,
@@ -235,6 +237,7 @@ export default function SessionChatWebView({
         theme,
         transcriptWidthPercent,
         verboseMode,
+        fileEditPreviews,
       })}; true;`,
     [
       acknowledgedDraftAtMount,
@@ -247,6 +250,7 @@ export default function SessionChatWebView({
       theme,
       transcriptWidthPercent,
       verboseMode,
+      fileEditPreviews,
     ]
   );
 
@@ -276,8 +280,16 @@ export default function SessionChatWebView({
     theme,
     transcriptWidthPercent,
     verboseMode,
+    fileEditPreviews,
   });
-  presentationRef.current = { customTranscriptWidthEnabled, fontFamily, theme, transcriptWidthPercent, verboseMode };
+  presentationRef.current = {
+    customTranscriptWidthEnabled,
+    fontFamily,
+    theme,
+    transcriptWidthPercent,
+    verboseMode,
+    fileEditPreviews,
+  };
   const pushPresentation = useCallback((): void => {
     webviewRef.current?.injectJavaScript(
       'window.ghostexMobileChatSetPresentation && window.ghostexMobileChatSetPresentation(' +
@@ -287,7 +299,15 @@ export default function SessionChatWebView({
 
   useEffect(() => {
     pushPresentation();
-  }, [customTranscriptWidthEnabled, fontFamily, pushPresentation, theme, transcriptWidthPercent, verboseMode]);
+  }, [
+    customTranscriptWidthEnabled,
+    fontFamily,
+    pushPresentation,
+    theme,
+    transcriptWidthPercent,
+    verboseMode,
+    fileEditPreviews,
+  ]);
 
   const pushCurrentState = useCallback((): void => {
     pushHostState();
