@@ -70,7 +70,11 @@ import {
   stateWithProjectInCollection,
 } from '../../contract/collectionsState';
 import type { ProjectHeaderItem } from '../../contract/grouping';
-import { SESSION_TAG_SECTIONS, sessionTagIcon } from '../../contract/sessionTags';
+import {
+  SESSION_TAG_SECTIONS,
+  customSessionTagIcon,
+  sessionTagIcon,
+} from '../../contract/sessionTags';
 import {
   agentIconTint,
   displayStatus,
@@ -413,7 +417,7 @@ export function useSessionsScreenMenus({
     return items;
   };
 
-  /** SESSION "Tag as" submenu — grouped Priority/Progress/Type radio rows. */
+  /** SESSION "Tag as" submenu — grouped Priority/Progress/Type radio rows, then the machine's custom tags. */
   const sessionTagItems = (ctx: SessionContext): ContextMenuItem[] => {
     const { session } = ctx.item;
     const current = session.sessionTag;
@@ -463,6 +467,25 @@ export function useSessionsScreenMenus({
         });
       }
     });
+    // Custom tags come from the daemon's catalog in its saved order, as one more
+    // radio section after the built-ins (desktop "Tag as" menu order).
+    const customTags = summaryFor(ctx.machine.id)?.customSessionTags;
+    if (customTags !== undefined && customTags.order.length > 0) {
+      items.push({ kind: 'separator', key: 'sep-Custom' });
+      for (const tagId of customTags.order) {
+        const tag = customTags.tags[tagId];
+        if (tag === undefined) continue;
+        const CustomIcon = customSessionTagIcon(tag.icon);
+        items.push({
+          kind: 'item',
+          key: tagId,
+          label: tag.name,
+          icon: <CustomIcon size={14} color={tag.color} strokeWidth={1.9} />,
+          selected: current === tagId,
+          onPress: () => applyTag(current === tagId ? 'none' : tagId),
+        });
+      }
+    }
     return items;
   };
 

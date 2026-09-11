@@ -246,6 +246,8 @@ anchors to the long-pressed row):
 
 - **Session** (long-press): Rename, Pin/Unpin (`pin-session`), Tag as ›
   (grouped Priority/Progress/Type radio submenu with the desktop tag tints,
+  plus a Custom section listing the machine's user-defined tags from the
+  root `customSessionTags` catalog ({order, tags}: tagId, name, icon, color),
   check on `session.sessionTag`, tap-again clears → `tag-session`),
   Sleep/Wake · Attach, Copy attach command, Delayed Send (modal mirroring the
   desktop Hours/Minutes dialog → `delayed-send --delay-ms`, Cancel Timer →

@@ -28,13 +28,10 @@ import {
   agentIconTint,
   displayStatus,
   resolveAgentIconId,
+  type GhostexCustomSessionTags,
   type GhostexSession,
 } from '../../contract/mobileSummary';
-import {
-  effectiveSessionTag,
-  sessionTagColor,
-  sessionTagIcon,
-} from '../../contract/sessionTags';
+import { resolveSessionTag } from '../../contract/sessionTags';
 import { SessionCopy } from '../../copy';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
@@ -139,6 +136,8 @@ export type SessionRowProps = {
   sidebarForeground: string;
   /** True for rows inside a project card (tighter insets than Quick rows). */
   inCard: boolean;
+  /** The owning machine's custom tag catalog, so a `custom-` sessionTag resolves to its icon and color. */
+  customSessionTags?: GhostexCustomSessionTags;
   onPress: () => void;
   /** Context menu, opened by long-pressing the row (anchored to the row). */
   onMenu: (anchor: MenuAnchor) => void;
@@ -152,6 +151,7 @@ export default function SessionRow({
   sidebarBackground,
   sidebarForeground,
   inCard,
+  customSessionTags,
   onPress,
   onMenu,
 }: SessionRowProps) {
@@ -178,9 +178,9 @@ export default function SessionRow({
    * Send clock, then a Close After Done clock, then the session tag, then the
    * agent icon.
    */
-  const tag = effectiveSessionTag(session);
-  const TagIcon = tag === undefined ? undefined : sessionTagIcon(tag);
-  const tagColor = tag === undefined ? null : sessionTagColor(tag);
+  const tag = resolveSessionTag(session, customSessionTags);
+  const TagIcon = tag?.Icon;
+  const tagColor = tag === undefined ? null : tag.color;
   const timerClockColor = hasActiveDelayedSend(session)
     ? SidebarPalette.DELAYED_SEND_CLOCK
     : session.closeAfterDone

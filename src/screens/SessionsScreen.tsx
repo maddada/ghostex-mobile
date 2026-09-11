@@ -824,6 +824,7 @@ export default function SessionsScreen({ navigation }: Props) {
             sidebarBackground={sidebarAppearance.background}
             sidebarForeground={sidebarAppearance.foreground}
             inCard
+            customSessionTags={inventoriesByMachineId[machineId]?.summary?.customSessionTags}
             onPress={() => {
               if (target !== null) void attach(target, child.session);
             }}
@@ -1140,6 +1141,7 @@ export default function SessionsScreen({ navigation }: Props) {
             sidebarBackground={sidebarAppearance.background}
             sidebarForeground={sidebarAppearance.foreground}
             inCard={false}
+            customSessionTags={inventoriesByMachineId[block.machineId]?.summary?.customSessionTags}
             onPress={() => {
               if (target !== null) void attach(target, item.session);
             }}

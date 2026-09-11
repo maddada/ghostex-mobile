@@ -78,6 +78,8 @@ export type MobileSummaryWireRoot = {
   sidebarProjectCollections?: unknown;
   /** Server-normalized saved sidebar filters: {order, spaces}. */
   sidebarSpaces?: unknown;
+  /** Server-normalized custom session tag catalog: {order, tags}; absent when the daemon has none. */
+  customSessionTags?: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -189,6 +191,29 @@ export type GhostexSidebarSpaces = {
 
 export const EMPTY_SIDEBAR_SPACES: GhostexSidebarSpaces = { order: [], spaces: {} };
 
+/**
+ * One user-defined session tag, mirroring `CustomSessionTag` in
+ * packages/shared/session-tags.ts. gxserver owns the catalog per daemon and
+ * ships the resolved hex color and icon id, so the phone needs no palette mirror.
+ */
+export type GhostexCustomSessionTag = {
+  /** `custom-` plus a random token; the value a session's `sessionTag` stores. */
+  tagId: string;
+  name: string;
+  /** SIDEBAR_COMMAND_ICON_IDS glyph name (COMMAND_ICONS on the phone). */
+  icon: string;
+  /** "#rrggbb". */
+  color: string;
+};
+
+/** Ordered custom tag catalog for one machine. Empty `order` means the daemon has none. */
+export type GhostexCustomSessionTags = {
+  order: string[];
+  tags: Record<string, GhostexCustomSessionTag>;
+};
+
+export const EMPTY_CUSTOM_SESSION_TAGS: GhostexCustomSessionTags = { order: [], tags: {} };
+
 export type GhostexSessionActions = {
   acknowledgeAttention: boolean;
   attach: boolean;
@@ -250,7 +275,10 @@ export type GhostexSession = {
   isFocused: boolean;
   isFavorite: boolean;
   isPinned: boolean;
-  /** Current session tag ('' when untagged); values from SIDEBAR_SESSION_TAGS. */
+  /**
+   * Current session tag ('' when untagged): a built-in SIDEBAR_SESSION_TAGS
+   * value or a `custom-…` id resolved against the machine's `customSessionTags`.
+   */
   sessionTag: string;
   /** Live Delayed Send countdown label ('' when no timer / emitter predates it). */
   delayedSendRemainingLabel: string;
@@ -324,6 +352,8 @@ export type GhostexMobileSummary = {
   projectCollectionsState: unknown;
   /** Ordered saved sidebar filters; empty when the daemon has no Spaces. */
   sidebarSpaces: GhostexSidebarSpaces;
+  /** Ordered user-defined session tags; empty when the daemon has none. */
+  customSessionTags: GhostexCustomSessionTags;
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not
@@ -1140,6 +1170,41 @@ export function parseSidebarSpaces(value: unknown): GhostexSidebarSpaces {
   return { order, spaces };
 }
 
+/**
+ * Parse the `customSessionTags` wire key ({order, tags}) the mobile summary
+ * emits from the daemon's custom tag catalog. Like `parseSidebarSpaces` it only
+ * re-narrows the server-normalized shape and appends any tag the order array
+ * missed, so a tag a session already carries can never become unresolvable.
+ */
+export function parseCustomSessionTags(value: unknown): GhostexCustomSessionTags {
+  if (!isObject(value) || !isObject(value.tags)) return { order: [], tags: {} };
+  const byTagId = value.tags as JsonObject;
+  const tags: Record<string, GhostexCustomSessionTag> = {};
+  for (const tagId of Object.keys(byTagId)) {
+    const entry = byTagId[tagId];
+    if (!tagId.startsWith('custom-') || !isObject(entry)) continue;
+    const rawColor = trimmedValue(entry, 'color');
+    tags[tagId] = {
+      tagId,
+      name: firstNonEmpty(trimmedValue(entry, 'name')) || 'Tag',
+      icon: firstNonEmpty(trimmedValue(entry, 'icon')) || 'sparkles',
+      color: /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#9AA8B6',
+    };
+  }
+  const order: string[] = [];
+  if (Array.isArray(value.order)) {
+    for (const entry of value.order) {
+      if (typeof entry !== 'string') continue;
+      const tagId = entry.trim();
+      if (tagId in tags && !order.includes(tagId)) order.push(tagId);
+    }
+  }
+  for (const tagId of Object.keys(tags)) {
+    if (!order.includes(tagId)) order.push(tagId);
+  }
+  return { order, tags };
+}
+
 function normalizeRoot(root: JsonObject): GhostexMobileSummary {
   const rawSessions = Array.isArray(root.sessions) ? root.sessions : [];
   const sessions: GhostexSession[] = [];
@@ -1164,6 +1229,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
       ? root.sidebarProjectCollections
       : null,
     sidebarSpaces: parseSidebarSpaces(root.sidebarSpaces),
+    customSessionTags: parseCustomSessionTags(root.customSessionTags),
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
   };
 }
