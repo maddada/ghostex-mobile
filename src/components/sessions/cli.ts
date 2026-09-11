@@ -62,10 +62,12 @@ export async function runGhostexCli(
   }
 }
 
-/** Created-session id from a `{ok:true, session:{sessionId}}` payload. */
+/** Created-session id from create commands or the fork command's `{fork:{session}}` result. */
 export function createdSessionId(result: CliJsonResult): string | null {
   if (result.json === null) return null;
-  const session = result.json.session;
+  const payload = 'fork' in result.json ? result.json.fork : result.json;
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return null;
+  const session = (payload as Record<string, unknown>).session;
   if (typeof session !== 'object' || session === null || Array.isArray(session)) return null;
   const sessionId = (session as Record<string, unknown>).sessionId;
   if (typeof sessionId !== 'string') return null;
