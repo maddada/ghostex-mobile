@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ghostex",
     "slug": "ghostex-mobile",
-    "version": "9.1.0",
+    "version": "9.4.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
