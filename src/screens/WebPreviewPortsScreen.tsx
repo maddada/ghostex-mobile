@@ -1,7 +1,7 @@
 /**
- * Web preview step 1: choose which of the computer's ports to preview.
+ * Web preview step 1: enter an address or choose a listening port.
  *
- * Two ways in, both first class. The port field is what the user already knows
+ * Two ways in, both first class. The address field is what the user already knows
  * ("my app runs on 3000") and never depends on the computer answering, while
  * the list below it is discovery for everything else, read from
  * `ghostex ports --json`. A failed listing therefore reports itself and leaves
@@ -13,14 +13,15 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { WorldGlyph } from '../components/sessions/icons';
+import { PortSections } from './web-preview/PortSections';
 import { WebPreviewCopy } from '../copy';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { GhostexPalette } from '../theme/palette';
 import { fetchRemotePorts, type RemoteListeningPort } from '../webPreview/ports';
 import { useWebPreviewStore } from '../webPreview/store';
-import { parsePortInput } from '../webPreview/urls';
+import { parseAddressInput } from '../webPreview/urls';
+import { webPreviewTargetForUrl } from '../webPreview/routing';
 import { styles } from './web-preview/styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WebPreviewPorts'>;
@@ -28,13 +29,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'WebPreviewPorts'>;
 type ListingState =
   { kind: 'loading' } | { kind: 'loaded'; ports: RemoteListeningPort[] } | { kind: 'failed'; message: string };
 
-/** Secondary line of a port row: the process, then the addresses it bound. */
-function portRowDescription(entry: RemoteListeningPort): string {
-  const command = entry.command ?? WebPreviewCopy.portRowUnknownCommand;
-  if (entry.addresses.length === 0) return command;
-  return `${command} · ${entry.addresses.join(', ')}`;
-}
-
+/**
+ * CDXC:Browser 2026-09-12 DECISION:
+ * User: allow typing an address immediately on the mobile browser list and editing it while browsing.
+ */
 export default function WebPreviewPortsScreen({ navigation, route }: Props) {
   const machine = useMachinesStore((state) =>
     state.machines.find((candidate) => candidate.id === route.params.machineId)
@@ -42,10 +40,13 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
   const hydrateWebPreview = useWebPreviewStore((state) => state.hydrate);
   const rememberedPort = useWebPreviewStore((state) => state.lastPortByMachine[route.params.machineId]);
 
-  const [portText, setPortText] = useState(rememberedPort === undefined ? '' : String(rememberedPort));
-  const [portError, setPortError] = useState<string | null>(null);
+  const [addressText, setAddressText] = useState(rememberedPort === undefined ? '' : String(rememberedPort));
+  const [addressError, setAddressError] = useState<string | null>(null);
   const [listing, setListing] = useState<ListingState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const listingRequestRef = useRef(0);
 
   /*
    * The machine record is rebuilt on every inventory poll, so reading it through
@@ -56,6 +57,10 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
   machineRef.current = machine;
 
   const loadPorts = useCallback(async (isRefresh: boolean): Promise<void> => {
+    const request = ++listingRequestRef.current;
+    const isCurrent = () => listingRequestRef.current === request;
+    setDetailsError(null);
+    setInspecting(false);
     const target = machineRef.current;
     if (target === undefined) {
       setListing({ kind: 'failed', message: WebPreviewCopy.machineMissing });
@@ -65,19 +70,34 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
     else setListing({ kind: 'loading' });
     try {
       const ports = await fetchRemotePorts(target);
+      if (!isCurrent()) return;
       setListing({ kind: 'loaded', ports });
+      setRefreshing(false);
+      if (ports.length > 0) {
+        setInspecting(true);
+        try {
+          const enriched = await fetchRemotePorts(target, true);
+          if (isCurrent()) setListing({ kind: 'loaded', ports: enriched });
+        } catch {
+          if (isCurrent()) setDetailsError('Could not read page details. You can still open a port or refresh to try again.');
+        } finally {
+          if (isCurrent()) setInspecting(false);
+        }
+      }
     } catch (error) {
+      if (!isCurrent()) return;
       setListing({
         kind: 'failed',
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      if (isRefresh) setRefreshing(false);
+      if (isCurrent()) setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     void loadPorts(false);
+    return () => { listingRequestRef.current += 1; };
   }, [loadPorts]);
 
   // Remembered ports come off disk, so the field starts empty on a cold start
@@ -94,27 +114,30 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (prefilledRef.current || rememberedPort === undefined) return;
     prefilledRef.current = true;
-    setPortText((current) => (current.length === 0 ? String(rememberedPort) : current));
+    setAddressText((current) => (current.length === 0 ? String(rememberedPort) : current));
   }, [rememberedPort]);
 
   const openPort = useCallback(
-    (port: number): void => {
-      navigation.navigate('WebPreview', { machineId: route.params.machineId, remotePort: port });
+    (entry: RemoteListeningPort): void => {
+      navigation.navigate('WebPreview', { machineId: route.params.machineId, remotePort: entry.port, scheme: entry.web?.scheme ?? 'http' });
     },
     [navigation, route.params.machineId]
   );
 
-  const submitTypedPort = useCallback((): void => {
-    const port = parsePortInput(portText);
-    if (port === null) {
-      setPortError(WebPreviewCopy.invalidPort);
+  const submitAddress = useCallback((): void => {
+    const url = parseAddressInput(addressText);
+    if (url === null) {
+      setAddressError(WebPreviewCopy.invalidAddress);
       return;
     }
-    setPortError(null);
-    openPort(port);
-  }, [openPort, portText]);
+    setAddressError(null);
+    const target = webPreviewTargetForUrl(url);
+    navigation.navigate('WebPreview', target === null
+      ? { machineId: route.params.machineId, url }
+      : { machineId: route.params.machineId, ...target });
+  }, [navigation, route.params.machineId, addressText]);
 
-  const typedPortValid = parsePortInput(portText) !== null;
+  const addressValid = parseAddressInput(addressText) !== null;
   const listedPorts = listing.kind === 'loaded' ? listing.ports : [];
 
   // A machine deleted while this screen was open has nothing left to preview.
@@ -150,15 +173,17 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
         <View style={styles.portEntryRow}>
           <TextInput
             style={styles.portInput}
-            value={portText}
+            value={addressText}
             onChangeText={(value) => {
-              setPortText(value);
-              setPortError(null);
+              prefilledRef.current = true;
+              setAddressText(value);
+              setAddressError(null);
             }}
-            onSubmitEditing={submitTypedPort}
+            onSubmitEditing={submitAddress}
             placeholder={WebPreviewCopy.manualPlaceholder}
             placeholderTextColor={GhostexPalette.MUTED}
-            keyboardType='number-pad'
+            keyboardType='url'
+            selectTextOnFocus
             autoCapitalize='none'
             autoCorrect={false}
             spellCheck={false}
@@ -168,28 +193,28 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
           />
           <Pressable
             accessibilityRole='button'
-            accessibilityState={{ disabled: !typedPortValid }}
-            disabled={!typedPortValid}
-            onPress={submitTypedPort}
-            style={[styles.openButton, !typedPortValid && styles.openButtonDisabled]}
+            accessibilityState={{ disabled: !addressValid }}
+            disabled={!addressValid}
+            onPress={submitAddress}
+            style={[styles.openButton, !addressValid && styles.openButtonDisabled]}
           >
             <Text style={styles.openButtonLabel}>{WebPreviewCopy.openButton}</Text>
           </Pressable>
         </View>
-        {portError === null ? (
+        {addressError === null ? (
           <Text style={styles.hint}>{WebPreviewCopy.manualHint}</Text>
         ) : (
           <View accessibilityRole='alert' style={styles.errorBanner}>
-            <Text style={styles.errorBannerBody}>{portError}</Text>
+            <Text style={styles.errorBannerBody}>{addressError}</Text>
           </View>
         )}
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeaderTitle}>{WebPreviewCopy.listeningSection}</Text>
+          <Text style={styles.sectionHeaderTitle}>{WebPreviewCopy.listeningSection}{listedPorts.length > 0 ? ` (${listedPorts.length})` : ''}</Text>
           <Pressable
             accessibilityRole='button'
             accessibilityLabel={WebPreviewCopy.refreshButton}
-            onPress={() => void loadPorts(false)}
+            onPress={() => void loadPorts(true)}
             style={styles.pillButton}
           >
             <Text style={styles.pillButtonLabel}>{WebPreviewCopy.refreshButton}</Text>
@@ -215,35 +240,14 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
           <Text style={styles.emptyRow}>{WebPreviewCopy.listeningEmpty}</Text>
         ) : null}
 
-        {listedPorts.length > 0 ? (
-          <View style={styles.listSection}>
-            {listedPorts.map((entry, index) => (
-              <Pressable
-                key={entry.port}
-                accessibilityRole='button'
-                accessibilityLabel={WebPreviewCopy.portRowTitle(entry.port)}
-                onPress={() => openPort(entry.port)}
-                style={({ pressed }) => [
-                  styles.portRow,
-                  index > 0 && styles.portRowDivided,
-                  pressed && styles.portRowPressed,
-                ]}
-              >
-                <View style={styles.portRowIcon}>
-                  <WorldGlyph size={14} color={GhostexPalette.MUTED} />
-                </View>
-                <View style={styles.portRowBody}>
-                  <Text numberOfLines={1} style={styles.portRowTitle}>
-                    {WebPreviewCopy.portRowTitle(entry.port)}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.portRowDescription}>
-                    {portRowDescription(entry)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
+        {inspecting ? (
+          <View style={styles.pendingRow}>
+            <ActivityIndicator size='small' color={GhostexPalette.ACCENT} />
+            <Text style={styles.pendingLabel}>Reading page titles and icons…</Text>
           </View>
         ) : null}
+        {detailsError ? <Text style={styles.hint}>{detailsError}</Text> : null}
+        {listedPorts.length > 0 ? <PortSections ports={listedPorts} onOpen={openPort} /> : null}
       </ScrollView>
     </SafeAreaView>
   );

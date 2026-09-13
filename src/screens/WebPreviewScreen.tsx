@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
@@ -34,7 +34,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { GhostexPalette } from '../theme/palette';
 import { describeForwardFailure, startWebPreviewForward, type WebPreviewFailure } from '../webPreview/forwards';
 import { useWebPreviewStore } from '../webPreview/store';
-import { LOOPBACK_HOST, isLoopbackHost, localPreviewUrl, parseHttpUrl, remoteDisplayAddress } from '../webPreview/urls';
+import { LOOPBACK_HOST, isLoopbackHost, localPreviewUrl, parseHttpUrl, parseAddressInput, remoteDisplayAddress } from '../webPreview/urls';
 import { styles } from './web-preview/styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WebPreview'>;
@@ -72,7 +72,9 @@ type PreviewAddress = ({ kind: 'remote' } & RemoteTarget) | { kind: 'external'; 
 type PreviewSource = { uri: string; nonce: number };
 
 function addressText(address: PreviewAddress): string {
-  return address.kind === 'remote' ? remoteDisplayAddress(address.remotePort, address.path) : address.url;
+  return address.kind === 'remote'
+    ? `${address.scheme}://${remoteDisplayAddress(address.remotePort, address.path)}`
+    : address.url;
 }
 
 /**
@@ -178,13 +180,22 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
   /** Where Retry goes: the port that was last asked for, failed or not. */
   const intendedRef = useRef<RemoteTarget>({
     scheme: route.params.scheme ?? 'http',
-    remotePort: route.params.remotePort,
+    remotePort: route.params.remotePort ?? 80,
     path: route.params.path ?? '/',
   });
   /** Guards every state write against an older navigation finishing last. */
   const seqRef = useRef(0);
 
-  const [address, setAddress] = useState<PreviewAddress>({ kind: 'remote', ...intendedRef.current });
+  const [address, setAddress] = useState<PreviewAddress>(() => route.params.url
+    ? { kind: 'external', url: route.params.url }
+    : { kind: 'remote', ...intendedRef.current });
+  const [addressDraft, setAddressDraft] = useState(() => addressText(address));
+  const editingAddressRef = useRef(false);
+  const addressInputRef = useRef<TextInput>(null);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!editingAddressRef.current) setAddressDraft(addressText(address));
+  }, [address]);
   const [source, setSource] = useState<PreviewSource | null>(null);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const currentUrlRef = useRef<string | null>(null);
@@ -307,6 +318,34 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
     [loadUri, setLastPort]
   );
 
+  const openAddress = useCallback((url: string): void => {
+    const parsed = parseHttpUrl(url);
+    if (parsed === null) return;
+    if (isLoopbackHost(parsed.host)) {
+      void openRemotePort(parsed.scheme, parsed.port, parsed.pathAndQuery);
+      return;
+    }
+    // A newly entered website supersedes any pending port-forward navigation.
+    seqRef.current += 1;
+    setAddress({ kind: 'external', url });
+    setFailure(null);
+    setConnecting(false);
+    loadUri(url);
+  }, [loadUri, openRemotePort]);
+
+  const submitAddress = useCallback((): void => {
+    const url = parseAddressInput(addressDraft);
+    if (url === null) {
+      setAddressError(WebPreviewCopy.invalidAddress);
+      return;
+    }
+    editingAddressRef.current = false;
+    addressInputRef.current?.blur();
+    setAddressError(null);
+    setAddressDraft(url);
+    openAddress(url);
+  }, [addressDraft, openAddress]);
+
   /*
    * Retry re-establishes only the port that failed. The forward it is replacing
    * may still be half-alive on the native side, so it is stopped and forgotten
@@ -314,6 +353,10 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
    * opened are healthy and stay up.
    */
   const retry = useCallback((): void => {
+    if (address.kind === 'external') {
+      openAddress(address.url);
+      return;
+    }
     void (async () => {
       const target = intendedRef.current;
       const stale = remoteToLocalRef.current.get(target.remotePort);
@@ -325,12 +368,12 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
       }
       await openRemotePort(target.scheme, target.remotePort, target.path);
     })();
-  }, [machineId, openRemotePort]);
+  }, [address, machineId, openAddress, openRemotePort]);
 
   // Opening the screen, and re-opening it with new params from a followed link.
   useEffect(() => {
-    void openRemotePort(route.params.scheme ?? 'http', route.params.remotePort, route.params.path ?? '/');
-  }, [openRemotePort, route.params.path, route.params.remotePort, route.params.scheme]);
+    openAddress(route.params.url ?? `${route.params.scheme ?? 'http'}://localhost:${route.params.remotePort ?? 80}${route.params.path ?? '/'}`);
+  }, [openAddress, route.params.url, route.params.path, route.params.remotePort, route.params.scheme]);
 
   const handleShouldStartLoad = useCallback(
     (request: PreviewLoadRequest): boolean => {
@@ -443,16 +486,13 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
     webviewRef.current?.reload();
   }, []);
 
-  /*
-   * Loopback listeners are reachable by every app on the phone, so handing the
-   * phone-side URL to the system browser opens the same page there.
-   */
+  // Computer-side addresses stay in the preview that owns their forwards.
   const openInBrowser = useCallback((): void => {
-    if (currentUrl === null) return;
+    if (currentUrl === null || address.kind === 'remote' || isLoopbackHost(parseHttpUrl(currentUrl)?.host ?? '')) return;
     void Linking.openURL(currentUrl).catch(() => {
       Alert.alert(WebPreviewCopy.previewTitle, WebPreviewCopy.openInBrowserFailed);
     });
-  }, [currentUrl]);
+  }, [address.kind, currentUrl]);
 
   // Android's back gesture walks the page's history before leaving the preview.
   useFocusEffect(
@@ -467,7 +507,6 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
   );
 
   const linkRewriteScript = useMemo(() => buildLinkRewriteScript(forwardedPairs), [forwardedPairs]);
-  const connectingPort = address.kind === 'remote' ? address.remotePort : route.params.remotePort;
 
   /*
    * RNCWebView keeps the WebView mounted and draws this over it, so the page's
@@ -480,9 +519,9 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
       failure !== null && failure.origin === 'load' ? (
         <PreviewFailure failure={failure} onRetry={retry} />
       ) : (
-        <ConnectingSurface remotePort={connectingPort} />
+        <ConnectingSurface address={address} />
       ),
-    [connectingPort, failure, retry]
+    [address, failure, retry]
   );
 
   return (
@@ -516,16 +555,41 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
           </View>
           <ToolbarButton
             label={WebPreviewCopy.openInBrowserLabel}
-            disabled={currentUrl === null}
+            disabled={currentUrl === null || address.kind === 'remote'}
             onPress={openInBrowser}
             icon={<ExternalLinkIcon size={18} color={GhostexPalette.FOREGROUND} />}
           />
         </View>
         <View style={styles.addressBar}>
-          <Text numberOfLines={1} ellipsizeMode='middle' style={styles.addressText}>
-            {addressText(address)}
-          </Text>
+          <TextInput
+            ref={addressInputRef}
+            style={styles.addressText}
+            value={addressDraft}
+            onFocus={() => { editingAddressRef.current = true; }}
+            onBlur={() => { editingAddressRef.current = false; }}
+            onChangeText={(value) => {
+              setAddressDraft(value);
+              setAddressError(null);
+            }}
+            onSubmitEditing={submitAddress}
+            accessibilityLabel={WebPreviewCopy.manualSection}
+            placeholder={WebPreviewCopy.manualPlaceholder}
+            placeholderTextColor={GhostexPalette.MUTED}
+            keyboardType='url'
+            returnKeyType='go'
+            submitBehavior='submit'
+            autoCapitalize='none'
+            autoCorrect={false}
+            spellCheck={false}
+            selectTextOnFocus
+          />
+          <ToolbarButton
+            label={WebPreviewCopy.openButton}
+            onPress={submitAddress}
+            icon={<ArrowIcon direction='right' size={18} color={GhostexPalette.FOREGROUND} />}
+          />
         </View>
+        {addressError !== null ? <Text accessibilityRole='alert' style={styles.errorBannerBody}>{addressError}</Text> : null}
       </View>
 
       <View style={styles.contentArea}>
@@ -559,7 +623,7 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
         {failure !== null && failure.origin === 'forward' ? (
           <PreviewFailure failure={failure} onRetry={retry} />
         ) : null}
-        {source === null && failure === null ? <ConnectingSurface remotePort={connectingPort} /> : null}
+        {source === null && failure === null ? <ConnectingSurface address={address} /> : null}
 
         {/* Progress for work happening behind a page that is already on screen:
             opening the next port's forward, or loading the next page. */}
@@ -573,11 +637,13 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
   );
 }
 
-function ConnectingSurface({ remotePort }: { remotePort: number }) {
+function ConnectingSurface({ address }: { address: PreviewAddress }) {
   return (
     <View style={[styles.stateSurface, styles.failureOverlay]}>
       <ActivityIndicator size='small' color={GhostexPalette.ACCENT} />
-      <Text style={styles.stateBody}>{WebPreviewCopy.connecting(remotePort)}</Text>
+      <Text style={styles.stateBody}>
+        {address.kind === 'remote' ? WebPreviewCopy.connecting(address.remotePort) : WebPreviewCopy.loadingAddress(address.url)}
+      </Text>
     </View>
   );
 }

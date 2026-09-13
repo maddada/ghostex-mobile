@@ -38,19 +38,13 @@ export type RootStackParamList = {
   Terminal: { sessionKey: string; machineId: string; title?: string };
   /** Find Prompts: search every prompt this machine sent to an agent (`gx f`). */
   FindPrompts: { machineId: string };
-  /** Web preview step 1: pick which of the computer's ports to forward. */
+  /** Web preview opening screen: enter an address or select a listening port. */
   WebPreviewPorts: { machineId: string };
-  /**
-   * Web preview: browse `localhost:<remotePort>` on the computer through an SSH
-   * forward. `path` and `scheme` come from a followed link; they default to the
-   * site root over http.
-   */
-  WebPreview: {
-    machineId: string;
-    remotePort: number;
-    path?: string;
-    scheme?: 'http' | 'https';
-  };
+  /** Browse a computer-side port through SSH, or an ordinary website directly. */
+  WebPreview: { machineId: string } & (
+    | { remotePort: number; path?: string; scheme?: 'http' | 'https'; url?: never }
+    | { url: string; remotePort?: never; path?: never; scheme?: never }
+  );
   Settings: undefined;
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;

@@ -17,6 +17,16 @@ import {
 } from '../inventory/client';
 import { hasPassword, type MachineConnectionTarget } from '../machines/credentials';
 
+export type PortWebMetadata = {
+  scheme: 'http' | 'https';
+  status: number;
+  kind: 'page' | 'service';
+  title: string | null;
+  server: string | null;
+  contentType: string | null;
+  faviconDataUrl: string | null;
+};
+
 /** One listening TCP port on the machine, merged across its bind addresses. */
 export type RemoteListeningPort = {
   port: number;
@@ -25,6 +35,7 @@ export type RemoteListeningPort = {
   /** Process name, when the CLI could read it. */
   command: string | null;
   pid: number | null;
+  web: PortWebMetadata | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -39,6 +50,21 @@ function optionalString(value: unknown): string | null {
 
 function optionalInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) ? value : null;
+}
+
+function parseWebMetadata(value: unknown): PortWebMetadata | null {
+  if (!isRecord(value) || (value.scheme !== 'http' && value.scheme !== 'https')) return null;
+  if ((value.kind !== 'page' && value.kind !== 'service') || typeof value.status !== 'number') return null;
+  const icon = optionalString(value.faviconDataUrl);
+  return {
+    scheme: value.scheme,
+    status: value.status,
+    kind: value.kind,
+    title: optionalString(value.title),
+    server: optionalString(value.server),
+    contentType: optionalString(value.contentType),
+    faviconDataUrl: icon !== null && icon.length <= 24 * 1024 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(icon) ? icon : null,
+  };
 }
 
 /**
@@ -62,11 +88,13 @@ function mergeByPort(rows: unknown[]): RemoteListeningPort[] {
         addresses: address === null ? [] : [address],
         command: optionalString(row.command),
         pid: optionalInteger(row.pid),
+        web: parseWebMetadata(row.web),
       });
       continue;
     }
     if (address !== null && !existing.addresses.includes(address)) existing.addresses.push(address);
     if (existing.command === null) existing.command = optionalString(row.command);
+    if (existing.web === null) existing.web = parseWebMetadata(row.web);
     if (existing.pid === null) existing.pid = optionalInteger(row.pid);
   }
   return [...byPort.values()].sort((left, right) => left.port - right.port);
@@ -94,13 +122,13 @@ function parsePortsPayload(stdout: string): RemoteListeningPort[] | null {
  * specific "update Ghostex, or enter a port manually" line instead of the
  * generic outdated-machine one, because manual entry still works here.
  */
-export async function fetchRemotePorts(machine: MachineConnectionTarget): Promise<RemoteListeningPort[]> {
+export async function fetchRemotePorts(machine: MachineConnectionTarget, includeWebMetadata = false): Promise<RemoteListeningPort[]> {
   try {
     await ensureConnected(machine);
     const result = await GhostexNative.exec(
       machine.id,
-      loginShellCommand(portsListCommand()),
-      INVENTORY_EXEC_TIMEOUT_MS
+      loginShellCommand(portsListCommand(includeWebMetadata)),
+      includeWebMetadata ? 30000 : INVENTORY_EXEC_TIMEOUT_MS
     );
     const output = `${result.stdout}\n${result.stderr}`.trim();
     if (result.exitCode !== 0) {

@@ -118,6 +118,27 @@ export function parsePortInput(value: string): number | null {
   return isValidPort(port) ? port : null;
 }
 
+/** Accept a full address, a bare hostname, or a computer-side port number. */
+export function parseAddressInput(value: string): string | null {
+  const text = value.trim();
+  if (text.length === 0 || /[\s\\]/.test(text)) return null;
+  if (/^\d+$/.test(text)) {
+    const port = parsePortInput(text);
+    return port === null ? null : `http://localhost:${port}/`;
+  }
+  if (text.includes('://') && !/^https?:\/\//i.test(text)) return null;
+  const candidate = /^https?:\/\//i.test(text)
+    ? text
+    : text.startsWith('//') ? `http:${text}` : `http://${text}`;
+  const parsed = parseHttpUrl(candidate);
+  if (parsed === null || parsed.host.length === 0 || parsed.host.includes('@')) return null;
+  // Reject unsupported schemes and malformed authorities before giving them to the WebView.
+  if (!parsed.host.startsWith('[') && parsed.host.includes(':')) return null;
+  if (candidate.slice(candidate.indexOf('://') + 3).split(/[/?#]/)[0].includes('@')) return null;
+  if (/^https?:\/\//i.test(text) || text.startsWith('//') || isLoopbackHost(parsed.host)) return candidate;
+  return `https://${text}`;
+}
+
 /** The phone-side URL a forward serves. */
 export function localPreviewUrl(scheme: 'http' | 'https', localPort: number, pathAndQuery: string): string {
   return `${scheme}://${LOOPBACK_HOST}:${localPort}${pathAndQuery}`;
