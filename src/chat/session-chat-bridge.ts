@@ -34,6 +34,7 @@ import {
   removeSessionChatQueuedPromptCommand,
   reorderSessionChatQueueCommand,
   savedPromptsCommand,
+  selectSessionChatModelCommand,
   sendSessionChatKeyCommand,
   sendSessionChatMessageCommand,
   sendSessionChatQueuedPromptCommand,
@@ -93,6 +94,7 @@ const SESSION_CHAT_BRIDGE_OPS = [
   'switchDraftAgent',
   'send',
   'sendKey',
+  'selectModel',
   'switchToTerminalForAgentPicker',
   'answerPrompt',
   'interrupt',
@@ -546,6 +548,27 @@ export async function runSessionChatBridgeRequest(
         // Desktop parity: answering a session clears its attention status.
         acknowledgeSessionAttention(machine.id, sessionId);
         return { id: request.id, ok: true, result: result.json ?? { queued: true } };
+      }
+      case 'selectModel': {
+        if (typeof params.model !== 'string' || typeof params.effort !== 'string') {
+          return { id: request.id, ok: false, error: 'The model selection requires model and effort values.' };
+        }
+        const options =
+          params.options && typeof params.options === 'object' && !Array.isArray(params.options)
+            ? (params.options as Record<string, unknown>)
+            : {};
+        const result = await runGhostexCli(
+          machine,
+          selectSessionChatModelCommand(sessionId, projectId, {
+            model: params.model,
+            effort: params.effort,
+            defer: params.defer === true,
+            mode: stringParam(options, 'mode'),
+            fastMode: stringParam(options, 'fastMode'),
+          }),
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
+        );
+        return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'sendKey': {
         const key = stringParam(params, 'key');
