@@ -129,6 +129,10 @@ function requiredKey(params: Record<string, unknown>): string {
  * Turns a page request into either a CLI round trip or a host action. Returning
  * the action rather than performing it keeps this module free of navigation and
  * screen state.
+ *
+ * CDXC:PromptSearch 2026-09-13 WHY:
+ * The CLI prints each Find payload directly, without a nested `result` field.
+ * Reading `json.result` discarded successful replies and made search fail on `.rows`.
  */
 export async function runFindPromptsBridgeRequest(
   machine: MachineConnectionTarget,
@@ -153,7 +157,7 @@ export async function runFindPromptsBridgeRequest(
           }),
           { timeoutMs: FIND_SEARCH_TIMEOUT_MS },
         );
-        return { response: { id: request.id, ok: true, result: result.json?.result } };
+        return { response: { id: request.id, ok: true, result: result.json } };
       }
       case 'readText': {
         const result = await runGhostexCli(
@@ -161,7 +165,7 @@ export async function runFindPromptsBridgeRequest(
           readAgentPromptTextCommand(requiredKey(params)),
           { timeoutMs: FIND_ACTION_TIMEOUT_MS },
         );
-        return { response: { id: request.id, ok: true, result: result.json?.result } };
+        return { response: { id: request.id, ok: true, result: result.json } };
       }
       case 'toggleFavorite': {
         const result = await runGhostexCli(
@@ -169,7 +173,7 @@ export async function runFindPromptsBridgeRequest(
           toggleAgentPromptFavoriteCommand(requiredKey(params), booleanParam(params, 'favorite')),
           { timeoutMs: FIND_ACTION_TIMEOUT_MS },
         );
-        return { response: { id: request.id, ok: true, result: result.json?.result } };
+        return { response: { id: request.id, ok: true, result: result.json } };
       }
       case 'resolveLaunch': {
         const action = stringParam(params, 'action') === 'fork' ? 'fork' : 'resume';
@@ -182,7 +186,7 @@ export async function runFindPromptsBridgeRequest(
           ),
           { timeoutMs: FIND_ACTION_TIMEOUT_MS },
         );
-        return { response: { id: request.id, ok: true, result: result.json?.result } };
+        return { response: { id: request.id, ok: true, result: result.json } };
       }
       case 'copyText': {
         await Clipboard.setStringAsync(stringParam(params, 'text') ?? '');
