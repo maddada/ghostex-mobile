@@ -199,6 +199,11 @@ export function runActionCommand(commandId: string, projectId: string): string {
   );
 }
 
+/** Park or unpark through the computer's session lifecycle. */
+export function parkSessionCommand(sessionId: string, projectId: string, parked: boolean): string {
+  return `ghostex park-session ${sessionChatSelector(sessionId, projectId)} --parked ${parked ? 'true' : 'false'} --json`;
+}
+
 /** Pin/unpin: `ghostex pin-session --session-id <id> --pinned <bool> --json`. */
 export function pinSessionCommand(sessionId: string, pinned: boolean): string {
   return (
@@ -497,8 +502,8 @@ export function restoreRecentProjectCommand(projectId: string): string {
  * Web preview port discovery: `ghostex ports --json`. Lists every listening TCP
  * socket on the machine, one entry per (port, address), sorted by port.
  */
-export function portsListCommand(): string {
-  return 'ghostex ports --json';
+export function portsListCommand(includeWebMetadata = false): string {
+  return `ghostex ports --json${includeWebMetadata ? ' --web' : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -592,6 +597,23 @@ export function readSessionChatSkillsCommand(sessionId: string, projectId: strin
 /** List the session project's files for the composer's "@" mentions. */
 export function readSessionChatFilesCommand(sessionId: string, projectId: string): string {
   return `ghostex read-session-chat-files ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
+export function selectSessionChatModelCommand(
+  sessionId: string,
+  projectId: string,
+  selection: { model: string; effort: string; defer?: boolean; mode?: string; fastMode?: string }
+): string {
+  const parts = [
+    `ghostex select-session-chat-model ${sessionChatSelector(sessionId, projectId)}`,
+    `--model ${shellQuote(selection.model)}`,
+    `--effort ${shellQuote(selection.effort)}`,
+  ];
+  if (selection.defer) parts.push('--defer');
+  if (selection.mode !== undefined) parts.push(`--mode ${shellQuote(selection.mode)}`);
+  if (selection.fastMode !== undefined) parts.push(`--fast-mode ${shellQuote(selection.fastMode)}`);
+  parts.push('--json');
+  return parts.join(' ');
 }
 
 function draftVersionFlag(version?: unknown): string {
