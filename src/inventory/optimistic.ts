@@ -12,6 +12,7 @@ export type OptimisticSessionPatch = Partial<
     | 'displayTitle'
     | 'displayTitleTooltip'
     | 'isPinned'
+    | 'isParked'
     | 'sessionTag'
     | 'sessionNote'
     | 'isSleeping'

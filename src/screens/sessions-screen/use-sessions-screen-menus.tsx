@@ -20,6 +20,7 @@ import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
   ArrowGlyph,
+  ArchiveGlyph,
   ChevronDownGlyph,
   ClockGlyph,
   CopyGlyph,
@@ -53,6 +54,7 @@ import {
   forkSessionCommand,
   moveProjectCommand,
   pinSessionCommand,
+  parkSessionCommand,
   reloadSessionCommand,
   removeProjectCommand,
   sleepSessionCommand,
@@ -89,6 +91,7 @@ import {
   FORK_AGENT_ICONS,
   lifecycleMutation,
   pinMutation,
+  parkMutation,
   tagMutation,
 } from '../../sessions/sessionCommands';
 import { useInventoryStore } from '../../inventory/store';
@@ -287,6 +290,18 @@ export function useSessionsScreenMenus({
         icon: <TagGlyph size={14} color={menuIconColor} />,
         submenu: true,
         onPress: () => setOverlay({ kind: 'sessionMenu', ctx, view: 'tags' }),
+      });
+      items.push({
+        kind: 'item',
+        key: 'park',
+        label: session.isParked ? 'Unpark' : 'Park',
+        icon: <ArchiveGlyph size={14} color={menuIconColor} />,
+        onPress: () =>
+          void runSessionCommand(
+            ctx.machine,
+            parkSessionCommand(session.sessionId, session.projectId, !session.isParked),
+            { optimisticChange: parkMutation(session.sessionId, !session.isParked) },
+          ),
       });
     }
     if (sleeping || isRunningSession(session)) {

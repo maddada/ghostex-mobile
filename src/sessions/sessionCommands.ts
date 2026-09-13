@@ -44,8 +44,17 @@ export function pinMutation(sessionId: string, isPinned: boolean): OptimisticInv
   return {
     kind: 'sessionPatch',
     sessionId,
-    patch: { isPinned },
+    patch: { isPinned, ...(isPinned ? { isParked: false } : {}) },
     confirmPatch: { isPinned },
+  };
+}
+
+export function parkMutation(sessionId: string, isParked: boolean): OptimisticInventoryChange {
+  return {
+    kind: 'sessionPatch',
+    sessionId,
+    patch: { isParked, ...(isParked ? { isPinned: false } : {}) },
+    confirmPatch: { isParked },
   };
 }
 

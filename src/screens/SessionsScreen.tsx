@@ -309,6 +309,7 @@ export default function SessionsScreen({ navigation }: Props) {
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
+          expandedParkedSessionKeysByMachine: collapse.expandedParkedSessionKeysByMachine,
         },
       }),
     [
@@ -322,6 +323,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.collapsedSessionListsByMachine,
       collapse.collapsedSectionsByMachine,
       collapse.collapsedSessionKindsByMachine,
+      collapse.expandedParkedSessionKeysByMachine,
     ],
   );
 

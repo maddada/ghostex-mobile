@@ -226,17 +226,22 @@ export function groupCollapseKey(projectKey: string, groupId: string): string {
   return `${projectKey}|${groupId}`;
 }
 
-/** In-project kind disclosures, mirroring desktop getProjectSessionSection. */
-export type SessionKindSection = 'browser' | 'pinned' | 'sessions';
+/** CDXC:Mobile 2026-09-12 DECISION:
+ * User: parked sessions need their own section on mobile, with a Park action.
+ * Keep the project-level Parked disclosure accessible independently of ordinary row clipping and named groups.
+ */
+export type SessionKindSection = 'browser' | 'pinned' | 'sessions' | 'parked';
 
 export const SESSION_KIND_LABELS: Readonly<Record<SessionKindSection, string>> = {
   browser: SessionCopy.browserKindLabel,
   pinned: SessionCopy.pinnedKindLabel,
   sessions: SessionCopy.sessionsKindLabel,
+  parked: SessionCopy.parkedKindLabel,
 };
 
 export function sessionKindSection(session: GhostexSession): SessionKindSection {
   if (session.kind === 'browser' || session.surface === 'browser') return 'browser';
+  if (session.isParked) return 'parked';
   return session.isPinned ? 'pinned' : 'sessions';
 }
 
@@ -312,6 +317,15 @@ function groupsForProject(summary: GhostexMobileSummary, projectId: string): Gho
 export function compareForSidebarOrder(left: GhostexSession, right: GhostexSession): number {
   const kindDelta = sessionKindRank(left) - sessionKindRank(right);
   if (kindDelta !== 0) return kindDelta;
+  const parkedDelta = Number(left.isParked === true) - Number(right.isParked === true);
+  if (parkedDelta !== 0) return parkedDelta;
+  // CDXC:Sessions 2026-09-12 SEE-ALSO: packages/shared/active-sessions-sort.ts owns the decision to sort Parked by activity time alone, newest first, on every client.
+  if (left.isParked && right.isParked) {
+    return (
+      parseTimestamp(right.lastInteractionAt) - parseTimestamp(left.lastInteractionAt) ||
+      left.sessionId.localeCompare(right.sessionId)
+    );
+  }
   const pinnedDelta = pinnedRank(left) - pinnedRank(right);
   if (pinnedDelta !== 0) return pinnedDelta;
   if (left.isPinned && right.isPinned) return 0;
@@ -436,6 +450,8 @@ export type DrawerBuildInput = {
    * like the desktop sidebar's EXPANDED_PROJECT_SESSION_SECTIONS.
    */
   collapsedSessionKindKeys: ReadonlySet<string>;
+  /** Parked starts collapsed on each app launch, matching the desktop sidebar. */
+  expandedParkedSessionKeys?: ReadonlySet<string>;
 };
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
@@ -448,6 +464,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     collapsedSessionListKeys,
     collapsedSectionKeys,
     collapsedSessionKindKeys,
+    expandedParkedSessionKeys = new Set<string>(),
   } = input;
 
   const projectById = new Map<string, GhostexProject>();
@@ -495,9 +512,11 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const items: DrawerItem[] = [];
 
   const emitProject = (projectKey: string, collectionColor?: string): void => {
-    const projectSessions = sessionsByProjectKey.get(projectKey);
-    if (projectSessions === undefined) return;
-    const first = projectSessions.length > 0 ? projectSessions[0] : null;
+    const allProjectSessions = sessionsByProjectKey.get(projectKey);
+    if (allProjectSessions === undefined) return;
+    const parkedSessions = allProjectSessions.filter((session) => sessionKindSection(session) === 'parked');
+    const projectSessions = allProjectSessions.filter((session) => sessionKindSection(session) !== 'parked');
+    const first = allProjectSessions.length > 0 ? allProjectSessions[0] : null;
     const project = projectKey.startsWith('id:')
       ? projectById.get(projectKey.slice(3)) ?? null
       : null;
@@ -512,7 +531,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     const projectPath =
       project !== null ? project.path ?? '' : first === null ? '' : first.projectPath;
     const legacyGroupId = first === null ? '' : first.groupId;
-    const counts = countSessions(projectSessions);
+    const counts = countSessions(allProjectSessions);
     const icon: GhostexProjectIcon = project !== null
       ? project.icon
       : { imageDataUrl: '', discoveredIconDataUrl: '', glyph: '', glyphColor: '', isWorktree: false };
@@ -534,7 +553,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       projectPath,
       isChatCollection: false,
       collapsed,
-      sessionCount: projectSessions.length,
+      sessionCount: allProjectSessions.length,
       workingCount: counts.workingCount,
       attentionCount: counts.attentionCount,
       sleepingCount: counts.sleepingCount,
@@ -549,7 +568,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     });
     if (collapsed) return;
 
-    if (projectSessions.length === 0) {
+    if (allProjectSessions.length === 0) {
       items.push({
         type: 'PROJECT_EMPTY',
         key: `empty:${projectKey}`,
@@ -567,7 +586,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       machineId,
       projectKey,
       projectId,
-      groupId,
+      groupId: groupId || namedGroups.find((group) => group.sessionIds.includes(session.sessionId))?.groupId || session.groupId,
       projectTitle,
       projectPath,
       session,
@@ -576,10 +595,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
 
     /*
      * Desktop parity (session-group-section.tsx ProjectSessionSectionToggle):
-     * a project's own list is three independent disclosures. The uppercase
-     * label sits above the first row of its kind, and collapsing one hides
-     * only that kind's rows — the "Show N more" clip is applied first, exactly
-     * like the desktop sidebar clips before it partitions the rendered ids.
+     * The label sits above the first row of its kind, and collapsing one hides
+     * only that kind's rows. Parked is emitted separately so the ordinary
+     * "Show N more" cap cannot hide its disclosure.
      */
     const emitSessionsWithKindLabels = (
       sessions: readonly GhostexSession[],
@@ -589,7 +607,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       for (const session of sessions) {
         const section = sessionKindSection(session);
         const kindCollapseKey = sessionKindCollapseKey(projectKey, section);
-        const kindCollapsed = collapsedSessionKindKeys.has(kindCollapseKey);
+        const kindCollapsed =
+          section === 'parked'
+            ? !expandedParkedSessionKeys.has(kindCollapseKey)
+            : collapsedSessionKindKeys.has(kindCollapseKey);
         if (!labelledSections.has(section)) {
           labelledSections.add(section);
           items.push({
@@ -630,6 +651,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           collectionColor,
         });
       }
+      emitSessionsWithKindLabels(parkedSessions, '');
       return;
     }
 
@@ -678,6 +700,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         items.push(sessionItem(session, group.groupId));
       }
     }
+    emitSessionsWithKindLabels(parkedSessions, '');
   };
 
   /*
@@ -691,8 +714,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const emittedProjectKeys = new Set<string>();
   emittedProjectKeys.add(CHATS_PROJECT_KEY);
 
-  const chatSessions = sessionsByProjectKey.get(CHATS_PROJECT_KEY) ?? [];
-  const quickCounts = countSessions(chatSessions);
+  const allChatSessions = sessionsByProjectKey.get(CHATS_PROJECT_KEY) ?? [];
+  const chatSessions = allChatSessions.filter((session) => sessionKindSection(session) !== 'parked');
+  const parkedChatSessions = allChatSessions.filter((session) => sessionKindSection(session) === 'parked');
+  const quickCounts = countSessions(allChatSessions);
   const quickCollapsed = collapsedSectionKeys.has('quick');
   items.push({
     type: 'SECTION_LABEL',
@@ -706,7 +731,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     awakeCount: quickCounts.awakeCount,
   });
   if (!quickCollapsed) {
-    if (chatSessions.length === 0) {
+    if (allChatSessions.length === 0) {
       items.push({
         type: 'PROJECT_EMPTY',
         key: `empty:${CHATS_PROJECT_KEY}`,
@@ -744,6 +769,35 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
             : SessionCopy.showLess,
           totalSessionCount: chatSessions.length,
         });
+      }
+      if (parkedChatSessions.length > 0) {
+        const kindCollapseKey = sessionKindCollapseKey(CHATS_PROJECT_KEY, 'parked');
+        const collapsed = !expandedParkedSessionKeys.has(kindCollapseKey);
+        items.push({
+          type: 'SESSION_KIND_LABEL',
+          key: `kind:${kindCollapseKey}`,
+          machineId,
+          projectKey: CHATS_PROJECT_KEY,
+          section: 'parked',
+          kindCollapseKey,
+          label: SessionCopy.parkedKindLabel,
+          collapsed,
+        });
+        if (!collapsed) {
+          for (const session of parkedChatSessions) {
+            items.push({
+              type: 'SESSION',
+              key: `session:${CHATS_PROJECT_KEY}:${session.sessionId}`,
+              machineId,
+              projectKey: CHATS_PROJECT_KEY,
+              projectId: session.projectId,
+              groupId: session.groupId,
+              projectTitle: SessionCopy.chatsTitle,
+              projectPath: '',
+              session,
+            });
+          }
+        }
       }
     }
   }

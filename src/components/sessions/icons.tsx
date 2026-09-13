@@ -397,6 +397,21 @@ export function GitForkGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Archive box for Park, matching the desktop session action. */
+export function ArchiveGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3} y={3} width={18} height={4} rx={1} stroke={color} strokeWidth={2} />
+      <Path
+        d="M 5 7 v 12 a 2 2 0 0 0 2 2 h 10 a 2 2 0 0 0 2 -2 V 7 M 10 11 h 4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** Pin (desktop IconPin, mirrored like the sidebar's pinned marker). */
 export function PinGlyph({ size, color }: GlyphProps) {
   return (

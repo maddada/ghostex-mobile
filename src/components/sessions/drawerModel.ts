@@ -45,6 +45,7 @@ export type DrawerCollapseInput = {
   collapsedSessionListsByMachine: Record<string, string[]>;
   collapsedSectionsByMachine: Record<string, string[]>;
   collapsedSessionKindsByMachine: Record<string, string[]>;
+  expandedParkedSessionKeysByMachine?: Record<string, string[]>;
 };
 
 export type DrawerListInput = {
@@ -178,6 +179,7 @@ function machineBlocks(
       collapsedSessionKindKeys: new Set(
         collapse.collapsedSessionKindsByMachine[machine.id] ?? [],
       ),
+      expandedParkedSessionKeys: new Set(collapse.expandedParkedSessionKeysByMachine?.[machine.id] ?? []),
     }),
   );
   if (items.length === 0) {

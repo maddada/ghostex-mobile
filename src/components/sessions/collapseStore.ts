@@ -50,6 +50,8 @@ type CollapseState = {
   collapsedSectionsByMachine: Record<string, string[]>;
   /** Persisted per machine: collapsed in-project kind-disclosure keys. */
   collapsedSessionKindsByMachine: Record<string, string[]>;
+  /** In-memory per project: Parked always starts collapsed after an app restart. */
+  expandedParkedSessionKeysByMachine: Record<string, string[]>;
   /** In-memory: collapsed machine section ids (multi-machine drawer). */
   collapsedMachineIds: string[];
 
@@ -127,6 +129,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
     collapsedSessionListsByMachine: {},
     collapsedSectionsByMachine: {},
     collapsedSessionKindsByMachine: {},
+    expandedParkedSessionKeysByMachine: {},
     collapsedMachineIds: [],
 
     hydrate: async () => {
@@ -198,8 +201,19 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
     toggleSection: (machineId, section) =>
       toggleIn('collapsedSectionsByMachine', machineId, section),
 
-    toggleSessionKind: (machineId, kindCollapseKey) =>
-      toggleIn('collapsedSessionKindsByMachine', machineId, kindCollapseKey),
+    toggleSessionKind: (machineId, kindCollapseKey) => {
+      if (kindCollapseKey.endsWith('|parked')) {
+        const current = get().expandedParkedSessionKeysByMachine;
+        set({
+          expandedParkedSessionKeysByMachine: {
+            ...current,
+            [machineId]: toggled(current[machineId] ?? [], kindCollapseKey),
+          },
+        });
+      } else {
+        toggleIn('collapsedSessionKindsByMachine', machineId, kindCollapseKey);
+      }
+    },
 
     toggleMachine: (machineId) => {
       set({ collapsedMachineIds: toggled(get().collapsedMachineIds, machineId) });

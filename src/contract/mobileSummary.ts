@@ -57,6 +57,7 @@ export type MobileSummaryWireSession = {
   isFocused?: boolean;
   isFavorite?: boolean;
   isPinned?: boolean;
+  isParked?: boolean;
   isSleeping?: boolean;
   isLive?: boolean;
   isPrimaryTitleTerminalTitle?: boolean;
@@ -275,6 +276,7 @@ export type GhostexSession = {
   isFocused: boolean;
   isFavorite: boolean;
   isPinned: boolean;
+  isParked?: boolean;
   /**
    * Current session tag ('' when untagged): a built-in SIDEBAR_SESSION_TAGS
    * value or a `custom-…` id resolved against the machine's `customSessionTags`.
@@ -852,6 +854,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     isFocused: boolValue(value, 'isFocused', false),
     isFavorite: boolValue(value, 'isFavorite', false),
     isPinned: boolValue(value, 'isPinned', false),
+    isParked: boolValue(value, 'isParked', false),
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
     delayedSendDeadlineAt: trimmedValue(value, 'delayedSendDeadlineAt'),
