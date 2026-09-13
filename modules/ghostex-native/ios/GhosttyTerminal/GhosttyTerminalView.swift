@@ -67,6 +67,7 @@ class GhosttyTerminalView: UIView {
 
     /// Fired on a plain single tap that did not interact with a selection.
     var onSingleTap: (() -> Void)?
+    var onOpenUrl: ((String) -> Void)?
 
     /// Fired after software-keyboard input consumes the RN accessory's one-shot modifiers.
     var onKeyModifiersConsumed: (() -> Void)?
@@ -383,6 +384,7 @@ class GhosttyTerminalView: UIView {
         onResize = nil
         onZoomAction = nil
         onSingleTap = nil
+        onOpenUrl = nil
         writeCallback = nil
 
         // Stop rendering/input callbacks and mark the surface as not visible.

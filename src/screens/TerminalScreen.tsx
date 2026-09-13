@@ -43,6 +43,7 @@ import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
 import { setMountedSessionKeys } from '../terminal/zmxDisplay';
 import { GhostexPalette } from '../theme/palette';
+import { useOpenMachineLink } from '../webPreview/useOpenMachineLink';
 import {
   AGENT_OVERLAY_NONE,
   ANDROID_KEYBOARD_GAP,
@@ -88,6 +89,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   /** Session keys already auto-focused this visit (hide-keyboard-on-startup off). */
   const autoFocusedSessionsRef = useRef<Set<string>>(new Set());
 
+  const openMachineLink = useOpenMachineLink();
   const activeTab = tabs.find((tab) => tab.sessionKey === selectedSessionKey) ?? null;
   const activeAgentId = useInventoryStore((state) =>
     sessionAgentIdFor(
@@ -544,6 +546,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             sessionKey={activeTab.sessionKey}
             style={styles.terminal}
             onSingleTap={() => setTapKeyboardHint(true)}
+            onOpenUrl={({ nativeEvent }) => openMachineLink(activeTab.machineId, nativeEvent.url)}
           />
         ) : null}
         {activeTab !== null && chatMachineTarget !== null ? (

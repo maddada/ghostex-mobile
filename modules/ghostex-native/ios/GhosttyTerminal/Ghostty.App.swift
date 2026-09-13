@@ -417,7 +417,7 @@ extension Ghostty {
                         guard let url = URL(string: urlString),
                               let scheme = url.scheme?.lowercased(),
                               scheme == "http" || scheme == "https" else { return }
-                        UIApplication.shared.open(url)
+                        terminalView?.onOpenUrl?(url.absoluteString)
                     }
                 }
                 return true

@@ -552,7 +552,7 @@ class GhostexNativeModule : Module() {
     // endregion
 
     View(GhostexTerminalView::class) {
-      Events("onSingleTap")
+      Events("onSingleTap", "onOpenUrl")
 
       Prop("sessionKey") { view: GhostexTerminalView, sessionKey: String ->
         view.setSessionKey(sessionKey)

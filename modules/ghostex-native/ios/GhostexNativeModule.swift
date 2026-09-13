@@ -700,7 +700,7 @@ public class GhostexNativeModule: Module {
 
         View(GhostexTerminalHostView.self) {
             ViewName("GhostexTerminalView")
-            Events("onSingleTap")
+            Events("onSingleTap", "onOpenUrl")
 
             Prop("sessionKey") { (view: GhostexTerminalHostView, sessionKey: String) in
                 view.setSessionKey(sessionKey)

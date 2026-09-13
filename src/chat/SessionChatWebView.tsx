@@ -10,7 +10,7 @@ import { Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Alert, Linking, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Alert, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -19,7 +19,7 @@ import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useTerminalStore } from '../terminal/sessions';
-import { webPreviewTargetForUrl } from '../webPreview/routing';
+import { useOpenMachineLink } from '../webPreview/useOpenMachineLink';
 import {
   handoffSessionChatDraft,
   parseSessionChatBridgeNotice,
@@ -175,6 +175,7 @@ export default function SessionChatWebView({
   openSessionNoteRequestId = 0,
   openSavedPromptsRequestId = 0,
 }: SessionChatWebViewProps) {
+  const openMachineLink = useOpenMachineLink();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const webviewRef = useRef<WebView>(null);
   const mountedRef = useRef(true);
@@ -514,10 +515,9 @@ export default function SessionChatWebView({
     <WebView
       ref={webviewRef}
       source={source}
-      // Only the page's own origin, exactly as when it loaded as an HTML
-      // string under about:blank. Everything else stays with
-      // onShouldStartLoadWithRequest below.
-      originWhitelist={['file://*']}
+      // HTTP origins must reach our handler. Unlisted origins are opened by
+      // react-native-webview through Linking before that handler can run.
+      originWhitelist={['file://*', 'http://*', 'https://*']}
       // iOS needs the read scope widened from the single index.html file to
       // its directory, or the page cannot load ./shiki/*.js beside it.
       allowingReadAccessToURL={baseUri}
@@ -537,18 +537,8 @@ export default function SessionChatWebView({
       // a listener on the machine this session runs on and therefore open in
       // the Web preview, which forwards the port.
       onShouldStartLoadWithRequest={(request) => {
-        if (request.url.startsWith('http://') || request.url.startsWith('https://')) {
-          const previewTarget = webPreviewTargetForUrl(request.url);
-          if (previewTarget !== null) {
-            navigation.navigate('WebPreview', {
-              machineId: machine.id,
-              remotePort: previewTarget.remotePort,
-              path: previewTarget.path,
-              scheme: previewTarget.scheme,
-            });
-            return false;
-          }
-          void Linking.openURL(request.url).catch(() => undefined);
+        if (/^https?:\/\//i.test(request.url)) {
+          openMachineLink(machine.id, request.url);
           return false;
         }
         return true;

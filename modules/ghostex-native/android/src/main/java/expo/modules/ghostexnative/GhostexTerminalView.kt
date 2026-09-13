@@ -1,10 +1,7 @@
 package expo.modules.ghostexnative
 
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
 import android.graphics.Typeface
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -32,6 +29,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   ExpoView(context, appContext), TerminalViewClient {
 
   private val onSingleTap by EventDispatcher()
+  private val onOpenUrl by EventDispatcher()
 
   internal val terminalView = TerminalView(context, null)
 
@@ -414,14 +412,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   }
 
   private fun openUrl(url: String): Boolean {
-    return try {
-      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      context.startActivity(intent)
-      true
-    } catch (ignored: ActivityNotFoundException) {
-      // No browser installed: treat as a plain tap.
-      false
-    }
+    onOpenUrl(mapOf("url" to url))
+    return true
   }
 
   override fun shouldBackButtonBeMappedToEscape(): Boolean = false

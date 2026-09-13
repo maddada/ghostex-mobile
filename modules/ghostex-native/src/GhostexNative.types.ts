@@ -224,4 +224,5 @@ export type GhostexTerminalViewProps = {
   style?: import('react-native').StyleProp<import('react-native').ViewStyle>;
   /** Fired on a single tap that did not interact with a selection. */
   onSingleTap?: () => void;
+  onOpenUrl: (event: { nativeEvent: { url: string } }) => void;
 };

@@ -12,6 +12,7 @@ import ExpoModulesCore
 
 final class GhostexTerminalHostView: ExpoView {
     let onSingleTap = EventDispatcher()
+    let onOpenUrl = EventDispatcher()
 
     private(set) var sessionKey: String?
     private weak var attachedTerminalView: GhosttyTerminalView?
@@ -63,6 +64,10 @@ final class GhostexTerminalHostView: ExpoView {
             self?.onSingleTap()
         }
 
+        terminalView.onOpenUrl = { [weak self] url in
+            self?.onOpenUrl(["url": url])
+        }
+
         terminalView.resumeRendering()
         terminalView.sizeDidChange(bounds.size)
     }
@@ -70,6 +75,7 @@ final class GhostexTerminalHostView: ExpoView {
     func detachTerminalView() {
         guard let terminalView = attachedTerminalView else { return }
         terminalView.onSingleTap = nil
+        terminalView.onOpenUrl = nil
         terminalView.pauseRendering()
         terminalView.removeFromSuperview()
         attachedTerminalView = nil
