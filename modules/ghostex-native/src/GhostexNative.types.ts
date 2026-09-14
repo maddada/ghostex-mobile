@@ -189,6 +189,7 @@ export type ConnectionStateEvent = {
 };
 
 export type GhostexNativeEvents = {
+  onNetworkChanged: (event: Record<string, never>) => void;
   onTerminalState: (event: TerminalStateEvent) => void;
   onTerminalTitle: (event: TerminalTitleEvent) => void;
   onTerminalBell: (event: TerminalBellEvent) => void;

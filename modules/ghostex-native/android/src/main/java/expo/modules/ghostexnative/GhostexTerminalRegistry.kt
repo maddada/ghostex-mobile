@@ -17,7 +17,8 @@ class GhostexTerminalEntry(
   val machineId: String,
   @Volatile var fontSizeDp: Int,
   /** zmx-backed (`ghostex attach`) sessions get the post-attach viewport refresh. */
-  val zmxBacked: Boolean = false
+  val zmxBacked: Boolean = false,
+  val connection: GhostexSshConnection? = null
 ) {
   /** Set on the main thread right after construction in openTerminal. */
   @Volatile
@@ -80,6 +81,8 @@ class GhostexTerminalRegistry {
   }
 
   fun remove(sessionKey: String): GhostexTerminalEntry? = entries.remove(sessionKey)
+
+  fun remove(entry: GhostexTerminalEntry): Boolean = entries.remove(entry.sessionKey, entry)
 
   /** Called when a view takes a session key; it stays tracked until it releases the key. */
   fun trackView(sessionKey: String, view: GhostexTerminalView) {

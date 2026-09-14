@@ -106,8 +106,9 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
    * entry (closeTerminal), and the view must still be reachable for the next
    * entry opened under the same key.
    */
-  internal fun detachFromEntry() {
+  internal fun detachFromEntry(expected: GhostexTerminalEntry? = null) {
     val current = entry ?: return
+    if (expected != null && current !== expected) return
     entry = null
     if (current.attachedView === this) current.attachedView = null
     terminalView.setViewDrivenResizeSuppressed(false)

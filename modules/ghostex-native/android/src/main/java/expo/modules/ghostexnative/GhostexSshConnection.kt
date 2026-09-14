@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import net.schmizz.keepalive.KeepAliveProvider
 import net.schmizz.sshj.AndroidConfig
 import net.schmizz.sshj.Config
@@ -40,7 +41,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 class GhostexSshConnection(
   context: Context,
   val machineId: String,
-  private val config: SshConfigRecord
+  private val config: SshConfigRecord,
+  private val onTransportDeath: (GhostexSshConnection, String) -> Unit
 ) {
 
   class ExecOutcome(val stdout: String, val stderr: String, val exitCode: Int)
@@ -57,6 +59,10 @@ class GhostexSshConnection(
   @Volatile
   private var client: SSHClient? = null
 
+  private val lifecycleLock = Any()
+  private val cleanupStarted = AtomicBoolean(false)
+  @Volatile private var closed = false
+
   /** Darwin's SSH server is more reliable with a streamed exec upload than SFTP. */
   @Volatile
   private var execUploadPreferred: Boolean? = null
@@ -69,7 +75,7 @@ class GhostexSshConnection(
 
   fun isConnected(): Boolean {
     val ssh = client ?: return false
-    return ssh.isConnected && ssh.isAuthenticated
+    return !closed && ssh.isConnected && ssh.isAuthenticated
   }
 
   /** Blocking connect + auth with the fork's 8s connect timeout. Throws [GhostexException]. */
@@ -77,15 +83,27 @@ class GhostexSshConnection(
     ensureBundledBouncyCastleProvider()
     val ssh = SSHClient(createSshConfig())
     ssh.connectTimeout = CONNECT_TIMEOUT_MS
-    // This client is long-lived and multiplexes idle terminal channels, so unlike the fork's
-    // per-command clients it must not have a socket read timeout; keep-alives detect dead peers.
-    ssh.timeout = 0
+    // Bound the SSH greeting as well as TCP connect. Idle reads become unlimited after auth.
+    ssh.timeout = CONNECT_TIMEOUT_MS
+    /**
+     * CDXC:RemoteMachines 2026-09-14 WHY:
+     * SSHJ starts its keep-alive thread inside connect only when the interval is already nonzero.
+     * Setting it after authentication left half-open mobile connections alive until force quit.
+     */
+    ssh.connection.keepAlive.keepAliveInterval =
+      if (config.keepAliveEnabled) config.keepAliveIntervalSec.coerceIn(MIN_KEEP_ALIVE_INTERVAL_SECONDS, MAX_KEEP_ALIVE_INTERVAL_SECONDS)
+      else 0
+    synchronized(lifecycleLock) {
+      if (closed) throw notConnectedException(machineId)
+      client = ssh
+    }
     // Host-key identity is always config.host:config.port, never the dial target, so a
     // tailcat machine keeps one pinned fingerprint across every loopback port it gets.
     val verifier = GhostexPersistedHostKeyVerifier(config.host, config.port, hostKeys)
     ssh.addHostKeyVerifier(verifier)
     try {
       val (dialHost, dialPort) = resolveDialTarget()
+      if (closed) throw notConnectedException(machineId)
       val connectStartedAt = System.currentTimeMillis()
       Log.i(LOG_TAG, "connect $machineId -> $dialHost:$dialPort")
       ssh.connect(dialHost, dialPort)
@@ -94,15 +112,13 @@ class GhostexSshConnection(
         "transport up for $machineId in ${System.currentTimeMillis() - connectStartedAt}ms"
       )
       authenticate(ssh)
-      // 0 disables SSHJ's keep-alive thread; the thread dies with the transport on disconnect.
-      ssh.connection.keepAlive.keepAliveInterval =
-        if (config.keepAliveEnabled) config.keepAliveIntervalSec.coerceIn(MIN_KEEP_ALIVE_INTERVAL_SECONDS, MAX_KEEP_ALIVE_INTERVAL_SECONDS)
-        else 0
+      ssh.socket.soTimeout = 0
       installPortForwardTeardownOnTransportDeath(ssh)
-      client = ssh
+      if (!isConnected()) throw notConnectedException(machineId)
     } catch (error: Exception) {
       try {
-        if (ssh.isConnected) ssh.disconnect() else ssh.close()
+        ssh.socket?.close()
+        ssh.close()
       } catch (ignored: Exception) {
         // The original connect/auth error is the actionable failure.
       }
@@ -205,8 +221,8 @@ class GhostexSshConnection(
 
   /** Disconnect and stop the executor. Safe to call multiple times, never throws. */
   fun closeQuietly() {
-    val ssh = client
-    client = null
+    if (!cleanupStarted.compareAndSet(false, true)) return
+    val ssh = abortTransport()
     /*
      * The transport goes first. Closing a direct-tcpip channel on a live session
      * makes sshj wait up to 30s for the remote's close confirmation, once per
@@ -224,6 +240,20 @@ class GhostexSshConnection(
     // report a forward whose channels can no longer be opened.
     closeAllPortForwards()
     workExecutor.shutdown()
+  }
+
+  /** Close TCP without waiting for SSH channel acknowledgements or the forwarding lock. */
+  fun abortTransport(): SSHClient? {
+    val ssh = synchronized(lifecycleLock) {
+      closed = true
+      client
+    }
+    try {
+      ssh?.socket?.close()
+    } catch (_: Exception) {
+      // Already closed by a competing deadline or the peer.
+    }
+    return ssh
   }
 
   /**
@@ -446,6 +476,7 @@ class GhostexSshConnection(
   private fun installPortForwardTeardownOnTransportDeath(ssh: SSHClient) {
     ssh.transport.disconnectListener = DisconnectListener { reason, message ->
       Log.i(LOG_TAG, "transport for $machineId went down ($reason): ${message.orEmpty()}")
+      onTransportDeath(this, message ?: "The SSH connection was lost.")
       /*
        * Never inline: this runs on sshj's reader thread, and the teardown takes
        * the port-forward lock that an in-flight start holds while it waits for a

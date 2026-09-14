@@ -33,6 +33,8 @@ import kotlin.math.roundToInt
 class GhostexNativeModule : Module() {
 
   private val connections = ConcurrentHashMap<String, GhostexSshConnection>()
+  private val connectionLock = Any()
+  private var networkObserver: GhostexNetworkObserver? = null
 
   internal val terminalRegistry = GhostexTerminalRegistry()
 
@@ -111,8 +113,19 @@ class GhostexNativeModule : Module() {
       "onKeyModifiersConsumed",
       "onVisibleWindowFrameChange",
       "onTerminalGridChange",
-      "onConnectionState"
+      "onConnectionState",
+      "onNetworkChanged"
     )
+
+    OnStartObserving("onNetworkChanged") {
+      networkObserver = GhostexNetworkObserver(requireAndroidContext()) {
+        sendEvent("onNetworkChanged", emptyMap<String, Any>())
+      }
+    }
+    OnStopObserving("onNetworkChanged") {
+      networkObserver?.close()
+      networkObserver = null
+    }
 
     OnStartObserving("onVisibleWindowFrameChange") {
       mainHandler.post { startVisibleWindowFrameObserver() }
@@ -129,16 +142,21 @@ class GhostexNativeModule : Module() {
     }
 
     AsyncFunction("disconnect") { machineId: String, promise: Promise ->
-      val connection = connections.remove(machineId)
+      val connection = synchronized(connectionLock) {
+        connections.remove(machineId).also {
+          if (it != null) {
+            retireTerminals(it)
+            emitConnectionState(machineId, "disconnected", null, null)
+          }
+        }
+      }
       if (connection == null) {
         promise.resolve(null)
         return@AsyncFunction
       }
-      backgroundExecutor.execute {
-        connection.closeQuietly()
-        emitConnectionState(machineId, "disconnected", null, null)
-        promise.resolve(null)
-      }
+      connection.abortTransport()
+      backgroundExecutor.execute { connection.closeQuietly() }
+      promise.resolve(null)
     }
 
     AsyncFunction("isConnected") { machineId: String ->
@@ -181,20 +199,7 @@ class GhostexNativeModule : Module() {
         return@AsyncFunction
       }
       val timeout = timeoutMs?.toLong() ?: GhostexSshConnection.DEFAULT_EXEC_TIMEOUT_MS
-      connection.workExecutor.execute {
-        try {
-          val outcome = connection.exec(command, timeout)
-          promise.resolve(
-            mapOf(
-              "stdout" to outcome.stdout,
-              "stderr" to outcome.stderr,
-              "exitCode" to outcome.exitCode
-            )
-          )
-        } catch (error: Throwable) {
-          promise.reject(mapSshError(error, GhostexErrorCode.CHANNEL_FAILED))
-        }
-      }
+      execAsync(connection, command, null, timeout, promise)
     }
 
     AsyncFunction("execWithInput") { machineId: String, command: String, input: String, timeoutMs: Int?, promise: Promise ->
@@ -204,20 +209,7 @@ class GhostexNativeModule : Module() {
         return@AsyncFunction
       }
       val timeout = timeoutMs?.toLong() ?: GhostexSshConnection.DEFAULT_EXEC_TIMEOUT_MS
-      connection.workExecutor.execute {
-        try {
-          val outcome = connection.exec(command, timeout, input)
-          promise.resolve(
-            mapOf(
-              "stdout" to outcome.stdout,
-              "stderr" to outcome.stderr,
-              "exitCode" to outcome.exitCode
-            )
-          )
-        } catch (error: Throwable) {
-          promise.reject(mapSshError(error, GhostexErrorCode.CHANNEL_FAILED))
-        }
-      }
+      execAsync(connection, command, input, timeout, promise)
     }
 
     // endregion
@@ -275,15 +267,15 @@ class GhostexNativeModule : Module() {
         return@AsyncFunction
       }
       entry.lifecycleEnded = true
-      mainHandler.post { entry.attachedView?.detachFromEntry() }
+      mainHandler.post { entry.attachedView?.detachFromEntry(entry) }
+      emitTerminalState(sessionKey, "closed", null, null)
+      promise.resolve(null)
       backgroundExecutor.execute {
         try {
           entry.session?.finishIfRunning()
         } catch (ignored: Exception) {
           // A dead channel is fine: the terminal is being discarded.
         }
-        emitTerminalState(sessionKey, "closed", null, null)
-        promise.resolve(null)
       }
     }
 
@@ -587,6 +579,8 @@ class GhostexNativeModule : Module() {
     }
 
     OnDestroy {
+      networkObserver?.close()
+      networkObserver = null
       stopVisibleWindowFrameObserver()
       synchronized(toneGeneratorLock) {
         toneGenerator?.release()
@@ -606,23 +600,65 @@ class GhostexNativeModule : Module() {
   // region connection helpers
 
   private fun connectAsync(machineId: String, config: SshConfigRecord, promise: Promise) {
-    val previous = connections.remove(machineId)
-    val connection = GhostexSshConnection(requireAndroidContext(), machineId, config)
-    connections[machineId] = connection
-    emitConnectionState(machineId, "connecting", null, null)
-    connection.workExecutor.execute {
-      previous?.closeQuietly()
-      try {
-        connection.connect()
-        emitConnectionState(machineId, "connected", null, null)
-        promise.resolve(null)
-      } catch (error: Throwable) {
-        connections.remove(machineId, connection)
-        val coded = mapSshError(error, GhostexErrorCode.UNREACHABLE)
-        emitConnectionState(machineId, "failed", coded.message, coded.errorCode)
-        promise.reject(coded)
+    val connection = GhostexSshConnection(requireAndroidContext(), machineId, config) { dead, message ->
+      retireConnection(dead, "disconnected", GhostexException(GhostexErrorCode.NOT_CONNECTED, message))
+    }
+    val previous = synchronized(connectionLock) {
+      connections.put(machineId, connection).also {
+        if (it != null) retireTerminals(it)
+        emitConnectionState(machineId, "connecting", null, null)
       }
     }
+    previous?.abortTransport()
+    if (previous != null) backgroundExecutor.execute { previous.closeQuietly() }
+    GhostexSshTask.run(connection, 60_000L, success = {
+      synchronized(connectionLock) {
+        if (connections[machineId] === connection && connection.isConnected()) {
+          emitConnectionState(machineId, "connected", null, null)
+          promise.resolve(null)
+        } else {
+          promise.reject(notConnectedException(machineId))
+        }
+      }
+    }, failure = { error ->
+      val coded = mapSshError(error, GhostexErrorCode.UNREACHABLE)
+      retireConnection(connection, "failed", coded)
+      promise.reject(coded)
+    }) { connection.connect() }
+  }
+
+  private fun retireConnection(connection: GhostexSshConnection, state: String, error: GhostexException) {
+    synchronized(connectionLock) {
+      if (connections.remove(connection.machineId, connection)) {
+        retireTerminals(connection)
+        emitConnectionState(connection.machineId, state, error.message, error.errorCode)
+      }
+    }
+    connection.abortTransport()
+    backgroundExecutor.execute { connection.closeQuietly() }
+  }
+
+  private fun retireTerminals(connection: GhostexSshConnection) {
+    for (key in terminalRegistry.keys()) {
+      val entry = terminalRegistry.get(key) ?: continue
+      if (entry.connection !== connection || !terminalRegistry.remove(entry)) continue
+      entry.lifecycleEnded = true
+      emitTerminalState(key, "closed", null, null)
+      mainHandler.post { entry.attachedView?.detachFromEntry(entry) }
+      backgroundExecutor.execute { entry.session?.finishIfRunning() }
+    }
+  }
+
+  private fun execAsync(connection: GhostexSshConnection, command: String, input: String?, timeout: Long, promise: Promise) {
+    GhostexSshTask.run(connection, timeout, success = { outcome: GhostexSshConnection.ExecOutcome ->
+      promise.resolve(mapOf("stdout" to outcome.stdout, "stderr" to outcome.stderr, "exitCode" to outcome.exitCode))
+    }, failure = { error ->
+      val coded = mapSshError(error, GhostexErrorCode.CHANNEL_FAILED)
+      if (coded.errorCode == GhostexErrorCode.TIMEOUT || !connection.isConnected()) {
+        retireConnection(connection, "disconnected", coded)
+      }
+      promise.reject(coded)
+    }) { connection.exec(command, timeout, input) }
   }
 
   // endregion
@@ -648,25 +684,41 @@ class GhostexNativeModule : Module() {
 
     val fontSize = opts.fontSize?.roundToInt()?.coerceIn(MIN_FONT_SIZE_DP, MAX_FONT_SIZE_DP)
       ?: DEFAULT_FONT_SIZE_DP
-    val entry = GhostexTerminalEntry(sessionKey, machineId, fontSize, opts.zmxBacked)
+    val entry = GhostexTerminalEntry(sessionKey, machineId, fontSize, opts.zmxBacked, connection)
     emitTerminalState(sessionKey, "opening", null, null)
+    val openDeadline = GhostexSshTask.deadline(20_000L) {
+      if (entry.openSettled.compareAndSet(false, true)) {
+        entry.lifecycleEnded = true
+        terminalRegistry.remove(entry)
+        val error = GhostexException(GhostexErrorCode.TIMEOUT, "Opening the terminal timed out.")
+        retireConnection(connection, "disconnected", error)
+        emitTerminalState(sessionKey, "failed", error.message, error.errorCode)
+        promise.reject(error)
+      }
+    }
 
     val attachProcess = GhostexSshAttachProcess(
       connection = connection,
       command = opts.command,
       termType = opts.termType?.takeIf { it.isNotBlank() } ?: DEFAULT_TERM_TYPE,
       onStarted = {
+        openDeadline.cancel(false)
         if (entry.openSettled.compareAndSet(false, true)) {
-          emitTerminalState(sessionKey, "open", null, null)
-          promise.resolve(null)
+          if (!entry.lifecycleEnded && terminalRegistry.get(sessionKey) === entry) {
+            emitTerminalState(sessionKey, "open", null, null)
+            promise.resolve(null)
+          } else {
+            promise.reject(noTerminalException(sessionKey))
+          }
         }
       },
       onStartFailed = { error ->
-        terminalRegistry.remove(sessionKey)
+        openDeadline.cancel(false)
+        val removed = terminalRegistry.remove(entry)
         entry.lifecycleEnded = true
         if (entry.openSettled.compareAndSet(false, true)) {
           val coded = mapSshError(error, GhostexErrorCode.CHANNEL_FAILED)
-          emitTerminalState(sessionKey, "failed", coded.message, coded.errorCode)
+          if (removed) emitTerminalState(sessionKey, "failed", coded.message, coded.errorCode)
           promise.reject(coded)
         }
       }
@@ -676,6 +728,16 @@ class GhostexNativeModule : Module() {
     // placeholder 80x24 geometry so warm sessions run before any view attaches, and the
     // first attached view resizes the PTY to real metrics.
     mainHandler.post {
+      if (entry.lifecycleEnded) return@post
+      if (connections[machineId] !== connection || !connection.isConnected()) {
+        openDeadline.cancel(false)
+        entry.lifecycleEnded = true
+        if (entry.openSettled.compareAndSet(false, true)) {
+          emitTerminalState(sessionKey, "failed", "The SSH connection was replaced.", GhostexErrorCode.NOT_CONNECTED)
+          promise.reject(notConnectedException(machineId))
+        }
+        return@post
+      }
       val client = GhostexTerminalSessionClient(entry, this)
       val session = TerminalSession(attachProcess, resolveTranscriptRows(opts.scrollbackRows), client)
       entry.session = session
@@ -756,8 +818,8 @@ class GhostexNativeModule : Module() {
 
   /** Called by the session client (main thread) when the remote shell/channel ends. */
   internal fun onTerminalFinished(entry: GhostexTerminalEntry) {
-    terminalRegistry.remove(entry.sessionKey)
-    if (!entry.lifecycleEnded) {
+    val removed = terminalRegistry.remove(entry)
+    if (removed && !entry.lifecycleEnded) {
       entry.lifecycleEnded = true
       emitTerminalState(entry.sessionKey, "closed", null, null)
     }
