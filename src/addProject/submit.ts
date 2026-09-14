@@ -5,7 +5,7 @@
 
 import type { GhostexProject } from '../contract/mobileSummary';
 import { useInventoryStore } from '../inventory/store';
-import { hasTrailingPathSeparator, stripTrailingSeparators } from './paths';
+import { hasTrailingPathSeparator, isAbsoluteRemotePath, remotePathIdentity } from './paths';
 import type { DirectoryBrowseState } from './useDirectoryBrowse';
 
 /** Every path screen starts at the machine's home directory. */
@@ -41,14 +41,10 @@ export function willCreateSubmittedPath(query: string, browse: DirectoryBrowseSt
  * gxserver's own idempotent add.
  */
 export function duplicateProjectFor(machineId: string, path: string): GhostexProject | null {
-  if (!path.startsWith('/')) return null;
-  const normalized = stripTrailingSeparators(path);
-  const projects =
-    useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary?.projects ?? [];
+  if (!isAbsoluteRemotePath(path)) return null;
+  const normalized = remotePathIdentity(path);
+  const projects = useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary?.projects ?? [];
   return (
-    projects.find(
-      (project) =>
-        project.path !== undefined && stripTrailingSeparators(project.path) === normalized,
-    ) ?? null
+    projects.find((project) => project.path !== undefined && remotePathIdentity(project.path) === normalized) ?? null
   );
 }

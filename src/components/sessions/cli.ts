@@ -1,3 +1,4 @@
+import { execRemoteCommand } from '../../remote/commands';
 /**
  * Remote Ghostex CLI action runner for the sessions drawer: wraps a builder
  * command from src/commands/ghostexCli.ts in the login shell, executes it over
@@ -6,7 +7,6 @@
  */
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
-import { loginShellCommand } from '../../commands/ghostexCli';
 import { scanJsonObjects } from '../../contract/mobileSummary';
 import { ensureConnected, INVENTORY_EXEC_TIMEOUT_MS, summarizeFailure } from '../../inventory/client';
 import { hasPassword, type MachineConnectionTarget } from '../../machines/credentials';
@@ -39,15 +39,11 @@ function firstJsonObject(output: string): Record<string, unknown> | null {
 export async function runGhostexCli(
   machine: MachineConnectionTarget,
   command: string,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number }
 ): Promise<CliJsonResult> {
   try {
     await ensureConnected(machine);
-    const result = await GhostexNative.exec(
-      machine.id,
-      loginShellCommand(command),
-      options?.timeoutMs ?? INVENTORY_EXEC_TIMEOUT_MS,
-    );
+    const result = await execRemoteCommand(machine.id, command, options?.timeoutMs ?? INVENTORY_EXEC_TIMEOUT_MS);
     const output = `${result.stdout}\n${result.stderr}`.trim();
     const json = firstJsonObject(result.stdout);
     const ok = json === null || typeof json.ok !== 'boolean' || json.ok;

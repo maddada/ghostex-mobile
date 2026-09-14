@@ -1,3 +1,4 @@
+import { execRemoteCommand } from '../remote/commands';
 /**
  * Add Project transport: the four gxserver reads/writes the flow needs, run as
  * Ghostex CLI verbs over the machine's existing SSH connection.
@@ -17,7 +18,6 @@ import {
   browseDirectoriesCommand,
   cloneRepositoryCommand,
   discoverSourceControlCommand,
-  loginShellCommand,
   lookupRepositoryCommand,
   type SourceControlLookupProvider,
 } from '../commands/ghostexCli';
@@ -127,14 +127,14 @@ function structuredError(json: JsonObject | null): string | null {
 async function runAddProjectCli(
   machine: MachineConnectionTarget,
   command: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<JsonObject> {
   let output = '';
   let json: JsonObject | null = null;
   let failed = false;
   try {
     await ensureConnected(machine);
-    const result = await GhostexNative.exec(machine.id, loginShellCommand(command), timeoutMs);
+    const result = await execRemoteCommand(machine.id, command, timeoutMs);
     output = `${result.stdout}\n${result.stderr}`.trim();
     json = firstJsonObject(result.stdout);
     const ok = json === null || typeof json.ok !== 'boolean' || json.ok;
@@ -149,9 +149,7 @@ async function runAddProjectCli(
     // `ghostex <unknown verb> --json` reports through the JSON envelope, and its
     // `error` carries the CLI's whole usage dump. That is an outdated machine,
     // not an error worth printing.
-    throw new Error(
-      isOutdatedMachineFailure(structured) ? FailureCopy.outdatedForFeature : structured,
-    );
+    throw new Error(isOutdatedMachineFailure(structured) ? FailureCopy.outdatedForFeature : structured);
   }
   const machineHasPassword = await hasPassword(machine.id);
   throw new Error(summarizeFailure(output, machineHasPassword));
@@ -173,25 +171,16 @@ function parseBrowseEntries(value: unknown): AddProjectBrowseEntry[] {
 /** Directory suggestions for one directory query (no `cwd`, dirs only). */
 export async function browseDirectories(
   machine: MachineConnectionTarget,
-  partialPath: string,
+  partialPath: string
 ): Promise<AddProjectBrowseResult> {
-  const json = await runAddProjectCli(
-    machine,
-    browseDirectoriesCommand(partialPath),
-    INVENTORY_EXEC_TIMEOUT_MS,
-  );
+  const json = await runAddProjectCli(machine, browseDirectoriesCommand(partialPath), INVENTORY_EXEC_TIMEOUT_MS);
   return {
     parentPath: readString(json.parentPath),
     entries: parseBrowseEntries(json.entries),
   };
 }
 
-const PROVIDER_IDS: readonly AddProjectProviderId[] = [
-  'github',
-  'gitlab',
-  'bitbucket',
-  'azure-devops',
-];
+const PROVIDER_IDS: readonly AddProjectProviderId[] = ['github', 'gitlab', 'bitbucket', 'azure-devops'];
 
 function parseProviderDiscovery(value: unknown): AddProjectProviderDiscovery | null {
   if (!isObject(value)) return null;
@@ -205,17 +194,11 @@ function parseProviderDiscovery(value: unknown): AddProjectProviderDiscovery | n
   return {
     provider,
     label: readString(value.label),
-    status:
-      status === 'available' || status === 'missing' || status === 'unsupported'
-        ? status
-        : 'unsupported',
+    status: status === 'available' || status === 'missing' || status === 'unsupported' ? status : 'unsupported',
     installHint: readString(value.installHint),
     ...(detail.length > 0 ? { detail } : {}),
     auth: {
-      status:
-        authStatus === 'authenticated' || authStatus === 'unauthenticated'
-          ? authStatus
-          : 'unknown',
+      status: authStatus === 'authenticated' || authStatus === 'unauthenticated' ? authStatus : 'unknown',
       ...(authDetail.length > 0 ? { detail: authDetail } : {}),
     },
   };
@@ -223,12 +206,12 @@ function parseProviderDiscovery(value: unknown): AddProjectProviderDiscovery | n
 
 /** Which hosting CLIs this machine can clone with. */
 export async function discoverSourceControl(
-  machine: MachineConnectionTarget,
+  machine: MachineConnectionTarget
 ): Promise<AddProjectSourceControlDiscovery> {
   const json = await runAddProjectCli(
     machine,
     discoverSourceControlCommand({ timeoutMs: DISCOVERY_RPC_TIMEOUT_MS }),
-    DISCOVERY_EXEC_TIMEOUT_MS,
+    DISCOVERY_EXEC_TIMEOUT_MS
   );
   const discovery = isObject(json.discovery) ? json.discovery : null;
   const rawProviders = discovery === null ? [] : discovery.providers;
@@ -246,12 +229,12 @@ export async function discoverSourceControl(
 export async function lookupRepository(
   machine: MachineConnectionTarget,
   provider: SourceControlLookupProvider,
-  repository: string,
+  repository: string
 ): Promise<AddProjectRepositoryInfo> {
   const json = await runAddProjectCli(
     machine,
     lookupRepositoryCommand(provider, repository, { timeoutMs: LOOKUP_RPC_TIMEOUT_MS }),
-    LOOKUP_EXEC_TIMEOUT_MS,
+    LOOKUP_EXEC_TIMEOUT_MS
   );
   const raw = isObject(json.repository) ? json.repository : null;
   const sshUrl = raw === null ? '' : readString(raw.sshUrl);
@@ -275,7 +258,7 @@ export async function lookupRepository(
 export async function cloneRepository(
   machine: MachineConnectionTarget,
   remoteUrl: string,
-  destinationPath: string,
+  destinationPath: string
 ): Promise<AddProjectCloneResult> {
   const json = await runAddProjectCli(
     machine,
@@ -283,12 +266,10 @@ export async function cloneRepository(
       waitTimeoutMs: CLONE_WAIT_TIMEOUT_MS,
       timeoutMs: LOOKUP_RPC_TIMEOUT_MS,
     }),
-    CLONE_EXEC_TIMEOUT_MS,
+    CLONE_EXEC_TIMEOUT_MS
   );
   if (json.waitTimedOut === true) {
-    throw new Error(
-      'The clone is still running on the machine. Reopen the project list once it finishes.',
-    );
+    throw new Error('The clone is still running on the machine. Reopen the project list once it finishes.');
   }
   const job = isObject(json.job) ? json.job : null;
   const state = job === null ? '' : readString(job.state);
@@ -302,11 +283,11 @@ export async function cloneRepository(
 export async function addProjectPath(
   machine: MachineConnectionTarget,
   path: string,
-  options: { createIfMissing: boolean },
+  options: { createIfMissing: boolean }
 ): Promise<void> {
   await runAddProjectCli(
     machine,
     addProjectCommand(path, { createIfMissing: options.createIfMissing }),
-    INVENTORY_EXEC_TIMEOUT_MS,
+    INVENTORY_EXEC_TIMEOUT_MS
   );
 }

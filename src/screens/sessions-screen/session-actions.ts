@@ -1,3 +1,5 @@
+import { remoteTerminalCommand } from '../../remote/commands';
+import { ensureConnected } from '../../inventory/client';
 /**
  * SessionsScreen overlay/action model: the Overlay state union, the
  * BulkSessionAction factories, and the small pure session helpers, moved
@@ -7,23 +9,14 @@
 import {
   attachCommand,
   killSessionCommand,
-  loginShellCommand,
   pinSessionCommand,
   reloadSessionCommand,
   shellQuote,
   sleepSessionCommand,
   wakeSessionCommand,
 } from '../../commands/ghostexCli';
-import type {
-  CollectionHeaderItem,
-  GroupHeaderItem,
-  ProjectHeaderItem,
-  SessionItem,
-} from '../../contract/grouping';
-import type {
-  GhostexQuickAction,
-  GhostexSession,
-} from '../../contract/mobileSummary';
+import type { CollectionHeaderItem, GroupHeaderItem, ProjectHeaderItem, SessionItem } from '../../contract/grouping';
+import type { GhostexQuickAction, GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import { lifecycleMutation, pinMutation } from '../../sessions/sessionCommands';
@@ -81,10 +74,7 @@ export function closeMutation(sessionId: string): OptimisticInventoryChange {
   return { kind: 'sessionClose', sessionId };
 }
 
-export function lifecycleSessionAction(
-  session: GhostexSession,
-  sleeping: boolean,
-): BulkSessionAction {
+export function lifecycleSessionAction(session: GhostexSession, sleeping: boolean): BulkSessionAction {
   const projectId = session.projectId.length > 0 ? session.projectId : undefined;
   return {
     sessionId: session.sessionId,
@@ -99,10 +89,7 @@ export function lifecycleSessionAction(
 export function closeSessionAction(session: GhostexSession): BulkSessionAction {
   return {
     sessionId: session.sessionId,
-    command: killSessionCommand(
-      session.sessionId,
-      session.projectId.length > 0 ? session.projectId : undefined,
-    ),
+    command: killSessionCommand(session.sessionId, session.projectId.length > 0 ? session.projectId : undefined),
     closeWarmSession: true,
     optimisticChange: closeMutation(session.sessionId),
   };
@@ -130,9 +117,11 @@ export function reloadSessionAction(session: GhostexSession): BulkSessionAction 
  * tailcat machine has no address to ssh to — its host is a synthetic host-key
  * identity — so the copied command is the attach command to run on the machine.
  */
-export function attachSshCommand(machine: MachineRecord, session: GhostexSession): string {
-  const remote = loginShellCommand(
-    attachCommand(session.sessionId, session.projectId.length > 0 ? session.projectId : undefined),
+export async function attachSshCommand(machine: MachineRecord, session: GhostexSession): Promise<string> {
+  await ensureConnected(machine);
+  const remote = await remoteTerminalCommand(
+    machine.id,
+    attachCommand(session.sessionId, session.projectId.length > 0 ? session.projectId : undefined)
   );
   if (machine.transport === 'tailcat') return remote;
   const portFlag = machine.port === 22 ? '' : ` -p ${machine.port}`;

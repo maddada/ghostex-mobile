@@ -197,6 +197,29 @@ class GhostexNativeModule : Module() {
       }
     }
 
+    AsyncFunction("execWithInput") { machineId: String, command: String, input: String, timeoutMs: Int?, promise: Promise ->
+      val connection = connections[machineId]
+      if (connection == null) {
+        promise.reject(notConnectedException(machineId))
+        return@AsyncFunction
+      }
+      val timeout = timeoutMs?.toLong() ?: GhostexSshConnection.DEFAULT_EXEC_TIMEOUT_MS
+      connection.workExecutor.execute {
+        try {
+          val outcome = connection.exec(command, timeout, input)
+          promise.resolve(
+            mapOf(
+              "stdout" to outcome.stdout,
+              "stderr" to outcome.stderr,
+              "exitCode" to outcome.exitCode
+            )
+          )
+        } catch (error: Throwable) {
+          promise.reject(mapSshError(error, GhostexErrorCode.CHANNEL_FAILED))
+        }
+      }
+    }
+
     // endregion
 
     // region local port forwarding

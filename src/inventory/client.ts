@@ -1,3 +1,4 @@
+import { execRemoteCommand, forgetRemoteEnvironment } from '../remote/commands';
 /**
  * Inventory client: runs `ghostex sessions --json --mobile-summary` over the
  * native SSH transport and maps failures to the human copy from
@@ -6,12 +7,8 @@
  */
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { loginShellCommand, sessionsListCommand } from '../commands/ghostexCli';
-import {
-  parseMobileSummary,
-  scanJsonObjects,
-  type GhostexMobileSummary,
-} from '../contract/mobileSummary';
+import { sessionsListCommand } from '../commands/ghostexCli';
+import { parseMobileSummary, scanJsonObjects, type GhostexMobileSummary } from '../contract/mobileSummary';
 import { FailureCopy } from '../copy';
 import { resolveSshConfig, type MachineConnectionTarget } from '../machines/credentials';
 
@@ -28,6 +25,7 @@ export async function ensureConnected(machine: MachineConnectionTarget): Promise
   const connected = await GhostexNative.isConnected(machine.id);
   if (connected) return;
   const config = await resolveSshConfig(machine);
+  forgetRemoteEnvironment(machine.id);
   await GhostexNative.connect(machine.id, config);
 }
 
@@ -37,11 +35,7 @@ export async function ensureConnected(machine: MachineConnectionTarget): Promise
  */
 export async function fetchInventory(machine: MachineConnectionTarget): Promise<InventoryFetchResult> {
   await ensureConnected(machine);
-  const result = await GhostexNative.exec(
-    machine.id,
-    loginShellCommand(sessionsListCommand()),
-    INVENTORY_EXEC_TIMEOUT_MS,
-  );
+  const result = await execRemoteCommand(machine.id, sessionsListCommand(), INVENTORY_EXEC_TIMEOUT_MS);
   const output = `${result.stdout}\n${result.stderr}`.trim();
   if (result.exitCode !== 0) {
     throw new Error(output.length > 0 ? output : FailureCopy.emptyOutput);
@@ -140,13 +134,7 @@ export function unwrapNativeException(text: string): string {
  * reach" screen and the "Other reasons" rows under it.
  */
 export type FailureReasonCode =
-  | 'timeout'
-  | 'noRoute'
-  | 'sshRefused'
-  | 'authFailed'
-  | 'hostKeyChanged'
-  | 'ghostexMissing'
-  | 'unknown';
+  'timeout' | 'noRoute' | 'sshRefused' | 'authFailed' | 'hostKeyChanged' | 'ghostexMissing' | 'unknown';
 
 export type FailureSummary = {
   /** Actionable copy (sessions-drawer.md §5); unmatched text is truncated to 220 chars. */
@@ -194,12 +182,10 @@ function errorText(error: unknown): string {
 export function summarizeFailureDetailed(
   error: unknown,
   hasPassword: boolean,
-  lastReachedAt?: string | null,
+  lastReachedAt?: string | null
 ): FailureSummary {
   const classified = classifyFailure(error, hasPassword);
-  return lastReachedAt === undefined || lastReachedAt === null
-    ? classified
-    : { ...classified, lastReachedAt };
+  return lastReachedAt === undefined || lastReachedAt === null ? classified : { ...classified, lastReachedAt };
 }
 
 /** Map raw SSH/CLI failure text to actionable copy (sessions-drawer.md §5). */
@@ -210,10 +196,7 @@ export function summarizeFailure(raw: unknown, hasPassword: boolean): string {
 /** "Connection timed out" / "Operation timed out" / "connect timed out"; never `--timeout` from a usage dump. */
 const TIMED_OUT_TEXT = /\b(?:connection|operation|connect|read|dial|handshake)\s+timed out\b/iu;
 
-function classifyFailure(
-  error: unknown,
-  hasPassword: boolean,
-): Pick<FailureSummary, 'message' | 'reasonCode'> {
+function classifyFailure(error: unknown, hasPassword: boolean): Pick<FailureSummary, 'message' | 'reasonCode'> {
   let text = unwrapNativeException(errorText(error).trim());
   const cliError = extractCliError(text);
   if (cliError !== null) text = cliError;
@@ -230,9 +213,7 @@ function classifyFailure(
   }
   if (nativeCode === 'authFailed' || text.includes('Permission denied')) {
     return {
-      message: hasPassword
-        ? FailureCopy.permissionDeniedWithPassword
-        : FailureCopy.permissionDeniedWithoutPassword,
+      message: hasPassword ? FailureCopy.permissionDeniedWithPassword : FailureCopy.permissionDeniedWithoutPassword,
       reasonCode: 'authFailed',
     };
   }
@@ -267,10 +248,7 @@ function classifyFailure(
   ) {
     return { message: FailureCopy.unreachable, reasonCode: 'noRoute' };
   }
-  if (
-    lowerText.includes('session persistence is set to') &&
-    !lowerText.includes('session persistence is set to zmx')
-  ) {
+  if (lowerText.includes('session persistence is set to') && !lowerText.includes('session persistence is set to zmx')) {
     return { message: FailureCopy.persistenceNotZmx, reasonCode: reason('unknown') };
   }
   if (lowerText.includes('zmx') && (lowerText.includes('not found') || lowerText.includes('not configured'))) {

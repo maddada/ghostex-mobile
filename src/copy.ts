@@ -165,8 +165,7 @@ export const ConnectedCopy = {
   unavailable: 'Not reachable yet',
   cliNotFound: 'Ghostex CLI not found',
   versionFailed: (exitCode: number) => `ghostex server version exited with code ${exitCode}`,
-  sessionsValue: (total: number, working: number) =>
-    working > 0 ? `${total} · ${working} working` : `${total}`,
+  sessionsValue: (total: number, working: number) => (working > 0 ? `${total} · ${working} working` : `${total}`),
   calloutEasyConnect:
     'The computer needs to be awake and Ghostex open. Ghostex can keep it awake while sessions run: turn on Keep awake in Settings → General on the computer.',
   calloutTailscale:
@@ -212,8 +211,7 @@ export const StateCardCopy = {
   },
   connecting: {
     title: 'Connecting',
-    body: (label: string) =>
-      `Opening SSH to ${label} and asking the Ghostex CLI for ZMX-backed sessions.`,
+    body: (label: string) => `Opening SSH to ${label} and loading its Ghostex sessions.`,
     actionHint: 'Keep Tailscale online on both devices.',
     status: (label: string) => `Connecting to ${label}...`,
     refreshingStatus: (label: string) => `Refreshing sessions on ${label}...`,
@@ -225,15 +223,15 @@ export const StateCardCopy = {
     refreshFailedStatus: (message: string) => `Session refresh failed: ${message}`,
   },
   empty: {
-    title: 'No ZMX sessions yet',
-    body: 'The machine is reachable, but the Ghostex CLI did not return any ZMX-backed sessions.',
+    title: 'No sessions yet',
+    body: 'The computer is connected and has no active sessions.',
     actionHint: 'Start or resume sessions in Ghostex on the remote machine, then tap Retry.',
   },
   success: {
     status: (label: string) => `Connected to ${label}`,
-    emptyProjectsStatus: 'Connected. Active projects have no ZMX-backed sessions.',
+    emptyProjectsStatus: 'Connected. Active projects have no sessions.',
   },
-  initialStatus: 'Connect to a ZMX machine',
+  initialStatus: 'Connect to a computer',
 } as const;
 
 /** Failure summarization copy map, sessions-drawer.md §5. */
@@ -246,8 +244,7 @@ export const FailureCopy = {
     'SSH needs a key or password. Open the machine settings and save a password, or configure SSH keys/Tailscale SSH.',
   refused:
     'The computer is reachable, but SSH refused the connection. Turn on SSH access on the computer and confirm the saved SSH port.',
-  unreachable:
-    'Could not reach the computer. Open Tailscale and confirm both devices are online.',
+  unreachable: 'Could not reach the computer. Open Tailscale and confirm both devices are online.',
   timedOut:
     "The computer didn't answer. The connection timed out; check that the computer is awake and Ghostex is open.",
   noCli:
@@ -310,8 +307,7 @@ export const ProgressCopy = {
   creatingTerminal: (project: string) => `Creating a terminal in ${project}…`,
   creatingQuickSession: 'Creating a Quick session…',
   startingAgent: (agent: string, project: string) => `Starting ${agent} in ${project}…`,
-  noStableProjectId:
-    'This project has no stable project id, so agent sessions cannot be started here.',
+  noStableProjectId: 'This project has no stable project id, so agent sessions cannot be started here.',
   openedInBrowser: (name: string) => `Opened ${name} in the browser.`,
   restoringProject: (title: string) => `Restoring ${title}...`,
   restoredProject: (title: string) => `Restored ${title}.`,
@@ -679,8 +675,7 @@ export const CantReachCopy = {
     },
     easyConnectOn: {
       title: 'Is Easy Connect still on?',
-      detail:
-        'On the computer, open Settings → Remote and check that Easy Connect says Running and SSH access is on.',
+      detail: 'On the computer, open Settings → Remote and check that Easy Connect says Running and SSH access is on.',
     },
     unpaired: {
       title: 'Was this phone unpaired?',
@@ -699,8 +694,7 @@ export const CantReachCopy = {
     },
     tailscaleOnComputer: {
       title: 'Is Tailscale connected on the computer?',
-      detail:
-        'Open the Tailscale menu on the computer. It should show Connected, with the same account as this phone.',
+      detail: 'Open the Tailscale menu on the computer. It should show Connected, with the same account as this phone.',
     },
     awake: {
       title: 'Is the computer awake?',
@@ -709,8 +703,7 @@ export const CantReachCopy = {
     },
     address: {
       title: 'Is the address still right?',
-      detail:
-        'Tailscale IPs rarely change, but a re-added computer gets a new one. The MagicDNS name is safer.',
+      detail: 'Tailscale IPs rarely change, but a re-added computer gets a new one. The MagicDNS name is safer.',
       button: 'Edit address',
     },
     /** One accordion row per rarer SSH error: a short title, then a cause sentence, a fix sentence and the fix itself. */
@@ -723,7 +716,8 @@ export const CantReachCopy = {
       },
       wrongPassword: {
         title: 'Wrong password',
-        cause: 'The computer rejected the password saved on this phone, usually because the account password was changed.',
+        cause:
+          'The computer rejected the password saved on this phone, usually because the account password was changed.',
         fix: 'Enter the current password in Edit machine, then retry.',
         button: 'Edit machine',
       },

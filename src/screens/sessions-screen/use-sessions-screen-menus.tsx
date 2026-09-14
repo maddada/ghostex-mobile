@@ -72,11 +72,7 @@ import {
   stateWithProjectInCollection,
 } from '../../contract/collectionsState';
 import type { ProjectHeaderItem } from '../../contract/grouping';
-import {
-  SESSION_TAG_SECTIONS,
-  customSessionTagIcon,
-  sessionTagIcon,
-} from '../../contract/sessionTags';
+import { SESSION_TAG_SECTIONS, customSessionTagIcon, sessionTagIcon } from '../../contract/sessionTags';
 import {
   agentIconTint,
   displayStatus,
@@ -133,24 +129,21 @@ export type SessionsScreenMenusDeps = {
   reconnectMachine: (target: MachineRecord) => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshMachine: (machine: MachineRecord) => Promise<void>;
-  runBulkSessionActions: (
+  runBulkSessionActions: (target: MachineRecord, actions: readonly BulkSessionAction[]) => Promise<void>;
+  runCreationFlow: (
     target: MachineRecord,
-    actions: readonly BulkSessionAction[],
+    command: string,
+    message: string,
+    chatLaunch?: { agentId: string; projectId: string; title: string }
   ) => Promise<void>;
-  runCreationFlow: (target: MachineRecord, command: string, message: string, chatLaunch?: { agentId: string; projectId: string; title: string }) => Promise<void>;
-  runQuickAction: (
-    target: MachineRecord,
-    projectId: string,
-    projectTitle: string,
-    action: GhostexQuickAction,
-  ) => void;
+  runQuickAction: (target: MachineRecord, projectId: string, projectTitle: string, action: GhostexQuickAction) => void;
   runSessionCommand: (
     target: MachineRecord,
     command: string,
     options?: {
       closeWarmSessionId?: string;
       optimisticChange?: OptimisticInventoryChange;
-    },
+    }
   ) => Promise<void>;
   sessionsForProject: (target: MachineRecord, header: ProjectHeaderItem) => GhostexSession[];
   setOverlay: (overlay: Overlay) => void;
@@ -180,9 +173,7 @@ export function useSessionsScreenMenus({
 
   // Newer Android release known from the last self-update check; the Settings
   // menu item carries it as a one-line notice.
-  const availableUpdateVersion = useAndroidSelfUpdateStore(
-    (state) => availableUpdate(state.check)?.version ?? null,
-  );
+  const availableUpdateVersion = useAndroidSelfUpdateStore((state) => availableUpdate(state.check)?.version ?? null);
 
   const summaryFor = (machineId: string) =>
     useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
@@ -210,15 +201,13 @@ export function useSessionsScreenMenus({
         optimisticChange: { kind: 'projectCollections', state },
       });
     },
-    [runSessionCommand],
+    [runSessionCommand]
   );
 
   const collectionMemberSessions = (ctx: CollectionContext): GhostexSession[] => {
     const summary = summaryFor(ctx.machine.id);
     if (summary === null) return [];
-    const collection = summary.projectCollections.find(
-      (entry) => entry.collectionId === ctx.header.collectionId,
-    );
+    const collection = summary.projectCollections.find((entry) => entry.collectionId === ctx.header.collectionId);
     if (collection === undefined) return [];
     return summary.sessions.filter((session) => collection.projectIds.includes(session.projectId));
   };
@@ -274,13 +263,9 @@ export function useSessionsScreenMenus({
       label: session.isPinned ? 'Unpin' : 'Pin',
       icon: <PinGlyph size={14} color={menuIconColor} />,
       onPress: () =>
-        void runSessionCommand(
-          ctx.machine,
-          pinSessionCommand(session.sessionId, !session.isPinned),
-          {
-            optimisticChange: pinMutation(session.sessionId, !session.isPinned),
-          },
-        ),
+        void runSessionCommand(ctx.machine, pinSessionCommand(session.sessionId, !session.isPinned), {
+          optimisticChange: pinMutation(session.sessionId, !session.isPinned),
+        }),
     });
     if (!browser) {
       items.push({
@@ -300,7 +285,7 @@ export function useSessionsScreenMenus({
           void runSessionCommand(
             ctx.machine,
             parkSessionCommand(session.sessionId, session.projectId, !session.isParked),
-            { optimisticChange: parkMutation(session.sessionId, !session.isParked) },
+            { optimisticChange: parkMutation(session.sessionId, !session.isParked) }
           ),
       });
     }
@@ -309,28 +294,16 @@ export function useSessionsScreenMenus({
         kind: 'item',
         key: 'sleep',
         label: sleeping ? 'Wake' : 'Sleep',
-        icon: sleeping ? (
-          <PlayGlyph size={14} color={menuIconColor} />
-        ) : (
-          <SleepGlyph size={14} color={menuIconColor} />
-        ),
+        icon: sleeping ? <PlayGlyph size={14} color={menuIconColor} /> : <SleepGlyph size={14} color={menuIconColor} />,
         onPress: () =>
           sleeping
-            ? void runSessionCommand(
-                ctx.machine,
-                wakeSessionCommand(session.sessionId, projectId),
-                {
-                  optimisticChange: lifecycleMutation(session.sessionId, false),
-                },
-              )
-            : void runSessionCommand(
-                ctx.machine,
-                sleepSessionCommand(session.sessionId, projectId),
-                {
-                  closeWarmSessionId: session.sessionId,
-                  optimisticChange: lifecycleMutation(session.sessionId, true),
-                },
-              ),
+            ? void runSessionCommand(ctx.machine, wakeSessionCommand(session.sessionId, projectId), {
+                optimisticChange: lifecycleMutation(session.sessionId, false),
+              })
+            : void runSessionCommand(ctx.machine, sleepSessionCommand(session.sessionId, projectId), {
+                closeWarmSessionId: session.sessionId,
+                optimisticChange: lifecycleMutation(session.sessionId, true),
+              }),
       });
     }
 
@@ -345,10 +318,7 @@ export function useSessionsScreenMenus({
     if (
       session.projectId.length > 0 &&
       isSessionChatSupportedAgent(
-        resolveAgentIconId(
-          session.agentIcon,
-          session.agentName.length > 0 ? session.agentName : session.agent,
-        ),
+        resolveAgentIconId(session.agentIcon, session.agentName.length > 0 ? session.agentName : session.agent)
       )
     ) {
       items.push({
@@ -365,11 +335,15 @@ export function useSessionsScreenMenus({
       label: 'Copy attach command',
       icon: <CopyGlyph size={14} color={menuIconColor} />,
       onPress: () =>
-        setOverlay({
-          kind: 'copyText',
-          title: 'Copy attach command',
-          text: attachSshCommand(ctx.machine, session),
-        }),
+        void attachSshCommand(ctx.machine, session)
+          .then((text) =>
+            setOverlay({
+              kind: 'copyText',
+              title: 'Copy attach command',
+              text,
+            })
+          )
+          .catch((error: unknown) => setTransientStatus(error instanceof Error ? error.message : String(error))),
     });
     if (!browser) {
       items.push({
@@ -385,8 +359,7 @@ export function useSessionsScreenMenus({
         label: 'Close After Done',
         icon: <ClockGlyph size={14} color={menuIconColor} />,
         selected: session.closeAfterDone,
-        onPress: () =>
-          void runSessionCommand(ctx.machine, closeAfterDoneCommand(session.sessionId)),
+        onPress: () => void runSessionCommand(ctx.machine, closeAfterDoneCommand(session.sessionId)),
       });
     }
     if (FORK_AGENT_ICONS.includes(agentKey)) {
@@ -399,7 +372,7 @@ export function useSessionsScreenMenus({
           void runCreationFlow(
             ctx.machine,
             forkSessionCommand(session.sessionId),
-            ProgressCopy.creatingTerminal(ctx.item.projectTitle),
+            ProgressCopy.creatingTerminal(ctx.item.projectTitle)
           ),
       });
     }
@@ -445,7 +418,7 @@ export function useSessionsScreenMenus({
         kind: 'item',
         key: 'back',
         label: 'Back',
-        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction='left' />,
         onPress: () => setOverlay({ kind: 'sessionMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -569,7 +542,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            sleeping.map((session) => lifecycleSessionAction(session, false)),
+            sleeping.map((session) => lifecycleSessionAction(session, false))
           ),
       });
     } else {
@@ -582,7 +555,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            inactive.map((session) => lifecycleSessionAction(session, true)),
+            inactive.map((session) => lifecycleSessionAction(session, true))
           ),
       });
     }
@@ -632,7 +605,7 @@ export function useSessionsScreenMenus({
       kind: 'item',
       key: 'move-up',
       label: 'Move project up',
-      icon: <ArrowGlyph size={14} color={menuIconColor} direction="up" />,
+      icon: <ArrowGlyph size={14} color={menuIconColor} direction='up' />,
       disabled: !canMove || projectIndex <= 0,
       onPress: () =>
         void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'up'), {
@@ -646,7 +619,7 @@ export function useSessionsScreenMenus({
       kind: 'item',
       key: 'move-down',
       label: 'Move project down',
-      icon: <ArrowGlyph size={14} color={menuIconColor} direction="down" />,
+      icon: <ArrowGlyph size={14} color={menuIconColor} direction='down' />,
       disabled: !canMove || projectIndex >= orderedProjectIds.length - 1,
       onPress: () =>
         void runSessionCommand(ctx.machine, moveProjectCommand(header.projectId, 'down'), {
@@ -687,7 +660,7 @@ export function useSessionsScreenMenus({
         kind: 'item',
         key: 'back',
         label: 'Back',
-        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction='left' />,
         onPress: () => setOverlay({ kind: 'projectMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -707,10 +680,7 @@ export function useSessionsScreenMenus({
         swatch: collection.color,
         selected: collection.collectionId === currentId,
         onPress: () =>
-          runCollectionsUpdate(
-            ctx.machine,
-            stateWithProjectInCollection(state, collection.collectionId, projectId),
-          ),
+          runCollectionsUpdate(ctx.machine, stateWithProjectInCollection(state, collection.collectionId, projectId)),
       });
     }
     if (currentId !== null) {
@@ -747,7 +717,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            awake.map((session) => lifecycleSessionAction(session, true)),
+            awake.map((session) => lifecycleSessionAction(session, true))
           ),
       });
     }
@@ -760,7 +730,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            sleeping.map((session) => lifecycleSessionAction(session, false)),
+            sleeping.map((session) => lifecycleSessionAction(session, false))
           ),
       });
     }
@@ -773,7 +743,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            unpinned.map((session) => pinSessionAction(session, true)),
+            unpinned.map((session) => pinSessionAction(session, true))
           ),
       });
     }
@@ -786,7 +756,7 @@ export function useSessionsScreenMenus({
         onPress: () =>
           void runBulkSessionActions(
             ctx.machine,
-            pinned.map((session) => pinSessionAction(session, false)),
+            pinned.map((session) => pinSessionAction(session, false))
           ),
       });
     }
@@ -827,11 +797,7 @@ export function useSessionsScreenMenus({
           title: 'Delete group?',
           body: `This removes the ${ctx.header.title} group. Its projects stay in the sidebar.`,
           confirmLabel: 'Delete',
-          run: () =>
-            runCollectionsUpdate(
-              ctx.machine,
-              stateWithoutCollection(state, ctx.header.collectionId),
-            ),
+          run: () => runCollectionsUpdate(ctx.machine, stateWithoutCollection(state, ctx.header.collectionId)),
         }),
     });
     items.push({
@@ -862,7 +828,7 @@ export function useSessionsScreenMenus({
         kind: 'item',
         key: 'back',
         label: 'Back',
-        icon: <ArrowGlyph size={14} color={menuIconColor} direction="left" />,
+        icon: <ArrowGlyph size={14} color={menuIconColor} direction='left' />,
         onPress: () => setOverlay({ kind: 'collectionMenu', ctx, view: 'root' }),
       },
       { kind: 'separator', key: 'sep-back' },
@@ -875,10 +841,7 @@ export function useSessionsScreenMenus({
         swatch: option.value,
         selected: ctx.header.color === option.value,
         onPress: () =>
-          runCollectionsUpdate(
-            ctx.machine,
-            stateWithCollectionColor(state, ctx.header.collectionId, option.value),
-          ),
+          runCollectionsUpdate(ctx.machine, stateWithCollectionColor(state, ctx.header.collectionId, option.value)),
       });
     }
     return items;
@@ -915,7 +878,7 @@ export function useSessionsScreenMenus({
         const targets = allSleeping ? sleeping : running;
         void runBulkSessionActions(
           ctx.machine,
-          targets.map((session) => lifecycleSessionAction(session, !allSleeping)),
+          targets.map((session) => lifecycleSessionAction(session, !allSleeping))
         );
       },
     });
@@ -940,10 +903,7 @@ export function useSessionsScreenMenus({
   };
 
   /** Quick/Projects section-label menus — desktop section hover actions. */
-  const sectionMenuItems = (
-    target: MachineRecord,
-    section: 'quick' | 'projects',
-  ): ContextMenuItem[] => {
+  const sectionMenuItems = (target: MachineRecord, section: 'quick' | 'projects'): ContextMenuItem[] => {
     if (section === 'quick') {
       return [
         {
@@ -951,8 +911,7 @@ export function useSessionsScreenMenus({
           key: 'new-terminal',
           label: 'Quick Terminal',
           icon: <TerminalGlyph size={14} color={menuIconColor} />,
-          onPress: () =>
-            void runCreationFlow(target, createChatCommand(), ProgressCopy.creatingQuickSession),
+          onPress: () => void runCreationFlow(target, createChatCommand(), ProgressCopy.creatingQuickSession),
         },
       ];
     }
@@ -1123,9 +1082,7 @@ export function useSessionsScreenMenus({
       kind: 'item',
       key: 'settings',
       label:
-        availableUpdateVersion === null
-          ? 'Settings'
-          : `Settings · Update available: Ghostex ${availableUpdateVersion}`,
+        availableUpdateVersion === null ? 'Settings' : `Settings · Update available: Ghostex ${availableUpdateVersion}`,
       icon: <SettingsGlyph size={14} color={menuIconColor} />,
       onPress: () => {
         setOverlay(NONE);
@@ -1160,7 +1117,7 @@ export function useSessionsScreenMenus({
       if (agents.length === 0) return null;
       return agents.find((agent) => agent.agentId === primaryAgentId) ?? agents[0];
     },
-    [primaryAgentId],
+    [primaryAgentId]
   );
 
   const launchAgent = useCallback(
@@ -1169,19 +1126,18 @@ export function useSessionsScreenMenus({
         setTransientStatus(ProgressCopy.noStableProjectId);
         return;
       }
-      const agentName =
-        agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+      const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, agentName);
-      const chatFirst = useSettingsStore.getState().settings.preferredAgentInterface === 'chat'
-        && isSessionChatSupportedAgent(iconId);
+      const chatFirst =
+        useSettingsStore.getState().settings.preferredAgentInterface === 'chat' && isSessionChatSupportedAgent(iconId);
       void runCreationFlow(
         target,
         createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst),
         ProgressCopy.startingAgent(agentName, header.title),
-        chatFirst ? { agentId: iconId, projectId: header.projectId, title: agentName } : undefined,
+        chatFirst ? { agentId: iconId, projectId: header.projectId, title: agentName } : undefined
       );
     },
-    [runCreationFlow, setTransientStatus],
+    [runCreationFlow, setTransientStatus]
   );
 
   /** Agent menu: brand icon + name + optional chat marker; selection emphasizes text. */
@@ -1191,8 +1147,7 @@ export function useSessionsScreenMenus({
       const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, name);
       const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
-      const supportsChat =
-        isSessionChatSupportedAgent(agent.agentId) || isSessionChatSupportedAgent(iconId);
+      const supportsChat = isSessionChatSupportedAgent(agent.agentId) || isSessionChatSupportedAgent(iconId);
       return {
         kind: 'item' as const,
         key: agent.agentId,
@@ -1200,9 +1155,7 @@ export function useSessionsScreenMenus({
         icon: <Icon size={14} color={agentIconTint(iconId)} />,
         selected: selected !== null && selected.agentId === agent.agentId,
         selectedPresentation: 'emphasis' as const,
-        trailingIcon: supportsChat ? (
-          <MessageCircleGlyph size={14} color={SidebarPalette.MUTED} />
-        ) : undefined,
+        trailingIcon: supportsChat ? <MessageCircleGlyph size={14} color={SidebarPalette.MUTED} /> : undefined,
         trailingIconLabel: supportsChat ? 'Supports chat' : undefined,
         onPress: () => {
           setOverlay(NONE);
@@ -1215,15 +1168,11 @@ export function useSessionsScreenMenus({
 
   /** Actions menu: one row per project quick action, check on the last run. */
   const actionsMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
-    const selectedCommandId =
-      lastActionByProject[lastActionKey(ctx.machine.id, ctx.header.projectId)] ?? '';
+    const selectedCommandId = lastActionByProject[lastActionKey(ctx.machine.id, ctx.header.projectId)] ?? '';
     return ctx.header.quickActions.map((action, index) => {
       const name = quickActionDisplayName(action);
       const commandId = action.commandId ?? '';
-      const iconId = resolveAgentIconId(
-        action.icon,
-        action.actionType === 'browser' ? 'browser' : name,
-      );
+      const iconId = resolveAgentIconId(action.icon, action.actionType === 'browser' ? 'browser' : name);
       const Icon = AGENT_ICONS[iconId];
       return {
         kind: 'item' as const,
@@ -1239,9 +1188,7 @@ export function useSessionsScreenMenus({
         onPress: () => {
           setOverlay(NONE);
           if (commandId.length > 0) {
-            useLauncherStore
-              .getState()
-              .setLastAction(ctx.machine.id, ctx.header.projectId, commandId);
+            useLauncherStore.getState().setLastAction(ctx.machine.id, ctx.header.projectId, commandId);
           }
           runQuickAction(ctx.machine, ctx.header.projectId, ctx.header.title, action);
         },

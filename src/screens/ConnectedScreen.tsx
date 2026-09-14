@@ -1,3 +1,4 @@
+import { execRemoteCommand } from '../remote/commands';
 /**
  * Connected (docs/2026-09-03/mobile-setup/mobile-05-connected.html): end of
  * setup. Names the computer and the user, reads the Ghostex version and the
@@ -12,7 +13,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { loginShellCommand } from '../commands/ghostexCli';
 import { AlertTriangleGlyph, CheckGlyph, InfoGlyph, LoaderGlyph } from '../components/onboarding/SetupIcons';
 import {
   SetupButton,
@@ -77,7 +77,7 @@ async function loadFirstInventory(machine: MachineRecord): Promise<FirstLoad> {
 async function readGhostexVersion(machine: MachineRecord): Promise<string> {
   let result: { stdout: string; stderr: string; exitCode: number };
   try {
-    result = await GhostexNative.exec(machine.id, loginShellCommand(VERSION_COMMAND), VERSION_TIMEOUT_MS);
+    result = await execRemoteCommand(machine.id, VERSION_COMMAND, VERSION_TIMEOUT_MS);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -124,11 +124,7 @@ export default function ConnectedScreen({ navigation, route }: Props) {
   };
   const failure = firstLoad.kind === 'failed' ? firstLoad.message : null;
   const dotColor =
-    firstLoad.kind === 'loaded'
-      ? SetupPalette.OK
-      : firstLoad.kind === 'failed'
-        ? SetupPalette.ERROR
-        : SetupPalette.DIM;
+    firstLoad.kind === 'loaded' ? SetupPalette.OK : firstLoad.kind === 'failed' ? SetupPalette.ERROR : SetupPalette.DIM;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -177,10 +173,7 @@ export default function ConnectedScreen({ navigation, route }: Props) {
             leading={<StatusDot color={dotColor} />}
           />
           <SetupRow mono label={ConnectedCopy.rows.runsAs} value={machine.username} />
-          <SetupRow
-            label={ConnectedCopy.rows.version}
-            value={valueFor((load) => load.version)}
-          />
+          <SetupRow label={ConnectedCopy.rows.version} value={valueFor((load) => load.version)} />
           <SetupRow
             label={ConnectedCopy.rows.sessions}
             value={valueFor((load) => ConnectedCopy.sessionsValue(load.total, load.working))}
@@ -202,9 +195,9 @@ export default function ConnectedScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.footer}>
-        <SetupButton variant="primary" large label={ConnectedCopy.openSessions} onPress={openSessions} />
+        <SetupButton variant='primary' large label={ConnectedCopy.openSessions} onPress={openSessions} />
         <SetupButton
-          variant="ghost"
+          variant='ghost'
           label={ConnectedCopy.addAnother}
           onPress={() => navigation.navigate('ConnectChoose')}
         />

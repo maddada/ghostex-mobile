@@ -1,3 +1,5 @@
+import { execRemoteScript, remoteUploadPath } from '../../remote/commands';
+import { windowsAttachmentPath } from '../../remote/files';
 /**
  * File attach & send flow (terminal-screen.md §5):
  * document picker (Files) or image picker (photo library) → remote temp path
@@ -104,11 +106,7 @@ export function sanitizeSessionChatAttachmentName(suggestedName: string): string
  * exactly like gxserver's unique_session_chat_*_path helpers. Both arguments
  * are already sanitized to [A-Za-z0-9._-], so they interpolate safely.
  */
-export function remoteSessionChatUploadPathScript(
-  directory: 'i' | 'f',
-  prefix: string,
-  tail: string,
-): string {
+export function remoteSessionChatUploadPathScript(directory: 'i' | 'f', prefix: string, tail: string): string {
   return [
     'case "${GHOSTEX_HOME:-}" in',
     '  /*) ghostex_data_dir="${GHOSTEX_HOME%/}" ;;',
@@ -158,20 +156,24 @@ async function sendPickedAttachment(
   machineId: string,
   sessionKey: string,
   picked: { localUri: string; name: string; isImage: boolean },
-  deliver?: AttachmentReferenceSink,
+  deliver?: AttachmentReferenceSink
 ): Promise<AttachmentUploadResult> {
   const sanitized = sanitizeAttachmentFilename(picked.name);
-  const exec = await GhostexNative.exec(
+  const exec = await execRemoteScript(
     machineId,
-    remoteAttachmentPathScript(sanitized),
-    REMOTE_PATH_EXEC_TIMEOUT_MS,
+    { posix: remoteAttachmentPathScript(sanitized), powershell: windowsAttachmentPath(sanitized) },
+    REMOTE_PATH_EXEC_TIMEOUT_MS
   );
   const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
   if (exec.exitCode !== 0 || remotePath.length === 0) {
     throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
   }
 
-  await GhostexNative.uploadFile(machineId, localPathFromUri(picked.localUri), remotePath);
+  await GhostexNative.uploadFile(
+    machineId,
+    localPathFromUri(picked.localUri),
+    await remoteUploadPath(machineId, remotePath)
+  );
 
   const title = picked.isImage ? `Image #${++imageCounter}` : `File #${++fileCounter}`;
   const reference = `[${title}](${remotePath})`;
@@ -193,7 +195,7 @@ async function sendPickedAttachment(
 export async function pickAndSendAttachment(
   machineId: string,
   sessionKey: string,
-  deliver?: AttachmentReferenceSink,
+  deliver?: AttachmentReferenceSink
 ): Promise<AttachmentUploadResult> {
   const result = await DocumentPicker.getDocumentAsync({
     multiple: false,
@@ -211,7 +213,7 @@ export async function pickAndSendAttachment(
       name: asset.name,
       isImage: asset.mimeType?.startsWith('image/') === true,
     },
-    deliver,
+    deliver
   );
 }
 
@@ -232,7 +234,7 @@ function imageAssetExtension(mimeType: string | undefined): string {
 export async function pickAndSendImageAttachment(
   machineId: string,
   sessionKey: string,
-  deliver?: AttachmentReferenceSink,
+  deliver?: AttachmentReferenceSink
 ): Promise<AttachmentUploadResult> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],

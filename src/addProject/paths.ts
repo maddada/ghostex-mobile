@@ -1,90 +1,89 @@
-/**
- * POSIX path helpers for the Add Project browser
- * §2.3). Mobile only ever browses a Mac or Linux machine over SSH, so there is
- * no Windows separator handling and no relative-path support here: the flow
- * never sends `cwd`, so `./x` has nothing to resolve against.
- */
-
+/** Remote path helpers retain POSIX semantics and recognize Windows drive/UNC roots. */
 export const PATH_SEPARATOR = '/';
 
-/** True when the value ends with a separator, i.e. "list this directory". */
+export function isWindowsRemotePath(value: string): boolean {
+  return /^[a-z]:[/\\]/iu.test(value) || /^[/\\]{2}[^/\\]+[/\\][^/\\]+/u.test(value);
+}
+
+export function isAbsoluteRemotePath(value: string): boolean {
+  return value.startsWith('/') || isWindowsRemotePath(value);
+}
+
+function normalize(value: string): string {
+  return isWindowsRemotePath(value) ? value.replace(/\\/gu, '/') : value;
+}
+
+function rootLength(value: string): number {
+  const unc = /^\/\/[^/]+\/[^/]+(?:\/|$)/u.exec(value);
+  if (unc) return unc[0].length;
+  if (/^[a-z]:\//iu.test(value)) return 3;
+  if (value.startsWith('~/')) return 2;
+  return value.startsWith('/') ? 1 : 0;
+}
+
 export function hasTrailingPathSeparator(value: string): boolean {
-  return /\/$/.test(value);
+  return normalize(value).endsWith('/');
 }
 
-/** The directory portion of a query: itself when it ends with a separator. */
 export function getBrowseDirectoryPath(value: string): string {
-  if (hasTrailingPathSeparator(value)) return value;
-  const index = value.lastIndexOf(PATH_SEPARATOR);
-  return index < 0 ? '' : value.slice(0, index + 1);
+  const path = normalize(value);
+  if (hasTrailingPathSeparator(path)) return path;
+  const index = path.lastIndexOf('/');
+  return index < 0 ? '' : path.slice(0, index + 1);
 }
 
-/** The text after the last separator — the leaf filter the user is typing. */
 export function getBrowseLeafPathSegment(value: string): string {
-  const index = value.lastIndexOf(PATH_SEPARATOR);
-  return index < 0 ? value : value.slice(index + 1);
+  const path = normalize(value);
+  return path.slice(path.lastIndexOf('/') + 1);
 }
 
-/** Append a folder name to a directory query, keeping the trailing separator. */
 export function appendBrowsePathSegment(directory: string, segment: string): string {
-  const base = hasTrailingPathSeparator(directory)
-    ? directory
-    : `${getBrowseDirectoryPath(directory)}`;
-  return `${base}${segment}${PATH_SEPARATOR}`;
+  return `${getBrowseDirectoryPath(directory)}${segment}/`;
 }
 
-/**
- * Root-aware parent of a directory query; null when already at a root
- * (`/` or `~/`), which is what hides the ".." row.
- */
 export function getBrowseParentPath(value: string): string | null {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return null;
-  const withoutTrailing = trimmed.replace(/\/+$/, '');
-  if (withoutTrailing.length === 0) return null; // "/" is the filesystem root.
-  if (withoutTrailing === '~') return null; // "~/" is the home root.
-  const index = withoutTrailing.lastIndexOf(PATH_SEPARATOR);
+  const path = normalize(value.trim());
+  const root = rootLength(path);
+  const withoutTrailing = path.replace(/\/+$/u, '');
+  if (withoutTrailing.length <= root) return null;
+  const index = withoutTrailing.lastIndexOf('/');
   if (index < 0) return null;
-  if (index === 0) return PATH_SEPARATOR;
-  return `${withoutTrailing.slice(0, index)}${PATH_SEPARATOR}`;
+  return path.slice(0, Math.max(root, index + 1));
 }
 
-/** True when a ".." row should be offered for the current query. */
 export function canNavigateUp(value: string): boolean {
   return hasTrailingPathSeparator(value) && getBrowseParentPath(value) !== null;
 }
 
-/** Ensure a directory path ends with a separator (browse queries always do). */
 export function ensureBrowseDirectoryPath(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return `~${PATH_SEPARATOR}`;
-  return hasTrailingPathSeparator(trimmed) ? trimmed : `${trimmed}${PATH_SEPARATOR}`;
+  const path = normalize(value.trim());
+  if (!path) return '~/';
+  return path.endsWith('/') ? path : `${path}/`;
 }
 
-/** Drop trailing separators without turning "/" into "". */
 export function stripTrailingSeparators(value: string): string {
-  const stripped = value.replace(/\/+$/, '');
-  return stripped.length === 0 ? PATH_SEPARATOR : stripped;
+  const path = normalize(value);
+  const stripped = path.replace(/\/+$/u, '');
+  return path.slice(0, Math.max(rootLength(path), stripped.length));
 }
 
-/** Join a resolved directory with one more segment. */
+export function remotePathIdentity(value: string): string {
+  const normalized = stripTrailingSeparators(value);
+  return isWindowsRemotePath(value) ? normalized.toLowerCase() : normalized;
+}
+
 export function joinPathSegment(directory: string, segment: string): string {
-  const base = stripTrailingSeparators(directory);
-  return base === PATH_SEPARATOR ? `${PATH_SEPARATOR}${segment}` : `${base}${PATH_SEPARATOR}${segment}`;
+  const path = stripTrailingSeparators(directory);
+  return `${path}${path.endsWith('/') ? '' : '/'}${segment}`;
 }
 
-/**
- * Folder name a clone should land in: the repository leaf, with a trailing
- * `.git` removed. Used to turn a browsed destination directory into a concrete
- * destination path.
- */
 export function cloneFolderName(repositoryTitle: string, remoteUrl: string): string {
-  const fromTitle = repositoryTitle.trim().split(PATH_SEPARATOR).pop() ?? '';
+  const fromTitle = repositoryTitle.trim().split('/').pop() ?? '';
   const candidate = fromTitle.length > 0 ? fromTitle : remoteUrl.trim();
-  const leaf =
+  return (
     candidate
       .replace(/[/:]+$/, '')
       .split(/[/:]/)
-      .pop() ?? '';
-  return leaf.replace(/\.git$/i, '');
+      .pop() ?? ''
+  ).replace(/\.git$/i, '');
 }

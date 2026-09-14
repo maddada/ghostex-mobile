@@ -1,3 +1,4 @@
+import { execRemoteCommand, forgetRemoteEnvironment } from '../../remote/commands';
 /**
  * Test connection for the machine form: open SSH with the form's config under
  * a throwaway machine id, then on the same connection read `ghostex server
@@ -8,7 +9,7 @@
 
 import { GhostexNative, type SshConfig } from '../../../modules/ghostex-native/src';
 import { logAppEvent } from '../../app/appLog';
-import { loginShellCommand, sessionsListCommand } from '../../commands/ghostexCli';
+import { sessionsListCommand } from '../../commands/ghostexCli';
 import { parseMobileSummary } from '../../contract/mobileSummary';
 import { FailureCopy } from '../../copy';
 import { summarizeFailureDetailed, type FailureSummary } from '../../inventory/client';
@@ -58,11 +59,7 @@ const CLI_MISSING_TEXT = /command not found|not found|No such file/iu;
  * this user?" answer); any other non-zero exit is a real error and throws.
  */
 async function readVersion(): Promise<string | null> {
-  const result = await GhostexNative.exec(
-    TEST_MACHINE_ID,
-    loginShellCommand(VERSION_COMMAND),
-    EXEC_TIMEOUT_MS,
-  );
+  const result = await execRemoteCommand(TEST_MACHINE_ID, VERSION_COMMAND, EXEC_TIMEOUT_MS);
   const output = `${result.stdout}\n${result.stderr}`.trim();
   if (result.exitCode !== 0) {
     if (CLI_MISSING_TEXT.test(output)) return null;
@@ -74,11 +71,7 @@ async function readVersion(): Promise<string | null> {
 }
 
 async function readSessionCount(): Promise<number> {
-  const result = await GhostexNative.exec(
-    TEST_MACHINE_ID,
-    loginShellCommand(sessionsListCommand()),
-    EXEC_TIMEOUT_MS,
-  );
+  const result = await execRemoteCommand(TEST_MACHINE_ID, sessionsListCommand(), EXEC_TIMEOUT_MS);
   const output = `${result.stdout}\n${result.stderr}`.trim();
   if (result.exitCode !== 0) {
     throw new Error(output.length > 0 ? output : FailureCopy.emptyOutput);
@@ -99,6 +92,7 @@ async function cleanupQuietly(step: string, action: () => Promise<void>): Promis
 
 export async function runConnectionTest(plan: ConnectionTestPlan): Promise<ConnectionTestOutcome> {
   try {
+    forgetRemoteEnvironment(TEST_MACHINE_ID);
     await GhostexNative.connect(TEST_MACHINE_ID, plan.config);
     try {
       const version = await readVersion();

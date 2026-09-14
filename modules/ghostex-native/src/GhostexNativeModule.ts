@@ -39,14 +39,11 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    * before this resolves, so an unreachable computer or a stale address
    * rejects here. Pair with `stopTailcatForward(forwardId)`.
    */
-  startTailcatForward(
-    forwardId: string,
-    address: string,
-    remotePort: number,
-  ): Promise<{ localPort: number }>;
+  startTailcatForward(forwardId: string, address: string, remotePort: number): Promise<{ localPort: number }>;
 
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
+  execWithInput(machineId: string, command: string, input: string, timeoutMs?: number): Promise<ExecResult>;
 
   /**
    * SSH local port forwarding over the machine's existing, already-authenticated

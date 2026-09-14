@@ -1,3 +1,4 @@
+import { execRemoteCommand } from '../remote/commands';
 /**
  * Mobile analytics hello.
  *
@@ -16,11 +17,7 @@ import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import {
-  clientHelloCommand,
-  loginShellCommand,
-  type ClientHelloPlatform,
-} from '../commands/ghostexCli';
+import { clientHelloCommand, type ClientHelloPlatform } from '../commands/ghostexCli';
 import type { MachineConnectionTarget } from '../machines/credentials';
 
 /** The daemon dedupes to one attach per client kind per hour; match it. */
@@ -60,9 +57,5 @@ export function reportClientHello(machine: MachineConnectionTarget): void {
   if (last !== undefined && now - last < HELLO_INTERVAL_MS) return;
   // Stamp before the exec so a failing machine is asked once an hour, not once per poll.
   lastHelloAtByMachineId.set(machine.id, now);
-  void GhostexNative.exec(
-    machine.id,
-    loginShellCommand(clientHelloCommand(platform)),
-    HELLO_EXEC_TIMEOUT_MS,
-  ).catch(() => undefined);
+  void execRemoteCommand(machine.id, clientHelloCommand(platform), HELLO_EXEC_TIMEOUT_MS).catch(() => undefined);
 }

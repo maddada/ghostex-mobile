@@ -1,3 +1,4 @@
+import { execRemoteCommand } from '../remote/commands';
 /**
  * Web preview port discovery: runs `ghostex ports --json` on the machine over
  * the same SSH transport and failure mapping as the session inventory
@@ -6,7 +7,7 @@
  */
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { loginShellCommand, portsListCommand } from '../commands/ghostexCli';
+import { portsListCommand } from '../commands/ghostexCli';
 import { scanJsonObjects } from '../contract/mobileSummary';
 import { FailureCopy, WebPreviewCopy } from '../copy';
 import {
@@ -63,7 +64,8 @@ function parseWebMetadata(value: unknown): PortWebMetadata | null {
     title: optionalString(value.title),
     server: optionalString(value.server),
     contentType: optionalString(value.contentType),
-    faviconDataUrl: icon !== null && icon.length <= 24 * 1024 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(icon) ? icon : null,
+    faviconDataUrl:
+      icon !== null && icon.length <= 24 * 1024 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(icon) ? icon : null,
   };
 }
 
@@ -122,12 +124,15 @@ function parsePortsPayload(stdout: string): RemoteListeningPort[] | null {
  * specific "update Ghostex, or enter a port manually" line instead of the
  * generic outdated-machine one, because manual entry still works here.
  */
-export async function fetchRemotePorts(machine: MachineConnectionTarget, includeWebMetadata = false): Promise<RemoteListeningPort[]> {
+export async function fetchRemotePorts(
+  machine: MachineConnectionTarget,
+  includeWebMetadata = false
+): Promise<RemoteListeningPort[]> {
   try {
     await ensureConnected(machine);
-    const result = await GhostexNative.exec(
+    const result = await execRemoteCommand(
       machine.id,
-      loginShellCommand(portsListCommand(includeWebMetadata)),
+      portsListCommand(includeWebMetadata),
       includeWebMetadata ? 30000 : INVENTORY_EXEC_TIMEOUT_MS
     );
     const output = `${result.stdout}\n${result.stderr}`.trim();

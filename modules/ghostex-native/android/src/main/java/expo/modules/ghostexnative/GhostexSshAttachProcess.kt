@@ -3,7 +3,6 @@ package expo.modules.ghostexnative
 import com.termux.terminal.TerminalSession
 import java.io.InputStream
 import java.io.OutputStream
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import net.schmizz.sshj.connection.channel.direct.Session
 
@@ -43,15 +42,7 @@ class GhostexSshAttachProcess(
   @Throws(Exception::class)
   override fun start(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
     try {
-      val channel = connection.openShellChannel(termType, columns, rows, cellWidthPixels, cellHeightPixels)
-      if (!command.isNullOrEmpty()) {
-        // This is Ghostex-injected terminal input, not a command the user typed.
-        // Keep the leading space so Atuin and shells configured with ignore-space
-        // history rules do not persist attach/reconnect bootstrap commands.
-        val shellCommand = " exec $command\n"
-        channel.shell.outputStream.write(shellCommand.toByteArray(StandardCharsets.UTF_8))
-        channel.shell.outputStream.flush()
-      }
+      val channel = connection.openShellChannel(termType, columns, rows, cellWidthPixels, cellHeightPixels, command)
       session = channel.session
       shell = channel.shell
       onStarted()

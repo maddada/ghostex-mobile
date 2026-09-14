@@ -1,3 +1,6 @@
+import { execRemoteScript, remoteUploadPath } from '../remote/commands';
+import { windowsChatUploadPath, windowsReadImage } from '../remote/files';
+import { isAbsoluteRemotePath } from '../addProject/paths';
 /**
  * React Native side of the Session Chat webview bridge.
  *
@@ -25,7 +28,6 @@ import {
   answerSessionChatPromptCommand,
   handoffSessionChatDraftCommand,
   interruptSessionChatCommand,
-  loginShellCommand,
   queueSessionChatPromptCommand,
   readSessionChatCommand,
   readSessionChatFilesCommand,
@@ -263,9 +265,12 @@ async function saveChatUpload(
     const bytes = localFile.size;
 
     await ensureConnected(machine);
-    const exec = await GhostexNative.exec(
+    const exec = await execRemoteScript(
       machine.id,
-      loginShellCommand(remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail)),
+      {
+        posix: remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
+        powershell: windowsChatUploadPath(kind === 'image' ? 'i' : 'f', prefix, tail),
+      },
       REMOTE_PATH_EXEC_TIMEOUT_MS
     );
     const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
@@ -273,7 +278,11 @@ async function saveChatUpload(
       throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
     }
 
-    await GhostexNative.uploadFile(machine.id, localPathFromUri(localFile.uri), remotePath);
+    await GhostexNative.uploadFile(
+      machine.id,
+      localPathFromUri(localFile.uri),
+      await remoteUploadPath(machine.id, remotePath)
+    );
     return { bytes, path: remotePath };
   } finally {
     // Cache-directory scratch file; nothing downstream reads it again.
@@ -322,7 +331,7 @@ async function loadChatImage(
   params: Record<string, unknown>
 ): Promise<{ base64Data: string; mediaType: string; bytes: number }> {
   const path = stringParam(params, 'path') ?? '';
-  if (!path.startsWith('/')) throw new Error('Image reads need an absolute path.');
+  if (!isAbsoluteRemotePath(path)) throw new Error('Image reads need an absolute path.');
   const mediaType = imageMediaTypeForPath(path);
   if (mediaType === null) throw new Error('The file is not a recognized image.');
   await ensureConnected(machine);
@@ -336,7 +345,11 @@ async function loadChatImage(
     'fi',
     'base64 < "$image_path"',
   ].join('\n');
-  const exec = await GhostexNative.exec(machine.id, script, IMAGE_READ_EXEC_TIMEOUT_MS);
+  const exec = await execRemoteScript(
+    machine.id,
+    { posix: script, powershell: windowsReadImage(path, IMAGE_READ_MAX_BYTES) },
+    IMAGE_READ_EXEC_TIMEOUT_MS
+  );
   // Linux base64 wraps lines; strip all whitespace either way.
   const base64Data = exec.stdout.replace(/\s+/g, '');
   if (exec.exitCode !== 0 || base64Data.length === 0) {
@@ -530,11 +543,9 @@ export async function runSessionChatBridgeRequest(
         if (agentId === undefined) {
           return { id: request.id, ok: false, error: 'The draft-agent switch carried no agent id.' };
         }
-        const result = await runGhostexCli(
-          machine,
-          switchDraftAgentCommand(sessionId, projectId, agentId),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
-        );
+        const result = await runGhostexCli(machine, switchDraftAgentCommand(sessionId, projectId, agentId), {
+          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+        });
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'send': {
@@ -542,9 +553,13 @@ export async function runSessionChatBridgeRequest(
         if (text.length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to send.' };
         }
-        const result = await runGhostexCli(machine, sendSessionChatMessageCommand(sessionId, projectId, text, params.draftVersion), {
-          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
-        });
+        const result = await runGhostexCli(
+          machine,
+          sendSessionChatMessageCommand(sessionId, projectId, text, params.draftVersion),
+          {
+            timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+          }
+        );
         // Desktop parity: answering a session clears its attention status.
         acknowledgeSessionAttention(machine.id, sessionId);
         return { id: request.id, ok: true, result: result.json ?? { queued: true } };
@@ -579,7 +594,7 @@ export async function runSessionChatBridgeRequest(
         const result = await runGhostexCli(
           machine,
           sendSessionChatKeyCommand(sessionId, projectId, key as SessionChatKey),
-          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS },
+          { timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS }
         );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
@@ -632,9 +647,13 @@ export async function runSessionChatBridgeRequest(
         if (text.trim().length === 0) {
           return { id: request.id, ok: false, error: 'Nothing to queue.' };
         }
-        const result = await runGhostexCli(machine, queueSessionChatPromptCommand(sessionId, projectId, text, params.draftVersion), {
-          timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
-        });
+        const result = await runGhostexCli(
+          machine,
+          queueSessionChatPromptCommand(sessionId, projectId, text, params.draftVersion),
+          {
+            timeoutMs: SESSION_CHAT_ACTION_TIMEOUT_MS,
+          }
+        );
         return { id: request.id, ok: true, result: result.json ?? {} };
       }
       case 'updateQueuedPrompt': {

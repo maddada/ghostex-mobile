@@ -1,3 +1,4 @@
+import { remoteTerminalCommand, remoteShellCommand } from '../remote/commands';
 /**
  * Terminal tab/session orchestration.
  * - sessionKey = `${machineId}:${sessionId}` for attach tabs,
@@ -14,7 +15,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { attachCommand, loginShellCommand, shellQuote } from '../commands/ghostexCli';
+import { attachCommand } from '../commands/ghostexCli';
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
@@ -57,16 +58,6 @@ export type TerminalTab = {
   state: TerminalTabState;
   error?: string;
 };
-
-/**
- * Interactive login shell started in `cwd` (shell-tab open and reopen share
- * it); null when no directory is requested, which makes the native PTY start
- * its own plain login shell.
- */
-function shellCommandIn(cwd: string | undefined): string | null {
-  if (cwd === undefined || cwd.length === 0) return null;
-  return loginShellCommand(`cd ${shellQuote(cwd)} && exec "$SHELL" -l`);
-}
 
 export function attachSessionKey(machineId: string, sessionId: string): string {
   return `${machineId}:${sessionId}`;
@@ -124,13 +115,10 @@ type TerminalState = {
   /** Open (or re-select) an attach tab for a remote Ghostex session. */
   attachSession: (
     machine: MachineConnectionTarget,
-    session: { sessionId: string; projectId?: string; title?: string; agentId?: string },
+    session: { sessionId: string; projectId?: string; title?: string; agentId?: string }
   ) => Promise<string>;
   /** Open an interactive login-shell tab on a machine (in `cwd` when given). */
-  openShellTab: (
-    machine: MachineConnectionTarget,
-    options?: { title?: string; cwd?: string },
-  ) => Promise<string>;
+  openShellTab: (machine: MachineConnectionTarget, options?: { title?: string; cwd?: string }) => Promise<string>;
   selectTab: (sessionKey: string) => void;
   /** Close a tab and its warm native entry. */
   closeTab: (sessionKey: string) => Promise<void>;
@@ -213,7 +201,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
   const openTab = async (
     machine: MachineConnectionTarget,
     tab: TerminalTab,
-    command: string | null,
+    command: string | null
   ): Promise<string> => {
     set({ tabs: [...get().tabs, tab], selectedSessionKey: tab.sessionKey });
     touchWarm(tab.sessionKey);
@@ -226,7 +214,11 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         zmxBacked: tab.kind === 'attach',
         scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
       };
-      if (command !== null) opts.command = command;
+      const remoteCommand =
+        command !== null
+          ? await remoteTerminalCommand(machine.id, command)
+          : await remoteShellCommand(machine.id, tab.cwd);
+      if (remoteCommand !== null) opts.command = remoteCommand;
       await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
       if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
         await GhostexNative.closeTerminal(tab.sessionKey);
@@ -277,10 +269,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             if (isStringArray(legacy)) {
               for (const sessionKey of legacy) sessionViewModeBySessionKey[sessionKey] = 'chat';
             }
-            await AsyncStorage.setItem(
-              SESSION_VIEW_MODES_STORAGE_KEY,
-              JSON.stringify(sessionViewModeBySessionKey),
-            );
+            await AsyncStorage.setItem(SESSION_VIEW_MODES_STORAGE_KEY, JSON.stringify(sessionViewModeBySessionKey));
             await AsyncStorage.removeItem(LEGACY_CHAT_MODE_STORAGE_KEY);
           }
         }
@@ -323,7 +312,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           : {}),
         state: 'opening',
       };
-      const command = loginShellCommand(attachCommand(session.sessionId, session.projectId));
+      const command = attachCommand(session.sessionId, session.projectId);
       return openTab(machine, tab, command);
     },
 
@@ -340,7 +329,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         state: 'opening',
       };
       // command == null → interactive login shell in the native PTY.
-      return openTab(machine, tab, shellCommandIn(tab.cwd));
+      return openTab(machine, tab, null);
     },
 
     selectTab: (sessionKey) => {
@@ -370,10 +359,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
 
     closeWarmSessionFor: async (machineId, sessionId) => {
       const sessionKey = attachSessionKey(machineId, sessionId);
-      if (
-        get().tabs.some((tab) => tab.sessionKey === sessionKey) ||
-        get().warmOrder.includes(sessionKey)
-      ) {
+      if (get().tabs.some((tab) => tab.sessionKey === sessionKey) || get().warmOrder.includes(sessionKey)) {
         await get().closeTab(sessionKey);
       }
     },
@@ -384,9 +370,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       // an attach in flight; reopening either would race two attaches onto one
       // session key. Everything else is a restart.
       if (tab === undefined || tab.state === 'opening' || tab.state === 'open') return;
-      const record = useMachinesStore
-        .getState()
-        .machines.find((machine) => machine.id === tab.machineId);
+      const record = useMachinesStore.getState().machines.find((machine) => machine.id === tab.machineId);
       if (record === undefined) return;
       const target: MachineConnectionTarget = {
         id: record.id,
@@ -420,11 +404,12 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           // Same project-scoped selector the first attach used. A bare session
           // id still works, but costs the daemon an extra inventory lookup on
           // every reconnect to rediscover the project this tab already knows.
-          opts.command = loginShellCommand(
-            attachCommand(tab.ghostexSessionId, tab.ghostexProjectId),
+          opts.command = await remoteTerminalCommand(
+            tab.machineId,
+            attachCommand(tab.ghostexSessionId, tab.ghostexProjectId)
           );
         } else if (tab.kind === 'shell') {
-          const command = shellCommandIn(tab.cwd);
+          const command = await remoteShellCommand(tab.machineId, tab.cwd);
           if (command !== null) opts.command = command;
         }
         await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
@@ -463,10 +448,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         [sessionKey]: mode,
       };
       set({ sessionViewModeBySessionKey });
-      void AsyncStorage.setItem(
-        SESSION_VIEW_MODES_STORAGE_KEY,
-        JSON.stringify(sessionViewModeBySessionKey),
-      );
+      void AsyncStorage.setItem(SESSION_VIEW_MODES_STORAGE_KEY, JSON.stringify(sessionViewModeBySessionKey));
     },
 
     toggleChatMode: (sessionKey) => {
@@ -491,9 +473,7 @@ export function initTerminalEvents(): void {
     if (tab === undefined) return;
     useTerminalStore.setState({
       tabs: store.tabs.map((entry) =>
-        entry.sessionKey === event.sessionKey
-          ? { ...entry, state: event.state, error: event.error }
-          : entry,
+        entry.sessionKey === event.sessionKey ? { ...entry, state: event.state, error: event.error } : entry
       ),
     });
     if (event.state === 'open' && tab.kind === 'attach' && Platform.OS === 'ios') {
@@ -519,9 +499,7 @@ export function initTerminalEvents(): void {
     if (!store.tabs.some((tab) => tab.sessionKey === event.sessionKey)) return;
     if (event.title.trim().length === 0) return;
     useTerminalStore.setState({
-      tabs: store.tabs.map((tab) =>
-        tab.sessionKey === event.sessionKey ? { ...tab, title: event.title } : tab,
-      ),
+      tabs: store.tabs.map((tab) => (tab.sessionKey === event.sessionKey ? { ...tab, title: event.title } : tab)),
     });
   });
 

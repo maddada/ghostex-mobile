@@ -230,13 +230,16 @@ class GhostexSshConnection(
    * Run [command] in its own non-interactive session channel, collecting stdout/stderr off
    * the channel while waiting so large outputs cannot stall the remote window.
    */
-  fun exec(command: String, timeoutMs: Long): ExecOutcome {
+  fun exec(command: String, timeoutMs: Long, input: String? = null): ExecOutcome {
     val ssh = client ?: throw notConnectedException(machineId)
     try {
       ssh.startSession().use { session ->
         val cmd = session.exec(command)
         val stdout = StreamCollector(cmd.inputStream)
         val stderr = StreamCollector(cmd.errorStream)
+        if (input != null) {
+          cmd.outputStream.use { it.write(input.toByteArray(Charsets.UTF_8)) }
+        }
         // A join timeout carries java.util.concurrent.TimeoutException in its cause chain,
         // which mapSshError turns into E_TIMEOUT; other join failures stay channel errors.
         cmd.join(timeoutMs, TimeUnit.MILLISECONDS)
@@ -351,7 +354,8 @@ class GhostexSshConnection(
     columns: Int,
     rows: Int,
     cellWidthPixels: Int,
-    cellHeightPixels: Int
+    cellHeightPixels: Int,
+    command: String? = null
   ): ShellChannel {
     val ssh = client ?: throw notConnectedException(machineId)
     val session = try {
@@ -361,7 +365,11 @@ class GhostexSshConnection(
     }
     try {
       session.allocatePTY(termType, columns, rows, cellWidthPixels, cellHeightPixels, emptyMap<PTYMode, Int>())
-      val shell = session.startShell()
+      // SSHJ's SessionChannel implements both Command and Shell, including PTY resize.
+      // Execute prepared commands directly: injecting `exec ...` into a login shell
+      // breaks Windows cmd/PowerShell and can race interactive startup prompts.
+      val shell = if (command.isNullOrEmpty()) session.startShell()
+        else session.exec(command) as Session.Shell
       return ShellChannel(session, shell)
     } catch (error: Exception) {
       try {
