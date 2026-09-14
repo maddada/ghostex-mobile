@@ -1,8 +1,8 @@
 /**
  * SSH auto-reconnect (Settings › SSH connection).
  * - Watches native onConnectionState. When a machine's shared SSH connection
- *   drops while terminal tabs exist for it (and the drop was not a deliberate
- *   manual disconnect), reconnects with a short backoff.
+ *   drops for an enabled machine, reconnects in the foreground with capped backoff.
+ *   Manual disconnects and credential/host-key failures wait for explicit action.
  * - After a successful reconnect, re-attaches closed/failed zmx attach tabs
  *   (their sessionKeys are stable, so re-attaching cannot duplicate sessions).
  *   Plain shell tabs are left to the explicit Retry button: their remote
@@ -10,26 +10,29 @@
  *   would masquerade as the old one.
  */
 
+import { AppState } from 'react-native';
+
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { ensureConnected } from '../inventory/client';
-import type { MachineConnectionTarget } from '../machines/credentials';
-import { useMachinesStore } from '../machines/store';
+import { useInventoryStore } from '../inventory/store';
+import { enabledMachines, useMachinesStore } from '../machines/store';
+import { cancelConnectionAttempt, ensureConnected } from '../remote/connection';
 import { useSettingsStore } from '../settings/store';
-import { useTerminalStore } from '../terminal/sessions';
+import { restoreAttachTabs, useTerminalStore } from '../terminal/sessions';
 
-const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000];
-
+const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 30_000];
 let installed = false;
-/** Machines whose next disconnected/failed event is user-initiated. */
 const manualDisconnects = new Set<string>();
+const permanentFailures = new Set<string>();
 const attemptsByMachineId = new Map<string, number>();
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const recovering = new Map<string, Promise<void>>();
 
-/**
- * Call immediately before a deliberate GhostexNative.disconnect so the
- * resulting state event does not trigger a reconnect.
- */
+function foreground(): boolean {
+  return AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+}
+
 export function markManualDisconnect(machineId: string): void {
+  cancelConnectionAttempt(machineId);
   manualDisconnects.add(machineId);
   cancelRetry(machineId);
   attemptsByMachineId.delete(machineId);
@@ -37,70 +40,103 @@ export function markManualDisconnect(machineId: string): void {
 
 function cancelRetry(machineId: string): void {
   const timer = retryTimers.get(machineId);
-  if (timer !== undefined) {
-    clearTimeout(timer);
-    retryTimers.delete(machineId);
-  }
+  if (timer !== undefined) clearTimeout(timer);
+  retryTimers.delete(machineId);
 }
 
-function machineTarget(machineId: string): MachineConnectionTarget | null {
-  const record = useMachinesStore.getState().machines.find((machine) => machine.id === machineId);
-  if (record === undefined) return null;
-  return {
-    id: record.id,
-    host: record.host,
-    username: record.username,
-    port: record.port,
-    transport: record.transport,
-  };
+function machineTarget(machineId: string) {
+  return enabledMachines(useMachinesStore.getState()).find((machine) => machine.id === machineId);
 }
 
-function hasTabsFor(machineId: string): boolean {
-  return useTerminalStore.getState().tabs.some((tab) => tab.machineId === machineId);
+function canRecover(machineId: string): boolean {
+  return (
+    foreground() &&
+    useSettingsStore.getState().settings.autoReconnect &&
+    !manualDisconnects.has(machineId) &&
+    !permanentFailures.has(machineId) &&
+    machineTarget(machineId) !== undefined
+  );
 }
 
 function scheduleReconnect(machineId: string): void {
-  if (retryTimers.has(machineId)) return;
+  if (retryTimers.has(machineId) || !canRecover(machineId)) return;
   const attempt = attemptsByMachineId.get(machineId) ?? 0;
-  if (attempt >= RECONNECT_DELAYS_MS.length) return;
   attemptsByMachineId.set(machineId, attempt + 1);
-  const timer = setTimeout(() => {
-    retryTimers.delete(machineId);
-    const target = machineTarget(machineId);
-    if (target === null || !hasTabsFor(machineId)) return;
-    void ensureConnected(target).catch(() => {
-      // The resulting "failed" state event schedules the next attempt.
-    });
-  }, RECONNECT_DELAYS_MS[attempt]);
-  retryTimers.set(machineId, timer);
+  const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+  retryTimers.set(
+    machineId,
+    setTimeout(() => {
+      retryTimers.delete(machineId);
+      void recoverMachine(machineId);
+    }, delay)
+  );
 }
 
-function reattachDroppedTabs(machineId: string): void {
-  const store = useTerminalStore.getState();
-  for (const tab of store.tabs) {
-    if (tab.machineId !== machineId || tab.kind !== 'attach') continue;
-    if (tab.state !== 'closed' && tab.state !== 'failed') continue;
-    void store.reopenTab(tab.sessionKey).catch(() => undefined);
+function recoverMachine(machineId: string, verify = false): Promise<void> {
+  const existing = recovering.get(machineId);
+  if (existing) return existing;
+  const target = machineTarget(machineId);
+  if (!target || !canRecover(machineId)) return Promise.resolve();
+  cancelRetry(machineId);
+  const request = (async () => {
+    try {
+      await ensureConnected(target, { verify });
+      if (!canRecover(machineId)) return;
+      // A slow/offline second computer must not delay restoring this one's tabs.
+      await restoreAttachTabs(machineId);
+      await useInventoryStore.getState().refreshMachine(target);
+      const failedTabs = useTerminalStore
+        .getState()
+        .tabs.some((tab) => tab.machineId === machineId && tab.kind === 'attach' && tab.state === 'failed');
+      if (useInventoryStore.getState().inventoriesByMachineId[machineId]?.lastError || failedTabs) {
+        scheduleReconnect(machineId);
+      } else {
+        attemptsByMachineId.delete(machineId);
+      }
+    } catch {
+      scheduleReconnect(machineId);
+    }
+  })();
+  recovering.set(machineId, request);
+  const clear = () => {
+    if (recovering.get(machineId) === request) recovering.delete(machineId);
+  };
+  void request.then(clear, clear);
+  return request;
+}
+
+/** Validate existing sockets after resume or route changes, then resume bounded retries. */
+export function recoverConnections(): void {
+  for (const machine of enabledMachines(useMachinesStore.getState())) {
+    void recoverMachine(machine.id, true);
   }
 }
 
-/** Install once at app startup. */
 export function initAutoReconnect(): void {
   if (installed) return;
   installed = true;
-
   GhostexNative.addListener('onConnectionState', (event) => {
+    if (event.state === 'connecting') {
+      permanentFailures.delete(event.machineId);
+      return;
+    }
     if (event.state === 'connected') {
       cancelRetry(event.machineId);
       attemptsByMachineId.delete(event.machineId);
       manualDisconnects.delete(event.machineId);
-      reattachDroppedTabs(event.machineId);
+      permanentFailures.delete(event.machineId);
+      if (canRecover(event.machineId)) void recoverMachine(event.machineId);
       return;
     }
     if (event.state !== 'disconnected' && event.state !== 'failed') return;
-    if (manualDisconnects.delete(event.machineId)) return;
-    if (!useSettingsStore.getState().settings.autoReconnect) return;
-    if (!hasTabsFor(event.machineId)) return;
+    if (event.errorCode === 'E_AUTH_FAILED' || event.errorCode === 'E_HOST_KEY_MISMATCH') {
+      permanentFailures.add(event.machineId);
+      cancelRetry(event.machineId);
+      return;
+    }
     scheduleReconnect(event.machineId);
+  });
+  AppState.addEventListener('change', () => {
+    if (!foreground()) for (const machineId of retryTimers.keys()) cancelRetry(machineId);
   });
 }

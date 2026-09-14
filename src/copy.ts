@@ -244,7 +244,8 @@ export const FailureCopy = {
     'SSH needs a key or password. Open the machine settings and save a password, or configure SSH keys/Tailscale SSH.',
   refused:
     'The computer is reachable, but SSH refused the connection. Turn on SSH access on the computer and confirm the saved SSH port.',
-  unreachable: 'Could not reach the computer. Open Tailscale and confirm both devices are online.',
+  unreachable:
+    'Could not reach the computer. Confirm both devices are online and the computer is awake. For a Tailscale connection, check Tailscale on both devices.',
   timedOut:
     "The computer didn't answer. The connection timed out; check that the computer is awake and Ghostex is open.",
   noCli:

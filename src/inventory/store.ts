@@ -12,12 +12,9 @@ import { reportClientHello } from '../analytics/clientHello';
 import { logAppEvent } from '../app/appLog';
 import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import { hasPassword } from '../machines/credentials';
-import {
-  enabledMachines,
-  machineDisplayLabel,
-  useMachinesStore,
-  type MachineRecord,
-} from '../machines/store';
+import { reconnectMachine } from '../remote/connection';
+import { restoreAttachTabs } from '../terminal/sessions';
+import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
 import {
   applyOptimisticMutations,
@@ -103,6 +100,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let nextMutationNumber = 1;
 const inFlightRefreshes = new Map<string, Promise<void>>();
 const refreshRevisions = new Map<string, number>();
+const retryRequests = new Map<string, Promise<void>>();
 
 export const useInventoryStore = create<InventoryState>()((set, get) => {
   const patchMachine = (machineId: string, patch: Partial<MachineInventory>): void => {
@@ -131,6 +129,8 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
     polling: false,
 
     refreshMachine: (machine) => {
+      const retry = retryRequests.get(machine.id);
+      if (retry !== undefined) return retry;
       const existing = inFlightRefreshes.get(machine.id);
       if (existing !== undefined) return existing;
 
@@ -141,6 +141,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       const refresh = (async (): Promise<void> => {
         try {
           const { summary: serverSummary, fingerprint } = await fetchInventory(machine);
+          if (refreshRevisions.get(machine.id) !== refreshRevision) return;
           const previous = get().inventoriesByMachineId[machine.id];
           const previousPending = get().pendingMutationsByMachineId[machine.id] ?? [];
           const reconciled = reconcileOptimisticMutations(
@@ -200,6 +201,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           } catch {
             // Credential lookup failure must not leave inventory refreshing.
           }
+          if (refreshRevisions.get(machine.id) !== refreshRevision) return;
           const failure = summarizeFailureDetailed(error, machineHasPassword);
           // 5s polling repeats the same failure; log only new failure text.
           if (get().inventoriesByMachineId[machine.id]?.lastError !== failure.message) {
@@ -236,23 +238,51 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       await get().refreshMachine(machine);
     },
 
-    retryMachine: async (machineId) => {
-      const machine = enabledMachines(useMachinesStore.getState()).find(
-        (entry) => entry.id === machineId,
-      );
-      if (machine === undefined) return;
+    retryMachine: (machineId) => {
+      const existing = retryRequests.get(machineId);
+      if (existing !== undefined) return existing;
+      const machine = enabledMachines(useMachinesStore.getState()).find((entry) => entry.id === machineId);
+      if (machine === undefined) return Promise.resolve();
+      refreshRevisions.set(machineId, (refreshRevisions.get(machineId) ?? 0) + 1);
+      inFlightRefreshes.delete(machineId);
       patchMachine(machine.id, { retrying: true });
-      try {
-        await get().refreshMachineFresh(machine);
-      } finally {
-        patchMachine(machine.id, { retrying: false });
-      }
+      const request = Promise.resolve().then(async () => {
+        try {
+          await reconnectMachine(machine);
+          if (retryRequests.get(machineId) !== request) return;
+          retryRequests.delete(machineId);
+          const refresh = get().refreshMachine(machine);
+          retryRequests.set(machineId, request);
+          await Promise.all([refresh, restoreAttachTabs(machineId)]);
+        } catch (error) {
+          const failure = summarizeFailureDetailed(error, await hasPassword(machineId).catch(() => false));
+          if (retryRequests.get(machineId) !== request) return;
+          patchMachine(machineId, {
+            refreshing: false,
+            hasLoaded: true,
+            lastError: failure.message,
+            lastErrorCode: failure.reasonCode,
+          });
+          logAppEvent(`${machineDisplayLabel(machine)}: ${failure.message}`);
+          return;
+        } finally {
+          if (retryRequests.get(machineId) === request) {
+            retryRequests.delete(machineId);
+            patchMachine(machineId, { retrying: false });
+          }
+        }
+      });
+      retryRequests.set(machineId, request);
+      return request;
     },
 
     refreshAll: async () => {
       // Machines hidden from the Sessions screen are never connected to, so a
       // hidden machine costs no SSH connection and no poll.
-      const machines = enabledMachines(useMachinesStore.getState());
+      const machines = enabledMachines(useMachinesStore.getState()).filter((machine) => {
+        const failure = get().inventoriesByMachineId[machine.id]?.lastErrorCode;
+        return failure !== 'authFailed' && failure !== 'hostKeyChanged';
+      });
       await Promise.all(machines.map((machine) => get().refreshMachine(machine)));
     },
 
@@ -277,11 +307,13 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
     },
 
     clearMachine: (machineId) => {
+      retryRequests.delete(machineId);
       const next = { ...get().inventoriesByMachineId };
       const nextPending = { ...get().pendingMutationsByMachineId };
       delete next[machineId];
       delete nextPending[machineId];
-      refreshRevisions.delete(machineId);
+      refreshRevisions.set(machineId, (refreshRevisions.get(machineId) ?? 0) + 1);
+      inFlightRefreshes.delete(machineId);
       set({
         inventoriesByMachineId: next,
         pendingMutationsByMachineId: nextPending,

@@ -11,7 +11,7 @@ import { remoteTerminalCommand, remoteShellCommand } from '../remote/commands';
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -21,6 +21,18 @@ import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
 import { forgetAttach, noteAttachOpened } from './zmxDisplay';
+
+const tabOpenRequests = new Map<string, Promise<unknown>>();
+
+function trackTabOpen<T>(sessionKey: string, work: () => Promise<T>): Promise<T> {
+  const request = Promise.resolve().then(work);
+  tabOpenRequests.set(sessionKey, request);
+  const clear = () => {
+    if (tabOpenRequests.get(sessionKey) === request) tabOpenRequests.delete(sessionKey);
+  };
+  void request.then(clear, clear);
+  return request;
+}
 
 export const MAX_WARM_SESSIONS = 7;
 /**
@@ -198,41 +210,38 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     return useSettingsStore.getState().settings.fontSize;
   };
 
-  const openTab = async (
-    machine: MachineConnectionTarget,
-    tab: TerminalTab,
-    command: string | null
-  ): Promise<string> => {
-    set({ tabs: [...get().tabs, tab], selectedSessionKey: tab.sessionKey });
-    touchWarm(tab.sessionKey);
-    await evictExcessWarmEntries();
-    try {
-      await ensureConnected(machine);
-      if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
-      const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
-        fontSize: initialFontSize(tab.sessionKey),
-        zmxBacked: tab.kind === 'attach',
-        scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
-      };
-      const remoteCommand =
-        command !== null
-          ? await remoteTerminalCommand(machine.id, command)
-          : await remoteShellCommand(machine.id, tab.cwd);
-      if (remoteCommand !== null) opts.command = remoteCommand;
-      await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
-      if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
-        await GhostexNative.closeTerminal(tab.sessionKey);
+  const openTab = (machine: MachineConnectionTarget, tab: TerminalTab, command: string | null): Promise<string> =>
+    trackTabOpen(tab.sessionKey, async () => {
+      set({ tabs: [...get().tabs, tab], selectedSessionKey: tab.sessionKey });
+      touchWarm(tab.sessionKey);
+      await evictExcessWarmEntries();
+      try {
+        await ensureConnected(machine);
+        if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
+        const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
+          fontSize: initialFontSize(tab.sessionKey),
+          zmxBacked: tab.kind === 'attach',
+          scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
+        };
+        const remoteCommand =
+          command !== null
+            ? await remoteTerminalCommand(machine.id, command)
+            : await remoteShellCommand(machine.id, tab.cwd);
+        if (remoteCommand !== null) opts.command = remoteCommand;
+        await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
+        if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
+          await GhostexNative.closeTerminal(tab.sessionKey);
+        }
+      } catch (error) {
+        patchTab(tab.sessionKey, {
+          state: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        dropWarm(tab.sessionKey);
+        throw error;
       }
-    } catch (error) {
-      patchTab(tab.sessionKey, {
-        state: 'failed',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      dropWarm(tab.sessionKey);
-      throw error;
-    }
-    return tab.sessionKey;
-  };
+      return tab.sessionKey;
+    });
 
   return {
     hydrated: false,
@@ -281,6 +290,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
 
     attachSession: async (machine, session) => {
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
+      const pending = tabOpenRequests.get(sessionKey);
+      if (pending) await pending;
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       if (existing !== undefined) {
         if (session.agentId) patchTab(sessionKey, { ghostexAgentId: session.agentId });
@@ -298,6 +309,13 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         }
         set({ selectedSessionKey: sessionKey });
         touchWarm(sessionKey);
+        await ensureConnected(machine, { verify: true });
+        const opening = tabOpenRequests.get(sessionKey);
+        if (opening) await opening;
+        const current = get().tabs.find((tab) => tab.sessionKey === sessionKey);
+        if (current?.state === 'closed' || current?.state === 'failed') await get().reopenTab(sessionKey);
+        const attached = get().tabs.find((tab) => tab.sessionKey === sessionKey);
+        if (attached?.state !== 'open') throw new Error(attached?.error ?? 'The terminal is not connected yet.');
         return sessionKey;
       }
       const tab: TerminalTab = {
@@ -364,61 +382,69 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       }
     },
 
-    reopenTab: async (sessionKey) => {
-      const tab = get().tabs.find((entry) => entry.sessionKey === sessionKey);
-      // An open tab is already showing a live terminal, and a tab mid-open has
-      // an attach in flight; reopening either would race two attaches onto one
-      // session key. Everything else is a restart.
-      if (tab === undefined || tab.state === 'opening' || tab.state === 'open') return;
-      const record = useMachinesStore.getState().machines.find((machine) => machine.id === tab.machineId);
-      if (record === undefined) return;
-      const target: MachineConnectionTarget = {
-        id: record.id,
-        host: record.host,
-        username: record.username,
-        port: record.port,
-        transport: record.transport,
-      };
-      patchTab(sessionKey, { state: 'opening', error: undefined });
-      // A fresh attach gets a fresh native viewport refresh and display announcement.
-      cancelZmxRefresh(sessionKey);
-      zmxRefreshSent.delete(sessionKey);
-      forgetAttach(sessionKey);
-      touchWarm(sessionKey);
-      try {
-        /*
-         * Reconnect means "throw the dead terminal away and start over", so the
-         * native entry goes first. Without this, openTerminal finds a warm entry
-         * under the same session key and resolves as a no-op — which is exactly
-         * how a Reconnect could report success while the user kept staring at
-         * the exited process.
-         */
-        await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
-        await ensureConnected(target);
-        const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
-          fontSize: initialFontSize(sessionKey),
-          zmxBacked: tab.kind === 'attach',
-          scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
+    reopenTab: (sessionKey) => {
+      const existing = tabOpenRequests.get(sessionKey);
+      if (existing)
+        return existing.then(
+          () => undefined,
+          () => undefined
+        );
+      return trackTabOpen(sessionKey, async () => {
+        const tab = get().tabs.find((entry) => entry.sessionKey === sessionKey);
+        // An open tab is already showing a live terminal, and a tab mid-open has
+        // an attach in flight; reopening either would race two attaches onto one
+        // session key. Everything else is a restart.
+        if (tab === undefined || tab.state === 'opening' || tab.state === 'open') return;
+        const record = useMachinesStore.getState().machines.find((machine) => machine.id === tab.machineId);
+        if (record === undefined) return;
+        const target: MachineConnectionTarget = {
+          id: record.id,
+          host: record.host,
+          username: record.username,
+          port: record.port,
+          transport: record.transport,
         };
-        if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
-          // Same project-scoped selector the first attach used. A bare session
-          // id still works, but costs the daemon an extra inventory lookup on
-          // every reconnect to rediscover the project this tab already knows.
-          opts.command = await remoteTerminalCommand(
-            tab.machineId,
-            attachCommand(tab.ghostexSessionId, tab.ghostexProjectId)
-          );
-        } else if (tab.kind === 'shell') {
-          const command = await remoteShellCommand(tab.machineId, tab.cwd);
-          if (command !== null) opts.command = command;
+        patchTab(sessionKey, { state: 'opening', error: undefined });
+        // A fresh attach gets a fresh native viewport refresh and display announcement.
+        cancelZmxRefresh(sessionKey);
+        zmxRefreshSent.delete(sessionKey);
+        forgetAttach(sessionKey);
+        touchWarm(sessionKey);
+        try {
+          /*
+           * Reconnect means "throw the dead terminal away and start over", so the
+           * native entry goes first. Without this, openTerminal finds a warm entry
+           * under the same session key and resolves as a no-op — which is exactly
+           * how a Reconnect could report success while the user kept staring at
+           * the exited process.
+           */
+          await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
+          await ensureConnected(target);
+          const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
+            fontSize: initialFontSize(sessionKey),
+            zmxBacked: tab.kind === 'attach',
+            scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
+          };
+          if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
+            // Same project-scoped selector the first attach used. A bare session
+            // id still works, but costs the daemon an extra inventory lookup on
+            // every reconnect to rediscover the project this tab already knows.
+            opts.command = await remoteTerminalCommand(
+              tab.machineId,
+              attachCommand(tab.ghostexSessionId, tab.ghostexProjectId)
+            );
+          } else if (tab.kind === 'shell') {
+            const command = await remoteShellCommand(tab.machineId, tab.cwd);
+            if (command !== null) opts.command = command;
+          }
+          await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
+        } catch (error) {
+          patchTab(sessionKey, {
+            state: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
-        await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
-      } catch (error) {
-        patchTab(sessionKey, {
-          state: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      });
     },
 
     setFontSizeForSession: (sessionKey, size) => {
@@ -457,6 +483,34 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
   };
 });
 
+const restoring = new Map<string, Promise<void>>();
+
+/** Reattach serially, selected first, without respawning ordinary shell processes. */
+export function restoreAttachTabs(machineId: string): Promise<void> {
+  const existing = restoring.get(machineId);
+  if (existing) return existing;
+  const request = (async () => {
+    const store = useTerminalStore.getState();
+    const tabs = store.tabs.filter((tab) => tab.machineId === machineId && tab.kind === 'attach');
+    tabs.sort(
+      (a, b) => Number(b.sessionKey === store.selectedSessionKey) - Number(a.sessionKey === store.selectedSessionKey)
+    );
+    for (const tab of tabs) {
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') break;
+      const current = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === tab.sessionKey);
+      if (current?.state === 'closed' || current?.state === 'failed') {
+        await useTerminalStore.getState().reopenTab(tab.sessionKey);
+      }
+    }
+  })();
+  restoring.set(machineId, request);
+  const clear = () => {
+    if (restoring.get(machineId) === request) restoring.delete(machineId);
+  };
+  void request.then(clear, clear);
+  return request;
+}
+
 let eventsInstalled = false;
 
 /**
@@ -471,6 +525,7 @@ export function initTerminalEvents(): void {
     const store = useTerminalStore.getState();
     const tab = store.tabs.find((entry) => entry.sessionKey === event.sessionKey);
     if (tab === undefined) return;
+    if (event.state === 'closed' && tab.state === 'opening' && tabOpenRequests.has(event.sessionKey)) return;
     useTerminalStore.setState({
       tabs: store.tabs.map((entry) =>
         entry.sessionKey === event.sessionKey ? { ...entry, state: event.state, error: event.error } : entry

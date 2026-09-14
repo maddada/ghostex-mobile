@@ -24,7 +24,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { logAppEvent } from '../app/appLog';
-import { markManualDisconnect } from '../app/autoReconnect';
 import { openTailscaleOrDownload } from '../app/tailscale';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -598,15 +597,9 @@ export default function SessionsScreen({ navigation }: Props) {
    */
   const reconnectMachine = useCallback(
     async (target: MachineRecord): Promise<void> => {
-      try {
-        markManualDisconnect(target.id);
-        await GhostexNative.disconnect(target.id);
-      } catch {
-        // Not connected is fine; the refresh below reconnects.
-      }
-      await refreshMachine(target);
+      await retryMachine(target.id);
     },
-    [refreshMachine],
+    [retryMachine]
   );
 
   const submitRename = useCallback(

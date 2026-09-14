@@ -1,4 +1,6 @@
-import { execRemoteCommand, forgetRemoteEnvironment } from '../remote/commands';
+import { execRemoteCommand } from '../remote/commands';
+import { ensureConnected } from '../remote/connection';
+export { ensureConnected } from '../remote/connection';
 /**
  * Inventory client: runs `ghostex sessions --json --mobile-summary` over the
  * native SSH transport and maps failures to the human copy from
@@ -6,11 +8,10 @@ import { execRemoteCommand, forgetRemoteEnvironment } from '../remote/commands';
  * reference implementation GhostexSessionInventoryClient).
  */
 
-import { GhostexNative } from '../../modules/ghostex-native/src';
 import { sessionsListCommand } from '../commands/ghostexCli';
 import { parseMobileSummary, scanJsonObjects, type GhostexMobileSummary } from '../contract/mobileSummary';
 import { FailureCopy } from '../copy';
-import { resolveSshConfig, type MachineConnectionTarget } from '../machines/credentials';
+import type { MachineConnectionTarget } from '../machines/credentials';
 
 export const INVENTORY_EXEC_TIMEOUT_MS = 20000;
 
@@ -19,15 +20,6 @@ export type InventoryFetchResult = {
   /** Raw JSON text of the matched summary object; used for change-skip. */
   fingerprint: string;
 };
-
-/** Ensure the machine's SSH client is connected, connecting if needed. */
-export async function ensureConnected(machine: MachineConnectionTarget): Promise<void> {
-  const connected = await GhostexNative.isConnected(machine.id);
-  if (connected) return;
-  const config = await resolveSshConfig(machine);
-  forgetRemoteEnvironment(machine.id);
-  await GhostexNative.connect(machine.id, config);
-}
 
 /**
  * Fetch and parse the mobile summary for one machine. Throws an Error whose
