@@ -34,6 +34,7 @@ import PromptDialog from '../components/common/PromptDialog';
 import StateCard from '../components/common/StateCard';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import { useCollapseStore } from '../components/sessions/collapseStore';
+import { useSessionListClock } from '../components/sessions/useSessionListClock';
 import ContextMenu from '../components/sessions/ContextMenu';
 import {
   buildDrawerList,
@@ -294,9 +295,15 @@ export default function SessionsScreen({ navigation }: Props) {
   );
   const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
 
+  const clockSessions = useMemo(
+    () => Object.values(inventoriesByMachineId).flatMap((inventory) => inventory.summary?.sessions ?? []),
+    [inventoriesByMachineId],
+  );
+  const sessionListNowMs = useSessionListClock(clockSessions);
   const entries = useMemo(
     () =>
       buildDrawerList({
+        nowMs: sessionListNowMs,
         machines,
         selectedMachineId: machine === null ? null : machine.id,
         inventoriesByMachineId,
@@ -309,6 +316,7 @@ export default function SessionsScreen({ navigation }: Props) {
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
           expandedParkedSessionKeysByMachine: collapse.expandedParkedSessionKeysByMachine,
+          expandedDraftSessionKeysByMachine: collapse.expandedDraftSessionKeysByMachine,
         },
       }),
     [
@@ -323,6 +331,8 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.collapsedSectionsByMachine,
       collapse.collapsedSessionKindsByMachine,
       collapse.expandedParkedSessionKeysByMachine,
+      collapse.expandedDraftSessionKeysByMachine,
+      sessionListNowMs,
     ],
   );
 

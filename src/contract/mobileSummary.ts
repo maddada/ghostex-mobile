@@ -260,6 +260,7 @@ export type GhostexSession = {
   surface: string;
   createdAt: string;
   isDraft?: true;
+  hasComposerDraft?: boolean;
   lastInteractionAt: string;
   lastActiveAt: string;
   primaryTitle: string;
@@ -840,6 +841,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     surface: trimmedValue(value, 'surface'),
     createdAt: trimmedValue(value, 'createdAt'),
     isDraft: value.isDraft === true ? true : undefined,
+    hasComposerDraft: value.hasComposerDraft === true ? true : undefined,
     lastInteractionAt: trimmedValue(value, 'lastInteractionAt'),
     lastActiveAt: trimmedValue(value, 'lastActiveAt'),
     primaryTitle: trimmedValue(value, 'primaryTitle'),

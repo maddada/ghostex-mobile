@@ -46,9 +46,11 @@ export type DrawerCollapseInput = {
   collapsedSectionsByMachine: Record<string, string[]>;
   collapsedSessionKindsByMachine: Record<string, string[]>;
   expandedParkedSessionKeysByMachine?: Record<string, string[]>;
+  expandedDraftSessionKeysByMachine?: Record<string, string[]>;
 };
 
 export type DrawerListInput = {
+  nowMs?: number;
   /** Enabled machines only; empty means the "no machines" state card. */
   machines: MachineRecord[];
   /** The machine whose content the drawer renders; null falls back to the first. */
@@ -139,6 +141,7 @@ function machineBlocks(
   inventory: MachineInventory | undefined,
   selectedSpaceId: string,
   collapse: DrawerCollapseInput,
+  nowMs: number,
 ): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
   if (inventory === undefined || (inventory.summary === null && !inventory.hasLoaded)) {
@@ -170,6 +173,8 @@ function machineBlocks(
   const items = withoutQuickSection(
     buildDrawerItems({
       machineId: machine.id,
+      nowMs,
+      expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[machine.id] ?? []),
       summary: filterSummaryForSpace(inventory.summary, selectedSpaceId),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
@@ -220,6 +225,7 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     inventoriesByMachineId[machine.id],
     selectedSpaceId,
     collapse,
+    input.nowMs ?? Date.now(),
   );
 }
 

@@ -195,6 +195,7 @@ export const SessionCopy = {
    */
   browserKindLabel: 'Browser',
   pinnedKindLabel: 'Pinned',
+  draftsKindLabel: 'Drafts',
   parkedKindLabel: 'Parked',
   sessionsKindLabel: 'Sessions',
   unknownRecency: 'Unknown',
