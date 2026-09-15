@@ -514,6 +514,8 @@ export async function runSessionChatBridgeRequest(
     switch (request.op) {
       case 'read': {
         const options: SessionChatReadOptions = {
+          historyMode: stringParam(params, 'historyMode'),
+          preserveNewest: params.preserveNewest === true,
           subagent: stringParam(params, 'subagent'),
           limit: numberParam(params, 'limit'),
           beforeOffset: numberParam(params, 'beforeOffset'),

@@ -515,6 +515,8 @@ export function portsListCommand(includeWebMetadata = false): string {
 const SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS = 15000;
 
 export type SessionChatReadOptions = {
+  historyMode?: string;
+  preserveNewest?: boolean;
   subagent?: string;
   limit?: number;
   beforeOffset?: number;
@@ -543,6 +545,8 @@ export function readSessionChatCommand(
   options?: SessionChatReadOptions,
 ): string {
   const parts = [`ghostex read-session-chat ${sessionChatSelector(sessionId, projectId)}`];
+  if (options?.historyMode) parts.push(`--history-mode ${shellQuote(options.historyMode)}`);
+  if (options?.preserveNewest) parts.push('--preserve-newest');
   if (options?.subagent) parts.push(`--subagent ${shellQuote(options.subagent)}`);
   parts.push(positiveIntegerFlag('--limit', options?.limit, 'chat read limit').trim());
   const beforeOffset = options?.beforeOffset;
