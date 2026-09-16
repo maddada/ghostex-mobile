@@ -582,10 +582,12 @@ export type AgentIconId =
   | 'hermes-agent'
   | 'kiro'
   | 'omp'
+  | 'openclaude'
   | 'opencode'
   | 'pi'
   | 'qoder'
   | 'rovo-dev'
+  | 'zcode'
   | 'terminal';
 
 /** Brand tints mirror the desktop sidebar's AGENT_LOGO_COLORS map. */
@@ -604,10 +606,12 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   'hermes-agent': '#F3C46B',
   kiro: '#A6E3FF',
   omp: '#C8FF62',
+  openclaude: '#f0a68a',
   opencode: '#6D96C0',
   pi: '#C8FF62',
   qoder: '#A991FF',
   'rovo-dev': '#4FC3A1',
+  zcode: '#FFFFFF',
   terminal: '#FAFAFA',
 };
 
@@ -617,6 +621,8 @@ const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
   'codex cli': 'codex',
   claude: 'claude',
   'claude code': 'claude',
+  openclaude: 'openclaude',
+  'open claude': 'openclaude',
   cursor: 'cursor-cli',
   'cursor cli': 'cursor-cli',
   'cursor agent': 'cursor-cli',
@@ -649,6 +655,9 @@ const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
   rovo: 'rovo-dev',
   'rovo dev': 'rovo-dev',
   'rovo-dev': 'rovo-dev',
+  zcode: 'zcode',
+  'zcode-cli': 'zcode',
+  'z code': 'zcode',
   browser: 'browser',
 };
 
