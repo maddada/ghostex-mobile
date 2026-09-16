@@ -15,6 +15,7 @@
       "./plugins/withAndroidReleaseSigning.js",
       "./plugins/withLoopbackCleartext.js",
       "expo-status-bar",
+      "@react-native-community/datetimepicker",
       [
         "expo-camera",
         {

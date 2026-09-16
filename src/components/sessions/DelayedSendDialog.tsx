@@ -4,8 +4,9 @@
  * to the connected desktop renderer that owns the automation runtime.
  */
 
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { DelayedSendTrigger } from '../../commands/ghostexCli';
@@ -13,9 +14,9 @@ import { agentIconTint, resolveAgentIconId } from '../../contract/mobileSummary'
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
 import { formatDeadlineCountdown, remainingMsUntil, useNowTick } from './timerCountdown';
 
-/** Desktop bounds: whole minutes between 1 minute and 24 days. */
+/** After a delay uses whole minutes; Specific time can leave a partial minute. */
 export const DELAYED_SEND_MIN_DELAY_MS = 60_000;
-export const DELAYED_SEND_MAX_DELAY_MS = 24 * 24 * 60 * 60 * 1000;
+export const DELAYED_SEND_MAX_DELAY_MS = 2_147_483_647;
 
 export type DelayedSendDialogProps = {
   agentIcon: string;
@@ -72,9 +73,25 @@ export default function DelayedSendDialog({
 }: DelayedSendDialogProps) {
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('5');
+  const [specificTime, setSpecificTime] = useState(() => new Date());
+  const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
   const [sendEnterEnabled, setSendEnterEnabled] = useState(true);
   const [closeAfterDoneEnabled, setCloseAfterDoneEnabled] = useState(closeAfterDoneActive);
-  const [trigger, setTrigger] = useState<DelayedSendTrigger>('afterDelay');
+  const [trigger, setTrigger] = useState<DelayedSendTrigger | 'specificTime'>('afterDelay');
+  const dismissPicker = useCallback(() => setPickerMode(null), []);
+  const changePickerValue = useCallback((_: DateTimePickerChangeEvent, selected: Date) => {
+    setSpecificTime((previous) => {
+      const next = new Date(previous);
+      if (pickerMode === 'date') {
+        next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
+      } else {
+        next.setHours(selected.getHours(), selected.getMinutes());
+      }
+      next.setSeconds(0, 0);
+      return next;
+    });
+    if (Platform.OS === 'android') setPickerMode(null);
+  }, [pickerMode]);
 
   useEffect(() => {
     if (visible) {
@@ -82,6 +99,8 @@ export default function DelayedSendDialog({
       const duration = remainingMs > 0 ? durationPartsFromMs(remainingMs) : undefined;
       setHours(String(duration?.hours ?? 0));
       setMinutes(String(duration?.minutes ?? 5));
+      setSpecificTime(new Date(Math.ceil((Date.now() + (remainingMs || 5 * 60_000)) / 60_000) * 60_000));
+      setPickerMode(null);
       setSendEnterEnabled(true);
       setCloseAfterDoneEnabled(closeAfterDoneActive);
       setTrigger(
@@ -102,15 +121,22 @@ export default function DelayedSendDialog({
 
   // The daemon's label is a snapshot from the last poll; tick the countdown from
   // the phone clock while a deadline is known, like the desktop sidebar row.
-  const nowMs = useNowTick(visible && delayedSendDeadlineAt.length > 0);
+  const nowMs = useNowTick(visible && (delayedSendDeadlineAt.length > 0 || trigger === 'specificTime'));
   const liveCountdown = formatDeadlineCountdown(delayedSendDeadlineAt, nowMs);
   const liveRemainingLabel = liveCountdown.length > 0 ? liveCountdown : remainingLabel;
 
-  const delayMs = parseDurationPart(hours) * 3_600_000 + parseDurationPart(minutes) * 60_000;
+  /**
+   * CDXC:DelayedSend 2026-09-16 DECISION:
+   * User: add Specific time to the GPUI, React, and React Native Session Automations dialogs, converting the chosen local time to the existing After a delay wait on Save.
+   */
+  const delayMs = trigger === 'specificTime'
+    ? specificTime.getTime() - nowMs
+    : parseDurationPart(hours) * 3_600_000 + parseDurationPart(minutes) * 60_000;
   const isValidDelay =
-    Number.isFinite(delayMs) && delayMs >= DELAYED_SEND_MIN_DELAY_MS && delayMs <= DELAYED_SEND_MAX_DELAY_MS;
-  const hasStatusTrigger = trigger !== 'afterDelay';
+    Number.isFinite(delayMs) && delayMs >= (trigger === 'specificTime' ? 1 : DELAYED_SEND_MIN_DELAY_MS) && delayMs <= DELAYED_SEND_MAX_DELAY_MS;
+  const hasStatusTrigger = trigger !== 'afterDelay' && trigger !== 'specificTime';
   const hasActiveTimer =
+    delayedSendDeadlineAt.length > 0 ||
     remainingLabel.length > 0 ||
     sendWhenAgentStopsActive ||
     sendWhenAllProjectSessionsStopActive;
@@ -125,13 +151,18 @@ export default function DelayedSendDialog({
 
   const saveChanges = async (): Promise<void> => {
     if (!canSave) return;
-    if (closeAfterDoneChanged) {
-      await onToggleCloseAfterDone();
+    const submittedDelayMs = trigger === 'specificTime' ? specificTime.getTime() - Date.now() : delayMs;
+    if (sendEnterEnabled && trigger === 'specificTime') {
+      if (submittedDelayMs <= 0 || submittedDelayMs > DELAYED_SEND_MAX_DELAY_MS) return;
     }
+    // Send first so waiting for another setting to save cannot shift the chosen time.
     if (sendEnterEnabled) {
-      await onConfirm(trigger, delayMs);
+      await onConfirm(trigger === 'specificTime' ? 'afterDelay' : trigger, submittedDelayMs);
     } else if (hasActiveTimer) {
       await onCancelTimer();
+    }
+    if (closeAfterDoneChanged) {
+      await onToggleCloseAfterDone();
     }
     onCancel();
   };
@@ -140,136 +171,170 @@ export default function DelayedSendDialog({
     <Modal visible={visible} transparent animationType='fade' onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-          <Text style={styles.title}>Session Automations</Text>
-          <Text style={styles.body}>Configure automations for this agent session.</Text>
-          <View style={styles.sessionTarget}>
-            <TargetIcon size={14} color={agentIconTint(targetIconId)} />
-            <Text numberOfLines={1} style={styles.sessionTargetTitle}>
-              {sessionTargetLabel}
-            </Text>
-          </View>
-          <View style={styles.automationStack}>
-            <View style={styles.automationCard}>
-              <View style={styles.automationHeader}>
-                <View style={styles.automationCopy}>
-                  <Text style={styles.automationTitle}>Send Enter</Text>
-                  <Text style={styles.automationDescription}>
-                    {!sendEnterEnabled
-                      ? 'No Enter keypress will be scheduled.'
-                      : sendWhenAllProjectSessionsStopActive
-                        ? 'Active when all agents finish working.'
-                        : sendWhenAgentStopsActive
-                          ? 'Active when this agent finishes working.'
-                          : liveRemainingLabel.length > 0
-                            ? `Active. Enter sends in ${liveRemainingLabel}.`
-                            : 'Press Enter later using the selected trigger.'}
-                  </Text>
+          <ScrollView keyboardShouldPersistTaps='handled' contentContainerStyle={styles.cardContent}>
+            <Text style={styles.title}>Session Automations</Text>
+            <Text style={styles.body}>Configure automations for this agent session.</Text>
+            <View style={styles.sessionTarget}>
+              <TargetIcon size={14} color={agentIconTint(targetIconId)} />
+              <Text numberOfLines={1} style={styles.sessionTargetTitle}>
+                {sessionTargetLabel}
+              </Text>
+            </View>
+            <View style={styles.automationStack}>
+              <View style={styles.automationCard}>
+                <View style={styles.automationHeader}>
+                  <View style={styles.automationCopy}>
+                    <Text style={styles.automationTitle}>Send Enter</Text>
+                    <Text style={styles.automationDescription}>
+                      {!sendEnterEnabled
+                        ? 'No Enter keypress will be scheduled.'
+                        : sendWhenAllProjectSessionsStopActive
+                          ? 'Active when all agents finish working.'
+                          : sendWhenAgentStopsActive
+                            ? 'Active when this agent finishes working.'
+                            : liveRemainingLabel.length > 0
+                              ? `Active. Enter sends in ${liveRemainingLabel}.`
+                              : 'Press Enter later using the selected trigger.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel='Send Enter automation'
+                    value={sendEnterEnabled}
+                    onValueChange={setSendEnterEnabled}
+                    trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
+                    thumbColor={GhostexPalette.FOREGROUND}
+                  />
                 </View>
-                <Switch
-                  accessibilityLabel='Send Enter automation'
-                  value={sendEnterEnabled}
-                  onValueChange={setSendEnterEnabled}
-                  trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
-                  thumbColor={GhostexPalette.FOREGROUND}
-                />
-              </View>
-              {sendEnterEnabled ? (
-                <View style={styles.automationContent}>
-                  <Text style={styles.fieldLabel}>Trigger</Text>
-                  <View accessibilityRole='radiogroup' style={styles.triggerOptions}>
-                    {([
-                      ['afterDelay', 'After a delay'],
-                      ['agentStops', 'When this agent finishes'],
-                      ['allAgentsStop', 'When all agents finish'],
-                    ] as const).map(([value, label]) => {
-                      const selected = trigger === value;
-                      return (
-                        <Pressable
-                          key={value}
-                          accessibilityRole='radio'
-                          accessibilityState={{ selected }}
-                          style={[styles.triggerOption, selected ? styles.triggerOptionSelected : null]}
-                          onPress={() => setTrigger(value)}
-                        >
-                          <View style={[styles.radio, selected ? styles.radioSelected : null]}>
-                            {selected ? <View style={styles.radioDot} /> : null}
+                {sendEnterEnabled ? (
+                  <View style={styles.automationContent}>
+                    <Text style={styles.fieldLabel}>Trigger</Text>
+                    <View accessibilityRole='radiogroup' style={styles.triggerOptions}>
+                      {([
+                        ['afterDelay', 'After a delay'],
+                        ['specificTime', 'Specific time'],
+                        ['agentStops', 'When this agent finishes'],
+                        ['allAgentsStop', 'When all agents finish'],
+                      ] as const).map(([value, label]) => {
+                        const selected = trigger === value;
+                        return (
+                          <Pressable
+                            key={value}
+                            accessibilityRole='radio'
+                            accessibilityState={{ selected }}
+                            style={[styles.triggerOption, selected ? styles.triggerOptionSelected : null]}
+                            onPress={() => { setTrigger(value); setPickerMode(null); }}
+                          >
+                            <View style={[styles.radio, selected ? styles.radioSelected : null]}>
+                              {selected ? <View style={styles.radioDot} /> : null}
+                            </View>
+                            <Text style={[styles.triggerLabel, selected ? styles.triggerLabelSelected : null]}>
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <View style={styles.triggerDetailSlot}>
+                      {trigger === 'afterDelay' ? (
+                        <View style={styles.durationRow}>
+                          <View style={styles.durationField}>
+                            <Text style={styles.fieldLabel}>Hours</Text>
+                            <TextInput
+                              accessibilityLabel='Hours'
+                              style={styles.input}
+                              keyboardType='number-pad'
+                              value={hours}
+                              onChangeText={setHours}
+                              selectTextOnFocus
+                            />
                           </View>
-                          <Text style={[styles.triggerLabel, selected ? styles.triggerLabelSelected : null]}>
-                            {label}
+                          <View style={styles.durationField}>
+                            <Text style={styles.fieldLabel}>Minutes</Text>
+                            <TextInput
+                              accessibilityLabel='Minutes'
+                              autoFocus
+                              style={styles.input}
+                              keyboardType='number-pad'
+                              value={minutes}
+                              onChangeText={setMinutes}
+                              selectTextOnFocus
+                            />
+                          </View>
+                        </View>
+                      ) : trigger === 'specificTime' ? (
+                        <View>
+                          <View style={styles.durationRow}>
+                            <View style={styles.durationField}>
+                              <Text style={styles.fieldLabel}>Date</Text>
+                              <Pressable accessibilityRole='button' accessibilityLabel='Choose date' style={styles.input} onPress={() => setPickerMode('date')}>
+                                <Text style={styles.dateTimeValue}>{specificTime.toLocaleDateString()}</Text>
+                              </Pressable>
+                            </View>
+                            <View style={styles.durationField}>
+                              <Text style={styles.fieldLabel}>Time</Text>
+                              <Pressable accessibilityRole='button' accessibilityLabel='Choose time' style={styles.input} onPress={() => setPickerMode('time')}>
+                                <Text style={styles.dateTimeValue}>{specificTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                          <Text style={styles.triggerDescription}>
+                            {isValidDelay ? 'Uses your local time.' : 'Choose a future date and time within 24 days.'}
                           </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <View style={styles.triggerDetailSlot}>
-                    {trigger === 'afterDelay' ? (
-                      <View style={styles.durationRow}>
-                        <View style={styles.durationField}>
-                          <Text style={styles.fieldLabel}>Hours</Text>
-                          <TextInput
-                            accessibilityLabel='Hours'
-                            style={styles.input}
-                            keyboardType='number-pad'
-                            value={hours}
-                            onChangeText={setHours}
-                            selectTextOnFocus
-                          />
+                          {pickerMode && visible ? (
+                            <DateTimePicker
+                              value={specificTime}
+                              mode={pickerMode}
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              minimumDate={pickerMode === 'date' ? new Date(nowMs) : undefined}
+                              maximumDate={pickerMode === 'date' ? new Date(nowMs + DELAYED_SEND_MAX_DELAY_MS) : undefined}
+                              onDismiss={dismissPicker}
+                              onValueChange={changePickerValue}
+                            />
+                          ) : null}
                         </View>
-                        <View style={styles.durationField}>
-                          <Text style={styles.fieldLabel}>Minutes</Text>
-                          <TextInput
-                            accessibilityLabel='Minutes'
-                            autoFocus
-                            style={styles.input}
-                            keyboardType='number-pad'
-                            value={minutes}
-                            onChangeText={setMinutes}
-                            selectTextOnFocus
-                          />
-                        </View>
-                      </View>
-                    ) : (
-                      <Text style={styles.triggerDescription}>
-                        {trigger === 'agentStops'
-                          ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
-                          : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
-                      </Text>
-                    )}
+                      ) : (
+                        <Text style={styles.triggerDescription}>
+                          {trigger === 'agentStops'
+                            ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
+                            : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
+                        </Text>
+                      )}
+                    </View>
                   </View>
+                ) : null}
+              </View>
+              <View style={styles.automationCard}>
+                <View style={styles.automationHeader}>
+                  <View style={styles.automationCopy}>
+                    <Text style={styles.automationTitle}>Close session after Done</Text>
+                    <Text numberOfLines={1} style={styles.automationDescription}>
+                      Closes this terminal 3 minutes after Done.
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel='Close session after Done'
+                    value={closeAfterDoneEnabled}
+                    onValueChange={setCloseAfterDoneEnabled}
+                    trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
+                    thumbColor={GhostexPalette.FOREGROUND}
+                  />
                 </View>
-              ) : null}
-            </View>
-            <View style={styles.automationCard}>
-              <View style={styles.automationHeader}>
-                <View style={styles.automationCopy}>
-                  <Text style={styles.automationTitle}>Close session after Done</Text>
-                  <Text numberOfLines={1} style={styles.automationDescription}>
-                    Closes this terminal 3 minutes after Done.
-                  </Text>
-                </View>
-                <Switch
-                  accessibilityLabel='Close session after Done'
-                  value={closeAfterDoneEnabled}
-                  onValueChange={setCloseAfterDoneEnabled}
-                  trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
-                  thumbColor={GhostexPalette.FOREGROUND}
-                />
               </View>
             </View>
-          </View>
-          <View style={styles.buttonRow}>
-            <Pressable accessibilityRole='button' style={styles.cancelButton} onPress={onCancel}>
-              <Text style={styles.cancelLabel}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole='button'
-              disabled={!canSave}
-              style={[styles.primaryButton, !canSave ? styles.buttonDisabled : null]}
-              onPress={() => void saveChanges()}
-            >
-              <Text style={styles.primaryLabel}>Save changes</Text>
-            </Pressable>
-          </View>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole='button' style={styles.cancelButton} onPress={onCancel}>
+                <Text style={styles.cancelLabel}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole='button'
+                disabled={!canSave}
+                style={[styles.primaryButton, !canSave ? styles.buttonDisabled : null]}
+                onPress={() => void saveChanges()}
+              >
+                <Text style={styles.primaryLabel}>Save changes</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -288,6 +353,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: GhostexStrokeWidth,
     borderColor: GhostexPalette.BORDER,
+    maxHeight: '100%',
+    overflow: 'hidden',
+  },
+  cardContent: {
     padding: 16,
   },
   title: {
@@ -400,7 +469,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   triggerDetailSlot: {
-    height: 86,
+    minHeight: 112,
     justifyContent: 'center',
   },
   triggerDescription: {
@@ -424,6 +493,10 @@ const styles = StyleSheet.create({
     color: GhostexPalette.FOREGROUND,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    fontSize: 15,
+  },
+  dateTimeValue: {
+    color: GhostexPalette.FOREGROUND,
     fontSize: 15,
   },
   buttonRow: {
