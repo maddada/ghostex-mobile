@@ -104,6 +104,7 @@ import {
   WebPreviewCopy,
 } from '../copy';
 import MachineFailedCard from './sessions-screen/MachineFailedCard';
+import ConnectionWarning from './sessions-screen/ConnectionWarning';
 import type { OptimisticInventoryChange } from '../inventory/optimistic';
 import {
   enqueueRemoteMutation,
@@ -1271,6 +1272,13 @@ export default function SessionsScreen({ navigation }: Props) {
             <Text style={styles.tailscaleWarningBody}>Tap to open Tailscale and reconnect.</Text>
           </View>
         </Pressable>
+      ) : null}
+      {machine !== null ? (
+        <ConnectionWarning
+          machineName={machineDisplayLabel(machine)}
+          inventory={selectedInventory}
+          onRetry={() => retryMachineWithStatus(machine)}
+        />
       ) : null}
       <View style={styles.statusRow}>
         <Pressable

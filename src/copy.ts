@@ -466,6 +466,10 @@ export const StripCopy = {
     retry: 'Retry',
     whatCanICheck: 'What can I check?',
   },
+  connectionWarning: {
+    title: (name: string) => `No connection to ${name}`,
+    body: 'Showing saved sessions. Reconnect to open sessions and get updates.',
+  },
 } as const;
 
 /** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html). */
