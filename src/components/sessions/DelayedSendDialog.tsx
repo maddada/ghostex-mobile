@@ -77,7 +77,7 @@ export default function DelayedSendDialog({
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
   const [sendEnterEnabled, setSendEnterEnabled] = useState(true);
   const [closeAfterDoneEnabled, setCloseAfterDoneEnabled] = useState(closeAfterDoneActive);
-  const [trigger, setTrigger] = useState<DelayedSendTrigger | 'specificTime'>('afterDelay');
+  const [trigger, setTrigger] = useState<DelayedSendTrigger | 'specificTime'>('allAgentsStop');
   const dismissPicker = useCallback(() => setPickerMode(null), []);
   const changePickerValue = useCallback((_: DateTimePickerChangeEvent, selected: Date) => {
     setSpecificTime((previous) => {
@@ -103,17 +103,27 @@ export default function DelayedSendDialog({
       setPickerMode(null);
       setSendEnterEnabled(true);
       setCloseAfterDoneEnabled(closeAfterDoneActive);
+      const hasArmedTimer = delayedSendDeadlineAt.length > 0 || remainingLabel.length > 0;
+      /**
+       * CDXC:DelayedSend 2026-09-19 DECISION:
+       * User: the default Delayed Send trigger is When all agents finish.
+       * An already armed send still reopens on its own trigger.
+       * SEE-ALSO: packages/core-ui/delayed-send-modal.tsx, apps/desktop/src/app/window/delayed_send_modal.rs
+       */
       setTrigger(
         sendWhenAllProjectSessionsStopActive
           ? 'allAgentsStop'
           : sendWhenAgentStopsActive
             ? 'agentStops'
-            : 'afterDelay',
+            : hasArmedTimer
+              ? 'afterDelay'
+              : 'allAgentsStop',
       );
     }
   }, [
     closeAfterDoneActive,
     delayedSendDeadlineAt,
+    remainingLabel,
     sendWhenAgentStopsActive,
     sendWhenAllProjectSessionsStopActive,
     visible,
