@@ -35,21 +35,27 @@ export function ensureConnected(
     }
   };
   const promise = (async () => {
-    if (options.reset) {
-      forgetRemoteEnvironment(machine.id);
-      await GhostexNative.disconnect(machine.id);
-      assertCurrent();
-    } else if (await GhostexNative.isConnected(machine.id)) {
+    let replaceExisting = options.reset === true;
+    if (!replaceExisting && (await GhostexNative.isConnected(machine.id))) {
       assertCurrent();
       if (!options.verify) return;
-      try {
-        // echo is understood by POSIX shells, Windows cmd and PowerShell.
-        const probe = await GhostexNative.exec(machine.id, 'echo __GHOSTEX_CONNECTED__', 5_000);
-        assertCurrent();
-        if (probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__')) return;
-      } catch {
-        assertCurrent();
-      }
+      if (await probeConnection(machine.id)) return;
+      assertCurrent();
+      /**
+       * CDXC:RemoteMachines 2026-09-22 WHY:
+       * A connection that fails the probe is dead and must be torn down before the
+       * replacement is dialed, not left in place until a new one lands. Native
+       * isConnected keeps answering true for it, so if the reconnect fails (an
+       * Easy Connect tunnel that died while iOS had the app suspended, a computer
+       * that is briefly offline) every scheduled retry, which does not probe,
+       * would return here as "connected" and the phone would never reconnect
+       * until the app was killed.
+       */
+      replaceExisting = true;
+    }
+    if (replaceExisting) {
+      forgetRemoteEnvironment(machine.id);
+      await GhostexNative.disconnect(machine.id);
     }
     assertCurrent();
     const config = await resolveSshConfig(machine);
@@ -65,6 +71,17 @@ export function ensureConnected(
   };
   void promise.then(clear, clear);
   return promise;
+}
+
+/** True when the shared connection still answers a trivial command. */
+async function probeConnection(machineId: string): Promise<boolean> {
+  try {
+    // echo is understood by POSIX shells, Windows cmd and PowerShell.
+    const probe = await GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', 5_000);
+    return probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
+  } catch {
+    return false;
+  }
 }
 
 export function reconnectMachine(machine: MachineConnectionTarget): Promise<void> {

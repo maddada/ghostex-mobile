@@ -586,8 +586,10 @@ actor SSHConnection {
     /**
      * Where the TCP connection actually goes. A tailcat machine dials the loopback
      * port of the forward the bridge keeps for `config.machineId`; starting it is
-     * idempotent, so a reconnect reuses the already-established tunnel. The very
-     * first call per machine performs the peer rendezvous and blocks for seconds —
+     * idempotent, so a reconnect reuses the already-established tunnel after the
+     * bridge has probed it, and gets a rebuilt one when it no longer answers (the
+     * tunnel does not survive iOS suspending the app). The first call per machine,
+     * and a rebuild, perform the peer rendezvous and block for seconds —
      * acceptable here because `connect()` already blocks the actor on the socket
      * connect and the libssh2 handshake.
      */

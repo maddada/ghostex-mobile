@@ -148,9 +148,10 @@ class GhostexSshConnection(
 
   /**
    * Where the TCP connection actually goes. Plain SSH dials the configured host; a tailcat
-   * machine dials the loopback port of the forward the bridge keeps for this machineId.
-   * The first call per machine performs the peer rendezvous and can block for seconds; it
-   * runs on [workExecutor], never the main thread.
+   * machine dials the loopback port of the forward the bridge keeps for this machineId,
+   * which the bridge probes on reuse and rebuilds when it no longer answers. The first
+   * call per machine, and a rebuild, perform the peer rendezvous and can block for
+   * seconds; it runs on [workExecutor], never the main thread.
    */
   private fun resolveDialTarget(): Pair<String, Int> {
     val token = config.tailcatToken.trim()
