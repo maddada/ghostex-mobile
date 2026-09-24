@@ -1,0 +1,139 @@
+/**
+ * The rows of the composer's menus, built from the document the way desktop builds them
+ * (`actions.rs`, `show_actions`; `option_menu/window.rs`, `show_option_menu`). Rows that need the
+ * app shell (`{type: 'host', ...}`) appear only when the screen handed the composer a way to run
+ * them (`onHostAction`).
+ */
+
+import type { ChatDocument } from '../../rust/document';
+import { arr, isTrue, obj, str } from './json';
+import type { MenuRow } from './MenuSheet';
+
+/** The toolbar controls in desktop's order, which is also the order they fold into More actions
+ * (`toolbar.rs`, `COMPOSER_CONTROLS`). Maximize is desktop-only. */
+export const COMPOSER_CONTROLS = [
+  { id: 'summary', action: 'summaryMode', label: 'Summary mode', icon: 'titlebar/list-details.svg' },
+  { id: 'note', action: 'sessionNote', label: 'Session note', icon: 'titlebar/note.svg' },
+  { id: 'stash', action: 'stashPrompt', label: 'Stash prompt', icon: 'titlebar/stack-push.svg' },
+  { id: 'attach', action: 'attachPath', label: 'Attach a file or folder', icon: 'titlebar/paperclip.svg' },
+  { id: 'terminal', action: 'terminalView', label: 'Terminal View', icon: 'titlebar/terminal-2.svg' },
+] as const;
+
+export type ComposerControlId = (typeof COMPOSER_CONTROLS)[number]['id'];
+
+const HOST_ACTION_ICONS: Record<string, string> = {
+  splitSessionRight: 'titlebar/layout-columns.svg',
+  closeAfterDone: 'titlebar/clock.svg',
+  delayedActions: 'titlebar/clock-check.svg',
+  exportTranscript: 'titlebar/file-export.svg',
+  fork: 'titlebar/git-branch.svg',
+  fullReload: 'titlebar/refresh.svg',
+  rename: 'titlebar/pencil.svg',
+  sleep: 'titlebar/moon.svg',
+  switchAccount: 'titlebar/switch-horizontal.svg',
+};
+
+const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone', 'splitSessionRight']);
+
+export function overflowed(document: ChatDocument, id: string): boolean {
+  return document.composerOverflow?.overflowed?.includes(id) === true;
+}
+
+export type MoreActionsInput = {
+  document: ChatDocument;
+  verbose: boolean;
+  /** Controls this composer can draw (the host gates plus what the phone serves). */
+  available: (id: ComposerControlId) => boolean;
+  hostActions: boolean;
+};
+
+export function moreActionsRows({ document, verbose, available, hostActions }: MoreActionsInput): MenuRow[] {
+  const rows: MenuRow[] = [];
+  const labels = obj(document.optionLabels);
+  const merged = obj(document.modelMenu) !== null;
+  if (document.composerOverflow?.optionsOverflowed === true) {
+    rows.push({ heading: true, label: 'Model settings' });
+    if (isTrue(labels, 'showOptions') && !merged) {
+      rows.push({
+        label: str(labels, 'optionsTitle') || 'Options',
+        detail: str(labels, 'options'),
+        disabled: str(labels, 'options').length === 0,
+        children: arr(obj(document.optionMenus)?.options),
+      });
+    }
+    if (obj(document.contextMeter) !== null) {
+      rows.push({
+        label: 'Context window',
+        detail: str(document.contextMeter, 'percentage'),
+        children: [{ context: document.contextMeter }],
+      });
+    }
+    rows.push({ separator: true });
+  }
+  rows.push({ heading: true, label: 'Chat' });
+  rows.push({
+    label: 'Verbose mode',
+    iconPath: verbose ? 'titlebar/eye-filled.svg' : 'titlebar/eye-off.svg',
+    checked: verbose,
+    command: { type: 'setVerbose', enabled: !verbose },
+  });
+  if (overflowed(document, 'summary') && available('summary')) {
+    rows.push({
+      label: 'Summary mode',
+      iconPath: document.summaryMode ? 'titlebar/list-check.svg' : 'titlebar/list-details.svg',
+      checked: document.summaryMode,
+      command: { type: 'toggleSummary' },
+    });
+  }
+  const actions = document.hostActions ?? [];
+  const hostRow = (action: (typeof actions)[number]): MenuRow => ({
+    label: action.label,
+    iconPath: HOST_ACTION_ICONS[action.id] ?? null,
+    command: { type: 'host', action: action.id },
+  });
+  if (hostActions) {
+    for (const action of actions) if (CHAT_GROUP_HOST_ACTIONS.has(action.id)) rows.push(hostRow(action));
+  }
+  for (const control of COMPOSER_CONTROLS) {
+    if (control.id === 'summary' || !overflowed(document, control.id) || !available(control.id)) continue;
+    const row: MenuRow = { label: control.label, iconPath: control.icon, command: { type: 'composerHost', action: control.action } };
+    if (control.id === 'note') row.checked = document.note.open;
+    rows.push(row);
+  }
+  const agentRows: MenuRow[] = [];
+  for (const action of actions) {
+    if (action.group !== 'agent') continue;
+    if (action.id === 'switchAccount') {
+      // Desktop's rule (actions.rs, a user decision there): Claude and Codex sessions open the
+      // Accounts & limits panel; other agents keep the daemon's switchable-agent rows.
+      if (obj(document.accountPanel) !== null) {
+        agentRows.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: [{ accounts: document.accountPanel }] });
+        continue;
+      }
+      if (!hostActions) continue;
+      const accounts = arr(document.switchableAgents).map((account) => ({
+        label: str(account, 'name'),
+        icon: str(account, 'icon'),
+        command: { type: 'host', action: 'switchAccount', agentId: obj(account)?.agentId ?? null },
+      }));
+      if (accounts.length > 0) agentRows.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: accounts });
+    } else if (hostActions) {
+      agentRows.push(hostRow(action));
+    }
+  }
+  if (agentRows.length > 0) {
+    rows.push({ separator: true }, { heading: true, label: 'Agent' }, ...agentRows);
+  }
+  if (hostActions) {
+    const other = actions.filter((action) => action.group !== 'agent' && !CHAT_GROUP_HOST_ACTIONS.has(action.id));
+    if (other.length > 0) rows.push({ separator: true }, ...other.map(hostRow));
+  }
+  return rows;
+}
+
+/** A pill's menu (`show_option_menu`): the document's rows, minus the desktop-only quick picker. */
+export function optionMenuRows(document: ChatDocument, kind: 'model' | 'options' | 'mode'): MenuRow[] {
+  return arr(obj(document.optionMenus)?.[kind])
+    .map((row) => obj(row))
+    .filter((row): row is MenuRow => row !== null && str(row.command, 'type') !== 'toggleModelPicker');
+}

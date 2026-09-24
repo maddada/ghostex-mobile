@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { UserAction } from './actions';
 import type { ChatViewRequest } from './effects';
 import type { ChatMeasurement } from './events';
+import type { ChatCoreQuery } from '../../../modules/gx-chat-core/src';
 import { acquireRustChatHost, type RustChatHost, type RustChatState, type RustChatTarget } from './host';
 
 export type RustChat = {
@@ -29,6 +30,8 @@ export type RustChat = {
   measure(measurement: ChatMeasurement): void;
   composer: RustChatHost['composerInput'] | null;
   attachFiles(files: readonly { uri: string; name?: string }[]): Promise<void>;
+  /** One of the core's pure helpers (see `RustChatHost.query`); null while no core runs. */
+  query(name: ChatCoreQuery, args: readonly unknown[]): unknown;
   /** Subscribe to view requests; returns the unsubscribe. Stable per chat. */
   onViewRequest(listener: (request: ChatViewRequest) => void): () => void;
 };
@@ -73,8 +76,12 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
     (listener: (request: ChatViewRequest) => void) => (host ? host.onViewRequest(listener) : noop),
     [host]
   );
+  const query = useCallback(
+    (name: ChatCoreQuery, args: readonly unknown[]) => (host ? host.query(name, args) : null),
+    [host]
+  );
   return useMemo<RustChat>(
-    () => ({ state, dispatch, measure, composer: host?.composerInput ?? null, attachFiles, onViewRequest }),
-    [host, state, dispatch, measure, attachFiles, onViewRequest]
+    () => ({ state, dispatch, measure, composer: host?.composerInput ?? null, attachFiles, query, onViewRequest }),
+    [host, state, dispatch, measure, attachFiles, query, onViewRequest]
   );
 }

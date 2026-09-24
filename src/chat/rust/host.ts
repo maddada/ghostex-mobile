@@ -21,6 +21,7 @@ import {
   type ChatCoreEffect,
   type ChatCoreEvent,
   type ChatCoreHandle,
+  type ChatCoreQuery,
   type ChatMeasurement,
 } from '../../../modules/gx-chat-core/src';
 import type { MachineConnectionTarget } from '../../machines/credentials';
@@ -271,6 +272,21 @@ export class RustChatHost {
   /** A size or position only the screen knows (toolbar overflow, status rows, open rows). */
   measure(measurement: ChatMeasurement): void {
     this.enqueue({ type: 'measured', measurement });
+  }
+
+  /**
+   * One of the core's pure helpers (`composerReferences`, `referenceMenu`, `composerKeyIntent`,
+   * `transcriptMenu`, `sendBlockedToast`), answered synchronously the way desktop's paint calls
+   * `nativeChat.<name>`. Returns the parsed answer, or null when the core is not running.
+   */
+  query(name: ChatCoreQuery, args: readonly unknown[]): unknown {
+    const core = this.core;
+    if (core === null) return null;
+    try {
+      return JSON.parse(core.query(name, JSON.stringify(args))) as unknown;
+    } catch {
+      return null;
+    }
   }
 
   /** The composer text field's own events. */
