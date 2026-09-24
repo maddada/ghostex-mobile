@@ -53,6 +53,11 @@ export type NativeComposerProps = {
    * actions row, so nothing on screen does nothing. Defaults to Terminal View alone.
    */
   hostActions?: readonly string[];
+  /**
+   * Bumped by the screen when something outside the composer asks for the Accounts & limits panel
+   * (the notice card's Switch account). Each new value opens it; 0 opens nothing.
+   */
+  openAccountsRequestId?: number;
 };
 
 const DEFAULT_HOST_ACTIONS: readonly string[] = ['terminalView'];
@@ -78,7 +83,7 @@ type OpenMenu =
   | { kind: 'model' }
   | null;
 
-export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_ACTIONS }: NativeComposerProps) {
+export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_ACTIONS, openAccountsRequestId = 0 }: NativeComposerProps) {
   const serves = useCallback(
     (action: string) => onHostAction !== undefined && hostActions.includes(action),
     [hostActions, onHostAction]
@@ -262,6 +267,15 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
     },
     [document]
   );
+
+  const handledAccountsRequest = useRef(openAccountsRequestId);
+  useEffect(() => {
+    if (openAccountsRequestId === handledAccountsRequest.current) return;
+    handledAccountsRequest.current = openAccountsRequestId;
+    if (openAccountsRequestId > 0 && document !== null && obj(document.accountPanel) !== null) {
+      setMenu({ kind: 'rows', rows: [{ accounts: document.accountPanel }] });
+    }
+  }, [document, openAccountsRequestId]);
 
   const openMore = useCallback(() => {
     if (document === null) return;

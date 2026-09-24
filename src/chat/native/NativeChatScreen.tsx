@@ -72,9 +72,12 @@ export default function NativeChatScreen({
   const document = chat.state?.document ?? null;
   const toast = useChatViewRequests(chat, machine.id, onSwitchToTerminal);
 
+  // The notice card's Switch account opens the composer's Accounts & limits panel.
+  const [accountsRequestId, setAccountsRequestId] = useState(0);
   const hostAction = useCallback(
     (action: string, params: Record<string, unknown> = {}) => {
       if (action === 'terminalView' || action === 'switchToTerminal') onSwitchToTerminal();
+      else if (action === 'switchAccount' && Object.keys(params).length === 0) setAccountsRequestId((current) => current + 1);
       else if (hostActions.includes(action)) onHostAction?.(action, params);
     },
     [hostActions, onHostAction, onSwitchToTerminal]
@@ -115,7 +118,7 @@ export default function NativeChatScreen({
           <NativeTranscript chat={chat} />
         </View>
         <NativeChatCards chat={chat} onHostAction={hostAction} />
-        {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} hostActions={composerHostActions} />}
+        {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} hostActions={composerHostActions} openAccountsRequestId={accountsRequestId} />}
         <RewindDialog chat={chat} />
         <NativeChatOverlays chat={chat} renderTranscriptItem={renderSubagentRow} />
         <ChatToast toast={toast} />
