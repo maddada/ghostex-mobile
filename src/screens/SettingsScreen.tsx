@@ -36,6 +36,7 @@ import {
   type GhostexSettings,
   type PreferredAgentInterface,
   type SessionChatTheme,
+  type SessionChatView,
 } from '../settings/store';
 import { useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
@@ -80,6 +81,11 @@ const BELL_ROWS: { value: BellBehavior; label: string }[] = [
   { value: 'vibrate', label: 'Vibrate' },
   { value: 'beep', label: 'Beep' },
   { value: 'ignore', label: 'Ignore bell' },
+];
+
+const SESSION_CHAT_VIEW_ROWS: { value: SessionChatView; label: string }[] = [
+  { value: 'native', label: 'Native (default)' },
+  { value: 'web', label: 'Web (previous)' },
 ];
 
 const SESSION_CHAT_THEME_ROWS: { value: SessionChatTheme; label: string }[] = [
@@ -317,6 +323,17 @@ export default function SettingsScreen() {
           at any time, and a switched tab remembers its own choice.
         </Text>
 
+        <Text style={styles.sectionHeader}>Chat view</Text>
+        {SESSION_CHAT_VIEW_ROWS.map((row) =>
+          renderChoice(`chat-view-${row.value}`, row.label, settings.sessionChatView === row.value, () =>
+            setSetting('sessionChatView', row.value)
+          )
+        )}
+        <Text style={styles.sectionCaption}>
+          Native draws chats with the phone's own controls, like the desktop app. Web shows the previous chat page;
+          switch to it if something in a chat does not look right.
+        </Text>
+
         <Text style={styles.sectionHeader}>Chat</Text>
         <Text style={styles.sectionCaption}>
           These settings change chat content only; the surrounding mobile app remains dark.
@@ -364,14 +381,6 @@ export default function SettingsScreen() {
         <Text style={styles.sectionCaption}>Show the first seven code lines instead of only the path and change counts.</Text>
         {renderToggle('sessionChatVerboseMode', 'Verbose Mode')}
         <Text style={styles.sectionCaption}>Expands thinking blocks to show their tool calls by default.</Text>
-        {__DEV__ ? (
-          <>
-            {renderToggle('sessionChatRustEngine', 'Rust chat engine (preview)')}
-            <Text style={styles.sectionCaption}>
-              Developer builds only. Shows chats on the new native screen and chat engine instead of the web page.
-            </Text>
-          </>
-        ) : null}
 
         <Text style={styles.sectionHeader}>Terminal behavior</Text>
         {TERMINAL_BEHAVIOR_TOGGLES.map((toggle) => renderToggle(toggle.key, toggle.label))}

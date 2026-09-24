@@ -561,9 +561,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
            * and its offscreen preload frame owns no input region until the user
            * switches views. Toggling no longer destroys the conversation.
            */
-          // Settings > "Rust chat engine (preview)" (development builds): the native screen drawn
-          // from the Rust chat core replaces the WebView chat, mounted and warmed the same way.
-          __DEV__ && settings.sessionChatRustEngine ? (
+          // Settings > Chat view: the native screen drawn from the Rust chat core (the default)
+          // or the previous WebView chat, mounted and warmed the same way.
+          settings.sessionChatView === 'native' ? (
             <NativeChatScreen
               key={activeTab.sessionKey}
               machine={chatMachineTarget}

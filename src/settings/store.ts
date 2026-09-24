@@ -22,6 +22,8 @@ const SETTINGS_STORAGE_KEY = 'settings.v1';
 
 export type BellBehavior = 'vibrate' | 'beep' | 'ignore';
 export type SessionChatTheme = 'dark' | 'light';
+/** Which screen draws a chat: the native one on the Rust chat core, or the previous web page. */
+export type SessionChatView = 'native' | 'web';
 /** Same value space as the desktop app's global Default Agent View setting. */
 export type PreferredAgentInterface = 'terminal' | 'chat';
 
@@ -72,11 +74,10 @@ export type GhostexSettings = {
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
   /**
-   * Developer preview: the chat view shows the native chat screen drawn from the Rust chat core
-   * (`src/chat/native/`, `src/chat/rust/`) instead of the WebView chat. Off by default and shown
-   * only in development builds; off keeps the WebView chat.
+   * CDXC:SessionChat 2026-09-25 DECISION:
+   * User (2026-09-24): "implement shared chat view between the gpui app and the react native app ... do all the steps from a to z to get this working perfect". Chats open in the native screen drawn from the Rust chat core (`src/chat/native/`, `src/chat/rust/`) by default in every build; the WebView chat stays as the fallback a user picks in Settings > Chat view. Only a stored `'web'` keeps the web view: the retired developer toggle `sessionChatRustEngine` was saved as `false` by every install that changed any setting, so it is ignored rather than migrated.
    */
-  sessionChatRustEngine: boolean;
+  sessionChatView: SessionChatView;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -148,7 +149,7 @@ export function defaultSettings(): GhostexSettings {
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
     sessionChatFileEditPreviews: false,
-    sessionChatRustEngine: false,
+    sessionChatView: 'native',
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -256,7 +257,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
-    sessionChatRustEngine: bool('sessionChatRustEngine', defaults.sessionChatRustEngine),
+    sessionChatView: record.sessionChatView === 'web' ? 'web' : defaults.sessionChatView,
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

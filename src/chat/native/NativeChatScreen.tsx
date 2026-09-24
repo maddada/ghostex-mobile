@@ -1,6 +1,6 @@
 /**
- * The native chat screen: the Rust chat core's document drawn with React Native views, in place of
- * the WebView chat while Settings > "Rust chat engine (preview)" is on.
+ * The native chat screen: the Rust chat core's document drawn with React Native views. It is the
+ * default chat view; Settings > Chat view > Web (previous) shows the WebView chat instead.
  *
  * Layout follows desktop's `native_chat/render.rs`: a host-level error line, the transcript search
  * bar, the transcript (or the empty/welcome state standing in for it), the cards stacked above the
