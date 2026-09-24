@@ -5,7 +5,7 @@
 
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
 import { Glyph } from './icons';
-import { ChatCardPalette as P } from './palette';
+import { useTranscriptTheme } from '../transcript/theme';
 
 const ACCENTS: Record<string, string> = {
   'antigravity-cli': '#749bff',
@@ -26,7 +26,10 @@ const ACCENTS: Record<string, string> = {
 };
 
 export function AgentMark({ icon, size }: { icon: string | null | undefined; size: number }) {
+  const P = useTranscriptTheme();
   const Icon = icon ? AGENT_ICONS[icon] : undefined;
   if (Icon === undefined) return <Glyph name="robot" size={size} color={P.foreground} />;
-  return <Icon size={size} color={ACCENTS[icon ?? ''] ?? P.foreground} />;
+  const accent = ACCENTS[icon ?? ''];
+  // The near-white mark takes the foreground on the light chat (`brand_logo_color`).
+  return <Icon size={size} color={accent === undefined || (P.light && accent === '#edecec') ? P.foreground : accent} />;
 }

@@ -11,10 +11,12 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from
 import type { UserAction } from '../../rust/actions';
 import { Glyph } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
 
 export function ContextEditorSheet({ editor, dispatch }: { editor: JsonRecord | null; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [query, setQuery] = useState('');
   const open = editor !== null;
   useEffect(() => {
@@ -34,7 +36,7 @@ export function ContextEditorSheet({ editor, dispatch }: { editor: JsonRecord | 
             dispatch({ type: 'contextQuery', query: next });
           }}
           placeholder="Search rows"
-          placeholderTextColor="rgba(158,158,158,0.6)"
+          placeholderTextColor={P.placeholder}
           style={styles.searchInput}
           autoCorrect={false}
           autoCapitalize="none"
@@ -71,7 +73,7 @@ export function ContextEditorSheet({ editor, dispatch }: { editor: JsonRecord | 
                     onPress={() => dispatch({ type: 'contextStar', id })}
                     style={styles.star}
                   >
-                    <Glyph name={starredRow ? 'star-filled' : 'star'} size={17} color={starredRow ? '#f6c945' : P.muted} />
+                    <Glyph name={starredRow ? 'star-filled' : 'star'} size={17} color={starredRow ? P.star : P.muted} />
                   </Pressable>
                   <Switch
                     accessibilityLabel={`Show ${label}`}
@@ -124,7 +126,7 @@ export function ContextEditorSheet({ editor, dispatch }: { editor: JsonRecord | 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   search: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingBottom: 12, gap: 12 },
   description: { color: P.muted, fontSize: 13, lineHeight: 18 },
   group: { gap: 2 },
-  groupLabel: { color: 'rgba(158,158,158,0.75)', fontSize: 11, fontWeight: '600', letterSpacing: 0.6, paddingVertical: 4 },
+  groupLabel: { color: P.mutedInk(0.75), fontSize: 11, fontWeight: '600', letterSpacing: 0.6, paddingVertical: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   rowText: { flex: 1, minWidth: 0 },
   rowLabel: { color: P.foreground, fontSize: 14 },
@@ -170,7 +172,7 @@ const styles = StyleSheet.create({
   textButtonLabel: { color: P.muted, fontSize: 13 },
   button: { height: 38, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: P.menuBorder, justifyContent: 'center' },
   buttonText: { color: P.foreground, fontSize: 14 },
-  primary: { backgroundColor: P.sendFill, borderColor: P.sendFill },
-  primaryText: { color: P.sendInk, fontSize: 14, fontWeight: '600' },
+  primary: { backgroundColor: P.send.fill, borderColor: P.send.fill },
+  primaryText: { color: P.send.ink, fontSize: 14, fontWeight: '600' },
   dim: { opacity: 0.5 },
-});
+}));

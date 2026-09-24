@@ -7,14 +7,15 @@
  */
 
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Glyph } from './icons';
 import { arr, isTrue, obj, str } from './json';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChoiceRow } from './primitives';
 
 export function QuestionExchangeCards({ exchanges }: { exchanges: unknown }) {
+  const styles = useStyles();
   const list = arr(exchanges);
   if (list.length === 0) return null;
   return (
@@ -27,6 +28,7 @@ export function QuestionExchangeCards({ exchanges }: { exchanges: unknown }) {
 }
 
 function ExchangeCard({ exchange }: { exchange: unknown }) {
+  const styles = useStyles();
   const questions = arr(obj(exchange)?.questions);
   const answers = Array.isArray(obj(exchange)?.answers) ? arr(obj(exchange)?.answers) : null;
   const fallback = str(exchange, 'fallbackText');
@@ -65,6 +67,8 @@ function ExchangeSection({
   index: number;
   total: number;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [expanded, setExpanded] = useState(false);
   const options = arr(obj(question)?.options);
   const selected = arr(obj(answer)?.selectedIndices).filter((value): value is number => typeof value === 'number');
@@ -122,6 +126,8 @@ function ExchangeSection({
 }
 
 function AnswerRow({ label, description, micro }: { label: string; description?: string; micro?: string }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <View style={styles.answerRow}>
       <View style={styles.answerCheck}>
@@ -138,7 +144,7 @@ function AnswerRow({ label, description, micro }: { label: string; description?:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   column: {
     width: '100%',
     gap: 12,
@@ -175,12 +181,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     borderRadius: 5,
     overflow: 'hidden',
-    backgroundColor: 'rgba(29,29,29,0.6)',
+    backgroundColor: P.light ? P.input : 'rgba(29,29,29,0.6)',
     color: P.muted,
     fontSize: 10,
   },
   prompt: {
-    color: 'rgba(252,252,252,0.9)',
+    color: P.ink(0.9),
     fontSize: 14,
     lineHeight: 21,
   },
@@ -230,7 +236,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: 'rgba(252,252,252,0.045)',
+    backgroundColor: P.ink(0.045),
     color: P.muted,
     fontSize: 12,
   },
@@ -248,4 +254,4 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: 6,
   },
-});
+}));

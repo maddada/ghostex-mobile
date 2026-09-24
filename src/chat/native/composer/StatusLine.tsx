@@ -6,13 +6,13 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatDocument } from '../../rust/document';
 import { Glyph } from './icons';
 import { arr, isTrue, obj, str } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 const SKELETON = { widths: [52, 72, 36], height: 10, gap: 12 };
 
@@ -23,6 +23,8 @@ export function statusLineReserved(document: ChatDocument): boolean {
 }
 
 export function StatusLine({ document, dispatch }: { document: ChatDocument; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const context = obj(document.contextMeter);
   const starred = arr(context?.starred);
   if (starred.length === 0) {
@@ -69,11 +71,11 @@ export function StatusLine({ document, dispatch }: { document: ChatDocument; dis
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   line: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', minHeight: 16, paddingHorizontal: 4 },
   item: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
-  separator: { width: 18, textAlign: 'center', fontSize: 7, color: 'rgba(158,158,158,0.4)' },
-  value: { color: 'rgba(158,158,158,0.8)', fontSize: 11, lineHeight: 16 },
+  separator: { width: 18, textAlign: 'center', fontSize: 7, color: P.mutedInk(0.4) },
+  value: { color: P.mutedInk(0.8), fontSize: 11, lineHeight: 16 },
   pen: { marginLeft: 4, width: 16, height: 16, alignItems: 'center', justifyContent: 'center', opacity: 0.55 },
-  skeleton: { borderRadius: 5, backgroundColor: 'rgba(158,158,158,0.24)' },
-});
+  skeleton: { borderRadius: 5, backgroundColor: P.mutedInk(0.24) },
+}));

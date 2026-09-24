@@ -8,9 +8,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str, type JsonRecord } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function ContextPanel({ context, onCommand }: { context: JsonRecord; onCommand: (command: JsonRecord) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const percentage = num(context, 'usedPercentage');
   const compactDisabled = isTrue(context, 'compactDisabled');
   const reason = str(context, 'compactDisabledReason');
@@ -69,7 +71,7 @@ export function ContextPanel({ context, onCommand }: { context: JsonRecord; onCo
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   panel: { gap: 10, paddingTop: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { color: P.foreground, fontSize: 15, fontWeight: '600' },
@@ -86,14 +88,14 @@ const styles = StyleSheet.create({
   },
   compactText: { color: P.primary, fontSize: 14 },
   reason: { color: P.muted, fontSize: 12 },
-  pressed: { backgroundColor: P.pressed },
+  pressed: { backgroundColor: P.controlPressed },
   disabled: { opacity: 0.5 },
   details: { marginTop: 4, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: P.menuBorder, gap: 4 },
   detailsTitle: { color: P.foreground, fontSize: 14, fontWeight: '500' },
   pen: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   group: { paddingTop: 8, gap: 4 },
-  groupLabel: { color: 'rgba(158,158,158,0.7)', fontSize: 10.5, fontWeight: '600', letterSpacing: 0.6 },
+  groupLabel: { color: P.mutedInk(0.7), fontSize: 10.5, fontWeight: '600', letterSpacing: 0.6 },
   item: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  itemLabel: { color: 'rgba(158,158,158,0.75)', fontSize: 13 },
+  itemLabel: { color: P.mutedInk(0.75), fontSize: 13 },
   itemValue: { flex: 1, textAlign: 'right', color: P.muted, fontSize: 13 },
-});
+}));

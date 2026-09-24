@@ -17,12 +17,14 @@ import { transcriptItemKey, type ProjectedMessage, type TranscriptItem } from '.
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
 import { isTrue, obj, str } from './json';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChatButton } from './primitives';
 
 export type TranscriptItemRenderer = (item: TranscriptItem, index: number) => ReactNode;
 
 export function SubagentViewer({ chat, renderItem }: { chat: RustChat; renderItem?: TranscriptItemRenderer }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
   const state = obj(chat.state?.document?.subagent);
   const items = chat.state?.subagentItems ?? [];
@@ -91,6 +93,7 @@ export function SubagentViewer({ chat, renderItem }: { chat: RustChat; renderIte
 
 /** A row read plainly: who said it and what. Stands in until the transcript's renderer is handed in. */
 function PlainRow({ item }: { item: TranscriptItem }) {
+  const styles = useStyles();
   const messages: ProjectedMessage[] =
     item.kind === 'message'
       ? [(item as { message: ProjectedMessage }).message]
@@ -111,25 +114,27 @@ function PlainRow({ item }: { item: TranscriptItem }) {
 }
 
 function IconButton({ label, icon, onPress }: { label: string; icon: GlyphName; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={8}
-      style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: 'rgba(29,29,29,0.6)' }]}
+      style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: P.pressedFill }]}
     >
       <Glyph name={icon} size={16} color={P.primary} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   backdrop: {
     flex: 1,
     paddingHorizontal: 12,
     justifyContent: 'center',
-    backgroundColor: P.backdrop,
+    backgroundColor: P.modalBackdrop,
   },
   card: {
     flex: 1,
@@ -223,4 +228,4 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: P.input,
   },
-});
+}));

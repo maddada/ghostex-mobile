@@ -4,14 +4,16 @@
  * this draws them and reports a pick (`suggestionPick`) or a retry (`suggestionRetry`).
  */
 
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function Suggestions({ data, dispatch }: { data: unknown; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const popup = obj(data);
   if (popup === null) return null;
   const rows = arr(popup.rows);
@@ -56,7 +58,7 @@ export function Suggestions({ data, dispatch }: { data: unknown; dispatch: (acti
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   popup: {
     borderRadius: 16,
     borderWidth: 1,
@@ -80,4 +82,4 @@ const styles = StyleSheet.create({
   label: { color: P.foreground, fontSize: 14, flexShrink: 0, maxWidth: '60%' },
   fileLabel: { fontWeight: '600' },
   detail: { flex: 1, color: P.muted, fontSize: 13 },
-});
+}));

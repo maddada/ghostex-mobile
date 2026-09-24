@@ -6,14 +6,16 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { NoteState } from '../../rust/document';
 import { Glyph, type GlyphName } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function NotePanel({ note, dispatch }: { note: NoteState; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [text, setText] = useState(note.value);
   const typed = useRef(note.value);
   useEffect(() => {
@@ -51,19 +53,19 @@ export function NotePanel({ note, dispatch }: { note: NoteState; dispatch: (acti
         multiline
         autoFocus
         placeholder="What’s next in this thread…"
-        placeholderTextColor="rgba(158,158,158,0.6)"
+        placeholderTextColor={P.placeholder}
         style={styles.input}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   panel: { gap: 4, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: P.border, backgroundColor: P.composerBackground },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: P.muted, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 4 },
   icon: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  pressed: { backgroundColor: P.pressed },
+  pressed: { backgroundColor: P.controlPressed },
   input: { color: P.foreground, fontSize: 14, lineHeight: 20, minHeight: 60, maxHeight: 160, paddingTop: 0, paddingBottom: 0, textAlignVertical: 'top' },
-});
+}));

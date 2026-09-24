@@ -5,12 +5,12 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatImageState } from '../../rust/host';
 import { Glyph } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import type { ComposerReference } from './references';
 
 export function AttachmentPreviews({
@@ -28,6 +28,8 @@ export function AttachmentPreviews({
   active: string | null;
   dispatch: (action: UserAction) => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const tiles = references.filter((reference) => reference.kind === 'image');
   const requested = useRef(new Set<string>());
   useEffect(() => {
@@ -74,7 +76,7 @@ export function AttachmentPreviews({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 8 },
   tileWrap: { width: 48, height: 48 },
   tile: {
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: P.background,
   },
-  tileActive: { borderColor: '#ffffff', borderWidth: 2 },
+  tileActive: { borderColor: P.foreground, borderWidth: 2 },
   image: { width: '100%', height: '100%' },
   remove: {
     position: 'absolute',
@@ -99,8 +101,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 1,
     borderColor: P.inputBorder,
-    backgroundColor: '#262626',
+    backgroundColor: P.light ? P.menu : '#262626',
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

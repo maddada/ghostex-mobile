@@ -7,14 +7,16 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glyph } from './icons';
 import { useChatOverlayStore } from './overlayStore';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function TablePreview() {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const preview = useChatOverlayStore((state) => state.tablePreview);
   const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export function TablePreview() {
 }
 
 function TableRow({ cells, widths, header }: { cells: string[]; widths: number[]; header?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={[styles.row, header && styles.headerRow]}>
       {widths.map((width, index) => (
@@ -79,6 +82,8 @@ function TableRow({ cells, widths, header }: { cells: string[]; widths: number[]
 }
 
 function CopyAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -140,11 +145,11 @@ export function tableCsv(source: string): string {
     .join('\n');
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   backdrop: {
     flex: 1,
     paddingHorizontal: 12,
-    backgroundColor: P.backdrop,
+    backgroundColor: P.modalBackdrop,
   },
   card: {
     flex: 1,
@@ -228,4 +233,4 @@ const styles = StyleSheet.create({
     color: P.foreground,
     fontWeight: '600',
   },
-});
+}));

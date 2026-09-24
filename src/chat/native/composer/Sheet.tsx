@@ -10,7 +10,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, Vie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glyph } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export type SheetProps = {
   visible: boolean;
@@ -28,6 +28,8 @@ export type SheetProps = {
 };
 
 export function Sheet({ visible, onClose, title, onBack, accessory, children, maxHeight = '80%', onDismissed }: SheetProps) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
   return (
     <Modal
@@ -62,9 +64,9 @@ export function Sheet({ visible, onClose, title, onBack, accessory, children, ma
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   fill: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: P.backdrop },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: P.sheetBackdrop },
   panel: {
     backgroundColor: P.menu,
     borderTopLeftRadius: 18,
@@ -77,4 +79,4 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8, minHeight: 32 },
   back: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: P.foreground, fontSize: 15, fontWeight: '600' },
-});
+}));

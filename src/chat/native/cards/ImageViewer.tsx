@@ -13,11 +13,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { useChatImage } from './useChatImage';
 import { useChatOverlayStore } from './overlayStore';
 
 export function ImageViewer({ chat }: { chat: RustChat }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const viewer = useChatOverlayStore((state) => state.imageViewer);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -148,6 +150,8 @@ function fit(natural: { width: number; height: number } | null, maxWidth: number
 }
 
 function ToolbarButton({ label, icon, onPress }: { label: string; icon: GlyphName; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -161,7 +165,7 @@ function ToolbarButton({ label, icon, onPress }: { label: string; icon: GlyphNam
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.86)',
@@ -213,4 +217,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 24,
   },
-});
+}));

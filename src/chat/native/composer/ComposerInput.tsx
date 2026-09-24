@@ -10,12 +10,12 @@
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
+import { Text, TextInput, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ComposerModelState } from '../../rust/composer';
 import type { RustChat } from '../../rust/useRustChat';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { diffEdit, guardEdit, snapCaret, type ComposerReference } from './references';
 
 export type ComposerInputHandle = { focus(): void; blur(): void };
@@ -40,6 +40,8 @@ export const ComposerInput = forwardRef<
     onCaret: (caret: number) => void;
   }
 >(function ComposerInput({ model, input, references, parsedFor, parse, placeholder, collapsed, maxHeight, dispatch, onTextChange, onCaret }, ref) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const field = useRef<TextInput>(null);
   const [text, setText] = useState(model.text);
   const [forced, setForced] = useState<Selection | undefined>(undefined);
@@ -126,7 +128,7 @@ export const ComposerInput = forwardRef<
     });
     if (cursor < text.length) parts.push(text.slice(cursor));
     return parts;
-  }, [live, text]);
+  }, [P, live, styles, text]);
 
   return (
     <TextInput
@@ -141,8 +143,8 @@ export const ComposerInput = forwardRef<
       onFocus={() => input.focused()}
       onBlur={() => input.blurred()}
       placeholder={placeholder}
-      placeholderTextColor="rgba(158,158,158,0.6)"
-      keyboardAppearance="dark"
+      placeholderTextColor={P.placeholder}
+      keyboardAppearance={P.light ? 'light' : 'dark'}
       autoCapitalize="sentences"
       textAlignVertical="top"
       style={[styles.input, collapsed ? styles.collapsed : { maxHeight }]}
@@ -152,7 +154,7 @@ export const ComposerInput = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   input: {
     color: P.foreground,
     fontSize: 15,
@@ -166,4 +168,4 @@ const styles = StyleSheet.create({
   pill: { fontWeight: '500' },
   /** The markdown around a pill's label: in the text, drawn with no width. */
   hidden: { fontSize: 0.1, color: 'transparent', letterSpacing: 0 },
-});
+}));

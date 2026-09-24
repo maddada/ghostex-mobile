@@ -24,6 +24,8 @@ const ACCENTS: Record<string, string> = {
   'rovo-dev': '#4fc3a1',
 };
 
-export function agentAccent(icon: string): string {
-  return ACCENTS[icon] ?? '#ffffff';
+/** The white and near-white marks take the foreground on the light chat (`brand_logo_color`). */
+export function agentAccent(icon: string, light: boolean): string {
+  const accent = ACCENTS[icon] ?? '#ffffff';
+  return light && (accent === '#ffffff' || accent === '#edecec') ? '#27272a' : accent;
 }

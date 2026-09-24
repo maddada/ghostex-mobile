@@ -4,17 +4,18 @@
  * labels, clocks, counters and both folds come from the core; the panels only lay them out.
  */
 
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { UserAction } from '../../rust/actions';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
 import { arr, asJson, isTrue, num, obj, str } from './json';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { CardHeader, PulseDot, Spinner, StatusCard } from './primitives';
 
 export function AgentTasksPanel({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const styles = useStyles();
   const panel = obj(document.agentTasksPanel);
   if (panel === null) return null;
   const open = panel.collapsed !== true;
@@ -69,6 +70,8 @@ export function AgentTasksPanel({ chat, document }: { chat: RustChat; document: 
 }
 
 function TaskRow({ row }: { row: unknown }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const group = str(row, 'group') || 'pending';
   const blocked = str(row, 'blockedLabel');
   return (
@@ -113,6 +116,7 @@ export function subagentOpenAction(target: unknown): UserAction | null {
 }
 
 export function AgentFleetStrip({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const styles = useStyles();
   const strip = obj(document.agentFleetStrip);
   if (strip === null) return null;
   const stale = isTrue(strip, 'stale');
@@ -159,6 +163,8 @@ export function AgentFleetStrip({ chat, document }: { chat: RustChat; document: 
 }
 
 function FleetRow({ row, stale, chat, nameWidth }: { row: unknown; stale: boolean; chat: RustChat; nameWidth: number }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const open = subagentOpenAction(row);
   const working = isTrue(row, 'working');
   const status = str(row, 'statusText');
@@ -166,7 +172,7 @@ function FleetRow({ row, stale, chat, nameWidth }: { row: unknown; stale: boolea
   const press = open === null ? undefined : () => chat.dispatch(open);
   return (
     <View style={styles.fleetRow}>
-      <PulseDot size={6} color={working ? P.controlPrimary : 'rgba(158,158,158,0.5)'} active={working} />
+      <PulseDot size={6} color={working ? P.controlPrimary : P.mutedInk(0.5)} active={working} />
       <Text
         style={[styles.fleetName, { width: nameWidth }]}
         numberOfLines={1}
@@ -198,7 +204,7 @@ function FleetRow({ row, stale, chat, nameWidth }: { row: unknown; stale: boolea
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   fill: {
     width: '100%',
   },
@@ -214,7 +220,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(252,252,252,0.1)',
+    backgroundColor: P.ink(0.1),
   },
   barFill: {
     height: '100%',
@@ -246,7 +252,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: 'rgba(158,158,158,0.7)',
+    borderColor: P.mutedInk(0.7),
   },
   taskSubject: {
     flexShrink: 1,
@@ -304,7 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: 'rgba(252,252,252,0.08)',
+    backgroundColor: P.ink(0.08),
     color: P.cardMuted,
     fontSize: 10,
     fontVariant: ['tabular-nums'],
@@ -314,4 +320,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

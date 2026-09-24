@@ -11,15 +11,16 @@
  * The transcript screen renders this in place of its list when `items` is empty.
  */
 
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { AgentMark } from './agentMark';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles } from '../transcript/theme';
 import { ChatButton } from './primitives';
 
 export function EmptyTranscript({ chat, document }: { chat: RustChat; document: ChatDocument | null }) {
+  const styles = useStyles();
   const retry = () => chat.dispatch({ type: 'retry' });
   const stage = document === null ? 'indicator' : (document.loadingStage ?? (document.status == null ? 'indicator' : null));
   if (document === null || stage !== null) {
@@ -70,7 +71,7 @@ function wrapWelcomeTitle(title: string): string {
   return `${words.slice(0, split).join(' ')}\n${words.slice(split).join(' ')}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   region: {
     flex: 1,
     width: '100%',
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: P.border,
-    backgroundColor: '#2c2c2c',
+    backgroundColor: P.markCard,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -120,4 +121,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-});
+}));

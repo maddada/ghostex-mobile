@@ -14,7 +14,7 @@ import { AccountsPanel } from './AccountsPanel';
 import { ContextPanel } from './ContextPanel';
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
 
 export type MenuRow = { [key: string]: unknown };
@@ -55,6 +55,7 @@ export type MenuSheetProps = {
 };
 
 export function MenuSheet({ rows, title, onClose, onCommand, header, onDismissed }: MenuSheetProps) {
+  const styles = useStyles();
   const [stack, setStack] = useState<Page[]>([]);
   useEffect(() => {
     setStack([]);
@@ -101,6 +102,8 @@ function MenuRowView({
   onRun: (command: MenuRow, keepOpen: boolean) => void;
   onOpen: (page: Page) => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   if (isTrue(row, 'separator')) return <View style={styles.separator} />;
   const accounts = obj(row.accounts);
   if (accounts !== null) return <AccountsPanel panel={accounts} onCommand={(command, keep) => onRun(command, keep)} />;
@@ -167,7 +170,7 @@ export function rowsOf(value: unknown): MenuRow[] {
   return arr(value).filter((row): row is MenuRow => obj(row) !== null);
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   content: { paddingHorizontal: 8, paddingBottom: 8 },
   panelContent: { paddingHorizontal: 16, paddingBottom: 12 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: P.menuBorder, marginVertical: 6, marginHorizontal: 8 },
@@ -175,10 +178,10 @@ const styles = StyleSheet.create({
   headingText: { color: P.muted, fontSize: 12, fontWeight: '600' },
   headingDescription: { color: P.muted, fontSize: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  rowPressed: { backgroundColor: P.pressed },
+  rowPressed: { backgroundColor: P.controlPressed },
   rowDisabled: { opacity: 0.45 },
   rowText: { flex: 1, minWidth: 0, gap: 2 },
   label: { color: P.foreground, fontSize: 15 },
   description: { color: P.muted, fontSize: 12.5, lineHeight: 17 },
   detail: { color: P.muted, fontSize: 13, maxWidth: 140 },
-});
+}));

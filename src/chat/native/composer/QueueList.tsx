@@ -6,17 +6,18 @@
  */
 
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, PanResponder, Pressable, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatDocument, QueuedPrompt } from '../../rust/document';
 import { Glyph, type GlyphName } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 const ROW_HEIGHT = 34;
 const ROW_GAP = 4;
 
 export function QueueList({ document, dispatch }: { document: ChatDocument; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
   const prompts = document.queue.prompts.filter((prompt) => prompt.startupSend !== true);
   const capabilities = document.queue.capabilities;
   if (!capabilities.supported || prompts.length === 0) return null;
@@ -63,6 +64,8 @@ function QueueRow({
   onMove: (to: number) => void;
   dispatch: (action: UserAction) => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const busy = prompt.busy;
   const failed = prompt.state === 'failed';
   const locked = blocked || busy;
@@ -146,7 +149,7 @@ function QueueRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   list: { gap: ROW_GAP, paddingBottom: 6, maxHeight: 5 * (ROW_HEIGHT + ROW_GAP) },
   row: {
     flexDirection: 'row',
@@ -155,12 +158,12 @@ const styles = StyleSheet.create({
     height: ROW_HEIGHT,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(29,29,29,0.9)',
+    borderColor: P.border,
     paddingRight: 2,
     backgroundColor: P.composerBackground,
   },
   rowFailed: {},
-  rowDragging: { backgroundColor: '#222222', opacity: 0.9 },
+  rowDragging: { backgroundColor: P.cardPanel, opacity: 0.9 },
   grip: { width: 26, height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   gripInert: { opacity: 0.35 },
   text: { flex: 1, minWidth: 64, color: P.muted, fontSize: 13 },
@@ -169,6 +172,6 @@ const styles = StyleSheet.create({
   error: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, maxWidth: '45%' },
   errorText: { color: P.error, fontSize: 11.5, flexShrink: 1 },
   action: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  actionPressed: { backgroundColor: P.pressed },
+  actionPressed: { backgroundColor: P.controlPressed },
   disabled: { opacity: 0.4 },
-});
+}));

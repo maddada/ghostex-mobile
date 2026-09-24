@@ -8,14 +8,14 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
 import { arr, isTrue, obj, str } from './json';
-import { ChatCardPalette as P, CHAT_MONO_FONT } from './palette';
-import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, CardButton, CardHeader, ChoiceRow, StatusCard, cardText, wellStyle } from './primitives';
+import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, CardButton, CardHeader, ChoiceRow, StatusCard, useCardText, useWellStyle } from './primitives';
 import { useEchoedText } from './useEchoedText';
 
 /** Desktop returns the question card instead of the composer for a `question` prompt. */
@@ -24,6 +24,7 @@ export function questionReplacesComposer(document: ChatDocument | null | undefin
 }
 
 export function QuestionCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const cardText = useCardText();
   const card = document.questionCard;
   if (card?.visible !== true) return null;
   if (card.loading) {
@@ -45,6 +46,9 @@ export function QuestionCard({ chat, document }: { chat: RustChat; document: Cha
 }
 
 function QuestionPromptCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const cardText = useCardText();
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const { dispatch } = chat;
   const { height } = useWindowDimensions();
   const card = document.questionCard;
@@ -134,7 +138,7 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
         returnKeyType="send"
         onSubmitEditing={() => dispatch({ type: 'questionNext' })}
         placeholder="Write a custom answer…"
-        placeholderTextColor="rgba(158,158,158,0.6)"
+        placeholderTextColor={P.placeholder}
       />
     ) : (
       <View key="spacer" style={styles.spacer} />
@@ -153,6 +157,10 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
 }
 
 function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const cardText = useCardText();
+  const wellStyle = useWellStyle();
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const { dispatch } = chat;
   const prompt = document.prompt;
   const busy = document.questionCard.busy;
@@ -168,7 +176,7 @@ function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocume
         accessibilityLabel="Dismiss"
         hitSlop={8}
         onPress={() => dispatch({ type: 'questionCancel' })}
-        style={({ pressed }) => [styles.dismiss, pressed && { backgroundColor: 'rgba(14,14,14,0.7)' }]}
+        style={({ pressed }) => [styles.dismiss, pressed && { backgroundColor: P.wellFill }]}
       >
         <Glyph name="x" size={14} color={P.muted} />
       </Pressable>
@@ -206,7 +214,7 @@ function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocume
   return <StatusCard header={header} body={body} actions={actions} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   collapsedQuestion: {
     flex: 1,
     minWidth: 0,
@@ -257,8 +265,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
-    backgroundColor: 'rgba(14,14,14,0.4)',
+    borderColor: P.light ? P.wellBorder : 'rgba(255,255,255,0.04)',
+    backgroundColor: P.light ? P.background : 'rgba(14,14,14,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -276,8 +284,8 @@ const styles = StyleSheet.create({
   },
   commandText: {
     color: P.cardMuted,
-    fontFamily: CHAT_MONO_FONT,
+    fontFamily: MONO_FONT,
     fontSize: 13,
     lineHeight: 20,
   },
-});
+}));

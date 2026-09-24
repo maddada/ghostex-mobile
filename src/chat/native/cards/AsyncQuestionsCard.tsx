@@ -10,11 +10,13 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDime
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { CardButton, ChoiceRow, Spinner } from './primitives';
 import { useEchoedText } from './useEchoedText';
 
 export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const { dispatch } = chat;
   const { height } = useWindowDimensions();
   const state = document.asyncQuestions;
@@ -89,7 +91,7 @@ export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; documen
             returnKeyType="send"
             onSubmitEditing={() => dispatch({ type: 'asyncQuestionSend' })}
             placeholder={options.length > 0 ? 'Or write your own answer…' : 'Write your answer…'}
-            placeholderTextColor="rgba(158,158,158,0.6)"
+            placeholderTextColor={P.placeholder}
           />
           {state.error.length > 0 ? <Text style={styles.error}>{state.error}</Text> : null}
           {state.canSend === false ? (
@@ -137,6 +139,8 @@ function NavButton({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -151,7 +155,7 @@ function NavButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   card: {
     width: '100%',
     overflow: 'hidden',
@@ -246,4 +250,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

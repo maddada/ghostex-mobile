@@ -1,5 +1,7 @@
 /**
- * The transcript's tones and type, for the phone's two chat themes.
+ * The native chat's tones and type, for the phone's two chat themes: the transcript, the composer
+ * and its sheets, and the cards all read this one object (`useTranscriptTheme`), so the whole screen
+ * follows Settings > Chat theme together.
  *
  * Each value is desktop's `ChatAppearance` (apps/desktop/src/app/native_chat/appearance.rs) computed
  * over the phone chat's own backgrounds (`#0e0e0e` dark, `#fdfdfd` light, the WebView chat's
@@ -7,7 +9,9 @@
  * it replaces (packages/core-ui/styles/chat.css).
  */
 
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
+
+import { useSettingsStore } from '../../../settings/store';
 
 export type TranscriptTheme = {
   light: boolean;
@@ -37,6 +41,62 @@ export type TranscriptTheme = {
   /** Search hits: every matched row, and the selected one. */
   searchHit: string;
   searchActive: string;
+
+  /** Hairlines of choice rows and card buttons (`control_border`), and of inputs (`input_border`). */
+  controlBorder: string;
+  inputBorder: string;
+  /** The status card's panel and its footer band (`card_panel`, `card_footer`). */
+  cardPanel: string;
+  cardFooter: string;
+  /** A focused field's edge, and the glow around it (`border-ring`, ring at 20%). */
+  ring: string;
+  ringGlow: string;
+  /** The theme accent (`theme_accent_for_variant`), used by the account-switch card. */
+  accent: string;
+  /** A pressed card, card header or choice. */
+  pressedFill: string;
+  /** A selected choice's fill and border (`control_primary` at 10% / 30%). */
+  selectedFill: string;
+  selectedBorder: string;
+  /** The inset well a command or a terminal excerpt sits in. */
+  wellFill: string;
+  wellBorder: string;
+  /** The dimmer behind a modal over the chat (the subagent viewer, the account switch). */
+  modalBackdrop: string;
+  /** The dimmer behind a composer sheet. */
+  sheetBackdrop: string;
+  /** The async question dot and spinner ring. */
+  asyncDot: string;
+  asyncSpinner: string;
+  /** The composer card and its border. */
+  composerBackground: string;
+  composerBorder: string;
+  /** Menus, sheets and popovers (`--popover`), their hairline, ink and a pressed row. */
+  menu: string;
+  menuBorder: string;
+  menuForeground: string;
+  controlPressed: string;
+  grabber: string;
+  /** Placeholder text in every field. */
+  placeholder: string;
+  /** A starred model or prompt. */
+  star: string;
+  /** Send and Stop (`send_control.rs`; the light pair is the React chat's user decision). */
+  send: { fill: string; ink: string; stopFill: string; stopInk: string; stopBorder: string };
+  /** Composer reference pill tints (`reference-visual.json`, mixed toward white in dark). */
+  reference: Record<string, string>;
+  /** The account-switch card's raised surface and its tiles (`account_switch_card.rs`). */
+  floatingSurface: string;
+  floatingTile: string;
+  /** The new-session welcome's agent mark card (card background 12% toward the foreground). */
+  markCard: string;
+  /** The context meter ring (`context_meter.rs`). */
+  meterTrack: string;
+  meterFill: string;
+  /** The foreground at an alpha: hairlines, washes and quiet fills that must flip with the theme. */
+  ink(alpha: number): string;
+  /** The muted text colour at an alpha. */
+  mutedInk(alpha: number): string;
 };
 
 const DARK: TranscriptTheme = {
@@ -67,6 +127,40 @@ const DARK: TranscriptTheme = {
   pressed: 'rgba(252,252,252,0.05)',
   searchHit: 'rgba(229,229,229,0.06)',
   searchActive: 'rgba(229,229,229,0.16)',
+  controlBorder: 'rgba(255,255,255,0.06)',
+  inputBorder: 'rgba(255,255,255,0.08)',
+  cardPanel: '#1f1f1f',
+  cardFooter: '#161616',
+  ring: '#737373',
+  ringGlow: 'rgba(115,115,115,0.20)',
+  accent: '#86d3f8',
+  pressedFill: 'rgba(252,252,252,0.06)',
+  selectedFill: 'rgba(229,229,229,0.10)',
+  selectedBorder: 'rgba(229,229,229,0.30)',
+  wellFill: 'rgba(14,14,14,0.7)',
+  wellBorder: 'rgba(255,255,255,0.05)',
+  modalBackdrop: 'rgba(0,0,0,0.58)',
+  sheetBackdrop: 'rgba(0,0,0,0.5)',
+  asyncDot: '#f472b6',
+  asyncSpinner: '#d99a62',
+  composerBackground: '#151515',
+  composerBorder: '#212121',
+  menu: '#171717',
+  menuBorder: 'rgba(255,255,255,0.10)',
+  menuForeground: '#fcfcfc',
+  controlPressed: 'rgba(252,252,252,0.08)',
+  grabber: 'rgba(255,255,255,0.22)',
+  placeholder: 'rgba(158,158,158,0.6)',
+  star: '#f6c945',
+  send: { fill: '#e5e5e5', ink: '#171717', stopFill: '#171717', stopInk: '#fcfcfc', stopBorder: 'rgba(255,255,255,0.14)' },
+  reference: { file: '#95a4b7', folder: '#b6a689', image: '#8cb59e', skill: '#91a99a', url: '#91a9bd' },
+  floatingSurface: '#181818',
+  floatingTile: '#1f1f1f',
+  markCard: '#2c2c2c',
+  meterTrack: 'rgba(158,158,158,0.24)',
+  meterFill: '#b9b9b9',
+  ink: (alpha) => `rgba(252,252,252,${alpha})`,
+  mutedInk: (alpha) => `rgba(158,158,158,${alpha})`,
 };
 
 const LIGHT: TranscriptTheme = {
@@ -97,10 +191,66 @@ const LIGHT: TranscriptTheme = {
   pressed: 'rgba(0,0,0,0.04)',
   searchHit: 'rgba(24,24,27,0.06)',
   searchActive: 'rgba(24,24,27,0.16)',
+  controlBorder: '#e5e5e5',
+  inputBorder: '#e5e5e5',
+  cardPanel: '#fefefe',
+  cardFooter: '#fdfdfd',
+  ring: '#9f9fa9',
+  ringGlow: 'rgba(159,159,169,0.20)',
+  accent: '#262626',
+  pressedFill: '#f5f5f5',
+  selectedFill: 'rgba(24,24,27,0.10)',
+  selectedBorder: 'rgba(24,24,27,0.30)',
+  wellFill: '#f7f7f7',
+  wellBorder: '#e5e5e5',
+  modalBackdrop: 'rgba(0,0,0,0.38)',
+  sheetBackdrop: 'rgba(0,0,0,0.3)',
+  asyncDot: '#f472b6',
+  asyncSpinner: '#d99a62',
+  composerBackground: '#fefefe',
+  composerBorder: '#ececec',
+  menu: '#ffffff',
+  menuBorder: 'rgba(0,0,0,0.12)',
+  menuForeground: '#292929',
+  controlPressed: 'rgba(41,41,41,0.06)',
+  grabber: 'rgba(0,0,0,0.18)',
+  placeholder: 'rgba(113,113,123,0.6)',
+  star: '#d97706',
+  send: { fill: '#7db8fb', ink: '#ffffff', stopFill: '#f6b5b5', stopInk: '#7a2929', stopBorder: 'transparent' },
+  reference: { file: '#6c819b', folder: '#9a835b', image: '#5f9878', skill: '#668773', url: '#6687a3' },
+  floatingSurface: '#fefefe',
+  floatingTile: '#f5f5f5',
+  markCard: '#e4e4e5',
+  meterTrack: 'rgba(85,85,92,0.24)',
+  meterFill: '#8b8b8b',
+  ink: (alpha) => `rgba(39,39,42,${alpha})`,
+  mutedInk: (alpha) => `rgba(113,113,123,${alpha})`,
 };
 
 export function transcriptTheme(theme: 'light' | 'dark'): TranscriptTheme {
   return theme === 'light' ? LIGHT : DARK;
+}
+
+/** The chat theme for the current chat setting (Settings > Chat theme). */
+export function useTranscriptTheme(): TranscriptTheme {
+  return transcriptTheme(useSettingsStore((store) => store.settings.sessionChatTheme));
+}
+
+/**
+ * A style sheet built from the chat theme, created once per theme: `const useStyles =
+ * themedStyles((t) => ({ ... }))` at module scope, then `const styles = useStyles()` in a component.
+ */
+export function themedStyles<T extends StyleSheet.NamedStyles<T>>(build: (theme: TranscriptTheme) => T): () => T {
+  const sheets = new Map<TranscriptTheme, T>();
+  const sheetFor = (theme: TranscriptTheme): T => {
+    let sheet = sheets.get(theme);
+    if (sheet === undefined) {
+      sheet = StyleSheet.create(build(theme));
+      sheets.set(theme, sheet);
+    }
+    return sheet;
+  };
+  return () => sheetFor(useTranscriptTheme());
 }
 
 /** The transcript's one prose size and its leading (React: `0.875rem` at `1.625`). */

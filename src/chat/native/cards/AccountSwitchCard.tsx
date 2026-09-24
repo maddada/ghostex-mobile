@@ -13,15 +13,13 @@ import type { RustChat } from '../../rust/useRustChat';
 import { AgentMark } from './agentMark';
 import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str } from './json';
-import { ChatCardPalette as P } from './palette';
+import { colorWithOpacity } from '../../../theme/palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChatButton, useLoop } from './primitives';
 
-const SURFACE = '#181818';
-const TILE = '#1f1f1f';
-const LINE = 'rgba(252,252,252,0.10)';
-const TRACK = 'rgba(252,252,252,0.09)';
 
 export function AccountSwitchCard({ chat }: { chat: RustChat }) {
+  const styles = useStyles();
   const card = obj(chat.state?.document?.accountSwitchCard);
   const appear = useRef(new Animated.Value(0)).current;
   const id = str(card, 'id');
@@ -94,6 +92,8 @@ export function AccountSwitchCard({ chat }: { chat: RustChat }) {
 }
 
 function Account({ value, provider, verified }: { value: unknown; provider: string; verified: boolean }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const target = isTrue(value, 'target');
   const role = target ? (verified ? 'Active' : 'To') : verified ? 'Previous' : 'From';
   return (
@@ -116,14 +116,16 @@ function Account({ value, provider, verified }: { value: unknown; provider: stri
 }
 
 function UsageTile({ usage, target }: { usage: unknown; target: boolean }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const level = str(usage, 'level') || 'unknown';
   const used = num(usage, 'used');
   const strong = level === 'high' || level === 'exhausted';
   const ink = { moderate: 0.5, high: 0.72, exhausted: 1 }[level] ?? 0.3;
-  const fill = target ? 'rgba(134,211,248,0.7)' : `rgba(252,252,252,${ink})`;
+  const fill = target ? colorWithOpacity(P.accent, 70) : P.ink(ink);
   const reset = str(usage, 'reset');
   return (
-    <View style={[styles.tile, level === 'exhausted' && { borderColor: 'rgba(252,252,252,0.35)' }]}>
+    <View style={[styles.tile, level === 'exhausted' && { borderColor: P.ink(0.35) }]}>
       <View style={styles.tileText}>
         <Text style={styles.tileLabel} numberOfLines={1}>
           {str(usage, 'label')}
@@ -150,6 +152,8 @@ function UsageTile({ usage, target }: { usage: unknown; target: boolean }) {
 }
 
 function Step({ index, step }: { index: number; step: unknown }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const state = str(step, 'state') || 'pending';
   const sweep = useLoop(1600, Easing.inOut(Easing.cubic), state === 'active');
   const [lineWidth, setLineWidth] = useState(0);
@@ -161,20 +165,20 @@ function Step({ index, step }: { index: number; step: unknown }) {
         style={[
           styles.stepNumber,
           state === 'active' && { backgroundColor: P.foreground, borderColor: 'transparent' },
-          state === 'done' && { backgroundColor: 'rgba(134,211,248,0.22)', borderColor: 'transparent' },
+          state === 'done' && { backgroundColor: colorWithOpacity(P.accent, 22), borderColor: 'transparent' },
         ]}
       >
         {state === 'done' ? (
           <Glyph name="check" size={10} color={P.accent} />
         ) : (
-          <Text style={[styles.stepNumberText, state === 'active' && { color: SURFACE }]}>{index + 1}</Text>
+          <Text style={[styles.stepNumberText, state === 'active' && { color: P.floatingSurface }]}>{index + 1}</Text>
         )}
       </View>
       <Text style={[styles.stepLabel, { color }]} numberOfLines={1}>
         {str(step, 'label')}
       </Text>
       <View
-        style={[styles.stepLine, state === 'done' && { backgroundColor: 'rgba(134,211,248,0.55)' }]}
+        style={[styles.stepLine, state === 'done' && { backgroundColor: colorWithOpacity(P.accent, 55) }]}
         onLayout={(event) => setLineWidth(event.nativeEvent.layout.width)}
       >
         {state === 'active' ? (
@@ -192,9 +196,9 @@ function Step({ index, step }: { index: number; step: unknown }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   backdrop: {
-    backgroundColor: P.backdrop,
+    backgroundColor: P.modalBackdrop,
     zIndex: 20,
   },
   scroll: {
@@ -211,10 +215,10 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: SURFACE,
+    borderColor: P.ink(P.light ? 0.12 : 0.1),
+    backgroundColor: P.floatingSurface,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
+    shadowOpacity: P.light ? 0.1 : 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 12 },
   },
@@ -265,8 +269,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: TILE,
+    borderColor: P.ink(P.light ? 0.12 : 0.1),
+    backgroundColor: P.floatingTile,
   },
   tileText: {
     flex: 1,
@@ -321,7 +325,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: LINE,
+    borderColor: P.ink(P.light ? 0.12 : 0.1),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -342,7 +346,7 @@ const styles = StyleSheet.create({
     height: 2,
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: TRACK,
+    backgroundColor: P.ink(P.light ? 0.1 : 0.09),
   },
   stepSweep: {
     position: 'absolute',
@@ -367,4 +371,4 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-});
+}));

@@ -9,18 +9,19 @@
  */
 
 import { useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import { Glyph, Spark } from './icons';
 import { isTrue, num, obj, str } from './json';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { PulseDot, Spinner, StatusCard, useLoop } from './primitives';
 
 /** `packages/shared/session-chat-presentation/working-strip.json`. */
 const VISUAL = { minHeight: 24, paddingX: 6, gap: 8, sparkBox: 16, sparkSize: 14, fontSize: 12.5, pulseMs: 1600, spinMs: 9000 };
 
 export function WorkingStrip({ document }: { document: ChatDocument }) {
+  const styles = useStyles();
   const strip = document.workingStrip;
   const activity = obj(strip?.presentation);
   if (activity !== null) return <WorkingActivity activity={activity} />;
@@ -38,6 +39,8 @@ export function WorkingStrip({ document }: { document: ChatDocument }) {
 
 /** The spark: a slow turn with a breathing scale and opacity, as `working_spark.rs` draws it. */
 function WorkingSpark() {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const pulse = useLoop(VISUAL.pulseMs, Easing.linear);
   const spin = useLoop(VISUAL.spinMs, Easing.linear);
   const breathe = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 0] });
@@ -60,6 +63,8 @@ function WorkingSpark() {
 
 /** Compaction and running shells: a status card with the activity, its clock and its progress. */
 function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const percent = num(activity, 'percent');
   const indeterminate = isTrue(activity, 'indeterminate');
   const elapsed = str(activity, 'elapsedLabel');
@@ -97,6 +102,7 @@ function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
 }
 
 function ProgressTrack({ percent }: { percent: number | null }) {
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   const sweep = useLoop(1800, Easing.inOut(Easing.cubic), percent === null);
   return (
@@ -116,7 +122,7 @@ function ProgressTrack({ percent }: { percent: number | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   row: {
     minHeight: VISUAL.minHeight,
     paddingHorizontal: VISUAL.paddingX,
@@ -167,7 +173,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   activityPercent: {
-    color: 'rgba(252,252,252,0.8)',
+    color: P.ink(0.8),
     fontSize: 14,
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
@@ -177,7 +183,7 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(252,252,252,0.1)',
+    backgroundColor: P.ink(0.1),
   },
   trackFill: {
     height: '100%',
@@ -189,4 +195,4 @@ const styles = StyleSheet.create({
     left: 0,
     width: '35%',
   },
-});
+}));

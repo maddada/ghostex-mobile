@@ -33,7 +33,7 @@ import {
   type TranscriptEnv,
 } from './context';
 import { arr, num, obj } from './json';
-import { transcriptTheme, type TranscriptTheme } from './theme';
+import { useTranscriptTheme } from './theme';
 import { TranscriptItemView } from './TranscriptItemRow';
 
 /** `scroll-bottom.json`: the pill's look and how far from the bottom it appears. */
@@ -56,10 +56,7 @@ export type NativeTranscriptProps = {
 
 type Row = { item: TranscriptItem; index: number };
 
-/** The transcript theme for the current chat setting. */
-export function useTranscriptTheme(): TranscriptTheme {
-  return transcriptTheme(useSettingsStore((store) => store.settings.sessionChatTheme));
-}
+export { useTranscriptTheme } from './theme';
 
 /** The providers every transcript row reads: how the list draws, the document's row flags, details and images. */
 export function TranscriptScope({ chat, main, children }: { chat: RustChat; main: boolean; children: ReactNode }) {

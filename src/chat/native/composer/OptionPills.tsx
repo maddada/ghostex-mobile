@@ -12,7 +12,7 @@ import type { ChatDocument } from '../../rust/document';
 import { agentAccent } from './agentColors';
 import { Glyph, ModeGlyph } from './icons';
 import { arr, isTrue, num, obj, str } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export type PillKind = 'model' | 'options' | 'mode' | 'context';
 
@@ -24,7 +24,19 @@ const MODE_COLORS: Record<string, [mode: 'advance' | 'pause', color: string]> = 
   plan: ['pause', '#a6ddd8'],
 };
 
+/** The pastel mode glyphs darkened for the light chat, as `option_pills.rs` does (x0.525). */
+function lightModeColor(hex: string): string {
+  const value = Number.parseInt(hex.slice(1), 16);
+  const channel = (shift: number): string =>
+    Math.round(((value >> shift) & 0xff) * 0.525)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${channel(16)}${channel(8)}${channel(0)}`;
+}
+
 export function OptionPills({ document, onOpen }: { document: ChatDocument; onOpen: (kind: PillKind) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const labels = obj(document.optionLabels);
   const modelMenu = obj(document.modelMenu);
   const merged = modelMenu !== null;
@@ -59,12 +71,12 @@ export function OptionPills({ document, onOpen }: { document: ChatDocument; onOp
             indicator.length > 0 ? (
               <View style={styles.accountMark}>
                 <View style={styles.accountLogo}>
-                  <AgentIcon size={19} color={agentAccent(agentIcon)} />
+                  <AgentIcon size={19} color={agentAccent(agentIcon, P.light)} />
                 </View>
                 <Text style={[styles.accountIndicator, agentIcon === 'codex' ? styles.accountIndicatorCodex : null]}>{indicator}</Text>
               </View>
             ) : (
-              <AgentIcon size={14} color={agentAccent(agentIcon)} />
+              <AgentIcon size={14} color={agentAccent(agentIcon, P.light)} />
             )
           ) : null}
           {loadingModel ? (
@@ -106,7 +118,7 @@ export function OptionPills({ document, onOpen }: { document: ChatDocument; onOp
           style={({ pressed }) => [styles.pill, styles.modePill, pressed ? styles.pressed : null]}
         >
           <View style={styles.modeGlyph}>
-            <ModeGlyph mode={modeGlyph} color={modeColor} />
+            <ModeGlyph mode={modeGlyph} color={P.light ? lightModeColor(modeColor) : modeColor} />
           </View>
         </Pressable>
       ) : null}
@@ -129,15 +141,16 @@ export function ContextRing({ percentage }: { percentage: number }) {
   const radius = 6.5;
   const circumference = 2 * Math.PI * radius;
   const fraction = Math.min(1, Math.max(0, percentage / 100));
+  const P = useTranscriptTheme();
   return (
     <Svg width={17} height={17} viewBox="0 0 17 17">
-      <Circle cx={8.5} cy={8.5} r={radius} stroke="rgba(158,158,158,0.24)" strokeWidth={2} fill="none" />
+      <Circle cx={8.5} cy={8.5} r={radius} stroke={P.meterTrack} strokeWidth={2} fill="none" />
       {fraction > 0 ? (
         <Circle
           cx={8.5}
           cy={8.5}
           r={radius}
-          stroke="#b9b9b9"
+          stroke={P.meterFill}
           strokeWidth={2}
           fill="none"
           strokeLinecap="round"
@@ -149,7 +162,7 @@ export function ContextRing({ percentage }: { percentage: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 1, minWidth: 0 },
   pill: {
     flexDirection: 'row',
@@ -165,8 +178,8 @@ const styles = StyleSheet.create({
   pillMerged: { maxWidth: 230 },
   pressed: { backgroundColor: P.border },
   pillText: { color: P.primary, fontSize: 13, flexShrink: 1 },
-  suffix: { color: 'rgba(158,158,158,0.8)' },
-  skeleton: { height: 10, borderRadius: 5, backgroundColor: 'rgba(180,184,192,0.24)' },
+  suffix: { color: P.mutedInk(0.8) },
+  skeleton: { height: 10, borderRadius: 5, backgroundColor: P.mutedInk(0.24) },
   modePill: { paddingHorizontal: 7 },
   modeGlyph: { opacity: 0.55 },
   ring: { width: 30, height: 30, marginLeft: 4, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
@@ -174,4 +187,4 @@ const styles = StyleSheet.create({
   accountLogo: { ...StyleSheet.absoluteFill, opacity: 0.3, alignItems: 'center', justifyContent: 'center' },
   accountIndicator: { color: P.muted, fontFamily: 'Menlo', fontSize: 9.9, fontWeight: '600' },
   accountIndicatorCodex: { color: '#7db8fb' },
-});
+}));

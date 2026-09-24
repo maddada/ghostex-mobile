@@ -10,7 +10,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
 import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str, type JsonRecord } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 type Run = (command: JsonRecord, keepOpen: boolean) => void;
 
@@ -23,6 +23,8 @@ function withField(policy: JsonRecord | null, key: string, value: unknown): Json
 }
 
 export function AccountsPanel({ panel, onCommand }: { panel: JsonRecord; onCommand: Run }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [customize, setCustomize] = useState(false);
   if (str(panel, 'kind') === 'noAccounts') {
     return (
@@ -85,6 +87,8 @@ function SessionBlocks({
   onDefaults: () => void;
   onCommand: Run;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const recovery = obj(session.recovery);
   const usage = arr(session.usage);
   const context = obj(session.context);
@@ -262,6 +266,8 @@ function SessionBlocks({
 }
 
 function Identity({ value }: { value: JsonRecord }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const provider = str(value, 'provider') || 'claude';
   const Icon = AGENT_ICONS[provider];
   const figures = arr(value.figures).filter((figure): figure is string => typeof figure === 'string');
@@ -280,6 +286,7 @@ function Identity({ value }: { value: JsonRecord }) {
 }
 
 function Meter({ label, percent, left, right }: { label: string; percent: number; left: string; right?: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.meter}>
       <Text style={styles.meterLabel}>{label}</Text>
@@ -295,6 +302,7 @@ function Meter({ label, percent, left, right }: { label: string; percent: number
 }
 
 function ToggleRow({ label, value, disabled, onChange }: { label: string; value: boolean; disabled: boolean; onChange: () => void }) {
+  const styles = useStyles();
   return (
     <View style={[styles.header, disabled ? styles.dim : null]}>
       <Text style={styles.accountName}>{label}</Text>
@@ -304,6 +312,7 @@ function ToggleRow({ label, value, disabled, onChange }: { label: string; value:
 }
 
 function OutlineButton({ label, disabled = false, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -316,12 +325,12 @@ function OutlineButton({ label, disabled = false, onPress }: { label: string; di
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   panel: { gap: 12, paddingTop: 4 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   headerTitle: { color: P.foreground, fontSize: 16, fontWeight: '600' },
   iconButton: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  pressed: { backgroundColor: P.pressed },
+  pressed: { backgroundColor: P.controlPressed },
   dim: { opacity: 0.45 },
   alert: { gap: 8, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: P.menuBorder },
   strong: { color: P.foreground, fontSize: 14, fontWeight: '600' },
@@ -349,4 +358,4 @@ const styles = StyleSheet.create({
   track: { height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: P.meterTrack },
   fill: { height: '100%', borderRadius: 3, backgroundColor: P.meterFill },
   outline: { height: 40, borderRadius: 10, borderWidth: 1, borderColor: P.menuBorder, alignItems: 'center', justifyContent: 'center' },
-});
+}));

@@ -13,7 +13,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Alert, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettingsStore } from '../../../settings/store';
@@ -32,7 +32,7 @@ import { MenuSheet, type MenuRow } from './MenuSheet';
 import { ModelMenuSheet } from './ModelMenuSheet';
 import { NotePanel } from './NotePanel';
 import { OptionPills, type PillKind } from './OptionPills';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
 import { parseReferences } from './references';
 import { SendControl } from './SendControl';
@@ -84,6 +84,7 @@ type OpenMenu =
   | null;
 
 export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_ACTIONS, openAccountsRequestId = 0 }: NativeComposerProps) {
+  const styles = useStyles();
   const serves = useCallback(
     (action: string) => onHostAction !== undefined && hostActions.includes(action),
     [hostActions, onHostAction]
@@ -459,6 +460,8 @@ function ToolbarButton({
   badge?: string | null;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -480,7 +483,7 @@ function ToolbarButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   root: { gap: 8, paddingHorizontal: 10, paddingTop: 6, backgroundColor: 'transparent' },
   error: { color: P.error, fontSize: 13, paddingHorizontal: 8 },
   card: {
@@ -517,4 +520,4 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: P.background, fontSize: 9, lineHeight: 11, fontWeight: '600' },
   measure: { position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row' },
-});
+}));

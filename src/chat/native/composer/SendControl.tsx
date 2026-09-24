@@ -10,13 +10,13 @@
 
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function SendControl({
   document,
@@ -33,6 +33,8 @@ export function SendControl({
   submit: NonNullable<RustChat['composer']>['submit'];
   dispatch: (action: UserAction) => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [cooling, setCooling] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
@@ -92,19 +94,19 @@ export function SendControl({
       }}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: stop ? P.stopFill : P.sendFill },
+        { backgroundColor: stop ? P.send.stopFill : P.send.fill },
         stop ? styles.stopBorder : null,
         disabled || blocked ? styles.dim : null,
         pressed ? styles.pressed : null,
       ]}
     >
       {!stop && pendingAttachments > 0 ? (
-        <ActivityIndicator size="small" color={P.sendInk} />
+        <ActivityIndicator size="small" color={P.send.ink} />
       ) : (
         <Glyph
           name={stop ? 'player-stop-filled' : 'arrow-up'}
           size={stop ? 12 : 16}
-          color={stop ? P.stopInk : P.sendInk}
+          color={stop ? P.send.stopInk : P.send.ink}
           strokeWidth={2.4}
         />
       )}
@@ -112,9 +114,9 @@ export function SendControl({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   button: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  stopBorder: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  stopBorder: { borderWidth: 1, borderColor: P.send.stopBorder },
   dim: { opacity: 0.5 },
   pressed: { opacity: 0.8 },
-});
+}));

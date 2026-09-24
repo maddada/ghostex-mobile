@@ -8,14 +8,14 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import type { GlyphName } from './icons';
 import { arr, asJson, isTrue, num, obj, str } from './json';
-import { ChatCardPalette as P, CHAT_MONO_FONT } from './palette';
-import { CARD_TEXT_SIZE, CardHeader, ChatButton, ChoiceRow, StatusCard, cardText, wellStyle } from './primitives';
+import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { CARD_TEXT_SIZE, CardHeader, ChatButton, ChoiceRow, StatusCard, useCardText, useWellStyle } from './primitives';
 import type { CardHostAction } from './types';
 
 export function NoticeCard({
@@ -27,6 +27,9 @@ export function NoticeCard({
   document: ChatDocument;
   onHostAction?: CardHostAction;
 }) {
+  const cardText = useCardText();
+  const styles = useStyles();
+  const look: DialogLook = { styles, P: useTranscriptTheme(), cardText, wellStyle: useWellStyle() };
   const { dispatch } = chat;
   const { height } = useWindowDimensions();
   const notice = obj(document.terminalNotice);
@@ -47,7 +50,7 @@ export function NoticeCard({
     return (
       <StatusCard
         header={<CardHeader icon="terminal-2" title={copyTitle || str(dialog, 'title')} />}
-        {...terminalDialogParts(chat, dialog, busy, dialogInput)}
+        {...terminalDialogParts(chat, dialog, busy, dialogInput, look)}
       />
     );
   }
@@ -85,7 +88,7 @@ export function NoticeCard({
     );
   }
   if (!collapsed && !rateLimit && dialog !== null) {
-    const parts = terminalDialogParts(chat, dialog, busy, dialogInput);
+    const parts = terminalDialogParts(chat, dialog, busy, dialogInput, look);
     body.push(...parts.body);
     actions.push(...parts.actions);
   }
@@ -139,12 +142,21 @@ export function NoticeCard({
   return <StatusCard header={header} body={body} actions={actions} />;
 }
 
+/** The themed styles a terminal dialog draws with, read by the card that owns it. */
+type DialogLook = {
+  styles: ReturnType<typeof useStyles>;
+  P: ReturnType<typeof useTranscriptTheme>;
+  cardText: ReturnType<typeof useCardText>;
+  wellStyle: ReturnType<typeof useWellStyle>;
+};
+
 /** The body rows and footer actions of a terminal dialog (`render_terminal_dialog`). */
 function terminalDialogParts(
   chat: RustChat,
   dialog: Record<string, unknown>,
   busy: boolean,
-  [inputValue, setInputValue]: DialogInput
+  [inputValue, setInputValue]: DialogInput,
+  { styles, P, cardText, wellStyle }: DialogLook
 ): { body: ReactNode[]; actions: ReactNode[] } {
   const { dispatch } = chat;
   const dialogId = str(dialog, 'id');
@@ -208,7 +220,7 @@ function terminalDialogParts(
         returnKeyType={search ? 'search' : 'done'}
         onSubmitEditing={submit}
         placeholder={search ? 'Search options…' : 'Enter text…'}
-        placeholderTextColor="rgba(158,158,158,0.6)"
+        placeholderTextColor={P.placeholder}
       />
     );
     actions.push(<ChatButton key="submit" label={search ? 'Search' : str(presentation, 'submitLabel')} onPress={submit} />);
@@ -265,7 +277,7 @@ function useDialogInput(dialog: Record<string, unknown> | null): DialogInput {
   return [value, setValue];
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   choicesColumn: {
     gap: 6,
   },
@@ -279,11 +291,11 @@ const styles = StyleSheet.create({
   },
   dialogBody: {
     maxHeight: 256,
-    backgroundColor: 'rgba(29,29,29,0.3)',
+    backgroundColor: P.light ? P.input : 'rgba(29,29,29,0.3)',
   },
   monoText: {
     color: P.cardMuted,
-    fontFamily: CHAT_MONO_FONT,
+    fontFamily: MONO_FONT,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -309,4 +321,4 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
   },
-});
+}));

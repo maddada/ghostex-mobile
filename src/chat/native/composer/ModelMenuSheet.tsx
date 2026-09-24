@@ -14,7 +14,7 @@ import type { UserAction } from '../../rust/actions';
 import { agentAccent } from './agentColors';
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
 
 const TRAIT_GLYPHS: Record<string, GlyphName> = { reasoning: 'brain', context: 'file-text', fast: 'bolt', plan: 'map' };
@@ -30,6 +30,8 @@ export function ModelMenuSheet({
   onClose: () => void;
   dispatch: (action: UserAction) => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [query, setQuery] = useState('');
   const [openTrait, setOpenTrait] = useState<string | null>(null);
   useEffect(() => {
@@ -123,7 +125,7 @@ export function ModelMenuSheet({
                   {id === 'favorites' ? (
                     <Glyph name="star" size={15} color={active ? P.foreground : P.muted} />
                   ) : Icon !== undefined ? (
-                    <Icon size={15} color={agentAccent(icon)} />
+                    <Icon size={15} color={agentAccent(icon, P.light)} />
                   ) : null}
                   <Text style={[styles.tabText, active ? styles.tabTextActive : null]}>{str(tab, 'name')}</Text>
                 </Pressable>
@@ -139,7 +141,7 @@ export function ModelMenuSheet({
                 dispatch({ type: 'modelMenuView', query: next });
               }}
               placeholder={str(menu, 'placeholder') || 'Search models'}
-              placeholderTextColor="rgba(158,158,158,0.6)"
+              placeholderTextColor={P.placeholder}
               style={styles.searchInput}
               autoCorrect={false}
               autoCapitalize="none"
@@ -165,7 +167,7 @@ export function ModelMenuSheet({
                   onLongPress={sessionScope ? () => pick(key, true) : undefined}
                   style={({ pressed }) => [styles.row, pressed ? styles.pressed : null, disabled ? styles.dim : null]}
                 >
-                  {Icon !== undefined ? <Icon size={17} color={agentAccent(icon)} /> : null}
+                  {Icon !== undefined ? <Icon size={17} color={agentAccent(icon, P.light)} /> : null}
                   <View style={styles.rowText}>
                     <Text style={styles.rowLabel} numberOfLines={1}>
                       {str(row, 'label')}
@@ -184,7 +186,7 @@ export function ModelMenuSheet({
                     onPress={() => dispatch({ type: 'modelMenuFavorite', key })}
                     style={styles.star}
                   >
-                    <Glyph name={favorite ? 'star-filled' : 'star'} size={17} color={favorite ? '#f6c945' : P.muted} />
+                    <Glyph name={favorite ? 'star-filled' : 'star'} size={17} color={favorite ? P.star : P.muted} />
                   </Pressable>
                 </Pressable>
               );
@@ -238,10 +240,10 @@ export function ModelMenuSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   tabs: { paddingHorizontal: 12, gap: 6, paddingBottom: 8 },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: P.menuBorder },
-  tabActive: { backgroundColor: P.border, borderColor: 'rgba(255,255,255,0.18)' },
+  tabActive: { backgroundColor: P.border, borderColor: P.ink(0.18) },
   tabText: { color: P.muted, fontSize: 13 },
   tabTextActive: { color: P.foreground },
   search: {
@@ -260,7 +262,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, color: P.foreground, fontSize: 15, paddingVertical: 0 },
   list: { paddingHorizontal: 8, paddingBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  pressed: { backgroundColor: P.pressed },
+  pressed: { backgroundColor: P.controlPressed },
   dim: { opacity: 0.45 },
   rowText: { flex: 1, minWidth: 0, gap: 2 },
   rowLabel: { color: P.foreground, fontSize: 15 },
@@ -292,4 +294,4 @@ const styles = StyleSheet.create({
   },
   traitLabel: { color: P.muted, fontSize: 11.5 },
   traitValue: { color: P.foreground, fontSize: 14 },
-});
+}));

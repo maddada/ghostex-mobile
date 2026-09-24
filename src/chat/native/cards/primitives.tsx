@@ -6,10 +6,10 @@
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
-import { ChatCardPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export const CARD_TEXT_SIZE = 14;
 export const CARD_LINE_HEIGHT = 20;
@@ -29,6 +29,8 @@ export function StatusCard({
   actions?: ReactNode[];
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const bodyItems = (body ?? []).filter((item) => item !== null && item !== undefined && item !== false);
   const actionItems = (actions ?? []).filter((item) => item !== null && item !== undefined && item !== false);
   const hasActions = actionItems.length > 0;
@@ -71,6 +73,8 @@ export function CardHeader({
   /** A body follows under a pressable header, so it keeps only a short gap below itself. */
   hasBody?: boolean;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const content = (
     <>
       {icon !== undefined ? (
@@ -127,6 +131,8 @@ export function ChoiceRow({
   disabled?: boolean;
   onPress?: () => void;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const showDescription = description !== undefined && description.length > 0 && description !== label;
   return (
     <Pressable
@@ -138,6 +144,8 @@ export function ChoiceRow({
       style={({ pressed }) => [
         styles.choice,
         dense && styles.choiceDense,
+        // The light chat lifts a choice off the card onto the page tone (`choice_rows.rs`).
+        P.light && !selected && { backgroundColor: P.background },
         selected && styles.choiceSelected,
         disabled === true && styles.disabledSoft,
         pressed && !selected && { backgroundColor: P.pressedFill },
@@ -168,6 +176,8 @@ export function CardButton({
   wide?: boolean;
   tint?: string;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -201,6 +211,8 @@ export function ChatButton({
   icon?: GlyphName;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -253,7 +265,7 @@ export function useLoop(periodMs: number, easing: (value: number) => number, run
   return value;
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   card: {
     width: '100%',
     borderWidth: 1,
@@ -283,7 +295,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.04)',
+    borderTopColor: P.light ? P.border : 'rgba(255,255,255,0.04)',
   },
   header: {
     flexDirection: 'row',
@@ -394,9 +406,9 @@ const styles = StyleSheet.create({
   disabledSoft: {
     opacity: 0.6,
   },
-});
+}));
 
-export const cardText = StyleSheet.create({
+export const useCardText = themedStyles((P) => ({
   prose: {
     color: P.cardMuted,
     fontSize: CARD_TEXT_SIZE,
@@ -423,13 +435,19 @@ export const cardText = StyleSheet.create({
     fontSize: CARD_TEXT_SIZE,
     lineHeight: CARD_LINE_HEIGHT,
   },
-});
+}));
+
+const useWellSheet = themedStyles((P) => ({
+  well: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: P.wellBorder,
+    backgroundColor: P.wellFill,
+  },
+}));
 
 /** The inset well a command or a terminal excerpt sits in. */
-export const wellStyle: ViewStyle = {
-  padding: 12,
-  borderRadius: 8,
-  borderWidth: 1,
-  borderColor: 'rgba(255,255,255,0.05)',
-  backgroundColor: 'rgba(14,14,14,0.7)',
-};
+export function useWellStyle(): ViewStyle {
+  return useWellSheet().well;
+}

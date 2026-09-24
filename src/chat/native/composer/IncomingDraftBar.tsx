@@ -5,14 +5,16 @@
  */
 
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { IncomingDraft } from '../../rust/document';
 import { Glyph } from './icons';
-import { ComposerPalette as P } from './palette';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export function IncomingDraftBar({ draft, dispatch }: { draft: IncomingDraft; dispatch: (action: UserAction) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const [preview, setPreview] = useState(false);
   return (
     <View style={styles.wrap}>
@@ -45,7 +47,7 @@ export function IncomingDraftBar({ draft, dispatch }: { draft: IncomingDraft; di
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   wrap: { gap: 6 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   glyph: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -54,4 +56,4 @@ const styles = StyleSheet.create({
   button: { paddingHorizontal: 10, height: 30, justifyContent: 'center', borderRadius: 8, borderWidth: 1, borderColor: P.border },
   buttonText: { color: P.primary, fontSize: 13 },
   preview: { color: P.muted, fontSize: 12.5, lineHeight: 18, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: P.border, backgroundColor: P.composerBackground },
-});
+}));

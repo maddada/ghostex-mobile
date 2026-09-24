@@ -7,13 +7,13 @@
  * Any other refused operation is the plain error line desktop draws in the same place.
  */
 
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
-import { ChatCardPalette as P, CHAT_MONO_FONT } from './palette';
-import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, ChatButton, StatusCard, cardText } from './primitives';
+import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, ChatButton, StatusCard, useCardText } from './primitives';
 import type { CardHostAction } from './types';
 
 const NOT_READY_HEADLINE = 'Message not sent. Your draft was restored.';
@@ -31,6 +31,9 @@ export function ComposerNotReadyCard({
   document: ChatDocument;
   onHostAction?: CardHostAction;
 }) {
+  const cardText = useCardText();
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   if (!composerNotReady(document)) {
     if (typeof document.operationError !== 'string') return null;
     return (
@@ -80,7 +83,7 @@ export function ComposerNotReadyCard({
   const header = (
     <View style={styles.header}>
       <View style={styles.headerIcon}>
-        <Glyph name="alert-circle" size={14} color={P.alertGlyph} />
+        <Glyph name="alert-circle" size={14} color={P.error} />
       </View>
       <Text style={styles.headline}>{NOT_READY_HEADLINE}</Text>
     </View>
@@ -92,7 +95,7 @@ export function ComposerNotReadyCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((P) => ({
   fill: {
     width: '100%',
   },
@@ -118,7 +121,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: P.inputBorder,
-    backgroundColor: 'rgba(14,14,14,0.7)',
+    backgroundColor: P.wellFill,
   },
   tailStatus: {
     paddingHorizontal: 12,
@@ -133,8 +136,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     color: P.foreground,
-    fontFamily: CHAT_MONO_FONT,
+    fontFamily: MONO_FONT,
     fontSize: 11,
     lineHeight: 16,
   },
-});
+}));
