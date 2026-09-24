@@ -85,7 +85,13 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
           </DisclosureBody>
         </FoldPlaceProvider>
       ) : null}
-      <CompletedFilesFold itemId={item.id} files={item.files} label={item.filesLabel} />
+      <CompletedFilesFold
+        itemId={item.id}
+        files={item.files}
+        label={item.filesLabel}
+        deferred={item.deferred}
+        notice={deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
+      />
       <FoldPlaceProvider value={HIDE_FILES}>
         {item.artifacts.map((message) => (
           <MessageRow key={message.id} message={message} />

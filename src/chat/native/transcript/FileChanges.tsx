@@ -5,7 +5,7 @@
  * turn's "N files changed" fold.
  */
 
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useNativeChatUi, useRowDetail, useTranscriptEnv } from './context';
@@ -42,14 +42,37 @@ export function FileChangeStack({ stackId, files }: { stackId: string; files: un
 }
 
 /** A finished turn's writes, folded behind "N files changed". */
-export function CompletedFilesFold({ itemId, files, label }: { itemId: string; files: unknown; label: string }) {
+export function CompletedFilesFold({
+  itemId,
+  files,
+  label,
+  deferred,
+  notice,
+}: {
+  itemId: string;
+  files: unknown;
+  label: string;
+  /** The turn's `deferred` descriptor, when its work has not been read yet. */
+  deferred?: unknown;
+  /** What the fold shows while that work is being read, or after the read failed. */
+  notice?: ReactNode;
+}) {
+  const { dispatch } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
-  const [open, toggle] = useDisclosure(disclosures, `work-files:${itemId}`);
-  if (fileRows(files).length === 0) return null;
+  const [open, toggleRaw] = useDisclosure(disclosures, `work-files:${itemId}`);
+  const work = obj(deferred);
+  // An older turn arrives collapsed with only the paths its unread work changed: the row stays and
+  // reads that work on open (desktop `file_change_card.rs`, React `list.tsx`).
+  const unread = fileRows(files).length === 0 && arr(work?.filePaths).length > 0;
+  if (fileRows(files).length === 0 && !unread) return null;
+  const toggle = () => {
+    if (!open && unread) dispatch({ type: 'loadWork', id: itemId, work: work as never });
+    toggleRaw();
+  };
   return (
     <View style={styles.fold}>
       <DisclosureHeading label={label} open={open} onToggle={toggle} />
-      {open ? <FileChangeStack stackId={`work:${itemId}`} files={files} /> : null}
+      {open ? unread ? (notice ?? null) : <FileChangeStack stackId={`work:${itemId}`} files={files} /> : null}
     </View>
   );
 }
