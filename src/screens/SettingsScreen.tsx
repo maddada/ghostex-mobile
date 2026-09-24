@@ -364,6 +364,14 @@ export default function SettingsScreen() {
         <Text style={styles.sectionCaption}>Show the first seven code lines instead of only the path and change counts.</Text>
         {renderToggle('sessionChatVerboseMode', 'Verbose Mode')}
         <Text style={styles.sectionCaption}>Expands thinking blocks to show their tool calls by default.</Text>
+        {__DEV__ ? (
+          <>
+            {renderToggle('sessionChatRustEngine', 'Rust chat engine (preview)')}
+            <Text style={styles.sectionCaption}>
+              Developer builds only. Runs the new chat engine beside the current chat and logs what it receives.
+            </Text>
+          </>
+        ) : null}
 
         <Text style={styles.sectionHeader}>Terminal behavior</Text>
         {TERMINAL_BEHAVIOR_TOGGLES.map((toggle) => renderToggle(toggle.key, toggle.label))}

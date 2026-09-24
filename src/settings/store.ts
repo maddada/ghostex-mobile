@@ -71,6 +71,11 @@ export type GhostexSettings = {
   /** Reveal thinking-owned tool calls by default. */
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
+  /**
+   * Developer preview: run the Rust chat core (`src/chat/rust/`) beside the WebView chat. Off by
+   * default and shown only in development builds; the WebView chat stays what the user sees.
+   */
+  sessionChatRustEngine: boolean;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -142,6 +147,7 @@ export function defaultSettings(): GhostexSettings {
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
     sessionChatFileEditPreviews: false,
+    sessionChatRustEngine: false,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -249,6 +255,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
+    sessionChatRustEngine: bool('sessionChatRustEngine', defaults.sessionChatRustEngine),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

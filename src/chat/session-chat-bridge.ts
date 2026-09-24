@@ -263,31 +263,56 @@ async function saveChatUpload(
     localFile.create({ intermediates: true, overwrite: true });
     localFile.write(base64, { encoding: 'base64' });
     const bytes = localFile.size;
-
-    await ensureConnected(machine);
-    const exec = await execRemoteScript(
-      machine.id,
-      {
-        posix: remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
-        powershell: windowsChatUploadPath(kind === 'image' ? 'i' : 'f', prefix, tail),
-      },
-      REMOTE_PATH_EXEC_TIMEOUT_MS
-    );
-    const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
-    if (exec.exitCode !== 0 || remotePath.length === 0) {
-      throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
-    }
-
-    await GhostexNative.uploadFile(
-      machine.id,
-      localPathFromUri(localFile.uri),
-      await remoteUploadPath(machine.id, remotePath)
-    );
-    return { bytes, path: remotePath };
+    const path = await uploadStagedChatFile(machine, localFile.uri, kind, prefix, tail);
+    return { bytes, path };
   } finally {
     // Cache-directory scratch file; nothing downstream reads it again.
     localFile.delete();
   }
+}
+
+/** Stages a machine-side path in the Ghostex `i` or `f` folder and SFTPs a local file into it. */
+async function uploadStagedChatFile(
+  machine: MachineConnectionTarget,
+  localUri: string,
+  kind: 'image' | 'file',
+  prefix: string,
+  tail: string
+): Promise<string> {
+  await ensureConnected(machine);
+  const exec = await execRemoteScript(
+    machine.id,
+    {
+      posix: remoteSessionChatUploadPathScript(kind === 'image' ? 'i' : 'f', prefix, tail),
+      powershell: windowsChatUploadPath(kind === 'image' ? 'i' : 'f', prefix, tail),
+    },
+    REMOTE_PATH_EXEC_TIMEOUT_MS
+  );
+  const remotePath = exec.stdout.trim().split('\n').pop()?.trim() ?? '';
+  if (exec.exitCode !== 0 || remotePath.length === 0) {
+    throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
+  }
+  await GhostexNative.uploadFile(machine.id, localPathFromUri(localUri), await remoteUploadPath(machine.id, remotePath));
+  return remotePath;
+}
+
+/**
+ * A file already on the phone (a picker or camera result) uploaded as a chat attachment, the same
+ * route and destination as {@link saveChatUpload}; answers the machine path. Used by the Rust
+ * chat host for the core's `importNativeAttachments` request, which carries local paths.
+ */
+export async function uploadSessionChatLocalFile(
+  machine: MachineConnectionTarget,
+  localUri: string,
+  suggestedName: string | undefined,
+  kind: 'image' | 'file'
+): Promise<string> {
+  const prefix = String(Date.now());
+  const tail =
+    kind === 'image'
+      ? `.${sessionChatImageExtension('', suggestedName)}`
+      : `-${sanitizeSessionChatAttachmentName(suggestedName ?? '') ?? ATTACHMENT_FALLBACK_NAME}`;
+  return uploadStagedChatFile(machine, localUri, kind, prefix, tail);
 }
 
 function imageMediaTypeForPath(path: string): string | null {

@@ -28,6 +28,7 @@ import {
   runSessionChatBridgeRequest,
   type SessionChatBridgeResponse,
 } from './session-chat-bridge';
+import { useRustChatDevShadow } from './rust/devShadow';
 
 const CHAT_BACKGROUNDS = { dark: '#0e0e0e', light: '#fdfdfd' } as const;
 
@@ -175,6 +176,9 @@ export default function SessionChatWebView({
   openSessionNoteRequestId = 0,
   openSavedPromptsRequestId = 0,
 }: SessionChatWebViewProps) {
+  // Development builds only, behind Settings > "Rust chat engine (preview)": the Rust core runs
+  // beside this WebView for the same chat and logs frame counts, drawing nothing.
+  useRustChatDevShadow(machine, projectId, sessionId);
   const openMachineLink = useOpenMachineLink();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const webviewRef = useRef<WebView>(null);
