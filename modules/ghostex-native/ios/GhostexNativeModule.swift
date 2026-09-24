@@ -620,8 +620,13 @@ public class GhostexNativeModule: Module {
                 }
                 guard entry.zmxBacked else { return }
                 view.forceRefresh()
-                view.sendTerminalKey(.pageUp)
-                view.sendTerminalKey(.pageDown)
+                // CDXC:Zmx 2026-09-25 WHY: the attach refresh asks zmx to repaint (its private ZMX_REFRESH OSC, consumed by the attach client) instead of typing a PageUp/PageDown nudge. Those keys reached the agent: in Claude's AskUserQuestion dialog PageDown moves the highlight to "Type something", so the chat's answer digit landed there as a custom answer ("1") and the question stayed open.
+                guard let shellId = entry.shellId else { return }
+                let connection = entry.connection
+                let data = Data("\u{1b}]1337;ZMX_REFRESH\u{07}".utf8)
+                Task {
+                    try? await connection.write(data, to: shellId)
+                }
             }
         }
 

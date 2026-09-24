@@ -233,7 +233,7 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   // region zmx post-attach viewport refresh (ported from the Termux fork's
   // GhostexAndroidController: retry until the attached terminal is visible and
   // has rendered remote output, wait ~2s, then force a size update and send the
-  // private ZMX redraw OSC plus a PageUp/PageDown nudge)
+  // private ZMX redraw OSC)
 
   private fun shouldRefreshAfterSessionSwitch(
     candidate: GhostexTerminalEntry,
@@ -276,8 +276,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
   }
 
   /**
-   * Explicit refresh (refreshTerminalViewport): the same size update + ZMX redraw OSC +
-   * PageUp/PageDown nudge the post-attach path sends, without its visibility retry loop.
+   * Explicit refresh (refreshTerminalViewport): the same size update + ZMX redraw OSC
+   * the post-attach path sends, without its visibility retry loop.
    * No-op unless the attached entry is zmx-backed and still running.
    */
   internal fun performZmxViewportRefreshNow() {
@@ -286,17 +286,6 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     if (!shouldRefreshAfterSessionSwitch(current, session)) return
     terminalView.updateSize()
     session.write(GhostexZmxViewportRefresh.sequence())
-    sendTerminalPageUpPageDownNudge(session)
-  }
-
-  private fun sendTerminalPageUpPageDownNudge(session: TerminalSession) {
-    val emulator = session.emulator
-    val cursorApplicationMode = emulator != null && emulator.isCursorKeysApplicationMode
-    val keypadApplicationMode = emulator != null && emulator.isKeypadApplicationMode
-    val pageUp = GhostexZmxViewportRefresh.pageUpSequence(cursorApplicationMode, keypadApplicationMode)
-    val pageDown = GhostexZmxViewportRefresh.pageDownSequence(cursorApplicationMode, keypadApplicationMode)
-    if (pageUp != null) session.write(pageUp)
-    if (pageDown != null) session.write(pageDown)
   }
 
   private fun isZmxAttachVisibleForDelayedRefresh(session: TerminalSession): Boolean {

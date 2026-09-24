@@ -1,19 +1,16 @@
 package expo.modules.ghostexnative
 
-import android.view.KeyEvent
-import com.termux.terminal.KeyHandler
-
 /**
  * Post-attach ZMX viewport refresh, ported verbatim from the Ghostex Termux
  * fork's GhostexZmxViewportRefresh (android/app). Attaching to a zmx-backed
  * session from the phone must repaint/reflow the remote terminal to the phone
  * viewport: after the attached terminal is visible, measured, has an emulator,
  * and has rendered remote output, wait about two seconds, force a size update,
- * then send zmx's private redraw OSC plus a PageUp/PageDown nudge. zmx
- * consumes the OSC locally and requests a display repaint from daemon state,
- * so it stays gated to zmx-backed sessions instead of being a generic
- * terminal fallback. Sending the key nudge before zmx is visible is
- * ineffective because the attach CLI has not yet accepted terminal input.
+ * then send zmx's private redraw OSC. zmx consumes the OSC locally and
+ * requests a display repaint from daemon state, so it stays gated to
+ * zmx-backed sessions instead of being a generic terminal fallback.
+ *
+ * CDXC:Zmx 2026-09-25 WHY: the PageUp/PageDown key nudge the Termux fork sent after the OSC is gone and must not come back. Those keys reached the agent: in Claude's AskUserQuestion dialog PageDown moves the highlight to "Type something", so the chat's answer digit landed there as a custom answer and the question stayed open.
  */
 object GhostexZmxViewportRefresh {
 
@@ -46,12 +43,6 @@ object GhostexZmxViewportRefresh {
     }
     return false
   }
-
-  fun pageUpSequence(cursorApplicationMode: Boolean, keypadApplicationMode: Boolean): String? =
-    KeyHandler.getCode(KeyEvent.KEYCODE_PAGE_UP, 0, cursorApplicationMode, keypadApplicationMode)
-
-  fun pageDownSequence(cursorApplicationMode: Boolean, keypadApplicationMode: Boolean): String? =
-    KeyHandler.getCode(KeyEvent.KEYCODE_PAGE_DOWN, 0, cursorApplicationMode, keypadApplicationMode)
 
   fun sequence(): String = REFRESH_SEQUENCE
 }
