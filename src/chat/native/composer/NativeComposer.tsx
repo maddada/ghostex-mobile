@@ -48,7 +48,14 @@ export type NativeComposerProps = {
    * `rename`, `sleep`, `fork`. Controls and rows that need it are hidden while it is absent.
    */
   onHostAction?: (action: string, params: JsonRecord) => void;
+  /**
+   * The app-shell actions `onHostAction` actually performs. Only those get a control or a More
+   * actions row, so nothing on screen does nothing. Defaults to Terminal View alone.
+   */
+  hostActions?: readonly string[];
 };
+
+const DEFAULT_HOST_ACTIONS: readonly string[] = ['terminalView'];
 
 /** Toolbar geometry the overflow fit is computed from (`toolbar.rs`, `composer_measurement`). */
 const CONTROL_WIDTH = 32;
@@ -71,7 +78,11 @@ type OpenMenu =
   | { kind: 'model' }
   | null;
 
-export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
+export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_ACTIONS }: NativeComposerProps) {
+  const serves = useCallback(
+    (action: string) => onHostAction !== undefined && hostActions.includes(action),
+    [hostActions, onHostAction]
+  );
   const state = chat.state;
   const document = state?.document ?? null;
   const input = chat.composer;
@@ -110,10 +121,10 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
       if (document === null) return false;
       const gate = document.composerActions?.[id];
       if (gate === false) return false;
-      if (id === 'terminal') return onHostAction !== undefined;
+      if (id === 'terminal') return serves('terminalView');
       return true;
     },
-    [document, onHostAction]
+    [document, serves]
   );
   const [footerWidth, setFooterWidth] = useState(0);
   const [optionsWidth, setOptionsWidth] = useState(0);
@@ -175,7 +186,7 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
         case 'stashPrompt':
           if (model !== null && model.text.trim().length > 0) {
             dispatch({ type: 'stash', text: model.text, draftVersion: { draftId: model.draftId, revision: model.revision } });
-          } else {
+          } else if (serves('stashedPrompts')) {
             host('stashedPrompts');
           }
           return;
@@ -183,7 +194,7 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
           host(action);
       }
     },
-    [dispatch, host, model, openAttach]
+    [dispatch, host, model, openAttach, serves]
   );
 
   /** A menu row's command, routed the way desktop's `handle_action` routes it. */
@@ -202,7 +213,7 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
           performComposerAction(str(command, 'action'));
           return false;
         case 'openAccountsSettings':
-          host('openAccountsSettings');
+          if (serves('openAccountsSettings')) host('openAccountsSettings');
           return false;
         case 'copyText':
           void Clipboard.setStringAsync(str(command, 'text'));
@@ -217,7 +228,7 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
           return false;
       }
     },
-    [dispatch, host, input, performComposerAction]
+    [dispatch, host, input, performComposerAction, serves]
   );
 
   const closeMenu = useCallback(() => {
@@ -255,8 +266,8 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
   const openMore = useCallback(() => {
     if (document === null) return;
     const verbose = document.verboseOverride ?? verboseSetting;
-    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, hostActions: onHostAction !== undefined }) });
-  }, [available, document, onHostAction, verboseSetting]);
+    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves }) });
+  }, [available, document, serves, verboseSetting]);
 
   // ---- layout ------------------------------------------------------------------------------------
 
@@ -355,7 +366,7 @@ export function NativeComposer({ chat, onHostAction }: NativeComposerProps) {
                         pressed={pressed}
                         badge={badge}
                         onPress={() => performComposerAction(control.action)}
-                        {...(control.id === 'stash' && onHostAction !== undefined ? { onLongPress: () => host('stashedPrompts') } : {})}
+                        {...(control.id === 'stash' && serves('stashedPrompts') ? { onLongPress: () => host('stashedPrompts') } : {})}
                       />
                     );
                   })

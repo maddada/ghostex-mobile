@@ -1,8 +1,7 @@
 /**
  * The rows of the composer's menus, built from the document the way desktop builds them
  * (`actions.rs`, `show_actions`; `option_menu/window.rs`, `show_option_menu`). Rows that need the
- * app shell (`{type: 'host', ...}`) appear only when the screen handed the composer a way to run
- * them (`onHostAction`).
+ * app shell (`{type: 'host', ...}`) appear only for the actions the screen performs.
  */
 
 import type { ChatDocument } from '../../rust/document';
@@ -44,10 +43,11 @@ export type MoreActionsInput = {
   verbose: boolean;
   /** Controls this composer can draw (the host gates plus what the phone serves). */
   available: (id: ComposerControlId) => boolean;
-  hostActions: boolean;
+  /** Whether the screen performs this app-shell action (`NativeComposer`'s `hostActions`). */
+  serves: (action: string) => boolean;
 };
 
-export function moreActionsRows({ document, verbose, available, hostActions }: MoreActionsInput): MenuRow[] {
+export function moreActionsRows({ document, verbose, available, serves }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   const labels = obj(document.optionLabels);
   const merged = obj(document.modelMenu) !== null;
@@ -91,9 +91,7 @@ export function moreActionsRows({ document, verbose, available, hostActions }: M
     iconPath: HOST_ACTION_ICONS[action.id] ?? null,
     command: { type: 'host', action: action.id },
   });
-  if (hostActions) {
-    for (const action of actions) if (CHAT_GROUP_HOST_ACTIONS.has(action.id)) rows.push(hostRow(action));
-  }
+  for (const action of actions) if (CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id)) rows.push(hostRow(action));
   for (const control of COMPOSER_CONTROLS) {
     if (control.id === 'summary' || !overflowed(document, control.id) || !available(control.id)) continue;
     const row: MenuRow = { label: control.label, iconPath: control.icon, command: { type: 'composerHost', action: control.action } };
@@ -110,24 +108,22 @@ export function moreActionsRows({ document, verbose, available, hostActions }: M
         agentRows.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: [{ accounts: document.accountPanel }] });
         continue;
       }
-      if (!hostActions) continue;
+      if (!serves('switchAccount')) continue;
       const accounts = arr(document.switchableAgents).map((account) => ({
         label: str(account, 'name'),
         icon: str(account, 'icon'),
         command: { type: 'host', action: 'switchAccount', agentId: obj(account)?.agentId ?? null },
       }));
       if (accounts.length > 0) agentRows.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: accounts });
-    } else if (hostActions) {
+    } else if (serves(action.id)) {
       agentRows.push(hostRow(action));
     }
   }
   if (agentRows.length > 0) {
     rows.push({ separator: true }, { heading: true, label: 'Agent' }, ...agentRows);
   }
-  if (hostActions) {
-    const other = actions.filter((action) => action.group !== 'agent' && !CHAT_GROUP_HOST_ACTIONS.has(action.id));
-    if (other.length > 0) rows.push({ separator: true }, ...other.map(hostRow));
-  }
+  const other = actions.filter((action) => action.group !== 'agent' && !CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id));
+  if (other.length > 0) rows.push({ separator: true }, ...other.map(hostRow));
   return rows;
 }
 
