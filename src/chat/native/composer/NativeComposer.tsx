@@ -13,7 +13,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettingsStore } from '../../../settings/store';
@@ -215,6 +215,11 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           input?.submit((str(command, 'mode') || 'send') as 'send' | 'queue' | 'compact' | 'handoff');
           return false;
         case 'composerHost':
+          // Attach swaps this sheet's rows for the Attach rows; closing it would close those too.
+          if (str(command, 'action') === 'attachPath') {
+            openAttach();
+            return true;
+          }
           performComposerAction(str(command, 'action'));
           return false;
         case 'openAccountsSettings':
@@ -233,23 +238,36 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           return false;
       }
     },
-    [dispatch, host, input, performComposerAction, serves]
+    [dispatch, host, input, openAttach, performComposerAction, serves]
   );
 
-  const closeMenu = useCallback(() => {
-    setMenu(null);
-    const source = pendingPick.current;
-    pendingPick.current = null;
-    if (source === null) return;
-    // The picker cannot present while the sheet's modal is still going away.
-    setTimeout(() => {
+  const launchPick = useCallback(
+    (source: AttachSource) => {
       pickAttachments(source)
         .then((files) => chat.attachFiles(files))
         .catch((error: unknown) => {
           Alert.alert('Attachment failed', error instanceof Error ? error.message : 'The attachment could not be added.');
         });
-    }, 450);
-  }, [chat]);
+    },
+    [chat]
+  );
+  /** A source picked in the sheet, launched once the sheet's modal is gone (iOS). */
+  const pickAfterDismiss = useRef<AttachSource | null>(null);
+  const closeMenu = useCallback(() => {
+    setMenu(null);
+    const source = pendingPick.current;
+    pendingPick.current = null;
+    if (source === null) return;
+    // iOS cannot present the picker while the sheet's modal is still sliding away; a fixed delay
+    // raced that animation and the picker silently never showed. Android's modal is a dialog.
+    if (Platform.OS === 'ios') pickAfterDismiss.current = source;
+    else launchPick(source);
+  }, [launchPick]);
+  const onMenuDismissed = useCallback(() => {
+    const source = pickAfterDismiss.current;
+    pickAfterDismiss.current = null;
+    if (source !== null) launchPick(source);
+  }, [launchPick]);
 
   const openPill = useCallback(
     (kind: PillKind) => {
@@ -408,6 +426,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
         {...(menu?.kind === 'rows' && menu.title !== undefined ? { title: menu.title } : {})}
         onClose={closeMenu}
         onCommand={runCommand}
+        onDismissed={onMenuDismissed}
       />
       <ModelMenuSheet
         menu={obj(document?.modelMenu)}

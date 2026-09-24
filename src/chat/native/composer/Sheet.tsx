@@ -23,12 +23,21 @@ export type SheetProps = {
   children: ReactNode;
   /** Fraction of the screen the panel may take. */
   maxHeight?: `${number}%`;
+  /** iOS: the sheet finished going away, so another view controller (a picker) can present. */
+  onDismissed?: () => void;
 };
 
-export function Sheet({ visible, onClose, title, onBack, accessory, children, maxHeight = '80%' }: SheetProps) {
+export function Sheet({ visible, onClose, title, onBack, accessory, children, maxHeight = '80%', onDismissed }: SheetProps) {
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onBack ?? onClose} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onBack ?? onClose}
+      {...(onDismissed !== undefined ? { onDismiss: onDismissed } : {})}
+      statusBarTranslucent
+    >
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
         <View style={[styles.panel, { maxHeight, paddingBottom: Math.max(insets.bottom, 12) }]}>

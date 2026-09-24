@@ -50,9 +50,11 @@ export type MenuSheetProps = {
   onCommand: (command: MenuRow) => boolean | void;
   /** Extra content above the rows (the attach sheet's source buttons). */
   header?: ReactNode;
+  /** iOS: the sheet finished going away (see `Sheet`). */
+  onDismissed?: () => void;
 };
 
-export function MenuSheet({ rows, title, onClose, onCommand, header }: MenuSheetProps) {
+export function MenuSheet({ rows, title, onClose, onCommand, header, onDismissed }: MenuSheetProps) {
   const [stack, setStack] = useState<Page[]>([]);
   useEffect(() => {
     setStack([]);
@@ -69,6 +71,7 @@ export function MenuSheet({ rows, title, onClose, onCommand, header }: MenuSheet
     <Sheet
       visible={page !== null}
       onClose={onClose}
+      {...(onDismissed !== undefined ? { onDismissed } : {})}
       {...(page?.title !== undefined ? { title: page.title } : {})}
       {...(stack.length > 0 ? { onBack: () => setStack(stack.slice(0, -1)) } : {})}
     >
