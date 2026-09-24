@@ -21,7 +21,8 @@ export type DraftVersion = { draftId: string; revision: number };
 /** The fields each action kind carries. `{}` means the kind carries none. */
 export type ActionFields = {
   // ---- view state the sub-controllers answer first ----------------------------------------
-  /** Rows drawn open, so only they ship details (prefer the `openRowDetails` measurement). */
+  /** Rows drawn open, so only they ship details. Desktop sends this action too (`row_details.rs`);
+   * the `openRowDetails` measurement is an unused alternative. */
   rowDetails: { open: Json };
   /** The composer box scrolled (short panes). Desktop: `composer_scroll.rs`. */
   composerScroll: { canScroll: boolean; delta: number; distanceToEnd: number; eligible: boolean };

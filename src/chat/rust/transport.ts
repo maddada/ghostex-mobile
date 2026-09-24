@@ -159,7 +159,10 @@ export type LongPollCallbacks = {
 export class SessionChatLongPoll {
   private generation = 0;
   private limit = 0;
+  /** The core wants the stream (between its `subscribe` and `unsubscribe`). */
   private running = false;
+  /** The app is in the background: the stream is wanted but no request goes out. */
+  private paused = false;
   /** Bumped when a read's position went backwards, so the core never reads the frame as stale. */
   private serverGeneration = 1;
   private lastPosition: { epoch: number; seq: number } | null = null;
@@ -177,7 +180,7 @@ export class SessionChatLongPoll {
     this.limit = Math.max(this.limit, limit);
     if (this.running) return;
     this.running = true;
-    void this.loop(++this.generation);
+    if (!this.paused) void this.loop(++this.generation);
   }
 
   /** The core's own tail reads carry its window; a poll must never answer with fewer rows. */
@@ -196,6 +199,24 @@ export class SessionChatLongPoll {
     const limit = this.limit;
     this.stop();
     this.start(limit);
+  }
+
+  /**
+   * The app went to the background: end the loop without forgetting that the core wants the
+   * stream, so a backgrounded phone stops holding an SSH exec open every 20 seconds.
+   */
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    this.generation += 1;
+    this.wake?.();
+  }
+
+  /** Back in the foreground: read at once (fresh fingerprint) when the stream is wanted. */
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this.running) void this.loop(++this.generation);
   }
 
   private sleep(ms: number, generation: number): Promise<void> {

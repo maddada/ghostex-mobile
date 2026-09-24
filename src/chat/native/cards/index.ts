@@ -16,7 +16,6 @@ export type { CardHostAction } from './types';
 
 // Inline pieces the transcript draws inside its rows.
 export { EmptyTranscript } from './EmptyTranscript';
-export { DeferredWorkNotice, InterAgentMessageCard, StartupDeliveryStatus } from './InlineRows';
 export { QuestionExchangeCards } from './QuestionExchangeCards';
 export { subagentOpenAction } from './AgentPanels';
 

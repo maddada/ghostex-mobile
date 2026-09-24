@@ -45,7 +45,7 @@ export type ChatFrame = {
   /** The open subagent viewer's own transcript list, as a splice on its own channel.
    * Desktop: `subagent_view.rs`. */
   subagentSplice?: ItemsSplice;
-  /** Details of the rows the screen reported open (see the `measured` / `openRowDetails` event),
+  /** Details of the rows the screen reported open (the `rowDetails` action, as desktop sends it),
    * keyed by the screen's own row key. Replaces the previous map whole. Desktop: `row_details.rs`. */
   rowDetails?: RowDetails;
   /** Bumped once per publish. Pass the last value you applied back into the next drain. */

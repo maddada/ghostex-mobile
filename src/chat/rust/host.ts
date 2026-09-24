@@ -14,6 +14,8 @@
  * and timers answer later, each as a burst of its own. Bursts never interleave.
  */
 
+import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
+
 import {
   ChatCoreError,
   createChatCore,
@@ -24,6 +26,7 @@ import {
   type ChatCoreQuery,
   type ChatMeasurement,
 } from '../../../modules/gx-chat-core/src';
+
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import { uploadSessionChatLocalFile } from '../session-chat-bridge';
 import type { UserAction } from './actions';
@@ -167,6 +170,7 @@ export class RustChatHost {
   private draftRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private draftRetryFailures = 0;
   private draftRetryBusy = false;
+  private appStateSubscription: NativeEventSubscription | null = null;
 
   constructor(private readonly target: RustChatTarget) {
     const { machine, projectId, sessionId } = target;
@@ -227,11 +231,20 @@ export class RustChatHost {
     });
     // `replayDraftSaves`: a save an earlier run could not deliver is still in the outbox.
     this.scheduleDraftRetry(0);
+    // Only `background` pauses: `inactive` is a pulled-down notification centre or an app switcher
+    // glance, and dropping the poll for those would cost a full re-read on every glance.
+    if (AppState.currentState === 'background') this.poll.pause();
+    this.appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'background') this.poll.pause();
+      else if (next === 'active') this.poll.resume();
+    });
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.appStateSubscription?.remove();
+    this.appStateSubscription = null;
     this.poll.stop();
     if (this.timer !== null) clearTimeout(this.timer);
     if (this.draftRetryTimer !== null) clearTimeout(this.draftRetryTimer);
