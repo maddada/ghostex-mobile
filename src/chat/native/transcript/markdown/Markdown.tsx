@@ -6,7 +6,7 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type TextStyle } from 'react-native';
 
 import { openChatTablePreview, tableCsv } from '../../cards';
@@ -228,17 +228,35 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
   const [collapsed, setCollapsed] = useState(false);
   // React's `--chat-table-cell-max`: min(24rem, 60% of the pane).
   const cellMax = Math.min(384, width * 0.6);
-  // React Native has no table layout, so every column takes one width: its widest cell's text,
-  // estimated from the prose size, capped like the React cell; cells wrap inside it.
+  // React Native has no table layout. Each column takes its widest cell's natural width, capped like
+  // the React cell (cells wrap inside the cap). The widths are measured from an invisible copy of
+  // the cells laid out without a width limit; until that layout lands, an estimate from the prose
+  // size stands in (it runs narrow for wide glyphs, which broke words like "number" mid-word).
+  // A column reports only when its width changes, so the last report per column stays valid.
+  const [measured, setMeasured] = useState<number[] | null>(null);
+  const pending = useRef<number[]>([]);
   const columns = useMemo(() => {
-    const widths = block.head.map((cell) => inlineText(cell).length * 7.9);
-    for (const row of block.rows) {
-      row.forEach((cell, column) => {
-        widths[column] = Math.max(widths[column] ?? 0, inlineText(cell).length * 7.3);
-      });
+    let natural: number[];
+    if (measured !== null && measured.length === block.head.length) natural = measured;
+    else {
+      natural = block.head.map((cell) => inlineText(cell).length * 7.9);
+      for (const row of block.rows) {
+        row.forEach((cell, column) => {
+          natural[column] = Math.max(natural[column] ?? 0, inlineText(cell).length * 7.3);
+        });
+      }
     }
-    return widths.map((textWidth) => Math.min(cellMax, Math.max(44, Math.ceil(textWidth) + CELL_PAD_X * 2)));
-  }, [block, cellMax]);
+    return natural.map((textWidth) => Math.min(cellMax, Math.max(44, Math.ceil(textWidth) + 1 + CELL_PAD_X * 2)));
+  }, [block, cellMax, measured]);
+  const measureColumn = (column: number, columnWidth: number) => {
+    const widths = pending.current;
+    widths[column] = columnWidth;
+    if (!block.head.every((_, index) => typeof widths[index] === 'number')) return;
+    const next = block.head.map((_, index) => widths[index]!);
+    setMeasured((current) =>
+      current !== null && current.length === next.length && current.every((value, index) => value === next[index]) ? current : next
+    );
+  };
   const cellStyle = (column: number) => {
     const align = block.align[column] ?? null;
     return [styles.tableCell, { width: columns[column] }, align === 'right' ? styles.right : align === 'center' ? styles.center : null];
@@ -247,6 +265,18 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
   return (
     <View style={styles.table}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.tableMeasure} pointerEvents='none' accessibilityElementsHidden importantForAccessibility='no-hide-descendants'>
+          {block.head.map((cell, column) => (
+            <View key={column} style={styles.tableMeasureColumn} onLayout={(event) => measureColumn(column, event.nativeEvent.layout.width)}>
+              <Text style={[styles.tableText, styles.strong]}>{renderInlines(cell, context, `mh${column}`)}</Text>
+              {block.rows.map((row, rowIndex) => (
+                <Text key={rowIndex} style={styles.tableText}>
+                  {renderInlines(row[column] ?? [], context, `mr${rowIndex}.${column}`)}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </View>
         <View>
           <View style={[styles.tableRow, { borderBottomColor: theme.border }]}>
             {block.head.map((cell, column) => (
@@ -513,6 +543,8 @@ const styles = StyleSheet.create({
   codeText: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: 17.5 },
   table: { gap: 2 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1 },
+  tableMeasure: { position: 'absolute', left: 0, top: 0, width: 10000, flexDirection: 'row', alignItems: 'flex-start', opacity: 0 },
+  tableMeasureColumn: { alignItems: 'flex-start' },
   tableCell: { paddingHorizontal: CELL_PAD_X, paddingVertical: 7 },
   tableText: { fontSize: PROSE_SIZE, lineHeight: 20 },
   right: { alignItems: 'flex-end' },
