@@ -11,7 +11,7 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { MachineConnectionTarget } from '../../machines/credentials';
@@ -35,6 +35,13 @@ export type NativeChatScreenProps = {
   sessionId: string;
   /** Shows the session's terminal (the Terminal View buttons, the core's `switchToTerminal`). */
   onSwitchToTerminal: () => void;
+  /**
+   * The app-shell actions the host screen performs for the composer's More actions rows and the
+   * cards (desktop's `sessionChatHostAction`: `rename`, `sleep`, `fork`, ...). `terminalView` is
+   * always served, through `onSwitchToTerminal`.
+   */
+  hostActions?: readonly string[];
+  onHostAction?: (action: string, params: Record<string, unknown>) => void;
   /** Keeps the chat loading offscreen until chat mode is selected. */
   visible: boolean;
   /** Bumped by the terminal header's Search Conversation; each new value opens the search bar. */
@@ -52,6 +59,8 @@ export default function NativeChatScreen({
   projectId,
   sessionId,
   onSwitchToTerminal,
+  hostActions = NO_HOST_ACTIONS,
+  onHostAction,
   visible,
   openSearchRequestId = 0,
   openSessionNoteRequestId = 0,
@@ -64,11 +73,13 @@ export default function NativeChatScreen({
   const toast = useChatViewRequests(chat, machine.id, onSwitchToTerminal);
 
   const hostAction = useCallback(
-    (action: string) => {
+    (action: string, params: Record<string, unknown> = {}) => {
       if (action === 'terminalView' || action === 'switchToTerminal') onSwitchToTerminal();
+      else if (hostActions.includes(action)) onHostAction?.(action, params);
     },
-    [onSwitchToTerminal]
+    [hostActions, onHostAction, onSwitchToTerminal]
   );
+  const composerHostActions = useMemo(() => ['terminalView', ...hostActions], [hostActions]);
 
   // The header's requests, one per new value (0 runs nothing).
   const handledSearch = useRef(openSearchRequestId);
@@ -104,7 +115,7 @@ export default function NativeChatScreen({
           <NativeTranscript chat={chat} />
         </View>
         <NativeChatCards chat={chat} onHostAction={hostAction} />
-        {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} />}
+        {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} hostActions={composerHostActions} />}
         <RewindDialog chat={chat} />
         <NativeChatOverlays chat={chat} renderTranscriptItem={renderSubagentRow} />
         <ChatToast toast={toast} />
@@ -112,6 +123,8 @@ export default function NativeChatScreen({
     </NativeChatUiProvider>
   );
 }
+
+const NO_HOST_ACTIONS: readonly string[] = [];
 
 type Toast = { id: number; title?: string; message: string; error: boolean } | null;
 

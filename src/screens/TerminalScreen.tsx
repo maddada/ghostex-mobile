@@ -26,7 +26,7 @@ import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet'
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
-import TerminalMenu from '../components/terminal/TerminalMenu';
+import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
 import { ChatBubbleIcon, ChevronLeftIcon, EllipsisIcon, TerminalPromptIcon } from '../components/terminal/icons';
@@ -60,6 +60,10 @@ import { styles } from './terminal-screen/styles';
 import { useTerminalAgentActions } from './terminal-screen/use-agent-actions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
+
+/** The native chat's More actions rows this screen performs (the terminal menu's own actions). */
+const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = ['rename', 'sleep', 'delayedActions', 'closeAfterDone', 'fork', 'fullReload', 'exportTranscript'];
+const NO_NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [];
 
 export default function TerminalScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -567,6 +571,11 @@ export default function TerminalScreen({ navigation, route }: Props) {
               sessionId={activeTab.ghostexSessionId ?? ''}
               onSwitchToTerminal={() => {
                 if (chatModeActive) toggleChatView();
+              }}
+              hostActions={agentActionsCapable && activeSession !== null ? NATIVE_CHAT_HOST_ACTIONS : NO_NATIVE_CHAT_HOST_ACTIONS}
+              onHostAction={(action) => {
+                if (action === 'closeAfterDone') void toggleCloseAfterDone();
+                else handleTerminalMenuAction(action as TerminalMenuActionId);
               }}
               visible={chatModeActive}
               openSearchRequestId={chatSearchRequestId}

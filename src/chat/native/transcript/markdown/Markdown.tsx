@@ -15,7 +15,7 @@ import { Glyph, type GlyphName } from '../icons';
 import { arr, obj, str, type JsonRecord } from '../json';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from '../theme';
 import { InlineImage } from '../Images';
-import { parseMarkdown, type Align, type Block, type FenceHeader, type Inline } from './parse';
+import { inlineText, parseMarkdown, type Block, type FenceHeader, type Inline } from './parse';
 
 type Reference = { label: string; kind: string };
 
@@ -72,7 +72,7 @@ function renderInlines(inlines: readonly Inline[], context: InlineContext, keyPr
               { backgroundColor: context.theme.inlineCodeSurface, color: context.theme.primary },
             ]}
           >
-            {` ${inline.v} `}
+            {`\u00a0${inline.v}\u00a0`}
           </Text>
         );
       case 'strong':
@@ -150,6 +150,8 @@ function FlowParagraph({ inlines, context, color }: { inlines: Inline[]; context
   );
 }
 
+const CELL_PAD_X = 12;
+
 /** `markdown-visual.json`: the shared heading sizes, gaps and leading. */
 const HEADING_SIZES = [0, 20, 18, 16, 14, 14, 14];
 const HEADING_LINE = 1.3;
@@ -226,7 +228,21 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
   const [collapsed, setCollapsed] = useState(false);
   // React's `--chat-table-cell-max`: min(24rem, 60% of the pane).
   const cellMax = Math.min(384, width * 0.6);
-  const cellStyle = (align: Align) => [styles.tableCell, { maxWidth: cellMax }, align === 'right' ? styles.right : align === 'center' ? styles.center : null];
+  // React Native has no table layout, so every column takes one width: its widest cell's text,
+  // estimated from the prose size, capped like the React cell; cells wrap inside it.
+  const columns = useMemo(() => {
+    const widths = block.head.map((cell) => inlineText(cell).length * 7.9);
+    for (const row of block.rows) {
+      row.forEach((cell, column) => {
+        widths[column] = Math.max(widths[column] ?? 0, inlineText(cell).length * 7.3);
+      });
+    }
+    return widths.map((textWidth) => Math.min(cellMax, Math.max(44, Math.ceil(textWidth) + CELL_PAD_X * 2)));
+  }, [block, cellMax]);
+  const cellStyle = (column: number) => {
+    const align = block.align[column] ?? null;
+    return [styles.tableCell, { width: columns[column] }, align === 'right' ? styles.right : align === 'center' ? styles.center : null];
+  };
   const lines = collapsed ? 1 : undefined;
   return (
     <View style={styles.table}>
@@ -234,7 +250,7 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
         <View>
           <View style={[styles.tableRow, { borderBottomColor: theme.border }]}>
             {block.head.map((cell, column) => (
-              <View key={column} style={cellStyle(block.align[column] ?? null)}>
+              <View key={column} style={cellStyle(column)}>
                 <Text numberOfLines={lines} style={[styles.tableText, styles.strong, { color: theme.foreground }]}>
                   {renderInlines(cell, context, `h${column}`)}
                 </Text>
@@ -244,7 +260,7 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
           {block.rows.map((row, rowIndex) => (
             <View key={rowIndex} style={[styles.tableRow, { borderBottomColor: theme.light ? 'rgba(229,229,229,0.6)' : 'rgba(29,29,29,0.6)' }]}>
               {row.map((cell, column) => (
-                <View key={column} style={cellStyle(block.align[column] ?? null)}>
+                <View key={column} style={cellStyle(column)}>
                   <Text numberOfLines={lines} style={[styles.tableText, { color: theme.prose }]}>
                     {renderInlines(cell, context, `r${rowIndex}.${column}`)}
                   </Text>
@@ -497,7 +513,7 @@ const styles = StyleSheet.create({
   codeText: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: 17.5 },
   table: { gap: 2 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1 },
-  tableCell: { paddingHorizontal: 12, paddingVertical: 7 },
+  tableCell: { paddingHorizontal: CELL_PAD_X, paddingVertical: 7 },
   tableText: { fontSize: PROSE_SIZE, lineHeight: 20 },
   right: { alignItems: 'flex-end' },
   center: { alignItems: 'center' },

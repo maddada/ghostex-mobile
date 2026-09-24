@@ -68,7 +68,8 @@ export type OpenRow = { key: string; kind: 'tool' | 'file'; messageId: string; i
  */
 export class RowDetailDemand {
   private readonly rows = new Map<string, { row: OpenRow; count: number }>();
-  private sent = '';
+  /** Nothing is open until a row says so, and the core starts with nothing open. */
+  private sent = '[]';
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private dispatch: (action: UserAction) => void) {}
@@ -93,7 +94,7 @@ export class RowDetailDemand {
 
   /** Forget what was sent, so the next change re-sends the whole set (a new core). */
   reset(): void {
-    this.sent = '';
+    this.sent = this.rows.size === 0 ? '[]' : '';
     this.schedule();
   }
 
