@@ -368,7 +368,7 @@ export default function SettingsScreen() {
           <>
             {renderToggle('sessionChatRustEngine', 'Rust chat engine (preview)')}
             <Text style={styles.sectionCaption}>
-              Developer builds only. Runs the new chat engine beside the current chat and logs what it receives.
+              Developer builds only. Shows chats on the new native screen and chat engine instead of the web page.
             </Text>
           </>
         ) : null}
