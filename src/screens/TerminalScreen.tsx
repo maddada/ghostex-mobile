@@ -32,6 +32,7 @@ import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
 import { ChatBubbleIcon, ChevronLeftIcon, EllipsisIcon, TerminalPromptIcon } from '../components/terminal/icons';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
 import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
+import NativeChatScreen from '../chat/native/NativeChatScreen';
 import SessionChatWebView from '../chat/SessionChatWebView';
 import { RenameCopy, SessionCopy } from '../copy';
 import { summarizeFailure } from '../inventory/client';
@@ -556,32 +557,51 @@ export default function TerminalScreen({ navigation, route }: Props) {
            * and its offscreen preload frame owns no input region until the user
            * switches views. Toggling no longer destroys the conversation.
            */
-          <SessionChatWebView
-            key={activeTab.sessionKey}
-            machine={chatMachineTarget}
-            projectId={activeProjectId}
-            sessionId={activeTab.ghostexSessionId ?? ''}
-            terminalSessionKey={activeTab.sessionKey}
-            onSwitchToTerminalForAgentPicker={switchToTerminalForAgentPicker}
-            agentId={activeAgentId}
-            customTranscriptWidthEnabled={settings.sessionChatCustomTranscriptWidthEnabled}
-            fontFamily={settings.sessionChatFontFamily}
-            theme={settings.sessionChatTheme}
-            transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
-            verboseMode={settings.sessionChatVerboseMode}
-            fileEditPreviews={settings.sessionChatFileEditPreviews}
-            // The page cannot see live activity; the inventory poll supplies
-            // that hint without acting as an input-availability lock.
-            working={activeSession?.activity === 'working'}
-            visible={chatModeActive}
-            draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
-            handoffToTerminalRequestId={handoffToTerminalIds[activeTab.sessionKey] ?? 0}
-            openSearchRequestId={chatSearchRequestId}
-            openSessionNoteRequestId={chatSessionNoteRequestId}
-            openSavedPromptsRequestId={chatSavedPromptsRequestId}
-            onQueueCountChange={handleChatQueueCount}
-            style={styles.terminal}
-          />
+          // Settings > "Rust chat engine (preview)" (development builds): the native screen drawn
+          // from the Rust chat core replaces the WebView chat, mounted and warmed the same way.
+          __DEV__ && settings.sessionChatRustEngine ? (
+            <NativeChatScreen
+              key={activeTab.sessionKey}
+              machine={chatMachineTarget}
+              projectId={activeProjectId}
+              sessionId={activeTab.ghostexSessionId ?? ''}
+              onSwitchToTerminal={() => {
+                if (chatModeActive) toggleChatView();
+              }}
+              visible={chatModeActive}
+              openSearchRequestId={chatSearchRequestId}
+              openSessionNoteRequestId={chatSessionNoteRequestId}
+              onQueueCountChange={handleChatQueueCount}
+              style={styles.terminal}
+            />
+          ) : (
+            <SessionChatWebView
+              key={activeTab.sessionKey}
+              machine={chatMachineTarget}
+              projectId={activeProjectId}
+              sessionId={activeTab.ghostexSessionId ?? ''}
+              terminalSessionKey={activeTab.sessionKey}
+              onSwitchToTerminalForAgentPicker={switchToTerminalForAgentPicker}
+              agentId={activeAgentId}
+              customTranscriptWidthEnabled={settings.sessionChatCustomTranscriptWidthEnabled}
+              fontFamily={settings.sessionChatFontFamily}
+              theme={settings.sessionChatTheme}
+              transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
+              verboseMode={settings.sessionChatVerboseMode}
+              fileEditPreviews={settings.sessionChatFileEditPreviews}
+              // The page cannot see live activity; the inventory poll supplies
+              // that hint without acting as an input-availability lock.
+              working={activeSession?.activity === 'working'}
+              visible={chatModeActive}
+              draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
+              handoffToTerminalRequestId={handoffToTerminalIds[activeTab.sessionKey] ?? 0}
+              openSearchRequestId={chatSearchRequestId}
+              openSessionNoteRequestId={chatSessionNoteRequestId}
+              openSavedPromptsRequestId={chatSavedPromptsRequestId}
+              onQueueCountChange={handleChatQueueCount}
+              style={styles.terminal}
+            />
+          )
         ) : null}
         {activeTab !== null && !chatModeActive && (
           <TerminalStateOverlay

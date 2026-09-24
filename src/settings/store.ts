@@ -72,8 +72,9 @@ export type GhostexSettings = {
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
   /**
-   * Developer preview: run the Rust chat core (`src/chat/rust/`) beside the WebView chat. Off by
-   * default and shown only in development builds; the WebView chat stays what the user sees.
+   * Developer preview: the chat view shows the native chat screen drawn from the Rust chat core
+   * (`src/chat/native/`, `src/chat/rust/`) instead of the WebView chat. Off by default and shown
+   * only in development builds; off keeps the WebView chat.
    */
   sessionChatRustEngine: boolean;
   // SSH connection (appended group).
