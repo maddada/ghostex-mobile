@@ -1,0 +1,27 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.gxchatcore'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.gxchatcore"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  // src/main/jniLibs/<abi>/libgx_chat_mobile.so and the UniFFI Kotlin bindings under
+  // src/main/java/dev/ghostex/gxchatcore/uniffi/ are build outputs of
+  // packages/gx-chat-mobile/build.sh in the Ghostex main repo (gitignored).
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // UniFFI's Kotlin bindings call the Rust library through JNA. The @aar carries JNA's own
+  // libjnidispatch.so for every Android ABI.
+  implementation "net.java.dev.jna:jna:5.17.0@aar"
+}
