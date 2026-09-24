@@ -35,6 +35,12 @@ export function SendControl({
 }) {
   const [cooling, setCooling] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The current press already fired its hold. Queuing empties the composer, which turns this
+   * button into Stop under the finger; a release that then ran `onPress` interrupted the agent the
+   * prompt had just been queued behind. So a press does one thing: its hold or its tap.
+   */
+  const heldThisPress = useRef(false);
   useEffect(() => () => {
     if (timer.current !== null) clearTimeout(timer.current);
   }, []);
@@ -68,17 +74,22 @@ export function SendControl({
       disabled={disabled}
       delayLongPress={holdMs}
       hitSlop={6}
+      onPressIn={() => {
+        heldThisPress.current = false;
+      }}
       onPress={() => {
+        if (heldThisPress.current) return;
         if (stop) onStop();
         else submit('send');
       }}
-      onLongPress={
-        !stop && canQueue
-          ? () => {
-              if (submit('queue')) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-          : undefined
-      }
+      onLongPress={() => {
+        heldThisPress.current = true;
+        // A hold is the queue gesture; where there is nothing to queue it does what a tap does.
+        if (stop) onStop();
+        else if (canQueue) {
+          if (submit('queue')) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } else submit('send');
+      }}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: stop ? P.stopFill : P.sendFill },
