@@ -253,7 +253,14 @@ export class SessionChatLongPoll {
     }
   }
 
-  /** `snapshotEventFromRead` in the WebView page, with a position the core can order. */
+  /**
+   * `snapshotEventFromRead` in the WebView page, with a position the core can order.
+   *
+   * The three draft-agent keys are always own properties, `null` when the read omits them: a read
+   * drops them once a draft session's first prompt promotes it, and the core clears them only on
+   * an explicit `null` (absent means "this frame does not own them", which is every gxserver
+   * socket frame). JSON has no `undefined`, so the WebView's own-property trick has to be a `null`.
+   */
   private snapshotFrame(read: ReadAnswer): Record<string, unknown> {
     const epoch = typeof read.epoch === 'number' ? read.epoch : 0;
     const seq = typeof read.seq === 'number' ? read.seq : 0;
@@ -265,6 +272,9 @@ export class SessionChatLongPoll {
     const { fingerprint: _fingerprint, ...rest } = read;
     return {
       ...rest,
+      sessionAgentId: rest.sessionAgentId ?? null,
+      availableAgents: rest.availableAgents ?? null,
+      switchableAgents: rest.switchableAgents ?? null,
       type: 'sessionChatSnapshot',
       projectId: this.projectId,
       sessionId: this.sessionId,
