@@ -14,7 +14,8 @@
  * `questionReplacesComposer`.
  */
 
-import { StyleSheet, View } from 'react-native';
+import { useRef } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 
 import type { RustChat } from '../../rust/useRustChat';
 import { AgentFleetStrip, AgentTasksPanel } from './AgentPanels';
@@ -33,6 +34,8 @@ export type NativeChatCardsProps = {
 };
 
 export function NativeChatCards({ chat, onHostAction }: NativeChatCardsProps) {
+  const { height } = useWindowDimensions();
+  const band = useRef<ScrollView>(null);
   const document = chat.state?.document ?? null;
   if (document === null) return null;
   const hasAny =
@@ -46,7 +49,16 @@ export function NativeChatCards({ chat, onHostAction }: NativeChatCardsProps) {
     document.questionCard?.visible === true;
   if (!hasAny) return null;
   return (
-    <View style={styles.stack}>
+    // A phone is short: several cards at once scroll inside a band so the transcript keeps its room.
+    // When the band overflows, the newest card (the blocking question, nearest the composer) stays in view.
+    <ScrollView
+      ref={band}
+      onContentSizeChange={() => band.current?.scrollToEnd({ animated: false })}
+      style={[styles.band, { maxHeight: height * 0.6 }]}
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       <WorkingStrip document={document} />
       <ComposerNotReadyCard chat={chat} document={document} onHostAction={onHostAction} />
       <AgentTasksPanel chat={chat} document={document} />
@@ -54,11 +66,15 @@ export function NativeChatCards({ chat, onHostAction }: NativeChatCardsProps) {
       <NoticeCard chat={chat} document={document} onHostAction={onHostAction} />
       <AsyncQuestionsCard chat={chat} document={document} />
       <QuestionCard chat={chat} document={document} />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  band: {
+    flexGrow: 0,
+    width: '100%',
+  },
   stack: {
     width: '100%',
     gap: 8,

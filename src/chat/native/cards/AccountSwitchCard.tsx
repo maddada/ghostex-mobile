@@ -6,7 +6,7 @@
  * A switch in flight blocks the chat behind it; a failed one lets touches through.
  */
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { RustChat } from '../../rust/useRustChat';
@@ -152,6 +152,7 @@ function UsageTile({ usage, target }: { usage: unknown; target: boolean }) {
 function Step({ index, step }: { index: number; step: unknown }) {
   const state = str(step, 'state') || 'pending';
   const sweep = useLoop(1600, Easing.inOut(Easing.cubic), state === 'active');
+  const [lineWidth, setLineWidth] = useState(0);
   const color = state === 'active' ? P.foreground : state === 'done' ? P.prose : P.muted;
   const grow = [1, 1.3, 1.1][index] ?? 1;
   return (
@@ -172,12 +173,17 @@ function Step({ index, step }: { index: number; step: unknown }) {
       <Text style={[styles.stepLabel, { color }]} numberOfLines={1}>
         {str(step, 'label')}
       </Text>
-      <View style={[styles.stepLine, state === 'done' && { backgroundColor: 'rgba(134,211,248,0.55)' }]}>
+      <View
+        style={[styles.stepLine, state === 'done' && { backgroundColor: 'rgba(134,211,248,0.55)' }]}
+        onLayout={(event) => setLineWidth(event.nativeEvent.layout.width)}
+      >
         {state === 'active' ? (
           <Animated.View
             style={[
               styles.stepSweep,
-              { transform: [{ translateX: sweep.interpolate({ inputRange: [0, 1], outputRange: [-40, 110] }) }] },
+              { width: lineWidth * 0.4 },
+              // `gx-account-switch-step-sweep`: a 40% bar crossing from -100% to 250% of its own width.
+              { transform: [{ translateX: sweep.interpolate({ inputRange: [0, 1], outputRange: [-0.4 * lineWidth, lineWidth] }) }] },
             ]}
           />
         ) : null}
@@ -342,7 +348,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: 40,
     borderRadius: 2,
     backgroundColor: P.accent,
   },
