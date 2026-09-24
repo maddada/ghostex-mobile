@@ -191,6 +191,10 @@ export class ComposerModel {
         preserveError,
       });
     }
+    // Desktop reports every (text, caret) the field shows (`suggestions/window.rs`); a programmatic
+    // value change fires no selection event on iOS, so a picked `@` file kept its popup open.
+    const at = this.state.caret ?? content.length;
+    this.selected({ start: at, end: at });
     this.save(preserveError);
   }
 
