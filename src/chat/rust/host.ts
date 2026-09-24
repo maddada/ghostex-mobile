@@ -220,6 +220,8 @@ export class RustChatHost {
         projectId: this.target.projectId,
         sessionId: this.target.sessionId,
         retainedKey: this.retainedKey,
+        // The phone's field has no Enter-to-send; the core then names the tap and hold gestures.
+        touchComposer: true,
         ...(initialPresentation !== undefined ? { initialPresentation } : {}),
       },
     });
