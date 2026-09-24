@@ -30,6 +30,8 @@ export const ComposerInput = forwardRef<
     references: readonly ComposerReference[];
     /** The text the references were parsed from; they are dropped while it differs from `text`. */
     parsedFor: string;
+    /** Parses a draft's references now, for an edit that lands before `references` caught up. */
+    parse: (text: string) => readonly ComposerReference[];
     placeholder: string;
     collapsed: boolean;
     maxHeight: number;
@@ -37,7 +39,7 @@ export const ComposerInput = forwardRef<
     onTextChange: (text: string) => void;
     onCaret: (caret: number) => void;
   }
->(function ComposerInput({ model, input, references, parsedFor, placeholder, collapsed, maxHeight, dispatch, onTextChange, onCaret }, ref) {
+>(function ComposerInput({ model, input, references, parsedFor, parse, placeholder, collapsed, maxHeight, dispatch, onTextChange, onCaret }, ref) {
   const field = useRef<TextInput>(null);
   const [text, setText] = useState(model.text);
   const [forced, setForced] = useState<Selection | undefined>(undefined);
@@ -64,7 +66,10 @@ export const ComposerInput = forwardRef<
 
   const onChangeText = (next: string): void => {
     const before = textRef.current;
-    const guarded = guardEdit(before, next, live);
+    // Guard against the pills of the text being edited. Key repeats (a held Backspace) arrive
+    // before the parent re-parses the previous edit, and an empty list let them eat a pill's
+    // markdown one character at a time.
+    const guarded = guardEdit(before, next, parsedFor === before ? references : parse(before));
     if (guarded.kind === 'remove') {
       // The core answers with the text minus the whole reference; until then the field shows
       // what it had (the nonce re-renders it over the half-deleted pill).

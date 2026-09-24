@@ -113,7 +113,8 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   );
 
   // Pills: the core parses the draft (`composerReferences`) in the same turn the text changes.
-  const references = useMemo(() => parseReferences(text, chat.query('composerReferences', [text])), [text, chat.query]);
+  const parseDraftReferences = useCallback((draft: string) => parseReferences(draft, chat.query('composerReferences', [draft])), [chat.query]);
+  const references = useMemo(() => parseDraftReferences(text), [text, parseDraftReferences]);
   const activeImage = useMemo(() => {
     const reference = references.find((entry) => entry.kind === 'image' && caret >= entry.start && caret <= entry.end);
     return reference?.path ?? null;
@@ -354,6 +355,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                 }}
                 references={references}
                 parsedFor={text}
+                parse={parseDraftReferences}
                 placeholder={placeholder}
                 collapsed={collapsed}
                 maxHeight={INPUT_MAX_HEIGHT}
