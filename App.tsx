@@ -41,6 +41,8 @@ import MachineFormScreen from './src/screens/MachineFormScreen';
 import MachinesScreen from './src/screens/MachinesScreen';
 import SessionsScreen from './src/screens/SessionsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import SettingsPageScreen from './src/screens/settings/SettingsPageScreen';
+import { SETTINGS_PAGES } from './src/screens/settings/pages';
 import TerminalScreen from './src/screens/TerminalScreen';
 import FindPromptsScreen from './src/screens/FindPromptsScreen';
 import WebPreviewPortsScreen from './src/screens/WebPreviewPortsScreen';
@@ -194,6 +196,11 @@ export default function App() {
                 <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
                 <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+                <Stack.Screen
+                  name="SettingsPage"
+                  component={SettingsPageScreen}
+                  options={({ route }) => ({ title: SETTINGS_PAGES[route.params.page].title })}
+                />
                 <Stack.Screen
                   name="ExtraKeysEditor"
                   component={ExtraKeysEditorScreen}

@@ -49,21 +49,29 @@ export const SidebarPalette = {
   MUTED: '#747B85',
   /** Project group title: mix(--app-foreground 74%, --app-muted 26%). */
   GROUP_TITLE: '#B2B8C0',
-  /** Collapsed-header working count pill (#f8ad07). */
-  PILL_WORKING: '#F8AD07',
-  /** Collapsed-header attention/done count pill. */
-  PILL_ATTENTION: '#95D7F6',
-  /** Collapsed-header awake terminal/browser count pill. */
-  PILL_AWAKE: '#D8D8D8',
-  /** Session-row working status dot (desktop .session-status-dot #ffb454). */
-  WORKING_DOT: '#FFB454',
-  /** Reference-sidebar working spinner ring (reference-sidebar-working-spin #d99a62). */
-  WORKING_SPINNER: '#D99A62',
-  /** Delayed Send leading clock (.session-delayed-send-agent-icon #f6c945). */
+  /** Queued-prompt badge yellow (desktop decorations.rs #f6c945); not the row's Delayed Send clock. */
   DELAYED_SEND_CLOCK: '#F6C945',
-  /** Close After Done leading clock (.session-close-after-done-agent-icon #ff9aa2). */
-  CLOSE_AFTER_DONE_CLOCK: '#FF9AA2',
-  /** Session-row error status dot (desktop #ff6b6b). */
+  /*
+   * Session-row status, the dark-theme values of the desktop sidebar row
+   * (apps/desktop/src/app/native_sidebar/status.rs, sessions.rs, icons.rs).
+   */
+  /** Working dot, 8dp (status.rs WORKING_COLOR). */
+  ROW_WORKING: '#C68A06',
+  /** Attention dot, 7dp. */
+  ROW_ATTENTION: '#95D7F6',
+  /** Background shell or monitor dot, 8dp (status.rs background_work_color). */
+  ROW_BACKGROUND_WORK: '#B4B8BF',
+  /** Pending question dot, 6dp (status.rs question_indicator). */
+  ROW_QUESTION: '#F472B6',
+  /** Relative time and timer countdown. */
+  ROW_TIME: '#A6A6A6',
+  /** The same text on a sleeping session. */
+  ROW_TIME_SLEEPING: '#686868',
+  /** Delayed Send leading clock, 18dp (icons.rs). */
+  ROW_DELAYED_SEND_CLOCK: '#F4CE6B',
+  /** Close After Done leading clock, 18dp (icons.rs). */
+  ROW_CLOSE_AFTER_DONE_CLOCK: '#F2A2A2',
+  /** Failed queued-prompt badge red (desktop decorations.rs #ff6b6b). */
   ERROR_DOT: '#FF6B6B',
   /** Remote sleeping-row dot: mix(--app-muted 86%, --app-foreground 14%). */
   SLEEP_DOT: '#808791',

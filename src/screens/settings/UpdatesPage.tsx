@@ -1,15 +1,16 @@
 /**
- * Settings → Updates: the installed version, a "Check for updates" button,
+ * Settings > Updates: the installed version, a "Check for updates" button,
  * and, when GitHub has a newer release, one primary button that walks
  * Download (with percent) → Install (opens the Android package installer).
- * Rendered only while ANDROID_SELF_UPDATE_ENABLED is on.
+ * Listed on the Settings home only while ANDROID_SELF_UPDATE_ENABLED is on.
  */
 
 import * as Application from 'expo-application';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { SetupButton, SetupRow, SetupRows, setupText } from '../../components/onboarding/SetupPrimitives';
+import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { SetupPalette } from '../../theme/palette';
+import { useAppearance } from '../../theme/useAppearance';
 import { formatByteSize, installedAppVersion } from '../../updates/androidSelfUpdate';
 import {
   availableUpdate,
@@ -17,9 +18,9 @@ import {
   type UpdateCheckState,
   type UpdateDownloadState,
 } from '../../updates/androidSelfUpdateStore';
+import { SettingsScreenLayout, ValueRow } from './SettingsControls';
 
 const UpdatesCopy = {
-  header: 'Updates',
   installedLabel: 'Installed',
   latestLabel: 'Latest release',
   notChecked: 'Ghostex has not checked GitHub for a newer release yet.',
@@ -63,7 +64,8 @@ function downloadPercent(download: UpdateDownloadState): number {
   return Math.min(100, Math.floor((download.bytesWritten / download.totalBytes) * 100));
 }
 
-export default function UpdatesSection() {
+export default function UpdatesPage() {
+  const appearance = useAppearance();
   const check = useAndroidSelfUpdateStore((state) => state.check);
   const download = useAndroidSelfUpdateStore((state) => state.download);
   const checkForUpdates = useAndroidSelfUpdateStore((state) => state.checkForUpdates);
@@ -75,25 +77,21 @@ export default function UpdatesSection() {
   const buildNumber = Application.nativeBuildVersion;
   const update = availableUpdate(check);
   const status = checkStatusLine(check);
+  const mutedText = { color: appearance.muted };
+  const secondaryButton = { backgroundColor: appearance.card, borderColor: appearance.border };
 
   return (
-    <View style={styles.section}>
-      <Text style={styles.header}>{UpdatesCopy.header}</Text>
-      <SetupRows>
-        <SetupRow
-          first
-          mono
-          label={UpdatesCopy.installedLabel}
-          value={buildNumber === null ? installedVersion : `${installedVersion} (${buildNumber})`}
-        />
-        {check.phase === 'checked' ? (
-          <SetupRow mono label={UpdatesCopy.latestLabel} value={check.latest.version} />
-        ) : null}
-      </SetupRows>
+    <SettingsScreenLayout>
+      <ValueRow
+        label={UpdatesCopy.installedLabel}
+        value={buildNumber === null ? installedVersion : `${installedVersion} (${buildNumber})`}
+      />
+      {check.phase === 'checked' ? <ValueRow label={UpdatesCopy.latestLabel} value={check.latest.version} /> : null}
 
       <Text
         style={[
-          setupText.small,
+          styles.status,
+          mutedText,
           status.tone === 'accent' ? styles.statusAccent : null,
           status.tone === 'error' ? styles.statusError : null,
         ]}
@@ -129,12 +127,12 @@ export default function UpdatesSection() {
             />
           )}
           {download.phase === 'error' ? (
-            <Text style={[setupText.small, styles.statusError]}>{download.message}</Text>
+            <Text style={[styles.status, styles.statusError]}>{download.message}</Text>
           ) : null}
           {download.phase === 'ready' && download.installError !== null ? (
-            <Text style={[setupText.small, styles.statusError]}>{download.installError}</Text>
+            <Text style={[styles.status, styles.statusError]}>{download.installError}</Text>
           ) : null}
-          <Text style={[setupText.small, setupText.dim]}>{UpdatesCopy.installHint}</Text>
+          <Text style={[styles.status, mutedText]}>{UpdatesCopy.installHint}</Text>
         </View>
       ) : null}
 
@@ -142,24 +140,17 @@ export default function UpdatesSection() {
         label={UpdatesCopy.checkButton}
         accessibilityLabel={UpdatesCopy.checkButton}
         busy={check.phase === 'checking'}
+        style={secondaryButton}
         onPress={() => void checkForUpdates()}
       />
-    </View>
+    </SettingsScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: 8,
-  },
-  header: {
-    color: SetupPalette.MUTED,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: 14,
-    marginBottom: 2,
+  status: {
+    fontSize: 12.5,
+    lineHeight: 18,
     paddingHorizontal: 4,
   },
   statusAccent: {

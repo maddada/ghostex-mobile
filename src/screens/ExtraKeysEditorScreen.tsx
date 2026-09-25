@@ -1,5 +1,5 @@
 /**
- * Extra-keys layout editor (Settings › Extra keys). Visual two-row editor over
+ * Extra-keys layout editor (Settings › Keyboard). Visual two-row editor over
  * the React Native key model (no raw Termux config text): select a chip to
  * move/remove it, add built-in keys from the catalog, or create custom actions
  * (insert text, insert text + Enter, shortcut with modifiers). Save validates
@@ -7,7 +7,7 @@
  * default layout.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -35,6 +35,8 @@ import {
   type ExtraKeysLayout,
 } from '../settings/extraKeys';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
+import type { Appearance } from '../theme/useAppearance';
+import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 const STATUS_LINE =
   'Customize the two key rows shown above the keyboard. Tap a key to move or remove it.';
@@ -63,6 +65,8 @@ function cloneLayout(layout: ExtraKeysLayout): ExtraKeysLayout {
 
 export default function ExtraKeysEditorScreen() {
   const navigation = useNavigation();
+  const appearance = useAppearanceHeader();
+  const styles = useMemo(() => createStyles(appearance), [appearance]);
   const savedLayout = useExtraKeysStore((state) => state.layout);
   const saveLayout = useExtraKeysStore((state) => state.saveLayout);
   const resetToDefault = useExtraKeysStore((state) => state.resetToDefault);
@@ -346,7 +350,7 @@ export default function ExtraKeysEditorScreen() {
                   autoCorrect={false}
                   maxLength={EXTRA_KEY_LABEL_MAX_LENGTH}
                   placeholder="e.g. GITST"
-                  placeholderTextColor={GhostexPalette.MUTED}
+                  placeholderTextColor={appearance.muted}
                   value={customDraft.label}
                   onChangeText={(label) => setCustomDraft({ ...customDraft, label })}
                 />
@@ -358,7 +362,7 @@ export default function ExtraKeysEditorScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       placeholder="e.g. c, escape, f5"
-                      placeholderTextColor={GhostexPalette.MUTED}
+                      placeholderTextColor={appearance.muted}
                       value={customDraft.shortcutKey}
                       onChangeText={(shortcutKey) => setCustomDraft({ ...customDraft, shortcutKey })}
                     />
@@ -370,9 +374,9 @@ export default function ExtraKeysEditorScreen() {
                           onValueChange={(value) =>
                             setCustomDraft({ ...customDraft, [modifier]: value })
                           }
-                          trackColor={{ false: '#3A3A3A', true: GhostexPalette.ACCENT }}
-                          thumbColor={customDraft[modifier] ? GhostexPalette.FOREGROUND : '#A8A8A8'}
-                          ios_backgroundColor="#3A3A3A"
+                          trackColor={{ false: appearance.control, true: GhostexPalette.ACCENT }}
+                          thumbColor={customDraft[modifier] ? appearance.foreground : appearance.controlThumb}
+                          ios_backgroundColor={appearance.control}
                         />
                       </View>
                     ))}
@@ -387,7 +391,7 @@ export default function ExtraKeysEditorScreen() {
                       multiline
                       maxLength={EXTRA_KEY_TEXT_MAX_LENGTH}
                       placeholder="e.g. git status"
-                      placeholderTextColor={GhostexPalette.MUTED}
+                      placeholderTextColor={appearance.muted}
                       value={customDraft.text}
                       onChangeText={(text) => setCustomDraft({ ...customDraft, text })}
                     />
@@ -410,200 +414,202 @@ export default function ExtraKeysEditorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GhostexPalette.BACKGROUND,
-  },
-  list: {
-    padding: 12,
-    gap: 10,
-  },
-  statusLine: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-  },
-  rowHeader: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: 8,
-    marginBottom: 6,
-    paddingHorizontal: 2,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    padding: 10,
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  chip: {
-    minWidth: 52,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  chipSelected: {
-    backgroundColor: GhostexPalette.ACCENT,
-    borderColor: 'transparent',
-  },
-  chipLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: GhostexPalette.FOREGROUND,
-  },
-  chipLabelSelected: {
-    color: '#FFFFFF',
-  },
-  chipAdd: {
-    backgroundColor: 'transparent',
-    borderStyle: 'dashed',
-  },
-  chipAddLabel: {
-    fontSize: 16,
-    color: GhostexPalette.MUTED,
-  },
-  selectionActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    height: 36,
-    borderRadius: GhostexRadii.row,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  actionLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 12,
-  },
-  actionLabelDestructive: {
-    color: '#FF6B6B',
-  },
-  examples: {
-    color: GhostexPalette.MUTED,
-    fontSize: 11,
-    marginTop: 4,
-  },
-  primaryButton: {
-    height: 44,
-    borderRadius: GhostexRadii.row,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GhostexPalette.ACCENT,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.45,
-  },
-  primaryButtonLabel: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    height: 44,
-    borderRadius: GhostexRadii.row,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    paddingHorizontal: 16,
-  },
-  secondaryButtonLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxHeight: '80%',
-    borderRadius: 14,
-    padding: 16,
-    gap: 8,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  modalScroll: {
-    flexGrow: 0,
-  },
-  modalTitle: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  modalSection: {
-    color: GhostexPalette.MUTED,
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  modalRow: {
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  modalRowLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-  },
-  modifierRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 40,
-    paddingHorizontal: 4,
-  },
-  fieldLabel: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    marginTop: 8,
-  },
-  input: {
-    minHeight: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    color: GhostexPalette.FOREGROUND,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-  },
-  inputMultiline: {
-    minHeight: 70,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 12,
-  },
-});
+function createStyles(appearance: Appearance) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: appearance.background,
+    },
+    list: {
+      padding: 12,
+      gap: 10,
+    },
+    statusLine: {
+      color: appearance.muted,
+      fontSize: 12,
+    },
+    rowHeader: {
+      color: appearance.muted,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 8,
+      marginBottom: 6,
+      paddingHorizontal: 2,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      padding: 10,
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    chip: {
+      minWidth: 52,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.3)',
+    },
+    chipSelected: {
+      backgroundColor: GhostexPalette.ACCENT,
+      borderColor: 'transparent',
+    },
+    chipLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: appearance.foreground,
+    },
+    chipLabelSelected: {
+      color: '#FFFFFF',
+    },
+    chipAdd: {
+      backgroundColor: 'transparent',
+      borderStyle: 'dashed',
+    },
+    chipAddLabel: {
+      fontSize: 16,
+      color: appearance.muted,
+    },
+    selectionActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    actionButton: {
+      flex: 1,
+      height: 36,
+      borderRadius: GhostexRadii.row,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    actionLabel: {
+      color: appearance.foreground,
+      fontSize: 12,
+    },
+    actionLabelDestructive: {
+      color: '#FF6B6B',
+    },
+    examples: {
+      color: appearance.muted,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    primaryButton: {
+      height: 44,
+      borderRadius: GhostexRadii.row,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: GhostexPalette.ACCENT,
+    },
+    primaryButtonDisabled: {
+      opacity: 0.45,
+    },
+    primaryButtonLabel: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    secondaryButton: {
+      height: 44,
+      borderRadius: GhostexRadii.row,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+      paddingHorizontal: 16,
+    },
+    secondaryButtonLabel: {
+      color: appearance.foreground,
+      fontSize: 14,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    modalCard: {
+      width: '100%',
+      maxHeight: '80%',
+      borderRadius: 14,
+      padding: 16,
+      gap: 8,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    modalScroll: {
+      flexGrow: 0,
+    },
+    modalTitle: {
+      color: appearance.foreground,
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    modalSection: {
+      color: appearance.muted,
+      fontSize: 11,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    modalRow: {
+      minHeight: 40,
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+    },
+    modalRowLabel: {
+      color: appearance.foreground,
+      fontSize: 14,
+    },
+    modifierRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      minHeight: 40,
+      paddingHorizontal: 4,
+    },
+    fieldLabel: {
+      color: appearance.muted,
+      fontSize: 12,
+      marginTop: 8,
+    },
+    input: {
+      minHeight: 40,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.3)',
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      color: appearance.foreground,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 14,
+    },
+    inputMultiline: {
+      minHeight: 70,
+      textAlignVertical: 'top',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 8,
+      marginTop: 12,
+    },
+  });
+}

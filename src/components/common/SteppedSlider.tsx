@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import type { Appearance } from '../../theme/useAppearance';
 
 type SteppedSliderProps = {
   label: string;
@@ -17,6 +18,8 @@ type SteppedSliderProps = {
   step: number;
   valueLabel: string;
   onValueChange: (value: number) => void;
+  /** Paints the card, text and track in these colors (Settings pages pass the current appearance). */
+  appearance?: Appearance;
 };
 
 export default function SteppedSlider({
@@ -27,6 +30,7 @@ export default function SteppedSlider({
   step,
   valueLabel,
   onValueChange,
+  appearance,
 }: SteppedSliderProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const range = maximumValue - minimumValue;
@@ -52,11 +56,22 @@ export default function SteppedSlider({
     onValueChange(Math.min(maximumValue, Math.max(minimumValue, value + delta * step)));
   };
 
+  const colors =
+    appearance === undefined
+      ? null
+      : {
+          card: { backgroundColor: appearance.card, borderColor: appearance.border },
+          label: { color: appearance.foreground },
+          muted: { color: appearance.muted },
+          track: { backgroundColor: appearance.control },
+          thumb: { backgroundColor: appearance.foreground },
+        };
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, colors?.card]}>
       <View style={styles.header}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value}>{valueLabel}</Text>
+        <Text style={[styles.label, colors?.label]}>{label}</Text>
+        <Text style={[styles.value, colors?.muted]}>{valueLabel}</Text>
       </View>
       <View
         accessible
@@ -80,14 +95,14 @@ export default function SteppedSlider({
         onResponderMove={handleTouch}
         onStartShouldSetResponder={() => true}
       >
-        <View style={styles.track}>
+        <View style={[styles.track, colors?.track]}>
           <View style={[styles.fill, { width: `${progress * 100}%` }]} />
         </View>
-        <View style={[styles.thumb, { left: `${progress * 100}%` }]} />
+        <View style={[styles.thumb, colors?.thumb, { left: `${progress * 100}%` }]} />
       </View>
       <View style={styles.rangeLabels}>
-        <Text style={styles.rangeLabel}>{minimumValue.toLocaleString('en-US')}</Text>
-        <Text style={styles.rangeLabel}>{maximumValue.toLocaleString('en-US')}</Text>
+        <Text style={[styles.rangeLabel, colors?.muted]}>{minimumValue.toLocaleString('en-US')}</Text>
+        <Text style={[styles.rangeLabel, colors?.muted]}>{maximumValue.toLocaleString('en-US')}</Text>
       </View>
     </View>
   );

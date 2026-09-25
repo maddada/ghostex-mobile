@@ -1,4 +1,5 @@
 import type { AddProjectSourceId } from '../addProject/client';
+import type { SettingsPageId } from '../screens/settings/pages';
 
 /**
  * Add/edit machine form params. `tailcatToken` prefills the Easy Connect
@@ -52,7 +53,10 @@ export type RootStackParamList = {
    * (a link such as `other.md#setup`).
    */
   DocViewer: { machineId: string; path: string; fragment?: string };
+  /** Settings home: the list of Settings pages. */
   Settings: undefined;
+  /** One Settings page (Theme, Chat, Terminal, Keyboard, Sounds, Connection, Updates, Advanced). */
+  SettingsPage: { page: SettingsPageId };
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;
   /** Add Project step 1: pick a source on an already-chosen machine. */

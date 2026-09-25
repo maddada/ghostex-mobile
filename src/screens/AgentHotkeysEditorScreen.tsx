@@ -23,12 +23,16 @@ import {
   type ConfigurableAgentId,
 } from '../settings/agentHotkeys';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
+import type { Appearance } from '../theme/useAppearance';
+import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 function makeHotkeyId(agentId: ConfigurableAgentId): string {
   return `${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export default function AgentHotkeysEditorScreen() {
+  const appearance = useAppearanceHeader();
+  const styles = useMemo(() => createStyles(appearance), [appearance]);
   const profiles = useAgentHotkeysStore((state) => state.profiles);
   const saveProfile = useAgentHotkeysStore((state) => state.saveProfile);
   const resetAgent = useAgentHotkeysStore((state) => state.resetAgent);
@@ -221,7 +225,7 @@ export default function AgentHotkeysEditorScreen() {
           autoCorrect={false}
           maxLength={AGENT_HOTKEY_LABEL_MAX_LENGTH}
           placeholder="e.g. HISTORY"
-          placeholderTextColor={GhostexPalette.MUTED}
+          placeholderTextColor={appearance.muted}
           style={styles.input}
           value={label}
           onChangeText={setLabel}
@@ -231,7 +235,7 @@ export default function AgentHotkeysEditorScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="e.g. Ctrl+R"
-          placeholderTextColor={GhostexPalette.MUTED}
+          placeholderTextColor={appearance.muted}
           style={styles.input}
           value={hotkey}
           onChangeText={setHotkey}
@@ -301,225 +305,227 @@ export default function AgentHotkeysEditorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GhostexPalette.BACKGROUND,
-  },
-  list: {
-    padding: 12,
-    paddingBottom: 28,
-    gap: 8,
-  },
-  status: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  sectionHeader: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: 14,
-    paddingHorizontal: 4,
-  },
-  fieldLabel: {
-    color: GhostexPalette.MUTED,
-    fontSize: 12,
-    paddingHorizontal: 4,
-    marginTop: 4,
-  },
-  dropdown: {
-    minHeight: 46,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  dropdownLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  dropdownChevron: {
-    color: GhostexPalette.MUTED,
-    fontSize: 20,
-  },
-  hotkeyRow: {
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    overflow: 'hidden',
-  },
-  hotkeyMain: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 3,
-  },
-  hotkeyLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  hotkeyChord: {
-    color: GhostexPalette.MUTED,
-    fontSize: 11,
-  },
-  rowActions: {
-    flexDirection: 'row',
-    gap: 4,
-    paddingRight: 7,
-  },
-  smallButton: {
-    width: 30,
-    height: 32,
-    borderRadius: GhostexRadii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GhostexPalette.BACKGROUND,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  smallButtonLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 15,
-  },
-  removeLabel: {
-    color: '#FF7B72',
-    fontSize: 19,
-    lineHeight: 20,
-  },
-  disabled: {
-    opacity: 0.3,
-  },
-  emptyCard: {
-    minHeight: 52,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  emptyText: {
-    color: GhostexPalette.MUTED,
-    fontSize: 13,
-  },
-  input: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.INPUT_BACKGROUND,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-  },
-  help: {
-    color: GhostexPalette.MUTED,
-    fontSize: 11,
-    lineHeight: 16,
-    paddingHorizontal: 4,
-  },
-  editorActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  primaryButton: {
-    minHeight: 44,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.ACCENT,
-  },
-  primaryButtonLabel: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    minHeight: 44,
-    paddingHorizontal: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  secondaryButtonLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 14,
-  },
-  resetButton: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  resetButtonLabel: {
-    color: '#FF7B72',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  backdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-  },
-  pickerCard: {
-    width: '100%',
-    maxWidth: 420,
-    padding: 14,
-    gap: 6,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: GhostexPalette.CARD,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: GhostexPalette.BORDER,
-  },
-  pickerTitle: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 17,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  pickerRow: {
-    minHeight: 46,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: GhostexRadii.row,
-    backgroundColor: GhostexPalette.BACKGROUND,
-  },
-  pickerRowLabel: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 15,
-  },
-  selectedMark: {
-    color: GhostexPalette.ACCENT,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-});
+function createStyles(appearance: Appearance) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: appearance.background,
+    },
+    list: {
+      padding: 12,
+      paddingBottom: 28,
+      gap: 8,
+    },
+    status: {
+      color: appearance.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 4,
+    },
+    sectionHeader: {
+      color: appearance.muted,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 14,
+      paddingHorizontal: 4,
+    },
+    fieldLabel: {
+      color: appearance.muted,
+      fontSize: 12,
+      paddingHorizontal: 4,
+      marginTop: 4,
+    },
+    dropdown: {
+      minHeight: 46,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    dropdownLabel: {
+      color: appearance.foreground,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    dropdownChevron: {
+      color: appearance.muted,
+      fontSize: 20,
+    },
+    hotkeyRow: {
+      minHeight: 54,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+      overflow: 'hidden',
+    },
+    hotkeyMain: {
+      flex: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 3,
+    },
+    hotkeyLabel: {
+      color: appearance.foreground,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    hotkeyChord: {
+      color: appearance.muted,
+      fontSize: 11,
+    },
+    rowActions: {
+      flexDirection: 'row',
+      gap: 4,
+      paddingRight: 7,
+    },
+    smallButton: {
+      width: 30,
+      height: 32,
+      borderRadius: GhostexRadii.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: appearance.background,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    smallButtonLabel: {
+      color: appearance.foreground,
+      fontSize: 15,
+    },
+    removeLabel: {
+      color: '#FF7B72',
+      fontSize: 19,
+      lineHeight: 20,
+    },
+    disabled: {
+      opacity: 0.3,
+    },
+    emptyCard: {
+      minHeight: 52,
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    emptyText: {
+      color: appearance.muted,
+      fontSize: 13,
+    },
+    input: {
+      minHeight: 44,
+      paddingHorizontal: 12,
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.input,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+      color: appearance.foreground,
+      fontSize: 14,
+    },
+    help: {
+      color: appearance.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      paddingHorizontal: 4,
+    },
+    editorActions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 4,
+    },
+    primaryButton: {
+      minHeight: 44,
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: GhostexPalette.ACCENT,
+    },
+    primaryButtonLabel: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      minHeight: 44,
+      paddingHorizontal: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    secondaryButtonLabel: {
+      color: appearance.foreground,
+      fontSize: 14,
+    },
+    resetButton: {
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    resetButtonLabel: {
+      color: '#FF7B72',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    backdrop: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      backgroundColor: 'rgba(0,0,0,0.72)',
+    },
+    pickerCard: {
+      width: '100%',
+      maxWidth: 420,
+      padding: 14,
+      gap: 6,
+      borderRadius: GhostexRadii.card,
+      backgroundColor: appearance.card,
+      borderWidth: GhostexStrokeWidth,
+      borderColor: appearance.border,
+    },
+    pickerTitle: {
+      color: appearance.foreground,
+      fontSize: 17,
+      fontWeight: '700',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    pickerRow: {
+      minHeight: 46,
+      paddingHorizontal: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderRadius: GhostexRadii.row,
+      backgroundColor: appearance.background,
+    },
+    pickerRowLabel: {
+      color: appearance.foreground,
+      fontSize: 15,
+    },
+    selectedMark: {
+      color: GhostexPalette.ACCENT,
+      fontSize: 17,
+      fontWeight: '700',
+    },
+  });
+}
