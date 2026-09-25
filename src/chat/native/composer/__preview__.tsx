@@ -98,6 +98,7 @@ function useFakeChat(scene: string): RustChat {
       },
       dispatch: (action) => fakeDispatch(action),
       measure: () => undefined,
+      setTitle: () => undefined,
       composer: {
         edited: (text, selection) => model.edited(text, selection),
         selected: (selection) => model.selected(selection),
@@ -127,7 +128,7 @@ function Preview() {
         {SCENE === 'more' ? (
           <MenuSheet rows={moreActionsRows({ document: doc, verbose: false, available: () => true, serves: () => true })} onClose={() => undefined} onCommand={() => true} />
         ) : null}
-        {SCENE === 'model' ? <ModelMenuSheet menu={doc.modelMenu as never} visible onClose={() => undefined} dispatch={() => undefined} /> : null}
+        {SCENE === 'model' ? <ModelMenuSheet menu={doc.modelMenu as never} visible ownProvider="claude" onClose={() => undefined} dispatch={() => undefined} /> : null}
         {SCENE === 'mode' ? <MenuSheet rows={(doc.optionMenus as { mode: never[] }).mode} onClose={() => undefined} onCommand={() => true} /> : null}
         {SCENE === 'contextMeter' ? <MenuSheet rows={[{ context: doc.contextMeter }]} onClose={() => undefined} onCommand={() => true} /> : null}
         {SCENE === 'accounts' ? <MenuSheet rows={[{ accounts: doc.accountPanel }]} onClose={() => undefined} onCommand={() => true} /> : null}

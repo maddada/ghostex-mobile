@@ -175,7 +175,8 @@ const useStyles = themedStyles((P) => ({
     flexShrink: 1,
     minWidth: 0,
   },
-  pillMerged: { maxWidth: 230 },
+  // The merged pill's cap on desktop (`option_pills.rs`), so the suffix gives way at the same width.
+  pillMerged: { maxWidth: 248 },
   pressed: { backgroundColor: P.border },
   pillText: { color: P.primary, fontSize: 13, flexShrink: 1 },
   suffix: { color: P.mutedInk(0.8) },

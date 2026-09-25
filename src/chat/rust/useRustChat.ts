@@ -28,6 +28,8 @@ export type RustChat = {
   state: RustChatState | null;
   dispatch(action: UserAction): void;
   measure(measurement: ChatMeasurement): void;
+  /** Pushes the session's display title into the core (see `RustChatHost.setTitle`). */
+  setTitle(title: string | null): void;
   composer: RustChatHost['composerInput'] | null;
   attachFiles(files: readonly { uri: string; name?: string }[]): Promise<void>;
   /** One of the core's pure helpers (see `RustChatHost.query`); null while no core runs. */
@@ -68,6 +70,7 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
 
   const dispatch = useCallback((action: UserAction) => host?.dispatch(action), [host]);
   const measure = useCallback((measurement: ChatMeasurement) => host?.measure(measurement), [host]);
+  const setTitle = useCallback((title: string | null) => host?.setTitle(title), [host]);
   const attachFiles = useCallback(
     (files: readonly { uri: string; name?: string }[]) => host?.attachFiles(files) ?? Promise.resolve(),
     [host]
@@ -81,7 +84,7 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
     [host]
   );
   return useMemo<RustChat>(
-    () => ({ state, dispatch, measure, composer: host?.composerInput ?? null, attachFiles, query, onViewRequest }),
-    [host, state, dispatch, measure, attachFiles, query, onViewRequest]
+    () => ({ state, dispatch, measure, setTitle, composer: host?.composerInput ?? null, attachFiles, query, onViewRequest }),
+    [host, state, dispatch, measure, setTitle, attachFiles, query, onViewRequest]
   );
 }

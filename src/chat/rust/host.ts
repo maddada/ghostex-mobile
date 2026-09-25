@@ -290,6 +290,20 @@ export class RustChatHost {
   }
 
   /**
+   * The session's display title, which the boot read leaves null on the phone (`boot.ts`): the
+   * screen pushes it from the inventory once it knows it, and again on a rename, the way desktop's
+   * host pushes `chatSettings`. Save to Markdown suggests its file name from it and the context
+   * meter shows it.
+   */
+  setTitle(title: string | null): void {
+    if (title === this.title) return;
+    this.title = title;
+    this.enqueue({ type: 'settingsChanged', settings: { hideAccountEmails: false, title } });
+  }
+
+  private title: string | null = null;
+
+  /**
    * One of the core's pure helpers (`composerReferences`, `referenceMenu`, `composerKeyIntent`,
    * `transcriptMenu`, `sendBlockedToast`), answered synchronously the way desktop's paint calls
    * `nativeChat.<name>`. Returns the parsed answer, or null when the core is not running.
@@ -449,6 +463,11 @@ export class RustChatHost {
         }
         this.composer.init(read, this.target.sessionId);
         answers.push({ type: 'composerBootRead', read });
+        // The boot read clears the core's title, and a retried read comes after `setTitle` already
+        // pushed it, so the known title goes back in behind every read.
+        if (this.title !== null) {
+          answers.push({ type: 'settingsChanged', settings: { hideAccountEmails: false, title: this.title } });
+        }
         return;
       }
       case 'readRetainedSnapshot':

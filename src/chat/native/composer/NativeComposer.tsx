@@ -70,6 +70,20 @@ const FOOTER_GAP = 8;
 const CLEARANCE = 8;
 const INPUT_MAX_HEIGHT = 168;
 
+/** How often a composer focus may re-read the agent's screen for the readiness light. */
+const TAIL_READ_INTERVAL_MS = 15_000;
+
+/**
+ * Only a measured verdict tints the Terminal View glyph (`terminal_ready.rs`): `unknown`, an
+ * unreadable screen and the time before the first read keep the footer colour.
+ */
+function terminalReadinessTint(document: ChatDocument): string | null {
+  const readiness = document.terminalTail?.readiness;
+  if (readiness === 'ready') return '#a6e3b1';
+  if (readiness === 'notReady') return '#f0a3a3';
+  return null;
+}
+
 const CONTROL_GLYPHS: Record<ComposerControlId, GlyphName> = {
   summary: 'list-details',
   note: 'note',
@@ -300,8 +314,27 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const openMore = useCallback(() => {
     if (document === null) return;
     const verbose = document.verboseOverride ?? verboseSetting;
-    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves }) });
-  }, [available, document, serves, verboseSetting]);
+    // Send's own menu on desktop (`show_send_actions`), which a phone has no right press to open.
+    const compactAndSend =
+      model !== null && model.text.trim().length > 0
+        ? { disabled: !(model.ready && !model.pendingSend && document.queue.capabilities.canQueue) }
+        : null;
+    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves, compactAndSend }) });
+  }, [available, document, model, serves, verboseSetting]);
+
+  /**
+   * The Terminal View button's readiness light reads the agent's screen on hover or focus on
+   * desktop (`terminal_ready.rs`), never on a timer. A phone has no hover, so the composer taking
+   * focus reads it, at most once per `TAIL_READ_INTERVAL_MS`.
+   */
+  const lastTailRead = useRef(0);
+  const readTerminalTail = useCallback(() => {
+    if (!available('terminal')) return;
+    const now = Date.now();
+    if (now - lastTailRead.current < TAIL_READ_INTERVAL_MS) return;
+    lastTailRead.current = now;
+    dispatch({ type: 'terminalTailHover' });
+  }, [available, dispatch]);
 
   // ---- layout ------------------------------------------------------------------------------------
 
@@ -348,6 +381,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                   focused: () => {
                     setFocused(true);
                     input.focused();
+                    readTerminalTail();
                   },
                   blurred: () => {
                     setFocused(false);
@@ -400,6 +434,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                         label={control.label}
                         pressed={pressed}
                         badge={badge}
+                        tint={control.id === 'terminal' ? terminalReadinessTint(document) : null}
                         onPress={() => performComposerAction(control.action)}
                         {...(control.id === 'stash' && serves('stashedPrompts') ? { onLongPress: () => host('stashedPrompts') } : {})}
                       />
@@ -434,6 +469,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
       <ModelMenuSheet
         menu={obj(document?.modelMenu)}
         visible={menu?.kind === 'model'}
+        ownProvider={str(document?.modelMenuContext, 'provider')}
         onClose={closeMenu}
         dispatch={dispatch}
       />
@@ -450,6 +486,7 @@ function ToolbarButton({
   pressed = false,
   badge = null,
   disabled = false,
+  tint = null,
 }: {
   glyph: GlyphName;
   label: string;
@@ -459,6 +496,8 @@ function ToolbarButton({
   /** Text badge (the stash count), `''` for a presence dot, null for none. */
   badge?: string | null;
   disabled?: boolean;
+  /** A glyph colour that carries meaning (the Terminal View button's readiness light). */
+  tint?: string | null;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -473,7 +512,7 @@ function ToolbarButton({
       {...(onLongPress !== undefined ? { onLongPress } : {})}
       style={({ pressed: touching }) => [styles.control, pressed || touching ? styles.controlPressed : null]}
     >
-      <Glyph name={glyph} size={18} color={pressed ? P.controlPrimary : P.primary} />
+      <Glyph name={glyph} size={18} color={tint ?? (pressed ? P.controlPrimary : P.primary)} />
       {badge !== null ? (
         <View style={badge.length === 0 ? styles.dot : styles.badge}>
           {badge.length > 0 ? <Text style={styles.badgeText}>{badge}</Text> : null}

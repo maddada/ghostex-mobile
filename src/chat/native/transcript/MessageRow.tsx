@@ -16,6 +16,7 @@ import { ImageRow } from './Images';
 import { arr, obj, str } from './json';
 import { Markdown } from './markdown/Markdown';
 import { hasReplyActions, ReplyActions, UserActions } from './MessageActions';
+import { openTranscriptMenu } from './transcriptMenuStore';
 import { useDisclosure } from './state';
 import { estimatedLines, InterAgentCard, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
 import { PROSE_LINE, PROSE_SIZE } from './theme';
@@ -35,9 +36,23 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Proje
   return <AgentMessage message={message} proseColor={theme.prose} />;
 });
 
+/**
+ * The long press that opens the transcript menu on a message (desktop's right press), with the
+ * message's own text as the selection. Only the main transcript has the menu (`TranscriptMenu.tsx`).
+ */
+function useMessageMenu(message: ProjectedMessage): (() => void) | undefined {
+  const { main } = useTranscriptEnv();
+  const selection = typeof message.copyText === 'string' ? message.copyText : '';
+  return main && selection.trim().length > 0 ? () => openTranscriptMenu({ selection }) : undefined;
+}
+
+const MENU_HINT = 'Long press for Copy and Add to Chat';
+
 function UserMessage({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
   const body = typeof message.text === 'string' ? message.text : '';
+  const openMenu = useMessageMenu(message);
+  const bubble = <Markdown text={body} references={message.markdownReferences} color={theme.primary} breaks selectable={openMenu === undefined} />;
   return (
     <View style={styles.message} accessibilityLabel={`user message: ${body.slice(0, 2000)}`}>
       <StartupDelivery message={message} />
@@ -47,9 +62,17 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
       <ImageRow images={message.images} user />
       <View style={styles.userColumn}>
         {body.length > 0 ? (
-          <View style={[styles.bubble, { backgroundColor: theme.input }]}>
-            <Markdown text={body} references={message.markdownReferences} color={theme.primary} breaks />
-          </View>
+          openMenu !== undefined ? (
+            <Pressable
+              onLongPress={openMenu}
+              accessibilityHint={MENU_HINT}
+              style={({ pressed }) => [styles.bubble, { backgroundColor: theme.input }, pressed && { opacity: 0.85 }]}
+            >
+              {bubble}
+            </Pressable>
+          ) : (
+            <View style={[styles.bubble, { backgroundColor: theme.input }]}>{bubble}</View>
+          )
         ) : null}
         <UserActions message={message} />
       </View>
@@ -68,6 +91,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const hasTools = arr(message.tools).length > 0;
   const toolsKey = reasoning ? `reasoning:${id}` : `tools:${id}`;
   const [toolsOpen, toggleTools] = useDisclosure(disclosures, toolsKey, verbose);
+  const openMenu = useMessageMenu(message);
   let lead = null;
   let toolsRendered = false;
   if (body.length > 0) {
@@ -94,7 +118,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
         <View style={styles.heading}>
           {hasTools ? <Chevron open={toolsOpen} color={theme.primary} /> : <LaneMarker color={theme.primary} />}
           <View style={styles.headingBody}>
-            <Markdown text={body} references={message.markdownReferences} color={proseColor} />
+            <Markdown text={body} references={message.markdownReferences} color={proseColor} selectable={openMenu === undefined} />
           </View>
         </View>
       );
@@ -102,6 +126,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
         <>
           <Pressable
             onPress={toggleTools}
+            {...(openMenu !== undefined ? { onLongPress: openMenu } : {})}
             accessibilityRole='button'
             accessibilityState={{ expanded: toolsOpen }}
             accessibilityHint={toolsOpen ? 'Hide tool calls for this message' : 'Show tool calls for this message'}
@@ -115,6 +140,10 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
             </DisclosureBody>
           ) : null}
         </>
+      ) : openMenu !== undefined ? (
+        <Pressable onLongPress={openMenu} accessibilityHint={MENU_HINT} style={({ pressed }) => [styles.headingPress, pressed && { backgroundColor: theme.pressed }]}>
+          {heading}
+        </Pressable>
       ) : (
         heading
       );

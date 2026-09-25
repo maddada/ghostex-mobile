@@ -4,35 +4,116 @@
  * shows something more specific (compaction, running shells), the activity card with its clock
  * and progress. Every word, clock and percent comes from the document; the strip only animates.
  *
- * Desktop's armed Delayed Send / Close After Done items come from the app shell, not the
- * document, and the phone has no Delayed Actions modal, so they are not drawn.
+ * The armed Delayed Send / Close After Done items on the right of the row come from the app shell,
+ * not the document (desktop's `armed_actions`); the screen builds them from the session's row in the
+ * inventory (`armedActions`) and a tap opens Delayed Actions, as desktop's click does.
  */
 
 import { useState } from 'react';
-import { Animated, Easing, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
+import { Glyph as ComposerGlyph } from '../composer/icons';
 import { Glyph, Spark } from './icons';
 import { isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { PulseDot, Spinner, StatusCard, useLoop } from './primitives';
 
 /** `packages/shared/session-chat-presentation/working-strip.json`. */
-const VISUAL = { minHeight: 24, paddingX: 6, gap: 8, sparkBox: 16, sparkSize: 14, fontSize: 12.5, pulseMs: 1600, spinMs: 9000 };
+const VISUAL = {
+  minHeight: 24,
+  paddingX: 6,
+  gap: 8,
+  sparkBox: 16,
+  sparkSize: 14,
+  fontSize: 12.5,
+  pulseMs: 1600,
+  spinMs: 9000,
+  armedIconGap: 6,
+  armedColumnGap: 16,
+  armedRowGap: 2,
+  delayedSendColor: '#f6c945',
+  closeAfterDoneColor: '#ff9aa2',
+};
 
-export function WorkingStrip({ document }: { document: ChatDocument }) {
+/** One armed timer on the working row (`SessionChatArmedAction` in `armed-actions.ts`). */
+export type ArmedAction = { id: 'delayedSend' | 'closeAfterDone'; label: string };
+
+export function WorkingStrip({
+  document,
+  armed = [],
+  onArmedPress,
+}: {
+  document: ChatDocument;
+  armed?: readonly ArmedAction[];
+  /** Opens Delayed Actions; without it the items are drawn but not pressable. */
+  onArmedPress?: () => void;
+}) {
   const styles = useStyles();
   const strip = document.workingStrip;
   const activity = obj(strip?.presentation);
-  if (activity !== null) return <WorkingActivity activity={activity} />;
+  if (activity !== null) {
+    if (armed.length === 0) return <WorkingActivity activity={activity} />;
+    return (
+      <View style={styles.stack}>
+        <WorkingActivity activity={activity} />
+        <WorkingRow label={null} armed={armed} onArmedPress={onArmedPress} />
+      </View>
+    );
+  }
   const label = typeof strip?.label === 'string' ? strip.label : null;
-  if (label === null) return null;
+  if (label === null && armed.length === 0) return null;
+  return <WorkingRow label={label} armed={armed} onArmedPress={onArmedPress} />;
+}
+
+/**
+ * The working row: spark and word on the left while the agent works, the armed items pushed right,
+ * wrapping onto a left-aligned second line when they do not fit (`working_row`).
+ */
+function WorkingRow({
+  label,
+  armed,
+  onArmedPress,
+}: {
+  label: string | null;
+  armed: readonly ArmedAction[];
+  onArmedPress: (() => void) | undefined;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const aria = [label, ...armed.map((action) => action.label)].filter((part): part is string => part !== null).join(', ');
   return (
-    <View accessibilityRole="text" accessibilityLabel={label} style={styles.row}>
-      <WorkingSpark />
-      <Text style={styles.word} numberOfLines={1}>
-        {label}
-      </Text>
+    <View accessibilityRole="text" accessibilityLabel={aria} style={styles.row}>
+      <View style={styles.lead}>
+        {label !== null ? (
+          <>
+            <WorkingSpark />
+            <Text style={styles.word} numberOfLines={1}>
+              {label}
+            </Text>
+          </>
+        ) : null}
+      </View>
+      {armed.map((action) => (
+        <Pressable
+          key={action.id}
+          disabled={onArmedPress === undefined}
+          onPress={onArmedPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${action.label}. Manage delayed actions`}
+          hitSlop={6}
+          style={({ pressed }) => [styles.armed, pressed ? styles.armedPressed : null]}
+        >
+          <View style={styles.sparkBox}>
+            <ComposerGlyph
+              name="clock"
+              size={VISUAL.sparkSize}
+              color={action.id === 'delayedSend' ? VISUAL.delayedSendColor : VISUAL.closeAfterDoneColor}
+            />
+          </View>
+          <Text style={[styles.armedLabel, { color: P.foreground }]}>{action.label}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -127,8 +208,36 @@ const useStyles = themedStyles((P) => ({
     minHeight: VISUAL.minHeight,
     paddingHorizontal: VISUAL.paddingX,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: VISUAL.armedColumnGap,
+    rowGap: VISUAL.armedRowGap,
+  },
+  lead: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: VISUAL.gap,
+    minWidth: 0,
+    flexShrink: 1,
+    marginRight: 'auto',
+  },
+  stack: {
+    width: '100%',
+    gap: 8,
+  },
+  armed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: VISUAL.armedIconGap,
+    minWidth: 0,
+  },
+  armedPressed: {
+    opacity: 0.8,
+  },
+  armedLabel: {
+    flexShrink: 1,
+    fontSize: VISUAL.fontSize,
+    lineHeight: VISUAL.fontSize * 1.5,
   },
   sparkBox: {
     width: VISUAL.sparkBox,

@@ -8,23 +8,36 @@
  * preview, rewind confirmation) go over everything. The screen also performs the view requests the
  * core hands the phone (copy, toast, open, Save to Markdown, app-shell actions), the way desktop's
  * `apply_output` and the app shell do.
+ *
+ * CDXC:SessionChat 2026-09-25 DECISION:
+ * User: "Ok i want parity between the chat in gpui and mobile." Every feature of the GPUI chat view
+ * (`apps/desktop/src/app/native_chat/`) has its phone form here, drawn from the same core document
+ * and sending the same actions; only the gesture changes where desktop uses hover, a right press or
+ * a keyboard (long presses and sheets). A desktop feature the phone leaves out is one tied to the
+ * desktop itself (hover, keyboard shortcuts, windows and glass, the Chat Lab), or one that needs an
+ * app-level screen or setting the chat cannot add on its own.
  */
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Linking, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { docPathForChatFile } from '../../docs/openDoc';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import type { RootStackParamList } from '../../navigation/types';
+import { webPreviewTargetForUrl } from '../../webPreview/routing';
 import { useOpenMachineLink } from '../../webPreview/useOpenMachineLink';
 import type { ChatViewRequest } from '../rust/effects';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
-import { NativeChatCards, NativeChatOverlays, questionReplacesComposer } from './cards';
+import { useArmedActions } from './armedActions';
+import { ForkBranchBadge, NativeChatCards, NativeChatOverlays, questionReplacesComposer } from './cards';
 import { NativeComposer } from './composer';
+import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
+import type { MenuRow } from './composer/MenuSheet';
+import { openForkBranch } from './sessionShell';
 import {
   NativeChatUiProvider,
   NativeTranscript,
@@ -33,6 +46,8 @@ import {
   useSubagentRowRenderer,
   useTranscriptTheme,
 } from './transcript';
+import { SaveMarkdownDialog } from './transcript/SaveMarkdownDialog';
+import { TranscriptMenuSheet, type TranscriptMenuHost } from './transcript/TranscriptMenu';
 
 export type NativeChatScreenProps = {
   machine: MachineConnectionTarget;
@@ -75,19 +90,55 @@ export default function NativeChatScreen({
   const chat = useRustChat({ machine, projectId, sessionId });
   const theme = useTranscriptTheme();
   const document = chat.state?.document ?? null;
-  const toast = useChatViewRequests(chat, machine.id, projectId, onSwitchToTerminal);
+  const [handoff, setHandoff] = useState<HandoffRequest | null>(null);
+  // Both ways in (More actions, the model menu) arrive as their own sheet is still sliding away, and
+  // iOS drops a modal presented during another's dismissal; Android's dialogs have no such wait.
+  const openHandoff = useCallback((next: HandoffRequest) => {
+    if (Platform.OS === 'ios') setTimeout(() => setHandoff(next), HANDOFF_OPEN_DELAY_MS);
+    else setHandoff(next);
+  }, []);
+  const { toast, show } = useChatViewRequests(chat, machine, projectId, onSwitchToTerminal, openHandoff);
+  const menuHost = useTranscriptMenuHost(machine.id, projectId, show);
+
+  // The session title the core names saved files after and shows in the context meter.
+  const title = useInventoryStore(
+    (store) => store.inventoriesByMachineId[machine.id]?.summary?.sessions.find((entry) => entry.sessionId === sessionId)?.displayTitle ?? ''
+  );
+  const { setTitle } = chat;
+  useEffect(() => {
+    setTitle(title.length > 0 ? title : null);
+  }, [setTitle, title]);
+
+  // Armed Delayed Send / Close After Done on the working row; a tap opens Delayed Actions.
+  const armed = useArmedActions(machine.id, sessionId);
+  const openDelayedActions = useMemo(
+    () => (hostActions.includes('delayedActions') && onHostAction !== undefined ? () => onHostAction('delayedActions', {}) : undefined),
+    [hostActions, onHostAction]
+  );
 
   // The notice card's Switch account opens the composer's Accounts & limits panel.
   const [accountsRequestId, setAccountsRequestId] = useState(0);
+  // More actions > Handoff / Export opens the chat's own dialog, the one the model menu's handoff opens.
+  const exportCount = useRef(0);
   const hostAction = useCallback(
     (action: string, params: Record<string, unknown> = {}) => {
       if (action === 'terminalView' || action === 'switchToTerminal') onSwitchToTerminal();
       else if (action === 'switchAccount' && Object.keys(params).length === 0) setAccountsRequestId((current) => current + 1);
-      else if (hostActions.includes(action)) onHostAction?.(action, params);
+      else if (action === 'exportTranscript') {
+        exportCount.current += 1;
+        openHandoff({ id: -exportCount.current, target: null });
+      } else if (hostActions.includes(action)) onHostAction?.(action, params);
     },
-    [hostActions, onHostAction, onSwitchToTerminal]
+    [hostActions, onHostAction, onSwitchToTerminal, openHandoff]
   );
-  const composerHostActions = useMemo(() => ['terminalView', ...hostActions], [hostActions]);
+  const composerHostActions = useMemo(
+    () => [
+      'terminalView',
+      ...(sessionId.length > 0 && projectId.length > 0 ? ['exportTranscript'] : []),
+      ...hostActions.filter((action) => action !== 'exportTranscript'),
+    ],
+    [hostActions, projectId, sessionId]
+  );
 
   // The header's requests, one per new value (0 runs nothing).
   const handledSearch = useRef(openSearchRequestId);
@@ -121,10 +172,21 @@ export default function NativeChatScreen({
         <TranscriptSearchBar chat={chat} />
         <View style={styles.transcript}>
           <NativeTranscript chat={chat} />
+          <ForkBranchBadge chat={chat} />
         </View>
-        <NativeChatCards chat={chat} onHostAction={hostAction} />
+        <NativeChatCards chat={chat} onHostAction={hostAction} armed={armed} {...(openDelayedActions !== undefined ? { onArmedPress: openDelayedActions } : {})} />
         {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} hostActions={composerHostActions} openAccountsRequestId={accountsRequestId} />}
         <RewindDialog chat={chat} />
+        <SaveMarkdownDialog chat={chat} />
+        <TranscriptMenuSheet chat={chat} host={menuHost} />
+        <HandoffSheet
+          request={handoff}
+          machine={machine}
+          projectId={projectId}
+          sessionId={sessionId}
+          onClose={() => setHandoff(null)}
+          onFailure={(failure, message) => show(message, true, failure)}
+        />
         <NativeChatOverlays chat={chat} renderTranscriptItem={renderSubagentRow} />
         <ChatToast toast={toast} />
       </View>
@@ -143,11 +205,14 @@ type Toast = { id: number; title?: string; message: string; error: boolean } | n
  */
 function useChatViewRequests(
   chat: RustChat,
-  machineId: string,
+  machine: MachineConnectionTarget,
   projectId: string,
-  onSwitchToTerminal: () => void
-): Toast {
+  onSwitchToTerminal: () => void,
+  onHandoff: (request: HandoffRequest) => void
+): { toast: Toast; show: (message: string, error: boolean, title?: string) => void } {
+  const machineId = machine.id;
   const openMachineLink = useOpenMachineLink();
+  const handoffs = useRef(0);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [toast, setToast] = useState<Toast>(null);
   const counter = useRef(0);
@@ -170,12 +235,7 @@ function useChatViewRequests(
             if (request.target.kind === 'url') openMachineLink(machineId, request.target.url);
             else {
               // Markdown and HTML open in the Docs viewer; a relative path is the session project's.
-              const projectPath =
-                useInventoryStore
-                  .getState()
-                  .inventoriesByMachineId[machineId]?.summary?.projects.find((project) => project.projectId === projectId)
-                  ?.path ?? '';
-              const docPath = docPathForChatFile(request.target.path, projectPath);
+              const docPath = docPathForChatFile(request.target.path, projectPathFor(machineId, projectId));
               if (docPath !== null) {
                 navigation.push('DocViewer', { machineId, path: docPath });
                 return;
@@ -189,16 +249,93 @@ function useChatViewRequests(
             void Clipboard.setStringAsync(request.path);
             show('Saved to Markdown', false);
             return;
-          case 'hostAction':
+          case 'hostAction': {
             if (request.action === 'switchToTerminal' || request.action === 'terminalView') onSwitchToTerminal();
+            else if (request.action === 'selectForkBranch') {
+              void openForkBranch(machine, request.params).catch(() =>
+                show('The session could not be resumed. Try again from the sessions list.', true, 'Could not open that branch')
+              );
+            } else if (request.action === 'handoffToModel') {
+              const params = (typeof request.params === 'object' && request.params !== null ? request.params : {}) as Record<string, unknown>;
+              const text = (key: string): string => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
+              if (text('provider').length === 0 || text('model').length === 0) return;
+              handoffs.current += 1;
+              const next: HandoffRequest = {
+                id: handoffs.current,
+                target: { provider: text('provider'), model: text('model'), effort: text('effort') },
+              };
+              onHandoff(next);
+            }
             return;
+          }
           case 'focusComposer':
             return;
         }
       }),
-    [chat.onViewRequest, machineId, navigation, onSwitchToTerminal, openMachineLink, projectId, show] // eslint-disable-line react-hooks/exhaustive-deps
+    [chat.onViewRequest, machine, machineId, navigation, onHandoff, onSwitchToTerminal, openMachineLink, projectId, show] // eslint-disable-line react-hooks/exhaustive-deps
   );
-  return toast;
+  return { toast, show };
+}
+
+/** How long the Handoff sheet waits on iOS for the sheet it was opened from to finish going away. */
+const HANDOFF_OPEN_DELAY_MS = 450;
+
+/** The project's folder on the machine, which a relative chat file path is under. */
+function projectPathFor(machineId: string, projectId: string): string {
+  return (
+    useInventoryStore
+      .getState()
+      .inventoriesByMachineId[machineId]?.summary?.projects.find((project) => project.projectId === projectId)
+      ?.path ?? ''
+  );
+}
+
+/**
+ * What the transcript menu's rows do on the phone (desktop's `handle_action` and the app shell's
+ * `openLink` / `openFile` / `locateFile`). Rows the phone cannot perform are left out: Open in
+ * Code (the phone has no code editor), Open File/Folder Location (the file is on the computer), and
+ * Open in Docs for a file the Docs viewer cannot show.
+ */
+function useTranscriptMenuHost(
+  machineId: string,
+  projectId: string,
+  show: (message: string, error: boolean, title?: string) => void
+): TranscriptMenuHost {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  return useMemo<TranscriptMenuHost>(() => {
+    const docPath = (command: MenuRow): string | null =>
+      typeof command.path === 'string' ? docPathForChatFile(command.path, projectPathFor(machineId, projectId)) : null;
+    return {
+      serves: (command) => {
+        const type = command.type;
+        if (type === 'copyText') return true;
+        if (type !== 'host') return false;
+        if (command.action === 'openLink') return typeof command.url === 'string';
+        if (command.action === 'openFile') return command.view === 'docs' && docPath(command) !== null;
+        return false;
+      },
+      perform: (command) => {
+        if (command.type === 'copyText') {
+          void Clipboard.setStringAsync(typeof command.text === 'string' ? command.text : '');
+          show('Copied', false);
+          return;
+        }
+        if (command.action === 'openLink' && typeof command.url === 'string') {
+          const url = command.url;
+          if (command.external === true) {
+            void Linking.openURL(url).catch(() => undefined);
+            return;
+          }
+          navigation.navigate('WebPreview', { machineId, ...(webPreviewTargetForUrl(url) ?? { url }) });
+          return;
+        }
+        if (command.action === 'openFile') {
+          const path = docPath(command);
+          if (path !== null) navigation.push('DocViewer', { machineId, path });
+        }
+      },
+    };
+  }, [machineId, navigation, projectId, show]);
 }
 
 /** A short-lived toast at the top of the chat. */

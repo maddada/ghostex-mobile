@@ -1,6 +1,6 @@
 /**
  * The action row under a message (desktop `message_actions.rs`, React `CopyFooter`): a final
- * reply's Copy then its time, starting at the prose column; a prompt's time then Rewind, Save
+ * reply's Copy and Save to md then its time, starting at the prose column; a prompt's time then Rewind, Save
  * prompt and Copy, right-aligned under the bubble. A phone has no hover, so the row always shows
  * (React's `@media (pointer: coarse)` rule).
  */
@@ -13,6 +13,7 @@ import type { ProjectedMessage } from '../../rust/document';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { Glyph, type GlyphName } from './icons';
 import { obj, str } from './json';
+import { rememberSaveMarkdown } from './saveMarkdownStore';
 import { PROSE_COLUMN } from './theme';
 
 function ActionButton({ label, glyph, onPress }: { label: string; glyph: GlyphName; onPress(): void }) {
@@ -61,11 +62,29 @@ export function hasReplyActions(message: ProjectedMessage, finalIds: ReadonlySet
   return message.role === 'assistant' && obj(message.actionContent)?.copyable === true && finalIds.has(message.id);
 }
 
+/**
+ * Desktop's reply row: Copy, Reply by Annotating, Save to md, then the time. Reply by Annotating
+ * opens the reply in the desktop Docs review surface, which the phone does not have, so it is left
+ * out rather than drawn as a control that does nothing.
+ */
 export const ReplyActions = memo(function ReplyActions({ message }: { message: ProjectedMessage }) {
+  const { dispatch } = useTranscriptEnv();
+  const markdown = typeof message.copyText === 'string' ? message.copyText : '';
+  const canSave = obj(message.actionContent)?.canSaveMarkdown === true;
   return (
     <View style={[styles.row, { paddingLeft: PROSE_COLUMN }]}>
       <View style={styles.buttons}>
-        <CopyButton text={typeof message.copyText === 'string' ? message.copyText : ''} label='Copy message' />
+        <CopyButton text={markdown} label='Copy message' />
+        {canSave ? (
+          <ActionButton
+            label='Save message to Markdown'
+            glyph='save'
+            onPress={() => {
+              rememberSaveMarkdown(markdown);
+              dispatch({ type: 'markdownSaveOpen', markdown });
+            }}
+          />
+        ) : null}
       </View>
       <MessageTime message={message} />
     </View>

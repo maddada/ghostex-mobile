@@ -14,7 +14,7 @@ import { AccountsPanel } from './AccountsPanel';
 import { ContextPanel } from './ContextPanel';
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str } from './json';
-import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { themedStyles, useTranscriptTheme, type TranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
 
 export type MenuRow = { [key: string]: unknown };
@@ -32,7 +32,8 @@ const KNOWN_GLYPHS = new Set<string>([
   'dots', 'list-details', 'list-check', 'note', 'stack-push', 'paperclip', 'terminal-2', 'arrow-up', 'refresh', 'pencil',
   'trash', 'loader', 'x', 'check', 'file-text', 'file', 'folder', 'photo', 'camera', 'eye', 'eye-off', 'leaf', 'clock',
   'clock-check', 'layout-columns', 'file-export', 'git-branch', 'moon', 'switch-horizontal', 'maximize', 'minimize',
-  'settings', 'copy', 'star', 'search', 'link', 'bolt', 'map', 'brain', 'arrow-back-up', 'sparkles',
+  'settings', 'copy', 'star', 'search', 'link', 'bolt', 'map', 'brain', 'arrow-back-up', 'sparkles', 'blockquote', 'world',
+  'share',
 ]);
 
 function isGlyph(name: string): name is GlyphName {
@@ -127,6 +128,8 @@ function MenuRowView({
   const detail = typeof row.detail === 'string' ? row.detail : '';
   const glyph = glyphForIconPath(row.iconPath);
   const AgentIcon = typeof row.icon === 'string' ? AGENT_ICONS[row.icon] : undefined;
+  // A lifecycle dot instead of a glyph (the fork branch list), tinted as `branch_dot_color` does.
+  const dot = typeof row.dot === 'string' ? row.dot : null;
   return (
     <Pressable
       accessibilityRole="menuitem"
@@ -144,6 +147,7 @@ function MenuRowView({
       ) : AgentIcon !== undefined ? (
         <AgentIcon size={17} color={P.primary} />
       ) : null}
+      {dot !== null ? <View style={[styles.dot, { backgroundColor: branchDotColor(dot, P) }]} /> : null}
       <View style={styles.rowText}>
         <Text style={styles.label} numberOfLines={2}>
           {label}
@@ -165,6 +169,12 @@ function MenuRowView({
   );
 }
 
+/** A fork branch's lifecycle tone (`branch_dot_color` in desktop's `fork_branches.rs`). */
+export function branchDotColor(tone: string, P: TranscriptTheme): string {
+  if (tone === 'running') return '#10b981';
+  return P.mutedInk(tone === 'sleeping' ? 0.6 : 0.35);
+}
+
 /** The rows under a heading, keyed for React, for callers that build menus from arrays. */
 export function rowsOf(value: unknown): MenuRow[] {
   return arr(value).filter((row): row is MenuRow => obj(row) !== null);
@@ -184,4 +194,5 @@ const useStyles = themedStyles((P) => ({
   label: { color: P.foreground, fontSize: 15 },
   description: { color: P.muted, fontSize: 12.5, lineHeight: 17 },
   detail: { color: P.muted, fontSize: 13, maxWidth: 140 },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
 }));

@@ -45,10 +45,20 @@ export type MoreActionsInput = {
   available: (id: ComposerControlId) => boolean;
   /** Whether the screen performs this app-shell action (`NativeComposer`'s `hostActions`). */
   serves: (action: string) => boolean;
+  /**
+   * Compact & Send, while there is a draft. Desktop offers it in Send's own right-click menu
+   * (`show_send_actions` in `actions.rs`) and on Option+Enter; a phone has neither, and Send's hold
+   * already queues, so it leads this menu instead.
+   */
+  compactAndSend?: { disabled: boolean } | null;
 };
 
-export function moreActionsRows({ document, verbose, available, serves }: MoreActionsInput): MenuRow[] {
+export function moreActionsRows({ document, verbose, available, serves, compactAndSend = null }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
+  if (compactAndSend !== null) {
+    rows.push({ label: 'Compact & Send', iconPath: 'titlebar/arrow-up.svg', disabled: compactAndSend.disabled, command: { type: 'submit', mode: 'compact' } });
+    rows.push({ separator: true });
+  }
   const labels = obj(document.optionLabels);
   const merged = obj(document.modelMenu) !== null;
   if (document.composerOverflow?.optionsOverflowed === true) {

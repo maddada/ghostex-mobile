@@ -25,20 +25,27 @@ import { obj } from './json';
 import { NoticeCard } from './NoticeCard';
 import { QuestionCard } from './QuestionCard';
 import type { CardHostAction } from './types';
-import { WorkingStrip } from './WorkingStrip';
+import { WorkingStrip, type ArmedAction } from './WorkingStrip';
+
+const NO_ARMED: readonly ArmedAction[] = [];
 
 export type NativeChatCardsProps = {
   chat: RustChat;
   /** The app-shell actions a card offers (Terminal View, Switch account). Without it those buttons are not drawn. */
   onHostAction?: CardHostAction;
+  /** The session's armed Delayed Send / Close After Done, drawn on the working row. */
+  armed?: readonly ArmedAction[];
+  /** Opens Delayed Actions from an armed item; without it the items are not pressable. */
+  onArmedPress?: () => void;
 };
 
-export function NativeChatCards({ chat, onHostAction }: NativeChatCardsProps) {
+export function NativeChatCards({ chat, onHostAction, armed = NO_ARMED, onArmedPress }: NativeChatCardsProps) {
   const { height } = useWindowDimensions();
   const band = useRef<ScrollView>(null);
   const document = chat.state?.document ?? null;
   if (document === null) return null;
   const hasAny =
+    armed.length > 0 ||
     typeof document.workingStrip?.label === 'string' ||
     obj(document.workingStrip?.presentation) !== null ||
     typeof document.operationError === 'string' ||
@@ -59,7 +66,7 @@ export function NativeChatCards({ chat, onHostAction }: NativeChatCardsProps) {
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled
     >
-      <WorkingStrip document={document} />
+      <WorkingStrip document={document} armed={armed} {...(onArmedPress !== undefined ? { onArmedPress } : {})} />
       <ComposerNotReadyCard chat={chat} document={document} onHostAction={onHostAction} />
       <AgentTasksPanel chat={chat} document={document} />
       <AgentFleetStrip chat={chat} document={document} />

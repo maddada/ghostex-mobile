@@ -151,9 +151,11 @@ export type ActionFields = {
   modelPickerModel: { index: number; save?: boolean; pointer?: boolean };
   modelPickerEffort: { index: number; save?: boolean };
   modelPickerCancel: {};
-  modelMenuView: { tab?: string; query?: string };
+  /** `tab: null` is the picker opening, which also re-reads the stars (`model_menu_view`). */
+  modelMenuView: { tab?: string | null; query?: string };
   modelMenuFavorite: { key: string };
-  modelMenuPick: { key: string; secondary?: boolean };
+  /** `effort` is the reasoning level the pick carries (desktop's Left and Right); left out, the model keeps its own. */
+  modelMenuPick: { key: string; secondary?: boolean; effort?: string };
   modelMenuTrait: { id: string; value: Json; exitPlan?: boolean; secondary?: boolean };
   /** Accounts panel operations: `{operation, request?, accountId?, policy?, refresh?}`. */
   accounts: { operation?: string; request?: Json; accountId?: string; policy?: Json; refresh?: boolean };
@@ -166,7 +168,8 @@ export type ActionFields = {
   contextQuery: { query: string };
   contextShown: { id: string; shown: boolean };
   contextStar: { id: string };
-  contextReorder: { group: string; from: number; to: number };
+  /** Move row `from` onto row `to` (both row ids) in `group`, or `starred` for the status line order. */
+  contextReorder: { group: string; from: string; to: string };
   contextReset: {};
   contextSave: {};
   contextCompact: {};

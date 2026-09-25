@@ -32,12 +32,23 @@ import {
   transcriptFlags,
   type TranscriptEnv,
 } from './context';
-import { arr, num, obj } from './json';
+import { arr, num, obj, str } from './json';
 import { useTranscriptTheme } from './theme';
 import { TranscriptItemView } from './TranscriptItemRow';
 
 /** `scroll-bottom.json`: the pill's look and how far from the bottom it appears. */
 const SCROLL_BOTTOM = { label: 'Scroll to bottom', edgeThreshold: 10, height: 24, fontSize: 11, paddingX: 10, bottom: 4 };
+/**
+ * The composer's scroll collapse (`composer_scroll.rs`): at or under this many points from the end
+ * the reader is at the bottom (`COMPOSER_BOTTOM_THRESHOLD_PX` in the core).
+ */
+const COMPOSER_BOTTOM_THRESHOLD = 10;
+/**
+ * About how much shorter the collapsed composer is than the open one (its pills and toolbar row
+ * plus their gap): a scroll that stays within this much of the end is not a collapse gesture,
+ * because collapsing there uncovers no rows (desktop's `collapse_travel` guard).
+ */
+const COMPOSER_COLLAPSE_TRAVEL = 56;
 /** Space above the first row, and below the last (`transcript-layout.json`). */
 const TOP_PADDING = 32;
 const END_PADDING = 16;
@@ -158,15 +169,64 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
     if (hasMore && !loadingEarlier) dispatch({ type: 'loadEarlier' });
   }, [dispatch, hasMore, loadingEarlier]);
 
-  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    // Inverted: the offset is the distance from the bottom.
-    setAwayFromBottom(event.nativeEvent.contentOffset.y > SCROLL_BOTTOM.edgeThreshold);
+  // The composer collapses while the reader scrolls the transcript and opens again at the end
+  // (`composer_scroll.rs`). Desktop reports wheel events; a phone reports the finger's drag and the
+  // fling after it. The core owns the gesture's threshold and timing (`composerScroll`).
+  const collapseEligible =
+    main &&
+    document?.composerCollapseEligible === true &&
+    !(document.questionCard?.visible === true && str(document.prompt, 'kind') === 'question');
+  const collapse = useRef({ eligible: false, collapsed: false, userScrolling: false, offset: 0 });
+  collapse.current.eligible = collapseEligible;
+  collapse.current.collapsed = main && document?.composerCollapsed === true;
+  const startUserScroll = useCallback(() => {
+    collapse.current.userScrolling = true;
   }, []);
+  const endUserScroll = useCallback(() => {
+    collapse.current.userScrolling = false;
+  }, []);
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      // Inverted: the offset is the distance from the bottom.
+      const offset = contentOffset.y;
+      setAwayFromBottom(offset > SCROLL_BOTTOM.edgeThreshold);
+      const state = collapse.current;
+      const previous = state.offset;
+      state.offset = offset;
+      if (!main) return;
+      // Following the newest turn again opens a collapsed box (desktop's scroll handler).
+      if (state.collapsed) {
+        if (offset <= COMPOSER_BOTTOM_THRESHOLD) dispatch({ type: 'composerExpand' });
+        return;
+      }
+      const delta = offset - previous;
+      if (!state.userScrolling || !state.eligible || delta === 0) return;
+      const distanceToEnd = Math.max(0, previous);
+      if (Math.max(0, distanceToEnd + delta) < COMPOSER_COLLAPSE_TRAVEL) return;
+      const distanceToTop = Math.max(0, contentSize.height - layoutMeasurement.height - previous);
+      dispatch({
+        type: 'composerScroll',
+        delta,
+        distanceToEnd,
+        canScroll: delta > 0 ? distanceToTop > 0 : distanceToEnd > 0,
+        eligible: true,
+      });
+    },
+    [dispatch, main]
+  );
 
   const jumpToBottom = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
     dispatch({ type: 'composerExpand' });
   }, [dispatch]);
+
+  // Settings > Chat's custom transcript width (desktop's `transcript_width`): the rows take that
+  // share of the pane instead of the composer's 768pt column.
+  const customWidth = useSettingsStore((store) => store.settings.sessionChatCustomTranscriptWidthEnabled);
+  const widthPercent = useSettingsStore((store) => store.settings.sessionChatTranscriptWidthPercent);
+  const rowWidth = main && customWidth ? widthPercent : null;
 
   const lastIndex = rows.length - 1;
   const renderItem = useCallback(
@@ -176,9 +236,10 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
         first={row.index === 0}
         last={row.index === lastIndex}
         tint={searchItems.has(row.index) ? (activeItem === row.index ? theme.searchActive : theme.searchHit) : null}
+        widthPercent={rowWidth}
       />
     ),
-    [activeItem, lastIndex, searchItems, theme]
+    [activeItem, lastIndex, rowWidth, searchItems, theme]
   );
 
   const keyExtractor = useCallback((row: Row) => transcriptItemKey(row.item), []);
@@ -212,6 +273,10 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
         keyExtractor={keyExtractor}
         extraData={renderItem}
         onScroll={onScroll}
+        onScrollBeginDrag={startUserScroll}
+        onScrollEndDrag={endUserScroll}
+        onMomentumScrollBegin={startUserScroll}
+        onMomentumScrollEnd={endUserScroll}
         scrollEventThrottle={32}
         onEndReached={loadEarlier}
         onEndReachedThreshold={0.6}
@@ -266,15 +331,24 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   first,
   last,
   tint,
+  widthPercent,
 }: {
   item: TranscriptItem;
   first: boolean;
   last: boolean;
   tint: string | null;
+  /** The custom transcript width, as a share of the pane; null keeps the 768pt column. */
+  widthPercent: number | null;
 }) {
   return (
     <View style={[styles.rowOuter, first && styles.rowFirst, last && styles.rowLast]}>
-      <View style={[styles.rowInner, tint !== null && { backgroundColor: tint, borderRadius: 8 }]}>
+      <View
+        style={[
+          styles.rowInner,
+          widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' },
+          tint !== null && { backgroundColor: tint, borderRadius: 8 },
+        ]}
+      >
         <TranscriptItemView item={item} />
       </View>
     </View>

@@ -15,6 +15,7 @@ import { Glyph, type GlyphName } from '../icons';
 import { arr, obj, str, type JsonRecord } from '../json';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from '../theme';
 import { InlineImage } from '../Images';
+import { openTranscriptMenu } from '../transcriptMenuStore';
 import { inlineText, parseMarkdown, type Block, type FenceHeader, type Inline } from './parse';
 
 type Reference = { label: string; kind: string };
@@ -23,6 +24,10 @@ type InlineContext = {
   theme: TranscriptTheme;
   references: Map<string, Reference>;
   openLink(href: string): void;
+  /** A long press on a link: the transcript menu's reference rows (main transcript only). */
+  longPressLink: ((href: string) => void) | undefined;
+  /** Whether prose and code take the platform's own text selection (see `TranscriptMenu.tsx`). */
+  selectable: boolean;
 };
 
 function referenceMap(references: unknown): Map<string, Reference> {
@@ -107,6 +112,9 @@ function renderInlines(inlines: readonly Inline[], context: InlineContext, keyPr
             style={[style, { color }]}
             suppressHighlighting={false}
             onPress={() => context.openLink(inline.href)}
+            {...(context.longPressLink !== undefined
+              ? { onLongPress: () => context.longPressLink?.(inline.href) }
+              : {})}
             accessibilityRole='link'
           >
             {glyph !== undefined ? (
@@ -156,7 +164,7 @@ const CELL_PAD_X = 12;
 const HEADING_SIZES = [0, 20, 18, 16, 14, 14, 14];
 const HEADING_LINE = 1.3;
 
-function CodeBlock({ block, blockKey }: { block: Extract<Block, { t: 'code' }>; blockKey: string }) {
+function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t: 'code' }>; blockKey: string; selectable: boolean }) {
   const { theme, dispatch } = useTranscriptEnv();
   const [wrapped, setWrapped] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -169,7 +177,7 @@ function CodeBlock({ block, blockKey }: { block: Extract<Block, { t: 'code' }>; 
   const openHeader = header?.href;
   const separator = header === null ? -1 : Math.max(header.label.lastIndexOf('/'), header.label.lastIndexOf('\\'));
   const body = (
-    <Text selectable style={[styles.codeText, { color: theme.primary }]}>
+    <Text selectable={selectable} style={[styles.codeText, { color: theme.primary }]}>
       {block.text}
     </Text>
   );
@@ -384,7 +392,7 @@ function Blocks({ blocks, context, color, depth, listDepth }: BlockProps) {
               );
             }
             return (
-              <Text key={key} selectable style={[styles.prose, { color }, spacing]}>
+              <Text key={key} selectable={context.selectable} style={[styles.prose, { color }, spacing]}>
                 {renderInlines(block.c, context, key)}
               </Text>
             );
@@ -392,7 +400,7 @@ function Blocks({ blocks, context, color, depth, listDepth }: BlockProps) {
             return (
               <Text
                 key={key}
-                selectable
+                selectable={context.selectable}
                 accessibilityRole='header'
                 style={[
                   styles.heading,
@@ -408,7 +416,7 @@ function Blocks({ blocks, context, color, depth, listDepth }: BlockProps) {
           case 'code':
             return (
               <View key={key} style={spacing}>
-                <CodeBlock block={block} blockKey={key} />
+                <CodeBlock block={block} blockKey={key} selectable={context.selectable} />
               </View>
             );
           case 'hr':
@@ -483,17 +491,28 @@ export type MarkdownProps = {
   color?: string;
   /** Text somebody typed: single newlines are line breaks. */
   breaks?: boolean;
+  /** False where a long press on the message opens the transcript menu instead. */
+  selectable?: boolean;
 };
 
-export const Markdown = memo(function Markdown({ text, references, color, breaks = false }: MarkdownProps) {
-  const { theme, dispatch } = useTranscriptEnv();
+export const Markdown = memo(function Markdown({ text, references, color, breaks = false, selectable = true }: MarkdownProps) {
+  const { theme, dispatch, main } = useTranscriptEnv();
   const blocks = useMemo(() => parseMarkdown(text, { breaks }), [breaks, text]);
   const referencesMap = useMemo(() => referenceMap(references), [references]);
   const openLink = useCallback(
     (href: string) => dispatch({ type: 'openMarkdownLink', href, external: false }),
     [dispatch]
   );
-  const context = useMemo<InlineContext>(() => ({ theme, references: referencesMap, openLink }), [openLink, referencesMap, theme]);
+  const context = useMemo<InlineContext>(
+    () => ({
+      theme,
+      references: referencesMap,
+      openLink,
+      longPressLink: main ? (href: string) => openTranscriptMenu({ href }) : undefined,
+      selectable,
+    }),
+    [main, openLink, referencesMap, selectable, theme]
+  );
   return (
     <View style={styles.root}>
       <Blocks blocks={blocks} context={context} color={color ?? theme.prose} depth={0} listDepth={{ ordered: 0, bullet: 0 }} />
