@@ -12,6 +12,7 @@ import type {
   GhostexSidebarSpace,
   GhostexSidebarSpaces,
 } from '../contract/mobileSummary';
+import { countSessions, type SessionCounts } from '../contract/grouping';
 import {
   isSidebarSpaceProject,
   isUnassignedSidebarSpaceProject,
@@ -141,4 +142,21 @@ export function spaceRowItems(spaces: GhostexSidebarSpaces): SpaceRowItem[] {
     icon: space.icon,
     color: space.color,
   }));
+}
+
+/**
+ * The counts each Space button's status dots draw: the sessions that Space
+ * shows, counted by the desktop header rule (packages/gx-core/src/sidebar_view/
+ * assemble.rs, the Space rows), for every Space plus Other.
+ */
+export function spaceSessionCounts(
+  summary: GhostexMobileSummary | null,
+  spaceIds: readonly string[],
+): Record<string, SessionCounts> {
+  const counts: Record<string, SessionCounts> = {};
+  if (summary === null) return counts;
+  for (const spaceId of [...spaceIds, OTHER_SIDEBAR_SPACE_ID]) {
+    counts[spaceId] = countSessions(filterSummaryForSpace(summary, spaceId).sessions);
+  }
+  return counts;
 }

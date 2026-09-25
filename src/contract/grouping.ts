@@ -54,6 +54,7 @@ export type MachineHeaderItem = {
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
 };
 
@@ -70,6 +71,7 @@ export type SectionLabelItem = {
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
 };
 
@@ -86,6 +88,7 @@ export type CollectionHeaderItem = {
   sessionCount: number;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
 };
 
@@ -104,6 +107,7 @@ export type ProjectHeaderItem = {
   sessionCount: number;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   sleepingCount: number;
   /** Awake (running terminal/browser) count for the collapsed count pills. */
   awakeCount: number;
@@ -147,6 +151,8 @@ export type GroupHeaderItem = {
   title: string;
   count: number;
   collapsed: boolean;
+  /** The group's header counts; a user-made group draws a project header's counts on the desktop. */
+  status: Pick<SessionCounts, 'workingCount' | 'attentionCount' | 'backgroundWorkCount' | 'awakeCount'>;
   collectionColor?: string;
 };
 
@@ -178,6 +184,8 @@ export type SessionKindLabelItem = {
   kindCollapseKey: string;
   label: string;
   collapsed: boolean;
+  /** What the heading draws while collapsed. */
+  status: SectionStatusCounts;
   collectionColor?: string;
 };
 
@@ -268,7 +276,7 @@ export function machineHeaderItem(
   machineId: string,
   title: string,
   collapsed: boolean,
-  counts: Pick<SessionCounts, 'workingCount' | 'attentionCount' | 'awakeCount'>,
+  counts: Pick<SessionCounts, 'workingCount' | 'attentionCount' | 'backgroundWorkCount' | 'awakeCount'>,
 ): MachineHeaderItem {
   return {
     type: 'MACHINE_HEADER',
@@ -278,6 +286,7 @@ export function machineHeaderItem(
     collapsed,
     workingCount: counts.workingCount,
     attentionCount: counts.attentionCount,
+    backgroundWorkCount: counts.backgroundWorkCount,
     awakeCount: counts.awakeCount,
   };
 }
@@ -397,24 +406,78 @@ function isAwakeSession(session: GhostexSession): boolean {
 
 export type SessionCounts = {
   workingCount: number;
+  /** In attention or waiting on an answer (the desktop counts both as attention on project, collection, Space and machine headers). */
   attentionCount: number;
+  /** Rows drawing the grey dot: idle with a background shell or monitor still running. */
+  backgroundWorkCount: number;
   sleepingCount: number;
   awakeCount: number;
 };
 
+/**
+ * packages/gx-core/src/sidebar_view/view.rs `shows_background_work`: the row
+ * draws the grey dot, so a header counts it.
+ */
+export function showsBackgroundWork(session: GhostexSession): boolean {
+  return (
+    session.backgroundWorkDetectedAt.length > 0 &&
+    session.activity !== 'working' &&
+    session.activity !== 'attention'
+  );
+}
+
+/**
+ * packages/gx-core/src/sidebar_view/groups.rs `group_summary`, the counts a
+ * project, collection, Space or machine header draws. Read off the raw
+ * activity the row draws, so a header never disagrees with its rows.
+ */
 export function countSessions(sessions: readonly GhostexSession[]): SessionCounts {
   const counts: SessionCounts = {
     workingCount: 0,
     attentionCount: 0,
+    backgroundWorkCount: 0,
     sleepingCount: 0,
     awakeCount: 0,
   };
   for (const session of sessions) {
     const status = displayStatus(session);
-    if (status === 'working') counts.workingCount++;
-    if (status === 'attention') counts.attentionCount++;
+    if (session.activity === 'working') counts.workingCount++;
+    if (session.activity === 'attention' || session.pendingQuestionCount > 0) counts.attentionCount++;
+    if (showsBackgroundWork(session)) counts.backgroundWorkCount++;
     if (status === 'sleep' || status === 'sleeping') counts.sleepingCount++;
     if (isAwakeSession(session)) counts.awakeCount++;
+  }
+  return counts;
+}
+
+/** What a collapsed in-project section heading draws (packages/gx-core/src/sidebar_view/sections.rs). */
+export type SectionStatusCounts = {
+  /** Every session of the section, including rows a compact list leaves out. */
+  count: number;
+  workingCount: number;
+  /** In attention with no question pending; a question shows as the pink dot instead. */
+  attentionCount: number;
+  backgroundWorkCount: number;
+  questionCount: number;
+  /** The section's session ids, so the renderer can ring a collapsed section holding the selected session. */
+  sessionIds: string[];
+};
+
+/** packages/gx-core/src/sidebar_view/sections.rs `project_session_sections`, one section's counts. */
+export function countSectionSessions(sessions: readonly GhostexSession[]): SectionStatusCounts {
+  const counts: SectionStatusCounts = {
+    count: sessions.length,
+    workingCount: 0,
+    attentionCount: 0,
+    backgroundWorkCount: 0,
+    questionCount: 0,
+    sessionIds: sessions.map((session) => session.sessionId),
+  };
+  for (const session of sessions) {
+    if (session.activity === 'working') counts.workingCount++;
+    if (session.activity === 'attention' && session.pendingQuestionCount === 0) counts.attentionCount++;
+    if (showsBackgroundWork(session)) counts.backgroundWorkCount++;
+    if (session.pendingQuestionCount > 0) counts.questionCount++;
   }
   return counts;
 }
@@ -551,6 +614,16 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       : { imageDataUrl: '', discoveredIconDataUrl: '', glyph: '', glyphColor: '', isWorktree: false };
 
     const namedGroups = groupsForProject(summary, projectId);
+    /*
+     * What a section heading counts: every session of that section, including
+     * rows a compact list leaves out (sections.rs counts all members), less the
+     * members of named groups, which the desktop draws as groups of their own.
+     */
+    const groupedSessionIds = new Set(namedGroups.flatMap((group) => group.sessionIds));
+    const sectionPool = allProjectSessions.filter((session) => {
+      const section = sessionKindSection(session, nowMs);
+      return section === 'drafts' || section === 'parked' || !groupedSessionIds.has(session.sessionId);
+    });
     const sessionListClipped =
       namedGroups.length === 0 && projectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
     const sessionListCollapsed = sessionListClipped && collapsedSessionListKeys.has(projectKey);
@@ -570,6 +643,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       sessionCount: allProjectSessions.length,
       workingCount: counts.workingCount,
       attentionCount: counts.attentionCount,
+      backgroundWorkCount: counts.backgroundWorkCount,
       sleepingCount: counts.sleepingCount,
       awakeCount: counts.awakeCount,
       collectionColor,
@@ -639,6 +713,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
             kindCollapseKey,
             label: SESSION_KIND_LABELS[section],
             collapsed: kindCollapsed,
+            status: countSectionSessions(
+              sectionPool.filter((candidate) => sessionKindSection(candidate, nowMs) === section),
+            ),
             collectionColor,
           });
         }
@@ -719,6 +796,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         title: group.title,
         count: groupSessions.length,
         collapsed: groupCollapsed,
+        status: countSessions(groupSessions),
         collectionColor,
       });
       if (groupCollapsed) continue;
@@ -754,6 +832,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     collapsed: quickCollapsed,
     workingCount: quickCounts.workingCount,
     attentionCount: quickCounts.attentionCount,
+    backgroundWorkCount: quickCounts.backgroundWorkCount,
     awakeCount: quickCounts.awakeCount,
   });
   if (!quickCollapsed) {
@@ -808,6 +887,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           kindCollapseKey,
           label: SessionCopy.parkedKindLabel,
           collapsed,
+          status: countSectionSessions(parkedChatSessions),
         });
         if (!collapsed) {
           for (const session of parkedChatSessions) {
@@ -846,6 +926,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     collapsed: false,
     workingCount: projectCounts.workingCount,
     attentionCount: projectCounts.attentionCount,
+    backgroundWorkCount: projectCounts.backgroundWorkCount,
     awakeCount: projectCounts.awakeCount,
   });
 
@@ -874,6 +955,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       sessionCount: collectionSessions.length,
       workingCount: counts.workingCount,
       attentionCount: counts.attentionCount,
+      backgroundWorkCount: counts.backgroundWorkCount,
       awakeCount: counts.awakeCount,
     });
     for (const key of memberKeys) emittedProjectKeys.add(key);

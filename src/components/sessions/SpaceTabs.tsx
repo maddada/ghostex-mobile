@@ -7,6 +7,12 @@
  * claims (src/spaces/otherSpace.ts) — so the row is always a complete cover of
  * the machine's projects. The phone has no overflow menu: the row scrolls
  * horizontally instead, since a chip that is off-screen is still one swipe away.
+ *
+ * Each chip shows the status of the sessions it holds with the desktop Space's
+ * overlapping dots (StatusDotStack; apps/desktop/src/app/native_sidebar/
+ * selectors.rs), its icon dimmed to 80% while it does, like the desktop. The
+ * phone chip carries its name, so the dots follow the name instead of hanging
+ * under the icon.
  */
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -17,8 +23,10 @@ import {
   OTHER_SIDEBAR_SPACE_ID,
   OTHER_SIDEBAR_SPACE_LABEL,
 } from '../../spaces/otherSpace';
+import type { SessionCounts } from '../../contract/grouping';
 import type { SpaceRowItem } from '../../spaces/spaceFilter';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth, SidebarPalette } from '../../theme/palette';
+import StatusDotStack from './StatusDotStack';
 
 const OTHER_ROW_ITEM: SpaceRowItem = {
   spaceId: OTHER_SIDEBAR_SPACE_ID,
@@ -30,11 +38,14 @@ const OTHER_ROW_ITEM: SpaceRowItem = {
 export default function SpaceTabs({
   spaces,
   selectedSpaceId,
+  countsBySpaceId,
   onSelect,
 }: {
   /** The machine's own Spaces, in order; Other is appended here. */
   spaces: readonly SpaceRowItem[];
   selectedSpaceId: string;
+  /** spaceSessionCounts: what each chip's status dots draw. */
+  countsBySpaceId: Readonly<Record<string, SessionCounts>>;
   onSelect: (spaceId: string) => void;
 }) {
   const items = [...spaces, OTHER_ROW_ITEM];
@@ -48,6 +59,10 @@ export default function SpaceTabs({
       {items.map((item) => {
         const selected = item.spaceId === selectedSpaceId;
         const Icon = COMMAND_ICONS[item.icon] ?? COMMAND_ICONS.stack;
+        const counts = countsBySpaceId[item.spaceId];
+        const hasStatus =
+          counts !== undefined &&
+          (counts.workingCount > 0 || counts.attentionCount > 0 || counts.backgroundWorkCount > 0);
         return (
           <Pressable
             accessibilityRole="tab"
@@ -57,10 +72,12 @@ export default function SpaceTabs({
             onPress={() => onSelect(item.spaceId)}
             style={[styles.chip, selected ? styles.chipSelected : null]}
           >
-            <Icon
-              size={14}
-              color={selected ? GhostexPalette.FOREGROUND : SidebarPalette.MUTED}
-            />
+            <View style={hasStatus ? styles.iconWithStatus : null}>
+              <Icon
+                size={14}
+                color={selected ? GhostexPalette.FOREGROUND : SidebarPalette.MUTED}
+              />
+            </View>
             <Text
               ellipsizeMode="tail"
               numberOfLines={1}
@@ -68,6 +85,14 @@ export default function SpaceTabs({
             >
               {item.name}
             </Text>
+            {hasStatus ? (
+              <StatusDotStack
+                workingCount={counts.workingCount}
+                attentionCount={counts.attentionCount}
+                backgroundWorkCount={counts.backgroundWorkCount}
+                ringColor={GhostexPalette.CARD_ACTIVE}
+              />
+            ) : null}
             {selected ? (
               <View style={[styles.selectedRail, { backgroundColor: item.color }]} />
             ) : null}
@@ -125,6 +150,9 @@ const styles = StyleSheet.create({
   },
   labelSelected: {
     color: GhostexPalette.FOREGROUND,
+  },
+  iconWithStatus: {
+    opacity: 0.8,
   },
   /** The Space's own color, drawn under the selected chip like the desktop rail. */
   selectedRail: {

@@ -64,7 +64,14 @@ export type MobileSummaryWireSession = {
   isTemporaryTitle?: boolean;
   visibleInSidebarByDefault?: boolean;
   shouldSubmitStagedFirstPromptTitleCommand?: boolean;
-  attention?: { enteredAt?: string; acknowledged?: boolean };
+  /** Sent only while `activity` is attention. */
+  attention?: { enteredAt?: string; acknowledged?: boolean; eventId?: string };
+  /** Questions the agent is waiting on an answer to; absent at zero. */
+  pendingQuestionCount?: number;
+  /** Present while a background shell or monitor the agent started still runs after its turn. */
+  backgroundWorkDetectedAt?: string;
+  /** When an armed Close After Done closes the session, while it counts down. */
+  closeAfterDoneDeadlineAt?: string;
   actions?: Partial<GhostexSessionActions>;
 };
 
@@ -325,6 +332,19 @@ export type GhostexSession = {
   sendWhenAgentStopsActive: boolean;
   /** Close After Done armed flag (false when unarmed / emitter predates it). */
   closeAfterDone: boolean;
+  /**
+   * Absolute RFC 3339 time an armed Close After Done closes the session ('' while
+   * it waits for the agent to finish, or when the computer predates the field,
+   * which then shows the armed 03:00 like the desktop does without a deadline).
+   */
+  closeAfterDoneDeadlineAt: string;
+  /** Questions the agent is waiting on an answer to (0 when none, or from a computer that predates the field). */
+  pendingQuestionCount: number;
+  /**
+   * Set while a background shell or monitor the agent started is still running
+   * after its turn ('' when none, or from a computer that predates the field).
+   */
+  backgroundWorkDetectedAt: string;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
   isSleeping: boolean;
   isLive: boolean;
@@ -334,6 +354,8 @@ export type GhostexSession = {
   shouldSubmitStagedFirstPromptTitleCommand: boolean;
   attentionEnteredAt: string;
   attentionAcknowledged: boolean;
+  /** The attention event id ('' outside attention, or from a computer that predates it). */
+  attentionEventId: string;
   actions: GhostexSessionActions;
 };
 
@@ -887,6 +909,12 @@ export function parseSession(value: unknown): GhostexSession | null {
     ),
     sendWhenAgentStopsActive: boolValue(value, 'sendWhenAgentStopsActive', false),
     closeAfterDone: boolValue(value, 'closeAfterDone', false),
+    closeAfterDoneDeadlineAt: trimmedValue(value, 'closeAfterDoneDeadlineAt'),
+    pendingQuestionCount:
+      typeof value.pendingQuestionCount === 'number' && Number.isFinite(value.pendingQuestionCount)
+        ? Math.max(0, Math.floor(value.pendingQuestionCount))
+        : 0,
+    backgroundWorkDetectedAt: trimmedValue(value, 'backgroundWorkDetectedAt'),
     isSleeping: legacySleeping && !isLive,
     isLive,
     isPrimaryTitleTerminalTitle: boolValue(value, 'isPrimaryTitleTerminalTitle', false),
@@ -899,6 +927,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     ),
     attentionEnteredAt: attention === null ? '' : trimmedValue(attention, 'enteredAt'),
     attentionAcknowledged: attention === null ? false : boolValue(attention, 'acknowledged', false),
+    attentionEventId: attention === null ? '' : trimmedValue(attention, 'eventId'),
     actions: parseActions(value.actions),
   };
 }

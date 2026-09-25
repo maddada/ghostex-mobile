@@ -23,6 +23,7 @@ import {
   type GhostexProjectIcon,
   type GhostexQuickAction,
 } from '../../contract/mobileSummary';
+import type { SectionStatusCounts } from '../../contract/grouping';
 import { GhostexPalette, mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import {
@@ -172,92 +173,156 @@ const AGENT_LAUNCHER_ICON_COLOR = mixHexColors(
 );
 
 // ---------------------------------------------------------------------------
-// Collapsed status-count pills (desktop .group-collapsed-status-count):
-// 6dp glowing dot + 10dp tabular count. Working (amber) first, then attention
-// (blue); awake (grey, NO dot in the current skin) only when neither exists.
+// Collapsed header status, drawn as the desktop sidebar draws it
+// (ProjectStatusCounts, CollectionStatusCounts, SectionStatusDots).
 // ---------------------------------------------------------------------------
 
-function StatusCountPill({
-  count,
-  color,
-  dim,
-  showDot,
-}: {
-  count: number;
-  color: string;
-  dim?: boolean;
-  showDot: boolean;
-}) {
-  return (
-    <View style={[pillStyles.pill, dim === true ? pillStyles.pillDim : null]}>
-      {showDot ? (
-        <View style={[pillStyles.dotHalo, { backgroundColor: `${color}1F` }]}>
-          <View style={[pillStyles.dot, { backgroundColor: color }]} />
-        </View>
-      ) : null}
-      <Text style={[pillStyles.count, { color }]}>{count}</Text>
-    </View>
-  );
-}
+/** Desktop sidebar text color (appearance.rs `foreground`, dark). */
+const HEADER_STATUS_TEXT = '#B4B8C0';
 
-export function StatusCountPills({
-  workingCount,
-  attentionCount,
-  awakeCount,
-}: {
+export type HeaderStatusCounts = {
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
-}) {
-  const hasActionStatus = workingCount > 0 || attentionCount > 0;
-  if (!hasActionStatus && awakeCount === 0) return null;
+};
+
+function ProjectStatusBadge({ count, dotColor }: { count: number; dotColor: string | null }) {
   return (
-    <View style={pillStyles.cluster}>
+    <View style={statusStyles.badge}>
+      {dotColor !== null ? <View style={[statusStyles.badgeDot, { backgroundColor: dotColor }]} /> : null}
+      <Text style={statusStyles.count}>{count}</Text>
+    </View>
+  );
+}
+
+/**
+ * apps/desktop/src/app/native_sidebar/project_status.rs `project_status`, collapsed branch.
+ *
+ * CDXC:SessionStatus 2026-09-25 DECISION:
+ * User: "Please make the indicators for sessions status in the RN session list match gpui one exactly". A collapsed header shows the desktop header's status in its order and sizes: project, user-made group and Quick headers use project_status.rs (a 6dp dot and the number in the sidebar text color: orange working, blue attention or question, grey background work when nothing works, then a dotless awake count when nothing works or waits); collection headers use collections.rs (the numbers alone, in those colors); in-project section headings use sections.rs (8dp dots: orange, blue, grey, pink question, a hollow ring when the selected session is inside, then the section's count at the right edge). The orange is the desktop's one working color. This supersedes the phone's haloed #F8AD07 and #95D7F6 count pills and the named group's "(count)".
+ */
+export function ProjectStatusCounts({
+  workingCount,
+  attentionCount,
+  backgroundWorkCount,
+  awakeCount,
+}: HeaderStatusCounts) {
+  if (workingCount === 0 && attentionCount === 0 && awakeCount === 0) return null;
+  return (
+    <View style={statusStyles.projectCluster}>
       {workingCount > 0 ? (
-        <StatusCountPill count={workingCount} color={SidebarPalette.PILL_WORKING} showDot />
+        <ProjectStatusBadge count={workingCount} dotColor={SidebarPalette.ROW_WORKING} />
       ) : null}
       {attentionCount > 0 ? (
-        <StatusCountPill count={attentionCount} color={SidebarPalette.PILL_ATTENTION} showDot />
+        <ProjectStatusBadge count={attentionCount} dotColor={SidebarPalette.ROW_ATTENTION} />
       ) : null}
-      {!hasActionStatus && awakeCount > 0 ? (
-        <StatusCountPill count={awakeCount} color={SidebarPalette.PILL_AWAKE} dim showDot={false} />
+      {workingCount === 0 && backgroundWorkCount > 0 ? (
+        <ProjectStatusBadge count={backgroundWorkCount} dotColor={SidebarPalette.ROW_BACKGROUND_WORK} />
+      ) : null}
+      {workingCount === 0 && attentionCount === 0 && awakeCount > 0 ? (
+        <ProjectStatusBadge count={awakeCount} dotColor={null} />
       ) : null}
     </View>
   );
 }
 
-const pillStyles = StyleSheet.create({
-  cluster: {
+/** apps/desktop/src/app/native_sidebar/collections.rs: a collapsed collection's colored numbers. */
+function CollectionStatusCounts({
+  workingCount,
+  attentionCount,
+  backgroundWorkCount,
+  awakeCount,
+}: HeaderStatusCounts) {
+  const counts: { key: string; count: number; color: string }[] = [];
+  if (workingCount > 0) counts.push({ key: 'working', count: workingCount, color: SidebarPalette.ROW_WORKING });
+  if (attentionCount > 0) {
+    counts.push({ key: 'attention', count: attentionCount, color: SidebarPalette.ROW_ATTENTION });
+  }
+  if (workingCount === 0 && backgroundWorkCount > 0) {
+    counts.push({ key: 'background', count: backgroundWorkCount, color: SidebarPalette.ROW_BACKGROUND_WORK });
+  }
+  if (workingCount === 0 && attentionCount === 0 && awakeCount > 0) {
+    counts.push({ key: 'awake', count: awakeCount, color: HEADER_STATUS_TEXT });
+  }
+  if (counts.length === 0) return null;
+  return (
+    <View style={statusStyles.collectionCluster}>
+      {counts.map((entry) => (
+        <Text key={entry.key} style={[statusStyles.count, { color: entry.color }]}>
+          {entry.count}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+/** apps/desktop/src/app/native_sidebar/sections.rs: a collapsed section heading's dots. */
+function SectionStatusDots({ status, active }: { status: SectionStatusCounts; active: boolean }) {
+  const dots: { key: string; color: string }[] = [];
+  if (status.workingCount > 0) dots.push({ key: 'working', color: SidebarPalette.ROW_WORKING });
+  if (status.attentionCount > 0) dots.push({ key: 'attention', color: SidebarPalette.ROW_ATTENTION });
+  if (status.workingCount === 0 && status.backgroundWorkCount > 0) {
+    dots.push({ key: 'background', color: SidebarPalette.ROW_BACKGROUND_WORK });
+  }
+  if (status.questionCount > 0) dots.push({ key: 'question', color: SidebarPalette.ROW_QUESTION });
+  if (dots.length === 0 && !active) return null;
+  return (
+    <View style={statusStyles.sectionDots}>
+      {dots.map((dot) => (
+        <View key={dot.key} style={[statusStyles.sectionDot, { backgroundColor: dot.color }]} />
+      ))}
+      {active ? <View style={statusStyles.activeRing} /> : null}
+    </View>
+  );
+}
+
+const statusStyles = StyleSheet.create({
+  projectCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ds(6),
+    gap: ds(7),
     marginStart: 'auto',
   },
-  pill: {
+  collectionCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(5),
+  },
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: ds(3),
   },
-  pillDim: {
-    opacity: 0.7,
-  },
-  dotHalo: {
-    width: ds(12),
-    height: ds(12),
-    borderRadius: ds(6),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dot: {
+  badgeDot: {
     width: ds(6),
     height: ds(6),
-    borderRadius: ds(3),
+    borderRadius: 999,
   },
   count: {
+    color: HEADER_STATUS_TEXT,
     fontSize: ds(10),
     fontWeight: '300',
     fontVariant: ['tabular-nums'],
     lineHeight: ds(12),
+  },
+  sectionDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(4),
+  },
+  sectionDot: {
+    width: ds(8),
+    height: ds(8),
+    borderRadius: 999,
+  },
+  /* sections.rs: 9px hollow ring, 1.5px #a3a3a3 border. */
+  activeRing: {
+    width: ds(9),
+    height: ds(9),
+    borderRadius: 999,
+    borderWidth: ds(1.5),
+    borderColor: '#A3A3A3',
   },
 });
 
@@ -407,6 +472,7 @@ export function MachineHeaderRow({
   collapsed,
   workingCount,
   attentionCount,
+  backgroundWorkCount,
   awakeCount,
   onPress,
   onMenu,
@@ -415,6 +481,7 @@ export function MachineHeaderRow({
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
@@ -433,9 +500,10 @@ export function MachineHeaderRow({
       </Text>
       <View style={machineHeaderStyles.trailing}>
         {collapsed ? (
-          <StatusCountPills
+          <ProjectStatusCounts
             workingCount={workingCount}
             attentionCount={attentionCount}
+            backgroundWorkCount={backgroundWorkCount}
             awakeCount={awakeCount}
           />
         ) : null}
@@ -485,6 +553,7 @@ export function SectionLabelRow({
   collapsed,
   workingCount,
   attentionCount,
+  backgroundWorkCount,
   awakeCount,
   first,
   onToggle,
@@ -496,6 +565,7 @@ export function SectionLabelRow({
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
   /** First section after the status header uses the tighter top margin. */
   first: boolean;
@@ -525,9 +595,10 @@ export function SectionLabelRow({
       </Pressable>
       <View style={sectionStyles.trailing}>
         {collapsed ? (
-          <StatusCountPills
+          <ProjectStatusCounts
             workingCount={workingCount}
             attentionCount={attentionCount}
+            backgroundWorkCount={backgroundWorkCount}
             awakeCount={awakeCount}
           />
         ) : null}
@@ -597,6 +668,7 @@ export function CollectionHeaderRow({
   collapsed,
   workingCount,
   attentionCount,
+  backgroundWorkCount,
   awakeCount,
   onPress,
   onMenu,
@@ -605,6 +677,7 @@ export function CollectionHeaderRow({
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
@@ -629,9 +702,10 @@ export function CollectionHeaderRow({
         {title}
       </Text>
       {collapsed ? (
-        <StatusCountPills
+        <CollectionStatusCounts
           workingCount={workingCount}
           attentionCount={attentionCount}
+          backgroundWorkCount={backgroundWorkCount}
           awakeCount={awakeCount}
         />
       ) : null}
@@ -683,6 +757,7 @@ export function ProjectHeaderRow({
   collapsed,
   workingCount,
   attentionCount,
+  backgroundWorkCount,
   awakeCount,
   hasActions,
   selectedActionType,
@@ -702,6 +777,7 @@ export function ProjectHeaderRow({
   collapsed: boolean;
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
   awakeCount: number;
   hasActions: boolean;
   /** actionType of the last-run quick action, for the actions-button glyph. */
@@ -737,9 +813,10 @@ export function ProjectHeaderRow({
       </Text>
       <View style={projectHeaderStyles.trailing}>
         {collapsed ? (
-          <StatusCountPills
+          <ProjectStatusCounts
             workingCount={workingCount}
             attentionCount={attentionCount}
+            backgroundWorkCount={backgroundWorkCount}
             awakeCount={awakeCount}
           />
         ) : (
@@ -881,20 +958,22 @@ const emptyStyles = StyleSheet.create({
 
 // ---------------------------------------------------------------------------
 // GROUP_HEADER (named workspace session group inside a project card): caret +
-// light muted title, trailing "(count)" when collapsed, and an always-visible
-// overflow button. Long-press also opens the group menu (desktop right-click).
+// light muted title, the desktop project header's status counts when collapsed
+// (a user-made group is drawn with a project header there), and an
+// always-visible overflow button. Long-press also opens the group menu
+// (desktop right-click).
 // ---------------------------------------------------------------------------
 
 export function GroupHeaderRow({
   title,
-  count,
   collapsed,
+  status,
   onPress,
   onMenu,
 }: {
   title: string;
-  count: number;
   collapsed: boolean;
+  status: HeaderStatusCounts;
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
 }) {
@@ -915,7 +994,14 @@ export function GroupHeaderRow({
         {title}
       </Text>
       <View style={groupHeaderStyles.trailing}>
-        {collapsed ? <Text style={groupHeaderStyles.count}>({count})</Text> : null}
+        {collapsed ? (
+          <ProjectStatusCounts
+            workingCount={status.workingCount}
+            attentionCount={status.attentionCount}
+            backgroundWorkCount={status.backgroundWorkCount}
+            awakeCount={status.awakeCount}
+          />
+        ) : null}
         <HeaderButton accessibilityLabel={`${title} options`} onAnchorPress={onMenu}>
           <MoreGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
         </HeaderButton>
@@ -950,13 +1036,6 @@ const groupHeaderStyles = StyleSheet.create({
     gap: ds(6),
     marginStart: 'auto',
   },
-  count: {
-    color: SidebarPalette.MUTED,
-    fontSize: ds(13),
-    fontWeight: '300',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 0.16,
-  },
 });
 
 // ---------------------------------------------------------------------------
@@ -970,10 +1049,16 @@ const groupHeaderStyles = StyleSheet.create({
 export function SessionKindLabelRow({
   label,
   collapsed,
+  status,
+  active,
   onPress,
 }: {
   label: string;
   collapsed: boolean;
+  /** sections.rs: the dots and the count show only while the section is collapsed. */
+  status: SectionStatusCounts;
+  /** The selected session is one of this section's. */
+  active: boolean;
   onPress: () => void;
 }) {
   return (
@@ -994,6 +1079,13 @@ export function SessionKindLabelRow({
         </Text>
         <ChevronRightGlyph size={ds(12)} color={KIND_LABEL_COLOR} rotated={!collapsed} />
       </Pressable>
+      {collapsed ? (
+        <>
+          <SectionStatusDots status={status} active={active} />
+          <View style={kindLabelStyles.spacer} />
+          <Text style={kindLabelStyles.label}>{status.count}</Text>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -1004,9 +1096,14 @@ const KIND_LABEL_COLOR = 'rgba(200,205,213,0.34)';
 const kindLabelStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(5),
     paddingTop: ds(3),
     paddingLeft: ds(5),
     paddingRight: ds(10),
+  },
+  spacer: {
+    flex: 1,
   },
   button: {
     flexDirection: 'row',

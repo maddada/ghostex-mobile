@@ -242,12 +242,15 @@ export function CopyGlyph({ size, color }: GlyphProps) {
   );
 }
 
-/** Pencil (desktop IconPencil, Rename). */
+/**
+ * Pencil (desktop IconPencil, Rename, and the draft session's leading icon):
+ * the path of the desktop's apps/desktop/assets/titlebar/pencil.svg (Tabler).
+ */
 export function PencilGlyph({ size, color }: GlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M 4 20 l 1 -4 L 16.5 4.5 a 2.1 2.1 0 0 1 3 3 L 8 19 Z M 13.5 6.5 l 3 3"
+        d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4M13.5 6.5l4 4"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
@@ -571,6 +574,71 @@ export function EyeOffGlyph({ size, color }: GlyphProps) {
         strokeLinejoin="round"
       />
       <Path d="M 3 3 l 18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Upright pushpin (Tabler IconPinned): the session menu's Pin row. */
+export function PinnedGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 9 4 v 6 l -2 4 v 2 h 10 v -2 l -2 -4 v -6 M 12 16 v 5 M 8 4 h 8"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Crossed-out pushpin (Tabler IconPinnedOff): the session menu's Unpin row. */
+export function PinnedOffGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 3 3 l 18 18 M 15 4.5 l -3.249 3.249 m -2.57 1.433 l -2.181 0.818 l -1.5 1.5 l 7 7 l 1.5 -1.5 l 0.82 -2.186 m 1.43 -2.563 l 3.25 -3.251 M 9 15 l -4.5 4.5 M 14.5 4 l 5.5 5.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Horizontal ellipsis (Tabler IconDots): the session menu's Advanced row. */
+export function DotsGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={5} cy={12} r={1} stroke={color} strokeWidth={2} />
+      <Circle cx={12} cy={12} r={1} stroke={color} strokeWidth={2} />
+      <Circle cx={19} cy={12} r={1} stroke={color} strokeWidth={2} />
+    </Svg>
+  );
+}
+
+/** Tag with a slash (Tabler IconTagOff): Park's "No Tag Change" row. */
+export function TagOffGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 7.149 7.144 a 0.498 0.498 0 0 0 0.351 0.856 a 0.498 0.498 0 0 0 0.341 -0.135 M 3.883 3.875 a 2.99 2.99 0 0 0 -0.883 2.125 v 5.172 a 2 2 0 0 0 0.586 1.414 l 7.71 7.71 a 2.41 2.41 0 0 0 3.408 0 l 2.796 -2.796 m 2.005 -2.005 l 0.79 -0.79 a 2.41 2.41 0 0 0 0 -3.41 l -7.71 -7.71 a 2 2 0 0 0 -1.412 -0.585 h -4.173 M 3 3 l 18 18"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Chevron-left (Tabler IconChevronLeft): the Back row of a context-menu submenu. */
+export function ChevronLeftGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M 15 6 l -6 6 l 6 6" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }

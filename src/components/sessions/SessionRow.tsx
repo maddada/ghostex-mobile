@@ -9,14 +9,9 @@
  * its tag glyph in that leading slot instead of the agent icon, at full opacity
  * in the tag's color (desktop .session-tag-agent-icon, which owns the slot at
  * rest and only yields to the agent identity on pointer hover — a state the
- * phone has no equivalent for). Trailing precedence
- * matches the desktop trailing rules: a timer countdown label always wins the
- * text slot (getSessionCardTimerTrailingLabel), then the status indicator —
- * spinning orange ring for working (reference-sidebar-working-spin), static
- * blue dot for attention/done, red for error — and the muted Last Active time
- * renders only when neither is present, so the time and the status indicator
- * occupy the same right-aligned area. The active row gets the translucent
- * rounded fill plus a solid-white outline.
+ * phone has no equivalent for). The status slot after the title follows the
+ * desktop row (sessionStatus.ts holds the rules). The active row gets the
+ * translucent rounded fill plus a solid-white outline.
  *
  * CDXC:Sessions 2026-09-24 DECISION: "don't show multiple sessions as selected
  * in the list, just show last active one as highlighted", so warm terminal
@@ -27,104 +22,121 @@
  * Active time is dimmer.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import {
   agentIconTint,
-  displayStatus,
   resolveAgentIconId,
   type GhostexCustomSessionTags,
   type GhostexSession,
 } from '../../contract/mobileSummary';
 import { resolveSessionTag } from '../../contract/sessionTags';
 import { SessionCopy } from '../../copy';
+import { useSettingsStore } from '../../settings/store';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
 import { ClockGlyph, PencilGlyph } from './icons';
-import { delayedSendCountdownLabel, useNowTick } from './timerCountdown';
+import {
+  COMPLETION_FLASH_MS,
+  COMPLETION_FLASH_OPACITY,
+  COMPLETION_FLASH_PROGRESS,
+  hasPendingQuestion,
+  nextLabelDeadline,
+  rowActivityIndicator,
+  rowClockKind,
+  rowTimeLabel,
+  shouldStartCompletionFlash,
+} from './sessionStatus';
 
 const ACTIVE_DARKEN_PERCENT = 10;
 
 /**
- * Desktop timer-label precedence (session-card-content.tsx
- * getSessionCardTimerTrailingLabel): a live Delayed Send countdown wins (ticked
- * from the phone clock when gxserver published the deadline, and never the
- * "Waiting for agent(s)" prose, which stays on the clock icon), then an armed
- * Close After Done shows the constant 03:00 label.
+ * Re-renders the row when the time it draws next reads differently
+ * (nextLabelDeadline): every second while a countdown runs, and only when the
+ * relative time's digit changes otherwise. Returns the clock the labels read.
  */
-function timerTrailingLabel(session: GhostexSession, nowMs: number): string {
-  const delayedSend = delayedSendCountdownLabel(session, nowMs);
-  if (delayedSend.length > 0) return delayedSend;
-  if (hasActiveDelayedSend(session)) return '';
-  return session.closeAfterDone ? '03:00' : '';
+function useRowLabelClock(session: GhostexSession): number {
+  const [, wake] = useReducer((tick: number) => tick + 1, 0);
+  const nowMs = Date.now();
+  const deadline = nextLabelDeadline(session, nowMs);
+  useEffect(() => {
+    if (deadline === null) return undefined;
+    const timeout = setTimeout(wake, Math.max(0, Math.min(deadline - Date.now(), 2_147_483_647)));
+    return () => clearTimeout(timeout);
+  }, [deadline]);
+  return nowMs;
 }
 
 /**
- * Desktop SessionFloatingAgentIcon: the deadline alone is enough to show the
- * yellow clock, so a missing countdown label cannot hide an active timer.
+ * The completion flash (sessionStatus.ts shouldStartCompletionFlash): the
+ * row's opacity dips three times over three seconds, driven natively. Resting
+ * progress is 1, which reads as full opacity.
  */
-function hasActiveDelayedSend(session: GhostexSession): boolean {
+function useCompletionFlash(session: GhostexSession): Animated.AnimatedInterpolation<number> {
+  const progress = useRef(new Animated.Value(1)).current;
+  const opacity = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: COMPLETION_FLASH_PROGRESS,
+        outputRange: COMPLETION_FLASH_OPACITY,
+      }),
+    [progress],
+  );
+  const previousActivity = useRef<string | null>(null);
+  const soundEnabled = useSettingsStore(
+    (state) => state.hydrated && state.settings.doneNotificationSound,
+  );
+  useEffect(() => {
+    const previous = previousActivity.current;
+    previousActivity.current = session.activity;
+    if (!shouldStartCompletionFlash(previous, session, soundEnabled)) return;
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: COMPLETION_FLASH_MS,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+    // Only an activity or attention-event change can start a flash; the sound setting is read as it stands then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.activity, session.attentionEventId, session.attentionEnteredAt]);
+  return opacity;
+}
+
+/**
+ * apps/desktop/src/app/native_sidebar/status.rs `activity_indicator`: one dot
+ * centered in a 19x16 slot.
+ */
+function ActivityDot({ kind }: { kind: 'working' | 'attention' | 'backgroundWork' }) {
   return (
-    session.delayedSendRemainingLabel.length > 0 ||
-    session.delayedSendDeadlineAt.length > 0 ||
-    session.sendWhenAgentStopsActive ||
-    session.sendWhenAllProjectSessionsStopActive
+    <View style={styles.indicatorSlot}>
+      <View
+        style={
+          kind === 'working'
+            ? styles.workingDot
+            : kind === 'attention'
+              ? styles.attentionDot
+              : styles.backgroundWorkDot
+        }
+      />
+    </View>
   );
 }
 
-/** Compact desktop-style relative time: 32s / 5m / 3h / 2d (relative-time.ts). */
-function compactLastActive(session: GhostexSession): string {
-  const iso = session.lastInteractionAt.length > 0 ? session.lastInteractionAt : session.lastActiveAt;
-  if (iso.length === 0) return '';
-  const timestamp = Date.parse(iso);
-  if (Number.isNaN(timestamp)) return '';
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
-  const minutes = Math.floor(elapsedSeconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
 /**
- * Static right-edge dot color per the desktop reference-layout rules
- * (session-cards.css): attention/done → the blue attention token, error → red
- * #ff6b6b, idle and sleeping → no dot. Working renders the
- * spinning ring instead of a dot. This is the same displayStatus that drives
- * the collapsed project/group count pills.
+ * apps/desktop/src/app/native_sidebar/status.rs `question_indicator`: the pink
+ * question dot, after the orange working dot while the agent still works.
  */
-function referenceDotColor(status: string): string | null {
-  if (status === 'attention' || status === 'done') return SidebarPalette.PILL_ATTENTION;
-  if (status === 'error') return SidebarPalette.ERROR_DOT;
-  return null;
-}
-
-/**
- * Desktop working indicator (reference-sidebar-working-spin): a 12dp orange
- * ring with a transparent right quarter, rotating at 0.82s/turn.
- */
-function WorkingSpinner() {
-  const rotation = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(rotation, {
-        toValue: 1,
-        duration: 820,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [rotation]);
-
-  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  return <Animated.View style={[styles.workingSpinner, { transform: [{ rotate }] }]} />;
+function QuestionIndicator({ working }: { working: boolean }) {
+  return (
+    <View style={styles.questionSlot}>
+      {working ? <View style={styles.workingDot} /> : null}
+      <View style={styles.questionDot} />
+    </View>
+  );
 }
 
 export type SessionRowProps = {
@@ -146,6 +158,11 @@ export type SessionRowProps = {
   onMenu: (anchor: MenuAnchor) => void;
 };
 
+/**
+ * CDXC:SessionStatus 2026-09-25 DECISION:
+ * User: "Please make the indicators for sessions status in the RN session list match gpui one exactly". The row draws what the desktop sidebar row draws (apps/desktop/src/app/native_sidebar/sessions.rs, status.rs, icons.rs) in the same order and sizes: a static 8dp orange dot while working, a 7dp blue dot in attention, an 8dp grey dot for a background shell or monitor on an otherwise idle row, each centered in a 19x16 slot; a pending question replaces the dot and the time with a 6dp pink dot (after the orange one while working); then the timer countdown, or the relative time on a row with no dot, in #a6a6a6 (#686868 while sleeping); an 18dp yellow or pastel-red clock in the leading slot for Delayed Send and Close After Done; and the three-dip completion flash when a session enters attention with the completion sound on. Lifecycle (sleeping, stopped, error) draws no dot, as on the desktop. This supersedes the phone's spinning working ring and its red error and blue done dots.
+ * The rules live in sessionStatus.ts; the fields they read reach the phone through `to_mobile_session_summary` in server/src/ghostex_cli/sessions.rs.
+ */
 export default function SessionRow({
   session,
   active,
@@ -164,30 +181,32 @@ export default function SessionRow({
   );
   const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
   const iconSize = iconId === 'terminal' || iconId === 'browser' ? ds(15) : ds(13);
-  const status = displayStatus(session);
-  const sleeping = status === 'sleep' || status === 'sleeping';
-  const working = status === 'working';
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
-  const nowMs = useNowTick(session.delayedSendDeadlineAt.length > 0);
-  const timerLabel = timerTrailingLabel(session, nowMs);
-  const dotColor = working ? null : referenceDotColor(status);
-  // The time yields the trailing slot to a timer countdown or status indicator.
-  const lastActive =
-    timerLabel.length === 0 && !working && dotColor === null ? compactLastActive(session) : '';
-  const trailingText = timerLabel.length > 0 ? timerLabel : lastActive;
+  const nowMs = useRowLabelClock(session);
+  const flashOpacity = useCompletionFlash(session);
+  const question = hasPendingQuestion(session);
+  const indicator = question ? null : rowActivityIndicator(session);
+  const timeLabel = rowTimeLabel(session, nowMs);
   /*
-   * Desktop leading-slot order (SessionFloatingAgentIcon): an active Delayed
+   * Desktop leading-slot order (icons.rs render_session_icon): an armed Delayed
    * Send clock, then a Close After Done clock, then the session tag, then the
-   * agent icon.
+   * draft pencil, then the agent icon.
    */
   const tag = resolveSessionTag(session, customSessionTags);
   const TagIcon = tag?.Icon;
   const tagColor = tag === undefined ? null : tag.color;
-  const timerClockColor = hasActiveDelayedSend(session)
-    ? SidebarPalette.DELAYED_SEND_CLOCK
-    : session.closeAfterDone
-      ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
-      : null;
+  const clockKind = rowClockKind(session);
+  const timerClockColor =
+    clockKind === 'delayedSend'
+      ? SidebarPalette.ROW_DELAYED_SEND_CLOCK
+      : clockKind === 'closeAfterDone'
+        ? SidebarPalette.ROW_CLOSE_AFTER_DONE_CLOCK
+        : null;
+  const draftPencil =
+    timerClockColor === null &&
+    !(TagIcon !== undefined && tagColor !== null) &&
+    session.isDraft === true &&
+    iconId !== 'browser';
   const iconLeft = inCard ? ds(5) : ds(26);
   const lightActiveBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
   const activeBackground = mixHexColors('#000000', lightActiveBackground, ACTIVE_DARKEN_PERCENT);
@@ -200,100 +219,109 @@ export default function SessionRow({
   };
 
   return (
-    <Pressable
-      ref={rowRef}
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.row,
-        inCard ? styles.rowCard : styles.rowQuick,
-        active ? { backgroundColor: activeBackground } : null,
-        !active && pressed ? { backgroundColor: pressedBackground } : null,
-      ]}
-      onPress={onPress}
-      onLongPress={openMenuFromRow}
-    >
-      {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
-      <View
-        style={[
-          styles.icon,
-          { left: iconLeft },
-          timerClockColor !== null || tagColor !== null
-            ? styles.iconTimer
-            : active
-              ? styles.iconActive
-              : null,
+    <Animated.View style={{ opacity: flashOpacity }}>
+      <Pressable
+        ref={rowRef}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.row,
+          inCard ? styles.rowCard : styles.rowQuick,
+          active ? { backgroundColor: activeBackground } : null,
+          !active && pressed ? { backgroundColor: pressedBackground } : null,
         ]}
+        onPress={onPress}
+        onLongPress={openMenuFromRow}
       >
-        {timerClockColor !== null ? (
-          <ClockGlyph size={ds(15)} color={timerClockColor} />
-        ) : TagIcon !== undefined && tagColor !== null ? (
-          <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
-        ) : session.isDraft && iconId !== 'browser' ? (
-          <PencilGlyph size={ds(14)} color={sidebarForeground} />
-        ) : (
-          <Icon size={iconSize} color={agentIconTint(iconId)} />
-        )}
-      </View>
-      {/*
-        Desktop parity: a session carrying a note gets a small white dot just
-        left of the leading agent icon, vertically centered on it. A SIBLING of
-        the absolutely-placed icon, never a wrapper around it, so it keeps its
-        own full opacity (the icon slot sits at 48%) and cannot move the row.
-        In-card rows put the icon only 5dp from the row edge, so the offset is
-        clamped rather than letting the dot fall outside the row and vanish.
-      */}
-      {session.sessionNote.length > 0 ? (
+        {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
         <View
-          pointerEvents="none"
-          style={[styles.noteDot, { left: Math.max(ds(1), iconLeft - ds(7)) }]}
-        />
-      ) : null}
-      {/*
-        Desktop parity (plan 016 §6): prompts waiting in this session's Ghostex
-        queue, as a small filled circle over the agent icon. A SIBLING of the
-        absolutely-placed icon rather than a child of it, so it keeps its own
-        full opacity (the icon slot sits at 48%) and, like the icon, it can
-        never move the row's layout. Hidden at zero.
-      */}
-      {session.queuedPromptCount > 0 ? (
-        <View
-          pointerEvents="none"
           style={[
-            styles.queueBadge,
-            session.queuedPromptFailedCount > 0 ? styles.queueBadgeFailed : null,
-            { left: iconLeft + ds(8) },
+            styles.icon,
+            { left: iconLeft },
+            timerClockColor !== null || tagColor !== null
+              ? styles.iconTimer
+              : active && !draftPencil
+                ? styles.iconActive
+                : null,
           ]}
         >
-          <Text style={styles.queueBadgeCount} numberOfLines={1}>
-            {session.queuedPromptCount > 9 ? '9+' : String(session.queuedPromptCount)}
-          </Text>
+          {/* The clock is 18dp inside the 15dp slot, overhanging it evenly, as on the desktop. */}
+          {timerClockColor !== null ? (
+            <ClockGlyph size={ds(18)} color={timerClockColor} />
+          ) : TagIcon !== undefined && tagColor !== null ? (
+            <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
+          ) : draftPencil ? (
+            <PencilGlyph size={ds(15)} color={sidebarForeground} />
+          ) : (
+            <Icon size={iconSize} color={agentIconTint(iconId)} />
+          )}
         </View>
-      ) : null}
-      <Text
-        style={[styles.title, active ? styles.titleActive : null]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {title}
-      </Text>
-      <View style={styles.trailing}>
-        {trailingText.length > 0 ? (
-          <Text
+        {/*
+          The row's decorations, placed as the desktop row places them
+          (apps/desktop/src/app/native_sidebar/decorations.rs), measured from the
+          leading icon, which sits 5dp in from the desktop card's edge. Each is a
+          SIBLING of the absolutely-placed icon, never a wrapper around it, so it
+          keeps its own full opacity (the icon slot sits at 48%) and cannot move
+          the row. Painted in the desktop's order: note, draft, queue.
+
+          The note dot: 4dp, white, at the row's left edge, level with the icon.
+        */}
+        {session.sessionNote.length > 0 ? (
+          <View pointerEvents="none" style={[styles.noteDot, { left: iconLeft - ds(5) }]} />
+        ) : null}
+        {/*
+          The unsent-draft dot: 6dp #b9d8fa at the icon's top right, raised and
+          pushed right past the queue badge when one is shown.
+        */}
+        {session.hasComposerDraft === true ? (
+          <View
+            pointerEvents="none"
             style={[
-              styles.trailingText,
-              sleeping && timerLabel.length === 0 ? styles.trailingTextSleeping : null,
+              styles.composerDraftDot,
+              session.queuedPromptCount > 0
+                ? { left: iconLeft + ds(14), top: ds(4.5) }
+                : { left: iconLeft + ds(10), top: ds(8.5) },
+            ]}
+          />
+        ) : null}
+        {/*
+          Prompts waiting in this session's Ghostex queue (plan 016 §6): a 10dp
+          badge over the icon's top right, capped at 99+. Hidden at zero.
+        */}
+        {session.queuedPromptCount > 0 ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.queueBadge,
+              session.queuedPromptFailedCount > 0 ? styles.queueBadgeFailed : null,
+              { left: iconLeft + ds(8) },
             ]}
           >
-            {trailingText}
-          </Text>
+            <Text style={styles.queueBadgeCount} numberOfLines={1}>
+              {session.queuedPromptCount > 99 ? '99+' : String(session.queuedPromptCount)}
+            </Text>
+          </View>
         ) : null}
-        {working ? (
-          <WorkingSpinner />
-        ) : dotColor !== null ? (
-          <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        <Text
+          style={[styles.title, active ? styles.titleActive : null]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
+        {/* sessions.rs: the status dot, then the time, each 6dp after the one before; or the question indicator alone. */}
+        {question || indicator !== null || timeLabel !== null ? (
+          <View style={styles.trailing}>
+            {question ? <QuestionIndicator working={session.activity === 'working'} /> : null}
+            {indicator !== null ? <ActivityDot kind={indicator} /> : null}
+            {timeLabel !== null ? (
+              <Text style={[styles.trailingText, session.isSleeping ? styles.trailingTextSleeping : null]}>
+                {timeLabel}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -339,19 +367,25 @@ const styles = StyleSheet.create({
   },
   noteDot: {
     position: 'absolute',
-    top: '50%',
-    marginTop: -ds(2),
+    top: ds(15),
     width: ds(4),
     height: ds(4),
     borderRadius: ds(2),
     backgroundColor: '#FFFFFF',
   },
+  /* The desktop's composer-draft color (decorations.rs), #B9D8FA in both themes by the user's 2026-09-21 decision there. */
+  composerDraftDot: {
+    position: 'absolute',
+    width: ds(6),
+    height: ds(6),
+    borderRadius: 999,
+    backgroundColor: '#B9D8FA',
+  },
   queueBadge: {
     position: 'absolute',
-    top: '50%',
-    marginTop: -ds(13),
-    minWidth: ds(13),
-    height: ds(13),
+    top: ds(6.5),
+    minWidth: ds(10),
+    height: ds(10),
     paddingHorizontal: ds(2),
     borderRadius: 999,
     alignItems: 'center',
@@ -368,10 +402,10 @@ const styles = StyleSheet.create({
     backgroundColor: SidebarPalette.ERROR_DOT,
   },
   queueBadgeCount: {
-    color: '#1A1A1A',
-    fontSize: ds(9),
+    color: '#1D1704',
+    fontSize: ds(7),
     fontWeight: '700',
-    lineHeight: ds(11),
+    lineHeight: ds(10),
   },
   title: {
     flex: 1,
@@ -383,33 +417,59 @@ const styles = StyleSheet.create({
   titleActive: {
     color: '#D8D8D8',
   },
+  /* The desktop row lays its title, status slot and time out with a 6px gap. */
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ds(5),
-    marginStart: ds(8),
+    gap: ds(6),
+    marginStart: ds(6),
   },
   trailingText: {
-    color: '#4F5359',
-    fontSize: ds(13.5),
+    color: SidebarPalette.ROW_TIME,
+    fontSize: ds(13.55),
     fontWeight: '300',
     lineHeight: ds(20),
     textAlign: 'right',
   },
   trailingTextSleeping: {
-    opacity: 0.45,
+    color: SidebarPalette.ROW_TIME_SLEEPING,
   },
-  dot: {
+  indicatorSlot: {
+    width: ds(19),
+    height: ds(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  questionSlot: {
+    height: ds(16),
+    minWidth: ds(16),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ds(4),
+  },
+  workingDot: {
+    width: ds(8),
+    height: ds(8),
+    borderRadius: 999,
+    backgroundColor: SidebarPalette.ROW_WORKING,
+  },
+  attentionDot: {
     width: ds(7),
     height: ds(7),
     borderRadius: 999,
+    backgroundColor: SidebarPalette.ROW_ATTENTION,
   },
-  workingSpinner: {
-    width: ds(12),
-    height: ds(12),
+  backgroundWorkDot: {
+    width: ds(8),
+    height: ds(8),
     borderRadius: 999,
-    borderWidth: 2,
-    borderColor: SidebarPalette.WORKING_SPINNER,
-    borderRightColor: 'transparent',
+    backgroundColor: SidebarPalette.ROW_BACKGROUND_WORK,
+  },
+  questionDot: {
+    width: ds(6),
+    height: ds(6),
+    borderRadius: 999,
+    backgroundColor: SidebarPalette.ROW_QUESTION,
   },
 });

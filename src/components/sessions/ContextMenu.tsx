@@ -52,11 +52,18 @@ type ContextMenuLeadingVisual =
       icon?: never;
       /** 14dp leading color swatch circle (collection colors). */
       swatch: string;
+    }
+  | {
+      /** A row the desktop draws without an icon (a collection in Add to Group). */
+      icon?: never;
+      swatch?: never;
     };
 
 export type ContextMenuItem =
   | { kind: 'separator'; key: string }
   | { kind: 'label'; key: string; label: string }
+  /** The desktop sidebar menu's small dimmed heading ("Session", "Below"), sentence case. */
+  | { kind: 'heading'; key: string; label: string }
   | (ContextMenuAction & ContextMenuLeadingVisual);
 
 export type ContextMenuProps = {
@@ -172,6 +179,13 @@ export default function ContextMenu({
               if (item.kind === 'label') {
                 return (
                   <Text key={item.key} style={styles.sectionLabel} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                );
+              }
+              if (item.kind === 'heading') {
+                return (
+                  <Text key={item.key} style={styles.heading} numberOfLines={1}>
                     {item.label}
                   </Text>
                 );
@@ -348,6 +362,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     paddingHorizontal: 10,
     paddingTop: 8,
+    paddingBottom: 2,
+  },
+  /** Desktop heading row: 11px at 60% opacity, no hover (native_sidebar/menus.rs). */
+  heading: {
+    color: SidebarPalette.FOREGROUND,
+    opacity: 0.6,
+    fontSize: 11,
+    lineHeight: 14,
+    paddingHorizontal: 10,
+    paddingTop: 6,
     paddingBottom: 2,
   },
   separator: {

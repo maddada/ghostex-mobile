@@ -60,19 +60,3 @@ export function remainingMsUntil(deadlineAt: string, nowMs: number): number {
 export function isDelayedSendWaitingLabel(remainingLabel: string): boolean {
   return remainingLabel === 'Waiting for agent' || remainingLabel === 'Waiting for agents';
 }
-
-/**
- * Live Delayed Send countdown for a session: the deadline ticked from the
- * client clock when gxserver published one, otherwise the daemon's own label.
- * '' while a send-when-finished trigger is still waiting for its agents, and
- * '' when no Delayed Send is armed.
- */
-export function delayedSendCountdownLabel(
-  session: { delayedSendDeadlineAt: string; delayedSendRemainingLabel: string },
-  nowMs: number,
-): string {
-  const fromDeadline = formatDeadlineCountdown(session.delayedSendDeadlineAt, nowMs);
-  if (fromDeadline.length > 0) return fromDeadline;
-  if (isDelayedSendWaitingLabel(session.delayedSendRemainingLabel)) return '';
-  return session.delayedSendRemainingLabel;
-}

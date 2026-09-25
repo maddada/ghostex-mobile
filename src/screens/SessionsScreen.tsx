@@ -67,6 +67,7 @@ import {
 } from '../components/sessions/rows';
 import SessionRow from '../components/sessions/SessionRow';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
+import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { WarningTriangleIcon } from '../components/terminal/icons';
 import {
   cancelDelayedSendCommand,
@@ -89,9 +90,7 @@ import {
   type ProjectHeaderItem,
 } from '../contract/grouping';
 import {
-  displayStatus,
   EMPTY_SIDEBAR_SPACES,
-  formatLastActive,
   type GhostexQuickAction,
   type GhostexSession,
 } from '../contract/mobileSummary';
@@ -121,7 +120,7 @@ import {
   type MachineRecord,
 } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
-import { resolveSelectedSpaceId, spaceRowItems } from '../spaces/spaceFilter';
+import { resolveSelectedSpaceId, spaceRowItems, spaceSessionCounts } from '../spaces/spaceFilter';
 import { useSpacesStore } from '../spaces/store';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
@@ -294,6 +293,11 @@ export default function SessionsScreen({ navigation }: Props) {
     machine === null ? undefined : selectedSpaceIdByMachine[machine.id],
   );
   const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
+  const selectedSummary = selectedInventory?.summary ?? null;
+  const spaceCounts = useMemo(
+    () => spaceSessionCounts(selectedSummary, spaceItems.map((item) => item.spaceId)),
+    [selectedSummary, spaceItems],
+  );
 
   const clockSessions = useMemo(
     () => Object.values(inventoriesByMachineId).flatMap((inventory) => inventory.summary?.sessions ?? []),
@@ -391,6 +395,7 @@ export default function SessionsScreen({ navigation }: Props) {
         onConnect: retryable ? () => retryMachineWithStatus(entry) : undefined,
         workingCount: counts.workingCount,
         attentionCount: counts.attentionCount,
+        backgroundWorkCount: counts.backgroundWorkCount,
       };
     });
     return [...tabs, MACHINE_TAB_ADD];
@@ -438,34 +443,6 @@ export default function SessionsScreen({ navigation }: Props) {
       }
     },
     [navigation, setTransientStatus],
-  );
-
-  /**
-   * Open a session straight onto its Session Chat surface. The attach tab's
-   * key is deterministic, so chat mode is armed BEFORE the tab opens and the
-   * Terminal screen mounts the chat view without flashing the terminal first.
-   */
-  const attachInChatMode = useCallback(
-    async (target: MachineRecord, session: GhostexSession): Promise<void> => {
-      const sessionKey = attachSessionKey(target.id, session.sessionId);
-      useTerminalStore.getState().setSessionViewMode(sessionKey, 'chat');
-      await attach(target, session);
-    },
-    [attach],
-  );
-
-  /**
-   * Open a session straight onto its terminal. Pins the tab's explicit
-   * terminal choice so a chat-first Default Agent View cannot override the
-   * menu's Attach action.
-   */
-  const attachInTerminalMode = useCallback(
-    async (target: MachineRecord, session: GhostexSession): Promise<void> => {
-      const sessionKey = attachSessionKey(target.id, session.sessionId);
-      useTerminalStore.getState().setSessionViewMode(sessionKey, 'terminal');
-      await attach(target, session);
-    },
-    [attach],
   );
 
   /** Attach a session that only exists as an id (creation flows, §6). */
@@ -750,10 +727,9 @@ export default function SessionsScreen({ navigation }: Props) {
   const {
     summaryFor,
     runCollectionsUpdate,
-    sessionMenuRootItems,
-    sessionTagItems,
-    projectMenuRootItems,
-    projectCollectionsItems,
+    sessionMenuView,
+    projectMenuView,
+    startTranscriptConversation,
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
@@ -771,8 +747,7 @@ export default function SessionsScreen({ navigation }: Props) {
     lastActionByProject,
     navigation,
     primaryAgentId,
-    attachInChatMode,
-    attachInTerminalMode,
+    setProgress,
     reconnectMachine,
     refreshAll,
     refreshMachine,
@@ -804,8 +779,8 @@ export default function SessionsScreen({ navigation }: Props) {
           <GroupHeaderRow
             key={child.key}
             title={child.title}
-            count={child.count}
             collapsed={child.collapsed}
+            status={child.status}
             onPress={() => collapse.toggleGroup(machineId, child.groupCollapseKey)}
             onMenu={() => {
               if (target === null) return;
@@ -838,7 +813,7 @@ export default function SessionsScreen({ navigation }: Props) {
               setOverlay({
                 kind: 'sessionMenu',
                 ctx: { machine: target, item: child },
-                view: 'root',
+                menuPath: [],
               });
             }}
           />
@@ -850,6 +825,10 @@ export default function SessionsScreen({ navigation }: Props) {
             key={child.key}
             label={child.label}
             collapsed={child.collapsed}
+            status={child.status}
+            active={child.status.sessionIds.some(
+              (sessionId) => attachSessionKey(machineId, sessionId) === selectedSessionKey,
+            )}
             onPress={() => collapse.toggleSessionKind(machineId, child.kindCollapseKey)}
           />
         );
@@ -919,6 +898,7 @@ export default function SessionsScreen({ navigation }: Props) {
             collapsed={header.collapsed}
             workingCount={header.workingCount}
             attentionCount={header.attentionCount}
+            backgroundWorkCount={header.backgroundWorkCount}
             awakeCount={header.awakeCount}
             hasActions={header.quickActions.length > 0}
             selectedActionType={
@@ -936,7 +916,7 @@ export default function SessionsScreen({ navigation }: Props) {
               setOverlay({
                 kind: 'projectMenu',
                 ctx: { machine: target, header },
-                view: 'root',
+                menuPath: [],
               });
             }}
             onCreateTerminal={() => {
@@ -1038,6 +1018,7 @@ export default function SessionsScreen({ navigation }: Props) {
               collapsed={header.collapsed}
               workingCount={header.workingCount}
               attentionCount={header.attentionCount}
+              backgroundWorkCount={header.backgroundWorkCount}
               awakeCount={header.awakeCount}
               onPress={() => collapse.toggleCollection(block.machineId, header.collectionId)}
               onMenu={() => {
@@ -1090,6 +1071,7 @@ export default function SessionsScreen({ navigation }: Props) {
             collapsed={item.collapsed}
             workingCount={item.workingCount}
             attentionCount={item.attentionCount}
+            backgroundWorkCount={item.backgroundWorkCount}
             awakeCount={item.awakeCount}
             first={item.section === 'quick'}
             /* Projects is always open (grouping.ts), so it draws no caret. */
@@ -1154,7 +1136,7 @@ export default function SessionsScreen({ navigation }: Props) {
               setOverlay({
                 kind: 'sessionMenu',
                 ctx: { machine: target, item },
-                view: 'root',
+                menuPath: [],
               });
             }}
           />
@@ -1317,6 +1299,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <SpaceTabs
           spaces={spaceItems}
           selectedSpaceId={selectedSpaceId}
+          countsBySpaceId={spaceCounts}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
         />
       ) : null}
@@ -1347,59 +1330,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <ContextMenu
           visible
           title={sessionTitle(overlay.ctx.item.session)}
-          subtitle={overlay.view === 'tags' ? 'Tags' : overlay.ctx.item.projectTitle}
-          items={
-            overlay.view === 'tags'
-              ? sessionTagItems(overlay.ctx)
-              : sessionMenuRootItems(overlay.ctx)
-          }
-          onClose={() => setOverlay(NONE)}
-        />
-      ) : null}
-
-      {overlay.kind === 'sessionDetails' ? (
-        <DetailsSheet
-          visible
-          title={sessionTitle(overlay.ctx.item.session)}
-          subtitle="Remote session metadata from the Ghostex CLI."
-          entries={[
-            {
-              label: 'Machine',
-              value: machineDisplayLabel(overlay.ctx.machine),
-            },
-            { label: 'Project', value: overlay.ctx.item.projectTitle },
-            { label: 'Project path', value: overlay.ctx.item.projectPath },
-            { label: 'Status', value: displayStatus(overlay.ctx.item.session) },
-            {
-              label: 'Focused on the computer',
-              value: overlay.ctx.item.session.isFocused ? 'Yes' : 'No',
-            },
-            {
-              label: 'Last active',
-              value: formatLastActive(
-                overlay.ctx.item.session.lastInteractionAt.length > 0
-                  ? overlay.ctx.item.session.lastInteractionAt
-                  : overlay.ctx.item.session.lastActiveAt,
-                new Date(),
-              ),
-            },
-            { label: 'Provider', value: 'zmx' },
-            {
-              label: 'ZMX session',
-              value:
-                overlay.ctx.item.session.zmxName.length > 0
-                  ? overlay.ctx.item.session.zmxName
-                  : overlay.ctx.item.session.providerSessionName,
-            },
-            {
-              label: 'Agent',
-              value:
-                overlay.ctx.item.session.agentName.length > 0
-                  ? overlay.ctx.item.session.agentName
-                  : overlay.ctx.item.session.agent,
-            },
-            { label: 'Session id', value: overlay.ctx.item.session.sessionId },
-          ]}
+          {...sessionMenuView(overlay.ctx, overlay.menuPath)}
           onClose={() => setOverlay(NONE)}
         />
       ) : null}
@@ -1498,16 +1429,18 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
 
-      {overlay.kind === 'copyText' ? (
-        <ConfirmDialog
+      {overlay.kind === 'exportedTranscript' ? (
+        <ExportTranscriptSheet
           visible
-          title={overlay.title}
-          body={overlay.text}
-          selectableBody
-          confirmLabel="Close"
-          cancelLabel={null}
-          onConfirm={() => setOverlay(NONE)}
-          onCancel={() => setOverlay(NONE)}
+          sessionTitle={overlay.exported.sessionTitle}
+          path={overlay.exported.path}
+          agentLabel={overlay.exported.agentId.length > 0 ? overlay.exported.agentLabel : ''}
+          starting={false}
+          error={null}
+          onStartNewConversation={() =>
+            startTranscriptConversation(overlay.exported, overlay.projectTitle)
+          }
+          onClose={() => setOverlay(NONE)}
         />
       ) : null}
 
@@ -1515,12 +1448,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <ContextMenu
           visible
           title={overlay.ctx.header.title}
-          subtitle={overlay.view === 'collections' ? 'Move to group' : 'Project'}
-          items={
-            overlay.view === 'collections'
-              ? projectCollectionsItems(overlay.ctx)
-              : projectMenuRootItems(overlay.ctx)
-          }
+          {...projectMenuView(overlay.ctx, overlay.menuPath)}
           onClose={() => setOverlay(NONE)}
         />
       ) : null}

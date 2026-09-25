@@ -14,16 +14,18 @@
  * together with the label when the connection failed, and is dim while not
  * connected. Pressing the glyph on a failed or not-connected machine retries
  * through `onConnect` WITHOUT selecting the tab; pressing the label selects.
- * Working and attention counts stay on unselected tabs so a machine still
- * reports that something needs the user. A long press opens the tab's menu.
+ * Unselected tabs show their machine's status as the desktop's overlapping
+ * dots (StatusDotStack) so a machine still reports that something needs the
+ * user. A long press opens the tab's menu.
  */
 
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StripCopy } from '../../copy';
-import { GhostexStrokeWidth, SetupPalette, SidebarPalette } from '../../theme/palette';
+import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import { CloudGlyph, LoaderGlyph, PlusGlyph } from './icons';
+import StatusDotStack from './StatusDotStack';
 
 export type MachineTabConnectionState = 'busy' | 'connected' | 'disconnected' | 'failed';
 
@@ -39,8 +41,10 @@ export type MachineTabItem = {
   connectionLabel?: string;
   /** Retries the connection from the glyph; absent while connected or busy. */
   onConnect?: () => void;
+  /** grouping.ts countSessions: the desktop machine tab's counts. */
   workingCount: number;
   attentionCount: number;
+  backgroundWorkCount: number;
 };
 
 /** The trailing "+" tab; the strip's `items` always end with it. */
@@ -119,28 +123,30 @@ function ConnectionGlyph({ item }: { item: MachineTabItem }) {
   );
 }
 
-function CountPills({ item }: { item: MachineTabItem }) {
-  if (item.workingCount <= 0 && item.attentionCount <= 0) return null;
+/**
+ * CDXC:SessionStatus 2026-09-25 DECISION:
+ * User: "Please make the indicators for sessions status in the RN session list match gpui one exactly". The desktop machine tab shows no status on the selected machine and the other machines' status as dots, not numbers, like its Spaces (apps/desktop/src/app/native_sidebar/machines.rs), so the phone draws the same overlapping dots on unselected tabs only. This supersedes the phone's numbered pills on every tab.
+ */
+function StatusDots({ item }: { item: MachineTabItem }) {
+  if (item.workingCount <= 0 && item.attentionCount <= 0 && item.backgroundWorkCount <= 0) return null;
   return (
     <View
       accessibilityLabel={[
         item.workingCount > 0 ? `${item.workingCount} working` : '',
-        item.attentionCount > 0 ? `${item.attentionCount} done` : '',
+        item.attentionCount > 0 ? `${item.attentionCount} need attention` : '',
+        item.workingCount === 0 && item.backgroundWorkCount > 0
+          ? `${item.backgroundWorkCount} running in the background`
+          : '',
       ]
         .filter(Boolean)
         .join(', ')}
-      style={styles.counts}
     >
-      {item.workingCount > 0 ? (
-        <View style={[styles.count, { backgroundColor: SidebarPalette.PILL_WORKING }]}>
-          <Text style={styles.countLabel}>{item.workingCount}</Text>
-        </View>
-      ) : null}
-      {item.attentionCount > 0 ? (
-        <View style={[styles.count, { backgroundColor: SidebarPalette.PILL_ATTENTION }]}>
-          <Text style={styles.countLabel}>{item.attentionCount}</Text>
-        </View>
-      ) : null}
+      <StatusDotStack
+        workingCount={item.workingCount}
+        attentionCount={item.attentionCount}
+        backgroundWorkCount={item.backgroundWorkCount}
+        ringColor={SetupPalette.PANEL}
+      />
     </View>
   );
 }
@@ -210,7 +216,7 @@ export default function MachineTabs({
             >
               {item.label}
             </Text>
-            <CountPills item={item} />
+            {selected ? null : <StatusDots item={item} />}
           </Pressable>
         );
       })}
@@ -290,24 +296,5 @@ const styles = StyleSheet.create({
   },
   labelFailed: {
     color: SetupPalette.ERROR,
-  },
-  counts: {
-    flexDirection: 'row',
-    gap: 3,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  count: {
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countLabel: {
-    color: '#111111',
-    fontSize: 10.5,
-    fontWeight: '700',
   },
 });

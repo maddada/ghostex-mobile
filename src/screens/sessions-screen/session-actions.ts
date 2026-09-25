@@ -1,5 +1,3 @@
-import { remoteTerminalCommand } from '../../remote/commands';
-import { ensureConnected } from '../../inventory/client';
 /**
  * SessionsScreen overlay/action model: the Overlay state union, the
  * BulkSessionAction factories, and the small pure session helpers, moved
@@ -7,20 +5,28 @@ import { ensureConnected } from '../../inventory/client';
  */
 
 import {
-  attachCommand,
+  cancelDelayedSendCommand,
+  closeAfterDoneCommand,
   killSessionCommand,
+  parkSessionCommand,
   pinSessionCommand,
   reloadSessionCommand,
-  shellQuote,
   sleepSessionCommand,
+  tagSessionCommand,
   wakeSessionCommand,
 } from '../../commands/ghostexCli';
 import type { CollectionHeaderItem, GroupHeaderItem, ProjectHeaderItem, SessionItem } from '../../contract/grouping';
 import type { GhostexQuickAction, GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
-import { lifecycleMutation, pinMutation } from '../../sessions/sessionCommands';
+import {
+  lifecycleMutation,
+  parkMutation,
+  pinMutation,
+  tagMutation,
+} from '../../sessions/sessionCommands';
 import type { MachineRecord } from '../../machines/store';
+import type { ExportedTranscript } from '../terminal-screen/session-lookups';
 
 export type SessionContext = { machine: MachineRecord; item: SessionItem };
 export type ProjectContext = { machine: MachineRecord; header: ProjectHeaderItem };
@@ -31,14 +37,15 @@ export type MachineContext = { machine: MachineRecord };
 
 export type Overlay =
   | { kind: 'none' }
-  | { kind: 'sessionMenu'; ctx: SessionContext; view: 'root' | 'tags' }
-  | { kind: 'sessionDetails'; ctx: SessionContext }
+  /** `menuPath`: the labels of the submenus opened so far, root first. */
+  | { kind: 'sessionMenu'; ctx: SessionContext; menuPath: readonly string[] }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
   | { kind: 'sessionNote'; ctx: SessionContext }
   | { kind: 'delayedSend'; ctx: SessionContext }
   | { kind: 'closeConfirm'; ctx: SessionContext }
-  | { kind: 'copyText'; title: string; text: string }
-  | { kind: 'projectMenu'; ctx: ProjectContext; view: 'root' | 'collections' }
+  /** Handoff / Export's result: the exported path and the follow-up conversation. */
+  | { kind: 'exportedTranscript'; exported: ExportedTranscript; projectTitle: string }
+  | { kind: 'projectMenu'; ctx: ProjectContext; menuPath: readonly string[] }
   | { kind: 'projectKillConfirm'; ctx: ProjectContext }
   | { kind: 'projectDetails'; ctx: ProjectContext }
   | { kind: 'agentMenu'; ctx: ProjectContext }
@@ -112,20 +119,41 @@ export function reloadSessionAction(session: GhostexSession): BulkSessionAction 
   };
 }
 
-/**
- * `ssh -tt [-p port] user@host '<login-shell attach command>'` (§2 row 7). A
- * tailcat machine has no address to ssh to — its host is a synthetic host-key
- * identity — so the copied command is the attach command to run on the machine.
- */
-export async function attachSshCommand(machine: MachineRecord, session: GhostexSession): Promise<string> {
-  await ensureConnected(machine);
-  const remote = await remoteTerminalCommand(
-    machine.id,
-    attachCommand(session.sessionId, session.projectId.length > 0 ? session.projectId : undefined)
-  );
-  if (machine.transport === 'tailcat') return remote;
-  const portFlag = machine.port === 22 ? '' : ` -p ${machine.port}`;
-  return `ssh -tt${portFlag} ${machine.username}@${machine.host} ${shellQuote(remote)}`;
+/** Park or unpark; the CLI selects the session by project and id. */
+export function parkSessionAction(session: GhostexSession, parked: boolean): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: parkSessionCommand(session.sessionId, session.projectId, parked),
+    closeWarmSession: false,
+    optimisticChange: parkMutation(session.sessionId, parked),
+  };
+}
+
+/** Set a tag, or clear it with `null`. */
+export function tagSessionAction(session: GhostexSession, tag: string | null): BulkSessionAction {
+  const value = tag ?? 'none';
+  return {
+    sessionId: session.sessionId,
+    command: tagSessionCommand(session.sessionId, value),
+    closeWarmSession: false,
+    optimisticChange: tagMutation(session.sessionId, value),
+  };
+}
+
+export function closeAfterDoneSessionAction(session: GhostexSession): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: closeAfterDoneCommand(session.sessionId),
+    closeWarmSession: false,
+  };
+}
+
+export function cancelDelayedSendSessionAction(session: GhostexSession): BulkSessionAction {
+  return {
+    sessionId: session.sessionId,
+    command: cancelDelayedSendCommand(session.sessionId),
+    closeWarmSession: false,
+  };
 }
 
 export function sessionTitle(session: GhostexSession): string {
