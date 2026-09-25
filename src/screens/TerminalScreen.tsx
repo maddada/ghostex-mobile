@@ -108,6 +108,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
       activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary
     )
   );
+  // The project's folder and name, for the menu's Docs row.
+  const activeProject = useInventoryStore((state) =>
+    activeTab === null || activeProjectId.length === 0
+      ? null
+      : (state.inventoriesByMachineId[activeTab.machineId]?.summary?.projects.find(
+          (project) => project.projectId === activeProjectId
+        ) ?? null)
+  );
   const activeSession = useInventoryStore((state) =>
     sessionRecordFor(
       activeTab,
@@ -439,6 +447,18 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   const handleTerminalMenuAction = useCallback(
     (id: Parameters<typeof handleMenuAction>[0]): void => {
+      if (id === 'docs') {
+        setMenuVisible(false);
+        if (activeTab !== null && activeProject !== null && (activeProject.path ?? '').length > 0) {
+          navigation.navigate('Docs', {
+            machineId: activeTab.machineId,
+            projectId: activeProject.projectId,
+            projectName: activeProject.name ?? '',
+            projectPath: activeProject.path ?? '',
+          });
+        }
+        return;
+      }
       if (id === 'sessionNote' || id === 'savedPrompts') {
         setMenuVisible(false);
         if (!chatModeActive) {
@@ -453,7 +473,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       }
       handleMenuAction(id);
     },
-    [chatModeActive, handleMenuAction, toggleChatView]
+    [activeProject, activeTab, chatModeActive, handleMenuAction, navigation, toggleChatView]
   );
 
   const uploadEnabled = activeTab !== null && (chatModeActive ? agentActionsCapable : activeTab.state === 'open');
@@ -695,6 +715,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         sessionNoteEnabled={chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
         savedPromptsEnabled={chatCapable}
         searchConversationEnabled={chatModeActive}
+        docsEnabled={activeProject !== null && (activeProject.path ?? '').length > 0}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         killSessionEnabled={activeTab !== null && activeSession !== null}

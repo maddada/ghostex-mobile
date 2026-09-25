@@ -50,10 +50,13 @@ import ConnectChooseScreen from './src/screens/ConnectChooseScreen';
 import ConnectedScreen from './src/screens/ConnectedScreen';
 import ScanCodeScreen from './src/screens/ScanCodeScreen';
 import CantReachScreen from './src/screens/CantReachScreen';
+import DocsScreen from './src/screens/DocsScreen';
+import DocViewerScreen from './src/screens/DocViewerScreen';
 import SshAccessHelpScreen from './src/screens/SshAccessHelpScreen';
 import { useWebPreviewStore } from './src/webPreview/store';
 import {
   AddProjectCopy,
+  DocsCopy,
   MachineCopy,
   SshAccessCopy,
   TailscaleFormCopy,
@@ -188,6 +191,8 @@ export default function App() {
                   component={WebPreviewScreen}
                   options={{ headerShown: false }}
                 />
+                <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
+                <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
                 <Stack.Screen
                   name="ExtraKeysEditor"

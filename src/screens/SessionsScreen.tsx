@@ -167,7 +167,6 @@ export default function SessionsScreen({ navigation }: Props) {
   const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
   const lastActionByProject = useLauncherStore((state) => state.lastActionByProject);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
-  const surfacedSessionKeys = useTerminalStore((state) => state.warmOrder);
   const sidebarBackgroundContrast = useSettingsStore(
     (state) => state.settings.sidebarBackgroundContrast,
   );
@@ -825,7 +824,6 @@ export default function SessionsScreen({ navigation }: Props) {
             key={child.key}
             session={child.session}
             active={active}
-            surfaced={surfacedSessionKeys.includes(sessionKey)}
             expandedGroupSurface={expandedGroupSurface}
             sidebarBackground={sidebarAppearance.background}
             sidebarForeground={sidebarAppearance.foreground}
@@ -1001,7 +999,7 @@ export default function SessionsScreen({ navigation }: Props) {
     if (block.kind === 'collection') {
       const header = block.header;
       /*
-       * The branched panel paints no fill of its own any more, so a surfaced
+       * The branched panel paints no fill of its own any more, so the active
        * session row inside it sits on the same neutral expanded-group surface
        * as one in a top-level project. Mixing the collection tint in here would
        * describe a backing that is no longer drawn.
@@ -1142,7 +1140,6 @@ export default function SessionsScreen({ navigation }: Props) {
           <SessionRow
             session={item.session}
             active={active}
-            surfaced={surfacedSessionKeys.includes(sessionKey)}
             expandedGroupSurface={neutralExpandedGroupSurface}
             sidebarBackground={sidebarAppearance.background}
             sidebarForeground={sidebarAppearance.foreground}

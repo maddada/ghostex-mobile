@@ -5,7 +5,7 @@
  * Actions" cluster — same ids and same order: rename, sleep, delayedActions,
  * fork, fullReload, promptEditor, Session Note, Saved Prompts,
  * exportTranscript) and the screen's overflow menu (search conversation,
- * attach, new terminal, settings, disconnect, kill session).
+ * the project's Docs, attach, new terminal, settings, disconnect, kill session).
  *
  * The Agent Actions section is present only for a resolved gxserver session;
  * the screen section is always present, so shell tabs still get the menu.
@@ -45,6 +45,7 @@ export type TerminalMenuActionId =
   | 'savedPrompts'
   | 'exportTranscript'
   | 'searchConversation'
+  | 'docs'
   | 'attachPath'
   | 'newTerminal'
   | 'settings'
@@ -69,6 +70,8 @@ export type TerminalMenuProps = {
   savedPromptsEnabled: boolean;
   /** Searching the transcript only means anything while chat mode is showing. */
   searchConversationEnabled: boolean;
+  /** Docs needs the session's project (its id and folder on the computer). */
+  docsEnabled: boolean;
   /** Attach needs an open terminal (or, in chat mode, a chat-capable session). */
   attachEnabled: boolean;
   /** Disconnect needs a tab to close. */
@@ -97,6 +100,7 @@ export default function TerminalMenu({
   sessionNoteEnabled,
   savedPromptsEnabled,
   searchConversationEnabled,
+  docsEnabled,
   attachEnabled,
   disconnectEnabled,
   killSessionEnabled,
@@ -200,6 +204,15 @@ export default function TerminalMenu({
       label: 'Search Conversation',
       icon: <SearchGlyph size={ICON_SIZE} color={iconColor} />,
       onPress: () => onSelect('searchConversation'),
+    });
+  }
+  if (docsEnabled) {
+    items.push({
+      kind: 'item',
+      key: 'docs',
+      label: 'Docs',
+      icon: <NoteGlyph size={ICON_SIZE} color={iconColor} />,
+      onPress: () => onSelect('docs'),
     });
   }
   items.push(

@@ -742,3 +742,39 @@ export const CantReachCopy = {
   diagnosticsCopied: 'Diagnostics copied.',
   retry: 'Retry',
 } as const;
+
+/**
+ * Docs: the project's Markdown and HTML documents, listed from the computer and opened in a
+ * viewer on the phone. HTML pages carry Agentation so they can be annotated.
+ */
+export const DocsCopy = {
+  menuLabel: 'Docs',
+  listTitle: 'Docs',
+  searchPlaceholder: 'Search docs',
+  recentSection: 'Recently changed',
+  foldersSection: 'Folders',
+  searchSection: (count: number) => (count === 1 ? '1 match' : `${count} matches`),
+  loading: 'Listing this project’s docs…',
+  empty: 'No Markdown or HTML files in this project’s Docs folders yet.',
+  emptyHint: 'Docs lists docs/, artifacts/, ai/ and tmp/, the Markdown and HTML files in the project folder, and any folders added under Settings > Projects > Docs on the computer.',
+  noMatches: 'No docs match that search.',
+  listFailed: 'Could not list this project’s docs',
+  oldCli: 'Update Ghostex on the computer to list its docs from the phone.',
+  retry: 'Retry',
+  machineMissing: 'This machine is no longer saved on this device.',
+  fileCount: (count: number) => (count === 1 ? '1 file' : `${count} files`),
+  opening: 'Opening…',
+  readingFile: 'Reading the file from the computer…',
+  openFailed: 'Could not open this file',
+  reload: 'Reload',
+  copyPath: 'Copy path',
+  pathCopied: 'Path copied',
+  annotateOn: 'Hide annotation tools',
+  annotateOff: 'Annotate with Agentation',
+  annotationsCopied: 'Annotations copied',
+  annotationsCopiedHint: 'Paste them into a session’s chat or terminal.',
+  agentationFailed: 'Agentation could not load. It needs an internet connection on this phone.',
+  skippedAssets: (count: number) =>
+    count === 1 ? 'One file this page uses was too large to copy to the phone.' : `${count} files this page uses were too large to copy to the phone.`,
+  notADoc: 'Only Markdown and HTML files open on the phone. The path was copied.',
+} as const;

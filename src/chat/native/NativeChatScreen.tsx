@@ -10,11 +10,16 @@
  * `apply_output` and the app shell do.
  */
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { docPathForChatFile } from '../../docs/openDoc';
+import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
+import type { RootStackParamList } from '../../navigation/types';
 import { useOpenMachineLink } from '../../webPreview/useOpenMachineLink';
 import type { ChatViewRequest } from '../rust/effects';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
@@ -70,7 +75,7 @@ export default function NativeChatScreen({
   const chat = useRustChat({ machine, projectId, sessionId });
   const theme = useTranscriptTheme();
   const document = chat.state?.document ?? null;
-  const toast = useChatViewRequests(chat, machine.id, onSwitchToTerminal);
+  const toast = useChatViewRequests(chat, machine.id, projectId, onSwitchToTerminal);
 
   // The notice card's Switch account opens the composer's Accounts & limits panel.
   const [accountsRequestId, setAccountsRequestId] = useState(0);
@@ -136,8 +141,14 @@ type Toast = { id: number; title?: string; message: string; error: boolean } | n
  * link through the machine-aware opener (loopback links go to the Web preview), Save to Markdown's
  * result, and the app-shell actions this screen can serve. `focusComposer` is the composer's.
  */
-function useChatViewRequests(chat: RustChat, machineId: string, onSwitchToTerminal: () => void): Toast {
+function useChatViewRequests(
+  chat: RustChat,
+  machineId: string,
+  projectId: string,
+  onSwitchToTerminal: () => void
+): Toast {
   const openMachineLink = useOpenMachineLink();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [toast, setToast] = useState<Toast>(null);
   const counter = useRef(0);
   const show = useCallback((message: string, error: boolean, title?: string) => {
@@ -158,7 +169,18 @@ function useChatViewRequests(chat: RustChat, machineId: string, onSwitchToTermin
           case 'open':
             if (request.target.kind === 'url') openMachineLink(machineId, request.target.url);
             else {
-              // The phone has no file viewer for machine files yet; the path is what it can offer.
+              // Markdown and HTML open in the Docs viewer; a relative path is the session project's.
+              const projectPath =
+                useInventoryStore
+                  .getState()
+                  .inventoriesByMachineId[machineId]?.summary?.projects.find((project) => project.projectId === projectId)
+                  ?.path ?? '';
+              const docPath = docPathForChatFile(request.target.path, projectPath);
+              if (docPath !== null) {
+                navigation.push('DocViewer', { machineId, path: docPath });
+                return;
+              }
+              // Any other file has no viewer on the phone; the path is what it can offer.
               void Clipboard.setStringAsync(request.target.path);
               show(`${request.target.path} (path copied)`, false, 'File');
             }
@@ -174,7 +196,7 @@ function useChatViewRequests(chat: RustChat, machineId: string, onSwitchToTermin
             return;
         }
       }),
-    [chat.onViewRequest, machineId, onSwitchToTerminal, openMachineLink, show] // eslint-disable-line react-hooks/exhaustive-deps
+    [chat.onViewRequest, machineId, navigation, onSwitchToTerminal, openMachineLink, projectId, show] // eslint-disable-line react-hooks/exhaustive-deps
   );
   return toast;
 }

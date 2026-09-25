@@ -81,7 +81,7 @@ import {
   type GhostexQuickAction,
   type GhostexSession,
 } from '../../contract/mobileSummary';
-import { ProgressCopy, StripCopy, WebPreviewCopy } from '../../copy';
+import { DocsCopy, ProgressCopy, StripCopy, WebPreviewCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import {
   FORK_AGENT_ICONS,
@@ -522,6 +522,23 @@ export function useSessionsScreenMenus({
           }),
       },
     ];
+    if (header.projectId.length > 0 && header.projectPath.length > 0) {
+      items.push({
+        kind: 'item',
+        key: 'docs',
+        label: DocsCopy.menuLabel,
+        icon: <NoteGlyph size={14} color={menuIconColor} />,
+        onPress: () => {
+          setOverlay(NONE);
+          navigation.navigate('Docs', {
+            machineId: ctx.machine.id,
+            projectId: header.projectId,
+            projectName: header.title,
+            projectPath: header.projectPath,
+          });
+        },
+      });
+    }
     if (header.projectId.length > 0) {
       items.push({
         kind: 'item',

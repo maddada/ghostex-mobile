@@ -45,6 +45,13 @@ export type RootStackParamList = {
     | { remotePort: number; path?: string; scheme?: 'http' | 'https'; url?: never }
     | { url: string; remotePort?: never; path?: never; scheme?: never }
   );
+  /** A project's Docs: its Markdown and HTML files, by folder, as the desktop Docs view lists them. */
+  Docs: { machineId: string; projectId: string; projectName: string; projectPath: string };
+  /**
+   * One Markdown or HTML file from the computer, by absolute path. `fragment` scrolls to an anchor
+   * (a link such as `other.md#setup`).
+   */
+  DocViewer: { machineId: string; path: string; fragment?: string };
   Settings: undefined;
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;

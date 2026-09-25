@@ -13,11 +13,18 @@
  * matches the desktop trailing rules: a timer countdown label always wins the
  * text slot (getSessionCardTimerTrailingLabel), then the status indicator —
  * spinning orange ring for working (reference-sidebar-working-spin), static
- * blue dot for attention/done, red for error, gray for remote sleeping — and
- * the muted Last Active time renders only when neither is present, so the time
- * and the status indicator occupy the same right-aligned area. Sleeping dims
- * only the title, and the active row gets the translucent rounded fill plus a
- * solid-white outline.
+ * blue dot for attention/done, red for error — and the muted Last Active time
+ * renders only when neither is present, so the time and the status indicator
+ * occupy the same right-aligned area. The active row gets the translucent
+ * rounded fill plus a solid-white outline.
+ *
+ * CDXC:Sessions 2026-09-24 DECISION: "don't show multiple sessions as selected
+ * in the list, just show last active one as highlighted", so warm terminal
+ * surfaces no longer get their own fill; only the selected session is
+ * highlighted. "Don't show sleeping vs not sleeping effect, make all look the
+ * same, just make the last active time bit dimmed for sleeping ones": a
+ * sleeping row keeps the normal title and shows no sleep dot, only its Last
+ * Active time is dimmer.
  */
 
 import { useEffect, useRef } from 'react';
@@ -39,8 +46,7 @@ import { ds } from './rows';
 import { ClockGlyph, PencilGlyph } from './icons';
 import { delayedSendCountdownLabel, useNowTick } from './timerCountdown';
 
-const ACTIVE_SURFACED_DARKEN_PERCENT = 10;
-const INACTIVE_SURFACED_DARKEN_PERCENT = 40;
+const ACTIVE_DARKEN_PERCENT = 10;
 
 /**
  * Desktop timer-label precedence (session-card-content.tsx
@@ -87,14 +93,13 @@ function compactLastActive(session: GhostexSession): string {
 /**
  * Static right-edge dot color per the desktop reference-layout rules
  * (session-cards.css): attention/done → the blue attention token, error → red
- * #ff6b6b, remote sleeping → neutral gray, idle → no dot. Working renders the
+ * #ff6b6b, idle and sleeping → no dot. Working renders the
  * spinning ring instead of a dot. This is the same displayStatus that drives
  * the collapsed project/group count pills.
  */
 function referenceDotColor(status: string): string | null {
   if (status === 'attention' || status === 'done') return SidebarPalette.PILL_ATTENTION;
   if (status === 'error') return SidebarPalette.ERROR_DOT;
-  if (status === 'sleep' || status === 'sleeping') return SidebarPalette.SLEEP_DOT;
   return null;
 }
 
@@ -126,8 +131,6 @@ export type SessionRowProps = {
   session: GhostexSession;
   /** Warm-attached session key matches the current terminal. */
   active: boolean;
-  /** A warm native terminal surface exists for this session. */
-  surfaced: boolean;
   /** Exact expanded-group surface behind this row, including collection tint. */
   expandedGroupSurface: string;
   /** Current tint/contrast-resolved sidebar backing. */
@@ -146,7 +149,6 @@ export type SessionRowProps = {
 export default function SessionRow({
   session,
   active,
-  surfaced,
   expandedGroupSurface,
   sidebarBackground,
   sidebarForeground,
@@ -187,10 +189,8 @@ export default function SessionRow({
       ? SidebarPalette.CLOSE_AFTER_DONE_CLOCK
       : null;
   const iconLeft = inCard ? ds(5) : ds(26);
-  const lightSurfacedBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
-  const surfacedBackground = active
-    ? mixHexColors('#000000', lightSurfacedBackground, ACTIVE_SURFACED_DARKEN_PERCENT)
-    : mixHexColors('#000000', lightSurfacedBackground, INACTIVE_SURFACED_DARKEN_PERCENT);
+  const lightActiveBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
+  const activeBackground = mixHexColors('#000000', lightActiveBackground, ACTIVE_DARKEN_PERCENT);
   const pressedBackground = mixHexColors(sidebarBackground, '#000000', 90);
 
   const openMenuFromRow = (): void => {
@@ -206,8 +206,8 @@ export default function SessionRow({
       style={({ pressed }) => [
         styles.row,
         inCard ? styles.rowCard : styles.rowQuick,
-        surfaced ? { backgroundColor: surfacedBackground } : null,
-        !surfaced && pressed ? { backgroundColor: pressedBackground } : null,
+        active ? { backgroundColor: activeBackground } : null,
+        !active && pressed ? { backgroundColor: pressedBackground } : null,
       ]}
       onPress={onPress}
       onLongPress={openMenuFromRow}
@@ -270,18 +270,23 @@ export default function SessionRow({
         </View>
       ) : null}
       <Text
-        style={[
-          styles.title,
-          active ? styles.titleActive : null,
-          sleeping ? styles.titleSleeping : null,
-        ]}
+        style={[styles.title, active ? styles.titleActive : null]}
         numberOfLines={1}
         ellipsizeMode="tail"
       >
         {title}
       </Text>
       <View style={styles.trailing}>
-        {trailingText.length > 0 ? <Text style={styles.trailingText}>{trailingText}</Text> : null}
+        {trailingText.length > 0 ? (
+          <Text
+            style={[
+              styles.trailingText,
+              sleeping && timerLabel.length === 0 ? styles.trailingTextSleeping : null,
+            ]}
+          >
+            {trailingText}
+          </Text>
+        ) : null}
         {working ? (
           <WorkingSpinner />
         ) : dotColor !== null ? (
@@ -378,10 +383,6 @@ const styles = StyleSheet.create({
   titleActive: {
     color: '#D8D8D8',
   },
-  titleSleeping: {
-    color: '#5F646B',
-    opacity: 0.42,
-  },
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -394,6 +395,9 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     lineHeight: ds(20),
     textAlign: 'right',
+  },
+  trailingTextSleeping: {
+    opacity: 0.45,
   },
   dot: {
     width: ds(7),
