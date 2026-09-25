@@ -1,6 +1,6 @@
 /**
  * The native chat screen: the Rust chat core's document drawn with React Native views. It is the
- * default chat view; Settings > Chat view > Web (previous) shows the WebView chat instead.
+ * phone's only chat view.
  *
  * Layout follows desktop's `native_chat/render.rs`: a host-level error line, the transcript search
  * bar, the transcript (or the empty/welcome state standing in for it), the cards stacked above the
@@ -14,7 +14,7 @@
  * (`apps/desktop/src/app/native_chat/`) has its phone form here, drawn from the same core document
  * and sending the same actions; only the gesture changes where desktop uses hover, a right press or
  * a keyboard (long presses and sheets). A desktop feature the phone leaves out is one tied to the
- * desktop itself (hover, keyboard shortcuts, windows and glass, the Chat Lab), or one that needs an
+ * desktop itself (hover, keyboard shortcuts, windows and glass), or one that needs an
  * app-level screen or setting the chat cannot add on its own.
  */
 

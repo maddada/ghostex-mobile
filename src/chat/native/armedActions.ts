@@ -1,7 +1,7 @@
 /**
  * The session's armed Delayed Send and Close After Done as the chat's working row names them: the
- * phone form of `sessionChatArmedActions` (packages/shared/session-chat-presentation/armed-actions.ts),
- * which desktop's sidebar clock rebuilds every second for `working_strip.rs`.
+ * phone form of `packages/gx-core/src/sidebar_view/armed_actions.rs`, which desktop's sidebar clock
+ * rebuilds every second for `working_strip.rs`.
  *
  * The phone reads the session's row in the inventory, which carries the Delayed Send deadline and
  * label and only whether Close After Done is armed, so a Close After Done has no countdown here and a

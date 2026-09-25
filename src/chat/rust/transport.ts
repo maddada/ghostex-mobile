@@ -6,12 +6,11 @@
  * The core asks for gxserver calls by method and params (`sendRpc`) and folds gxserver chat frames.
  * The phone reaches the computer only through SSH exec and has no streaming channel, so:
  * every `sendRpc` is one `ghostex session-chat-rpc <method> --params-base64 <json>` exec (the verb
- * prints the daemon's own `{ok, result}` or refusal), and the live stream is the same long poll the
- * WebView chat runs (`readSessionChat` with `waitMs` and `fingerprint`), each changed answer handed
- * to the core as a `sessionChatSnapshot` frame. One verb for every method keeps this file a dumb
- * pipe: a method the core adds needs no phone change, only its name in the verb's allowlist.
- * SEE-ALSO: server/src/ghostex_cli/session_chat_rpc.rs, apps/mobile/views/chat/session-chat-main.tsx
- * (`snapshotEventFromRead`, the WebView's long poll)
+ * prints the daemon's own `{ok, result}` or refusal), and the live stream is a `readSessionChat`
+ * long poll (`waitMs` and `fingerprint`), each changed answer handed to the core as a
+ * `sessionChatSnapshot` frame. One verb for every method keeps this file a dumb pipe: a method the
+ * core adds needs no phone change, only its name in the verb's allowlist.
+ * SEE-ALSO: server/src/ghostex_cli/session_chat_rpc.rs
  *
  * Positions: a read's `(epoch, seq)` is the follower's current position when one exists and
  * `(0, 0)` when none does, so it jumps back to zero whenever the last desktop viewer of the session

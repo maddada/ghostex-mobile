@@ -19,7 +19,7 @@ import { isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { PulseDot, Spinner, StatusCard, useLoop } from './primitives';
 
-/** `packages/shared/session-chat-presentation/working-strip.json`. */
+/** `packages/gx-chat-core/visual/working-strip.json`. */
 const VISUAL = {
   minHeight: 24,
   paddingX: 6,
@@ -142,7 +142,11 @@ function WorkingSpark() {
   );
 }
 
-/** Compaction and running shells: a status card with the activity, its clock and its progress. */
+/**
+ * Compaction and running shells: a status card with the activity, its clock and its progress.
+ *
+ * CDXC:SessionChat 2026-09-11 DECISION: User: put the compaction hint in an info-circle tooltip immediately right of the title, replacing the visible hint line.
+ */
 function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
   const styles = useStyles();
   const P = useTranscriptTheme();

@@ -28,7 +28,7 @@ import {
 } from '../../../modules/gx-chat-core/src';
 
 import type { MachineConnectionTarget } from '../../machines/credentials';
-import { uploadSessionChatLocalFile } from '../session-chat-bridge';
+import { uploadSessionChatLocalFile } from '../session-chat-helpers';
 import type { UserAction } from './actions';
 import { readComposerBoot } from './boot';
 import { ComposerModel, type ComposerModelState } from './composer';

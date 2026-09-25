@@ -3,8 +3,7 @@
  * separate trailing buttons: the Agent Actions menu (the phone's copy of the
  * desktop terminal-overlay action strip and the shared chat view's "Agent
  * Actions" cluster — same ids and same order: rename, sleep, delayedActions,
- * fork, fullReload, promptEditor, Session Note, Saved Prompts,
- * exportTranscript) and the screen's overflow menu (search conversation,
+ * fork, fullReload, promptEditor, Session Note, exportTranscript) and the screen's overflow menu (search conversation,
  * the project's Docs, attach, new terminal, settings, disconnect, kill session).
  *
  * The Agent Actions section is present only for a resolved gxserver session;
@@ -28,7 +27,6 @@ import {
   SearchGlyph,
   SettingsGlyph,
   SleepGlyph,
-  StackPushGlyph,
   TerminalGlyph,
 } from '../sessions/icons';
 import { PaperclipIcon, PencilIcon } from './icons';
@@ -42,7 +40,6 @@ export type TerminalMenuActionId =
   | 'fullReload'
   | 'promptEditor'
   | 'sessionNote'
-  | 'savedPrompts'
   | 'exportTranscript'
   | 'searchConversation'
   | 'docs'
@@ -64,10 +61,8 @@ export type TerminalMenuProps = {
   forkEnabled: boolean;
   /** gxserver can only export transcripts of the agents it can decode. */
   exportTranscriptEnabled: boolean;
-  /** Session Note needs a provider conversation and the shared chat page. */
+  /** Session Note needs a provider conversation and the chat view. */
   sessionNoteEnabled: boolean;
-  /** Saved Prompts is hosted by the shared chat page. */
-  savedPromptsEnabled: boolean;
   /** Searching the transcript only means anything while chat mode is showing. */
   searchConversationEnabled: boolean;
   /** Docs needs the session's project (its id and folder on the computer). */
@@ -98,7 +93,6 @@ export default function TerminalMenu({
   forkEnabled,
   exportTranscriptEnabled,
   sessionNoteEnabled,
-  savedPromptsEnabled,
   searchConversationEnabled,
   docsEnabled,
   attachEnabled,
@@ -174,15 +168,6 @@ export default function TerminalMenu({
         onPress: () => onSelect('sessionNote'),
       });
     }
-    if (savedPromptsEnabled) {
-      items.push({
-        kind: 'item',
-        key: 'savedPrompts',
-        label: 'Saved Prompts',
-        icon: <StackPushGlyph size={ICON_SIZE} color={iconColor} />,
-        onPress: () => onSelect('savedPrompts'),
-      });
-    }
     if (exportTranscriptEnabled) {
       items.push({
         kind: 'item',
@@ -196,7 +181,7 @@ export default function TerminalMenu({
   }
 
   items.push({ kind: 'label', key: 'session-label', label: 'Session' });
-  // The chat page has no search button of its own; this row is its entry point.
+  // The chat screen has no search button of its own; this row is its entry point.
   if (searchConversationEnabled) {
     items.push({
       kind: 'item',

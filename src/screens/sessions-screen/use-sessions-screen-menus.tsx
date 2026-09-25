@@ -17,7 +17,7 @@ import { GhostexNative } from '../../../modules/ghostex-native/src';
 import { openTailscaleOrDownload } from '../../app/tailscale';
 import type { ActionSheetItem } from '../../components/common/ActionSheet';
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
-import { isSessionChatSupportedAgent } from '../../chat/session-chat-bridge';
+import { isSessionChatSupportedAgent } from '../../chat/session-chat-helpers';
 import { runGhostexCli } from '../../components/sessions/cli';
 import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { type DrawerBlock } from '../../components/sessions/drawerModel';

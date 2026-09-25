@@ -30,7 +30,7 @@ export function effortFor(row: JsonRecord, efforts: Readonly<Record<string, stri
 }
 
 /**
- * CDXC:SessionChat 2026-09-25 SEE-ALSO: `reasoning_for` in apps/desktop/src/app/native_chat/option_menu/model_menu/state.rs and `modelMenuReasoningFor` in packages/shared/session-chat-presentation/model-menu.ts draw the same button; keep the three in step.
+ * CDXC:SessionChat 2026-09-25 SEE-ALSO: `reasoning_for` in apps/desktop/src/app/native_chat/option_menu/model_menu/state.rs draws the same button; keep the two in step.
  * The Reasoning button for the highlighted row: its levels, with the one the chips moved to
  * marked. `browse` names the row, and `browseCurrent` says whether it is the model in use, whose
  * level a choice from the list applies at once.

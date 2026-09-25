@@ -91,8 +91,8 @@ export function transcriptItemKey(item: TranscriptItem): string {
 }
 
 /**
- * One dash on the transcript minimap (`SessionChatMinimapMarker` in
- * `packages/shared/session-chat-presentation/minimap.ts`). Desktop: `minimap.rs`.
+ * One dash on the transcript minimap (`packages/gx-chat-core/src/extras/minimap.rs`). Desktop:
+ * `minimap.rs`.
  */
 export type MinimapMarker = {
   /** The user prompt's message id. */
@@ -171,9 +171,9 @@ export type UnknownItem = { kind: string } & JsonObject;
 
 /**
  * A projected message: the wire message plus everything the renderer needs to draw it without
- * re-parsing markdown. Free-form in Rust (family b); the producer is `projectMessage` in
- * `packages/shared/session-chat-controller/native-presentation.ts`, which the Rust core mirrors
- * key for key. The keys desktop reads are typed below; the rest ride along in the index signature.
+ * re-parsing markdown. Free-form in Rust; the producer is
+ * `packages/gx-chat-core/src/transcript/presentation.rs`. The keys desktop reads are typed below;
+ * the rest ride along in the index signature.
  *
  * A row with `pending: true` is a placeholder that the core fills in a following frame (the
  * backfill); draw it as a skeleton of its role.
@@ -449,7 +449,7 @@ export type ChatDocument = {
   loadingStage: string | null;
   skillsLoading: boolean;
   filesLoading: boolean;
-  /** Chat Lab only; absent on a real session. */
+  /** A preview's own display settings; absent on a real session. */
   previewSettings?: JsonObject;
 
   [key: string]: unknown;

@@ -61,7 +61,7 @@ export function Glyph({ name, size, color, strokeWidth }: { name: GlyphName; siz
   );
 }
 
-/** The working strip's spark (`sparkPath` in packages/shared/session-chat-presentation/working-strip.json). */
+/** The working strip's spark (`sparkPath` in packages/gx-chat-core/visual/working-strip.json). */
 export const SPARK_PATH =
   'M12 0.8c.5 4.6 1.8 7.4 3.6 9.1 1.6 1.6 4.2 2.5 7.6 2.1-3.4-.4-6 .5-7.6 2.1-1.8 1.7-3.1 4.5-3.6 9.1-.5-4.6-1.8-7.4-3.6-9.1C6.8 12.5 4.2 11.6.8 12c3.4.4 6-.5 7.6-2.1C10.2 8.2 11.5 5.4 12 .8z';
 

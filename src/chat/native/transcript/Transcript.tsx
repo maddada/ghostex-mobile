@@ -36,7 +36,12 @@ import { arr, num, obj, str } from './json';
 import { useTranscriptTheme } from './theme';
 import { TranscriptItemView } from './TranscriptItemRow';
 
-/** `scroll-bottom.json`: the pill's look and how far from the bottom it appears. */
+/**
+ * `scroll-bottom.json`: the pill's look and how far from the bottom it appears.
+ *
+ * CDXC:Mobile 2026-09-12 DECISION:
+ * User: do not show the Ctrl+Shift+Down shortcut on the mobile Scroll to bottom button.
+ */
 const SCROLL_BOTTOM = { label: 'Scroll to bottom', edgeThreshold: 10, height: 24, fontSize: 11, paddingX: 10, bottom: 4 };
 /**
  * The composer's scroll collapse (`composer_scroll.rs`): at or under this many points from the end

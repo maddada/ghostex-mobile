@@ -1,7 +1,7 @@
 /**
  * The glyphs the transcript draws. Tabler paths copied from the files desktop names
  * (`apps/desktop/assets/titlebar/*.svg`) and from
- * `packages/shared/session-chat-presentation/message-action-icons.json` (`chat-actions/*`).
+ * `packages/gx-chat-core/visual/message-action-icons.json` (`chat-actions/*`).
  */
 
 import { memo } from 'react';

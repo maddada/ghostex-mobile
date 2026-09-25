@@ -19,27 +19,11 @@ Pod::Spec.new do |s|
   # exclude_files is applied to EVERY attribute's globs (including
   # vendored_frameworks), so it must only match source-like files here.
   s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}']
-  # Fonts/…ttf and WebAssets/session-chat are both git-tracked symlinks into
-  # ../../../../assets, so iOS and Android ship byte-identical copies of the
-  # same generated files.
-  #
-  # 'WebAssets/session-chat' names a DIRECTORY, which install_resource rsyncs
-  # whole (a '/**/*' glob would flatten it instead). Structure matters here:
-  # the page is loaded as <Bundle.main>/session-chat/index.html and pulls its
-  # Shiki grammars from ./shiki/ next to it. See
-  # src/chat/SessionChatWebView.tsx and tooling/build-mobile-chat.mjs in the
-  # Ghostex main repo.
-  #
-  # The symlink level matters too: 'WebAssets' itself MUST be a real directory
-  # whose 'session-chat' entry is the symlink, never a symlinked 'WebAssets'
-  # directory. CocoaPods enumerates a pod's files with a Sandbox PathList glob
-  # that lists symlinked entries but does NOT descend into symlinked
-  # DIRECTORIES, so a symlinked 'WebAssets' makes `pod install` silently drop
-  # this resource from Pods-Ghostex-resources.sh — no warning, no error, just
-  # a shipped app whose chat WebView fails to load (WebKitErrorDomain 103).
-  # Fonts/…ttf survives either way because it is a symlinked FILE inside a
-  # real directory.
-  s.resources = ['Fonts/JetBrainsMonoNerdFont-Regular.ttf', 'WebAssets/session-chat']
+  # Fonts/…ttf is a git-tracked symlink into ../../../../assets, so iOS and
+  # Android ship a byte-identical copy of the same font. It survives CocoaPods'
+  # file enumeration because it is a symlinked FILE inside a real directory;
+  # CocoaPods does not descend into symlinked DIRECTORIES.
+  s.resources = ['Fonts/JetBrainsMonoNerdFont-Regular.ttf']
 
   # -- Vendored native libraries -------------------------------------------
   # GhosttyKit is a proper xcframework (static library + Headers with a

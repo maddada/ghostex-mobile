@@ -16,16 +16,6 @@ android {
     main {
       // Share the exact JetBrains Mono Nerd Font asset used by the iOS pod.
       assets.srcDir project.file('../../../assets/fonts')
-
-      // Session Chat's bundled webview page, generated in the Ghostex main repo
-      // by `bun run build:mobile-chat`. Each srcDir's CONTENTS land at the APK
-      // assets root, so pointing at assets/webview (not assets/webview/
-      // session-chat) is what puts the page at
-      // file:///android_asset/session-chat/index.html — the URL
-      // src/chat/SessionChatWebView.tsx loads. Serving it from a real URL
-      // instead of an HTML string is what gives the page a base URL, so it can
-      // pull in Shiki grammars on demand for syntax highlighting.
-      assets.srcDir project.file('../../../assets/webview')
     }
   }
   lintOptions {

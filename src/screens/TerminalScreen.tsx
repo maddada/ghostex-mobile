@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, Keyboard, Platform, Pressable, Text, ToastAndroid, View } from 'react-native';
+import { Alert, BackHandler, Keyboard, Platform, Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
@@ -31,9 +31,8 @@ import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
 import { ChatBubbleIcon, ChevronLeftIcon, EllipsisIcon, TerminalPromptIcon } from '../components/terminal/icons';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
-import { isSessionChatSupportedAgent } from '../chat/session-chat-bridge';
+import { isSessionChatSupportedAgent } from '../chat/session-chat-helpers';
 import NativeChatScreen from '../chat/native/NativeChatScreen';
-import SessionChatWebView from '../chat/SessionChatWebView';
 import { RenameCopy, SessionCopy } from '../copy';
 import { summarizeFailure } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
@@ -78,11 +77,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const isFocused = useIsFocused();
   const [tapKeyboardHint, setTapKeyboardHint] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  // Each pick of the menu's Search Conversation row opens the chat page's own
-  // search box; the page has no search button of its own on this surface.
+  // Each pick of the menu's Search Conversation row opens the chat screen's own
+  // search box; the screen has no search button of its own.
   const [chatSearchRequestId, setChatSearchRequestId] = useState(0);
   const [chatSessionNoteRequestId, setChatSessionNoteRequestId] = useState(0);
-  const [chatSavedPromptsRequestId, setChatSavedPromptsRequestId] = useState(0);
   const [agentOverlay, setAgentOverlay] = useState<AgentOverlay>(AGENT_OVERLAY_NONE);
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [exportedTranscript, setExportedTranscript] = useState<ExportedTranscript | null>(null);
@@ -156,22 +154,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
     setMountedSessionKeys(mountedTerminalSessionKey, mountedChatSessionKey);
   }, [mountedTerminalSessionKey, mountedChatSessionKey]);
   useEffect(() => () => setMountedSessionKeys(null, null), []);
-
-  /*
-   * Terminal → chat draft transfer counter, per session key. Entering chat
-   * bumps the session's entry, which tells its (already mounted) chat page to
-   * pull whatever the user had typed into the agent CLI into its composer.
-   * Runtime-only: a transfer is a response to one switch, never a stored fact.
-   */
-  const [chatDraftTransferIds, setChatDraftTransferIds] = useState<Record<string, number>>({});
-
-  /*
-   * Chat → terminal draft transfer counter, per session key, and the exact
-   * mirror of the one above: leaving chat bumps the session's entry, which
-   * tells its chat page to park whatever is in the composer and hand it back
-   * for the agent CLI. Runtime-only for the same reason.
-   */
-  const [handoffToTerminalIds, setHandoffToTerminalIds] = useState<Record<string, number>>({});
 
   /*
    * CDXC:SessionChatPromptQueue 2026-08-21:
@@ -327,37 +309,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
       if (tab?.ghostexSessionId !== undefined) {
         acknowledgeSessionAttention(tab.machineId, tab.ghostexSessionId);
       }
-      // Anything half-typed in the agent CLI belongs to the surface the user
-      // is moving to, not the one they are leaving.
-      setChatDraftTransferIds((current) => ({
-        ...current,
-        [sessionKey]: (current[sessionKey] ?? 0) + 1,
-      }));
-    } else {
-      // Same rule, other direction: anything half-typed in the chat composer
-      // belongs to the agent CLI the user is moving to.
-      setHandoffToTerminalIds((current) => ({
-        ...current,
-        [sessionKey]: (current[sessionKey] ?? 0) + 1,
-      }));
     }
     store.toggleChatMode(sessionKey);
-  }, [dismissKeyboard]);
-
-  const switchToTerminalForAgentPicker = useCallback((): void => {
-    const store = useTerminalStore.getState();
-    const sessionKey = store.selectedSessionKey;
-    if (sessionKey === null) return;
-    dismissKeyboard();
-    if (store.chatModeArmed(sessionKey)) {
-      store.setSessionViewMode(sessionKey, 'terminal');
-    }
-    const message = 'Please pick the model and effort in the CLI then switch back to the chat view';
-    if (Platform.OS === 'android') {
-      ToastAndroid.show(message, ToastAndroid.LONG);
-    } else {
-      Alert.alert(message);
-    }
   }, [dismissKeyboard]);
 
   /** Re-run the open flow for a failed/closed tab (Retry / Reconnect). */
@@ -459,16 +412,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
         }
         return;
       }
-      if (id === 'sessionNote' || id === 'savedPrompts') {
+      if (id === 'sessionNote') {
         setMenuVisible(false);
         if (!chatModeActive) {
           toggleChatView();
         }
-        if (id === 'sessionNote') {
-          setChatSessionNoteRequestId((current) => current + 1);
-        } else {
-          setChatSavedPromptsRequestId((current) => current + 1);
-        }
+        setChatSessionNoteRequestId((current) => current + 1);
         return;
       }
       handleMenuAction(id);
@@ -576,61 +525,33 @@ export default function TerminalScreen({ navigation, route }: Props) {
         ) : null}
         {activeTab !== null && chatMachineTarget !== null ? (
           /*
-           * Keep the selected session's chat page mounted while terminal mode
-           * is visible. Its bundle and first transcript read warm in advance,
-           * and its offscreen preload frame owns no input region until the user
-           * switches views. Toggling no longer destroys the conversation.
+           * Keep the selected session's chat screen mounted while terminal mode
+           * is visible. Its first transcript read warms in advance, and while
+           * hidden it owns no input region until the user switches views.
+           * Toggling no longer destroys the conversation.
+           *
+           * CDXC:SessionChat 2026-09-25 DECISION:
+           * User (2026-09-25): delete the phone's "Web (previous)" chat fallback so the phone runs only the native Rust chat. NativeChatScreen is the only chat view; the WebView chat, the Settings > Chat view choice and its bundled page are gone, and a stored `sessionChatView: 'web'` is ignored. Supersedes the earlier 2026-09-25 decision that kept the WebView as a fallback.
            */
-          // Settings > Chat view: the native screen drawn from the Rust chat core (the default)
-          // or the previous WebView chat, mounted and warmed the same way.
-          settings.sessionChatView === 'native' ? (
-            <NativeChatScreen
-              key={activeTab.sessionKey}
-              machine={chatMachineTarget}
-              projectId={activeProjectId}
-              sessionId={activeTab.ghostexSessionId ?? ''}
-              onSwitchToTerminal={() => {
-                if (chatModeActive) toggleChatView();
-              }}
-              hostActions={agentActionsCapable && activeSession !== null ? NATIVE_CHAT_HOST_ACTIONS : NO_NATIVE_CHAT_HOST_ACTIONS}
-              onHostAction={(action) => {
-                if (action === 'closeAfterDone') void toggleCloseAfterDone();
-                else handleTerminalMenuAction(action as TerminalMenuActionId);
-              }}
-              visible={chatModeActive}
-              openSearchRequestId={chatSearchRequestId}
-              openSessionNoteRequestId={chatSessionNoteRequestId}
-              onQueueCountChange={handleChatQueueCount}
-              style={styles.terminal}
-            />
-          ) : (
-            <SessionChatWebView
-              key={activeTab.sessionKey}
-              machine={chatMachineTarget}
-              projectId={activeProjectId}
-              sessionId={activeTab.ghostexSessionId ?? ''}
-              terminalSessionKey={activeTab.sessionKey}
-              onSwitchToTerminalForAgentPicker={switchToTerminalForAgentPicker}
-              agentId={activeAgentId}
-              customTranscriptWidthEnabled={settings.sessionChatCustomTranscriptWidthEnabled}
-              fontFamily={settings.sessionChatFontFamily}
-              theme={settings.sessionChatTheme}
-              transcriptWidthPercent={settings.sessionChatTranscriptWidthPercent}
-              verboseMode={settings.sessionChatVerboseMode}
-              fileEditPreviews={settings.sessionChatFileEditPreviews}
-              // The page cannot see live activity; the inventory poll supplies
-              // that hint without acting as an input-availability lock.
-              working={activeSession?.activity === 'working'}
-              visible={chatModeActive}
-              draftTransferRequestId={chatDraftTransferIds[activeTab.sessionKey] ?? 0}
-              handoffToTerminalRequestId={handoffToTerminalIds[activeTab.sessionKey] ?? 0}
-              openSearchRequestId={chatSearchRequestId}
-              openSessionNoteRequestId={chatSessionNoteRequestId}
-              openSavedPromptsRequestId={chatSavedPromptsRequestId}
-              onQueueCountChange={handleChatQueueCount}
-              style={styles.terminal}
-            />
-          )
+          <NativeChatScreen
+            key={activeTab.sessionKey}
+            machine={chatMachineTarget}
+            projectId={activeProjectId}
+            sessionId={activeTab.ghostexSessionId ?? ''}
+            onSwitchToTerminal={() => {
+              if (chatModeActive) toggleChatView();
+            }}
+            hostActions={agentActionsCapable && activeSession !== null ? NATIVE_CHAT_HOST_ACTIONS : NO_NATIVE_CHAT_HOST_ACTIONS}
+            onHostAction={(action) => {
+              if (action === 'closeAfterDone') void toggleCloseAfterDone();
+              else handleTerminalMenuAction(action as TerminalMenuActionId);
+            }}
+            visible={chatModeActive}
+            openSearchRequestId={chatSearchRequestId}
+            openSessionNoteRequestId={chatSessionNoteRequestId}
+            onQueueCountChange={handleChatQueueCount}
+            style={styles.terminal}
+          />
         ) : null}
         {activeTab !== null && !chatModeActive && (
           <TerminalStateOverlay
@@ -713,7 +634,6 @@ export default function TerminalScreen({ navigation, route }: Props) {
         // supports, so anything else would only ever get `unsupportedAgent`.
         exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
         sessionNoteEnabled={chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
-        savedPromptsEnabled={chatCapable}
         searchConversationEnabled={chatModeActive}
         docsEnabled={activeProject !== null && (activeProject.path ?? '').length > 0}
         attachEnabled={uploadEnabled && !uploading}

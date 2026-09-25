@@ -511,113 +511,11 @@ export function portsListCommand(includeWebMetadata = false): string {
 // transcript decoding — these verbs are thin wrappers over its chat endpoints).
 // ---------------------------------------------------------------------------
 
-/** Extra CLI HTTP-timeout margin on top of a read's long-poll wait. */
-const SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS = 15000;
-
-export type SessionChatReadOptions = {
-  historyMode?: string;
-  preserveNewest?: boolean;
-  subagent?: string;
-  limit?: number;
-  beforeOffset?: number;
-  /** Long-poll: hold until the chat changes or this many ms pass. */
-  waitMs?: number;
-  /** The fingerprint from the previous read result (required for waitMs). */
-  fingerprint?: string;
-};
-
 function sessionChatSelector(sessionId: string, projectId: string): string {
   return (
     `--session-id ${shellQuote(requireId(sessionId, 'session id'))}` +
     ` --project-id ${shellQuote(requireId(projectId, 'project id'))}`
   );
-}
-
-/**
- * Read: `ghostex read-session-chat --session-id <id> --project-id <id>
- * [--limit n] [--before-offset n] [--wait-ms n --fingerprint f] --json`.
- * A waiting read raises `--timeout` above the wait so the CLI's own gxserver
- * HTTP timeout (15s default) cannot cut the long-poll short.
- */
-export function readSessionChatCommand(
-  sessionId: string,
-  projectId: string,
-  options?: SessionChatReadOptions,
-): string {
-  const parts = [`ghostex read-session-chat ${sessionChatSelector(sessionId, projectId)}`];
-  if (options?.historyMode) parts.push(`--history-mode ${shellQuote(options.historyMode)}`);
-  if (options?.preserveNewest) parts.push('--preserve-newest');
-  if (options?.subagent) parts.push(`--subagent ${shellQuote(options.subagent)}`);
-  parts.push(positiveIntegerFlag('--limit', options?.limit, 'chat read limit').trim());
-  const beforeOffset = options?.beforeOffset;
-  if (beforeOffset !== undefined) {
-    if (!Number.isInteger(beforeOffset) || beforeOffset < 0) {
-      throw new Error('Ghostex chat read beforeOffset must be a non-negative whole number.');
-    }
-    parts.push(`--before-offset ${beforeOffset}`);
-  }
-  const waitMs = options?.waitMs;
-  const fingerprint = options?.fingerprint?.trim() ?? '';
-  if (waitMs !== undefined && fingerprint.length > 0) {
-    parts.push(positiveIntegerFlag('--wait-ms', waitMs, 'chat read wait').trim());
-    parts.push(`--fingerprint ${shellQuote(fingerprint)}`);
-    parts.push(`--timeout ${waitMs + SESSION_CHAT_WAIT_TIMEOUT_MARGIN_MS}`);
-  }
-  parts.push('--json');
-  return parts.filter((part) => part.length > 0).join(' ');
-}
-
-/** Switch an unprompted draft to another agent from its daemon-published catalog. */
-export function switchDraftAgentCommand(
-  sessionId: string,
-  projectId: string,
-  agentId: string,
-): string {
-  return (
-    `ghostex switch-draft-agent ${sessionChatSelector(sessionId, projectId)}` +
-    ` --agent-id ${shellQuote(requireId(agentId, 'agent id'))} --json`
-  );
-}
-
-export type SessionChatKey = 'enter' | 'shift-tab' | 'shift-up' | 'shift-down';
-
-/** Queue one raw option key through gxserver's per-session chat writer. */
-export function sendSessionChatKeyCommand(
-  sessionId: string,
-  projectId: string,
-  key: SessionChatKey,
-): string {
-  return (
-    `ghostex send-session-chat-key ${sessionChatSelector(sessionId, projectId)}` +
-    ` --key ${shellQuote(key)} --json`
-  );
-}
-
-/** List skills resolved by gxserver for the session's stored agent identity. */
-export function readSessionChatSkillsCommand(sessionId: string, projectId: string): string {
-  return `ghostex read-session-chat-skills ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
-/** List the session project's files for the composer's "@" mentions. */
-export function readSessionChatFilesCommand(sessionId: string, projectId: string): string {
-  return `ghostex read-session-chat-files ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
-export function selectSessionChatModelCommand(
-  sessionId: string,
-  projectId: string,
-  selection: { model: string; effort: string; defer?: boolean; mode?: string; fastMode?: string }
-): string {
-  const parts = [
-    `ghostex select-session-chat-model ${sessionChatSelector(sessionId, projectId)}`,
-    `--model ${shellQuote(selection.model)}`,
-    `--effort ${shellQuote(selection.effort)}`,
-  ];
-  if (selection.defer) parts.push('--defer');
-  if (selection.mode !== undefined) parts.push(`--mode ${shellQuote(selection.mode)}`);
-  if (selection.fastMode !== undefined) parts.push(`--fast-mode ${shellQuote(selection.fastMode)}`);
-  parts.push('--json');
-  return parts.join(' ');
 }
 
 function draftVersionFlag(version?: unknown): string {
@@ -637,47 +535,10 @@ export function sendSessionChatMessageCommand(
   );
 }
 
-/**
- * Answer a question/approval prompt:
- * `ghostex answer-session-chat-prompt --session-id <id> --project-id <id>
- * --answer-json '<json>' --json`. The answer object carries kind plus
- * selections or approvalSend, exactly as the shared transport produced it.
- */
-export function answerSessionChatPromptCommand(
-  sessionId: string,
-  projectId: string,
-  answer: unknown,
-): string {
-  return (
-    `ghostex answer-session-chat-prompt ${sessionChatSelector(sessionId, projectId)}` +
-    ` --answer-json ${shellQuote(JSON.stringify(answer))} --json`
-  );
-}
-
-/** Interrupt the running turn: `ghostex interrupt-session-chat --session-id <id> --project-id <id> --json`. */
-export function interruptSessionChatCommand(sessionId: string, projectId: string): string {
-  return `ghostex interrupt-session-chat ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
-/**
- * Move the agent CLI's composer draft out of the terminal and print it:
- * `ghostex handoff-session-chat-draft --session-id <id> --project-id <id> --json`.
- *
- * The daemon holds this while the CLI answers its Ctrl+G prompt-editor
- * handshake, so it is the one chat verb that routinely takes seconds.
- */
-export function handoffSessionChatDraftCommand(sessionId: string, projectId: string): string {
-  return `ghostex handoff-session-chat-draft ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
 // ---------------------------------------------------------------------------
-// Ghostex prompt queue + synced composer draft (plan 016).
-//
-// gxserver owns the queue and drains it one prompt per idle window, so these
-// verbs only ever describe an intent — nothing here waits for an agent. Rows
-// are addressed by the `--prompt-id` the daemon handed out, never by a list
-// position, so acting on a row minutes after it was displayed still lands on
-// the prompt the phone showed.
+// Synced composer draft (plan 016), read and written by the Prompt Editor
+// sheet. The chat screen itself reaches gxserver through the Rust chat core's
+// `session-chat-rpc` transport (src/chat/rust/transport.ts).
 // ---------------------------------------------------------------------------
 
 /**
@@ -693,90 +554,9 @@ function inlineTextFlag(name: string, value: string): string {
   return `${name}=${shellQuote(value)}`;
 }
 
-/** A row id safe to put in a flag: non-empty and free of the reorder separator. */
-function requirePromptId(promptId: string): string {
-  const trimmed = promptId.trim();
-  if (trimmed.length === 0) throw new Error('Ghostex queued prompt id is required.');
-  if (trimmed.includes(',')) {
-    throw new Error('Ghostex queued prompt ids must not contain a comma.');
-  }
-  return trimmed;
-}
-
 /** Read the queue and the synced draft: `ghostex read-session-chat-queue …`. */
 export function readSessionChatQueueCommand(sessionId: string, projectId: string): string {
   return `ghostex read-session-chat-queue ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
-/** Append one prompt at the END of the queue. */
-export function queueSessionChatPromptCommand(
-  sessionId: string,
-  projectId: string,
-  text: string,
-  draftVersion?: unknown,
-): string {
-  return (
-    `ghostex queue-session-chat-prompt ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--text', text)}${draftVersionFlag(draftVersion)} --json`
-  );
-}
-
-/**
- * Edit a row's text and/or retry it. `retry` moves a `failed` row back to
- * `queued` and clears its error so the server scheduler resumes draining.
- */
-export function updateSessionChatQueuedPromptCommand(
-  sessionId: string,
-  projectId: string,
-  promptId: string,
-  options?: { text?: string; retry?: boolean },
-): string {
-  const parts = [
-    `ghostex update-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}`,
-    inlineTextFlag('--prompt-id', requirePromptId(promptId)),
-  ];
-  if (options?.text !== undefined) parts.push(inlineTextFlag('--text', options.text));
-  if (options?.retry === true) parts.push('--retry');
-  parts.push('--json');
-  return parts.join(' ');
-}
-
-/** Delete a row; the answer carries the removed row so Edit can reuse its text. */
-export function removeSessionChatQueuedPromptCommand(
-  sessionId: string,
-  projectId: string,
-  promptId: string,
-): string {
-  return (
-    `ghostex remove-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--prompt-id', requirePromptId(promptId))} --json`
-  );
-}
-
-/** Commit a drag-to-reorder with the complete id list, head first. */
-export function reorderSessionChatQueueCommand(
-  sessionId: string,
-  projectId: string,
-  promptIds: readonly string[],
-): string {
-  const ids = promptIds.map(requirePromptId);
-  if (ids.length === 0) throw new Error('Ghostex queue reorder needs at least one prompt id.');
-  return (
-    `ghostex reorder-session-chat-queue ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--prompt-ids', ids.join(','))} --json`
-  );
-}
-
-/** "Send now": deliver one row immediately, exactly like pressing Enter. */
-export function sendSessionChatQueuedPromptCommand(
-  sessionId: string,
-  projectId: string,
-  promptId: string,
-): string {
-  return (
-    `ghostex send-session-chat-queued-prompt ${sessionChatSelector(sessionId, projectId)}` +
-    ` ${inlineTextFlag('--prompt-id', requirePromptId(promptId))} --json`
-  );
 }
 
 /**
@@ -811,26 +591,6 @@ export function setSessionChatDraftCommand(
  */
 export function exportSessionTranscriptCommand(sessionId: string, projectId: string): string {
   return `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)} --json`;
-}
-
-export type SavedPromptsAction =
-  | 'list'
-  | 'save'
-  | 'delete'
-  | 'save-tag'
-  | 'delete-tag'
-  | 'set-tags';
-
-/**
- * Daemon-owned Saved Prompts RPC over the mobile SSH transport. The action is
- * an allowlisted CLI subcommand and the payload is the desktop modal's exact
- * JSON contract, so the React view stays shared between hosts.
- */
-export function savedPromptsCommand(
-  action: SavedPromptsAction,
-  payload: Record<string, unknown>,
-): string {
-  return `ghostex saved-prompts ${action} --payload-json ${shellQuote(JSON.stringify(payload))} --json`;
 }
 
 /*

@@ -30,7 +30,10 @@ const SCROLL_WINDOW_MS = 600;
 /**
  * CDXC:SessionChat 2026-09-25 DECISION:
  * User: "please make the chat view model switcher match the one we have in gpui chat view now (search is gone for example)". The phone sheet draws the GPUI pop-up's tabs, model rows, footer buttons and Not applied line, and has no search field. This supersedes the phone's own layout with a search field, named tabs and a description under each model.
- * SEE-ALSO: apps/desktop/src/app/native_chat/option_menu/model_menu/ (the GPUI pop-up), packages/gx-chat-core/src/menus/picker/ (what it shows), and CDXC:Mobile 2026-09-24 in apps/mobile/views/chat/session-chat.css (no hotkey chips or key reminder on the phone, which also leaves out the footer buttons' hotkey letters).
+ * SEE-ALSO: apps/desktop/src/app/native_chat/option_menu/model_menu/ (the GPUI pop-up), packages/gx-chat-core/src/menus/picker/ (what it shows).
+ *
+ * CDXC:Mobile 2026-09-24 DECISION:
+ * User: remove the hotkeys shown on the mobile model picker; a phone has no Command key, so the ⌘1-⌘4 chips beside the models and the key hint row under the buttons don't make sense there. The sheet also leaves out the footer buttons' hotkey letters.
  */
 export function ModelMenuSheet({
   menu,

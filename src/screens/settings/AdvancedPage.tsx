@@ -1,5 +1,3 @@
-import { Text, TextInput, View } from 'react-native';
-
 import type { CursorStyle } from '../../../modules/ghostex-native/src/GhostexNative.types';
 import {
   KEEP_ALIVE_INTERVAL_MAX_SEC,
@@ -15,9 +13,7 @@ import {
   SIDEBAR_SURFACE_OPACITY_MIN,
   useSettingsStore,
   type BellBehavior,
-  type SessionChatView,
 } from '../../settings/store';
-import { useAppearance } from '../../theme/useAppearance';
 import {
   Caption,
   ChoiceRow,
@@ -26,7 +22,6 @@ import {
   SettingsSlider,
   SettingToggle,
   StepperRow,
-  useSettingsStyles,
   type BooleanSettingKey,
 } from './SettingsControls';
 
@@ -53,18 +48,11 @@ const BELL_ROWS: { value: BellBehavior; label: string }[] = [
   { value: 'ignore', label: 'Ignore bell' },
 ];
 
-const SESSION_CHAT_VIEW_ROWS: { value: SessionChatView; label: string }[] = [
-  { value: 'native', label: 'Native (default)' },
-  { value: 'web', label: 'Web (previous)' },
-];
-
 function formatRows(rows: number): string {
   return `${rows.toLocaleString('en-US')} rows`;
 }
 
 export default function AdvancedPage() {
-  const styles = useSettingsStyles();
-  const appearance = useAppearance();
   const settings = useSettingsStore((state) => state.settings);
   const setSetting = useSettingsStore((state) => state.setSetting);
 
@@ -116,20 +104,6 @@ export default function AdvancedPage() {
         />
       ))}
 
-      <SectionHeader title='Chat view' />
-      {SESSION_CHAT_VIEW_ROWS.map((row) => (
-        <ChoiceRow
-          key={row.value}
-          label={row.label}
-          selected={settings.sessionChatView === row.value}
-          onPress={() => setSetting('sessionChatView', row.value)}
-        />
-      ))}
-      <Caption>
-        Native draws chats with the phone's own controls, like the desktop app. Web shows the previous chat page;
-        switch to it if something in a chat does not look right.
-      </Caption>
-
       <SectionHeader title='Chat transcript' />
       <SettingToggle settingKey='sessionChatCustomTranscriptWidthEnabled' label='Custom Transcript Width' />
       <Caption>Lets the transcript use a different width from the prompt composer.</Caption>
@@ -147,25 +121,6 @@ export default function AdvancedPage() {
           <Caption>Adjusts messages only. The prompt composer keeps its current width.</Caption>
         </>
       ) : null}
-
-      <SectionHeader title='Web chat' />
-      <Caption>Only the Web chat view uses this.</Caption>
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Font Family</Text>
-        <TextInput
-          accessibilityLabel='Chat font family'
-          autoCapitalize='words'
-          autoCorrect={false}
-          placeholder='App default'
-          placeholderTextColor={appearance.muted}
-          returnKeyType='done'
-          spellCheck={false}
-          style={styles.input}
-          value={settings.sessionChatFontFamily}
-          onChangeText={(value) => setSetting('sessionChatFontFamily', value)}
-        />
-      </View>
-      <Caption>Type an installed font family name. Leave blank to use the app font.</Caption>
 
       <SectionHeader title='Sessions list' />
       <SettingsSlider

@@ -26,11 +26,3 @@ for ($index=1; $index -le 100; $index++) {
 throw 'Could not reserve an attachment path.'
 `;
 }
-
-export function windowsReadImage(path: string, maximumBytes: number): string {
-  return `
-$file=Get-Item -LiteralPath ${powershellQuote(path)}
-if ($file.PSIsContainer -or $file.Length -le 0 -or $file.Length -gt ${maximumBytes}) { throw 'Image is unreadable or too large.' }
-[Console]::Write([Convert]::ToBase64String([IO.File]::ReadAllBytes($file.FullName)))
-`;
-}

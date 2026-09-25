@@ -4,9 +4,8 @@
  * follows Settings > Chat theme together.
  *
  * Each value is desktop's `ChatAppearance` (apps/desktop/src/app/native_chat/appearance.rs) computed
- * over the phone chat's own backgrounds (`#0e0e0e` dark, `#fdfdfd` light, the WebView chat's
- * `CHAT_BACKGROUNDS`), so a row here reads like the same row in the GPUI chat and in the React chat
- * it replaces (packages/core-ui/styles/chat.css).
+ * over the phone chat's own backgrounds (`#0e0e0e` dark, `#fdfdfd` light, the ones the retired
+ * WebView chat used), so a row here reads like the same row in the GPUI chat.
  */
 
 import { Platform, StyleSheet } from 'react-native';

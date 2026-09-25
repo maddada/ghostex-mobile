@@ -1,6 +1,6 @@
 /**
  * The draft's markdown references as the core parses them (`composerReferences`, the rules in
- * `packages/shared/session-chat-presentation/reference-pills.ts`), and the edit rules that keep a
+ * `packages/gx-chat-core/src/composer/reference_pills.rs`), and the edit rules that keep a
  * pill whole inside a plain `TextInput`, the job gpui-component's `InlineReplacement` does on
  * desktop (`composer_references.rs`).
  */

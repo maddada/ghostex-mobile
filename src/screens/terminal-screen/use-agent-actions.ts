@@ -34,7 +34,7 @@ import {
   readSessionChatSyncedDraft,
   writeSessionChatSyncedDraft,
   type SessionChatSyncedDraft,
-} from '../../chat/session-chat-bridge';
+} from '../../chat/session-chat-helpers';
 import type { GhostexSession } from '../../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';

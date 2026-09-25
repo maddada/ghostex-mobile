@@ -22,8 +22,6 @@ const SETTINGS_STORAGE_KEY = 'settings.v1';
 
 export type BellBehavior = 'vibrate' | 'beep' | 'ignore';
 export type SessionChatTheme = 'dark' | 'light';
-/** Which screen draws a chat: the native one on the Rust chat core, or the previous web page. */
-export type SessionChatView = 'native' | 'web';
 /** Same value space as the desktop app's global Default Agent View setting. */
 export type PreferredAgentInterface = 'terminal' | 'chat';
 
@@ -64,8 +62,6 @@ export type GhostexSettings = {
   preferredAgentInterface: PreferredAgentInterface;
   /** Theme for chat content only; the surrounding mobile app remains dark. */
   sessionChatTheme: SessionChatTheme;
-  /** CSS font-family used by chat messages and the prompt composer. */
-  sessionChatFontFamily: string;
   /** Whether the transcript uses a custom width instead of the composer column. */
   sessionChatCustomTranscriptWidthEnabled: boolean;
   /** Width of the message transcript; the prompt composer keeps its full width. */
@@ -73,11 +69,6 @@ export type GhostexSettings = {
   /** Reveal thinking-owned tool calls by default. */
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
-  /**
-   * CDXC:SessionChat 2026-09-25 DECISION:
-   * User (2026-09-24): "implement shared chat view between the gpui app and the react native app ... do all the steps from a to z to get this working perfect". Chats open in the native screen drawn from the Rust chat core (`src/chat/native/`, `src/chat/rust/`) by default in every build; the WebView chat stays as the fallback a user picks in Settings > Chat view. Only a stored `'web'` keeps the web view: the retired developer toggle `sessionChatRustEngine` was saved as `false` by every install that changed any setting, so it is ignored rather than migrated.
-   */
-  sessionChatView: SessionChatView;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -144,12 +135,10 @@ export function defaultSettings(): GhostexSettings {
     sidebarProjectsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
     preferredAgentInterface: 'chat',
     sessionChatTheme: 'dark',
-    sessionChatFontFamily: '',
     sessionChatCustomTranscriptWidthEnabled: false,
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
     sessionChatFileEditPreviews: false,
-    sessionChatView: 'native',
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -219,8 +208,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     record.sessionChatTheme === 'dark' || record.sessionChatTheme === 'light'
       ? record.sessionChatTheme
       : defaults.sessionChatTheme;
-  const sessionChatFontFamily =
-    typeof record.sessionChatFontFamily === 'string' ? record.sessionChatFontFamily : defaults.sessionChatFontFamily;
   const sessionChatTranscriptWidthPercent =
     typeof record.sessionChatTranscriptWidthPercent === 'number'
       ? clampSessionChatTranscriptWidthPercent(record.sessionChatTranscriptWidthPercent)
@@ -249,7 +236,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sidebarProjectsOpacityPercent,
     preferredAgentInterface,
     sessionChatTheme,
-    sessionChatFontFamily,
     sessionChatCustomTranscriptWidthEnabled: bool(
       'sessionChatCustomTranscriptWidthEnabled',
       defaults.sessionChatCustomTranscriptWidthEnabled
@@ -257,7 +243,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
-    sessionChatView: record.sessionChatView === 'web' ? 'web' : defaults.sessionChatView,
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,
