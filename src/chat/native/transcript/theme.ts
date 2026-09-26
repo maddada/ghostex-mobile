@@ -31,7 +31,10 @@ export type TranscriptTheme = {
   /** Inline code chips. */
   inlineCodeSurface: string;
   inlineCodeBorder: string;
-  /** Link colours by reference kind (`reference-visual.json`, lightened toward white in dark). */
+  /**
+   * Reference colours in the transcript, by kind: `transcript` in `reference-visual.json`, the same
+   * brighter set the GPUI transcript uses (see `presentations` in native_chat/markdown_links.rs).
+   */
   link: { url: string; file: string; folder: string; image: string; skill: string };
   alert: { note: string; tip: string; important: string; warning: string; caution: string };
   diff: { added: string; removed: string; addedRow: string; removedRow: string; rail: string; border: string };
@@ -113,7 +116,7 @@ const DARK: TranscriptTheme = {
   error: '#ef9999',
   inlineCodeSurface: '#282828',
   inlineCodeBorder: 'rgba(252,252,252,0.18)',
-  link: { url: '#51a2ff', file: '#95a4b7', folder: '#b6a689', image: '#8cb59e', skill: '#91a99a' },
+  link: { url: '#6cb4ff', file: '#9dbcf0', folder: '#e3c283', image: '#8ed8ab', skill: '#a3d9bd' },
   alert: { note: '#51a2ff', tip: '#00d492', important: '#c27aff', warning: '#fe9a00', caution: '#ff6467' },
   diff: {
     added: '#94caaa',
@@ -177,7 +180,7 @@ const LIGHT: TranscriptTheme = {
   error: '#c53030',
   inlineCodeSurface: '#efefef',
   inlineCodeBorder: 'rgba(39,39,42,0.16)',
-  link: { url: '#1447e6', file: '#6c819b', folder: '#9a835b', image: '#5f9878', skill: '#668773' },
+  link: { url: '#1447e6', file: '#3f6aa8', folder: '#93631a', image: '#2a7d4c', skill: '#3d7458' },
   alert: { note: '#1447e6', tip: '#009966', important: '#9810fa', warning: '#e17100', caution: '#e7000b' },
   diff: {
     added: '#16803d',
