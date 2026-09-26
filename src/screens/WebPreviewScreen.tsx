@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
@@ -202,6 +202,8 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
   const [failure, setFailure] = useState<PreviewFailureState | null>(null);
   const [connecting, setConnecting] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
+  /** The page's own load progress (0 to 1), for the bar under the address bar. */
+  const [loadProgress, setLoadProgress] = useState(0);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
 
@@ -605,7 +607,11 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
             onError={handleLoadError}
             renderError={renderLoadFailure}
             injectedJavaScript={linkRewriteScript}
-            onLoadStart={() => setPageLoading(true)}
+            onLoadStart={() => {
+              setPageLoading(true);
+              setLoadProgress(0);
+            }}
+            onLoadProgress={(event) => setLoadProgress(event.nativeEvent.progress)}
             onLoadEnd={() => setPageLoading(false)}
             // Every `target=_blank` link has to reach the handler above instead of
             // asking for a window this screen has nowhere to put.
@@ -628,11 +634,39 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
         {/* Progress for work happening behind a page that is already on screen:
             opening the next port's forward, or loading the next page. */}
         {(connecting || pageLoading) && source !== null && failure === null ? (
-          <View style={styles.loadingStrip} pointerEvents='none'>
-            <ActivityIndicator size='small' color={GhostexPalette.ACCENT} />
-          </View>
+          <LoadProgressBar progress={pageLoading ? loadProgress : 0} />
         ) : null}
       </View>
+    </View>
+  );
+}
+
+/**
+ * CDXC:Browser 2026-09-26 WHY:
+ * A dev server's first load through the SSH forward can take many seconds on a slow link (a Vite app
+ * fetches hundreds of modules one round trip at a time; about 20s at a 300ms round trip) while its
+ * page stays blank. The small spinner that used to sit at the bottom edge read as "nothing is
+ * loading", and pressing Go looked like what started the page. A browser-style bar across the top of
+ * the page, fed by the WebView's own progress, shows the load is alive.
+ */
+function LoadProgressBar({ progress }: { progress: number }) {
+  const width = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    // A sliver while the forward opens or the first bytes are on their way.
+    Animated.timing(width, {
+      toValue: Math.max(0.08, Math.min(1, progress)),
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [progress, width]);
+  return (
+    <View style={styles.progressTrack} pointerEvents='none' accessibilityRole='progressbar'>
+      <Animated.View
+        style={[
+          styles.progressFill,
+          { width: width.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+        ]}
+      />
     </View>
   );
 }

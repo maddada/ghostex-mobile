@@ -313,13 +313,16 @@ export const styles = StyleSheet.create({
     backgroundColor: GhostexPalette.BACKGROUND,
   },
   /** Spinner over the page already on screen while the next forward opens. */
-  loadingStrip: {
+  /** The page's load progress, a thin bar along the top edge of the page. */
+  progressTrack: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    paddingVertical: 10,
-    backgroundColor: 'rgba(24,24,24,0.85)',
+    top: 0,
+    height: 3,
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: GhostexPalette.ACCENT,
   },
 });
