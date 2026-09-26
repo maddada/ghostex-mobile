@@ -107,15 +107,25 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
           {arr(obj(question)?.options).map((option, optionIndex) => {
             // A multi-select note is sent beside the picks, so they stay visible while it is typed.
             const selected = (multi || draft.other.trim().length === 0) && draft.indices.includes(optionIndex);
+            const preview = str(option, 'preview');
             return (
-              <ChoiceRow
-                key={optionIndex}
-                label={str(option, 'label')}
-                description={str(option, 'description')}
-                selected={selected}
-                disabled={busy}
-                onPress={() => dispatch({ type: 'questionOption', index: optionIndex })}
-              />
+              <View key={optionIndex} style={styles.optionWithPreview}>
+                <ChoiceRow
+                  label={str(option, 'label')}
+                  description={str(option, 'description')}
+                  selected={selected}
+                  disabled={busy}
+                  onPress={() => dispatch({ type: 'questionOption', index: optionIndex })}
+                />
+                {/* The mockup Claude shows beside the option, under the row that picks it (desktop question.rs). */}
+                {preview.length > 0 ? (
+                  <ScrollView style={styles.optionPreview} nestedScrollEnabled>
+                    <Text style={styles.commandText} selectable>
+                      {preview}
+                    </Text>
+                  </ScrollView>
+                ) : null}
+              </View>
             );
           })}
         </ScrollView>,
@@ -184,7 +194,7 @@ function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocume
   );
   const body = [
     <View key="ask" style={styles.approvalAsk}>
-      <Text style={[cardText.prose, styles.flexText]}>Allow this command?</Text>
+      <Text style={[cardText.prose, styles.flexText]}>{document.questionCard.approvalAsk || 'Allow this command?'}</Text>
       <Text style={cardText.hint}>{str(prompt, 'tool')}</Text>
     </View>,
     summary.length > 0 ? (
@@ -281,6 +291,17 @@ const useStyles = themedStyles((P) => ({
   },
   command: {
     maxHeight: 160,
+  },
+  optionWithPreview: {
+    gap: 6,
+  },
+  optionPreview: {
+    maxHeight: 160,
+    marginLeft: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: P.wellFill,
   },
   commandText: {
     color: P.cardMuted,

@@ -40,6 +40,9 @@ function SummaryRow({ item }: { item: SummaryItem }) {
   return (
     <View style={styles.column}>
       <MessageRow message={item.user} />
+      {(item.outcome ?? []).map((message) => (
+        <MessageRow key={message.id} message={message} />
+      ))}
       {hasFinal || item.active ? (
         <>
           <DisclosureHeading label={hasFinal ? 'Agent reply' : 'Active work'} open={open} onToggle={toggle} />
