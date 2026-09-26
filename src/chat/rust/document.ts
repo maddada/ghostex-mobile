@@ -133,9 +133,14 @@ export type SummaryItem = {
   user: ProjectedMessage;
   /** The turn's reply, or `null` while the turn is still running. */
   final: ProjectedMessage | null;
+  /** The replies before `final` in the same turn, oldest first (one per stretch a background task
+   * finishing broke the turn into). Drawn above `final`. */
+  earlierReplies?: ProjectedMessage[];
   /** The turn is the live one. */
   active: boolean;
   work: ProjectedMessage[];
+  /** The newest turn that has a reply: its "Agent reply" fold starts open. */
+  latestReply?: boolean;
 };
 
 /** A finished turn in verbose mode: "Worked for Xs" plus its file changes in one fold.

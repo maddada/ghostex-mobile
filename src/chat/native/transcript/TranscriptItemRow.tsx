@@ -35,7 +35,7 @@ export const TranscriptItemView = memo(function TranscriptItemView({ item }: { i
 
 function SummaryRow({ item }: { item: SummaryItem }) {
   const { disclosures } = useNativeChatUi();
-  const [open, toggle] = useDisclosure(disclosures, `summary:${item.id}`);
+  const [open, toggle] = useDisclosure(disclosures, `summary:${item.id}`, item.latestReply === true);
   const hasFinal = obj(item.final) !== null;
   return (
     <View style={styles.column}>
@@ -45,7 +45,9 @@ function SummaryRow({ item }: { item: SummaryItem }) {
           <DisclosureHeading label={hasFinal ? 'Agent reply' : 'Active work'} open={open} onToggle={toggle} />
           {open ? (
             <View style={styles.column}>
-              {hasFinal ? <MessageRow message={item.final!} /> : item.work.map((message) => <MessageRow key={message.id} message={message} />)}
+              {hasFinal
+                ? [...(item.earlierReplies ?? []), item.final!].map((message) => <MessageRow key={message.id} message={message} />)
+                : item.work.map((message) => <MessageRow key={message.id} message={message} />)}
             </View>
           ) : null}
         </>
