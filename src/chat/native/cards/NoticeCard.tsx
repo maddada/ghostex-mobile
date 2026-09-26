@@ -75,10 +75,12 @@ export function NoticeCard({
       >
         {choices.slice(0, shown).map((choice, index) => (
           <View key={`${num(choice, 'index') ?? index}`} style={collapsed ? styles.collapsedChoice : null}>
+            {/* CDXC:SessionChat 2026-09-26 DECISION: User: a notice card's choice must never wrap onto 2 lines; truncate it with "..." and show the whole label on hover. The phone has no hover, so pressing and holding shows it. SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs */}
             <ChoiceRow
               label={str(choice, collapsed ? 'collapsedLabel' : 'label')}
               selected={false}
               dense={collapsed}
+              singleLine
               disabled={busy}
               onPress={() => dispatch({ type: 'answer', answer: asJson(obj(choice)?.answer) })}
             />

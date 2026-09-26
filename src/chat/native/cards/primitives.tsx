@@ -5,7 +5,7 @@
  * and the small bordered chat button (`chat_button` in `composer.rs`).
  */
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
@@ -121,6 +121,7 @@ export function ChoiceRow({
   description,
   selected,
   dense,
+  singleLine,
   disabled,
   onPress,
 }: {
@@ -128,11 +129,15 @@ export function ChoiceRow({
   description?: string;
   selected: boolean;
   dense?: boolean;
+  /** One line cut with an ellipsis; pressing and holding shows the whole label, as hover does on the desktop. */
+  singleLine?: boolean;
   disabled?: boolean;
   onPress?: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
+  const [revealed, setRevealed] = useState(false);
+  const truncated = singleLine === true && !revealed;
   const showDescription = description !== undefined && description.length > 0 && description !== label;
   return (
     <Pressable
@@ -141,6 +146,7 @@ export function ChoiceRow({
       accessibilityState={{ selected, disabled: disabled === true }}
       disabled={disabled === true || onPress === undefined}
       onPress={onPress}
+      {...(singleLine === true ? { onLongPress: () => setRevealed(true), onPressOut: () => setRevealed(false) } : {})}
       style={({ pressed }) => [
         styles.choice,
         dense && styles.choiceDense,
@@ -152,7 +158,9 @@ export function ChoiceRow({
       ]}
     >
       <View style={styles.choiceText}>
-        <Text style={styles.choiceLabel}>{label}</Text>
+        <Text style={styles.choiceLabel} {...(truncated ? { numberOfLines: 1, ellipsizeMode: 'tail' as const } : {})}>
+          {label}
+        </Text>
         {showDescription ? <Text style={styles.choiceDescription}>{description}</Text> : null}
       </View>
       {selected ? <Glyph name="check" size={16} color={P.controlPrimary} /> : null}
