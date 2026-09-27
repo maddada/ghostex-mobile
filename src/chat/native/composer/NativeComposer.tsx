@@ -319,7 +319,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
       model !== null && model.text.trim().length > 0
         ? { disabled: !(model.ready && !model.pendingSend && document.queue.capabilities.canQueue) }
         : null;
-    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves, compactAndSend }) });
+    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves, compactAndSend, draft: model?.text ?? '' }) });
   }, [available, document, model, serves, verboseSetting]);
 
   /**

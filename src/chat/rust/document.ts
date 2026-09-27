@@ -359,6 +359,8 @@ export type ChatDocument = {
   interaction: Interaction;
   /** The More actions menu's host rows. Desktop: `actions.rs`. */
   hostActions: HostActionRow[];
+  /** The Side chat prefix (`/btw `) when the agent takes side questions, else null (`side_chat.rs`). */
+  sideChat?: string | null;
 
   // ---- questions and notices --------------------------------------------------------------
 

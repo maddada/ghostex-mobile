@@ -28,6 +28,12 @@ export function parseReferences(draft: string, answer: unknown): ComposerReferen
     const { start, end, kind, label, path } = reference;
     if (typeof start !== 'number' || typeof end !== 'number' || typeof kind !== 'string') continue;
     if (typeof label !== 'string' || typeof path !== 'string' || start >= end || end > draft.length) continue;
+    // The Side Chat pill is the `/btw ` prefix itself: a text field cannot show other words in its
+    // place, so the phone tints `/btw` where desktop draws "Side Chat".
+    if (kind === 'sideChat') {
+      references.push({ start, end, kind, label, path, labelStart: start, labelEnd: start + path.length });
+      continue;
+    }
     const labelEnd = draft.indexOf('](', start);
     if (draft[start] !== '[' || labelEnd < 0 || labelEnd >= end) continue;
     references.push({ start, end, kind, label, path, labelStart: start + 1, labelEnd });

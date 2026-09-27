@@ -115,12 +115,14 @@ export const ComposerInput = forwardRef<
       const tint = P.reference[reference.kind] ?? P.reference.file;
       parts.push(
         <Text key={`h0:${index}`} style={styles.hidden}>
-          {'['}
+          {text.slice(reference.start, reference.labelStart)}
         </Text>,
         <Text key={`l:${index}`} style={[styles.pill, { color: tint, backgroundColor: `${tint}26` }]}>
           {text.slice(reference.labelStart, reference.labelEnd)}
         </Text>,
-        <Text key={`h1:${index}`} style={styles.hidden}>
+        // The Side Chat pill covers `/btw ` with its space, which stays visible after the pill
+        // (core `reference_pill_text`).
+        <Text key={`h1:${index}`} style={reference.kind === 'sideChat' ? undefined : styles.hidden}>
           {text.slice(reference.labelEnd, reference.end)}
         </Text>
       );

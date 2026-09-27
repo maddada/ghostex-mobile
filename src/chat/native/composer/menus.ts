@@ -21,7 +21,6 @@ export const COMPOSER_CONTROLS = [
 export type ComposerControlId = (typeof COMPOSER_CONTROLS)[number]['id'];
 
 const HOST_ACTION_ICONS: Record<string, string> = {
-  splitSessionRight: 'titlebar/layout-columns.svg',
   closeAfterDone: 'titlebar/clock.svg',
   delayedActions: 'titlebar/clock-check.svg',
   exportTranscript: 'titlebar/file-export.svg',
@@ -32,7 +31,7 @@ const HOST_ACTION_ICONS: Record<string, string> = {
   switchAccount: 'titlebar/switch-horizontal.svg',
 };
 
-const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone', 'splitSessionRight']);
+const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone']);
 
 export function overflowed(document: ChatDocument, id: string): boolean {
   return document.composerOverflow?.overflowed?.includes(id) === true;
@@ -51,9 +50,38 @@ export type MoreActionsInput = {
    * already queues, so it leads this menu instead.
    */
   compactAndSend?: { disabled: boolean } | null;
+  /** The chat box's text, which Side chat toggles its `/btw ` prefix on. */
+  draft?: string;
 };
 
-export function moreActionsRows({ document, verbose, available, serves, compactAndSend = null }: MoreActionsInput): MenuRow[] {
+/**
+ * The View row: the chat's display modes as one submenu, its detail naming the ones that are on
+ * (desktop's `view_modes_row` in `actions.rs`, where the user decision is recorded). The phone has
+ * no Simple mode, so it lists Verbose and Summary.
+ */
+function viewModesRow(document: ChatDocument, verbose: boolean, summaryAvailable: boolean): MenuRow {
+  const summary = summaryAvailable && document.summaryMode === true;
+  const modes: MenuRow[] = [
+    {
+      label: 'Verbose mode',
+      iconPath: verbose ? 'titlebar/eye-filled.svg' : 'titlebar/eye-off.svg',
+      checked: verbose,
+      command: { type: 'setVerbose', enabled: !verbose },
+    },
+  ];
+  if (summaryAvailable) {
+    modes.push({
+      label: 'Summary mode',
+      iconPath: summary ? 'titlebar/list-check.svg' : 'titlebar/list-details.svg',
+      checked: summary,
+      command: { type: 'toggleSummary' },
+    });
+  }
+  const on = [verbose ? 'Verbose' : null, summary ? 'Summary' : null].filter((name) => name !== null);
+  return { label: 'View', iconPath: 'titlebar/eye.svg', detail: on.length > 0 ? on.join(', ') : 'Standard', children: modes };
+}
+
+export function moreActionsRows({ document, verbose, available, serves, compactAndSend = null, draft = '' }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   if (compactAndSend !== null) {
     rows.push({ label: 'Compact & Send', iconPath: 'titlebar/arrow-up.svg', disabled: compactAndSend.disabled, command: { type: 'submit', mode: 'compact' } });
@@ -81,18 +109,14 @@ export function moreActionsRows({ document, verbose, available, serves, compactA
     rows.push({ separator: true });
   }
   rows.push({ heading: true, label: 'Chat' });
-  rows.push({
-    label: 'Verbose mode',
-    iconPath: verbose ? 'titlebar/eye-filled.svg' : 'titlebar/eye-off.svg',
-    checked: verbose,
-    command: { type: 'setVerbose', enabled: !verbose },
-  });
-  if (overflowed(document, 'summary') && available('summary')) {
+  rows.push(viewModesRow(document, verbose, available('summary')));
+  // Side chat: offered only for agents that take `/btw` (core `composer/side_chat.rs`).
+  if (typeof document.sideChat === 'string') {
     rows.push({
-      label: 'Summary mode',
-      iconPath: document.summaryMode ? 'titlebar/list-check.svg' : 'titlebar/list-details.svg',
-      checked: document.summaryMode,
-      command: { type: 'toggleSummary' },
+      label: 'Side chat',
+      iconPath: 'titlebar/message-circle.svg',
+      checked: draft.startsWith(document.sideChat),
+      command: { type: 'toggleSideChat', text: draft },
     });
   }
   const actions = document.hostActions ?? [];

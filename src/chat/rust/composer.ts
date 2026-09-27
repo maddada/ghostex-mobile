@@ -131,6 +131,8 @@ export class ComposerModel {
       this.hooks.dispatch({ type: 'completeComposerCommand' });
       return false;
     }
+    // The Side Chat pill stays in the box after a send until the user removes it (desktop `submit`).
+    const sideChat = typeof document?.sideChat === 'string' && this.state.text.startsWith(document.sideChat) ? document.sideChat : null;
     const submission = { type: mode, text: this.state.text, draftVersion: this.version() } as UserAction;
     this.set({
       pendingSend: true,
@@ -142,6 +144,7 @@ export class ComposerModel {
       fromHistory: false,
     });
     this.hooks.dispatch(submission);
+    if (sideChat !== null) this.replace(sideChat, sideChat.length, false);
     return true;
   }
 

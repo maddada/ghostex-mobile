@@ -86,6 +86,8 @@ export type ActionFields = {
   /** Insert reference pills for machine paths at the selection. */
   insertAttachments: { paths: string[]; text: string; start: number; end: number };
   removeAttachment: { text: string; start: number; end: number };
+  /** Side chat on or off: adds or removes the `/btw ` prefix on `text` (core `side_chat.rs`). */
+  toggleSideChat: { text: string };
   /** Read an image's bytes for a thumbnail or the viewer; answered as a `chatImage` request. */
   loadImage: { path: string };
 

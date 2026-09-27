@@ -85,7 +85,12 @@ export type TranscriptTheme = {
   star: string;
   /** Send and Stop (`send_control.rs`; the light pair is the React chat's user decision). */
   send: { fill: string; ink: string; stopFill: string; stopInk: string; stopBorder: string };
-  /** Composer reference pill tints (`reference-visual.json`, mixed toward white in dark). */
+  /**
+   * Composer reference pill tints: the same brighter set as `link`.
+   *
+   * CDXC:SessionChat 2026-09-27 DECISION:
+   * User: the phone composer's reference pills take the transcript's brighter reference colours. The GPUI composer still uses the dimmer `colors` from `reference-visual.json`.
+   */
   reference: Record<string, string>;
   /** The account-switch card's raised surface and its tiles (`account_switch_card.rs`). */
   floatingSurface: string;
@@ -155,7 +160,7 @@ const DARK: TranscriptTheme = {
   placeholder: 'rgba(158,158,158,0.6)',
   star: '#f6c945',
   send: { fill: '#e5e5e5', ink: '#171717', stopFill: '#171717', stopInk: '#fcfcfc', stopBorder: 'rgba(255,255,255,0.14)' },
-  reference: { file: '#95a4b7', folder: '#b6a689', image: '#8cb59e', skill: '#91a99a', url: '#91a9bd' },
+  reference: { file: '#9dbcf0', folder: '#e3c283', image: '#8ed8ab', skill: '#a3d9bd', url: '#6cb4ff', sideChat: '#bdb2f5' },
   floatingSurface: '#181818',
   floatingTile: '#1f1f1f',
   markCard: '#2c2c2c',
@@ -219,7 +224,7 @@ const LIGHT: TranscriptTheme = {
   placeholder: 'rgba(113,113,123,0.6)',
   star: '#d97706',
   send: { fill: '#7db8fb', ink: '#ffffff', stopFill: '#f6b5b5', stopInk: '#7a2929', stopBorder: 'transparent' },
-  reference: { file: '#6c819b', folder: '#9a835b', image: '#5f9878', skill: '#668773', url: '#6687a3' },
+  reference: { file: '#3f6aa8', folder: '#93631a', image: '#2a7d4c', skill: '#3d7458', url: '#1447e6', sideChat: '#5a4ab0' },
   floatingSurface: '#fefefe',
   floatingTile: '#f5f5f5',
   markCard: '#e4e4e5',
