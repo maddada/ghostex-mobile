@@ -1,7 +1,8 @@
 /**
- * The pills under the composer (`option_pills.rs`): the model pill (with the agent's mark and, for
- * the merged picker, the reasoning suffix), the options pill, the permission mode pill, and the
- * context meter ring. Each opens its menu; the menus are the document's rows.
+ * The pills under the composer (`option_pills.rs`): the agent chip naming the bot a Hermes chat
+ * talks to, the model pill (with the agent's mark and, for the merged picker, the reasoning suffix),
+ * the options pill, the permission mode pill, and the context meter ring. Each pill opens its menu;
+ * the menus are the document's rows.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -46,6 +47,10 @@ export function OptionPills({ document, onOpen }: { document: ChatDocument; onOp
   const suffix = merged && !loadingModel ? str(obj(modelMenu?.pill), 'suffix') : '';
   const agentIcon = str(labels, 'agentIcon');
   const AgentIcon = agentIcon.length > 0 ? AGENT_ICONS[agentIcon] : undefined;
+  // The core moves the agent's mark from the model pill into this chip (`agent_chip` on desktop).
+  const agentChip = obj(labels?.agentChip);
+  const chipName = str(agentChip, 'name');
+  const chipIcon = str(agentChip, 'icon');
   const indicator = str(labels, 'accountIndicator');
   const hasMode = arr(obj(document.optionMenus)?.mode).length > 0;
   const modeValue = str(labels, 'modeValue');
@@ -60,6 +65,16 @@ export function OptionPills({ document, onOpen }: { document: ChatDocument; onOp
   );
   return (
     <View style={styles.row}>
+      {chipName.length > 0 ? (
+        <View style={styles.agentChip} accessibilityLabel={`Agent: ${chipName}`}>
+          <View style={[styles.agentTile, { backgroundColor: chipIcon.length > 0 ? agentAccent(chipIcon, P.light) : P.muted }]}>
+            <Text style={styles.agentInitial}>{Array.from(chipName)[0]}</Text>
+          </View>
+          <Text style={styles.agentName} numberOfLines={1}>
+            {chipName}
+          </Text>
+        </View>
+      ) : null}
       {isTrue(labels, 'showModel') ? (
         <Pressable
           accessibilityRole="button"
@@ -164,6 +179,10 @@ export function ContextRing({ percentage }: { percentage: number }) {
 
 const useStyles = themedStyles((P) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 1, minWidth: 0 },
+  agentChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 8, flexShrink: 0 },
+  agentTile: { width: 14, height: 14, borderRadius: 3, alignItems: 'center', justifyContent: 'center' },
+  agentInitial: { color: '#111111', fontSize: 9, fontWeight: '700' },
+  agentName: { color: P.primary, fontSize: 13, fontWeight: '500' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
