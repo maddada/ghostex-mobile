@@ -1,3 +1,4 @@
+import { isGpuiAvailable } from '../../../modules/gx-chat-core/src/gpui';
 import { useSettingsStore, type PreferredAgentInterface, type SessionChatTheme } from '../../settings/store';
 import { Caption, ChoiceRow, SectionHeader, SettingsScreenLayout, SettingToggle } from './SettingsControls';
 
@@ -49,6 +50,17 @@ export default function ChatPage() {
       <Caption>Show the first seven code lines instead of only the path and change counts.</Caption>
       <SettingToggle settingKey='sessionChatVerboseMode' label='Verbose Mode' />
       <Caption>Expands thinking blocks to show their tool calls by default.</Caption>
+
+      {isGpuiAvailable() ? (
+        <>
+          <SectionHeader title='Developer' />
+          <SettingToggle settingKey='sessionChatGpuiTranscript' label='GPUI transcript (beta)' />
+          <Caption>
+            Draws the conversation with the desktop app's own chat renderer. Takes effect the next time a chat
+            opens.
+          </Caption>
+        </>
+      ) : null}
     </SettingsScreenLayout>
   );
 }

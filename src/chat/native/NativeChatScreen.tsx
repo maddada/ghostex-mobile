@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Linking, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { docPathForChatFile } from '../../docs/openDoc';
+import { isGpuiAvailable } from '../../../modules/gx-chat-core/src/gpui';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import type { RootStackParamList } from '../../navigation/types';
@@ -32,6 +33,9 @@ import { webPreviewTargetForUrl } from '../../webPreview/routing';
 import { useOpenMachineLink } from '../../webPreview/useOpenMachineLink';
 import type { ChatViewRequest } from '../rust/effects';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
+import GpuiTranscript from '../gpui/GpuiTranscript';
+import { useGpuiChat } from '../gpui/useGpuiChat';
+import { useSettingsStore } from '../../settings/store';
 import { useArmedActions } from './armedActions';
 import { ForkBranchBadge, NativeChatCards, NativeChatOverlays, questionReplacesComposer } from './cards';
 import { NativeComposer } from './composer';
@@ -87,7 +91,14 @@ export default function NativeChatScreen({
   onQueueCountChange,
   style,
 }: NativeChatScreenProps) {
-  const chat = useRustChat({ machine, projectId, sessionId });
+  // The transcript's engine is picked once per chat screen: the GPUI one runs the chat in the Rust
+  // host inside the phone library, the React Native one in the TypeScript host, and one chat must
+  // not run in both.
+  const gpuiSetting = useSettingsStore((state) => state.settings.sessionChatGpuiTranscript);
+  const [gpui] = useState(() => gpuiSetting && isGpuiAvailable());
+  const rustChat = useRustChat(gpui ? null : { machine, projectId, sessionId });
+  const gpuiChat = useGpuiChat(gpui ? { machine, projectId, sessionId } : null);
+  const chat = gpui ? gpuiChat : rustChat;
   const theme = useTranscriptTheme();
   const document = chat.state?.document ?? null;
   const [handoff, setHandoff] = useState<HandoffRequest | null>(null);
@@ -169,16 +180,24 @@ export default function NativeChatScreen({
         pointerEvents={visible ? 'auto' : 'none'}
       >
         {chat.state?.error ? <Text style={[styles.error, { color: theme.error }]}>{chat.state.error}</Text> : null}
-        <TranscriptSearchBar chat={chat} />
+        {gpui ? null : <TranscriptSearchBar chat={chat} />}
         <View style={styles.transcript}>
-          <NativeTranscript chat={chat} />
-          <ForkBranchBadge chat={chat} />
+          {gpui ? (
+            // GPUI draws the whole transcript region itself: search, the fork badge, the subagent
+            // viewer and the account switch card included.
+            <GpuiTranscript style={StyleSheet.absoluteFill} />
+          ) : (
+            <>
+              <NativeTranscript chat={chat} />
+              <ForkBranchBadge chat={chat} />
+            </>
+          )}
         </View>
         <NativeChatCards chat={chat} onHostAction={hostAction} armed={armed} {...(openDelayedActions !== undefined ? { onArmedPress: openDelayedActions } : {})} />
         {questionReplacesComposer(document) ? null : <NativeComposer chat={chat} onHostAction={hostAction} hostActions={composerHostActions} openAccountsRequestId={accountsRequestId} />}
         <RewindDialog chat={chat} />
         <SaveMarkdownDialog chat={chat} />
-        <TranscriptMenuSheet chat={chat} host={menuHost} />
+        {gpui ? null : <TranscriptMenuSheet chat={chat} host={menuHost} />}
         <HandoffSheet
           request={handoff}
           machine={machine}
@@ -187,7 +206,7 @@ export default function NativeChatScreen({
           onClose={() => setHandoff(null)}
           onFailure={(failure, message) => show(message, true, failure)}
         />
-        <NativeChatOverlays chat={chat} renderTranscriptItem={renderSubagentRow} />
+        {gpui ? null : <NativeChatOverlays chat={chat} renderTranscriptItem={renderSubagentRow} />}
         <ChatToast toast={toast} />
       </View>
     </NativeChatUiProvider>

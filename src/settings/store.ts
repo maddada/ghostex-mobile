@@ -69,6 +69,12 @@ export type GhostexSettings = {
   /** Reveal thinking-owned tool calls by default. */
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
+  /**
+   * Draw the chat transcript with the desktop's own GPUI renderer (`packages/gpui-mobile` in the
+   * main repo) instead of the React Native one. Only builds of the phone library made with
+   * `build.sh --gpui` can; the switch is hidden otherwise.
+   */
+  sessionChatGpuiTranscript: boolean;
   // SSH connection (appended group).
   autoReconnect: boolean;
   keepAliveEnabled: boolean;
@@ -139,6 +145,7 @@ export function defaultSettings(): GhostexSettings {
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
     sessionChatVerboseMode: false,
     sessionChatFileEditPreviews: false,
+    sessionChatGpuiTranscript: false,
     autoReconnect: true,
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
@@ -243,6 +250,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
+    sessionChatGpuiTranscript: bool('sessionChatGpuiTranscript', defaults.sessionChatGpuiTranscript),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,

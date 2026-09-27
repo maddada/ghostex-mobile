@@ -1,9 +1,17 @@
 {
-  "platforms": ["apple", "android"],
+  "platforms": [
+    "apple",
+    "android"
+  ],
   "apple": {
-    "modules": ["GxChatCoreModule"]
+    "modules": [
+      "GxChatCoreModule"
+    ]
   },
   "android": {
-    "modules": ["expo.modules.gxchatcore.GxChatCoreModule"]
+    "modules": [
+      "expo.modules.gxchatcore.GxChatCoreModule",
+      "expo.modules.gxchatcore.gpui.GpuiViewModule"
+    ]
   }
 }

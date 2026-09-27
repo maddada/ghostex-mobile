@@ -53,5 +53,6 @@ modules/ghostex-native/ios/Vendor/Tailcatbridge.xcframework/
 modules/gx-chat-core/ios/Vendor/
 modules/gx-chat-core/ios/Generated/
 modules/gx-chat-core/android/src/main/jniLibs/
-modules/gx-chat-core/android/src/main/java/dev/
+modules/gx-chat-core/android/src/main/assets/
+modules/gx-chat-core/android/src/main/java/dev/ghostex/gxchatcore/uniffi/
 modules/gx-chat-core/android/build/
