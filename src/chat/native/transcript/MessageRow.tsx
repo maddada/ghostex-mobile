@@ -20,6 +20,7 @@ import { openTranscriptMenu } from './transcriptMenuStore';
 import { useDisclosure } from './state';
 import { estimatedLines, InterAgentCard, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
 import { PROSE_LINE, PROSE_SIZE } from './theme';
+import { SideQuestionRow } from './SideQuestionRow';
 import { ToolRows } from './ToolRows';
 
 /** React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`). */
@@ -31,6 +32,7 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Proje
   if (message.role === 'user' && obj(message.interAgentMessage) !== null) return <InterAgentCard message={message} />;
   if (obj(message.terminalTool) !== null) return <TerminalToolRow activity={message.terminalTool} />;
   if (message.role === 'user' && obj(message.suppressed) === null) return <UserMessage message={message} />;
+  if (obj(message.sideQuestion) !== null) return <SideQuestionRow message={message} />;
   if (obj(message.suppressed) !== null) return <SuppressedRow message={message} />;
   if (obj(message.systemCard) !== null) return <SystemCard message={message} />;
   return <AgentMessage message={message} proseColor={theme.prose} />;

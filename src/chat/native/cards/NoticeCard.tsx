@@ -15,7 +15,19 @@ import type { RustChat } from '../../rust/useRustChat';
 import type { GlyphName } from './icons';
 import { arr, asJson, isTrue, num, obj, str } from './json';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { CARD_TEXT_SIZE, CardHeader, ChatButton, ChoiceRow, StatusCard, useCardText, useWellStyle } from './primitives';
+import {
+  CARD_TEXT_SIZE,
+  CHOICE_ROW_CHROME,
+  CardHeader,
+  ChatButton,
+  ChoiceRow,
+  ChoiceRowLabelMeasure,
+  StatusCard,
+  useCardText,
+  useWellStyle,
+} from './primitives';
+import { PanelBlocks } from './PanelBlocks';
+import { SideQuestionCard } from './SideQuestionCard';
 import type { CardHostAction } from './types';
 
 export function NoticeCard({
@@ -35,6 +47,7 @@ export function NoticeCard({
   const notice = obj(document.terminalNotice);
   const key = `notice:${str(notice, 'kind')}:${str(notice, 'detectedAt')}`;
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [choiceWidths, setChoiceWidths] = useState<Record<string, number>>({});
   const dialogInput = useDialogInput(obj(notice?.dialog));
   if (notice === null || document.noticeVisible !== true) return null;
 
@@ -46,10 +59,14 @@ export function NoticeCard({
   const rateLimit = choices.some((choice) => str(choice, 'label').startsWith('Wait here, then continue automatically'));
 
   if (dialog !== null && Array.isArray(dialog.rows) && dialog.rows.length === 0) {
+    if (obj(obj(dialog.presentation)?.sideQuestion) !== null) {
+      return <SideQuestionCard chat={chat} dialog={dialog} />;
+    }
     const copyTitle = str(obj(obj(dialog.presentation)?.copy), 'title');
+    const panelTitle = str(obj(dialog.presentation), 'title');
     return (
       <StatusCard
-        header={<CardHeader icon="terminal-2" title={copyTitle || str(dialog, 'title')} />}
+        header={<CardHeader icon="terminal-2" title={copyTitle || panelTitle || str(dialog, 'title')} />}
         {...terminalDialogParts(chat, dialog, busy, dialogInput, look)}
       />
     );
@@ -66,15 +83,36 @@ export function NoticeCard({
   }
   if (answerable) {
     const shown = collapsed ? (num(notice, 'collapsedChoiceCount') ?? 2) : choices.length;
+    const labels = choices.slice(0, shown).map((choice) => str(choice, collapsed ? 'collapsedLabel' : 'label'));
+    /*
+     * CDXC:SessionChat 2026-09-27 DECISION: User: when a notice card's choices do not fit side by side, "make buttons appear full
+     * width and on top of each other", for every card like the model switch confirmation. Each collapsed button starts at the width
+     * the widest label needs on one line and the row wraps, so the buttons share the row in equal halves only when every label fits
+     * whole, and otherwise stack full width. Until the labels are measured they sit side by side as before.
+     * SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs
+     */
+    const widths = labels.map((label) => choiceWidths[label]);
+    const widest = collapsed && widths.every((width) => width !== undefined) ? Math.max(...(widths as number[])) : null;
+    const stacked = widest !== null && !Number.isFinite(widest);
+    const choiceStyle = !collapsed || stacked ? null : widest === null ? styles.collapsedChoice : { flexGrow: 1, flexShrink: 1, flexBasis: widest + CHOICE_ROW_CHROME, minWidth: 0 };
     body.push(
       <ScrollView
         key="choices"
         style={{ maxHeight: height * 0.45 }}
-        contentContainerStyle={collapsed ? styles.choicesRow : styles.choicesColumn}
+        contentContainerStyle={collapsed && !stacked ? styles.choicesRow : styles.choicesColumn}
         nestedScrollEnabled
       >
+        {collapsed
+          ? labels.map((label, index) => (
+              <ChoiceRowLabelMeasure
+                key={`measure:${index}`}
+                label={label}
+                onWidth={(width) => setChoiceWidths((previous) => (previous[label] === width ? previous : { ...previous, [label]: width }))}
+              />
+            ))
+          : null}
         {choices.slice(0, shown).map((choice, index) => (
-          <View key={`${num(choice, 'index') ?? index}`} style={collapsed ? styles.collapsedChoice : null}>
+          <View key={`${num(choice, 'index') ?? index}`} style={choiceStyle}>
             {/* CDXC:SessionChat 2026-09-26 DECISION: User: a notice card's choice must never wrap onto 2 lines; truncate it with "..." and show the whole label on hover. The phone has no hover, so pressing and holding shows it. SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs */}
             <ChoiceRow
               label={str(choice, collapsed ? 'collapsedLabel' : 'label')}
@@ -191,6 +229,8 @@ function terminalDialogParts(
         </Text>
       );
     });
+  } else if (arr(presentation?.blocks).length > 0) {
+    body.push(<PanelBlocks key="blocks" chat={chat} dialog={dialog} blocks={arr(presentation?.blocks)} />);
   } else if (!hasRows && str(dialog, 'body').length > 0) {
     body.push(
       <View key="dialog-body" style={[wellStyle, styles.dialogBody]}>
@@ -244,7 +284,8 @@ function terminalDialogParts(
       />
     );
   }
-  if (copy === null && str(dialog, 'footer').length > 0) {
+  // Written copy and blocks come with buttons for everything the key-hint footer says.
+  if (copy === null && arr(presentation?.blocks).length === 0 && str(dialog, 'footer').length > 0) {
     body.push(
       <Text key="footer" style={cardText.prose}>
         {str(dialog, 'footer')}
@@ -285,6 +326,7 @@ const useStyles = themedStyles((P) => ({
   },
   choicesRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
   },
   collapsedChoice: {

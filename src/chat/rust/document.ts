@@ -229,6 +229,8 @@ export type ProjectedMessage = {
   images?: Json[];
   /** How a suppressed row is presented, or null. */
   suppressed?: Json;
+  /** A `/btw` side question kept in the transcript: `{question, answer, answerMarkdown, answerReferences}`. */
+  sideQuestion?: Json;
   /** A system card (compaction, errors, agent messages...), or null. Desktop: `system_cards.rs`. */
   systemCard?: Json;
   /** File change rows. Desktop: `file_change_card.rs`, `file_change_rows` in the core. */

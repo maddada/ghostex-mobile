@@ -334,8 +334,8 @@ export type GhostexSession = {
   closeAfterDone: boolean;
   /**
    * Absolute RFC 3339 time an armed Close After Done closes the session ('' while
-   * it waits for the agent to finish, or when the computer predates the field,
-   * which then shows the armed 03:00 like the desktop does without a deadline).
+   * it waits for the agent to finish, or when the computer predates the field;
+   * the row then draws the clock icon and no time, like the desktop).
    */
   closeAfterDoneDeadlineAt: string;
   /** Questions the agent is waiting on an answer to (0 when none, or from a computer that predates the field). */

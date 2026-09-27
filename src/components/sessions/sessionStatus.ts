@@ -30,9 +30,6 @@ type RowSession = Pick<
   | 'attentionEnteredAt'
 >;
 
-/** packages/gx-core/src/sidebar_view/session_text.rs `CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL`. */
-const CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL = '03:00';
-
 /** The dot in the row's status slot (apps/desktop/src/app/native_sidebar/status.rs `activity_indicator`). */
 export type RowActivityIndicator = 'working' | 'attention' | 'backgroundWork' | null;
 
@@ -94,8 +91,8 @@ function deadlineCountdown(deadlineAt: string, nowMs: number): string | null {
 /**
  * packages/gx-core/src/sidebar_view/session_text.rs `timer_trailing_label`: a
  * Delayed Send owns the slot (its countdown, or its label unless it is still
- * waiting for agents), then an armed Close After Done (its countdown, or the
- * armed 03:00 while it waits for the agent to finish).
+ * waiting for agents), then an armed Close After Done's countdown. An armed
+ * Close After Done still waiting for its agent to finish draws no time.
  */
 export function timerTrailingLabel(session: RowSession, nowMs: number): string | null {
   if (hasPublishedDelayedSend(session)) {
@@ -108,11 +105,8 @@ export function timerTrailingLabel(session: RowSession, nowMs: number): string |
         : session.delayedSendRemainingLabel;
     }
   }
-  if (!session.closeAfterDone) return null;
-  if (session.closeAfterDoneDeadlineAt.length > 0) {
-    return deadlineCountdown(session.closeAfterDoneDeadlineAt, nowMs);
-  }
-  return CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL;
+  if (!session.closeAfterDone || session.closeAfterDoneDeadlineAt.length === 0) return null;
+  return deadlineCountdown(session.closeAfterDoneDeadlineAt, nowMs);
 }
 
 /** packages/gx-core/src/sidebar_view/session_text.rs `last_interaction_label`: 32s / 5m / 3h / 2d. */

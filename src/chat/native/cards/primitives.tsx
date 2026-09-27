@@ -168,6 +168,31 @@ export function ChoiceRow({
   );
 }
 
+/** A `ChoiceRow`'s 12px sides and 1px border around its label, matching `choice_row_width` on the desktop. */
+export const CHOICE_ROW_CHROME = 26;
+
+/**
+ * Reports the one-line width of `label` as a `ChoiceRow` draws it, or Infinity when it does not fit
+ * on one line of its container. Place it in the choices' container; it draws nothing and takes no
+ * touches.
+ */
+export function ChoiceRowLabelMeasure({ label, onWidth }: { label: string; onWidth: (width: number) => void }) {
+  const styles = useStyles();
+  return (
+    <View pointerEvents="none" style={styles.measureLayer} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Text
+        style={styles.choiceLabel}
+        onTextLayout={(event) => {
+          const lines = event.nativeEvent.lines;
+          onWidth(lines.length === 1 ? Math.ceil(lines[0].width) : Number.POSITIVE_INFINITY);
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 /** The question card's footer button (`question_button`): bordered, or ghost without a border. */
 export function CardButton({
   label,
@@ -369,6 +394,14 @@ const useStyles = themedStyles((P) => ({
     color: P.foreground,
     fontSize: CARD_TEXT_SIZE,
     lineHeight: 19,
+  },
+  measureLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'flex-start',
+    opacity: 0,
   },
   choiceDescription: {
     color: P.cardMuted,
