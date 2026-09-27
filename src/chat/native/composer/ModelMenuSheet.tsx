@@ -34,6 +34,9 @@ const SCROLL_WINDOW_MS = 600;
  *
  * CDXC:Mobile 2026-09-24 DECISION:
  * User: remove the hotkeys shown on the mobile model picker; a phone has no Command key, so the ⌘1-⌘4 chips beside the models and the key hint row under the buttons don't make sense there. The sheet also leaves out the footer buttons' hotkey letters.
+ *
+ * CDXC:SessionChat 2026-09-27 DECISION:
+ * User: "please remove the effort pills from each model in the react native model picker, we can pick the effort from the bottom button". A model row carries no reasoning level chips; the level is picked in the footer's Reasoning list, which follows the highlighted row, as on the desktop pop-up (which never had per-row chips).
  */
 export function ModelMenuSheet({
   menu,
@@ -59,7 +62,7 @@ export function ModelMenuSheet({
   const { height } = useWindowDimensions();
   /** The highlighted row's key; null is the tab's selected row, else its first (`selected_row`). */
   const [cursor, setCursor] = useState<string | null>(null);
-  /** Levels the chips (or the Reasoning list) moved to this visit, by row key (`model_efforts`). */
+  /** Levels the Reasoning list moved to this visit, by row key (`model_efforts`). */
   const [efforts, setEfforts] = useState<Record<string, string>>({});
   /** The footer button whose choices are open. */
   const [openButton, setOpenButton] = useState<number | null>(null);
@@ -247,8 +250,6 @@ export function ModelMenuSheet({
             const selected = isTrue(row, 'selected');
             const active = key === highlightedKey;
             const favorite = isTrue(row, 'favorite');
-            const levels = active ? arr(row.efforts).map(obj).filter((level): level is JsonRecord => level !== null) : [];
-            const level = active ? effortFor(row, efforts) : '';
             return (
               <Pressable
                 key={key}
@@ -294,26 +295,6 @@ export function ModelMenuSheet({
                   </Pressable>
                 </View>
                 {active && about === key && description.length > 0 ? <Text style={styles.description}>{description}</Text> : null}
-                {levels.length > 0 ? (
-                  <View style={styles.levels} accessibilityRole="radiogroup" accessibilityLabel={`Reasoning for ${label}`}>
-                    <Glyph name="brain" size={15} color={P.ink(0.64)} />
-                    {levels.map((entry) => {
-                      const value = str(entry, 'value');
-                      const on = value === level;
-                      return (
-                        <Pressable
-                          key={value}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: on }}
-                          onPress={() => setEfforts((current) => ({ ...current, [key]: value }))}
-                          style={({ pressed }) => [styles.level, on ? styles.levelOn : pressed ? styles.levelPressed : null]}
-                        >
-                          <Text style={[styles.levelText, on ? styles.levelTextOn : null]}>{str(entry, 'label')}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : null}
               </Pressable>
             );
           })}
@@ -327,7 +308,7 @@ export function ModelMenuSheet({
 
 /**
  * CDXC:SessionChat 2026-09-25 WHY:
- * The desktop pop-up is driven from the keyboard (keys.rs DECISION): Up and Down move the highlight, Left and Right move its reasoning level, Enter uses the model and level in this session and Shift+Enter saves them as the agent's default. A phone has no such keys, so a tap on a row only highlights it, the level chips under it are Left and Right, and these buttons are Enter and Shift+Enter. Where the agent cannot apply a pick to one session (every agent but Claude, `sessionScope`), both keys save the default, so one Apply button stands for them with the core's `scopeHint`; another agent's row hands off (a draft switches agent), which one button names.
+ * The desktop pop-up is driven from the keyboard (keys.rs DECISION): Up and Down move the highlight, Left and Right move its reasoning level, Enter uses the model and level in this session and Shift+Enter saves them as the agent's default. A phone has no such keys, so a tap on a row only highlights it, the footer's Reasoning list is Left and Right, and these buttons are Enter and Shift+Enter. Where the agent cannot apply a pick to one session (every agent but Claude, `sessionScope`), both keys save the default, so one Apply button stands for them with the core's `scopeHint`; another agent's row hands off (a draft switches agent), which one button names.
  */
 function ApplyBar({
   menu,
@@ -426,12 +407,6 @@ const useStyles = themedStyles((P) => ({
   rowButton: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rowButtonPressed: { backgroundColor: P.ink(0.08) },
   description: { color: P.ink(0.64), fontSize: 13, lineHeight: 18, paddingBottom: 6, paddingRight: 8 },
-  levels: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingTop: 2, paddingBottom: 8 },
-  level: { height: 30, paddingHorizontal: 12, borderRadius: 15, borderWidth: 1, borderColor: P.ink(0.12), justifyContent: 'center' },
-  levelOn: { backgroundColor: P.ink(0.14), borderColor: P.ink(0.26) },
-  levelPressed: { backgroundColor: P.ink(0.06) },
-  levelText: { color: P.ink(0.64), fontSize: 13 },
-  levelTextOn: { color: P.menuForeground, fontWeight: '600' },
   applyBar: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: P.ink(0.08), paddingHorizontal: 12, paddingTop: 10, gap: 8 },
   hint: { color: P.ink(0.64), fontSize: 12, lineHeight: 16, paddingHorizontal: 4 },
   applyRow: { flexDirection: 'row', gap: 8 },

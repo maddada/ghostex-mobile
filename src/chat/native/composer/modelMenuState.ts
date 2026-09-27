@@ -24,14 +24,14 @@ export function footerLines<T>(buttons: readonly T[]): T[][] {
   return lines;
 }
 
-/** The level a pick of `row` carries: where the level chips left it this visit, else the row's own (`effort_for`). */
+/** The level a pick of `row` carries: where the Reasoning list left it this visit, else the row's own (`effort_for`). */
 export function effortFor(row: JsonRecord, efforts: Readonly<Record<string, string>>): string {
   return efforts[str(row, 'key')] ?? str(row, 'effort');
 }
 
 /**
  * CDXC:SessionChat 2026-09-25 SEE-ALSO: `reasoning_for` in apps/desktop/src/app/native_chat/option_menu/model_menu/state.rs draws the same button; keep the two in step.
- * The Reasoning button for the highlighted row: its levels, with the one the chips moved to
+ * The Reasoning button for the highlighted row: its levels, with the one the list moved to
  * marked. `browse` names the row, and `browseCurrent` says whether it is the model in use, whose
  * level a choice from the list applies at once.
  */
