@@ -388,8 +388,6 @@ export type ChatDocument = {
   modelMenuContext: Json;
   /** The projected model menu, or null when closed. Desktop: `option_menu/model_menu/`. */
   modelMenu: Json;
-  /** The full model picker, or null. */
-  modelPicker: Json;
   /** Provider the model pills belong to; absent before the agent is known. */
   modelProvider?: string | null;
   /** The queued model selection and its outbox. Not drawn directly. */

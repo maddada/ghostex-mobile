@@ -254,8 +254,6 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
         case 'host':
           host(str(command, 'action'), command);
           return false;
-        case 'toggleModelPicker':
-          return false;
         default:
           dispatch(command as UserAction);
           return false;

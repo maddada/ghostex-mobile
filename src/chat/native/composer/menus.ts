@@ -161,9 +161,9 @@ export function moreActionsRows({ document, verbose, available, serves, compactA
   return rows;
 }
 
-/** A pill's menu (`show_option_menu`): the document's rows, minus the desktop-only quick picker. */
+/** A pill's menu (`show_option_menu`): the document's rows. */
 export function optionMenuRows(document: ChatDocument, kind: 'model' | 'options' | 'mode'): MenuRow[] {
   return arr(obj(document.optionMenus)?.[kind])
     .map((row) => obj(row))
-    .filter((row): row is MenuRow => row !== null && str(row.command, 'type') !== 'toggleModelPicker');
+    .filter((row): row is MenuRow => row !== null);
 }

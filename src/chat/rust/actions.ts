@@ -142,17 +142,6 @@ export type ActionFields = {
   // ---- options, models and accounts ---------------------------------------------------------
   /** Pick an option row (`optionMenus` rows carry the exact payload to send). */
   selectOption: { descriptorId?: string; value?: Json; [field: string]: unknown };
-  toggleModelPicker: {};
-  modelPickerMeasure: { size?: Json; width?: number; height?: number; controlsHeight?: number };
-  modelPickerPane: { requestId?: string };
-  modelPickerKey: { key: string };
-  modelPickerKeyUp: { key: string };
-  modelPickerBlur: {};
-  modelPickerControl: { control: string };
-  modelPickerScroll: { input: Json };
-  modelPickerModel: { index: number; save?: boolean; pointer?: boolean };
-  modelPickerEffort: { index: number; save?: boolean };
-  modelPickerCancel: {};
   /** `tab: null` is the picker opening, which also re-reads the stars (`model_menu_view`). */
   modelMenuView: { tab?: string | null; query?: string };
   modelMenuFavorite: { key: string };
