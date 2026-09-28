@@ -81,6 +81,14 @@ export function NoticeCard({
       </Text>
     );
   }
+  // The command a collapsed approval card is asking to run (`collapsedDetail` in the chat core).
+  if (collapsed && typeof notice.collapsedDetail === 'string') {
+    body.push(
+      <Text key="collapsed-detail" style={styles.monoText}>
+        {notice.collapsedDetail}
+      </Text>
+    );
+  }
   if (answerable) {
     const shown = collapsed ? (num(notice, 'collapsedChoiceCount') ?? 2) : choices.length;
     const labels = choices.slice(0, shown).map((choice) => str(choice, collapsed ? 'collapsedLabel' : 'label'));

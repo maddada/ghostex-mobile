@@ -153,6 +153,7 @@ function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
   const percent = num(activity, 'percent');
   const indeterminate = isTrue(activity, 'indeterminate');
   const elapsed = str(activity, 'elapsedLabel');
+  const tokens = str(activity, 'tokens');
   const hint = str(activity, 'hint');
   const header = (
     <View style={styles.activityHeader}>
@@ -172,6 +173,7 @@ function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
         ) : null}
       </View>
       {elapsed.length > 0 ? <Text style={styles.activityClock}>{elapsed}</Text> : null}
+      {tokens.length > 0 ? <Text style={styles.activityClock}>{tokens}</Text> : null}
       {percent !== null ? <Text style={styles.activityPercent}>{`${percent}%`}</Text> : null}
     </View>
   );

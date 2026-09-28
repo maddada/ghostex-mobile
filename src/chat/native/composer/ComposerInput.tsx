@@ -10,7 +10,7 @@
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Text, TextInput, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
+import { Text, TextInput, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ComposerModelState } from '../../rust/composer';
@@ -139,7 +139,10 @@ export const ComposerInput = forwardRef<
     return parts;
   }, [P, live, styles, text]);
 
-  return (
+  // A TextInput wraps its placeholder and cannot truncate it, so the collapsed field draws the
+  // placeholder's first line itself, cut to one line with an ellipsis.
+  const collapsedHint = collapsed && text.length === 0 ? (placeholder.split('\n')[0] ?? '') : null;
+  const field_ = (
     <TextInput
       ref={field}
       accessibilityLabel="Message composer"
@@ -151,7 +154,7 @@ export const ComposerInput = forwardRef<
       onSelectionChange={onSelectionChange}
       onFocus={() => input.focused()}
       onBlur={() => input.blurred()}
-      placeholder={collapsed ? placeholder.split('\n')[0] : placeholder}
+      placeholder={collapsed ? '' : placeholder}
       placeholderTextColor={P.placeholder}
       keyboardAppearance={P.light ? 'light' : 'dark'}
       autoCapitalize="sentences"
@@ -160,6 +163,15 @@ export const ComposerInput = forwardRef<
     >
       {children}
     </TextInput>
+  );
+  if (collapsedHint === null) return field_;
+  return (
+    <View>
+      {field_}
+      <Text style={[styles.hint, { color: P.placeholder }]} numberOfLines={1} pointerEvents="none">
+        {collapsedHint}
+      </Text>
+    </View>
   );
 });
 
@@ -173,6 +185,7 @@ const useStyles = themedStyles((P) => ({
     paddingBottom: 2,
     paddingHorizontal: 0,
   },
+  hint: { position: 'absolute', left: 0, right: 0, top: 2, fontSize: 15, lineHeight: 21 },
   collapsed: { height: COLLAPSED_INPUT_HEIGHT, maxHeight: COLLAPSED_INPUT_HEIGHT },
   pill: { fontWeight: '500' },
   /** The markdown around a pill's label: in the text, drawn with no width. */
