@@ -15,7 +15,7 @@ import { FileChangeStack } from './FileChanges';
 import { ImageRow } from './Images';
 import { arr, obj, str } from './json';
 import { Markdown } from './markdown/Markdown';
-import { hasReplyActions, ReplyActions, UserActions } from './MessageActions';
+import { DeliveryIndicator, hasReplyActions, ReplyActions, UserActions } from './MessageActions';
 import { openTranscriptMenu } from './transcriptMenuStore';
 import { useDisclosure } from './state';
 import { estimatedLines, InterAgentCard, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
@@ -57,25 +57,25 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
   const bubble = <Markdown text={body} references={message.markdownReferences} color={theme.primary} breaks selectable={openMenu === undefined} />;
   return (
     <View style={styles.message} accessibilityLabel={`user message: ${body.slice(0, 2000)}`}>
-      <StartupDelivery message={message} />
-      {message.queued === true && (message.startupDelivery === undefined || message.startupDelivery === null) ? (
-        <Text style={[styles.queued, { color: theme.muted }]}>QUEUED</Text>
-      ) : null}
+      <StartupDelivery message={message} waitingLine={false} />
       <ImageRow images={message.images} user />
       <View style={styles.userColumn}>
-        {body.length > 0 ? (
-          openMenu !== undefined ? (
-            <Pressable
-              onLongPress={openMenu}
-              accessibilityHint={MENU_HINT}
-              style={({ pressed }) => [styles.bubble, { backgroundColor: theme.input }, pressed && { opacity: 0.85 }]}
-            >
-              {bubble}
-            </Pressable>
-          ) : (
-            <View style={[styles.bubble, { backgroundColor: theme.input }]}>{bubble}</View>
-          )
-        ) : null}
+        <View style={styles.bubbleRow}>
+          <DeliveryIndicator message={message} />
+          {body.length > 0 ? (
+            openMenu !== undefined ? (
+              <Pressable
+                onLongPress={openMenu}
+                accessibilityHint={MENU_HINT}
+                style={({ pressed }) => [styles.bubble, { backgroundColor: theme.input }, pressed && { opacity: 0.85 }]}
+              >
+                {bubble}
+              </Pressable>
+            ) : (
+              <View style={[styles.bubble, { backgroundColor: theme.input }]}>{bubble}</View>
+            )
+          ) : null}
+        </View>
         <UserActions message={message} />
       </View>
     </View>
@@ -206,9 +206,9 @@ function PendingRow({ user }: { user: boolean }) {
 
 const styles = StyleSheet.create({
   message: { gap: 8, minWidth: 0 },
-  queued: { alignSelf: 'flex-end', fontSize: 11 },
   userColumn: { alignItems: 'flex-end', gap: 4 },
-  bubble: { maxWidth: '80%', borderRadius: 16, padding: 12 },
+  bubbleRow: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 6 },
+  bubble: { maxWidth: '80%', flexShrink: 1, borderRadius: 16, padding: 12 },
   heading: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   headingBody: { flex: 1, minWidth: 0 },
   headingPress: { borderRadius: 4, paddingRight: 5 },

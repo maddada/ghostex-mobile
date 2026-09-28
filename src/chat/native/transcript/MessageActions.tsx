@@ -7,7 +7,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
@@ -91,6 +91,32 @@ export const ReplyActions = memo(function ReplyActions({ message }: { message: P
   );
 });
 
+/**
+ * Desktop's `delivery_indicator` (`startup_delivery.rs`): a spinner while the send waits for the
+ * agent's terminal, a play button while the agent holds it queued behind its running turn, drawn
+ * left of the bubble level with its last line. A tap on play sends one Escape so the agent takes
+ * the queued prompt now.
+ */
+export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
+  const { theme, dispatch } = useTranscriptEnv();
+  const delivery = message.startupDelivery;
+  const waiting = delivery !== undefined && delivery !== null && delivery.state !== 'failed';
+  const queued = message.queued === true && (delivery === undefined || delivery === null);
+  if (waiting) {
+    return (
+      <View style={[styles.button, styles.indicator]} accessibilityRole='progressbar' accessibilityLabel='Waiting for agent'>
+        <ActivityIndicator size={13} color={theme.muted} />
+      </View>
+    );
+  }
+  if (!queued) return null;
+  return (
+    <View style={styles.indicator}>
+      <ActionButton label='Queued, tap to interrupt and send' glyph='player-play' onPress={() => dispatch({ type: 'sendKey', key: 'escape' })} />
+    </View>
+  );
+}
+
 export const UserActions = memo(function UserActions({ message }: { message: ProjectedMessage }) {
   const { dispatch, main } = useTranscriptEnv();
   const flags = useTranscriptFlags();
@@ -134,6 +160,7 @@ export const UserActions = memo(function UserActions({ message }: { message: Pro
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   userRow: { justifyContent: 'flex-end', paddingRight: 4 },
+  indicator: { marginBottom: 10 },
   buttons: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   button: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   time: { fontSize: 12 },

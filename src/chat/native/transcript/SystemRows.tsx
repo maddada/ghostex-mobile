@@ -312,12 +312,16 @@ function CollapsedSuppressed({ id, suppressed }: { id: string; suppressed: JsonR
 
 // ---- another agent's message, delivery, the terminal's pending tool ------------------------
 
-/** A send still waiting for the terminal, or one that failed with Retry and Remove. */
-export function StartupDelivery({ message }: { message: ProjectedMessage }) {
+/**
+ * A send that failed, with Retry and Remove. `waitingLine` also writes "Waiting for agent…" for a
+ * card without the delivery indicator (`MessageActions.tsx`) that a user bubble has.
+ */
+export function StartupDelivery({ message, waitingLine = true }: { message: ProjectedMessage; waitingLine?: boolean }) {
   const { theme, dispatch } = useTranscriptEnv();
   const delivery = message.startupDelivery;
   if (delivery === undefined || delivery === null) return null;
   const failed = delivery.state === 'failed';
+  if (!failed && !waitingLine) return null;
   const status = failed ? (delivery.errorMessage?.length ? delivery.errorMessage : 'Message could not be delivered.') : 'Waiting for agent…';
   return (
     <View style={styles.delivery} accessibilityRole='text'>

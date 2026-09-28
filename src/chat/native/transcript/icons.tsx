@@ -72,6 +72,7 @@ const GLYPHS = {
   rewind: ['M9 14l-4 -4l4 -4', 'M5 10h11a4 4 0 1 1 0 8h-1'],
   savePrompt: ['M6 10l-2 1l8 4l8 -4l-2 -1', 'M4 15l8 4l8 -4', 'M12 4v7', 'M15 8l-3 3l-3 -3'],
   saved: ['M5 12l5 5l10 -10'],
+  'player-play': ['M7 4v16l13 -8l-13 -8'],
   photo: [
     'M15 8h.01',
     'M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z',
