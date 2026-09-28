@@ -14,6 +14,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettingsStore } from '../../../settings/store';
@@ -22,7 +23,7 @@ import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { AttachmentPreviews } from './AttachmentPreviews';
 import { pickAttachments, type AttachSource } from './attachments';
-import { ComposerInput, type ComposerInputHandle } from './ComposerInput';
+import { COLLAPSED_INPUT_HEIGHT, ComposerInput, type ComposerInputHandle } from './ComposerInput';
 import { ContextEditorSheet } from './ContextEditorSheet';
 import { Glyph, type GlyphName } from './icons';
 import { IncomingDraftBar } from './IncomingDraftBar';
@@ -38,6 +39,7 @@ import { parseReferences } from './references';
 import { SendControl } from './SendControl';
 import { StatusLine, statusLineReserved } from './StatusLine';
 import { Suggestions } from './Suggestions';
+import { useComposerMotion } from './useComposerMotion';
 import { useKeyboardInset } from './useKeyboardInset';
 
 export type NativeComposerProps = {
@@ -69,6 +71,9 @@ const SEND_WIDTH = 30;
 const FOOTER_GAP = 8;
 const CLEARANCE = 8;
 const INPUT_MAX_HEIGHT = 168;
+const CARD_BORDER = 1;
+/** The collapsed card before its first collapse is measured: the row (field or Send) inside `cardCollapsed`. */
+const COLLAPSED_CARD_ESTIMATE = 6 + Math.max(COLLAPSED_INPUT_HEIGHT, SEND_WIDTH) + 6 + CARD_BORDER * 2;
 
 /** How often a composer focus may re-read the agent's screen for the readiness light. */
 const TAIL_READ_INTERVAL_MS = 15_000;
@@ -111,6 +116,8 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const insets = useSafeAreaInsets();
   const anchor = useRef<View>(null);
   const keyboard = useKeyboardInset(anchor);
+  const requestedCollapsed = document?.composerCollapsed === true;
+  const motion = useComposerMotion(requestedCollapsed, CARD_BORDER, COLLAPSED_CARD_ESTIMATE);
   const field = useRef<ComposerInputHandle>(null);
   const [text, setText] = useState(model?.text ?? '');
   const [caret, setCaret] = useState(0);
@@ -339,7 +346,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   // ---- layout ------------------------------------------------------------------------------------
 
   if (state === null || input === null || model === null) return null;
-  const collapsed = document?.composerCollapsed === true;
+  const collapsed = motion.collapsed;
   const hasDraft = text.trim().length > 0;
   const placeholder = document?.composerPlaceholder ?? '';
   const operationError = document?.operationErrorCode === 'composerNotReady' ? null : (document?.operationError ?? null);
@@ -352,95 +359,56 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
       {operationError !== null && operationError.length > 0 ? <Text style={styles.error}>{operationError}</Text> : null}
       {document !== null ? <NotePanel note={document.note} dispatch={dispatch} /> : null}
       {document?.suggestions ? <Suggestions data={document.suggestions} dispatch={dispatch} /> : null}
-      <Pressable
-        accessible={false}
-        onPress={() => {
-          if (collapsed) dispatch({ type: 'composerExpand', editor: true });
-          field.current?.focus();
-        }}
-        style={[styles.card, focused ? styles.cardFocused : null, collapsed ? styles.cardCollapsed : null]}
-      >
-        {!collapsed && document !== null ? (
-          <AttachmentPreviews
-            references={references}
-            pending={document.pendingAttachments}
-            images={state.images}
-            draft={text}
-            active={activeImage}
-            dispatch={dispatch}
-          />
-        ) : null}
-        {document !== null ? <QueueList document={document} dispatch={dispatch} /> : null}
-        <View style={collapsed ? styles.collapsedRow : null}>
-          <View style={collapsed ? styles.grow : null}>
-            <ComposerInput
-                ref={field}
-                model={model}
-                input={{
-                  ...input,
-                  focused: () => {
-                    setFocused(true);
-                    input.focused();
-                    readTerminalTail();
-                  },
-                  blurred: () => {
-                    setFocused(false);
-                    input.blurred();
-                  },
-                }}
-                references={references}
-                parsedFor={text}
-                parse={parseDraftReferences}
-                placeholder={placeholder}
-                collapsed={collapsed}
-                maxHeight={INPUT_MAX_HEIGHT}
-                dispatch={dispatch}
-                onTextChange={setText}
-                onCaret={setCaret}
-              />
-          </View>
-          {collapsed ? (
-            <SendControl
-              document={document}
-              hasDraft={hasDraft}
-              ready={model.ready}
-              pendingSend={model.pendingSend}
-              submit={input.submit}
+      <Animated.View style={[styles.card, focused ? styles.cardFocused : null, motion.cardStyle]}>
+        <Pressable
+          accessible={false}
+          onPress={() => {
+            if (requestedCollapsed) dispatch({ type: 'composerExpand', editor: true });
+            field.current?.focus();
+          }}
+          onLayout={motion.onContentLayout}
+          style={[styles.cardBody, collapsed ? styles.cardCollapsed : null]}
+        >
+          {!collapsed && document !== null ? (
+            <AttachmentPreviews
+              references={references}
+              pending={document.pendingAttachments}
+              images={state.images}
+              draft={text}
+              active={activeImage}
               dispatch={dispatch}
             />
           ) : null}
-        </View>
-        {!collapsed ? (
-          <View style={styles.footer} onLayout={(event: LayoutChangeEvent) => setFooterWidth(Math.round(event.nativeEvent.layout.width))}>
-            <View style={styles.options}>{document !== null ? <OptionPills document={document} onOpen={openPill} /> : null}</View>
-            <View style={styles.toolbar}>
-              <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
-              {document !== null
-                ? COMPOSER_CONTROLS.filter((control) => available(control.id) && !overflowed(document, control.id)).map((control) => {
-                    const glyph = control.id === 'summary' && document.summaryMode ? 'list-check' : CONTROL_GLYPHS[control.id];
-                    const pressed =
-                      (control.id === 'summary' && document.composerChrome.summaryPressed) ||
-                      (control.id === 'note' && document.composerChrome.notePressed);
-                    const badge =
-                      control.id === 'stash'
-                        ? document.composerChrome.stashBadge
-                        : control.id === 'note' && document.composerChrome.notePresence
-                          ? ''
-                          : null;
-                    return (
-                      <ToolbarButton
-                        key={control.id}
-                        glyph={glyph}
-                        label={control.label}
-                        pressed={pressed}
-                        badge={badge}
-                        tint={control.id === 'terminal' ? terminalReadinessTint(document) : null}
-                        onPress={() => performComposerAction(control.action)}
-                        {...(control.id === 'stash' && serves('stashedPrompts') ? { onLongPress: () => host('stashedPrompts') } : {})}
-                      />
-                    );
-                  })
-                : null}
+          {document !== null ? <QueueList document={document} dispatch={dispatch} /> : null}
+          <View style={collapsed ? styles.collapsedRow : null}>
+            <View style={collapsed ? styles.grow : null}>
+              <ComposerInput
+                  ref={field}
+                  model={model}
+                  input={{
+                    ...input,
+                    focused: () => {
+                      setFocused(true);
+                      input.focused();
+                      readTerminalTail();
+                    },
+                    blurred: () => {
+                      setFocused(false);
+                      input.blurred();
+                    },
+                  }}
+                  references={references}
+                  parsedFor={text}
+                  parse={parseDraftReferences}
+                  placeholder={placeholder}
+                  collapsed={collapsed}
+                  maxHeight={INPUT_MAX_HEIGHT}
+                  dispatch={dispatch}
+                  onTextChange={setText}
+                  onCaret={setCaret}
+                />
+            </View>
+            {collapsed ? (
               <SendControl
                 document={document}
                 hasDraft={hasDraft}
@@ -449,15 +417,57 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                 submit={input.submit}
                 dispatch={dispatch}
               />
-            </View>
-            {document !== null ? (
-              <View style={styles.measure} pointerEvents="none" onLayout={(event) => setOptionsWidth(Math.round(event.nativeEvent.layout.width))}>
-                <OptionPills document={{ ...document, composerOverflow: { overflowed: [], optionsOverflowed: false } } as ChatDocument} onOpen={() => undefined} />
-              </View>
             ) : null}
           </View>
-        ) : null}
-      </Pressable>
+          {!collapsed ? (
+            <Animated.View style={[styles.footer, motion.controlsStyle]} onLayout={(event: LayoutChangeEvent) => setFooterWidth(Math.round(event.nativeEvent.layout.width))}>
+              <View style={styles.options}>{document !== null ? <OptionPills document={document} onOpen={openPill} /> : null}</View>
+              <View style={styles.toolbar}>
+                <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
+                {document !== null
+                  ? COMPOSER_CONTROLS.filter((control) => available(control.id) && !overflowed(document, control.id)).map((control) => {
+                      const glyph = control.id === 'summary' && document.summaryMode ? 'list-check' : CONTROL_GLYPHS[control.id];
+                      const pressed =
+                        (control.id === 'summary' && document.composerChrome.summaryPressed) ||
+                        (control.id === 'note' && document.composerChrome.notePressed);
+                      const badge =
+                        control.id === 'stash'
+                          ? document.composerChrome.stashBadge
+                          : control.id === 'note' && document.composerChrome.notePresence
+                            ? ''
+                            : null;
+                      return (
+                        <ToolbarButton
+                          key={control.id}
+                          glyph={glyph}
+                          label={control.label}
+                          pressed={pressed}
+                          badge={badge}
+                          tint={control.id === 'terminal' ? terminalReadinessTint(document) : null}
+                          onPress={() => performComposerAction(control.action)}
+                          {...(control.id === 'stash' && serves('stashedPrompts') ? { onLongPress: () => host('stashedPrompts') } : {})}
+                        />
+                      );
+                    })
+                  : null}
+                <SendControl
+                  document={document}
+                  hasDraft={hasDraft}
+                  ready={model.ready}
+                  pendingSend={model.pendingSend}
+                  submit={input.submit}
+                  dispatch={dispatch}
+                />
+              </View>
+              {document !== null ? (
+                <View style={styles.measure} pointerEvents="none" onLayout={(event) => setOptionsWidth(Math.round(event.nativeEvent.layout.width))}>
+                  <OptionPills document={{ ...document, composerOverflow: { overflowed: [], optionsOverflowed: false } } as ChatDocument} onOpen={() => undefined} />
+                </View>
+              ) : null}
+            </Animated.View>
+          ) : null}
+        </Pressable>
+      </Animated.View>
       {statusLine && document !== null ? <StatusLine document={document} dispatch={dispatch} /> : null}
       <MenuSheet
         rows={menu?.kind === 'rows' ? menu.rows : null}
@@ -527,9 +537,13 @@ const useStyles = themedStyles((P) => ({
   error: { color: P.error, fontSize: 13, paddingHorizontal: 8 },
   card: {
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: CARD_BORDER,
     borderColor: P.composerBorder,
     backgroundColor: P.composerBackground,
+    overflow: 'hidden',
+  },
+  /** The card's content at its natural height; the card clips it while its height tweens. */
+  cardBody: {
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 8,

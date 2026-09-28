@@ -22,6 +22,13 @@ export type ComposerInputHandle = { focus(): void; blur(): void };
 
 type Selection = { start: number; end: number };
 
+/**
+ * The collapsed field: exactly one line (`lineHeight` plus the vertical padding in `input`). The
+ * field was 24 tall, a point short of its own line, and Android squeezed both placeholder lines into
+ * it; collapsed, it shows only the placeholder's first line.
+ */
+export const COLLAPSED_INPUT_HEIGHT = 21 + 2 + 2;
+
 export const ComposerInput = forwardRef<
   ComposerInputHandle,
   {
@@ -144,7 +151,7 @@ export const ComposerInput = forwardRef<
       onSelectionChange={onSelectionChange}
       onFocus={() => input.focused()}
       onBlur={() => input.blurred()}
-      placeholder={placeholder}
+      placeholder={collapsed ? placeholder.split('\n')[0] : placeholder}
       placeholderTextColor={P.placeholder}
       keyboardAppearance={P.light ? 'light' : 'dark'}
       autoCapitalize="sentences"
@@ -166,7 +173,7 @@ const useStyles = themedStyles((P) => ({
     paddingBottom: 2,
     paddingHorizontal: 0,
   },
-  collapsed: { maxHeight: 24 },
+  collapsed: { height: COLLAPSED_INPUT_HEIGHT, maxHeight: COLLAPSED_INPUT_HEIGHT },
   pill: { fontWeight: '500' },
   /** The markdown around a pill's label: in the text, drawn with no width. */
   hidden: { fontSize: 0.1, color: 'transparent', letterSpacing: 0 },
