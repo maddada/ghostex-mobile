@@ -123,7 +123,7 @@ export function ModelMenuSheet({
   const emptyText = str(menu, 'emptyText');
   const listHeight = Math.min(340, Math.round(height * 0.4));
 
-  /** Desktop's Enter (`secondary`, this session) and Shift+Enter (the default): the highlighted row with its level, then close. */
+  /** Desktop's Enter (the default) and Option+Enter (`secondary`, this session only): the highlighted row with its level, then close. */
   const apply = (secondary: boolean): void => {
     if (disabled || highlighted === null) return;
     const action: UserAction = { type: 'modelMenuPick', key: str(highlighted, 'key'), secondary };
@@ -308,7 +308,7 @@ export function ModelMenuSheet({
 
 /**
  * CDXC:SessionChat 2026-09-25 WHY:
- * The desktop pop-up is driven from the keyboard (keys.rs DECISION): Up and Down move the highlight, Left and Right move its reasoning level, Enter uses the model and level in this session and Shift+Enter saves them as the agent's default. A phone has no such keys, so a tap on a row only highlights it, the footer's Reasoning list is Left and Right, and these buttons are Enter and Shift+Enter. Where the agent cannot apply a pick to one session (every agent but Claude, `sessionScope`), both keys save the default, so one Apply button stands for them with the core's `scopeHint`; another agent's row hands off (a draft switches agent), which one button names.
+ * The desktop pop-up is driven from the keyboard (keys.rs DECISION): Up and Down move the highlight, Left and Right move its reasoning level, Enter saves the model and level as the agent's default and Option+Enter uses them in this session only (2026-09-29). A phone has no such keys, so a tap on a row only highlights it, the footer's Reasoning list is Left and Right, and these buttons are Enter (Save as default, the primary one) and Option+Enter. Where the agent cannot apply a pick to one session (`sessionScope` false), both keys save the default, so one Apply button stands for them with the core's `scopeHint`; another agent's row hands off (a draft switches agent), which one button names.
  */
 function ApplyBar({
   menu,
@@ -351,8 +351,8 @@ function ApplyBar({
           button(handoff ? `Hand off to ${agent}` : `Switch to ${agent}`, true, true)
         ) : isTrue(menu, 'sessionScope') ? (
           <>
-            {button('Save as default', false, false)}
-            {button('Use in this session', true, true)}
+            {button('Use in this session', true, false)}
+            {button('Save as default', false, true)}
           </>
         ) : (
           button('Apply', false, true)
