@@ -11,9 +11,16 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
+/**
+ * CDXC:Cli 2026-09-30 WHY:
+ * The desktop app writes the `ghostex` wrapper into /opt/homebrew/bin, /usr/local/bin or ~/.local/bin (the Homebrew cask links it into its own bin), but a non-interactive SSH login shell on macOS often has neither Homebrew's bin nor ~/.local/bin on PATH, so every phone command failed with "ghostex: command not found" (GitHub PR #181). Those folders are appended after the user's own PATH, so a `ghostex` the user put earlier still wins; the desktop's installer is left alone because moving the public wrapper would break the terminal command instead.
+ * SEE-ALSO: `gpui_common_cli_install_dirs` in apps/desktop/src/app/helpers/os_cli/cli_install.rs, the folders the desktop installs into.
+ */
+const GHOSTEX_CLI_PATH_FALLBACK = '$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin';
+
 /** Wrap a remote command in the account's configured login shell. */
 export function loginShellCommand(remoteCommand: string): string {
-  return `"$SHELL" -lc ${shellQuote(remoteCommand)}`;
+  return `"$SHELL" -lc ${shellQuote(`export PATH="$PATH:${GHOSTEX_CLI_PATH_FALLBACK}"; ${remoteCommand}`)}`;
 }
 
 function requireId(value: string, label: string): string {
