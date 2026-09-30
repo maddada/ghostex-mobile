@@ -31,9 +31,12 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   if (tools.length === 0) return null;
   // Under a heading that already folds the run, every row shows (React's `showAllRows`).
   const showAll = message.toolsShowAllRows === true;
-  // An answered question is its own exchange card; it stays a plain row only where the card shows elsewhere.
-  const questionsAsRows = showAll || inWorkFold;
-  const visible = tools.map((_, index) => index).filter((index) => questionsAsRows || tools[index]!.exchange !== true);
+  // An answered question is its own exchange card and a message sent to another agent its own message
+  // card; each stays a plain row only where its card shows elsewhere.
+  const cardsAsRows = showAll || inWorkFold;
+  const visible = tools
+    .map((_, index) => index)
+    .filter((index) => cardsAsRows || (tools[index]!.exchange !== true && tools[index]!.sentMessage !== true));
   if (visible.length === 0) return null;
   const fold = obj(message.toolFold);
   const hidden = typeof fold?.hiddenCount === 'number' ? fold.hiddenCount : 0;

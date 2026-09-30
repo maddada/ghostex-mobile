@@ -18,7 +18,7 @@ import { Markdown } from './markdown/Markdown';
 import { DeliveryIndicator, hasReplyActions, ReplyActions, UserActions } from './MessageActions';
 import { openTranscriptMenu } from './transcriptMenuStore';
 import { useDisclosure } from './state';
-import { estimatedLines, InterAgentCard, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
+import { estimatedLines, InterAgentCard, SentAgentMessageCards, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
 import { PROSE_LINE, PROSE_SIZE } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
 import { ToolRows } from './ToolRows';
@@ -160,6 +160,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
       {!toolsRendered ? <ToolRows message={message} /> : null}
       {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. */}
       {!inWorkFold ? <QuestionExchangeCards exchanges={message.questions} /> : null}
+      {!inWorkFold ? <SentAgentMessageCards cards={message.sentMessages} /> : null}
       {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} /> : null}
     </View>
   );

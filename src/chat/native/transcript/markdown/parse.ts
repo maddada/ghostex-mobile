@@ -6,8 +6,8 @@
  * The core ships each message's Markdown with its decisions already made and marked with the
  * private-use character U+E000 (`packages/gx-chat-core/src/transcript/native_markdown.rs`): a fence
  * that names a file carries its header JSON after the mark on the info string, a GitHub alert is a
- * marked section, a table is wrapped in marks, and a picture written into prose is a marked token
- * with its image source. This file only splits on those marks, exactly as desktop's
+ * marked section, a table and a finished Mermaid fence are wrapped in marks, and a picture written
+ * into prose is a marked token with its image source. This file only splits on those marks, exactly as desktop's
  * `rich_markdown.rs` and `code_block.rs` do, and parses the plain Markdown between them. No chat
  * rule lives here.
  */
@@ -20,6 +20,8 @@ const ALERT_CLOSE = `${MARK}/alert`;
 const TABLE_OPEN = `${MARK}table`;
 const TABLE_CLOSE = `${MARK}/table`;
 const IMAGE_OPEN = `${MARK}image:`;
+const MERMAID_OPEN = `${MARK}mermaid`;
+const MERMAID_CLOSE = `${MARK}/mermaid`;
 
 export type Inline =
   | { t: 'text'; v: string }
@@ -154,7 +156,7 @@ class BlockParser {
   /** Whether `line` starts a block that ends a running paragraph. */
   private interrupts(line: string): boolean {
     if (FENCE.test(line) || ATX.test(line) || HR.test(line) || QUOTE.test(line)) return true;
-    if (line.startsWith(ALERT_OPEN) || line === TABLE_OPEN) return true;
+    if (line.startsWith(ALERT_OPEN) || line === TABLE_OPEN || line === MERMAID_OPEN) return true;
     const marker = listMarker(line);
     // Only a bullet, or an ordered item starting at 1, interrupts a paragraph (CommonMark).
     return marker !== null && marker.indent <= 3 && marker.rest.length > 0 && (!marker.ordered || marker.start === 1);
@@ -179,6 +181,12 @@ class BlockParser {
         }
         out.push({ t: 'alert', kind: line.slice(ALERT_OPEN.length).trim(), c: this.blocks(lines.slice(index + 1, end)) });
         index = end + 1;
+        continue;
+      }
+      // A finished ```mermaid fence arrives between these marks for the desktop's diagram card; the
+      // phone does not draw diagrams yet, so the fence inside shows as the code block it is.
+      if (line === MERMAID_OPEN || line === MERMAID_CLOSE) {
+        index += 1;
         continue;
       }
       if (line === TABLE_OPEN) {

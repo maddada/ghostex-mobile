@@ -14,6 +14,7 @@ import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosu
 import { CompletedFilesFold } from './FileChanges';
 import { obj } from './json';
 import { MessageRow } from './MessageRow';
+import { SentAgentMessageCards } from './SystemRows';
 import { useDisclosure } from './state';
 import { PROSE_COLUMN, PROSE_LINE, PROSE_SIZE } from './theme';
 
@@ -102,6 +103,7 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
           <MessageRow key={message.id} message={message} />
         ))}
         <QuestionExchangeCards exchanges={item.questions} />
+        <SentAgentMessageCards cards={item.sentMessages} />
         {item.final !== undefined && item.final !== null ? <MessageRow message={item.final} /> : null}
       </FoldPlaceProvider>
     </View>

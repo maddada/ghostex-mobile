@@ -167,6 +167,9 @@ export type CompletedWorkItem = {
   work: ProjectedMessage[];
   /** Answered question cards, hoisted out of the fold so they stay visible. */
   questions: Json[];
+  /** Cards for the messages the turn's work sent other agents, hoisted out of the fold (same
+   * shape as {@link ProjectedMessage.sentMessages}); omitted when there are none. */
+  sentMessages?: Json[];
   /** Rows that stay outside the fold (images and similar artifacts). */
   artifacts: ProjectedMessage[];
   /** The turn's reply; omitted (not null) when the turn has none. */
@@ -224,6 +227,9 @@ export type ProjectedMessage = {
   interAgentMessage?: Json;
   /** Question / answer exchanges on this row. Desktop: `question_exchange.rs`. */
   questions?: Json;
+  /** Messages this row's tool calls sent other agents: `{key, title, detail, body, markdown,
+   * markdownReferences, failed}`. Desktop: `inter_agent_message.rs`. */
+  sentMessages?: Json;
   /** Image sources on the row (machine paths). Load bytes with `{type: 'loadImage', path}`.
    * Desktop: `images.rs`. */
   images?: Json[];

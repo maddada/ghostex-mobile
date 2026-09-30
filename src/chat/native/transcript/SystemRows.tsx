@@ -1,7 +1,7 @@
 /**
  * The transcript rows that are cards or quiet lines rather than prose: system cards
  * (`system_cards.rs`), harness-injected turns (`status_rows.rs`), a message from another agent
- * (`inter_agent_message.rs`), a send still waiting for the terminal (`startup_delivery.rs`) and the
+ * (`inter_agent_message.rs`) and one this session's agent sent another, a send still waiting for the terminal (`startup_delivery.rs`) and the
  * pending tool read off the agent's screen (`terminal_tool_row.rs`). Answered question cards are the
  * cards area's (`../cards/QuestionExchangeCards.tsx`). Which card a row is comes from the core; this file only lays it out.
  */
@@ -340,29 +340,129 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
   );
 }
 
+/**
+ * The header of a message card (`message_header` in desktop `inter_agent_message.rs`): the message
+ * icon, the title with its session beside it, a tag, and the chevron. The whole header is the toggle
+ * when the card has more to show.
+ */
+function MessageCardHeader({
+  title,
+  detail,
+  tag,
+  expandable,
+  open,
+  onToggle,
+}: {
+  title: string;
+  detail: string;
+  tag?: { label: string; color: string };
+  expandable: boolean;
+  open: boolean;
+  onToggle(): void;
+}) {
+  const { theme } = useTranscriptEnv();
+  return (
+    <Pressable
+      disabled={!expandable}
+      onPress={onToggle}
+      accessibilityRole={expandable ? 'button' : undefined}
+      accessibilityState={expandable ? { expanded: open } : undefined}
+      style={styles.cardHeader}
+    >
+      <View style={styles.cardGlyph}>
+        <Glyph name='message-report' size={14} color={theme.muted} />
+      </View>
+      <Text style={[styles.prose, styles.cardTitle, { color: theme.foreground }]}>
+        {title}
+        {detail.length > 0 ? <Text style={{ color: theme.muted }}>{`  ${detail}`}</Text> : null}
+      </Text>
+      {tag !== undefined ? <Text style={[styles.queued, { color: tag.color }]}>{tag.label}</Text> : null}
+      {expandable ? (
+        <View style={styles.cardChevron}>
+          <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={14} color={theme.muted} />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** Collapsed to its first two lines; the header or the preview opens it (desktop `inter_agent_message_card`). */
 export const InterAgentCard = memo(function InterAgentCard({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
+  const { disclosures } = useNativeChatUi();
+  const [openState, toggle] = useDisclosure(disclosures, `inter-agent:${message.id}`);
   const sent = obj(message.interAgentMessage);
-  const session = str(sent, 'sessionTitle');
   const body = str(sent, 'body');
+  const expandable = estimatedLines(body) > MESSAGE_PREVIEW_LINES;
+  const open = expandable && openState;
   const hasDelivery = message.startupDelivery !== undefined && message.startupDelivery !== null;
   return (
     <StatusCard
       header={
-        <CardHeader
-          glyph='message-report'
-          title={
-            <Text style={[styles.prose, { color: theme.foreground }]}>
-              {`Message from ${str(sent, 'agentName')}`}
-              {session.length > 0 ? <Text style={{ color: theme.muted }}>{`  ${session}`}</Text> : null}
-            </Text>
-          }
-          trailing={message.queued === true ? <Text style={[styles.queued, { color: theme.muted }]}>QUEUED</Text> : undefined}
+        <MessageCardHeader
+          title={`Message from ${str(sent, 'agentName')}`}
+          detail={str(sent, 'sessionTitle')}
+          {...(message.queued === true ? { tag: { label: 'QUEUED', color: theme.muted } } : {})}
+          expandable={expandable}
+          open={open}
+          onToggle={toggle}
         />
       }
       footer={hasDelivery ? <StartupDelivery message={message} /> : undefined}
     >
-      {body.length > 0 ? <Markdown text={body} references={message.markdownReferences} color={theme.cardMuted} /> : null}
+      {body.length === 0 ? null : expandable && !open ? (
+        <Pressable onPress={toggle} accessibilityRole='button' accessibilityState={{ expanded: false }}>
+          <Text numberOfLines={MESSAGE_PREVIEW_LINES} style={[styles.prose, { color: theme.cardMuted }]}>
+            {body}
+          </Text>
+        </Pressable>
+      ) : (
+        <Markdown text={body} references={message.markdownReferences} color={theme.cardMuted} />
+      )}
+    </StatusCard>
+  );
+});
+
+/**
+ * The messages this session's agent sent other agents, collapsed to their headers (desktop
+ * `sent_agent_message_cards`). Which calls these are and whom they went to comes from the core.
+ */
+export function SentAgentMessageCards({ cards }: { cards: unknown }) {
+  const list = arr(cards)
+    .map((card) => obj(card))
+    .filter((card): card is JsonRecord => card !== null);
+  if (list.length === 0) return null;
+  return (
+    <View style={styles.sentColumn}>
+      {list.map((card) => (
+        <SentAgentMessageCard key={str(card, 'key')} card={card} />
+      ))}
+    </View>
+  );
+}
+
+const SentAgentMessageCard = memo(function SentAgentMessageCard({ card }: { card: JsonRecord }) {
+  const { theme } = useTranscriptEnv();
+  const { disclosures } = useNativeChatUi();
+  const [openState, toggle] = useDisclosure(disclosures, `sent-message:${str(card, 'key')}`);
+  const marked = str(card, 'markdown');
+  const body = marked.length > 0 ? marked : str(card, 'body');
+  const expandable = body.length > 0;
+  const open = expandable && openState;
+  return (
+    <StatusCard
+      header={
+        <MessageCardHeader
+          title={str(card, 'title')}
+          detail={str(card, 'detail')}
+          {...(card.failed === true ? { tag: { label: 'NOT SENT', color: theme.error } } : {})}
+          expandable={expandable}
+          open={open}
+          onToggle={toggle}
+        />
+      }
+    >
+      {open ? <Markdown text={body} references={card.markdownReferences} color={theme.cardMuted} /> : null}
     </StatusCard>
   );
 });
@@ -413,6 +513,7 @@ const styles = StyleSheet.create({
   cardGlyph: { height: PROSE_LINE, justifyContent: 'center' },
   cardTitle: { flex: 1, minWidth: 0 },
   cardChevron: { width: 22, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
+  sentColumn: { gap: 8, minWidth: 0 },
   autoNamedRow: { flexDirection: 'row', paddingBottom: 8 },
   autoNamed: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderWidth: 1, flexShrink: 1 },
   autoNamedGlyph: { marginTop: 2 },
