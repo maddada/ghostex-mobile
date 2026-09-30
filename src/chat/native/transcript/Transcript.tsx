@@ -50,8 +50,8 @@ const SCROLL_BOTTOM = {
   paddingX: 10,
   bottom: 4,
   errorTone: {
-    dark: { background: '#3a1417', border: 'rgba(248,113,113,0.35)', text: '#fca5a5' },
-    light: { background: '#fef2f2', border: 'rgba(220,38,38,0.3)', text: '#b91c1c' },
+    dark: { background: '#1c1617', border: 'rgba(248,113,113,0.18)', text: '#e8a5a5' },
+    light: { background: '#fdf8f8', border: 'rgba(220,38,38,0.15)', text: '#b43a3a' },
   },
 };
 /**
