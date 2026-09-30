@@ -461,19 +461,22 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   };
 
   const enabled = settings.hoverStrip;
-  // An action the hover strip offers is repeated at the top of the menu, newest first, with the
-  // two that have rows of their own left out.
+  // An action the hover strip offers is repeated in the menu too, with the two that have rows of
+  // their own left out.
   const mirror: HoverAction[] = settings.showSessionCardHoverButtonsInContextMenu
     ? caps.isBrowser
       ? ['sleep']
-      : [...enabled].reverse().filter((action) => action !== 'close' && action !== 'closeAfterDone')
+      : enabled.filter((action) => action !== 'close' && action !== 'closeAfterDone')
     : [];
-  // gx-core `full_menu` order (CDXC:ContextMenus): Note lives under Advanced, not in these rows.
-  const primaryOrder: HoverAction[] = ['rename', 'pin', 'snooze', 'park', 'sleep', 'tag'];
+  // gx-core `full_menu` order (CDXC:ContextMenus): ChatGPT's order, mirrored hover buttons
+  // included, Tag As after a line; Note shows here only as a mirrored hover button.
+  const primaryOrder: HoverAction[] = ['rename', 'pin', 'snooze', 'park', 'sleep', 'note', 'tag'];
   const menu: SidebarMenuItem[] = [];
-  for (const action of [...mirror, ...primaryOrder.filter((action) => !enabled.includes(action))]) {
+  for (const action of primaryOrder) {
+    const shown = mirror.includes(action) || (action !== 'note' && !enabled.includes(action));
     const item = rows[action];
-    if (item === undefined) continue;
+    if (!shown || item === undefined) continue;
+    if (action === 'tag' && menu.length > 0) menu.push(separator());
     menu.push(action === 'pin' && !pinned ? { ...item, icon: 'pinned' } : item);
   }
 
