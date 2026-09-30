@@ -202,6 +202,17 @@ export const SessionCopy = {
   attachCommandCopied: 'Attach command copied',
 } as const;
 
+/** Session search (the Sessions header's search button), worded as the desktop's Sessions search. */
+export const SessionSearchCopy = {
+  buttonLabel: 'Search sessions',
+  placeholder: 'Search sessions...',
+  close: 'Close search',
+  clear: 'Clear search',
+  noMatches: 'No sessions match that search.',
+  noSessions: 'No sessions yet.',
+  unknownDay: 'Unknown day',
+} as const;
+
 /** STATE_CARD copy + status lines, sessions-drawer.md §5. */
 export const StateCardCopy = {
   noMachines: {

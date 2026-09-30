@@ -42,7 +42,7 @@ import {
   type DrawerBlock,
   type ProjectCardBlock,
 } from '../components/sessions/drawerModel';
-import { MachinesGlyph, MenuGlyph, WorldGlyph } from '../components/sessions/icons';
+import { MachinesGlyph, MenuGlyph, SearchGlyph, WorldGlyph } from '../components/sessions/icons';
 import MachineTabs, {
   MACHINE_TAB_ADD,
   type MachineTabItem,
@@ -66,6 +66,7 @@ import {
   SessionListToggleRow,
 } from '../components/sessions/rows';
 import SessionRow from '../components/sessions/SessionRow';
+import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { WarningTriangleIcon } from '../components/terminal/icons';
@@ -98,6 +99,7 @@ import {
   ProgressCopy,
   RenameCopy,
   SessionNoteCopy,
+  SessionSearchCopy,
   StateCardCopy,
   StripCopy,
   WebPreviewCopy,
@@ -186,6 +188,7 @@ export default function SessionsScreen({ navigation }: Props) {
   );
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
+  const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   /*
    * Pull-to-refresh replaces the old header Refresh button, and owns its own
@@ -1186,6 +1189,18 @@ export default function SessionsScreen({ navigation }: Props) {
           <Text style={[styles.title, { color: sidebarAppearance.foreground }]}>Ghostex</Text>
         </Pressable>
         {/*
+          CDXC:Sessions 2026-09-30 DECISION:
+          User: "add the ability to search for a session, exactly like the modal we have in the app ... add it to the top right as a search icon button." The first button of the header's right-hand group opens SessionSearchSheet, which searches every visible computer's sessions with the desktop's Sessions search rules.
+        */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={SessionSearchCopy.buttonLabel}
+          style={styles.headerButton}
+          onPress={() => setSessionSearchOpen(true)}
+        >
+          <SearchGlyph size={22} color={sidebarAppearance.foreground} />
+        </Pressable>
+        {/*
           Web Preview forwards a port from the selected machine, so it is
           offered whenever a machine is chosen. It is also in the machine menu,
           but that is a long press on a machine tab (or on the page title), so
@@ -1325,6 +1340,18 @@ export default function SessionsScreen({ navigation }: Props) {
         }
       />
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
+
+      <SessionSearchSheet
+        visible={sessionSearchOpen}
+        machines={machines}
+        onOpen={(target, session) => {
+          setSessionSearchOpen(false);
+          // A result can come from another computer; show that computer's list, as if the row had been tapped there.
+          if (machine?.id !== target.id) selectMachine(target.id);
+          void attach(target, session);
+        }}
+        onClose={() => setSessionSearchOpen(false)}
+      />
 
       {overlay.kind === 'sessionMenu' ? (
         <ContextMenu
