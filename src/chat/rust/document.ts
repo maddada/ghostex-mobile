@@ -433,6 +433,8 @@ export type ChatDocument = {
   agentFleetStrip: Json;
   /** The task panel, or null. Desktop: `agent_tasks.rs`. */
   agentTasksPanel: Json;
+  /** A coordinator's Threads panel, or null. Desktop: `coordinator_threads.rs`. */
+  coordinatorThreadsPanel: Json;
   /** The subagent viewer header state, or null when closed (its rows come in `subagentSplice`).
    * Desktop: `subagent_view.rs`. */
   subagent: Json;

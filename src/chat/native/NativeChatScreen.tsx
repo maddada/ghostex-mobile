@@ -274,6 +274,11 @@ function useChatViewRequests(
               void openForkBranch(machine, request.params).catch(() =>
                 show('The session could not be resumed. Try again from the sessions list.', true, 'Could not open that branch')
               );
+            } else if (request.action === 'openCoordinatorThread') {
+              // A coordinator's thread opens like a fork branch: woken when it was closed, then its tab.
+              void openForkBranch(machine, request.params).catch(() =>
+                show('The thread could not be opened. Try again from the sessions list.', true, 'Could not open that thread')
+              );
             } else if (request.action === 'handoffToModel') {
               const params = (typeof request.params === 'object' && request.params !== null ? request.params : {}) as Record<string, unknown>;
               const text = (key: string): string => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');

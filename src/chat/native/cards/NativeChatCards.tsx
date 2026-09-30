@@ -4,7 +4,7 @@
  *
  * 1. the working strip,
  * 2. the composer-not-ready card, or a refused operation's error line,
- * 3. the task plan and the Subagents strip,
+ * 3. a coordinator's Threads panel, the task plan and the Subagents strip,
  * 4. the terminal notice,
  * 5. the async questions,
  * 6. the blocking question or approval.
@@ -18,7 +18,7 @@ import { useRef } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 
 import type { RustChat } from '../../rust/useRustChat';
-import { AgentFleetStrip, AgentTasksPanel } from './AgentPanels';
+import { AgentFleetStrip, AgentTasksPanel, CoordinatorThreadsPanel } from './AgentPanels';
 import { AsyncQuestionsCard } from './AsyncQuestionsCard';
 import { ComposerNotReadyCard } from './ComposerNotReadyCard';
 import { obj } from './json';
@@ -49,6 +49,7 @@ export function NativeChatCards({ chat, onHostAction, armed = NO_ARMED, onArmedP
     typeof document.workingStrip?.label === 'string' ||
     obj(document.workingStrip?.presentation) !== null ||
     typeof document.operationError === 'string' ||
+    obj(document.coordinatorThreadsPanel) !== null ||
     obj(document.agentTasksPanel) !== null ||
     obj(document.agentFleetStrip) !== null ||
     (obj(document.terminalNotice) !== null && document.noticeVisible === true) ||
@@ -68,6 +69,7 @@ export function NativeChatCards({ chat, onHostAction, armed = NO_ARMED, onArmedP
     >
       <WorkingStrip document={document} armed={armed} {...(onArmedPress !== undefined ? { onArmedPress } : {})} />
       <ComposerNotReadyCard chat={chat} document={document} onHostAction={onHostAction} />
+      <CoordinatorThreadsPanel chat={chat} document={document} />
       <AgentTasksPanel chat={chat} document={document} />
       <AgentFleetStrip chat={chat} document={document} />
       <NoticeCard chat={chat} document={document} onHostAction={onHostAction} />
