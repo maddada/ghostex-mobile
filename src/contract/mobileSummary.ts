@@ -52,6 +52,8 @@ export type MobileSummaryWireSession = {
   queuedPromptFailedCount?: number;
   /** Note attached to the session's agent conversation; absent when there is none. */
   sessionNote?: string;
+  /** 'coordinator' on a coordinator session, 'thread' on one it started; absent otherwise. */
+  coordinatorRole?: string;
   /** The provider resume id the note is keyed by; absent before the agent starts. */
   agentSessionId?: string;
   isFocused?: boolean;
@@ -319,6 +321,8 @@ export type GhostexSession = {
    * note follows the conversation across resumes and across clients.
    */
   sessionNote: string;
+  /** The session is a coordinator: its row draws the crown instead of its agent logo. */
+  isCoordinator: boolean;
   /**
    * The provider conversation id the note is keyed by ('' before the agent has
    * started one, or on a daemon that predates the field). Non-empty is what
@@ -901,6 +905,7 @@ export function parseSession(value: unknown): GhostexSession | null {
         ? Math.max(0, Math.floor(value.queuedPromptFailedCount))
         : 0,
     sessionNote: trimmedValue(value, 'sessionNote'),
+    isCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator',
     agentSessionId: trimmedValue(value, 'agentSessionId'),
     sendWhenAllProjectSessionsStopActive: boolValue(
       value,

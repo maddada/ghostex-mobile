@@ -38,7 +38,7 @@ import { useSettingsStore } from '../../settings/store';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
-import { ClockGlyph, PencilGlyph } from './icons';
+import { ClockGlyph, CoordinatorGlyph, PencilGlyph } from './icons';
 import {
   COMPLETION_FLASH_MS,
   COMPLETION_FLASH_OPACITY,
@@ -251,6 +251,8 @@ export default function SessionRow({
             <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
           ) : draftPencil ? (
             <PencilGlyph size={ds(15)} color={sidebarForeground} />
+          ) : session.isCoordinator ? (
+            <CoordinatorGlyph size={ds(13)} color={SidebarPalette.ROW_COORDINATOR_CROWN} />
           ) : (
             <Icon size={iconSize} color={agentIconTint(iconId)} />
           )}

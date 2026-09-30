@@ -260,6 +260,27 @@ export function PencilGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/**
+ * Crown (a coordinator row's icon in place of its agent logo): the paths of the
+ * desktop's apps/desktop/assets/titlebar/coordinator-crown.svg.
+ */
+export function CoordinatorGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path
+        d="M3.2 8.2 7.8 12.4 12 5.2 16.2 12.4 20.8 8.2 19.2 17.2H4.8Z"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Rect x={4.8} y={18.8} width={14.4} height={2.4} rx={1.2} />
+      <Circle cx={3.2} cy={7} r={1.9} />
+      <Circle cx={12} cy={3.8} r={1.9} />
+      <Circle cx={20.8} cy={7} r={1.9} />
+    </Svg>
+  );
+}
+
 /** X cross (desktop IconX, Close/Kill rows). */
 export function XGlyph({ size, color }: GlyphProps) {
   return (
