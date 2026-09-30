@@ -363,6 +363,9 @@ export type ChatDocument = {
   note: NoteState;
   /** Timings both renderers share. Desktop: `send_control.rs`. */
   interaction: Interaction;
+  /** The toast drawn in the Scroll to bottom pill's place: `notice` while a first Escape waits,
+   * `error` (red) for "Agent was interrupted". Absent otherwise. Desktop: `scroll_bottom.rs`. */
+  interruptToast?: { text: string; tone: 'notice' | 'error' } | null;
   /** The More actions menu's host rows. Desktop: `actions.rs`. */
   hostActions: HostActionRow[];
   /** The Side chat prefix (`/btw `) when the agent takes side questions, else null (`side_chat.rs`). */

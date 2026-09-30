@@ -42,7 +42,18 @@ import { TranscriptItemView } from './TranscriptItemRow';
  * CDXC:Mobile 2026-09-12 DECISION:
  * User: do not show the Ctrl+Shift+Down shortcut on the mobile Scroll to bottom button.
  */
-const SCROLL_BOTTOM = { label: 'Scroll to bottom', edgeThreshold: 10, height: 24, fontSize: 11, paddingX: 10, bottom: 4 };
+const SCROLL_BOTTOM = {
+  label: 'Scroll to bottom',
+  edgeThreshold: 10,
+  height: 24,
+  fontSize: 11,
+  paddingX: 10,
+  bottom: 4,
+  errorTone: {
+    dark: { background: '#3a1417', border: 'rgba(248,113,113,0.35)', text: '#fca5a5' },
+    light: { background: '#fef2f2', border: 'rgba(220,38,38,0.3)', text: '#b91c1c' },
+  },
+};
 /**
  * The composer's scroll collapse (`composer_scroll.rs`): at or under this many points from the end
  * the reader is at the bottom (`COMPOSER_BOTTOM_THRESHOLD_PX` in the core).
@@ -168,6 +179,8 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
     }
   }, [activeItem, rows.length, searchOpen, searchRevision]);
 
+  const interruptToast = main ? (document?.interruptToast ?? null) : null;
+  const errorTone = theme.light ? SCROLL_BOTTOM.errorTone.light : SCROLL_BOTTOM.errorTone.dark;
   const hasMore = main && document?.hasMore === true;
   const loadingEarlier = document?.loadingEarlier === true;
   const loadEarlier = useCallback(() => {
@@ -308,7 +321,39 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
     <TranscriptScope chat={chat} main={main}>
       <View style={[styles.root, { backgroundColor: theme.background }]} accessibilityLabel='Conversation'>
         {body}
-        {awayFromBottom && rows.length > 0 ? (
+        {interruptToast ? (
+          /*
+           * CDXC:SessionChat 2026-10-01 DECISION:
+           * User: the interrupt toasts take the Scroll to bottom pill's spot and look, hiding it while they show; "Agent was interrupted" is red. Visual only, so it takes no touches.
+           */
+          <View style={styles.pillRow} pointerEvents='none'>
+            <View
+              accessibilityRole='text'
+              accessibilityLiveRegion='polite'
+              style={[
+                styles.pill,
+                interruptToast.tone === 'error'
+                  ? {
+                      backgroundColor: errorTone.background,
+                      borderColor: errorTone.border,
+                    }
+                  : {
+                      backgroundColor: theme.light ? '#fefefe' : '#151515',
+                      borderColor: theme.light ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)',
+                    },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillText,
+                  { color: interruptToast.tone === 'error' ? errorTone.text : theme.primary },
+                ]}
+              >
+                {interruptToast.text}
+              </Text>
+            </View>
+          </View>
+        ) : awayFromBottom && rows.length > 0 ? (
           <View style={styles.pillRow} pointerEvents='box-none'>
             <Pressable
               onPress={jumpToBottom}
