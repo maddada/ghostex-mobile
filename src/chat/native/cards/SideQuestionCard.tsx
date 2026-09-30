@@ -20,6 +20,8 @@ import { ChatButton, StatusCard } from './primitives';
 
 /** A long answer shows about this many lines before "Show all". */
 const CAP_LINES = 12;
+/** The live card's footer note (desktop `SIDE_CARD_NOTE` in `native_chat/side_question.rs`). */
+const SIDE_CARD_NOTE = "Can't reply to sidechat. Close it to message main agent.";
 
 export function SideQuestionCard({ chat, dialog }: { chat: RustChat; dialog: JsonRecord }) {
   const styles = useStyles();
@@ -31,6 +33,8 @@ export function SideQuestionCard({ chat, dialog }: { chat: RustChat; dialog: Jso
   const answer = str(card, 'answer');
   const offered = (action: string) => arr(presentation?.actions).some((entry) => str(entry, 'action') === action);
   const send = (dialogAction: string) => dispatch({ type: 'answer', answer: { kind: 'terminalDialog', dialogId, dialogAction } });
+  // Cut to one line like the desktop's note; a phone has no hover, so a tap shows the whole line.
+  const [noteOpen, setNoteOpen] = useState(false);
   const header = (
     <View style={styles.header}>
       <SideBadge />
@@ -44,8 +48,8 @@ export function SideQuestionCard({ chat, dialog }: { chat: RustChat; dialog: Jso
     <SideAnswer key={`answer:${dialogId}`} dispatch={dispatch} markdown={str(card, 'answerMarkdown')} references={card?.answerReferences as Json} />
   );
   const actions = [
-    <Text key="note" style={styles.note}>
-      Not added to the conversation
+    <Text key="note" style={styles.note} numberOfLines={noteOpen ? undefined : 1} onPress={() => setNoteOpen(!noteOpen)}>
+      {SIDE_CARD_NOTE}
     </Text>,
     <ChatButton
       key="copy"
