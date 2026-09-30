@@ -281,12 +281,19 @@ export function PulseDot({ size, color, active }: { size: number; color: string;
   return <Animated.View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity }} />;
 }
 
-/** A 0 to 1 value that loops forever while `running`. */
+/**
+ * CSS `ease-in-out`, the curve of the desktop's sweeping bars (`css_ease_in_out` in native_chat/working_spark.rs).
+ * CDXC:SessionChat 2026-10-01 WHY: `useLoop` restarts its loop whenever its easing changes, and an easing built during render (`Easing.inOut(...)`) is a new function every render, so each re-render mid-sweep restarted the native loop from wherever the bar was and every later pass crossed only part of the track, slowly. Pass this constant, never an easing built in render.
+ */
+export const SWEEP_EASING = Easing.bezier(0.42, 0, 0.58, 1);
+
+/** A 0 to 1 value that loops forever while `running`; `easing` must be a stable reference. */
 export function useLoop(periodMs: number, easing: (value: number) => number, running = true): Animated.Value {
   const value = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    // The native loop repeats from the value it starts at, so every start begins at 0.
+    value.setValue(0);
     if (!running) {
-      value.setValue(0);
       return undefined;
     }
     const loop = Animated.loop(

@@ -15,7 +15,7 @@ import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str } from './json';
 import { colorWithOpacity } from '../../../theme/palette';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { ChatButton, useLoop } from './primitives';
+import { ChatButton, SWEEP_EASING, useLoop } from './primitives';
 
 
 export function AccountSwitchCard({ chat }: { chat: RustChat }) {
@@ -155,7 +155,7 @@ function Step({ index, step }: { index: number; step: unknown }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const state = str(step, 'state') || 'pending';
-  const sweep = useLoop(1600, Easing.inOut(Easing.cubic), state === 'active');
+  const sweep = useLoop(1600, SWEEP_EASING, state === 'active');
   const [lineWidth, setLineWidth] = useState(0);
   const color = state === 'active' ? P.foreground : state === 'done' ? P.prose : P.muted;
   const grow = [1, 1.3, 1.1][index] ?? 1;

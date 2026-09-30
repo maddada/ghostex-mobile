@@ -17,7 +17,7 @@ import { Glyph as ComposerGlyph } from '../composer/icons';
 import { Glyph, Spark } from './icons';
 import { isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { PulseDot, Spinner, StatusCard, useLoop } from './primitives';
+import { PulseDot, SWEEP_EASING, Spinner, StatusCard, useLoop } from './primitives';
 
 /** `packages/gx-chat-core/visual/working-strip.json`. */
 const VISUAL = {
@@ -191,7 +191,7 @@ function WorkingActivity({ activity }: { activity: Record<string, unknown> }) {
 function ProgressTrack({ percent }: { percent: number | null }) {
   const styles = useStyles();
   const [width, setWidth] = useState(0);
-  const sweep = useLoop(1800, Easing.inOut(Easing.cubic), percent === null);
+  const sweep = useLoop(1800, SWEEP_EASING, percent === null);
   return (
     <View style={styles.track} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
       {percent !== null ? (
