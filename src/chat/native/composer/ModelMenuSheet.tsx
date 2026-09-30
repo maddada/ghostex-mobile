@@ -62,8 +62,8 @@ export function ModelMenuSheet({
   const { height } = useWindowDimensions();
   /** The highlighted row's key; null is the tab's selected row, else its first (`selected_row`). */
   const [cursor, setCursor] = useState<string | null>(null);
-  /** Levels the Reasoning list moved to this visit, by row key (`model_efforts`). */
-  const [efforts, setEfforts] = useState<Record<string, string>>({});
+  /** The level the Reasoning list last moved to this visit (`model_effort`). */
+  const [effort, setEffort] = useState<string | null>(null);
   /** The footer button whose choices are open. */
   const [openButton, setOpenButton] = useState<number | null>(null);
   /** The row whose description the info button opened. */
@@ -75,7 +75,7 @@ export function ModelMenuSheet({
     if (!visible) return;
     // Every visit starts on the session's own agent with an empty search (state.rs, `show_model_menu`).
     setCursor(null);
-    setEfforts({});
+    setEffort(null);
     setOpenButton(null);
     setAbout(null);
     scrollUntil.current = Date.now() + SCROLL_WINDOW_MS;
@@ -113,7 +113,7 @@ export function ModelMenuSheet({
   const buttons = arr(menu?.traits)
     .map(obj)
     .filter((entry): entry is JsonRecord => entry !== null)
-    .map((setting) => reasoningFor(setting, highlighted, highlighted === null ? null : effortFor(highlighted, efforts)));
+    .map((setting) => reasoningFor(setting, highlighted, highlighted === null ? null : effortFor(highlighted, effort)));
   const open = openButton === null ? undefined : buttons[openButton];
   // A button that went away with a new document takes its open list with it.
   useEffect(() => {
@@ -127,7 +127,7 @@ export function ModelMenuSheet({
   const apply = (secondary: boolean): void => {
     if (disabled || highlighted === null) return;
     const action: UserAction = { type: 'modelMenuPick', key: str(highlighted, 'key'), secondary };
-    if (arr(highlighted.efforts).length > 0) action.effort = effortFor(highlighted, efforts);
+    if (arr(highlighted.efforts).length > 0) action.effort = effortFor(highlighted, effort);
     dispatch(action);
     onClose();
   };
@@ -159,7 +159,7 @@ export function ModelMenuSheet({
     const browse = str(setting, 'browse');
     if (browse.length > 0 && typeof choice.value === 'string') {
       const value = choice.value;
-      setEfforts((current) => ({ ...current, [browse]: value }));
+      setEffort(value);
       if (!isTrue(setting, 'browseCurrent')) {
         setOpenButton(null);
         return;

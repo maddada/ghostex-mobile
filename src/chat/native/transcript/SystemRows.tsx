@@ -100,10 +100,10 @@ function AutoNamedCard({ card }: { card: JsonRecord }) {
     <View style={styles.autoNamedRow}>
       <View style={[styles.autoNamed, { borderColor: theme.border, backgroundColor: theme.input }]}>
         <View style={styles.autoNamedGlyph}>
-          <Glyph name='sparkles' size={16} color={theme.muted} />
+          <Glyph name={card.userRenamed === true ? 'pencil' : 'sparkles'} size={16} color={theme.muted} />
         </View>
         <View style={styles.autoNamedText}>
-          <Text style={[styles.prose, styles.medium, { color: theme.foreground }]}>Ghostex auto named this session</Text>
+          <Text style={[styles.prose, styles.medium, { color: theme.foreground }]}>{str(card, 'lead')}</Text>
           <Text style={[styles.small, { color: theme.cardMuted }]}>
             New name: <Text style={{ color: theme.foreground }}>{str(card, 'title')}</Text>
           </Text>

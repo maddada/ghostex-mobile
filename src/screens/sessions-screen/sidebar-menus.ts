@@ -468,7 +468,8 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
       ? ['sleep']
       : [...enabled].reverse().filter((action) => action !== 'close' && action !== 'closeAfterDone')
     : [];
-  const primaryOrder: HoverAction[] = ['rename', 'sleep', 'pin', 'park', 'snooze', 'note', 'tag'];
+  // gx-core `full_menu` order (CDXC:ContextMenus): Note lives under Advanced, not in these rows.
+  const primaryOrder: HoverAction[] = ['rename', 'pin', 'snooze', 'park', 'sleep', 'tag'];
   const menu: SidebarMenuItem[] = [];
   for (const action of [...mirror, ...primaryOrder.filter((action) => !enabled.includes(action))]) {
     const item = rows[action];
@@ -477,6 +478,9 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   }
 
   const advanced: SidebarMenuItem[] = [heading('Session')];
+  if (!enabled.includes('note') && rows.note !== undefined) {
+    advanced.push(rows.note);
+  }
   if (caps.canDelayedSend) {
     advanced.push(row('Delayed Send', 'clock', { type: 'sessionAction', sessionId: id, action: 'delayedSend' }));
   }

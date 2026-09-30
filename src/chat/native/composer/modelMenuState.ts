@@ -24,9 +24,14 @@ export function footerLines<T>(buttons: readonly T[]): T[][] {
   return lines;
 }
 
-/** The level a pick of `row` carries: where the Reasoning list left it this visit, else the row's own (`effort_for`). */
-export function effortFor(row: JsonRecord, efforts: Readonly<Record<string, string>>): string {
-  return efforts[str(row, 'key')] ?? str(row, 'effort');
+/**
+ * The level a pick of `row` carries: where the Reasoning list last left it this visit when `row`
+ * offers that level, else the row's own (`effort_for`). The picked level follows the highlight to
+ * every model that offers it, as on desktop.
+ */
+export function effortFor(row: JsonRecord, effort: string | null): string {
+  if (effort !== null && arr(row.efforts).some((entry) => obj(entry)?.value === effort)) return effort;
+  return str(row, 'effort');
 }
 
 /**
