@@ -3,12 +3,13 @@
  * computer into a mirror folder on the phone that keeps the computer's own paths, so the page loads
  * from `file://` with its relative images, styles, scripts and frames intact.
  *
- * CDXC:Docs 2026-09-24 WHY:
+ * CDXC:Docs 2026-09-30 WHY:
  * react-native-webview cannot answer a page's requests itself (desktop Docs serves sibling assets
  * from a synthetic `ghostex-docs.invalid` origin that CEF intercepts), so the phone copies the
  * assets up front instead: every relative reference the HTML, its stylesheets and its module
- * scripts name is read in batches over SSH and written beside the page. A document that builds
- * asset URLs at run time (a `fetch` of a computed path) still misses those files.
+ * scripts name is read in batches over SSH and written beside the page. Files whose paths the page
+ * builds while it runs are copied when they fail to load (`assetLoader.ts`,
+ * {@link mirrorRequestedAssets}); this replaces the 2026-09-24 note that such pages stay broken.
  * SEE-ALSO: apps/desktop/views/manage/preview/html-viewer.tsx (`manageHtmlResourceBaseUrl`)
  */
 
@@ -28,7 +29,7 @@ import {
 } from './paths';
 import { decodeBase64Utf8, readRemoteFiles } from './remoteFiles';
 
-const MIRROR_FOLDER = 'ghostex-docs-view';
+export const MIRROR_FOLDER = 'ghostex-docs-view';
 const DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
 const ASSET_MAX_BYTES = 12 * 1024 * 1024;
 const ASSETS_MAX_COUNT = 250;
@@ -46,6 +47,22 @@ export type DocPage = {
   title: string;
   /** Referenced files that were missing, too large, or over the page budget. */
   skippedAssets: number;
+  /** What this page has already copied or tried, for the files it asks for while it runs. */
+  mirror: DocMirror;
+};
+
+/** One opened page's mirror bookkeeping. */
+type DocMirror = {
+  machine: MachineConnectionTarget;
+  rootUri: string;
+  /** Remote paths already copied, found missing, or refused; never read twice. */
+  settled: Set<string>;
+  /** Remote paths now in the mirror. */
+  copied: Set<string>;
+  /** The page's requests run one after another, so a second ask for a file waits for the first. */
+  requests: Promise<unknown>;
+  copiedCount: number;
+  copiedBytes: number;
 };
 
 let mirrorCleared = false;
@@ -223,45 +240,61 @@ function isScannable(remotePath: string): boolean {
 
 // Building --------------------------------------------------------------------------------------
 
+/**
+ * Copies the given remote files into the mirror, then whatever those files name in turn. Returns
+ * how many were left out. `limitTotals` applies the page budget, which keeps opening a page quick;
+ * files the running page asks for are copied without it.
+ */
 async function mirrorAssets(
-  machine: MachineConnectionTarget,
-  rootUri: string,
-  documentPath: string,
-  initialReferences: Set<string>,
-  isCancelled: () => boolean
+  mirror: DocMirror,
+  initialPaths: readonly string[],
+  isCancelled: () => boolean,
+  limitTotals: boolean
 ): Promise<number> {
-  const visited = new Set<string>([normalizeRemotePath(documentPath)]);
   let skipped = 0;
-  let copiedCount = 0;
-  let copiedBytes = 0;
-  let pending = [...initialReferences].map((reference) => resolveRemoteReference(documentPath, reference));
+  let pending = [...initialPaths];
   for (let depth = 0; depth < ASSET_MAX_DEPTH && pending.length > 0; depth += 1) {
     const level = pending.filter((path) => {
-      if (visited.has(path)) return false;
-      visited.add(path);
+      if (mirror.settled.has(path)) return false;
+      mirror.settled.add(path);
       return true;
     });
     pending = [];
     for (let start = 0; start < level.length; start += ASSET_BATCH_SIZE) {
       if (isCancelled()) return skipped;
       const batch = level.slice(start, start + ASSET_BATCH_SIZE);
-      if (copiedCount >= ASSETS_MAX_COUNT || copiedBytes >= ASSETS_MAX_TOTAL_BYTES) {
+      if (limitTotals && (mirror.copiedCount >= ASSETS_MAX_COUNT || mirror.copiedBytes >= ASSETS_MAX_TOTAL_BYTES)) {
+        // Left unsettled, so the page can still ask for them once it runs.
+        batch.forEach((path) => mirror.settled.delete(path));
         skipped += batch.length;
         continue;
       }
-      const reads = await readRemoteFiles(machine, batch, ASSET_MAX_BYTES);
+      let reads: Awaited<ReturnType<typeof readRemoteFiles>>;
+      try {
+        reads = await readRemoteFiles(mirror.machine, batch, ASSET_MAX_BYTES);
+      } catch (error) {
+        // The computer could not be asked; a later ask (or Reload) tries these files again.
+        batch.forEach((path) => mirror.settled.delete(path));
+        throw error;
+      }
       batch.forEach((path, index) => {
         const read = reads[index];
-        const uri = mirrorUri(rootUri, path);
+        const uri = mirrorUri(mirror.rootUri, path);
         // A missing file is broken on the computer too; only what the phone left out is counted.
         if (read === undefined || read.status === 'missing' || uri === null) return;
-        if (read.status === 'tooLarge' || copiedBytes + read.bytes > ASSETS_MAX_TOTAL_BYTES) {
+        if (read.status === 'tooLarge') {
+          skipped += 1;
+          return;
+        }
+        if (limitTotals && mirror.copiedBytes + read.bytes > ASSETS_MAX_TOTAL_BYTES) {
+          mirror.settled.delete(path);
           skipped += 1;
           return;
         }
         writeMirrorFile(uri, read.base64, 'base64');
-        copiedCount += 1;
-        copiedBytes += read.bytes;
+        mirror.copied.add(path);
+        mirror.copiedCount += 1;
+        mirror.copiedBytes += read.bytes;
         if (isScannable(path)) {
           for (const reference of referencesOf(path, decodeBase64Utf8(read.base64))) {
             pending.push(resolveRemoteReference(path, reference));
@@ -271,6 +304,27 @@ async function mirrorAssets(
     }
   }
   return skipped;
+}
+
+/**
+ * Copies files the loaded page asked for while it ran (see `assetLoader.ts`), given as the mirror
+ * URLs that failed. Returns the URLs whose files are now in the mirror; a file that is missing on
+ * the computer or too large is left out, and the page tries each file again only once.
+ */
+export async function mirrorRequestedAssets(page: DocPage, urls: readonly string[]): Promise<string[]> {
+  const byPath = new Map<string, string[]>();
+  for (const url of urls) {
+    const remotePath = remotePathForMirrorUrl(url)?.remotePath;
+    if (remotePath === undefined) continue;
+    const path = normalizeRemotePath(remotePath);
+    byPath.set(path, [...(byPath.get(path) ?? []), url]);
+  }
+  if (byPath.size === 0) return [];
+  const mirror = page.mirror;
+  const request = mirror.requests.then(() => mirrorAssets(mirror, [...byPath.keys()], () => false, false));
+  mirror.requests = request.catch(() => undefined);
+  await request;
+  return [...byPath.entries()].filter(([path]) => mirror.copied.has(path)).flatMap(([, pathUrls]) => pathUrls);
 }
 
 /**
@@ -295,16 +349,28 @@ export async function buildDocPage(
   const text = decodeBase64Utf8(read.base64);
   const title = baseName(documentPath);
 
+  const mirror: DocMirror = {
+    machine,
+    rootUri,
+    settled: new Set([documentPath]),
+    copied: new Set(),
+    requests: Promise.resolve(),
+    copiedCount: 0,
+    copiedBytes: 0,
+  };
+  const referencedPaths = (references: Set<string>) =>
+    [...references].map((reference) => resolveRemoteReference(documentPath, reference));
+
   if (kind === 'html') {
     writeMirrorFile(documentUri, read.base64, 'base64');
-    const skippedAssets = await mirrorAssets(machine, rootUri, documentPath, htmlReferences(text), isCancelled);
-    return { kind, uri: documentUri, rootUri, title, skippedAssets };
+    const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(text)), isCancelled, true);
+    return { kind, uri: documentUri, rootUri, title, skippedAssets, mirror };
   }
 
   const html = renderMarkdownDocument(text, title);
   // Beside the Markdown file, so its relative images and links resolve from the same folder.
   const pageUri = `${documentUri}.ghostex-view.html`;
   writeMirrorFile(pageUri, html, 'utf8');
-  const skippedAssets = await mirrorAssets(machine, rootUri, documentPath, htmlReferences(html), isCancelled);
-  return { kind, uri: pageUri, rootUri, title, skippedAssets };
+  const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(html)), isCancelled, true);
+  return { kind, uri: pageUri, rootUri, title, skippedAssets, mirror };
 }

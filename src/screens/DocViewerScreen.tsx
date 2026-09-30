@@ -3,7 +3,9 @@
  *
  * Markdown is rendered into a dark reading page; HTML runs as authored, with Agentation injected so
  * the page can be annotated (the header button turns it off and on). Both load from the phone's
- * mirror of the computer's folders (`src/docs/page.ts`), so relative images, styles and links work.
+ * mirror of the computer's folders (`src/docs/page.ts`), so relative images, styles and links work;
+ * files a page builds the paths of while it runs are copied when they fail to load
+ * (`src/docs/assetLoader.ts`).
  * A link to another Markdown or HTML file opens it in a new viewer, web links go through the
  * machine-aware opener (localhost links open in the Web Preview), and Reload reads the file again,
  * which is how an agent's latest edit shows up.
@@ -21,7 +23,14 @@ import { CopyGlyph, PencilGlyph } from '../components/sessions/icons';
 import { RefreshIcon } from '../components/terminal/icons';
 import { DocsCopy } from '../copy';
 import { agentationInjectionScript, parseDocPageMessage } from '../docs/agentation';
-import { buildDocPage, mirrorPathsToRemote, remotePathForMirrorUrl, type DocPage } from '../docs/page';
+import { assetLoaderAnswerScript, assetLoaderInjectionScript, parseDocAssetsMessage } from '../docs/assetLoader';
+import {
+  buildDocPage,
+  mirrorPathsToRemote,
+  mirrorRequestedAssets,
+  remotePathForMirrorUrl,
+  type DocPage,
+} from '../docs/page';
 import { baseName, docKindForPath, normalizeRemotePath } from '../docs/paths';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -51,6 +60,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const noticeCounter = useRef(0);
   const generation = useRef(0);
+  const webViewRef = useRef<WebView>(null);
   // The machine record is rebuilt on every inventory poll; only its id picks what is loaded.
   const machineRef = useRef(machine);
   machineRef.current = machine;
@@ -121,6 +131,8 @@ export default function DocViewerScreen({ navigation, route }: Props) {
   }, [annotate, copyPath, isHtml, navigation, reload, remotePath, toggleAnnotate]);
 
   const page = load.kind === 'ready' ? load.page : null;
+  const loadedPage = useRef<DocPage | null>(null);
+  loadedPage.current = page;
   const source = useMemo(
     () => (page === null ? null : { uri: fragment ? `${page.uri}#${encodeURIComponent(fragment)}` : page.uri }),
     [fragment, page]
@@ -162,6 +174,17 @@ export default function DocViewerScreen({ navigation, route }: Props) {
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
+      const assets = parseDocAssetsMessage(event.nativeEvent.data);
+      if (assets !== null) {
+        if (page === null) return;
+        const answer = (ready: readonly string[]) => {
+          // A reload in between replaced the page (and its mirror state); the old page is gone.
+          if (loadedPage.current !== page) return;
+          webViewRef.current?.injectJavaScript(assetLoaderAnswerScript(assets.urls, ready));
+        };
+        mirrorRequestedAssets(page, assets.urls).then(answer, () => answer([]));
+        return;
+      }
       const message = parseDocPageMessage(event.nativeEvent.data);
       if (message === null) return;
       if (message.type === 'agentationCopy') {
@@ -171,7 +194,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
         showNotice(DocsCopy.agentationFailed, true);
       }
     },
-    [showNotice]
+    [page, showNotice]
   );
 
   const injectAgentation = isHtml && annotate;
@@ -183,6 +206,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
         <WebView
           // A new read, or annotation tools turned on or off, loads the page afresh.
           key={`${load.nonce}:${injectAgentation ? 'a' : 'p'}`}
+          ref={webViewRef}
           source={source}
           originWhitelist={['*']}
           // iOS reads the page's sibling files only when access is widened to the mirror folder.
@@ -190,6 +214,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
           allowFileAccess
           // A page's own module scripts, stylesheets and frames are `file://` loads from a `file://` page.
           allowFileAccessFromFileURLs
+          injectedJavaScriptBeforeContentLoaded={ASSET_LOADER_SCRIPT}
           injectedJavaScript={injectedScript}
           onMessage={handleMessage}
           onShouldStartLoadWithRequest={handleShouldStartLoad}
@@ -220,6 +245,8 @@ export default function DocViewerScreen({ navigation, route }: Props) {
     </View>
   );
 }
+
+const ASSET_LOADER_SCRIPT = assetLoaderInjectionScript();
 
 function decodeFragment(fragment: string): string {
   try {
