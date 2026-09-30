@@ -43,7 +43,11 @@
     "web": "expo start --web",
     "sim:shot": "./scripts/sim-shot.sh",
     "sim:reload": "./scripts/sim-reload.sh",
-    "sim:tap": "./scripts/sim-tap.sh"
+    "sim:tap": "./scripts/sim-tap.sh",
+    "build:find-page": "node scripts/build-find-page.mjs",
+    "generate:chat-agents": "node scripts/generate-chat-agents.mjs",
+    "generate:tabler-icons": "node scripts/generate-tabler-icons.mjs",
+    "typecheck:find-page": "../../../node_modules/.bin/tsc -p views/find/tsconfig.json --noEmit"
   },
   "private": true
 }

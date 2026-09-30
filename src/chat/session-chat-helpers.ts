@@ -25,8 +25,8 @@ import { SESSION_CHAT_SUPPORTED_AGENT_IDS } from './session-chat-agents.generate
 /**
  * Agent icon ids whose sessions have a chat projection. Generated from
  * SESSION_CHAT_SUPPORTED_AGENTS in the main repo's packages/shared/session-chat.ts by
- * `bun run generate:mobile-chat-agents` (the shared module itself is outside this
- * submodule's compile scope).
+ * `bun run generate:chat-agents` (scripts/generate-chat-agents.mjs; the shared module
+ * itself is outside this submodule's compile scope).
  */
 const SESSION_CHAT_AGENT_IDS = new Set(SESSION_CHAT_SUPPORTED_AGENT_IDS);
 
