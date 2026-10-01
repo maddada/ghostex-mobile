@@ -1,7 +1,8 @@
 /**
  * What the image viewer shows in place of a picture it cannot show. Port of desktop
- * `image_viewer/unavailable.rs`: an icon, a title that says why, the file's name, its full path
- * wrapping in small muted text, and Copy path. Desktop's Open image and Show in Finder open the
+ * `image_viewer/unavailable.rs`: a left-aligned notice card, the crossed photo beside a title that
+ * says why, the sentence under it, the file's name and its folder shortened to one line, and Copy
+ * path at the bottom right. Desktop's Open image and Show in Finder open the
  * file on the computer; the phone cannot reach the session's machine's files, so it offers only
  * Copy path.
  */
@@ -41,6 +42,41 @@ export function imageFailureCopy(failure: ChatImageFailure): { title: string; de
   }
 }
 
+/** The folder and the file name of a path written with either separator. */
+function splitPath(path: string): { folder: string; file: string } {
+  const trimmed = path.replace(/[\\/]+$/, '');
+  const at = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  return at < 0 ? { folder: '', file: trimmed } : { folder: trimmed.slice(0, at), file: trimmed.slice(at + 1) };
+}
+
+/** A label that is a whole path, cut to its file name (desktop `file_name_of`). */
+export function fileNameOf(label: string): string {
+  return label.split(/[\\/]/).filter((segment) => segment.length > 0).pop() ?? label;
+}
+
+/**
+ * A folder shortened to one readable line, the same way as desktop's `short_folder`: the home
+ * folder as `~`, hash-named folders as `…`, and only the first segment and the last three kept
+ * when it is still long.
+ */
+export function shortFolder(folder: string): string {
+  const separator = folder.includes('\\') && !folder.includes('/') ? '\\' : '/';
+  let segments = folder.split(/[\\/]/);
+  const homeAt = segments.findIndex((segment) => segment === 'Users' || segment === 'home');
+  if (homeAt >= 0 && homeAt <= 1 && segments.length > homeAt + 1) segments = ['~', ...segments.slice(homeAt + 2)];
+  let shortened: string[] = [];
+  for (const raw of segments) {
+    const segment = raw.length >= 24 && /^[0-9a-fA-F-]+$/.test(raw) ? '…' : raw;
+    if (segment === '…' && shortened[shortened.length - 1] === '…') continue;
+    shortened.push(segment);
+  }
+  if (shortened.length > 5) {
+    const tail = shortened.slice(shortened.length - 3);
+    shortened = [shortened[0], ...(tail[0] === '…' ? [] : ['…']), ...tail];
+  }
+  return shortened.join(separator);
+}
+
 export function ImageUnavailable({
   image,
   failure,
@@ -57,32 +93,51 @@ export function ImageUnavailable({
   const { title, detail } = imageFailureCopy(failure);
   const copyPath = typeof image.copyPath === 'string' ? image.copyPath : '';
   const path = copyPath.length > 0 ? copyPath : typeof image.path === 'string' ? image.path : '';
-  const name = path.split(/[\\/]/).filter((segment) => segment.length > 0).pop() ?? image.label ?? '';
+  const { folder, file } = splitPath(path);
+  const name = file.length > 0 ? file : (image.label ?? '');
+  const shortened = shortFolder(folder);
   return (
     <View style={styles.card} onStartShouldSetResponder={() => true}>
-      <View style={styles.iconWell}>
-        <Glyph name="photo-off" size={22} color={P.muted} />
+      <View style={styles.header}>
+        <View style={styles.iconWell}>
+          <Glyph name="photo-off" size={18} color={P.muted} />
+        </View>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.detail}>{detail}</Text>
+        </View>
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.detail}>{detail}</Text>
-      {name.length > 0 ? <Text style={styles.name}>{name}</Text> : null}
-      {path.length > 0 ? (
-        <View style={styles.pathBox}>
-          <Text style={styles.path}>{path}</Text>
+      {name.length > 0 || shortened.length > 0 ? (
+        <View style={styles.fileBlock} accessible accessibilityLabel={path.length > 0 ? path : name}>
+          {name.length > 0 ? (
+            <Text style={styles.name} numberOfLines={1} ellipsizeMode="middle">
+              {name}
+            </Text>
+          ) : null}
+          {shortened.length > 0 ? (
+            <View style={styles.folderRow}>
+              <Glyph name="folder" size={12} color={P.muted} />
+              <Text style={styles.folder} numberOfLines={1} ellipsizeMode="middle">
+                {shortened}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
       {copyPath.length > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Copy path"
-          onPress={() => {
-            void Clipboard.setStringAsync(copyPath).then(onCopied);
-          }}
-          style={({ pressed }) => [styles.button, pressed && { backgroundColor: P.input }]}
-        >
-          <Glyph name={copied ? 'check' : 'copy'} size={14} color={P.foreground} />
-          <Text style={styles.buttonLabel}>{copied ? 'Copied' : 'Copy path'}</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Copy path"
+            onPress={() => {
+              void Clipboard.setStringAsync(copyPath).then(onCopied);
+            }}
+            style={({ pressed }) => [styles.button, pressed && { backgroundColor: P.input }]}
+          >
+            <Glyph name={copied ? 'check' : 'copy'} size={13} color={P.foreground} />
+            <Text style={styles.buttonLabel}>{copied ? 'Copied' : 'Copy path'}</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -91,69 +146,82 @@ export function ImageUnavailable({
 const useStyles = themedStyles((P) => ({
   card: {
     width: '100%',
-    maxWidth: 560,
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-    borderRadius: 14,
+    maxWidth: 460,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: P.border,
-    backgroundColor: P.background,
+    backgroundColor: P.cardBackground,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   iconWell: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: P.input,
   },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
   title: {
     color: P.foreground,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    textAlign: 'center',
-    paddingTop: 2,
   },
   detail: {
     color: P.muted,
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 12.5,
+  },
+  fileBlock: {
+    marginTop: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: P.border,
+    backgroundColor: P.input,
   },
   name: {
     color: P.foreground,
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '500',
-    textAlign: 'center',
-    paddingTop: 4,
   },
-  pathBox: {
-    alignSelf: 'stretch',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: P.input,
+  folderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
-  path: {
+  folder: {
+    flexShrink: 1,
     color: P.muted,
     fontSize: 11.5,
-    lineHeight: 16,
-    textAlign: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: 12,
   },
   button: {
-    marginTop: 4,
-    height: 34,
-    paddingHorizontal: 14,
+    height: 32,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: P.border,
   },
   buttonLabel: {
     color: P.foreground,
-    fontSize: 13,
+    fontSize: 12.5,
   },
 }));

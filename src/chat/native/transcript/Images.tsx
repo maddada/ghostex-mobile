@@ -9,7 +9,7 @@ import { memo } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { openChatImageViewer } from '../cards';
-import { imageFailureCopy } from '../cards/ImageUnavailable';
+import { fileNameOf, imageFailureCopy } from '../cards/ImageUnavailable';
 import { useImageDisplay, useTranscriptEnv, type ChatImageSource } from './context';
 import { Glyph } from './icons';
 import { arr, obj, str } from './json';
@@ -49,7 +49,7 @@ export const InlineImage = memo(function InlineImage({ image }: { image: ChatIma
   if (display.state === 'unavailable') {
     // The picture's words with the crossed photo before them, still opening the viewer so its
     // card can say why the picture is not there (desktop `inline_image`).
-    const named = label.length > 0 ? label : 'Image';
+    const named = label.length > 0 ? fileNameOf(label) : 'Image';
     return (
       <Pressable
         style={[styles.inlineMissing, { borderColor: theme.border }]}
@@ -98,7 +98,7 @@ function ImageTile({ image, index, user, onOpen, themeMuted }: { image: ChatImag
   if (display.state === 'unavailable') {
     // A file that has since gone, or bytes that would not decode: a small missing-image
     // placeholder that still opens the viewer, where the card says why (desktop `image_tile`).
-    const named = label.length > 0 ? label : `Image #${index + 1}`;
+    const named = label.length > 0 ? fileNameOf(label) : `Image #${index + 1}`;
     const spoken = `${imageFailureCopy({ reason: display.reason, error: '' }).title}: ${named}`;
     if (user)
       return (
