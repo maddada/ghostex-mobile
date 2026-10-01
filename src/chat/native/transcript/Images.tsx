@@ -9,6 +9,7 @@ import { memo } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { openChatImageViewer } from '../cards';
+import { imageFailureCopy } from '../cards/ImageUnavailable';
 import { useImageDisplay, useTranscriptEnv, type ChatImageSource } from './context';
 import { Glyph } from './icons';
 import { arr, obj, str } from './json';
@@ -41,10 +42,26 @@ function Thumbnail({ image }: { image: ChatImageSource }) {
 
 /** A picture written into prose, where its author wrote it (`inline_image` in `images.rs`). */
 export const InlineImage = memo(function InlineImage({ image }: { image: ChatImageSource }) {
+  const { theme } = useTranscriptEnv();
   const display = useImageDisplay(image);
   const label = str(image, 'label');
   const alt = str(image, 'alt');
-  if (display.state === 'unavailable') return <Text>{label.length > 0 ? label : 'Image'}</Text>;
+  if (display.state === 'unavailable') {
+    // The picture's words with the crossed photo before them, still opening the viewer so its
+    // card can say why the picture is not there (desktop `inline_image`).
+    const named = label.length > 0 ? label : 'Image';
+    return (
+      <Pressable
+        style={[styles.inlineMissing, { borderColor: theme.border }]}
+        onPress={() => openChatImageViewer([image], 0)}
+        accessibilityRole='button'
+        accessibilityLabel={`${imageFailureCopy({ reason: display.reason, error: '' }).title}: ${named}`}
+      >
+        <Glyph name='photo-off' size={13} color={theme.muted} />
+        <Text style={[styles.inlineMissingLabel, { color: theme.muted }]}>{named}</Text>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       style={styles.inline}
@@ -79,17 +96,32 @@ function ImageTile({ image, index, user, onOpen, themeMuted }: { image: ChatImag
   const label = str(image, 'label');
   const alt = str(image, 'alt');
   if (display.state === 'unavailable') {
-    // No transport for it, or the file has gone: the honest stand-in (`images.rs`).
-    if (user) return <Text style={[styles.standIn, { color: themeMuted }]}>{label.length > 0 ? label : `Image #${index + 1}`}</Text>;
+    // A file that has since gone, or bytes that would not decode: a small missing-image
+    // placeholder that still opens the viewer, where the card says why (desktop `image_tile`).
+    const named = label.length > 0 ? label : `Image #${index + 1}`;
+    const spoken = `${imageFailureCopy({ reason: display.reason, error: '' }).title}: ${named}`;
+    if (user)
+      return (
+        <Pressable onPress={onOpen} accessibilityRole='button' accessibilityLabel={spoken}>
+          <View style={[styles.thumbnail, styles.centered, styles.missing, { borderColor: theme.border }]}>
+            <Glyph name='photo-off' size={18} color={themeMuted} />
+          </View>
+        </Pressable>
+      );
     return (
-      <View style={[styles.card, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole='button'
+        accessibilityLabel={spoken}
+        style={[styles.card, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
+      >
         <View style={[styles.cardWell, { backgroundColor: theme.input }]}>
-          <Glyph name='photo' size={14} color={theme.foreground} />
+          <Glyph name='photo-off' size={14} color={themeMuted} />
         </View>
         <Text numberOfLines={1} style={[styles.cardLabel, { color: theme.foreground }]}>
-          {label}
+          {named}
         </Text>
-      </View>
+      </Pressable>
     );
   }
   return (
@@ -110,7 +142,18 @@ const styles = StyleSheet.create({
   inline: { marginHorizontal: VISUAL.inlineMarginX, marginVertical: VISUAL.inlineMarginY },
   row: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: VISUAL.rowPaddingY },
   rowEnd: { justifyContent: 'flex-end' },
-  standIn: { fontSize: 12 },
+  missing: { borderStyle: 'dashed' },
+  inlineMissing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginHorizontal: VISUAL.inlineMarginX,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    borderWidth: VISUAL.borderWidth,
+    borderStyle: 'dashed',
+  },
+  inlineMissingLabel: { fontSize: 13 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

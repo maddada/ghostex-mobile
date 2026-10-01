@@ -63,7 +63,7 @@ export type RustChatTarget = { machine: MachineConnectionTarget; projectId: stri
 /** One image the transcript asked for (`loadImage`), as the viewer and thumbnails read it. */
 export type ChatImageState =
   | { status: 'loaded'; base64Data: string; mediaType: string }
-  | { status: 'failed'; error: string };
+  | { status: 'failed'; error: string; reason: string };
 
 /** Counters for the dev log and the tester. Names only, never chat content. */
 export type RustChatStats = {
@@ -561,7 +561,11 @@ export class RustChatHost {
                 base64Data: image.base64Data,
                 mediaType: typeof image.mediaType === 'string' ? image.mediaType : 'image/png',
               } as const)
-            : ({ status: 'failed', error: typeof fields.error === 'string' ? fields.error : '' } as const);
+            : ({
+                status: 'failed',
+                error: typeof fields.error === 'string' ? fields.error : '',
+                reason: typeof fields.reason === 'string' && fields.reason.length > 0 ? fields.reason : 'unreadable',
+              } as const);
         this.update({ images: { ...this.state.images, [path]: loaded } });
         return;
       }

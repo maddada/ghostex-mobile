@@ -338,7 +338,11 @@ export class GpuiChatHost {
             base64Data,
             mediaType: typeof params.mediaType === 'string' ? params.mediaType : 'image/png',
           } as const)
-        : ({ status: 'failed', error: typeof params.error === 'string' ? params.error : '' } as const);
+        : ({
+            status: 'failed',
+            error: typeof params.error === 'string' ? params.error : '',
+            reason: typeof params.reason === 'string' && params.reason.length > 0 ? params.reason : 'unreadable',
+          } as const);
     this.update({ images: { ...this.state.images, [path]: loaded } });
   }
 

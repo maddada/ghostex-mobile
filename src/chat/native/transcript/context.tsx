@@ -147,7 +147,7 @@ export function useRowDetail(key: string, kind: 'tool' | 'file', messageId: stri
 }
 
 /** What an image tile shows: a URI React Native can load, a spinner, or the picture's own words. */
-export type ImageDisplay = { state: 'ready'; uri: string } | { state: 'loading' } | { state: 'unavailable' };
+export type ImageDisplay = { state: 'ready'; uri: string } | { state: 'loading' } | { state: 'unavailable'; reason: string };
 
 /** Resolves one projected image source, asking the core for machine bytes the first time (`images.rs`). */
 export function useImageDisplay(image: ChatImageSource): ImageDisplay {
@@ -159,10 +159,10 @@ export function useImageDisplay(image: ChatImageSource): ImageDisplay {
   useEffect(() => {
     if (transport === 'read' && path.length > 0 && images[path] === undefined) requestImage(path);
   }, [images, path, requestImage, transport]);
-  if (transport === 'url' || transport === 'data') return url.length > 0 ? { state: 'ready', uri: url } : { state: 'unavailable' };
-  if (transport !== 'read' || path.length === 0) return { state: 'unavailable' };
+  if (transport === 'url' || transport === 'data') return url.length > 0 ? { state: 'ready', uri: url } : { state: 'unavailable', reason: 'unavailable' };
+  if (transport !== 'read' || path.length === 0) return { state: 'unavailable', reason: 'unavailable' };
   const loaded = images[path];
   if (loaded === undefined) return { state: 'loading' };
-  if (loaded.status === 'failed') return { state: 'unavailable' };
+  if (loaded.status === 'failed') return { state: 'unavailable', reason: loaded.reason };
   return { state: 'ready', uri: `data:${loaded.mediaType};base64,${loaded.base64Data}` };
 }

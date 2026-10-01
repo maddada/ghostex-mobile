@@ -13,8 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
+import { ImageUnavailable } from './ImageUnavailable';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { useChatImage } from './useChatImage';
+import { useChatImage, type ChatImageFailure } from './useChatImage';
 import { useChatOverlayStore } from './overlayStore';
 
 export function ImageViewer({ chat }: { chat: RustChat }) {
@@ -30,19 +31,27 @@ export function ImageViewer({ chat }: { chat: RustChat }) {
   const image = viewer === null ? null : viewer.images[viewer.index] ?? null;
   const source = useChatImage(chat, image);
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
-  const uri = source.status === 'ready' ? source.uri : null;
+  // Bytes that arrived but would not decode (a truncated or corrupt file the server recognised by
+  // its first bytes): the card says the file looks damaged instead of an empty stage.
+  const [broken, setBroken] = useState(false);
+  const uri = source.status === 'ready' && !broken ? source.uri : null;
+  const readyUri = source.status === 'ready' ? source.uri : null;
 
   useEffect(() => {
     setCompleted(null);
     setZoomed(false);
     setNatural(null);
-    if (uri === null) return;
+    setBroken(false);
+    if (readyUri === null) return;
     Image.getSize(
-      uri,
+      readyUri,
       (w, h) => setNatural({ width: w, height: h }),
-      () => setNatural(null)
+      () => {
+        setNatural(null);
+        setBroken(true);
+      }
     );
-  }, [uri]);
+  }, [readyUri]);
 
   if (viewer === null || image === null) return null;
   const close = () => useChatOverlayStore.setState({ imageViewer: null });
@@ -53,7 +62,9 @@ export function ImageViewer({ chat }: { chat: RustChat }) {
   const frameWidth = width - 32;
   const frameHeight = height - insets.top - insets.bottom - 120;
   const fitted = fit(natural, frameWidth, frameHeight);
-  const copyPath = typeof image.copyPath === 'string' ? image.copyPath : '';
+  const failure: ChatImageFailure | null =
+    source.status === 'unavailable' ? source.failure : broken ? { reason: 'damaged', error: '' } : null;
+  const copyPath = failure === null && typeof image.copyPath === 'string' ? image.copyPath : '';
   const base64 = uri !== null && uri.startsWith('data:') ? uri.slice(uri.indexOf(',') + 1) : null;
 
   const toggleZoom = () => {
@@ -101,10 +112,17 @@ export function ImageViewer({ chat }: { chat: RustChat }) {
         </View>
         <View style={styles.stage} pointerEvents="box-none">
           {uri === null ? (
-            source.status === 'loading' ? (
-              <ActivityIndicator color={P.muted} />
+            failure !== null ? (
+              <View style={styles.unavailable} pointerEvents="box-none">
+                <ImageUnavailable
+                  image={image}
+                  failure={failure}
+                  copied={completed === 'Path copied'}
+                  onCopied={() => setCompleted('Path copied')}
+                />
+              </View>
             ) : (
-              <Text style={styles.unavailable}>{image.label || 'Image unavailable'}</Text>
+              <ActivityIndicator color={P.muted} />
             )
           ) : (
             <ScrollView
@@ -126,7 +144,12 @@ export function ImageViewer({ chat }: { chat: RustChat }) {
                   lastTap.current = now;
                 }}
               >
-                <Image source={{ uri }} style={{ width: fitted.width, height: fitted.height }} resizeMode="contain" />
+                <Image
+                  source={{ uri }}
+                  style={{ width: fitted.width, height: fitted.height }}
+                  resizeMode="contain"
+                  onError={() => setBroken(true)}
+                />
               </Pressable>
             </ScrollView>
           )}
@@ -206,8 +229,9 @@ const useStyles = themedStyles((P) => ({
     justifyContent: 'center',
   },
   unavailable: {
-    color: P.muted,
-    fontSize: 14,
+    width: '100%',
+    paddingHorizontal: 20,
+    alignItems: 'center',
   },
   stepRow: {
     position: 'absolute',
