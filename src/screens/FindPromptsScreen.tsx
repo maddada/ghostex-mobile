@@ -160,6 +160,20 @@ export default function FindPromptsScreen({ navigation, route }: Props) {
     useFindPromptsStore.getState().open(machineId);
   }, [machineId]);
 
+  /*
+   * Focus the search field (and bring up the keyboard) once the push animation ends, as the web
+   * page focused its query on open. `autoFocus` fires mid-transition, which Android ignores; coming
+   * back from the prompt screen leaves the keyboard down.
+   */
+  useEffect(() => {
+    let focused = false;
+    return navigation.addListener('transitionEnd', (event) => {
+      if (focused || event.data.closing) return;
+      focused = true;
+      inputRef.current?.focus();
+    });
+  }, [navigation]);
+
   // Changing the query or a filter restarts the results at the top, like the terminal picker.
   const agentsKey = find.agents.join(',');
   useEffect(() => {
@@ -207,7 +221,6 @@ export default function FindPromptsScreen({ navigation, route }: Props) {
           <SearchGlyph size={16} color={appearance.muted} />
           <TextInput
             ref={inputRef}
-            autoFocus
             value={find.query}
             onChangeText={actions.setQuery}
             placeholder={FindPromptsCopy.placeholder}
