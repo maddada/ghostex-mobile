@@ -30,7 +30,7 @@ export function glyphForIconPath(iconPath: unknown): GlyphName | null {
 
 const KNOWN_GLYPHS = new Set<string>([
   'dots', 'list-details', 'list-check', 'note', 'stack-push', 'paperclip', 'terminal-2', 'arrow-up', 'refresh', 'pencil',
-  'trash', 'loader', 'x', 'check', 'file-text', 'file', 'folder', 'photo', 'camera', 'eye', 'eye-off', 'leaf', 'clock',
+  'trash', 'loader', 'x', 'check', 'file-text', 'file', 'folder', 'photo', 'camera', 'eye', 'eye-off', 'leaf', 'message-circle', 'clock',
   'clock-check', 'layout-columns', 'file-export', 'git-branch', 'moon', 'switch-horizontal', 'maximize', 'minimize',
   'settings', 'copy', 'star', 'search', 'link', 'bolt', 'map', 'brain', 'arrow-back-up', 'sparkles', 'blockquote', 'world',
   'share',
