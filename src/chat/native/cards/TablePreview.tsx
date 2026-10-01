@@ -1,24 +1,33 @@
 /**
- * The larger table preview over the chat. Port of desktop `table_preview/`: a "Table" sheet with
- * every cell wrapping inside a column up to 480pt wide, scrolling sideways only when the table is
- * still wider than the screen, and Copy as Markdown / CSV. The table source is the Markdown the
+ * The larger table preview over the chat. Port of desktop `table_preview/`: a full-screen "Table"
+ * sheet whose columns share the screen's width and wrap (`fitTableColumns`, the transcript's rule),
+ * scrolling sideways only when even their floors are wider than the screen, and Copy as Markdown / CSV. The table source is the Markdown the
  * transcript's table carried; `tableCsv` is desktop's `table_csv` (React's `sessionChatTableToCsv`).
  */
 
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glyph } from './icons';
 import { useChatOverlayStore } from './overlayStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { fitTableColumns } from '../transcript/markdown/tableLayout';
+
+/** The 14pt cell text's average glyph width, for estimating column widths. */
+const GLYPH_WIDTH = 7.6;
+/** A cell's horizontal padding and rule. */
+const CELL_INSET = 22;
+/** The width the sheet keeps for itself: the backdrop's, the card border's and the body's horizontal padding. */
+const SHEET_MARGIN_X = 12 * 2 + 1 * 2 + 20 * 2;
 
 export function TablePreview() {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const preview = useChatOverlayStore((state) => state.tablePreview);
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const [copied, setCopied] = useState<string | null>(null);
   if (preview === null) return null;
   const close = () => {
@@ -28,11 +37,17 @@ export function TablePreview() {
   const rows = tableRows(preview.source);
   const [head, ...rest] = rows;
   const columns = Math.max(0, ...rows.map((row) => row.length));
-  // Each column is as wide as its longest cell needs (estimated from the 14pt glyph width), up to
-  // desktop's 480pt cap, so short columns stay narrow and long ones wrap.
-  const widths = Array.from({ length: columns }, (_, column) =>
-    Math.min(480, Math.max(72, Math.max(0, ...rows.map((row) => tableCellText(row[column] ?? '').length)) * 7.6 + 22))
-  );
+  // A column's widths are estimated from the 14pt glyph width: its longest cell, and its longest
+  // word. The sheet's own margins (backdrop, card border, body padding) are what the table cannot use.
+  const extents = Array.from({ length: columns }, (_, column) => {
+    const texts = rows.map((row) => tableCellText(row[column] ?? ''));
+    const longest = (values: number[]) => Math.max(0, ...values) * GLYPH_WIDTH;
+    return {
+      max: Math.max(72 - CELL_INSET, longest(texts.map((text) => text.length))),
+      min: longest(texts.flatMap((text) => text.split(/\s+/).map((word) => word.length))),
+    };
+  });
+  const widths = fitTableColumns(extents, CELL_INSET, screenWidth - SHEET_MARGIN_X, 14);
   const copy = (label: string, text: string) => {
     void Clipboard.setStringAsync(text).then(() => setCopied(label));
   };

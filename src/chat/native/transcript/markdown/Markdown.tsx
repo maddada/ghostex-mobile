@@ -17,6 +17,7 @@ import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } fr
 import { InlineImage } from '../Images';
 import { openTranscriptMenu } from '../transcriptMenuStore';
 import { inlineText, parseMarkdown, type Block, type FenceHeader, type Inline } from './parse';
+import { fitTableColumns } from './tableLayout';
 
 type Reference = { label: string; kind: string };
 
@@ -159,6 +160,8 @@ function FlowParagraph({ inlines, context, color }: { inlines: Inline[]; context
 }
 
 const CELL_PAD_X = 12;
+/** How many of a column's longest words are laid out to find its widest one. */
+const TABLE_MEASURED_WORDS = 4;
 
 /** `markdown-visual.json`: the shared heading sizes, gaps and leading. */
 const HEADING_SIZES = [0, 20, 18, 16, 14, 14, 14];
@@ -234,18 +237,26 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
   const { theme } = useTranscriptEnv();
   const { width } = useWindowDimensions();
   const [collapsed, setCollapsed] = useState(false);
-  // React's `--chat-table-cell-max`: min(24rem, 60% of the pane).
-  const cellMax = Math.min(384, width * 0.6);
-  // React Native has no table layout. Each column takes its widest cell's natural width, capped like
-  // the React cell (cells wrap inside the cap). The widths are measured from an invisible copy of
-  // the cells laid out without a width limit; until that layout lands, an estimate from the prose
-  // size stands in (it runs narrow for wide glyphs, which broke words like "number" mid-word).
-  // A column reports only when its width changes, so the last report per column stays valid.
-  const [measured, setMeasured] = useState<number[] | null>(null);
-  const pending = useRef<number[]>([]);
+  // The table fits the transcript's width (`fitTableColumns`). React Native has no table layout,
+  // so both of a column's widths are measured from an invisible copy of the cells laid out without
+  // a width limit (each column's cells, and its longest words alone); until that layout lands, an
+  // estimate from the prose size stands in. A column reports only when its width changes, so the
+  // last report per column stays valid.
+  const [available, setAvailable] = useState<number | null>(null);
+  const [measured, setMeasured] = useState<{ max: number[]; min: number[] } | null>(null);
+  const pending = useRef<{ max: number[]; min: number[] }>({ max: [], min: [] });
+  const longWords = useMemo(
+    () =>
+      block.head.map((cell, column) => {
+        const words = [cell, ...block.rows.map((row) => row[column] ?? [])].flatMap((inlines) => inlineText(inlines).split(/\s+/));
+        return [...new Set(words.filter((word) => word.length > 0))].sort((a, b) => b.length - a.length).slice(0, TABLE_MEASURED_WORDS);
+      }),
+    [block]
+  );
   const columns = useMemo(() => {
     let natural: number[];
-    if (measured !== null && measured.length === block.head.length) natural = measured;
+    let word: number[];
+    if (measured !== null && measured.max.length === block.head.length) ({ max: natural, min: word } = measured);
     else {
       natural = block.head.map((cell) => inlineText(cell).length * 7.9);
       for (const row of block.rows) {
@@ -253,17 +264,19 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
           natural[column] = Math.max(natural[column] ?? 0, inlineText(cell).length * 7.3);
         });
       }
+      word = longWords.map((words) => (words[0]?.length ?? 0) * 7.9);
     }
-    return natural.map((textWidth) => Math.min(cellMax, Math.max(44, Math.ceil(textWidth) + 1 + CELL_PAD_X * 2)));
-  }, [block, cellMax, measured]);
-  const measureColumn = (column: number, columnWidth: number) => {
+    const extents = natural.map((max, column) => ({ max, min: word[column] ?? 0 }));
+    return fitTableColumns(extents, 1 + CELL_PAD_X * 2, available ?? width, PROSE_SIZE);
+  }, [block, measured, longWords, available, width]);
+  const report = (kind: 'max' | 'min', column: number, columnWidth: number) => {
     const widths = pending.current;
-    widths[column] = columnWidth;
-    if (!block.head.every((_, index) => typeof widths[index] === 'number')) return;
-    const next = block.head.map((_, index) => widths[index]!);
-    setMeasured((current) =>
-      current !== null && current.length === next.length && current.every((value, index) => value === next[index]) ? current : next
-    );
+    widths[kind][column] = columnWidth;
+    const complete = (values: number[]) => block.head.every((_, index) => typeof values[index] === 'number');
+    if (!complete(widths.max) || !complete(widths.min)) return;
+    const next = { max: block.head.map((_, index) => widths.max[index]!), min: block.head.map((_, index) => widths.min[index]!) };
+    const same = (a: number[], b: number[]) => a.length === b.length && a.every((value, index) => value === b[index]);
+    setMeasured((current) => (current !== null && same(current.max, next.max) && same(current.min, next.min) ? current : next));
   };
   const cellStyle = (column: number) => {
     const align = block.align[column] ?? null;
@@ -272,14 +285,23 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
   const lines = collapsed ? 1 : undefined;
   return (
     <View style={styles.table}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         <View style={styles.tableMeasure} pointerEvents='none' accessibilityElementsHidden importantForAccessibility='no-hide-descendants'>
           {block.head.map((cell, column) => (
-            <View key={column} style={styles.tableMeasureColumn} onLayout={(event) => measureColumn(column, event.nativeEvent.layout.width)}>
+            <View key={column} style={styles.tableMeasureColumn} onLayout={(event) => report('max', column, event.nativeEvent.layout.width)}>
               <Text style={[styles.tableText, styles.strong]}>{renderInlines(cell, context, `mh${column}`)}</Text>
               {block.rows.map((row, rowIndex) => (
                 <Text key={rowIndex} style={styles.tableText}>
                   {renderInlines(row[column] ?? [], context, `mr${rowIndex}.${column}`)}
+                </Text>
+              ))}
+            </View>
+          ))}
+          {longWords.map((words, column) => (
+            <View key={`w${column}`} style={styles.tableMeasureColumn} onLayout={(event) => report('min', column, event.nativeEvent.layout.width)}>
+              {words.map((word, wordIndex) => (
+                <Text key={wordIndex} style={[styles.tableText, styles.strong]}>
+                  {word}
                 </Text>
               ))}
             </View>
