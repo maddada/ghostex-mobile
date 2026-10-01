@@ -269,6 +269,11 @@ export type GhostexSession = {
   surface: string;
   createdAt: string;
   isDraft?: true;
+  /**
+   * The agentbox box the session's agent runs in (`PresentationAgentbox`). `pending` is a draft
+   * whose chat Run on row picked the box; its first message starts it.
+   */
+  agentbox?: { provider: string; boxName: string; providerLabel: string; pending?: true };
   hasComposerDraft?: boolean;
   lastInteractionAt: string;
   lastActiveAt: string;
@@ -876,6 +881,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     surface: trimmedValue(value, 'surface'),
     createdAt: trimmedValue(value, 'createdAt'),
     isDraft: value.isDraft === true ? true : undefined,
+    agentbox: parseAgentbox(value.agentbox),
     hasComposerDraft: value.hasComposerDraft === true ? true : undefined,
     lastInteractionAt: trimmedValue(value, 'lastInteractionAt'),
     lastActiveAt: trimmedValue(value, 'lastActiveAt'),
@@ -1300,4 +1306,15 @@ export function parseMobileSummary(stdout: string): GhostexMobileSummary | null 
     }
     return { done: false, nextIndex: start + text.length };
   });
+}
+
+/** `PresentationAgentbox` as the summary forwards it, or undefined for a session on the computer. */
+function parseAgentbox(value: unknown): GhostexSession['agentbox'] {
+  if (value === null || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const text = (key: string): string => (typeof record[key] === 'string' ? (record[key] as string).trim() : '');
+  const provider = text('provider');
+  const boxName = text('boxName');
+  if (provider.length === 0 || boxName.length === 0) return undefined;
+  return { provider, boxName, providerLabel: text('providerLabel'), pending: record.pending === true ? true : undefined };
 }

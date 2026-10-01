@@ -156,6 +156,8 @@ export type ActionFields = {
   /** Accounts panel operations: `{operation, request?, accountId?, policy?, refresh?}`. */
   accounts: { operation?: string; request?: Json; accountId?: string; policy?: Json; refresh?: boolean };
   switchDraftAgent: { agentId: string };
+  /** The Run on row: move a draft to this computer (`local`) or a box (`agentbox:<provider>`). */
+  switchDraftRunLocation: { runLocation: string };
   selectForkBranch: { [field: string]: unknown };
 
   // ---- context ------------------------------------------------------------------------------

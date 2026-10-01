@@ -137,7 +137,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeTab.kind === 'attach' &&
     activeTab.ghostexSessionId !== undefined &&
     activeProjectId.length > 0 &&
-    isSessionChatSupportedAgent(activeAgentId);
+    isSessionChatSupportedAgent(activeAgentId) &&
+    // CDXC:AgentBox 2026-10-01 SEE-ALSO: gx-core's `session_chat_view_unavailable`. A box session's agent runs in its box, so no transcript exists here and it stays on its terminal; a draft whose box only starts with its first message (`pending`) keeps chat until that message.
+    !(activeSession?.agentbox !== undefined && activeSession.agentbox.pending !== true);
   const chatModeActive =
     chatCapable &&
     activeTab !== null &&

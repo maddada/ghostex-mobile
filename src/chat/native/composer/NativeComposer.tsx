@@ -33,6 +33,7 @@ import { MenuSheet, type MenuRow } from './MenuSheet';
 import { ModelMenuSheet } from './ModelMenuSheet';
 import { NotePanel } from './NotePanel';
 import { OptionPills, type PillKind } from './OptionPills';
+import { RunLocationRow } from './RunLocationRow';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
 import { parseReferences } from './references';
@@ -366,6 +367,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
       {operationError !== null && operationError.length > 0 ? <Text style={styles.error}>{operationError}</Text> : null}
       {document !== null ? <NotePanel note={document.note} dispatch={dispatch} /> : null}
       {document?.suggestions ? <Suggestions data={document.suggestions} dispatch={dispatch} /> : null}
+      {document?.runLocation ? <RunLocationRow row={document.runLocation} dispatch={dispatch} /> : null}
       <Animated.View style={[styles.card, focused ? styles.cardFocused : null, motion.cardStyle]}>
         <Pressable
           accessible={false}

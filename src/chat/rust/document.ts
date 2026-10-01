@@ -28,6 +28,16 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 /** A JSON object whose keys the Rust core keeps free-form. */
 export type JsonObject = { [key: string]: Json };
 
+/** The Run on row above a new thread's composer (gx-chat-core `menus/run_location.rs`). */
+export type RunLocationRow = {
+  label: string;
+  /** The selected chip's `runLocation`: `local` or `agentbox:<provider>`. */
+  selected: string;
+  /** A switch is in flight. */
+  busy: boolean;
+  options: { runLocation: string; label: string; icon: 'computer' | 'box' | 'server' | 'cloud'; tooltip: string | null }[];
+};
+
 // ---------------------------------------------------------------------------------------------
 // The frame envelope
 // ---------------------------------------------------------------------------------------------
@@ -309,6 +319,8 @@ export type ChatDocument = {
   availableAgents: Json;
   /** Same-family accounts the session can resume under. Desktop: `actions.rs` (Switch Account). */
   switchableAgents: Json;
+  /** A draft's Run on row, absent when hidden. Desktop: `run_location.rs`. */
+  runLocation?: RunLocationRow;
   /** The session's own launch agent id. Desktop: `launch.rs`. */
   sessionAgentId: string | null;
   /** The transcript-level failure copy, or null. */
