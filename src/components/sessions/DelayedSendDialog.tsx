@@ -6,12 +6,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { DelayedSendTrigger } from '../../commands/ghostexCli';
 import { agentIconTint, resolveAgentIconId } from '../../contract/mobileSummary';
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
+import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from '../common/keyboard/KeyboardAwareScrollView';
 import { formatDeadlineCountdown, remainingMsUntil, useNowTick } from './timerCountdown';
 
 /** After a delay uses whole minutes; Specific time can leave a partial minute. */
@@ -179,182 +181,188 @@ export default function DelayedSendDialog({
 
   return (
     <Modal visible={visible} transparent animationType='fade' onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-          <ScrollView keyboardShouldPersistTaps='handled' contentContainerStyle={styles.cardContent}>
-            <Text style={styles.title}>Session Automations</Text>
-            <Text style={styles.body}>Configure automations for this agent session.</Text>
-            <View style={styles.sessionTarget}>
-              <TargetIcon size={14} color={agentIconTint(targetIconId)} />
-              <Text numberOfLines={1} style={styles.sessionTargetTitle}>
-                {sessionTargetLabel}
-              </Text>
-            </View>
-            <View style={styles.automationStack}>
-              <View style={styles.automationCard}>
-                <View style={styles.automationHeader}>
-                  <View style={styles.automationCopy}>
-                    <Text style={styles.automationTitle}>Send Enter</Text>
-                    <Text style={styles.automationDescription}>
-                      {!sendEnterEnabled
-                        ? 'No Enter keypress will be scheduled.'
-                        : sendWhenAllProjectSessionsStopActive
-                          ? 'Active when all agents finish working.'
-                          : sendWhenAgentStopsActive
-                            ? 'Active when this agent finishes working.'
-                            : liveRemainingLabel.length > 0
-                              ? `Active. Enter sends in ${liveRemainingLabel}.`
-                              : 'Press Enter later using the selected trigger.'}
-                    </Text>
-                  </View>
-                  <Switch
-                    accessibilityLabel='Send Enter automation'
-                    value={sendEnterEnabled}
-                    onValueChange={setSendEnterEnabled}
-                    trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
-                    thumbColor={GhostexPalette.FOREGROUND}
-                  />
-                </View>
-                {sendEnterEnabled ? (
-                  <View style={styles.automationContent}>
-                    <Text style={styles.fieldLabel}>Trigger</Text>
-                    <View accessibilityRole='radiogroup' style={styles.triggerOptions}>
-                      {([
-                        ['afterDelay', 'After a delay'],
-                        ['specificTime', 'Specific time'],
-                        ['agentStops', 'When this agent finishes'],
-                        ['allAgentsStop', 'When all agents finish'],
-                      ] as const).map(([value, label]) => {
-                        const selected = trigger === value;
-                        return (
-                          <Pressable
-                            key={value}
-                            accessibilityRole='radio'
-                            accessibilityState={{ selected }}
-                            style={[styles.triggerOption, selected ? styles.triggerOptionSelected : null]}
-                            onPress={() => { setTrigger(value); setPickerMode(null); }}
-                          >
-                            <View style={[styles.radio, selected ? styles.radioSelected : null]}>
-                              {selected ? <View style={styles.radioDot} /> : null}
-                            </View>
-                            <Text style={[styles.triggerLabel, selected ? styles.triggerLabelSelected : null]}>
-                              {label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
+      <KeyboardAvoidingContainer safeAreaTop style={styles.keyboardFill}>
+        <Pressable style={styles.backdrop} onPress={onCancel}>
+          <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
+            <KeyboardAwareScrollView contentContainerStyle={styles.cardContent}>
+              <Text style={styles.title}>Session Automations</Text>
+              <Text style={styles.body}>Configure automations for this agent session.</Text>
+              <View style={styles.sessionTarget}>
+                <TargetIcon size={14} color={agentIconTint(targetIconId)} />
+                <Text numberOfLines={1} style={styles.sessionTargetTitle}>
+                  {sessionTargetLabel}
+                </Text>
+              </View>
+              <View style={styles.automationStack}>
+                <View style={styles.automationCard}>
+                  <View style={styles.automationHeader}>
+                    <View style={styles.automationCopy}>
+                      <Text style={styles.automationTitle}>Send Enter</Text>
+                      <Text style={styles.automationDescription}>
+                        {!sendEnterEnabled
+                          ? 'No Enter keypress will be scheduled.'
+                          : sendWhenAllProjectSessionsStopActive
+                            ? 'Active when all agents finish working.'
+                            : sendWhenAgentStopsActive
+                              ? 'Active when this agent finishes working.'
+                              : liveRemainingLabel.length > 0
+                                ? `Active. Enter sends in ${liveRemainingLabel}.`
+                                : 'Press Enter later using the selected trigger.'}
+                      </Text>
                     </View>
-                    <View style={styles.triggerDetailSlot}>
-                      {trigger === 'afterDelay' ? (
-                        <View style={styles.durationRow}>
-                          <View style={styles.durationField}>
-                            <Text style={styles.fieldLabel}>Hours</Text>
-                            <TextInput
-                              accessibilityLabel='Hours'
-                              style={styles.input}
-                              keyboardType='number-pad'
-                              value={hours}
-                              onChangeText={setHours}
-                              selectTextOnFocus
-                            />
-                          </View>
-                          <View style={styles.durationField}>
-                            <Text style={styles.fieldLabel}>Minutes</Text>
-                            <TextInput
-                              accessibilityLabel='Minutes'
-                              autoFocus
-                              style={styles.input}
-                              keyboardType='number-pad'
-                              value={minutes}
-                              onChangeText={setMinutes}
-                              selectTextOnFocus
-                            />
-                          </View>
-                        </View>
-                      ) : trigger === 'specificTime' ? (
-                        <View>
+                    <Switch
+                      accessibilityLabel='Send Enter automation'
+                      value={sendEnterEnabled}
+                      onValueChange={setSendEnterEnabled}
+                      trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
+                      thumbColor={GhostexPalette.FOREGROUND}
+                    />
+                  </View>
+                  {sendEnterEnabled ? (
+                    <View style={styles.automationContent}>
+                      <Text style={styles.fieldLabel}>Trigger</Text>
+                      <View accessibilityRole='radiogroup' style={styles.triggerOptions}>
+                        {([
+                          ['afterDelay', 'After a delay'],
+                          ['specificTime', 'Specific time'],
+                          ['agentStops', 'When this agent finishes'],
+                          ['allAgentsStop', 'When all agents finish'],
+                        ] as const).map(([value, label]) => {
+                          const selected = trigger === value;
+                          return (
+                            <Pressable
+                              key={value}
+                              accessibilityRole='radio'
+                              accessibilityState={{ selected }}
+                              style={[styles.triggerOption, selected ? styles.triggerOptionSelected : null]}
+                              onPress={() => { setTrigger(value); setPickerMode(null); }}
+                            >
+                              <View style={[styles.radio, selected ? styles.radioSelected : null]}>
+                                {selected ? <View style={styles.radioDot} /> : null}
+                              </View>
+                              <Text style={[styles.triggerLabel, selected ? styles.triggerLabelSelected : null]}>
+                                {label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={styles.triggerDetailSlot}>
+                        {trigger === 'afterDelay' ? (
                           <View style={styles.durationRow}>
                             <View style={styles.durationField}>
-                              <Text style={styles.fieldLabel}>Date</Text>
-                              <Pressable accessibilityRole='button' accessibilityLabel='Choose date' style={styles.input} onPress={() => setPickerMode('date')}>
-                                <Text style={styles.dateTimeValue}>{specificTime.toLocaleDateString()}</Text>
-                              </Pressable>
+                              <Text style={styles.fieldLabel}>Hours</Text>
+                              <TextInput
+                                accessibilityLabel='Hours'
+                                style={styles.input}
+                                keyboardType='number-pad'
+                                value={hours}
+                                onChangeText={setHours}
+                                selectTextOnFocus
+                              />
                             </View>
                             <View style={styles.durationField}>
-                              <Text style={styles.fieldLabel}>Time</Text>
-                              <Pressable accessibilityRole='button' accessibilityLabel='Choose time' style={styles.input} onPress={() => setPickerMode('time')}>
-                                <Text style={styles.dateTimeValue}>{specificTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                              </Pressable>
+                              <Text style={styles.fieldLabel}>Minutes</Text>
+                              <TextInput
+                                accessibilityLabel='Minutes'
+                                autoFocus
+                                style={styles.input}
+                                keyboardType='number-pad'
+                                value={minutes}
+                                onChangeText={setMinutes}
+                                selectTextOnFocus
+                              />
                             </View>
                           </View>
+                        ) : trigger === 'specificTime' ? (
+                          <View>
+                            <View style={styles.durationRow}>
+                              <View style={styles.durationField}>
+                                <Text style={styles.fieldLabel}>Date</Text>
+                                <Pressable accessibilityRole='button' accessibilityLabel='Choose date' style={styles.input} onPress={() => setPickerMode('date')}>
+                                  <Text style={styles.dateTimeValue}>{specificTime.toLocaleDateString()}</Text>
+                                </Pressable>
+                              </View>
+                              <View style={styles.durationField}>
+                                <Text style={styles.fieldLabel}>Time</Text>
+                                <Pressable accessibilityRole='button' accessibilityLabel='Choose time' style={styles.input} onPress={() => setPickerMode('time')}>
+                                  <Text style={styles.dateTimeValue}>{specificTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                            <Text style={styles.triggerDescription}>
+                              {isValidDelay ? 'Uses your local time.' : 'Choose a future date and time within 24 days.'}
+                            </Text>
+                            {pickerMode && visible ? (
+                              <DateTimePicker
+                                value={specificTime}
+                                mode={pickerMode}
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                minimumDate={pickerMode === 'date' ? new Date(nowMs) : undefined}
+                                maximumDate={pickerMode === 'date' ? new Date(nowMs + DELAYED_SEND_MAX_DELAY_MS) : undefined}
+                                onDismiss={dismissPicker}
+                                onValueChange={changePickerValue}
+                              />
+                            ) : null}
+                          </View>
+                        ) : (
                           <Text style={styles.triggerDescription}>
-                            {isValidDelay ? 'Uses your local time.' : 'Choose a future date and time within 24 days.'}
+                            {trigger === 'agentStops'
+                              ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
+                              : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
                           </Text>
-                          {pickerMode && visible ? (
-                            <DateTimePicker
-                              value={specificTime}
-                              mode={pickerMode}
-                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                              minimumDate={pickerMode === 'date' ? new Date(nowMs) : undefined}
-                              maximumDate={pickerMode === 'date' ? new Date(nowMs + DELAYED_SEND_MAX_DELAY_MS) : undefined}
-                              onDismiss={dismissPicker}
-                              onValueChange={changePickerValue}
-                            />
-                          ) : null}
-                        </View>
-                      ) : (
-                        <Text style={styles.triggerDescription}>
-                          {trigger === 'agentStops'
-                            ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
-                            : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
-                        </Text>
-                      )}
+                        )}
+                      </View>
                     </View>
+                  ) : null}
+                </View>
+                <View style={styles.automationCard}>
+                  <View style={styles.automationHeader}>
+                    <View style={styles.automationCopy}>
+                      <Text style={styles.automationTitle}>Close session after Done</Text>
+                      <Text numberOfLines={1} style={styles.automationDescription}>
+                        Closes this terminal 3 minutes after Done.
+                      </Text>
+                    </View>
+                    <Switch
+                      accessibilityLabel='Close session after Done'
+                      value={closeAfterDoneEnabled}
+                      onValueChange={setCloseAfterDoneEnabled}
+                      trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
+                      thumbColor={GhostexPalette.FOREGROUND}
+                    />
                   </View>
-                ) : null}
-              </View>
-              <View style={styles.automationCard}>
-                <View style={styles.automationHeader}>
-                  <View style={styles.automationCopy}>
-                    <Text style={styles.automationTitle}>Close session after Done</Text>
-                    <Text numberOfLines={1} style={styles.automationDescription}>
-                      Closes this terminal 3 minutes after Done.
-                    </Text>
-                  </View>
-                  <Switch
-                    accessibilityLabel='Close session after Done'
-                    value={closeAfterDoneEnabled}
-                    onValueChange={setCloseAfterDoneEnabled}
-                    trackColor={{ false: GhostexPalette.CARD_ACTIVE, true: GhostexPalette.ACCENT }}
-                    thumbColor={GhostexPalette.FOREGROUND}
-                  />
                 </View>
               </View>
-            </View>
-            <View style={styles.buttonRow}>
-              <Pressable accessibilityRole='button' style={styles.cancelButton} onPress={onCancel}>
-                <Text style={styles.cancelLabel}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole='button'
-                disabled={!canSave}
-                style={[styles.primaryButton, !canSave ? styles.buttonDisabled : null]}
-                onPress={() => void saveChanges()}
-              >
-                <Text style={styles.primaryLabel}>Save changes</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole='button' style={styles.cancelButton} onPress={onCancel}>
+                  <Text style={styles.cancelLabel}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole='button'
+                  disabled={!canSave}
+                  style={[styles.primaryButton, !canSave ? styles.buttonDisabled : null]}
+                  onPress={() => void saveChanges()}
+                >
+                  <Text style={styles.primaryLabel}>Save changes</Text>
+                </Pressable>
+              </View>
+            </KeyboardAwareScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  // The dim sits on the keyboard-avoiding layer so it also covers the strip the keyboard leaves while it slides away.
+  keyboardFill: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  backdrop: {
+    flex: 1,
     justifyContent: 'center',
     padding: 24,
   },

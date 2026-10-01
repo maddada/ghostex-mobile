@@ -20,6 +20,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from '../common/keyboard/KeyboardAwareScrollView';
 
 export type PromptEditorSheetProps = {
   visible: boolean;
@@ -75,70 +77,82 @@ export default function PromptEditorSheet({
       animationType="fade"
       onRequestClose={() => onCancel(text)}
     >
-      <Pressable style={styles.backdrop} onPress={() => onCancel(text)}>
-        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-          <Text style={styles.title}>Prompt Editor</Text>
-          <Text style={styles.body}>
-            {destination === 'chat'
-              ? `Send this prompt to ${title.length > 0 ? `"${title}"` : 'this agent session'} as a chat message.`
-              : `Type this prompt into ${title.length > 0 ? `"${title}"` : 'this session'} without pressing Enter.`}
-          </Text>
-          <TextInput
-            accessibilityLabel="Prompt"
-            style={styles.input}
-            multiline
-            textAlignVertical="top"
-            autoCapitalize="sentences"
-            autoCorrect
-            autoFocus
-            placeholder="Write a longer prompt…"
-            placeholderTextColor={GhostexPalette.MUTED}
-            value={text}
-            onChangeText={(next) => {
-              typedRef.current = true;
-              setText(next);
-            }}
-          />
-          <View style={styles.buttonRow}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              style={[styles.cancelButton, busy ? styles.buttonDisabled : null]}
-              onPress={() => onCancel(text)}
-            >
-              <Text style={styles.cancelLabel}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={!canSubmit}
-              style={[styles.confirmButton, canSubmit ? null : styles.buttonDisabled]}
-              onPress={() => {
-                if (canSubmit) onSubmit(trimmed);
-              }}
-            >
-              <Text style={styles.confirmLabel}>
-                {destination === 'chat' ? 'Send' : 'Insert'}
+      <KeyboardAvoidingContainer safeAreaTop style={styles.keyboardFill}>
+        <Pressable style={styles.backdrop} onPress={() => onCancel(text)}>
+          <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
+            <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.cardContent}>
+              <Text style={styles.title}>Prompt Editor</Text>
+              <Text style={styles.body}>
+                {destination === 'chat'
+                  ? `Send this prompt to ${title.length > 0 ? `"${title}"` : 'this agent session'} as a chat message.`
+                  : `Type this prompt into ${title.length > 0 ? `"${title}"` : 'this session'} without pressing Enter.`}
               </Text>
-            </Pressable>
-          </View>
+              <TextInput
+                accessibilityLabel="Prompt"
+                style={styles.input}
+                multiline
+                textAlignVertical="top"
+                autoCapitalize="sentences"
+                autoCorrect
+                autoFocus
+                placeholder="Write a longer prompt…"
+                placeholderTextColor={GhostexPalette.MUTED}
+                value={text}
+                onChangeText={(next) => {
+                  typedRef.current = true;
+                  setText(next);
+                }}
+              />
+              <View style={styles.buttonRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  style={[styles.cancelButton, busy ? styles.buttonDisabled : null]}
+                  onPress={() => onCancel(text)}
+                >
+                  <Text style={styles.cancelLabel}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canSubmit}
+                  style={[styles.confirmButton, canSubmit ? null : styles.buttonDisabled]}
+                  onPress={() => {
+                    if (canSubmit) onSubmit(trimmed);
+                  }}
+                >
+                  <Text style={styles.confirmLabel}>
+                    {destination === 'chat' ? 'Send' : 'Insert'}
+                  </Text>
+                </Pressable>
+              </View>
+            </KeyboardAwareScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  // The dim sits on the keyboard-avoiding layer so it also covers the strip the keyboard leaves while it slides away.
+  keyboardFill: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  backdrop: {
+    flex: 1,
     justifyContent: 'center',
     padding: 24,
   },
   card: {
+    maxHeight: '100%',
+    overflow: 'hidden',
     backgroundColor: GhostexPalette.BACKGROUND,
     borderRadius: 12,
     borderWidth: GhostexStrokeWidth,
     borderColor: GhostexPalette.BORDER,
+  },
+  cardContent: {
     padding: 16,
   },
   title: {

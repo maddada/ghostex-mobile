@@ -10,11 +10,9 @@
  * src/sessions/sessionSearch.ts.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  Keyboard,
   Modal,
-  Platform,
   Pressable,
   SectionList,
   StyleSheet,
@@ -41,6 +39,8 @@ import {
   type SessionSearchRow,
 } from '../../sessions/sessionSearch';
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
+import { useKeyboardTop } from '../common/keyboard/keyboardFrame';
+import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
 import { ChevronLeftGlyph, SearchGlyph, XGlyph } from './icons';
 
 export type SessionSearchSheetProps = {
@@ -67,26 +67,8 @@ export default function SessionSearchSheet({
   const inputRef = useRef<TextInput | null>(null);
   const [query, setQuery] = useState('');
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  /*
-   * Whether a transparent modal is resized for the keyboard differs between
-   * Android builds (see useKeyboardMetrics), so the list keeps the keyboard's
-   * height of room at its end: every result can be scrolled into view either way.
-   */
-  useEffect(() => {
-    if (!visible) return undefined;
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const subscriptions = [
-      Keyboard.addListener(showEvent, (event) => setKeyboardHeight(event.endCoordinates.height)),
-      Keyboard.addListener(hideEvent, () => setKeyboardHeight(0)),
-    ];
-    return () => {
-      for (const subscription of subscriptions) subscription.remove();
-      setKeyboardHeight(0);
-    };
-  }, [visible]);
+  // The navigation bar's inset is under the keyboard while it is open; the panel ends right on top of it.
+  const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
 
   const candidates = useMemo((): SessionSearchCandidate[] => {
     // The sheet stays mounted under the list; the 5s inventory poll need not rebuild results nobody sees.
@@ -206,7 +188,7 @@ export default function SessionSearchSheet({
       onRequestClose={close}
       onShow={() => inputRef.current?.focus()}
     >
-      <View style={[styles.fill, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+      <KeyboardAvoidingContainer style={[styles.fill, { paddingTop: insets.top + 8, paddingBottom: bottomInset + 8 }]}>
         <Pressable
           style={styles.backdrop}
           accessibilityRole="button"
@@ -272,7 +254,7 @@ export default function SessionSearchSheet({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             style={styles.list}
-            contentContainerStyle={[styles.listContent, { paddingBottom: 8 + keyboardHeight }]}
+            contentContainerStyle={styles.listContent}
             ListEmptyComponent={
               <Text style={styles.empty}>
                 {query.trim().length > 0 ? SessionSearchCopy.noMatches : SessionSearchCopy.noSessions}
@@ -280,7 +262,7 @@ export default function SessionSearchSheet({
             }
           />
         </View>
-      </View>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }
@@ -344,6 +326,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 6,
+    paddingBottom: 8,
   },
   sectionHeading: {
     color: SetupPalette.MUTED,

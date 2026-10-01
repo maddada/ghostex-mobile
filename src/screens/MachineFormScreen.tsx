@@ -16,13 +16,15 @@
  */
 
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src';
 import { markManualDisconnect } from '../app/autoReconnect';
 import PromptDialog from '../components/common/PromptDialog';
+import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import { SetupButton, setupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
@@ -405,109 +407,112 @@ export default function MachineFormScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={formStyles.page} edges={['bottom']}>
-      <ScrollView contentContainerStyle={formStyles.scroll} keyboardShouldPersistTaps="handled">
-        {existing !== null ? (
-          <>
-            {inventory?.lastError !== undefined && inventory.lastError !== null ? (
-              <View style={formStyles.errorCallout}>
-                <Text style={formStyles.errorCalloutText}>
-                  {EditMachineCopy.errorPrefix(existing.name.length > 0 ? existing.name : existing.username)}
-                  {inventory.lastError}{' '}
-                  <Text
-                    style={formStyles.link}
-                    onPress={() => navigation.navigate('CantReach', { machineId: existing.id })}
-                  >
-                    {EditMachineCopy.whatCanICheck}
+      {/* The Connect footer rides above the keyboard with the form on devices that do not resize the window. */}
+      <KeyboardAvoidingContainer style={formStyles.keyboardArea}>
+        <KeyboardAwareScrollView contentContainerStyle={formStyles.scroll} keyboardShouldPersistTaps="handled">
+          {existing !== null ? (
+            <>
+              {inventory?.lastError !== undefined && inventory.lastError !== null ? (
+                <View style={formStyles.errorCallout}>
+                  <Text style={formStyles.errorCalloutText}>
+                    {EditMachineCopy.errorPrefix(existing.name.length > 0 ? existing.name : existing.username)}
+                    {inventory.lastError}{' '}
+                    <Text
+                      style={formStyles.link}
+                      onPress={() => navigation.navigate('CantReach', { machineId: existing.id })}
+                    >
+                      {EditMachineCopy.whatCanICheck}
+                    </Text>
                   </Text>
-                </Text>
+                </View>
+              ) : null}
+              <NameField value={name} onChangeText={setName} hint={false} />
+              <Text style={formStyles.sectionLabel}>
+                {easyConnect ? EditMachineCopy.connectionLabel : EditMachineCopy.connectionTailscaleLabel}
+              </Text>
+              {easyConnect ? (
+                <View style={formStyles.rowsCard}>
+                  <EasyConnectSummary
+                    machine={existing}
+                    connectedNow={connectedNow}
+                    onRePair={() => navigation.navigate('ScanCode', { rePairMachineId: existing.id })}
+                  />
+                  {showInSessionsRow}
+                </View>
+              ) : (
+                <>
+                  {tailscaleFields}
+                  <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
+                </>
+              )}
+              {advanced}
+              {test}
+              {errorBanner}
+              <View style={formStyles.divider} />
+              <Pressable
+                accessibilityRole="button"
+                style={styles.removeButton}
+                onPress={() => {
+                  setRemoveError(null);
+                  setRemoveOpen(true);
+                }}
+              >
+                <Text style={[styles.removeLabel, formStyles.danger]}>{EditMachineCopy.remove.button}</Text>
+              </Pressable>
+            </>
+          ) : easyConnect ? (
+            <>
+              <NameField value={name} onChangeText={setName} />
+              <FormField
+                label={TailscaleFormCopy.fields.username}
+                value={username}
+                onChangeText={editField(setUsername)}
+                placeholder={TailscaleFormCopy.fields.usernamePlaceholder}
+                error={errors?.username}
+                mono
+              />
+              <PairingAddressField
+                value={tailcatToken}
+                onChangeText={editField(setTailcatToken)}
+                error={errors?.tailcatToken}
+              />
+              {advanced}
+              {test}
+              {errorBanner}
+            </>
+          ) : (
+            <>
+              <View style={styles.hero}>
+                <Text style={setupText.eyebrow}>{TailscaleFormCopy.eyebrow}</Text>
+                <Text style={setupText.titleLg}>{TailscaleFormCopy.title}</Text>
+                <Text style={setupText.lede}>{TailscaleFormCopy.lede}</Text>
               </View>
-            ) : null}
-            <NameField value={name} onChangeText={setName} hint={false} />
-            <Text style={formStyles.sectionLabel}>
-              {easyConnect ? EditMachineCopy.connectionLabel : EditMachineCopy.connectionTailscaleLabel}
-            </Text>
-            {easyConnect ? (
-              <View style={formStyles.rowsCard}>
-                <EasyConnectSummary
-                  machine={existing}
-                  connectedNow={connectedNow}
-                  onRePair={() => navigation.navigate('ScanCode', { rePairMachineId: existing.id })}
-                />
-                {showInSessionsRow}
-              </View>
-            ) : (
-              <>
-                {tailscaleFields}
-                <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
-              </>
-            )}
-            {advanced}
-            {test}
-            {errorBanner}
-            <View style={formStyles.divider} />
-            <Pressable
-              accessibilityRole="button"
-              style={styles.removeButton}
-              onPress={() => {
-                setRemoveError(null);
-                setRemoveOpen(true);
-              }}
-            >
-              <Text style={[styles.removeLabel, formStyles.danger]}>{EditMachineCopy.remove.button}</Text>
-            </Pressable>
-          </>
-        ) : easyConnect ? (
-          <>
-            <NameField value={name} onChangeText={setName} />
-            <FormField
-              label={TailscaleFormCopy.fields.username}
-              value={username}
-              onChangeText={editField(setUsername)}
-              placeholder={TailscaleFormCopy.fields.usernamePlaceholder}
-              error={errors?.username}
-              mono
-            />
-            <PairingAddressField
-              value={tailcatToken}
-              onChangeText={editField(setTailcatToken)}
-              error={errors?.tailcatToken}
-            />
-            {advanced}
-            {test}
-            {errorBanner}
-          </>
-        ) : (
-          <>
-            <View style={styles.hero}>
-              <Text style={setupText.eyebrow}>{TailscaleFormCopy.eyebrow}</Text>
-              <Text style={setupText.titleLg}>{TailscaleFormCopy.title}</Text>
-              <Text style={setupText.lede}>{TailscaleFormCopy.lede}</Text>
-            </View>
-            <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.prechecksLabel}</Text>
-            <PrecheckList onSelectOs={setHelpOs} currentOs={helpOs} />
-            <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.computerLabel}</Text>
-            <SetupButton label={TailscaleFormCopy.scanInstead} onPress={() => navigation.navigate('ScanCode')} />
-            <NameField value={name} onChangeText={setName} />
-            {tailscaleFields}
-            {advanced}
-            {test}
-            {errorBanner}
-          </>
-        )}
-      </ScrollView>
+              <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.prechecksLabel}</Text>
+              <PrecheckList onSelectOs={setHelpOs} currentOs={helpOs} />
+              <Text style={formStyles.sectionLabel}>{TailscaleFormCopy.computerLabel}</Text>
+              <SetupButton label={TailscaleFormCopy.scanInstead} onPress={() => navigation.navigate('ScanCode')} />
+              <NameField value={name} onChangeText={setName} />
+              {tailscaleFields}
+              {advanced}
+              {test}
+              {errorBanner}
+            </>
+          )}
+        </KeyboardAwareScrollView>
 
-      {existing === null ? (
-        <View style={formStyles.footer}>
-          <SetupButton
-            variant="primary"
-            large
-            label={TailscaleFormCopy.connect}
-            disabled={!canSave}
-            busy={saving}
-            onPress={() => void save()}
-          />
-        </View>
-      ) : null}
+        {existing === null ? (
+          <View style={formStyles.footer}>
+            <SetupButton
+              variant="primary"
+              large
+              label={TailscaleFormCopy.connect}
+              disabled={!canSave}
+              busy={saving}
+              onPress={() => void save()}
+            />
+          </View>
+        ) : null}
+      </KeyboardAvoidingContainer>
 
       <SshAccessHelpSheet os={helpOs} onClose={() => setHelpOs(null)} />
 

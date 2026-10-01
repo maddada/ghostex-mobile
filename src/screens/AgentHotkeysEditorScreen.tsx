@@ -3,7 +3,6 @@ import {
   Alert,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +23,7 @@ import {
 } from '../settings/agentHotkeys';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 import type { Appearance } from '../theme/useAppearance';
+import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 function makeHotkeyId(agentId: ConfigurableAgentId): string {
@@ -143,10 +143,7 @@ export default function AgentHotkeysEditorScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView
-        contentContainerStyle={styles.list}
-        keyboardShouldPersistTaps="handled"
-      >
+      <KeyboardAwareScrollView contentContainerStyle={styles.list}>
         <Text style={styles.status}>
           Configure the exact terminal shortcuts shown on each agent's key page. These keys never
           type slash commands.
@@ -275,7 +272,7 @@ export default function AgentHotkeysEditorScreen() {
             Restore {AGENT_NAMES[agentId]} defaults
           </Text>
         </Pressable>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal
         animationType="fade"

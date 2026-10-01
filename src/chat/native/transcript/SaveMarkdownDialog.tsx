@@ -18,11 +18,9 @@ import { File, Paths } from 'expo-file-system';
 import { useRef } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -30,6 +28,8 @@ import {
   View,
 } from 'react-native';
 
+import KeyboardAvoidingContainer from '../../../components/common/keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from '../../../components/common/keyboard/KeyboardAwareScrollView';
 import type { RustChat } from '../../rust/useRustChat';
 import { useEchoedText } from '../cards/useEchoedText';
 import { Glyph } from '../composer/icons';
@@ -143,7 +143,7 @@ export function SaveMarkdownDialog({ chat }: { chat: RustChat }) {
   );
   return (
     <Modal visible transparent animationType='fade' onRequestClose={cancel} statusBarTranslucent>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingContainer safeAreaTop style={styles.fill}>
         <View style={styles.backdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={saving ? undefined : cancel} accessibilityLabel='Cancel saving' />
           <View style={[styles.card, { backgroundColor: theme.light ? theme.background : '#191919' }]} accessibilityViewIsModal>
@@ -151,14 +151,14 @@ export function SaveMarkdownDialog({ chat }: { chat: RustChat }) {
               <Text style={[styles.title, { color: theme.foreground }]}>Save to Markdown</Text>
               <Text style={[styles.description, { color: theme.muted }]}>{DESCRIPTION}</Text>
             </View>
-            <ScrollView style={styles.fields} contentContainerStyle={styles.fieldsContent} keyboardShouldPersistTaps='handled'>
+            <KeyboardAwareScrollView style={styles.fields} contentContainerStyle={styles.fieldsContent}>
               {field('Folder', folder, setFolder, folderError, { prefix: '…/docs/' }, { selectOnFocus: false, autoFocus: false })}
               {field('File name', fileName, setFileName, nameError, { suffix: '.md' }, {
                 selectOnFocus: isTrue(state, 'suggested'),
                 autoFocus: true,
                 onSubmit: submit,
               })}
-            </ScrollView>
+            </KeyboardAwareScrollView>
             {/* Desktop stacks its footer below 640px wide, the save action on top. */}
             <View style={styles.footer}>
               {button('Save to md', submit, saving || unavailable, true, saving || unavailable)}
@@ -169,14 +169,15 @@ export function SaveMarkdownDialog({ chat }: { chat: RustChat }) {
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
-  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: 'rgba(0,0,0,0.65)' },
+  // The dim sits on the keyboard-avoiding layer so it also covers the strip the keyboard leaves while it slides away.
+  fill: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' },
+  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
   card: { width: 448, maxWidth: '100%', maxHeight: '100%', padding: 24, gap: 24, borderRadius: 14 },
   header: { gap: 6 },
   title: { fontSize: 16, lineHeight: 16, fontWeight: '500' },

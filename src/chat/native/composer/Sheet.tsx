@@ -6,9 +6,11 @@
  */
 
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useKeyboardTop } from '../../../components/common/keyboard/keyboardFrame';
+import KeyboardAvoidingContainer from '../../../components/common/keyboard/KeyboardAvoidingContainer';
 import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
@@ -31,6 +33,8 @@ export function Sheet({ visible, onClose, title, onBack, accessory, children, ma
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
+  // The navigation bar's inset is under the keyboard while it is open; the sheet sits right on top of it.
+  const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
   return (
     <Modal
       visible={visible}
@@ -40,9 +44,9 @@ export function Sheet({ visible, onClose, title, onBack, accessory, children, ma
       {...(onDismissed !== undefined ? { onDismiss: onDismissed } : {})}
       statusBarTranslucent
     >
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingContainer style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
-        <View style={[styles.panel, { maxHeight, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.panel, { maxHeight, paddingBottom: Math.max(bottomInset, 12) }]}>
           <View style={styles.grabber} />
           {title !== undefined || onBack !== undefined || accessory !== undefined ? (
             <View style={styles.titleRow}>
@@ -59,7 +63,7 @@ export function Sheet({ visible, onClose, title, onBack, accessory, children, ma
           ) : null}
           {children}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }

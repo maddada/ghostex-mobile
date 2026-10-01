@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import { CaretRightGlyph } from '../components/sessions/icons';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 
@@ -25,13 +25,13 @@ const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
 export function AddProjectShell({ children }: { children: ReactNode }): ReactElement {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
         {children}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

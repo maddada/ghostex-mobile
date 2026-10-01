@@ -6,18 +6,13 @@
  */
 
 import type { ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
+import { useKeyboardTop } from './keyboard/keyboardFrame';
+import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
 
 export type BottomSheetProps = {
   visible: boolean;
@@ -27,24 +22,19 @@ export type BottomSheetProps = {
 
 export default function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  // The navigation bar's inset is under the keyboard while it is open; the sheet sits right on top of it.
+  const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingContainer style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(bottomInset, 16) + 12 }]}>
           <View style={styles.grabber} />
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-            contentContainerStyle={styles.content}
-          >
+          <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.content}>
             {children}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }

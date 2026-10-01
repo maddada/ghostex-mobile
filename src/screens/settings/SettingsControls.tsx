@@ -4,10 +4,11 @@
  */
 
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SteppedSlider from '../../components/common/SteppedSlider';
+import KeyboardAwareScrollView from '../../components/common/keyboard/KeyboardAwareScrollView';
 import { useSettingsStore, type GhostexSettings } from '../../settings/store';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
@@ -191,10 +192,10 @@ export function SettingsScreenLayout({ intro, children }: { intro?: string; chil
   const styles = useSettingsStyles();
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps='handled'>
+      <KeyboardAwareScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps='handled'>
         {intro !== undefined ? <Text style={styles.intro}>{intro}</Text> : null}
         {children}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

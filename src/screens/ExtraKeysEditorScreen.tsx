@@ -36,6 +36,8 @@ import {
 } from '../settings/extraKeys';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 import type { Appearance } from '../theme/useAppearance';
+import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 const STATUS_LINE =
@@ -283,46 +285,48 @@ export default function ExtraKeysEditorScreen() {
         animationType="fade"
         onRequestClose={() => setAddTargetRow(null)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setAddTargetRow(null)}>
-          <Pressable style={styles.modalCard} onPress={() => undefined}>
-            <Text style={styles.modalTitle}>Add key</Text>
-            <ScrollView style={styles.modalScroll}>
-              <Text style={styles.modalSection}>Custom actions</Text>
-              {(
-                [
-                  { kind: 'text', label: 'Insert text…' },
-                  { kind: 'textEnter', label: 'Insert text and press Enter…' },
-                  { kind: 'shortcut', label: 'Shortcut with modifiers…' },
-                ] as { kind: CustomActionKind; label: string }[]
-              ).map((option) => (
-                <Pressable
-                  key={option.kind}
-                  style={styles.modalRow}
-                  onPress={() => setCustomDraft(emptyCustomDraft(option.kind))}
-                >
-                  <Text style={styles.modalRowLabel}>{option.label}</Text>
-                </Pressable>
-              ))}
-              <Text style={styles.modalSection}>Keys and modifiers</Text>
-              {extraKeyCatalog().map((entry) => (
-                <Pressable
-                  key={entry.id}
-                  style={styles.modalRow}
-                  onPress={() => {
-                    const row = addTargetRow;
-                    setAddTargetRow(null);
-                    if (row !== null) addItem(row, { type: 'builtin', id: entry.id });
-                  }}
-                >
-                  <Text style={styles.modalRowLabel}>
-                    {entry.label}
-                    {entry.isModifier ? '  (modifier)' : ''}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+        <KeyboardAvoidingContainer safeAreaTop style={styles.modalKeyboardFill}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setAddTargetRow(null)}>
+            <Pressable style={styles.modalCard} onPress={() => undefined}>
+              <Text style={styles.modalTitle}>Add key</Text>
+              <ScrollView style={styles.modalScroll}>
+                <Text style={styles.modalSection}>Custom actions</Text>
+                {(
+                  [
+                    { kind: 'text', label: 'Insert text…' },
+                    { kind: 'textEnter', label: 'Insert text and press Enter…' },
+                    { kind: 'shortcut', label: 'Shortcut with modifiers…' },
+                  ] as { kind: CustomActionKind; label: string }[]
+                ).map((option) => (
+                  <Pressable
+                    key={option.kind}
+                    style={styles.modalRow}
+                    onPress={() => setCustomDraft(emptyCustomDraft(option.kind))}
+                  >
+                    <Text style={styles.modalRowLabel}>{option.label}</Text>
+                  </Pressable>
+                ))}
+                <Text style={styles.modalSection}>Keys and modifiers</Text>
+                {extraKeyCatalog().map((entry) => (
+                  <Pressable
+                    key={entry.id}
+                    style={styles.modalRow}
+                    onPress={() => {
+                      const row = addTargetRow;
+                      setAddTargetRow(null);
+                      if (row !== null) addItem(row, { type: 'builtin', id: entry.id });
+                    }}
+                  >
+                    <Text style={styles.modalRowLabel}>
+                      {entry.label}
+                      {entry.isModifier ? '  (modifier)' : ''}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingContainer>
       </Modal>
 
       {/* Custom-action editor */}
@@ -332,83 +336,85 @@ export default function ExtraKeysEditorScreen() {
         animationType="fade"
         onRequestClose={() => setCustomDraft(null)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setCustomDraft(null)}>
-          <Pressable style={styles.modalCard} onPress={() => undefined}>
-            {customDraft !== null && (
-              <>
-                <Text style={styles.modalTitle}>
-                  {customDraft.kind === 'shortcut'
-                    ? 'Shortcut with modifiers'
-                    : customDraft.kind === 'textEnter'
-                      ? 'Insert text and press Enter'
-                      : 'Insert text'}
-                </Text>
-                <Text style={styles.fieldLabel}>Key label</Text>
-                <TextInput
-                  style={styles.input}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  maxLength={EXTRA_KEY_LABEL_MAX_LENGTH}
-                  placeholder="e.g. GITST"
-                  placeholderTextColor={appearance.muted}
-                  value={customDraft.label}
-                  onChangeText={(label) => setCustomDraft({ ...customDraft, label })}
-                />
-                {customDraft.kind === 'shortcut' ? (
-                  <>
-                    <Text style={styles.fieldLabel}>Key (single character or key name)</Text>
-                    <TextInput
-                      style={styles.input}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      placeholder="e.g. c, escape, f5"
-                      placeholderTextColor={appearance.muted}
-                      value={customDraft.shortcutKey}
-                      onChangeText={(shortcutKey) => setCustomDraft({ ...customDraft, shortcutKey })}
-                    />
-                    {(['ctrl', 'alt', 'shift'] as const).map((modifier) => (
-                      <View key={modifier} style={styles.modifierRow}>
-                        <Text style={styles.modalRowLabel}>{modifier.toUpperCase()}</Text>
-                        <Switch
-                          value={customDraft[modifier]}
-                          onValueChange={(value) =>
-                            setCustomDraft({ ...customDraft, [modifier]: value })
-                          }
-                          trackColor={{ false: appearance.control, true: GhostexPalette.ACCENT }}
-                          thumbColor={customDraft[modifier] ? appearance.foreground : appearance.controlThumb}
-                          ios_backgroundColor={appearance.control}
-                        />
-                      </View>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.fieldLabel}>Text to insert</Text>
-                    <TextInput
-                      style={[styles.input, styles.inputMultiline]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      multiline
-                      maxLength={EXTRA_KEY_TEXT_MAX_LENGTH}
-                      placeholder="e.g. git status"
-                      placeholderTextColor={appearance.muted}
-                      value={customDraft.text}
-                      onChangeText={(text) => setCustomDraft({ ...customDraft, text })}
-                    />
-                  </>
-                )}
-                <View style={styles.modalActions}>
-                  <Pressable style={styles.secondaryButton} onPress={() => setCustomDraft(null)}>
-                    <Text style={styles.secondaryButtonLabel}>Cancel</Text>
-                  </Pressable>
-                  <Pressable style={styles.primaryButton} onPress={submitCustomDraft}>
-                    <Text style={styles.primaryButtonLabel}>Add key</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
+        <KeyboardAvoidingContainer safeAreaTop style={styles.modalKeyboardFill}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setCustomDraft(null)}>
+            <Pressable style={styles.modalCard} onPress={() => undefined}>
+              {customDraft !== null && (
+                <KeyboardAwareScrollView style={styles.modalScroll} contentContainerStyle={styles.modalForm}>
+                  <Text style={styles.modalTitle}>
+                    {customDraft.kind === 'shortcut'
+                      ? 'Shortcut with modifiers'
+                      : customDraft.kind === 'textEnter'
+                        ? 'Insert text and press Enter'
+                        : 'Insert text'}
+                  </Text>
+                  <Text style={styles.fieldLabel}>Key label</Text>
+                  <TextInput
+                    style={styles.input}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={EXTRA_KEY_LABEL_MAX_LENGTH}
+                    placeholder="e.g. GITST"
+                    placeholderTextColor={appearance.muted}
+                    value={customDraft.label}
+                    onChangeText={(label) => setCustomDraft({ ...customDraft, label })}
+                  />
+                  {customDraft.kind === 'shortcut' ? (
+                    <>
+                      <Text style={styles.fieldLabel}>Key (single character or key name)</Text>
+                      <TextInput
+                        style={styles.input}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        placeholder="e.g. c, escape, f5"
+                        placeholderTextColor={appearance.muted}
+                        value={customDraft.shortcutKey}
+                        onChangeText={(shortcutKey) => setCustomDraft({ ...customDraft, shortcutKey })}
+                      />
+                      {(['ctrl', 'alt', 'shift'] as const).map((modifier) => (
+                        <View key={modifier} style={styles.modifierRow}>
+                          <Text style={styles.modalRowLabel}>{modifier.toUpperCase()}</Text>
+                          <Switch
+                            value={customDraft[modifier]}
+                            onValueChange={(value) =>
+                              setCustomDraft({ ...customDraft, [modifier]: value })
+                            }
+                            trackColor={{ false: appearance.control, true: GhostexPalette.ACCENT }}
+                            thumbColor={customDraft[modifier] ? appearance.foreground : appearance.controlThumb}
+                            ios_backgroundColor={appearance.control}
+                          />
+                        </View>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.fieldLabel}>Text to insert</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputMultiline]}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        multiline
+                        maxLength={EXTRA_KEY_TEXT_MAX_LENGTH}
+                        placeholder="e.g. git status"
+                        placeholderTextColor={appearance.muted}
+                        value={customDraft.text}
+                        onChangeText={(text) => setCustomDraft({ ...customDraft, text })}
+                      />
+                    </>
+                  )}
+                  <View style={styles.modalActions}>
+                    <Pressable style={styles.secondaryButton} onPress={() => setCustomDraft(null)}>
+                      <Text style={styles.secondaryButtonLabel}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={[styles.primaryButton, styles.modalPrimaryButton]} onPress={submitCustomDraft}>
+                      <Text style={styles.primaryButtonLabel}>Add key</Text>
+                    </Pressable>
+                  </View>
+                </KeyboardAwareScrollView>
+              )}
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingContainer>
       </Modal>
     </SafeAreaView>
   );
@@ -534,9 +540,13 @@ function createStyles(appearance: Appearance) {
       color: appearance.foreground,
       fontSize: 14,
     },
-    modalBackdrop: {
+    // The dim sits on the keyboard-avoiding layer so it also covers the strip the keyboard leaves while it slides away.
+    modalKeyboardFill: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    modalBackdrop: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24,
@@ -553,6 +563,9 @@ function createStyles(appearance: Appearance) {
     },
     modalScroll: {
       flexGrow: 0,
+    },
+    modalForm: {
+      gap: 8,
     },
     modalTitle: {
       color: appearance.foreground,
@@ -610,6 +623,9 @@ function createStyles(appearance: Appearance) {
       justifyContent: 'flex-end',
       gap: 8,
       marginTop: 12,
+    },
+    modalPrimaryButton: {
+      paddingHorizontal: 16,
     },
   });
 }

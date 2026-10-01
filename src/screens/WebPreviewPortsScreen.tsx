@@ -10,10 +10,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PortSections } from './web-preview/PortSections';
+import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import { WebPreviewCopy } from '../copy';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -153,7 +154,7 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.screen} edges={['bottom']}>
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.pickerContent}
         keyboardShouldPersistTaps='handled'
         keyboardDismissMode='on-drag'
@@ -248,7 +249,7 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
         ) : null}
         {detailsError ? <Text style={styles.hint}>{detailsError}</Text> : null}
         {listedPorts.length > 0 ? <PortSections ports={listedPorts} onOpen={openPort} /> : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

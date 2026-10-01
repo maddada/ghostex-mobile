@@ -14,6 +14,9 @@ export const formStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: SetupPalette.PAGE,
   },
+  keyboardArea: {
+    flex: 1,
+  },
   scroll: {
     paddingHorizontal: 16,
     paddingTop: 12,

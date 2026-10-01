@@ -8,6 +8,8 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
+import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
 
 export type PromptDialogProps = {
   visible: boolean;
@@ -59,59 +61,71 @@ export default function PromptDialog({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-          <Text style={styles.title}>{title}</Text>
-          {body !== undefined && body.length > 0 ? <Text style={styles.body}>{body}</Text> : null}
-          <TextInput
-            style={[styles.input, multiline ? styles.inputMultiline : null]}
-            placeholder={placeholder}
-            placeholderTextColor={GhostexPalette.MUTED}
-            autoCapitalize={multiline ? 'sentences' : 'none'}
-            autoCorrect={multiline}
-            multiline={multiline}
-            textAlignVertical={multiline ? 'top' : 'center'}
-            secureTextEntry={secureTextEntry}
-            value={value}
-            onChangeText={setValue}
-          />
-          {checkboxLabel !== undefined ? (
-            <Pressable style={styles.checkboxRow} onPress={() => setCheckboxValue(!checkboxValue)}>
-              <Switch value={checkboxValue} onValueChange={setCheckboxValue} />
-              <Text style={styles.checkboxLabel}>{checkboxLabel}</Text>
-            </Pressable>
-          ) : null}
-          {error !== null && error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
-          <View style={styles.buttonRow}>
-            <Pressable accessibilityRole="button" style={styles.cancelButton} onPress={onCancel}>
-              <Text style={styles.cancelLabel}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              style={styles.confirmButton}
-              onPress={() => onSubmit(value, checkboxValue)}
-            >
-              <Text style={styles.confirmLabel}>{confirmLabel}</Text>
-            </Pressable>
-          </View>
+      <KeyboardAvoidingContainer safeAreaTop style={styles.keyboardFill}>
+        <Pressable style={styles.backdrop} onPress={onCancel}>
+          <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
+            <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.cardContent}>
+              <Text style={styles.title}>{title}</Text>
+              {body !== undefined && body.length > 0 ? <Text style={styles.body}>{body}</Text> : null}
+              <TextInput
+                style={[styles.input, multiline ? styles.inputMultiline : null]}
+                placeholder={placeholder}
+                placeholderTextColor={GhostexPalette.MUTED}
+                autoCapitalize={multiline ? 'sentences' : 'none'}
+                autoCorrect={multiline}
+                multiline={multiline}
+                textAlignVertical={multiline ? 'top' : 'center'}
+                secureTextEntry={secureTextEntry}
+                value={value}
+                onChangeText={setValue}
+              />
+              {checkboxLabel !== undefined ? (
+                <Pressable style={styles.checkboxRow} onPress={() => setCheckboxValue(!checkboxValue)}>
+                  <Switch value={checkboxValue} onValueChange={setCheckboxValue} />
+                  <Text style={styles.checkboxLabel}>{checkboxLabel}</Text>
+                </Pressable>
+              ) : null}
+              {error !== null && error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" style={styles.cancelButton} onPress={onCancel}>
+                  <Text style={styles.cancelLabel}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.confirmButton}
+                  onPress={() => onSubmit(value, checkboxValue)}
+                >
+                  <Text style={styles.confirmLabel}>{confirmLabel}</Text>
+                </Pressable>
+              </View>
+            </KeyboardAwareScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingContainer>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  // The dim sits on the keyboard-avoiding layer so it also covers the strip the keyboard leaves while it slides away.
+  keyboardFill: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  backdrop: {
+    flex: 1,
     justifyContent: 'center',
     padding: 24,
   },
   card: {
+    maxHeight: '100%',
     backgroundColor: GhostexPalette.BACKGROUND,
     borderRadius: 12,
     borderWidth: GhostexStrokeWidth,
     borderColor: GhostexPalette.BORDER,
+    overflow: 'hidden',
+  },
+  cardContent: {
     padding: 16,
   },
   title: {
