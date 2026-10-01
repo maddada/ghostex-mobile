@@ -16,6 +16,7 @@ import { arr, obj, str, type JsonRecord } from '../json';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from '../theme';
 import { InlineImage } from '../Images';
 import { openTranscriptMenu } from '../transcriptMenuStore';
+import { highlightText, useOwnFind, useRowFind, type RowFind } from '../searchHighlight';
 import { inlineText, parseMarkdown, type Block, type FenceHeader, type Inline } from './parse';
 import { fitTableColumns } from './tableLayout';
 
@@ -29,6 +30,8 @@ type InlineContext = {
   longPressLink: ((href: string) => void) | undefined;
   /** Whether prose and code take the platform's own text selection (see `TranscriptMenu.tsx`). */
   selectable: boolean;
+  /** Transcript search's word highlight for the row this text is in (`searchHighlight.tsx`). */
+  find: RowFind | null;
 };
 
 function referenceMap(references: unknown): Map<string, Reference> {
@@ -65,7 +68,7 @@ function renderInlines(inlines: readonly Inline[], context: InlineContext, keyPr
     const key = `${keyPrefix}.${index}`;
     switch (inline.t) {
       case 'text':
-        return style === undefined ? inline.v : <Text key={key} style={style}>{inline.v}</Text>;
+        return highlightText(inline.v, context.find, key, style);
       case 'br':
         return '\n';
       case 'code':
@@ -78,7 +81,9 @@ function renderInlines(inlines: readonly Inline[], context: InlineContext, keyPr
               { backgroundColor: context.theme.inlineCodeSurface, color: context.theme.primary },
             ]}
           >
-            {`\u00a0${inline.v}\u00a0`}
+            {'\u00a0'}
+            {highlightText(inline.v, context.find, `${key}.code`)}
+            {'\u00a0'}
           </Text>
         );
       case 'strong':
@@ -169,6 +174,7 @@ const HEADING_LINE = 1.3;
 
 function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t: 'code' }>; blockKey: string; selectable: boolean }) {
   const { theme, dispatch } = useTranscriptEnv();
+  const [find, findDone] = useOwnFind(useRowFind());
   const [wrapped, setWrapped] = useState(false);
   const [copied, setCopied] = useState(false);
   const header: FenceHeader | null = block.header;
@@ -181,9 +187,10 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
   const separator = header === null ? -1 : Math.max(header.label.lastIndexOf('/'), header.label.lastIndexOf('\\'));
   const body = (
     <Text selectable={selectable} style={[styles.codeText, { color: theme.primary }]}>
-      {block.text}
+      {highlightText(block.text, find, `${blockKey}.code`)}
     </Text>
   );
+  findDone();
   return (
     <View style={[styles.codeBlock, { backgroundColor: theme.light ? '#fafafa' : '#171717', borderColor: theme.border }]} key={blockKey}>
       <View style={[styles.codeHeader, { borderBottomColor: theme.border }]}>
@@ -233,8 +240,13 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
   );
 }
 
-function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; context: InlineContext }) {
+function Table({ block, context: rowContext }: { block: Extract<Block, { t: 'table' }>; context: InlineContext }) {
   const { theme } = useTranscriptEnv();
+  // The table renders again on its own once its columns are measured; its occurrences keep their
+  // numbers then (`useOwnFind`), and the invisible measuring copy marks none.
+  const [find, findDone] = useOwnFind(rowContext.find);
+  const context = { ...rowContext, find };
+  const measureContext = { ...rowContext, find: null };
   const { width } = useWindowDimensions();
   const [collapsed, setCollapsed] = useState(false);
   // The table fits the transcript's width (`fitTableColumns`). React Native has no table layout,
@@ -283,16 +295,16 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
     return [styles.tableCell, { width: columns[column] }, align === 'right' ? styles.right : align === 'center' ? styles.center : null];
   };
   const lines = collapsed ? 1 : undefined;
-  return (
+  const table = (
     <View style={styles.table}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         <View style={styles.tableMeasure} pointerEvents='none' accessibilityElementsHidden importantForAccessibility='no-hide-descendants'>
           {block.head.map((cell, column) => (
             <View key={column} style={styles.tableMeasureColumn} onLayout={(event) => report('max', column, event.nativeEvent.layout.width)}>
-              <Text style={[styles.tableText, styles.strong]}>{renderInlines(cell, context, `mh${column}`)}</Text>
+              <Text style={[styles.tableText, styles.strong]}>{renderInlines(cell, measureContext, `mh${column}`)}</Text>
               {block.rows.map((row, rowIndex) => (
                 <Text key={rowIndex} style={styles.tableText}>
-                  {renderInlines(row[column] ?? [], context, `mr${rowIndex}.${column}`)}
+                  {renderInlines(row[column] ?? [], measureContext, `mr${rowIndex}.${column}`)}
                 </Text>
               ))}
             </View>
@@ -343,6 +355,8 @@ function Table({ block, context }: { block: Extract<Block, { t: 'table' }>; cont
       </View>
     </View>
   );
+  findDone();
+  return table;
 }
 
 function TableAction({ label, glyph, text, theme, onPress }: { label: string; glyph?: GlyphName; text?: string; theme: TranscriptTheme; onPress(): void }) {
@@ -519,6 +533,7 @@ export type MarkdownProps = {
 
 export const Markdown = memo(function Markdown({ text, references, color, breaks = false, selectable = true }: MarkdownProps) {
   const { theme, dispatch, main } = useTranscriptEnv();
+  const find = useRowFind();
   const blocks = useMemo(() => parseMarkdown(text, { breaks }), [breaks, text]);
   const referencesMap = useMemo(() => referenceMap(references), [references]);
   const openLink = useCallback(
@@ -532,8 +547,9 @@ export const Markdown = memo(function Markdown({ text, references, color, breaks
       openLink,
       longPressLink: main ? (href: string) => openTranscriptMenu({ href }) : undefined,
       selectable,
+      find,
     }),
-    [main, openLink, referencesMap, selectable, theme]
+    [find, main, openLink, referencesMap, selectable, theme]
   );
   return (
     <View style={styles.root}>

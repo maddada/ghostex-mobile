@@ -35,6 +35,7 @@ import {
 import { arr, num, obj, str } from './json';
 import { useTranscriptTheme } from './theme';
 import { TranscriptItemView } from './TranscriptItemRow';
+import { RowFindContext, type RowFind } from './searchHighlight';
 
 /**
  * `scroll-bottom.json`: the pill's look and how far from the bottom it appears.
@@ -165,6 +166,8 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
     [searchKey] // eslint-disable-line react-hooks/exhaustive-deps
   );
   const activeItem = num(search, 'activeItem');
+  const activeInRow = num(search, 'activeInRow');
+  const searchNeedle = str(search, 'query').trim().toLowerCase();
   const searchRevision = num(search, 'revision');
   const searchOpen = search !== null;
   const scrolledRevision = useRef<number | null>(null);
@@ -256,10 +259,12 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
         first={row.index === 0}
         last={row.index === lastIndex}
         tint={searchItems.has(row.index) ? (activeItem === row.index ? theme.searchActive : theme.searchHit) : null}
+        findNeedle={searchItems.has(row.index) ? searchNeedle : ''}
+        findActive={activeItem === row.index ? activeInRow : null}
         widthPercent={rowWidth}
       />
     ),
-    [activeItem, lastIndex, rowWidth, searchItems, theme]
+    [activeInRow, activeItem, lastIndex, rowWidth, searchItems, searchNeedle, theme]
   );
 
   const keyExtractor = useCallback((row: Row) => transcriptItemKey(row.item), []);
@@ -383,15 +388,34 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   first,
   last,
   tint,
+  findNeedle,
+  findActive,
   widthPercent,
 }: {
   item: TranscriptItem;
   first: boolean;
   last: boolean;
   tint: string | null;
+  /** Transcript search's query, lowercase, when this row holds a match; empty otherwise. */
+  findNeedle: string;
+  /** Which occurrence in this row is the selected one (`activeInRow`), when it is here. */
+  findActive: number | null;
   /** The custom transcript width, as a share of the pane; null keeps the 768pt column. */
   widthPercent: number | null;
 }) {
+  const theme = useTranscriptTheme();
+  // A fresh counter each time the row renders: its text numbers the occurrences in reading order
+  // (`searchHighlight.tsx`).
+  const find: RowFind | null =
+    findNeedle.length === 0
+      ? null
+      : {
+          needle: findNeedle,
+          background: theme.searchMatch,
+          activeBackground: theme.searchMatchActive,
+          active: findActive,
+          counter: { next: 0 },
+        };
   return (
     <View style={[styles.rowOuter, first && styles.rowFirst, last && styles.rowLast]}>
       <View
@@ -401,7 +425,9 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
           tint !== null && { backgroundColor: tint, borderRadius: 8 },
         ]}
       >
-        <TranscriptItemView item={item} />
+        <RowFindContext.Provider value={find}>
+          <TranscriptItemView item={item} />
+        </RowFindContext.Provider>
       </View>
     </View>
   );

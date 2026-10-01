@@ -43,6 +43,9 @@ export type TranscriptTheme = {
   /** Search hits: every matched row, and the selected one. */
   searchHit: string;
   searchActive: string;
+  /** Behind each occurrence of the query in a matched row's text, and behind the selected one. */
+  searchMatch: string;
+  searchMatchActive: string;
 
   /** Hairlines of choice rows and card buttons (`control_border`), and of inputs (`input_border`). */
   controlBorder: string;
@@ -134,6 +137,8 @@ const DARK: TranscriptTheme = {
   pressed: 'rgba(252,252,252,0.05)',
   searchHit: 'rgba(229,229,229,0.06)',
   searchActive: 'rgba(229,229,229,0.16)',
+  searchMatch: 'rgba(250,204,21,0.3)',
+  searchMatchActive: 'rgba(249,115,22,0.6)',
   controlBorder: 'rgba(255,255,255,0.06)',
   inputBorder: 'rgba(255,255,255,0.08)',
   cardPanel: '#1f1f1f',
@@ -198,6 +203,8 @@ const LIGHT: TranscriptTheme = {
   pressed: 'rgba(0,0,0,0.04)',
   searchHit: 'rgba(24,24,27,0.06)',
   searchActive: 'rgba(24,24,27,0.16)',
+  searchMatch: 'rgba(250,204,21,0.45)',
+  searchMatchActive: 'rgba(249,115,22,0.45)',
   controlBorder: '#e5e5e5',
   inputBorder: '#e5e5e5',
   cardPanel: '#fefefe',
