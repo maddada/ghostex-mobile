@@ -156,12 +156,27 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
     <View style={styles.message} accessibilityLabel={`${message.role} message: ${body.slice(0, 2000)}`}>
       <ImageRow images={message.images} user={false} />
       {lead}
-      {!hideFileChanges && arr(message.files).length > 0 ? <FileChangeStack stackId={id} files={message.files} /> : null}
+      {!hideFileChanges && arr(message.files).length > 0 ? <MessageFiles message={message} /> : null}
       {!toolsRendered ? <ToolRows message={message} /> : null}
       {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. */}
       {!inWorkFold ? <QuestionExchangeCards exchanges={message.questions} /> : null}
       {!inWorkFold ? <SentAgentMessageCards cards={message.sentMessages} /> : null}
       {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} /> : null}
+    </View>
+  );
+}
+
+/** A message's file cards; Simple mode folds them behind "Edited N files" (desktop `file_change_card.rs`). */
+function MessageFiles({ message }: { message: ProjectedMessage }) {
+  const { simple } = useTranscriptEnv();
+  const { disclosures } = useNativeChatUi();
+  const [open, toggle] = useDisclosure(disclosures, `files:${message.id}`);
+  const stack = <FileChangeStack stackId={message.id} files={message.files} />;
+  if (!simple) return stack;
+  return (
+    <View style={styles.message}>
+      <DisclosureHeading label={str(message, 'simpleFileLabel')} open={open} onToggle={toggle} />
+      {open ? stack : null}
     </View>
   );
 }

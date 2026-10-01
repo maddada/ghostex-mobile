@@ -1,7 +1,8 @@
 /**
  * The image tiles above the input (`attachment_previews.rs`): one 48pt thumbnail per image
  * reference in the draft, with its remove button (always shown: a phone has no hover), plus a
- * spinner tile per upload still in flight (`pendingAttachments`).
+ * spinner tile per upload still in flight (`pendingAttachments`). Tapping a tile opens the image
+ * viewer, as a click does on desktop.
  */
 
 import { useEffect, useRef } from 'react';
@@ -9,6 +10,7 @@ import { ActivityIndicator, Image, Pressable, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatImageState } from '../../rust/host';
+import { openChatImageViewer, type ChatImage } from '../cards';
 import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import type { ComposerReference } from './references';
@@ -40,13 +42,25 @@ export function AttachmentPreviews({
     }
   }, [tiles, images, dispatch]);
   if (tiles.length === 0 && pending === 0) return null;
+  const viewerImages: ChatImage[] = tiles.map((tile) => ({
+    transport: 'read',
+    path: tile.path,
+    label: tile.label,
+    copyPath: tile.path,
+    fileName: tile.path.replace(/^.*[\\/]/u, ''),
+  }));
   return (
     <View style={styles.row}>
-      {tiles.map((tile) => {
+      {tiles.map((tile, index) => {
         const image = images[tile.path];
         return (
           <View key={`${tile.start}:${tile.path}`} style={styles.tileWrap}>
-            <View style={[styles.tile, active === tile.path ? styles.tileActive : null]} accessibilityLabel={tile.label}>
+            <Pressable
+              onPress={() => openChatImageViewer(viewerImages, index)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`View ${tile.label}`}
+              style={[styles.tile, active === tile.path ? styles.tileActive : null]}
+            >
               {image?.status === 'loaded' ? (
                 <Image source={{ uri: `data:${image.mediaType};base64,${image.base64Data}` }} style={styles.image} resizeMode="cover" />
               ) : image === undefined ? (
@@ -54,7 +68,7 @@ export function AttachmentPreviews({
               ) : (
                 <Glyph name="photo" size={18} color={P.muted} />
               )}
-            </View>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Remove image"

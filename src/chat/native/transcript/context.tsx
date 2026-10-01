@@ -62,6 +62,11 @@ export type TranscriptEnv = {
   theme: TranscriptTheme;
   /** Verbose mode opens every work fold by default (`verboseOverride` or the setting). */
   verbose: boolean;
+  /**
+   * Simple mode (`sessionChatSimpleMode`): tool runs and a message's file edits fold behind a
+   * count, and tool rows hide their command preview (desktop `ChatAppearance::simple`).
+   */
+  simple: boolean;
   /** File edit previews: file cards show their first lines without a tap. */
   filePreviews: boolean;
   /** This session's own transcript (not the subagent viewer): only it offers rewind. */

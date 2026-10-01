@@ -9,6 +9,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { ChatDocument } from '../../rust/document';
 import type { UserAction } from '../../rust/actions';
 import type { RustChat } from '../../rust/useRustChat';
+import { useSettingsStore } from '../../../settings/store';
 import { Glyph } from './icons';
 import { arr, asJson, isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -197,9 +198,9 @@ function ThreadRow({ row, chat }: { row: unknown; chat: RustChat }) {
   );
 }
 
-/** The fleet card's fold: the user's last choice, else expanded (the phone has no Simple mode). */
-function fleetOpen(strip: Record<string, unknown>): boolean {
-  return typeof strip.openOverride === 'boolean' ? strip.openOverride : true;
+/** The fleet card's fold: the user's last choice, else expanded unless Simple mode (desktop `agent_fleet.rs`). */
+function fleetOpen(strip: Record<string, unknown>, simple: boolean): boolean {
+  return typeof strip.openOverride === 'boolean' ? strip.openOverride : !simple;
 }
 
 /** The `openSubagent` action a fleet row's links send; a self row is plain text. */
@@ -221,10 +222,11 @@ export function subagentOpenAction(target: unknown): UserAction | null {
 
 export function AgentFleetStrip({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const styles = useStyles();
+  const simple = useSettingsStore((store) => store.settings.sessionChatSimpleMode);
   const strip = obj(document.agentFleetStrip);
   if (strip === null) return null;
   const stale = isTrue(strip, 'stale');
-  const open = fleetOpen(strip);
+  const open = fleetOpen(strip, simple);
   const rows = arr(strip.rows);
   // Every task starts at the same x whatever the names above it are (desktop measures the widest
   // label; this estimates it from the 12pt medium glyph width), capped at 140pt.

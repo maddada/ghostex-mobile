@@ -61,7 +61,7 @@ function SummaryRow({ item }: { item: SummaryItem }) {
 }
 
 function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
-  const { theme, verbose, dispatch } = useTranscriptEnv();
+  const { theme, verbose, simple, dispatch } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
   const key = `work:${item.id}`;
@@ -94,7 +94,7 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
       <CompletedFilesFold
         itemId={item.id}
         files={item.files}
-        label={item.filesLabel}
+        label={simple ? item.simpleFilesLabel : item.filesLabel}
         deferred={item.deferred}
         notice={deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
       />

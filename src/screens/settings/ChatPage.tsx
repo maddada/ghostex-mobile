@@ -46,6 +46,8 @@ export default function ChatPage() {
       <Caption>Changes chat content only; the rest of the app keeps its dark theme.</Caption>
 
       <SectionHeader title='Messages' />
+      <SettingToggle settingKey='sessionChatSimpleMode' label='Simple mode' />
+      <Caption>Simplify all chats: hide tool command previews and group file edits behind an expandable file count.</Caption>
       <SettingToggle settingKey='sessionChatFileEditPreviews' label='Show file edit previews' />
       <Caption>Show the first seven code lines instead of only the path and change counts.</Caption>
       <SettingToggle settingKey='sessionChatVerboseMode' label='Verbose Mode' />

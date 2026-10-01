@@ -70,7 +70,7 @@ export function SideAnswer({ dispatch, markdown, references }: { dispatch: RustC
   const theme = useTranscriptTheme();
   const [expanded, setExpanded] = useState(false);
   const env = useMemo<TranscriptEnv>(
-    () => ({ dispatch, theme, verbose: false, filePreviews: false, main: false }),
+    () => ({ dispatch, theme, verbose: false, simple: false, filePreviews: false, main: false }),
     [dispatch, theme]
   );
   const lines = estimatedLines(markdown);

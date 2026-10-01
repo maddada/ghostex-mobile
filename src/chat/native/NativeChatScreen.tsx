@@ -32,6 +32,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { webPreviewTargetForUrl } from '../../webPreview/routing';
 import { useOpenMachineLink } from '../../webPreview/useOpenMachineLink';
 import type { ChatViewRequest } from '../rust/effects';
+import { sessionChatRpc } from '../rust/transport';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
 import GpuiTranscript from '../gpui/GpuiTranscript';
 import { useGpuiChat } from '../gpui/useGpuiChat';
@@ -41,6 +42,7 @@ import { ForkBranchBadge, NativeChatCards, NativeChatOverlays, questionReplacesC
 import { NativeComposer } from './composer';
 import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
 import type { MenuRow } from './composer/MenuSheet';
+import { SavedPromptsSheet } from './composer/SavedPromptsSheet';
 import { openForkBranch } from './sessionShell';
 import {
   NativeChatUiProvider,
@@ -129,23 +131,42 @@ export default function NativeChatScreen({
 
   // The notice card's Switch account opens the composer's Accounts & limits panel.
   const [accountsRequestId, setAccountsRequestId] = useState(0);
+  // The Stash button's Saved prompts (empty draft, or a long press), like desktop's Stashed Prompts modal.
+  const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
   // More actions > Handoff / Export opens the chat's own dialog, the one the model menu's handoff opens.
   const exportCount = useRef(0);
   const hostAction = useCallback(
     (action: string, params: Record<string, unknown> = {}) => {
       if (action === 'terminalView' || action === 'switchToTerminal') onSwitchToTerminal();
       else if (action === 'switchAccount' && Object.keys(params).length === 0) setAccountsRequestId((current) => current + 1);
+      else if (action === 'switchAccount') {
+        // A switchable-agent row (agents without the Accounts panel): rewrite the session's agent,
+        // then Full Reload so it resumes under the new one, as desktop's `switchSessionAgent` does.
+        const agentId = typeof params.agentId === 'string' ? params.agentId : '';
+        if (agentId.length === 0) return;
+        void sessionChatRpc(machine, 'switchSessionAgent', { projectId, sessionId, agentId }).then((answer) => {
+          if (answer.error === null) {
+            if (hostActions.includes('fullReload')) onHostAction?.('fullReload', {});
+            return;
+          }
+          show(answer.error.message, true, 'Switch Account failed');
+        });
+      }
       else if (action === 'exportTranscript') {
         exportCount.current += 1;
         openHandoff({ id: -exportCount.current, target: null });
+      } else if (action === 'stashedPrompts') {
+        // Stash folded into More actions opens this from that sheet, which iOS must finish closing first.
+        if (Platform.OS === 'ios') setTimeout(() => setSavedPromptsOpen(true), HANDOFF_OPEN_DELAY_MS);
+        else setSavedPromptsOpen(true);
       } else if (hostActions.includes(action)) onHostAction?.(action, params);
     },
-    [hostActions, onHostAction, onSwitchToTerminal, openHandoff]
+    [hostActions, machine, onHostAction, onSwitchToTerminal, openHandoff, projectId, sessionId, show]
   );
   const composerHostActions = useMemo(
     () => [
       'terminalView',
-      ...(sessionId.length > 0 && projectId.length > 0 ? ['exportTranscript'] : []),
+      ...(sessionId.length > 0 && projectId.length > 0 ? ['exportTranscript', 'stashedPrompts', 'switchAccount'] : []),
       ...hostActions.filter((action) => action !== 'exportTranscript'),
     ],
     [hostActions, projectId, sessionId]
@@ -198,6 +219,15 @@ export default function NativeChatScreen({
         <RewindDialog chat={chat} />
         <SaveMarkdownDialog chat={chat} />
         {gpui ? null : <TranscriptMenuSheet chat={chat} host={menuHost} />}
+        <SavedPromptsSheet
+          visible={savedPromptsOpen}
+          machine={machine}
+          projectId={projectId}
+          sessionId={sessionId}
+          onClose={() => setSavedPromptsOpen(false)}
+          onInsert={(content) => chat.composer?.replace(content)}
+          onChanged={() => chat.dispatch({ type: 'refreshComposerChrome', sessionId })}
+        />
         <HandoffSheet
           request={handoff}
           machine={machine}

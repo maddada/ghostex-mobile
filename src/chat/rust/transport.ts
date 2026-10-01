@@ -121,14 +121,17 @@ export async function sessionChatRpc(
       };
     }
     const detail = `${exec.stderr}`.trim() || `${exec.stdout}`.trim();
-    // An older Ghostex has no `session-chat-rpc` verb and prints its usage instead.
+    // An older Ghostex has no `session-chat-rpc` verb, or not this method, and prints its usage instead.
     const unknownVerb = /Unknown command: session-chat-rpc/u.test(detail);
+    const unknownMethod = /Unknown session chat method/u.test(detail);
     return {
       error: {
-        code: unknownVerb ? 'unsupportedClient' : null,
+        code: unknownVerb || unknownMethod ? 'unsupportedClient' : null,
         message: unknownVerb
           ? 'Update Ghostex on this computer to use the new chat engine.'
-          : detail.split('\n').slice(-1)[0] || 'The computer did not answer the chat request.',
+          : unknownMethod
+            ? 'Update Ghostex on this computer to use this from the phone.'
+            : detail.split('\n').slice(-1)[0] || 'The computer did not answer the chat request.',
         endpoint,
       },
     };

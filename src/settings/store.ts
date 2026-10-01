@@ -66,6 +66,11 @@ export type GhostexSettings = {
   sessionChatCustomTranscriptWidthEnabled: boolean;
   /** Width of the message transcript; the prompt composer keeps its full width. */
   sessionChatTranscriptWidthPercent: number;
+  /**
+   * Simplify every chat: hide tool command previews and fold tool runs and file edits behind
+   * expandable counts. Same key and default as the desktop's `sessionChatSimpleMode`.
+   */
+  sessionChatSimpleMode: boolean;
   /** Reveal thinking-owned tool calls by default. */
   sessionChatVerboseMode: boolean;
   sessionChatFileEditPreviews: boolean;
@@ -143,6 +148,7 @@ export function defaultSettings(): GhostexSettings {
     sessionChatTheme: 'dark',
     sessionChatCustomTranscriptWidthEnabled: false,
     sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+    sessionChatSimpleMode: true,
     sessionChatVerboseMode: false,
     sessionChatFileEditPreviews: false,
     sessionChatGpuiTranscript: false,
@@ -249,6 +255,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     ),
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
+    sessionChatSimpleMode: bool('sessionChatSimpleMode', defaults.sessionChatSimpleMode),
     sessionChatVerboseMode: bool('sessionChatVerboseMode', defaults.sessionChatVerboseMode),
     sessionChatGpuiTranscript: bool('sessionChatGpuiTranscript', defaults.sessionChatGpuiTranscript),
     autoReconnect: bool('autoReconnect', defaults.autoReconnect),

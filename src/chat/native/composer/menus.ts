@@ -40,6 +40,8 @@ export function overflowed(document: ChatDocument, id: string): boolean {
 export type MoreActionsInput = {
   document: ChatDocument;
   verbose: boolean;
+  /** The phone's Simple mode setting (`sessionChatSimpleMode`). */
+  simple: boolean;
   /** Controls this composer can draw (the host gates plus what the phone serves). */
   available: (id: ComposerControlId) => boolean;
   /** Whether the screen performs this app-shell action (`NativeComposer`'s `hostActions`). */
@@ -56,12 +58,17 @@ export type MoreActionsInput = {
 
 /**
  * The View row: the chat's display modes as one submenu, its detail naming the ones that are on
- * (desktop's `view_modes_row` in `actions.rs`, where the user decision is recorded). The phone has
- * no Simple mode, so it lists Verbose and Summary.
+ * (desktop's `view_modes_row` in `actions.rs`, where the user decision is recorded).
  */
-function viewModesRow(document: ChatDocument, verbose: boolean, summaryAvailable: boolean): MenuRow {
+function viewModesRow(document: ChatDocument, simple: boolean, verbose: boolean, summaryAvailable: boolean): MenuRow {
   const summary = summaryAvailable && document.summaryMode === true;
   const modes: MenuRow[] = [
+    {
+      label: 'Simple mode',
+      iconPath: 'titlebar/leaf.svg',
+      checked: simple,
+      command: { type: 'setSimpleMode', enabled: !simple },
+    },
     {
       label: 'Verbose mode',
       iconPath: verbose ? 'titlebar/eye-filled.svg' : 'titlebar/eye-off.svg',
@@ -77,11 +84,11 @@ function viewModesRow(document: ChatDocument, verbose: boolean, summaryAvailable
       command: { type: 'toggleSummary' },
     });
   }
-  const on = [verbose ? 'Verbose' : null, summary ? 'Summary' : null].filter((name) => name !== null);
+  const on = [simple ? 'Simple' : null, verbose ? 'Verbose' : null, summary ? 'Summary' : null].filter((name) => name !== null);
   return { label: 'View', iconPath: 'titlebar/eye.svg', detail: on.length > 0 ? on.join(', ') : 'Standard', children: modes };
 }
 
-export function moreActionsRows({ document, verbose, available, serves, compactAndSend = null, draft = '' }: MoreActionsInput): MenuRow[] {
+export function moreActionsRows({ document, simple, verbose, available, serves, compactAndSend = null, draft = '' }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   if (compactAndSend !== null) {
     rows.push({ label: 'Compact & Send', iconPath: 'titlebar/arrow-up.svg', disabled: compactAndSend.disabled, command: { type: 'submit', mode: 'compact' } });
@@ -109,7 +116,7 @@ export function moreActionsRows({ document, verbose, available, serves, compactA
     rows.push({ separator: true });
   }
   rows.push({ heading: true, label: 'Chat' });
-  rows.push(viewModesRow(document, verbose, available('summary')));
+  rows.push(viewModesRow(document, simple, verbose, available('summary')));
   // Side chat: offered only for agents that take `/btw` (core `composer/side_chat.rs`).
   if (typeof document.sideChat === 'string') {
     rows.push({

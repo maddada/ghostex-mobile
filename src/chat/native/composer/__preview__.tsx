@@ -105,6 +105,7 @@ function useFakeChat(scene: string): RustChat {
         focused: () => model.focused(),
         blurred: () => model.blurred(),
         submit: (mode) => model.submit(mode),
+        replace: (text) => model.replace(text, null, false),
       },
       attachFiles: async () => undefined,
       query: (name, args) => (name === 'composerReferences' ? refs(String(args[0] ?? '')) : null),
@@ -126,7 +127,7 @@ function Preview() {
         </ScrollView>
         <NativeComposer chat={chat} onHostAction={(action) => console.log('[preview] host', action)} />
         {SCENE === 'more' ? (
-          <MenuSheet rows={moreActionsRows({ document: doc, verbose: false, available: () => true, serves: () => true })} onClose={() => undefined} onCommand={() => true} />
+          <MenuSheet rows={moreActionsRows({ document: doc, simple: true, verbose: false, available: () => true, serves: () => true })} onClose={() => undefined} onCommand={() => true} />
         ) : null}
         {SCENE === 'model' ? <ModelMenuSheet menu={doc.modelMenu as never} visible ownProvider="claude" onClose={() => undefined} dispatch={() => undefined} /> : null}
         {SCENE === 'mode' ? <MenuSheet rows={(doc.optionMenus as { mode: never[] }).mode} onClose={() => undefined} onCommand={() => true} /> : null}

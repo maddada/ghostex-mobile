@@ -125,6 +125,8 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
   const verboseSetting = useSettingsStore((store) => store.settings.sessionChatVerboseMode);
+  const simpleSetting = useSettingsStore((store) => store.settings.sessionChatSimpleMode);
+  const setSetting = useSettingsStore((store) => store.setSetting);
 
   useEffect(
     () =>
@@ -247,9 +249,16 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           return false;
         case 'openAccountsSettings':
           if (serves('openAccountsSettings')) host('openAccountsSettings');
+          // Signing in to an account runs the agent's login on the computer, where desktop's Add
+          // account leads (Settings > Accounts); the phone says where instead of doing nothing.
+          else Alert.alert('Add accounts on your computer', 'Open Ghostex on your computer and go to Settings > Accounts to sign in to another account.');
           return false;
         case 'copyText':
           void Clipboard.setStringAsync(str(command, 'text'));
+          return false;
+        case 'setSimpleMode':
+          // A phone setting, like desktop's `setSimpleMode` host action writing its own settings.
+          setSetting('sessionChatSimpleMode', command.enabled === true);
           return false;
         case 'host':
           host(str(command, 'action'), command);
@@ -259,7 +268,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           return false;
       }
     },
-    [dispatch, host, input, openAttach, performComposerAction, serves]
+    [dispatch, host, input, openAttach, performComposerAction, serves, setSetting]
   );
 
   const launchPick = useCallback(
@@ -324,8 +333,8 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
       model !== null && model.text.trim().length > 0
         ? { disabled: !(model.ready && !model.pendingSend && document.queue.capabilities.canQueue) }
         : null;
-    setMenu({ kind: 'rows', rows: moreActionsRows({ document, verbose, available, serves, compactAndSend, draft: model?.text ?? '' }) });
-  }, [available, document, model, serves, verboseSetting]);
+    setMenu({ kind: 'rows', rows: moreActionsRows({ document, simple: simpleSetting, verbose, available, serves, compactAndSend, draft: model?.text ?? '' }) });
+  }, [available, document, model, serves, simpleSetting, verboseSetting]);
 
   /**
    * The Terminal View button's readiness light reads the agent's screen on hover or focus on
@@ -406,6 +415,10 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                   onCaret={setCaret}
                 />
             </View>
+            {collapsed ? (
+              // Collapsed, desktop's toolbar keeps More actions beside Send (`render_toolbar`).
+              <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
+            ) : null}
             {collapsed ? (
               <SendControl
                 document={document}

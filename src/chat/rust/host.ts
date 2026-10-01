@@ -325,6 +325,8 @@ export class RustChatHost {
     focused: () => this.composer.focused(),
     blurred: () => this.composer.blurred(),
     submit: (mode: 'send' | 'queue' | 'compact' | 'handoff') => this.composer.submit(mode),
+    /** Replaces the whole draft (a picked saved prompt), desktop's `insert_prompt`. */
+    replace: (text: string) => this.composer.replace(text, null, false),
   };
 
   /**

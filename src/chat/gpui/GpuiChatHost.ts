@@ -27,6 +27,7 @@ import { ComposerModel } from '../rust/composer';
 import type { RustChatHost, RustChatState, RustChatTarget } from '../rust/host';
 import type { UserAction } from '../rust/actions';
 import { uploadSessionChatLocalFile } from '../session-chat-helpers';
+import { useSettingsStore, type GhostexSettings } from '../../settings/store';
 import { gpuiMachineEndpoint, forgetGpuiMachineEndpoint } from './endpoint';
 
 type Listener = () => void;
@@ -36,6 +37,25 @@ const MAX_HELD_VIEW_REQUESTS = 64;
 
 let gpuiStarted = false;
 const eventListeners = new Set<(event: GpuiEvent) => void>();
+
+/** The phone's chat display settings the GPUI renderer reads (`ChatAppearance` on desktop). */
+function chatDisplaySettings(settings: GhostexSettings) {
+  return {
+    sessionChatSimpleMode: settings.sessionChatSimpleMode,
+    sessionChatVerboseMode: settings.sessionChatVerboseMode,
+  };
+}
+
+function chatSettingsChanged(next: GhostexSettings, previous: GhostexSettings): boolean {
+  return (
+    next.sessionChatSimpleMode !== previous.sessionChatSimpleMode ||
+    next.sessionChatVerboseMode !== previous.sessionChatVerboseMode
+  );
+}
+
+function installChatSettings(settings: GhostexSettings): void {
+  gpuiCommand({ type: 'installSettings', settings: chatDisplaySettings(settings) });
+}
 
 /** Hands one GPUI event to the open chat (the `GpuiView`'s `onEvent`). */
 export function dispatchGpuiEvent(event: GpuiEvent): void {
@@ -92,6 +112,7 @@ export class GpuiChatHost {
   private heldViewRequests: ChatViewRequest[] = [];
   private queryCore: ChatCoreHandle | null = null;
   private disposed = false;
+  private unsubscribeSettings: (() => void) | null = null;
   private readonly composer: ComposerModel;
   private readonly onEvent = (event: GpuiEvent) => this.handleEvent(event);
 
@@ -120,6 +141,11 @@ export class GpuiChatHost {
       .then((endpoint) => {
         if (this.disposed) return;
         gpuiCommand({ type: 'setMachineEndpoint', ...endpoint });
+        installChatSettings(useSettingsStore.getState().settings);
+        this.unsubscribeSettings?.();
+        this.unsubscribeSettings = useSettingsStore.subscribe((state, previous) => {
+          if (chatSettingsChanged(state.settings, previous.settings)) installChatSettings(state.settings);
+        });
         gpuiCommand({ type: 'openSession', machineId: machine.id, projectId, sessionId });
       })
       .catch((error: unknown) => {
@@ -130,6 +156,8 @@ export class GpuiChatHost {
 
   dispose(): void {
     this.disposed = true;
+    this.unsubscribeSettings?.();
+    this.unsubscribeSettings = null;
     eventListeners.delete(this.onEvent);
     this.queryCore?.dispose();
     this.queryCore = null;
@@ -175,6 +203,7 @@ export class GpuiChatHost {
     focused: () => this.composer.focused(),
     blurred: () => this.composer.blurred(),
     submit: (mode) => this.composer.submit(mode),
+    replace: (text) => this.composer.replace(text, null, false),
   };
 
   async attachFiles(files: readonly { uri: string; name?: string }[]): Promise<void> {

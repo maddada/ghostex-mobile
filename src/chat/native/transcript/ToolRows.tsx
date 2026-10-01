@@ -10,7 +10,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ProjectedMessage } from '../../rust/document';
 import { subagentOpenAction } from '../cards';
 import { useNativeChatUi, useRowDetail, useTranscriptEnv } from './context';
-import { Chevron, DisclosureBody, useFoldPlace } from './Disclosure';
+import { Chevron, DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { arr, obj, str, type JsonRecord } from './json';
 import { useDisclosure } from './state';
@@ -18,9 +18,12 @@ import { CODE_LINE, CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE } from './theme
 
 const ROW_GAP = 8;
 
-/** The tool rows of one message, folded the way the core's `toolFold` says. */
+/**
+ * The tool rows of one message, folded the way the core's `toolFold` says, or in Simple mode
+ * behind one "N tool calls" heading (desktop `tool_run.rs`).
+ */
 export function ToolRows({ message }: { message: ProjectedMessage }) {
-  const { theme } = useTranscriptEnv();
+  const { theme, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const { inWorkFold } = useFoldPlace();
   const tools = arr(message.tools)
@@ -28,6 +31,8 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
     .filter((tool): tool is JsonRecord => tool !== null);
   const runKey = `tool-run:${message.id}`;
   const [runOpen, toggleRun] = useDisclosure(disclosures, runKey);
+  // Simple mode's run heading opens on demand only; verbose mode never opens it.
+  const [simpleOpen, toggleSimple] = useDisclosure(disclosures, `tools:${message.id}`);
   if (tools.length === 0) return null;
   // Under a heading that already folds the run, every row shows (React's `showAllRows`).
   const showAll = message.toolsShowAllRows === true;
@@ -42,6 +47,18 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   const hidden = typeof fold?.hiddenCount === 'number' ? fold.hiddenCount : 0;
   const rows = (indices: number[]) =>
     indices.map((index) => <ToolRow key={index} messageId={message.id} index={index} tool={tools[index]!} />);
+  if (simple && !showAll) {
+    return (
+      <View style={styles.column}>
+        <DisclosureHeading label={str(message, 'simpleToolLabel')} open={simpleOpen} onToggle={toggleSimple} />
+        {simpleOpen ? (
+          <DisclosureBody onCollapse={toggleSimple} label='Collapse tool calls' gap={ROW_GAP}>
+            {rows(visible)}
+          </DisclosureBody>
+        ) : null}
+      </View>
+    );
+  }
   if (showAll || hidden === 0) return <View style={styles.column}>{rows(visible)}</View>;
   const keptFlags = arr(fold?.visible);
   const label = str(fold, runOpen ? 'expandedLabel' : 'collapsedLabel');
@@ -73,7 +90,7 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
 }
 
 const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: string; index: number; tool: JsonRecord }) {
-  const { theme, dispatch } = useTranscriptEnv();
+  const { theme, dispatch, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const key = `tool:${messageId}:${index}`;
   const [open, toggle] = useDisclosure(disclosures, key);
@@ -82,7 +99,8 @@ const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: s
   const detail = obj(useRowDetail(key, 'tool', messageId, index, expanded));
   const failed = tool.failed === true;
   const name = str(tool, 'name');
-  const preview = str(tool, 'preview');
+  // Simple mode hides the command preview next to the tool's name.
+  const preview = simple ? '' : str(tool, 'preview');
   const subagent = str(tool.subagent, 'name');
   const openSubagent = subagentOpenAction(tool.subagent);
   const trigger = (
