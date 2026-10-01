@@ -44,6 +44,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SettingsPageScreen from './src/screens/settings/SettingsPageScreen';
 import { SETTINGS_PAGES } from './src/screens/settings/pages';
 import TerminalScreen from './src/screens/TerminalScreen';
+import FindPromptScreen from './src/screens/FindPromptScreen';
 import FindPromptsScreen from './src/screens/FindPromptsScreen';
 import WebPreviewPortsScreen from './src/screens/WebPreviewPortsScreen';
 import WebPreviewScreen from './src/screens/WebPreviewScreen';
@@ -59,6 +60,7 @@ import { useWebPreviewStore } from './src/webPreview/store';
 import {
   AddProjectCopy,
   DocsCopy,
+  FindPromptsCopy,
   MachineCopy,
   SshAccessCopy,
   TailscaleFormCopy,
@@ -177,11 +179,12 @@ export default function App() {
                 <Stack.Screen
                   name="FindPrompts"
                   component={FindPromptsScreen}
-                  options={{
-                    title: 'Find Prompts',
-                    headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
-                    contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
-                  }}
+                  options={{ title: FindPromptsCopy.title }}
+                />
+                <Stack.Screen
+                  name="FindPrompt"
+                  component={FindPromptScreen}
+                  options={{ title: FindPromptsCopy.promptTitle }}
                 />
                 <Stack.Screen
                   name="WebPreviewPorts"

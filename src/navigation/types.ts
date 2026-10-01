@@ -39,6 +39,8 @@ export type RootStackParamList = {
   Terminal: { sessionKey: string; machineId: string; title?: string };
   /** Find Prompts: search every prompt this machine sent to an agent (`gx f`). */
   FindPrompts: { machineId: string };
+  /** One Find result in full, addressed by its stable prompt key. */
+  FindPrompt: { machineId: string; promptKey: string };
   /** Web preview opening screen: enter an address or select a listening port. */
   WebPreviewPorts: { machineId: string };
   /** Browse a computer-side port through SSH, or an ordinary website directly. */

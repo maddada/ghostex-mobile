@@ -213,6 +213,40 @@ export const SessionSearchCopy = {
   unknownDay: 'Unknown day',
 } as const;
 
+/** Find Prompts (the GUI for `gx f`) and the prompt screen it opens. */
+export const FindPromptsCopy = {
+  title: 'Find Prompts',
+  promptTitle: 'Prompt',
+  placeholder: 'Search every prompt you have sent',
+  clear: 'Clear search',
+  allAgents: 'All agents',
+  allProjects: 'All projects',
+  agentsTitle: 'Filter by agent',
+  projectsTitle: 'Filter by project',
+  projectsPlaceholder: 'Filter projects...',
+  noProjects: 'No projects found.',
+  groupByDay: 'Days',
+  groupByDayOn: 'Stop grouping results by day',
+  groupByDayOff: 'Group results by day',
+  noHistory: 'No agent prompt history was found on this computer.',
+  noMatches: 'No prompts match this search.',
+  searchFailed: 'Pull down to try again.',
+  noProject: 'No project',
+  favorite: 'Favorite this prompt',
+  unfavorite: 'Remove this prompt from favorites',
+  resume: 'Resume',
+  fork: 'Fork',
+  forkTitle: 'Fork prompt into',
+  copy: 'Copy',
+  star: 'Star',
+  starred: 'Starred',
+  copied: 'Prompt copied to the clipboard.',
+  copyFailed: 'Could not copy.',
+  resumeFailed: 'Could not resume.',
+  forkFailed: 'Could not fork.',
+  gone: 'This prompt is no longer in the results. Go back and search again.',
+} as const;
+
 /** STATE_CARD copy + status lines, sessions-drawer.md §5. */
 export const StateCardCopy = {
   noMachines: {

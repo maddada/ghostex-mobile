@@ -663,3 +663,19 @@ export function ChevronLeftGlyph({ size, color }: GlyphProps) {
     </Svg>
   );
 }
+
+/** Star (Tabler IconStar / IconStarFilled): a Find prompt's favorite toggle. */
+export function StarGlyph({ size, color, filled }: GlyphProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 12 17.75 l -6.172 3.245 l 1.179 -6.873 l -5 -4.867 l 6.9 -1 l 3.086 -6.253 l 3.086 6.253 l 6.9 1 l -5 4.867 l 1.179 6.873 z"
+        stroke={color}
+        fill={filled === true ? color : 'none'}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

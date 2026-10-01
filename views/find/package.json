@@ -1,5 +1,0 @@
-{
-  "//": "The Find page is ESM like the Ghostex main repo it imports from, so esbuild bundles it exactly as it did there.",
-  "type": "module",
-  "private": true
-}

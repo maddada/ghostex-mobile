@@ -3,6 +3,5 @@
   "compilerOptions": {
     "strict": true
   },
-  // views/ holds browser pages this app embeds (the Find page); they have their own tsconfig.
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "android", "ios", "views"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "android", "ios"]
 }
