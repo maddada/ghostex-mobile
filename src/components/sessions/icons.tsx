@@ -281,6 +281,27 @@ export function CoordinatorGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/**
+ * Crew (a coordinator row's badge beside its thread count): the paths of the
+ * desktop's apps/desktop/assets/titlebar/users-group.svg.
+ */
+export function CrewGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {[
+        'M10 13a2 2 0 1 0 4 0a2 2 0 0 0 -4 0',
+        'M8 21v-1a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v1',
+        'M15 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0',
+        'M17 10h2a2 2 0 0 1 2 2v1',
+        'M5 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0',
+        'M3 13v-1a2 2 0 0 1 2 -2h2',
+      ].map((d) => (
+        <Path key={d} d={d} stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </Svg>
+  );
+}
+
 /** X cross (desktop IconX, Close/Kill rows). */
 export function XGlyph({ size, color }: GlyphProps) {
   return (

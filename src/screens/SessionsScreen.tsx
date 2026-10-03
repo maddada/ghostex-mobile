@@ -68,6 +68,7 @@ import {
 import SessionRow from '../components/sessions/SessionRow';
 import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
+import NewCoordinatorSheet from './sessions-screen/NewCoordinatorSheet';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { WarningTriangleIcon } from '../components/terminal/icons';
 import {
@@ -90,6 +91,7 @@ import {
   type DrawerItem,
   type ProjectHeaderItem,
 } from '../contract/grouping';
+import { coordinatorRowKey } from '../contract/coordinatorTree';
 import {
   EMPTY_SIDEBAR_SPACES,
   type GhostexQuickAction,
@@ -322,6 +324,7 @@ export default function SessionsScreen({ navigation }: Props) {
           collapsedSessionListsByMachine: collapse.collapsedSessionListsByMachine,
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
+          collapsedCoordinatorsByMachine: collapse.collapsedCoordinatorsByMachine,
           expandedParkedSessionKeysByMachine: collapse.expandedParkedSessionKeysByMachine,
           expandedDraftSessionKeysByMachine: collapse.expandedDraftSessionKeysByMachine,
         },
@@ -337,6 +340,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.collapsedSessionListsByMachine,
       collapse.collapsedSectionsByMachine,
       collapse.collapsedSessionKindsByMachine,
+      collapse.collapsedCoordinatorsByMachine,
       collapse.expandedParkedSessionKeysByMachine,
       collapse.expandedDraftSessionKeysByMachine,
       sessionListNowMs,
@@ -742,6 +746,8 @@ export default function SessionsScreen({ navigation }: Props) {
     resolvePrimaryAgent,
     launchAgent,
     agentMenuItems,
+    createCoordinator,
+    loadCoordinatorOptions,
     actionsMenuItems,
     recoveryItems,
   } = useSessionsScreenMenus({
@@ -807,6 +813,9 @@ export default function SessionsScreen({ navigation }: Props) {
             sidebarForeground={sidebarAppearance.foreground}
             inCard
             customSessionTags={inventoriesByMachineId[machineId]?.summary?.customSessionTags}
+            nesting={child.nesting}
+            coordinatorBadge={child.coordinatorBadge}
+            onToggleThreads={() => collapse.toggleCoordinator(machineId, coordinatorRowKey(child.session))}
             onPress={() => {
               if (target !== null) void attach(target, child.session);
             }}
@@ -1582,6 +1591,15 @@ export default function SessionsScreen({ navigation }: Props) {
           subtitle="Start an agent session"
           items={agentMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'newCoordinator' ? (
+        <NewCoordinatorSheet
+          projectTitle={overlay.ctx.header.title}
+          loadOptions={() => loadCoordinatorOptions(overlay.ctx)}
+          onCreate={(input) => createCoordinator(overlay.ctx, input)}
+          onCancel={() => setOverlay(NONE)}
         />
       ) : null}
 

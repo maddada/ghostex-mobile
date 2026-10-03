@@ -198,6 +198,44 @@ export function createAgentCommand(
   );
 }
 
+/** The New Coordinator form's choices: agents, their model lineups and the defaults `create` applies. */
+export function coordinatorOptionsCommand(): string {
+  return 'ghostex coordinator options --json';
+}
+
+export type CreateCoordinatorInput = {
+  projectId: string;
+  agentId: string;
+  /** '' leaves the coordinator unnamed: gxserver saves the placeholder "Coordinator". */
+  title: string;
+  goal: string;
+  /** The first request, queued for the coordinator once it starts. */
+  task: string;
+  model: string;
+  effort: string;
+};
+
+/**
+ * `ghostex coordinator create`: the same verb (and so the same title, model and effort rules)
+ * the desktop's New Coordinator dialog follows. Empty fields are left out.
+ */
+export function createCoordinatorCommand(input: CreateCoordinatorInput): string {
+  // `--flag=value`, so a goal or request that starts with "-" is never read as a flag.
+  const optional = (flag: string, value: string): string =>
+    value.trim().length === 0 ? '' : ` ${flag}=${shellQuote(value.trim())}`;
+  return (
+    'ghostex coordinator create' +
+    ` --project-id ${shellQuote(requireId(input.projectId, 'project id'))}` +
+    ` --agent ${shellQuote(requireId(input.agentId, 'agent id'))}` +
+    optional('--title', input.title) +
+    optional('--goal', input.goal) +
+    optional('--task', input.task) +
+    optional('--model', input.model) +
+    optional('--effort', input.effort) +
+    ' --json'
+  );
+}
+
 /** Quick action: `ghostex run-action <commandId> --project-id <id>` (always prints JSON). */
 export function runActionCommand(commandId: string, projectId: string): string {
   return (

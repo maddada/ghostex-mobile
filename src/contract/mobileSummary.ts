@@ -54,6 +54,10 @@ export type MobileSummaryWireSession = {
   sessionNote?: string;
   /** 'coordinator' on a coordinator session, 'thread' on one it started; absent otherwise. */
   coordinatorRole?: string;
+  /** On a thread: its coordinator's ids and the thread's state (server/src/coordinators/presentation.rs). */
+  coordinatorProjectId?: string;
+  coordinatorSessionId?: string;
+  coordinatorThreadState?: string;
   /** The provider resume id the note is keyed by; absent before the agent starts. */
   agentSessionId?: string;
   isFocused?: boolean;
@@ -328,6 +332,14 @@ export type GhostexSession = {
   sessionNote: string;
   /** The session is a coordinator: its row draws the crown instead of its agent logo. */
   isCoordinator: boolean;
+  /**
+   * On a thread: the coordinator it belongs to ('' on every other session, and on a daemon that
+   * predates the fields). The drawer nests the thread under that coordinator (coordinatorTree.ts).
+   */
+  coordinatorProjectId: string;
+  coordinatorSessionId: string;
+  /** On a thread: waiting, finished, working, sleeping, closed or done ('' otherwise). */
+  coordinatorThreadState: string;
   /**
    * The provider conversation id the note is keyed by ('' before the agent has
    * started one, or on a daemon that predates the field). Non-empty is what
@@ -912,6 +924,9 @@ export function parseSession(value: unknown): GhostexSession | null {
         : 0,
     sessionNote: trimmedValue(value, 'sessionNote'),
     isCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator',
+    coordinatorProjectId: trimmedValue(value, 'coordinatorProjectId'),
+    coordinatorSessionId: trimmedValue(value, 'coordinatorSessionId'),
+    coordinatorThreadState: trimmedValue(value, 'coordinatorThreadState'),
     agentSessionId: trimmedValue(value, 'agentSessionId'),
     sendWhenAllProjectSessionsStopActive: boolValue(
       value,

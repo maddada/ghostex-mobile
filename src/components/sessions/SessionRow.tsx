@@ -26,6 +26,7 @@ import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
+import type { CoordinatorBadge, RowNesting } from '../../contract/coordinatorTree';
 import {
   agentIconTint,
   resolveAgentIconId,
@@ -38,7 +39,7 @@ import { useSettingsStore } from '../../settings/store';
 import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
-import { ClockGlyph, CoordinatorGlyph, PencilGlyph } from './icons';
+import { ChevronRightGlyph, ClockGlyph, CoordinatorGlyph, CrewGlyph, PencilGlyph } from './icons';
 import {
   COMPLETION_FLASH_MS,
   COMPLETION_FLASH_OPACITY,
@@ -52,6 +53,10 @@ import {
 } from './sessionStatus';
 
 const ACTIVE_DARKEN_PERCENT = 10;
+/** Indent per tree level (threads.rs THREAD_INDENT): one icon plus the row gap. */
+const THREAD_INDENT = 16;
+/** The fold chevron and its gaps push a coordinator's title right (sessions.rs: icon, chevron, title). */
+const CHEVRON_EXTRA = 17;
 
 /**
  * Re-renders the row when the time it draws next reads differently
@@ -127,6 +132,44 @@ function ActivityDot({ kind }: { kind: 'working' | 'attention' | 'backgroundWork
 }
 
 /**
+ * threads.rs `thread_connector`: from under the parent's icon in the row above,
+ * down to this row's icon (the last thread) or on through the row (a thread with
+ * siblings below it), then across to the icon.
+ */
+function ThreadConnector({ iconLeft, last }: { iconLeft: number; last: boolean }) {
+  const mid = ds(17);
+  const rise = mid - ds(7.5);
+  const left = iconLeft - ds(THREAD_INDENT) + ds(7);
+  return (
+    <View
+      pointerEvents="none"
+      style={[styles.threadLine, { left, top: -rise, height: last ? rise + mid : rise + ds(34) }]}
+    >
+      <View style={[styles.threadLineAcross, { top: rise + mid - 0.5, width: ds(THREAD_INDENT - 6) }]} />
+    </View>
+  );
+}
+
+/**
+ * threads.rs `coordinator_badge`: the crew icon and the thread count, light blue
+ * while a thread waits on someone, orange while one works.
+ */
+function CoordinatorBadgeView({ badge }: { badge: CoordinatorBadge }) {
+  const tint =
+    badge.tone === 'waiting'
+      ? SidebarPalette.ROW_ATTENTION
+      : badge.tone === 'working'
+        ? SidebarPalette.ROW_WORKING
+        : SidebarPalette.MUTED;
+  return (
+    <View style={styles.coordinatorBadge}>
+      <CrewGlyph size={ds(13)} color={tint} />
+      {badge.count > 0 ? <Text style={[styles.coordinatorBadgeCount, { color: tint }]}>{badge.count}</Text> : null}
+    </View>
+  );
+}
+
+/**
  * apps/desktop/src/app/native_sidebar/status.rs `question_indicator`: the pink
  * question dot, after the orange working dot while the agent still works.
  */
@@ -156,6 +199,12 @@ export type SessionRowProps = {
   onPress: () => void;
   /** Context menu, opened by long-pressing the row (anchored to the row). */
   onMenu: (anchor: MenuAnchor) => void;
+  /** The row's place in its coordinator's tree (coordinatorTree.ts); absent on a top-level row. */
+  nesting?: RowNesting;
+  /** On a coordinator row: the crew badge. */
+  coordinatorBadge?: CoordinatorBadge;
+  /** Folds or unfolds a coordinator's threads; the chevron shows while threads are drawn under it. */
+  onToggleThreads?: () => void;
 };
 
 /**
@@ -173,6 +222,9 @@ export default function SessionRow({
   customSessionTags,
   onPress,
   onMenu,
+  nesting,
+  coordinatorBadge,
+  onToggleThreads,
 }: SessionRowProps) {
   const rowRef = useRef<View | null>(null);
   const iconId = resolveAgentIconId(
@@ -207,7 +259,11 @@ export default function SessionRow({
     !(TagIcon !== undefined && tagColor !== null) &&
     session.isDraft === true &&
     iconId !== 'browser';
-  const iconLeft = inCard ? ds(5) : ds(26);
+  const depth = nesting?.depth ?? 0;
+  const indent = ds(depth * THREAD_INDENT);
+  const iconLeft = (inCard ? ds(5) : ds(26)) + indent;
+  const showChevron = onToggleThreads !== undefined && (nesting?.threadCount ?? 0) > 0;
+  const titleIndent = indent + (showChevron ? ds(CHEVRON_EXTRA) : 0);
   const lightActiveBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
   const activeBackground = mixHexColors('#000000', lightActiveBackground, ACTIVE_DARKEN_PERCENT);
   const pressedBackground = mixHexColors(sidebarBackground, '#000000', 90);
@@ -226,6 +282,7 @@ export default function SessionRow({
         style={({ pressed }) => [
           styles.row,
           inCard ? styles.rowCard : styles.rowQuick,
+          titleIndent > 0 ? { paddingLeft: (inCard ? ds(26) : ds(47)) + titleIndent } : null,
           active ? { backgroundColor: activeBackground } : null,
           !active && pressed ? { backgroundColor: pressedBackground } : null,
         ]}
@@ -233,6 +290,7 @@ export default function SessionRow({
         onLongPress={openMenuFromRow}
       >
         {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
+        {depth > 0 ? <ThreadConnector iconLeft={iconLeft} last={nesting?.lastChild === true} /> : null}
         <View
           style={[
             styles.icon,
@@ -257,6 +315,17 @@ export default function SessionRow({
             <Icon size={iconSize} color={agentIconTint(iconId)} />
           )}
         </View>
+        {showChevron ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={nesting?.collapsed === true ? 'Show threads' : 'Hide threads'}
+            hitSlop={ds(10)}
+            onPress={onToggleThreads}
+            style={[styles.threadChevron, { left: iconLeft + ds(18) }]}
+          >
+            <ChevronRightGlyph size={ds(14)} color={SidebarPalette.MUTED} rotated={nesting?.collapsed !== true} />
+          </Pressable>
+        ) : null}
         {/*
           The row's decorations, placed as the desktop row places them
           (apps/desktop/src/app/native_sidebar/decorations.rs), measured from the
@@ -311,8 +380,9 @@ export default function SessionRow({
           {title}
         </Text>
         {/* sessions.rs: the status dot, then the time, each 6dp after the one before; or the question indicator alone. */}
-        {question || indicator !== null || timeLabel !== null ? (
+        {question || indicator !== null || timeLabel !== null || coordinatorBadge !== undefined ? (
           <View style={styles.trailing}>
+            {coordinatorBadge !== undefined ? <CoordinatorBadgeView badge={coordinatorBadge} /> : null}
             {question ? <QuestionIndicator working={session.activity === 'working'} /> : null}
             {indicator !== null ? <ActivityDot kind={indicator} /> : null}
             {timeLabel !== null ? (
@@ -366,6 +436,36 @@ const styles = StyleSheet.create({
   },
   iconTimer: {
     opacity: 1,
+  },
+  threadLine: {
+    position: 'absolute',
+    width: ds(THREAD_INDENT - 5),
+    borderLeftWidth: ds(1),
+    borderLeftColor: SidebarPalette.ROW_THREAD_LINE,
+  },
+  threadLineAcross: {
+    position: 'absolute',
+    left: 0,
+    height: ds(1),
+    backgroundColor: SidebarPalette.ROW_THREAD_LINE,
+  },
+  threadChevron: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -ds(7),
+    width: ds(14),
+    height: ds(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coordinatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(2),
+  },
+  coordinatorBadgeCount: {
+    fontSize: ds(11.5),
+    lineHeight: ds(16),
   },
   noteDot: {
     position: 'absolute',

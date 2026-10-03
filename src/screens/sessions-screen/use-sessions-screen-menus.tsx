@@ -25,6 +25,7 @@ import {
   ArrowGlyph,
   ChevronDownGlyph,
   ClockGlyph,
+  CrewGlyph,
   ExitGlyph,
   EyeOffGlyph,
   InfoGlyph,
@@ -47,8 +48,11 @@ import {
 } from '../../components/sessions/icons';
 import { useLauncherStore, lastActionKey } from '../../components/sessions/launcherStore';
 import {
+  coordinatorOptionsCommand,
   createAgentCommand,
   createChatCommand,
+  createCoordinatorCommand,
+  type CreateCoordinatorInput,
   exportSessionTranscriptCommand,
   forkSessionCommand,
   moveProjectCommand,
@@ -102,6 +106,7 @@ import {
   type ProjectContext,
   type SessionContext,
 } from './session-actions';
+import { parseCoordinatorOptions, type CoordinatorOptions } from './NewCoordinatorSheet';
 import { sidebarMenuView } from './sidebar-menu-view';
 import {
   buildProjectMenu,
@@ -1065,10 +1070,29 @@ export function useSessionsScreenMenus({
     [runCreationFlow, setTransientStatus]
   );
 
-  /** Agent menu: brand icon + name + optional chat marker; selection emphasizes text. */
+  /**
+   * Agent menu: "New Coordinator…" first, then one row per agent (brand icon + name + optional chat
+   * marker; selection emphasizes text).
+   *
+   * CDXC:Coordinators 2026-10-03 DECISION:
+   * User: "On mobile app I can't start a coordinator thread from the agents drop down" and "Please move this to the top in both apps". The phone's agent menu offers New Coordinator… as its first row, as the desktop launcher does (gx-core `agent_launcher_items_with_accounts`), and it opens the phone's New Coordinator form.
+   */
   const agentMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
     const selected = resolvePrimaryAgent(ctx.header.agents);
-    return ctx.header.agents.map((agent) => {
+    const newCoordinator: ContextMenuItem[] =
+      ctx.header.projectId.length > 0
+        ? [
+            {
+              kind: 'item',
+              key: 'new-coordinator',
+              label: 'New Coordinator…',
+              icon: <CrewGlyph size={14} color={SidebarPalette.MUTED} />,
+              onPress: () => setOverlay({ kind: 'newCoordinator', ctx }),
+            },
+            { kind: 'separator', key: 'new-coordinator-separator' },
+          ]
+        : [];
+    return [...newCoordinator, ...ctx.header.agents.map((agent): ContextMenuItem => {
       const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, name);
       const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
@@ -1088,7 +1112,28 @@ export function useSessionsScreenMenus({
           launchAgent(ctx.machine, ctx.header, agent);
         },
       };
-    });
+    })];
+  };
+
+  /** The New Coordinator form's Create: the coordinator opens in chat, where its reports read best (as on the desktop). */
+  const createCoordinator = (
+    ctx: ProjectContext,
+    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string },
+  ): void => {
+    const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
+    const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
+    const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
+    void runCreationFlow(
+      ctx.machine,
+      createCoordinatorCommand({ ...input, projectId: ctx.header.projectId }),
+      ProgressCopy.startingCoordinator(ctx.header.title),
+      { agentId: iconId, projectId: ctx.header.projectId, title },
+    );
+  };
+
+  const loadCoordinatorOptions = async (ctx: ProjectContext): Promise<CoordinatorOptions> => {
+    const result = await runGhostexCli(ctx.machine, coordinatorOptionsCommand());
+    return parseCoordinatorOptions(result.json);
   };
 
   /** Actions menu: one row per project quick action, check on the last run. */
@@ -1188,6 +1233,8 @@ export function useSessionsScreenMenus({
     resolvePrimaryAgent,
     launchAgent,
     agentMenuItems,
+    createCoordinator,
+    loadCoordinatorOptions,
     actionsMenuItems,
     recoveryItems,
   };

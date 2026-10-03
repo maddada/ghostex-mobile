@@ -23,6 +23,8 @@ type PersistedMachineDisclosure = {
   collapsedSections?: string[];
   /** Collapsed in-project Browser/Pinned/Sessions labels (default expanded). */
   collapsedSessionKinds?: string[];
+  /** Coordinators whose threads are folded away (default unfolded). */
+  collapsedCoordinators?: string[];
 };
 
 type PersistedDisclosure = Record<string, PersistedMachineDisclosure>;
@@ -50,6 +52,11 @@ type CollapseState = {
   collapsedSectionsByMachine: Record<string, string[]>;
   /** Persisted per machine: collapsed in-project kind-disclosure keys. */
   collapsedSessionKindsByMachine: Record<string, string[]>;
+  /**
+   * Persisted per machine: coordinators (coordinatorRowKey) whose threads are folded away, like
+   * the desktop's fold chevron (gx-core nest_threads, the user's 2026-10-01 decision there).
+   */
+  collapsedCoordinatorsByMachine: Record<string, string[]>;
   /** In-memory per project: Parked always starts collapsed after an app restart. */
   expandedParkedSessionKeysByMachine: Record<string, string[]>;
   /** Drafts starts collapsed on every app launch, like Parked. */
@@ -64,6 +71,7 @@ type CollapseState = {
   toggleSessionList: (machineId: string, projectKey: string) => void;
   toggleSection: (machineId: string, section: 'quick' | 'projects') => void;
   toggleSessionKind: (machineId: string, kindCollapseKey: string) => void;
+  toggleCoordinator: (machineId: string, coordinatorKey: string) => void;
   toggleMachine: (machineId: string) => void;
   /** Projects-section bulk disclosure (desktop Collapse All / Expand). */
   collapseAllProjects: (machineId: string) => void;
@@ -79,6 +87,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       collapsedSessionListsByMachine,
       collapsedSectionsByMachine,
       collapsedSessionKindsByMachine,
+      collapsedCoordinatorsByMachine,
     } = get();
     const persisted: PersistedDisclosure = {};
     const machineIds = new Set([
@@ -88,6 +97,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       ...Object.keys(collapsedSessionListsByMachine),
       ...Object.keys(collapsedSectionsByMachine),
       ...Object.keys(collapsedSessionKindsByMachine),
+      ...Object.keys(collapsedCoordinatorsByMachine),
     ]);
     for (const machineId of machineIds) {
       persisted[machineId] = {
@@ -97,6 +107,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
         collapsedSessionLists: collapsedSessionListsByMachine[machineId] ?? [],
         collapsedSections: collapsedSectionsByMachine[machineId] ?? [],
         collapsedSessionKinds: collapsedSessionKindsByMachine[machineId] ?? [],
+        collapsedCoordinators: collapsedCoordinatorsByMachine[machineId] ?? [],
       };
     }
     void AsyncStorage.setItem(DISCLOSURE_STORAGE_KEY, JSON.stringify(persisted));
@@ -109,7 +120,8 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       | 'expandedGroupsByMachine'
       | 'collapsedSessionListsByMachine'
       | 'collapsedSectionsByMachine'
-      | 'collapsedSessionKindsByMachine',
+      | 'collapsedSessionKindsByMachine'
+      | 'collapsedCoordinatorsByMachine',
     machineId: string,
     key: string,
   ): void => {
@@ -131,6 +143,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
     collapsedSessionListsByMachine: {},
     collapsedSectionsByMachine: {},
     collapsedSessionKindsByMachine: {},
+    collapsedCoordinatorsByMachine: {},
     expandedParkedSessionKeysByMachine: {},
     expandedDraftSessionKeysByMachine: {},
     collapsedMachineIds: [],
@@ -143,6 +156,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
       let collapsedSessionLists: Record<string, string[]> = {};
       let collapsedSections: Record<string, string[]> = {};
       let collapsedSessionKinds: Record<string, string[]> = {};
+      let collapsedCoordinators: Record<string, string[]> = {};
       try {
         const raw = await AsyncStorage.getItem(DISCLOSURE_STORAGE_KEY);
         if (raw !== null) {
@@ -172,6 +186,10 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
                 ...collapsedSessionKinds,
                 [machineId]: stringArray(record.collapsedSessionKinds),
               };
+              collapsedCoordinators = {
+                ...collapsedCoordinators,
+                [machineId]: stringArray(record.collapsedCoordinators),
+              };
             }
           }
         }
@@ -186,6 +204,7 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
         collapsedSessionListsByMachine: collapsedSessionLists,
         collapsedSectionsByMachine: collapsedSections,
         collapsedSessionKindsByMachine: collapsedSessionKinds,
+        collapsedCoordinatorsByMachine: collapsedCoordinators,
       });
     },
 
@@ -223,6 +242,9 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
         toggleIn('collapsedSessionKindsByMachine', machineId, kindCollapseKey);
       }
     },
+
+    toggleCoordinator: (machineId, coordinatorKey) =>
+      toggleIn('collapsedCoordinatorsByMachine', machineId, coordinatorKey),
 
     toggleMachine: (machineId) => {
       set({ collapsedMachineIds: toggled(get().collapsedMachineIds, machineId) });

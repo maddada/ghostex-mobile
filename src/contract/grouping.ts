@@ -6,6 +6,13 @@
  */
 
 import { SessionCopy } from '../copy';
+import {
+  coordinatorBadges,
+  coordinatorRowKey,
+  nestCoordinatorThreads,
+  type CoordinatorBadge,
+  type RowNesting,
+} from './coordinatorTree';
 import { isNewSidebarSession, isSidebarDraftSectionSession } from './sessionDrafts';
 import {
   displayStatus,
@@ -167,6 +174,10 @@ export type SessionItem = {
   projectPath: string;
   session: GhostexSession;
   collectionColor?: string;
+  /** The row's place in its coordinator's tree; absent on an ordinary top-level row. */
+  nesting?: RowNesting;
+  /** On a coordinator row: its crew badge. */
+  coordinatorBadge?: CoordinatorBadge;
 };
 
 /**
@@ -524,6 +535,8 @@ export type DrawerBuildInput = {
   collapsedSessionKindKeys: ReadonlySet<string>;
   /** Parked starts collapsed on each app launch, matching the desktop sidebar. */
   expandedParkedSessionKeys?: ReadonlySet<string>;
+  /** Coordinators whose threads are folded away, by coordinatorRowKey() (persisted per machine). */
+  collapsedCoordinatorKeys?: ReadonlySet<string>;
 };
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
@@ -538,8 +551,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     collapsedSessionKindKeys,
     expandedParkedSessionKeys = new Set<string>(),
     expandedDraftSessionKeys = new Set<string>(),
+    collapsedCoordinatorKeys = new Set<string>(),
     nowMs = Date.now(),
   } = input;
+  const badges = coordinatorBadges(summary.sessions);
 
   const projectById = new Map<string, GhostexProject>();
   for (const project of summary.projects) projectById.set(project.projectId, project);
@@ -588,11 +603,6 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const emitProject = (projectKey: string, collectionColor?: string): void => {
     const allProjectSessions = sessionsByProjectKey.get(projectKey);
     if (allProjectSessions === undefined) return;
-    const parkedSessions = allProjectSessions.filter((session) => sessionKindSection(session, nowMs) === 'parked');
-    const draftSessions = allProjectSessions.filter((session) => sessionKindSection(session, nowMs) === 'drafts');
-    const projectSessions = allProjectSessions.filter(
-      (session) => !['drafts', 'parked'].includes(sessionKindSection(session, nowMs)),
-    );
     const first = allProjectSessions.length > 0 ? allProjectSessions[0] : null;
     const project = projectKey.startsWith('id:')
       ? projectById.get(projectKey.slice(3)) ?? null
@@ -614,18 +624,43 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       : { imageDataUrl: '', discoveredIconDataUrl: '', glyph: '', glyphColor: '', isWorktree: false };
 
     const namedGroups = groupsForProject(summary, projectId);
+    const groupedSessionIds = new Set(namedGroups.flatMap((group) => group.sessionIds));
+    const inNamedGroup = (session: GhostexSession): boolean => {
+      const section = sessionKindSection(session, nowMs);
+      return section !== 'drafts' && section !== 'parked' && groupedSessionIds.has(session.sessionId);
+    };
+    /*
+     * Coordinator trees (coordinatorTree.ts, gx-core nest_threads): each open
+     * thread follows its coordinator and takes its section. A named group's
+     * members are nested inside that group below.
+     */
+    const kindSection = (session: GhostexSession): SessionKindSection => sessionKindSection(session, nowMs);
+    const tree = nestCoordinatorThreads(
+      allProjectSessions.filter((session) => !inNamedGroup(session)),
+      collapsedCoordinatorKeys,
+      kindSection,
+    );
+    const nesting = new Map(tree.nesting);
+    const sectionOf = (session: GhostexSession): SessionKindSection =>
+      tree.sections.get(coordinatorRowKey(session)) ?? kindSection(session);
+    const isFolded = (session: GhostexSession): boolean =>
+      nesting.get(coordinatorRowKey(session))?.folded === true;
+    const parkedSessions = tree.sessions.filter((session) => sectionOf(session) === 'parked');
+    const draftSessions = tree.sessions.filter((session) => sectionOf(session) === 'drafts');
+    const projectSessions = [
+      ...tree.sessions.filter((session) => !['drafts', 'parked'].includes(sectionOf(session))),
+      ...allProjectSessions.filter(inNamedGroup),
+    ];
     /*
      * What a section heading counts: every session of that section, including
-     * rows a compact list leaves out (sections.rs counts all members), less the
-     * members of named groups, which the desktop draws as groups of their own.
+     * rows a compact list leaves out (sections.rs counts all members) and the
+     * threads of a folded coordinator, less the members of named groups, which
+     * the desktop draws as groups of their own.
      */
-    const groupedSessionIds = new Set(namedGroups.flatMap((group) => group.sessionIds));
-    const sectionPool = allProjectSessions.filter((session) => {
-      const section = sessionKindSection(session, nowMs);
-      return section === 'drafts' || section === 'parked' || !groupedSessionIds.has(session.sessionId);
-    });
+    const sectionPool = tree.sessions;
+    const shownProjectSessions = projectSessions.filter((session) => !isFolded(session));
     const sessionListClipped =
-      namedGroups.length === 0 && projectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
+      namedGroups.length === 0 && shownProjectSessions.length > PROJECT_SESSION_LIST_COLLAPSED_COUNT;
     const sessionListCollapsed = sessionListClipped && collapsedSessionListKeys.has(projectKey);
 
     const collapsed = !expandedProjectKeys.has(projectKey);
@@ -679,6 +714,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       projectPath,
       session,
       collectionColor,
+      nesting: nesting.get(coordinatorRowKey(session)),
+      coordinatorBadge: session.isCoordinator
+        ? badges.get(coordinatorRowKey(session)) ?? { count: 0, tone: 'idle' }
+        : undefined,
     });
 
     /*
@@ -693,7 +732,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     ): void => {
       const labelledSections = new Set<SessionKindSection>();
       for (const session of sessions) {
-        const section = sessionKindSection(session, nowMs);
+        const section = sectionOf(session);
         if (section === 'sessions') emitDraftSection();
         const kindCollapseKey = sessionKindCollapseKey(projectKey, section);
         const kindCollapsed =
@@ -714,12 +753,12 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
             label: SESSION_KIND_LABELS[section],
             collapsed: kindCollapsed,
             status: countSectionSessions(
-              sectionPool.filter((candidate) => sessionKindSection(candidate, nowMs) === section),
+              sectionPool.filter((candidate) => sectionOf(candidate) === section),
             ),
             collectionColor,
           });
         }
-        if (kindCollapsed) continue;
+        if (kindCollapsed || isFolded(session)) continue;
         items.push(sessionItem(session, groupId));
       }
     };
@@ -736,8 +775,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       // "Show N more" row, expanded lists collapse via the header chevron.
       const visibleCount = sessionListCollapsed
         ? PROJECT_SESSION_LIST_COLLAPSED_COUNT
-        : projectSessions.length;
-      emitSessionsWithKindLabels(projectSessions.slice(0, visibleCount), legacyGroupId);
+        : shownProjectSessions.length;
+      emitSessionsWithKindLabels(shownProjectSessions.slice(0, visibleCount), legacyGroupId);
       emitDraftSection();
       if (sessionListCollapsed) {
         items.push({
@@ -747,9 +786,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           projectKey,
           collapsed: true,
           label: SessionCopy.showCountMore(
-            projectSessions.length - PROJECT_SESSION_LIST_COLLAPSED_COUNT,
+            shownProjectSessions.length - PROJECT_SESSION_LIST_COLLAPSED_COUNT,
           ),
-          totalSessionCount: projectSessions.length,
+          totalSessionCount: shownProjectSessions.length,
           collectionColor,
         });
       }
@@ -783,6 +822,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           pinnedRank(left) - pinnedRank(right) ||
           (isNewSidebarSession(left, nowMs) || isNewSidebarSession(right, nowMs) ? compareForSidebarOrder(left, right, nowMs) : 0),
       );
+      const groupTree = nestCoordinatorThreads(groupSessions, collapsedCoordinatorKeys, kindSection);
+      for (const [key, value] of groupTree.nesting) nesting.set(key, value);
       const collapseKey = groupCollapseKey(projectKey, group.groupId);
       const groupCollapsed = !expandedGroupKeys.has(collapseKey);
       items.push({
@@ -800,7 +841,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         collectionColor,
       });
       if (groupCollapsed) continue;
-      for (const session of groupSessions) {
+      for (const session of groupTree.sessions) {
+        if (isFolded(session)) continue;
         items.push(sessionItem(session, group.groupId));
       }
     }

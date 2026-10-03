@@ -354,6 +354,7 @@ export const ProgressCopy = {
   creatingTerminal: (project: string) => `Creating a terminal in ${project}…`,
   creatingQuickSession: 'Creating a Quick session…',
   startingAgent: (agent: string, project: string) => `Starting ${agent} in ${project}…`,
+  startingCoordinator: (project: string) => `Starting a coordinator in ${project}…`,
   noStableProjectId: 'This project has no stable project id, so agent sessions cannot be started here.',
   openedInBrowser: (name: string) => `Opened ${name} in the browser.`,
   restoringProject: (title: string) => `Restoring ${title}...`,

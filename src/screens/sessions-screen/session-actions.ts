@@ -49,6 +49,7 @@ export type Overlay =
   | { kind: 'projectKillConfirm'; ctx: ProjectContext }
   | { kind: 'projectDetails'; ctx: ProjectContext }
   | { kind: 'agentMenu'; ctx: ProjectContext }
+  | { kind: 'newCoordinator'; ctx: ProjectContext }
   | { kind: 'actionsMenu'; ctx: ProjectContext }
   | { kind: 'collectionMenu'; ctx: CollectionContext; view: 'root' | 'colors' }
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }

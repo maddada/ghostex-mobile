@@ -71,6 +71,8 @@ export const SidebarPalette = {
   ROW_DELAYED_SEND_CLOCK: '#F4CE6B',
   /** A coordinator row's crown in place of its agent logo, 13dp, white like the Codex logo (threads.rs COORDINATOR_COLOR_DARK). */
   ROW_COORDINATOR_CROWN: '#FFFFFF',
+  /** The tree line from a coordinator down to its threads (threads.rs thread_connector, dark). */
+  ROW_THREAD_LINE: '#4A4A4A',
   /** Close After Done leading clock, 18dp (icons.rs). */
   ROW_CLOSE_AFTER_DONE_CLOCK: '#F2A2A2',
   /** Failed queued-prompt badge red (desktop decorations.rs #ff6b6b). */
