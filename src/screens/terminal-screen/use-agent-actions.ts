@@ -19,7 +19,6 @@ import {
 import {
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
-  createAgentCommand,
   delayedSendCommand,
   exportSessionTranscriptCommand,
   forkSessionCommand,
@@ -35,6 +34,7 @@ import {
   writeSessionChatSyncedDraft,
   type SessionChatSyncedDraft,
 } from '../../chat/session-chat-helpers';
+import { createAgentWithFirstInputDraft, machineAgents } from '../../chat/native/sessionShell';
 import type { GhostexSession } from '../../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
@@ -360,7 +360,9 @@ export function useTerminalAgentActions({
    * on the same machine, with the exported path staged as the new session's
    * first input. `create-agent --first-input-draft` has gxserver type that
    * mention into the agent's own input once the provider starts and stop
-   * there — the phone never sends anything for the user.
+   * there — the phone never sends anything for the user. A conversation that
+   * opens in chat gets the mention in its chat composer instead
+   * (`createAgentWithFirstInputDraft`).
    */
   const startTranscriptConversation = useCallback(async (): Promise<void> => {
     if (exportedTranscript === null || startingTranscriptConversation) return;
@@ -369,14 +371,11 @@ export function useTerminalAgentActions({
     setStartingTranscriptConversation(true);
     setExportedTranscriptError(null);
     try {
-      const created = await runGhostexCli(
-        machine,
-        createAgentCommand(agentId, projectId, transcriptMentionDraft(path, sessionTitle)),
-      );
-      const sessionId = createdSessionId(created);
-      if (sessionId === null) {
-        throw new Error('gxserver created the session without reporting its id.');
-      }
+      const sessionId = await createAgentWithFirstInputDraft(machine, {
+        projectId,
+        agent: machineAgents(machine.id).find((agent) => agent.agentId === agentId) ?? { agentId },
+        draft: transcriptMentionDraft(path, sessionTitle),
+      });
       await useInventoryStore.getState().refreshMachine(machine);
       // Creation-flow parity with Fork: the new conversation becomes the
       // visible session instead of leaving the user on the exported one.

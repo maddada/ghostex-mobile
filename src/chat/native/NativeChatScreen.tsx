@@ -43,7 +43,7 @@ import { NativeComposer } from './composer';
 import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
 import type { MenuRow } from './composer/MenuSheet';
 import { SavedPromptsSheet } from './composer/SavedPromptsSheet';
-import { openForkBranch } from './sessionShell';
+import { openForkBranch, takeLaunchDraft } from './sessionShell';
 import {
   NativeChatUiProvider,
   NativeTranscript,
@@ -121,6 +121,15 @@ export default function NativeChatScreen({
   useEffect(() => {
     setTitle(title.length > 0 ? title : null);
   }, [setTitle, title]);
+
+  // A Handoff's new conversation opens with the handover link gxserver staged for it.
+  const composerReady = chat.state?.composer.ready === true;
+  const composerInput = chat.composer;
+  useEffect(() => {
+    if (!composerReady || composerInput === null) return;
+    const draft = takeLaunchDraft(machine.id, projectId, sessionId);
+    if (draft !== null) composerInput.replace(draft);
+  }, [composerInput, composerReady, machine.id, projectId, sessionId]);
 
   // Armed Delayed Send / Close After Done on the working row; a tap opens Delayed Actions.
   const armed = useArmedActions(machine.id, sessionId);

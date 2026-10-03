@@ -8,12 +8,15 @@
 
 import { createdSessionId, runGhostexCli } from '../../components/sessions/cli';
 import { createAgentCommand, exportSessionTranscriptCommand, shellQuote, wakeSessionCommand } from '../../commands/ghostexCli';
-import type { GhostexAgentLauncher, GhostexSession } from '../../contract/mobileSummary';
+import { resolveAgentIconId, type GhostexAgentLauncher, type GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import { machineRecordFor, transcriptMentionDraft } from '../../screens/terminal-screen/session-lookups';
+import { useSettingsStore } from '../../settings/store';
 import { useTerminalStore } from '../../terminal/sessions';
+import { sessionChatRpc } from '../rust/transport';
+import { isSessionChatSupportedAgent } from '../session-chat-helpers';
 
 /** This machine's row for a session, or null before the inventory has it. */
 export function sessionRecord(machineId: string, sessionId: string): GhostexSession | null {
@@ -92,6 +95,70 @@ export async function exportTranscript(machine: MachineConnectionTarget, session
   return path;
 }
 
+/** Staged first-input drafts claimed for a chat composer, by `[machineId, projectId, sessionId]`. */
+const launchDrafts = new Map<string, string>();
+
+function launchDraftKey(machineId: string, projectId: string, sessionId: string): string {
+  return JSON.stringify([machineId, projectId, sessionId]);
+}
+
+/**
+ * The staged draft a new session's chat composer should open with, handed out once: the chat
+ * screen takes it when its composer is ready (desktop's `pending_session_chat_composer_insert`).
+ */
+export function takeLaunchDraft(machineId: string, projectId: string, sessionId: string): string | null {
+  const key = launchDraftKey(machineId, projectId, sessionId);
+  const draft = launchDrafts.get(key) ?? null;
+  launchDrafts.delete(key);
+  return draft;
+}
+
+/**
+ * Creates an agent session whose first input is `draft` (a Handoff's transcript link), staged and
+ * never sent, and answers its session id.
+ *
+ * CDXC:Drafts 2026-10-03 WHY:
+ * `create-agent --first-input-draft` has gxserver type the draft into the agent CLI once it starts,
+ * so a new conversation that opened in Chat showed an empty composer with the link hidden in the
+ * parked terminal. Desktop asks gxserver for the draft when such a session opens in Chat
+ * (`request_session_chat_launch_draft`); the phone does the same here, and creates the session with
+ * `--defer-start` so the claim always lands before the attach starts the provider and its typing.
+ * A computer whose CLI predates the claim refuses it and the draft is typed into the terminal, as
+ * before.
+ * SEE-ALSO: apps/desktop/src/app/session_chat/drafts_and_attachments.rs,
+ * server/src/server/title_generation/first_input_draft.rs (`claim_first_user_input_draft_for_chat`).
+ */
+export async function createAgentWithFirstInputDraft(
+  machine: MachineConnectionTarget,
+  input: {
+    projectId: string;
+    agent: Pick<GhostexAgentLauncher, 'agentId' | 'icon' | 'name'>;
+    draft: string;
+    model?: { model: string; effort: string } | null;
+  }
+): Promise<string> {
+  const { agent, projectId, model } = input;
+  const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+  const opensInChat =
+    useSettingsStore.getState().settings.preferredAgentInterface === 'chat' &&
+    isSessionChatSupportedAgent(resolveAgentIconId(agent.icon, agentName));
+  let command = createAgentCommand(agent.agentId, projectId, input.draft, opensInChat);
+  if (model != null && model.model.trim().length > 0) {
+    command += ` --model ${shellQuote(model.model.trim())}`;
+    if (model.effort.trim().length > 0) command += ` --effort ${shellQuote(model.effort.trim())}`;
+  }
+  const created = await runGhostexCli(machine, command);
+  const sessionId = createdSessionId(created);
+  if (sessionId === null) throw new Error('Could not create the new agent session.');
+  if (opensInChat) {
+    const answer = await sessionChatRpc(machine, 'claimSessionChatLaunchDraft', { projectId, sessionId });
+    const result = (answer.error === null ? answer.result : null) as { content?: unknown } | null;
+    const content = typeof result?.content === 'string' ? result.content : '';
+    if (content.length > 0) launchDrafts.set(launchDraftKey(machine.id, projectId, sessionId), content);
+  }
+  return sessionId;
+}
+
 /**
  * Handoff's new conversation: the agent starts in the same project with the exported file staged
  * as its first input (never sent), on the picked model when the agent belongs to the picked
@@ -112,13 +179,11 @@ export async function startHandoffConversation(
     target !== null && (target.provider === 'claude' || target.provider === 'codex') && modelPickerProvider(agent.icon) === target.provider
       ? target
       : null;
-  let command = createAgentCommand(agent.agentId, input.projectId, transcriptMentionDraft(input.path, input.sessionTitle));
-  if (launchModel !== null && launchModel.model.trim().length > 0) {
-    command += ` --model ${shellQuote(launchModel.model.trim())}`;
-    if (launchModel.effort.trim().length > 0) command += ` --effort ${shellQuote(launchModel.effort.trim())}`;
-  }
-  const created = await runGhostexCli(machine, command);
-  const sessionId = createdSessionId(created);
-  if (sessionId === null) throw new Error('Could not create the new agent session.');
+  const sessionId = await createAgentWithFirstInputDraft(machine, {
+    projectId: input.projectId,
+    agent,
+    draft: transcriptMentionDraft(input.path, input.sessionTitle),
+    model: launchModel,
+  });
   await openSessionTab(machine, sessionId, input.projectId);
 }
