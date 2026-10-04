@@ -289,8 +289,8 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
       transcriptAgent([session.agentName, session.agentIcon, session.agent]) !== null,
     canFork: terminal && !draft && FORK_AGENT_ICONS.includes(agentIcon),
     canFullReload: terminal && !draft && supportsFullReload(session, agentIcon),
-    // gx-core `full_menu` shows Make Coordinator on the same sessions gxserver can promote: Claude or
-    // Codex, not a draft, not in a box, and not already a coordinator or a coordinator's thread.
+    // gx-core `full_menu` shows Make Coordinator on the same sessions gxserver can promote: Claude,
+    // Codex or ZCode, not a draft, not in a box, and not already a coordinator or a coordinator's thread.
     canMakeCoordinator:
       terminal &&
       !draft &&
@@ -298,7 +298,7 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
       session.agentbox === undefined &&
       !session.isCoordinator &&
       session.coordinatorSessionId.length === 0 &&
-      (agentIcon === 'claude' || agentIcon === 'codex'),
+      (agentIcon === 'claude' || agentIcon === 'codex' || agentIcon === 'zcode'),
     canOpenNote: terminal && hasProject && session.agentSessionId.trim().length > 0,
     canPark: terminal && hasProject,
     canRename: terminal,

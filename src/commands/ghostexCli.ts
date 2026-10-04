@@ -243,7 +243,7 @@ export function createCoordinatorCommand(input: CreateCoordinatorInput): string 
 }
 
 /**
- * `ghostex coordinator promote`: makes an existing Claude or Codex session a coordinator without
+ * `ghostex coordinator promote`: makes an existing Claude, Codex or ZCode session a coordinator without
  * restarting or interrupting it (the desktop's Advanced > Make Coordinator).
  */
 export function promoteCoordinatorCommand(globalRef: string): string {
