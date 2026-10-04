@@ -620,6 +620,7 @@ export type AgentIconId =
   | 'codex'
   | 'copilot'
   | 'factory-droid'
+  | 'freebuff'
   | 'gemini'
   | 'grok-build'
   | 'hermes-agent'
@@ -644,6 +645,7 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   codex: '#FFFFFF',
   copilot: '#FFFFFF',
   'factory-droid': '#FF7A1A',
+  freebuff: '#FFFFFF',
   gemini: '#8B9AFF',
   'grok-build': '#FFFFFF',
   'hermes-agent': '#F3C46B',
@@ -701,6 +703,7 @@ const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
   zcode: 'zcode',
   'zcode-cli': 'zcode',
   'z code': 'zcode',
+  freebuff: 'freebuff',
   browser: 'browser',
 };
 

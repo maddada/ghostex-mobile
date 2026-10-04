@@ -236,6 +236,8 @@ function transcriptAgent(candidates: readonly string[]): string | null {
       case 'zcode':
       case 'zcode-cli':
         return 'zcode';
+      case 'freebuff':
+        return 'freebuff';
       default:
         break;
     }
