@@ -79,9 +79,13 @@ export function Glyph({ name, size, color, strokeWidth }: { name: GlyphName; siz
 export const SPARK_PATH =
   'M12 0.8c.5 4.6 1.8 7.4 3.6 9.1 1.6 1.6 4.2 2.5 7.6 2.1-3.4-.4-6 .5-7.6 2.1-1.8 1.7-3.1 4.5-3.6 9.1-.5-4.6-1.8-7.4-3.6-9.1C6.8 12.5 4.2 11.6.8 12c3.4.4 6-.5 7.6-2.1C10.2 8.2 11.5 5.4 12 .8z';
 
+/** Transparent units around the glyph so the rotating spark never has opaque pixels on its edge (mirrors `SPARK_PAD` in apps/desktop/src/assets/chat_working.rs). */
+const SPARK_PAD = 4;
+
 export function Spark({ size, color }: { size: number; color: string }) {
+  const box = size * (24 + 2 * SPARK_PAD) / 24;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Svg width={box} height={box} viewBox={`${-SPARK_PAD} ${-SPARK_PAD} ${24 + 2 * SPARK_PAD} ${24 + 2 * SPARK_PAD}`}>
       <Path d={SPARK_PATH} fill={color} />
     </Svg>
   );
