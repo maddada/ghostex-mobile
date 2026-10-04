@@ -31,9 +31,10 @@ export type RowNesting = {
 export type CoordinatorBadgeTone = 'idle' | 'working' | 'waiting';
 
 /**
- * The coordinator row's badge: the crew icon and every thread session of the coordinator still in
- * the list, whatever its state, tinted light blue while one waits on someone and orange while one
- * works (gx-core `coordinator_badge`, the user's 2026-10-01 decision there).
+ * The coordinator row's badge: the crew icon and one number: the threads working, else the threads
+ * waiting on the user, else every thread session of the coordinator still in the list. The tint
+ * follows the number: orange for the working count, light blue for the waiting count, neutral for
+ * the total (gx-core `coordinator_badge`, the user's 2026-10-04 decision there).
  */
 export type CoordinatorBadge = { count: number; tone: CoordinatorBadgeTone };
 
@@ -80,8 +81,8 @@ export function coordinatorBadges(sessions: readonly GhostexSession[]): Map<stri
   const badges = new Map<string, CoordinatorBadge>();
   for (const [key, tally] of tallies) {
     badges.set(key, {
-      count: tally.total,
-      tone: tally.waiting > 0 ? 'waiting' : tally.working > 0 ? 'working' : 'idle',
+      count: tally.working > 0 ? tally.working : tally.waiting > 0 ? tally.waiting : tally.total,
+      tone: tally.working > 0 ? 'working' : tally.waiting > 0 ? 'waiting' : 'idle',
     });
   }
   return badges;

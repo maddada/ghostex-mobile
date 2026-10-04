@@ -151,8 +151,8 @@ function ThreadConnector({ iconLeft, last }: { iconLeft: number; last: boolean }
 }
 
 /**
- * threads.rs `coordinator_badge`: the crew icon and the thread count, light blue
- * while a thread waits on someone, orange while one works.
+ * threads.rs `coordinator_badge`: the crew icon and one number (threads working, else waiting,
+ * else all of them), tinted to match: orange for working, light blue for waiting, neutral for all.
  */
 function CoordinatorBadgeView({ badge }: { badge: CoordinatorBadge }) {
   const tint =
