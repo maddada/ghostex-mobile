@@ -55,6 +55,7 @@ import {
   type CreateCoordinatorInput,
   exportSessionTranscriptCommand,
   forkSessionCommand,
+  promoteCoordinatorCommand,
   moveProjectCommand,
   removeProjectCommand,
   updateProjectCollectionsCommand,
@@ -329,6 +330,19 @@ export function useSessionsScreenMenus({
     }
   };
 
+  /** Make Coordinator: gxserver promotes the session in place; its running turn is never touched. */
+  const makeCoordinator = async (machine: MachineRecord, session: GhostexSession): Promise<void> => {
+    setProgress('Making it a coordinator…');
+    try {
+      await runGhostexCli(machine, promoteCoordinatorCommand(session.globalRef));
+      setTransientStatus('Now a coordinator');
+    } catch (error) {
+      setTransientStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProgress(null);
+    }
+  };
+
   /** The exported transcript's follow-up: the same agent, with the path staged as its first input. */
   const startTranscriptConversation = (exported: ExportedTranscript, projectTitle: string): void => {
     if (exported.agentId.length === 0) return;
@@ -389,6 +403,17 @@ export function useSessionsScreenMenus({
       case 'exportSessionTranscript':
         void exportTranscript(requireSession());
         return;
+      case 'makeCoordinator': {
+        const { session } = requireSession().item;
+        setOverlay({
+          kind: 'confirmAction',
+          title: 'Make coordinator?',
+          body: `${sessionTitle(session)} keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its coordinator playbook arrives once its current turn is over.`,
+          confirmLabel: 'Make Coordinator',
+          run: () => void makeCoordinator(machine, session),
+        });
+        return;
+      }
       case 'copyWorkspaceProjectPathForGroup': {
         const { header } = requireProject();
         setOverlay(NONE);
@@ -1062,7 +1087,7 @@ export function useSessionsScreenMenus({
         useSettingsStore.getState().settings.preferredAgentInterface === 'chat' && isSessionChatSupportedAgent(iconId);
       void runCreationFlow(
         target,
-        createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst),
+        createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst, true),
         ProgressCopy.startingAgent(agentName, header.title),
         chatFirst ? { agentId: iconId, projectId: header.projectId, title: agentName } : undefined
       );

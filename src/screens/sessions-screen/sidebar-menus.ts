@@ -46,6 +46,7 @@ export type SidebarMenuMessage =
   | { type: 'toggleCloseAfterDone'; sessionId: string }
   | { type: 'forkSession'; sessionId: string }
   | { type: 'fullReloadSession'; sessionId: string }
+  | { type: 'makeCoordinator'; sessionId: string }
   | { type: 'exportSessionTranscript'; sessionId: string }
   | { type: 'cancelDelayedSend'; sessionId: string }
   | { type: 'copyWorkspaceProjectPathForGroup'; groupId: string }
@@ -258,6 +259,7 @@ type SessionCapabilities = {
   canExportTranscript: boolean;
   canFork: boolean;
   canFullReload: boolean;
+  canMakeCoordinator: boolean;
   canOpenNote: boolean;
   canPark: boolean;
   canRename: boolean;
@@ -287,6 +289,16 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
       transcriptAgent([session.agentName, session.agentIcon, session.agent]) !== null,
     canFork: terminal && !draft && FORK_AGENT_ICONS.includes(agentIcon),
     canFullReload: terminal && !draft && supportsFullReload(session, agentIcon),
+    // gx-core `full_menu` shows Make Coordinator on the same sessions gxserver can promote: Claude or
+    // Codex, not a draft, not in a box, and not already a coordinator or a coordinator's thread.
+    canMakeCoordinator:
+      terminal &&
+      !draft &&
+      hasProject &&
+      session.agentbox === undefined &&
+      !session.isCoordinator &&
+      session.coordinatorSessionId.length === 0 &&
+      (agentIcon === 'claude' || agentIcon === 'codex'),
     canOpenNote: terminal && hasProject && session.agentSessionId.trim().length > 0,
     canPark: terminal && hasProject,
     canRename: terminal,
@@ -501,6 +513,9 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   }
   if (caps.canFullReload) {
     advanced.push(row('Full Reload', 'refresh', command({ type: 'fullReloadSession', sessionId: id })));
+  }
+  if (caps.canMakeCoordinator) {
+    advanced.push(row('Make Coordinator', 'users-group', command({ type: 'makeCoordinator', sessionId: id })));
   }
   if (caps.canExportTranscript) {
     advanced.push(

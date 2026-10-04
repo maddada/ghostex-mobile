@@ -181,12 +181,17 @@ export function createChatCommand(): string {
  * provider starts and never submits it, so the value is passed verbatim —
  * including a trailing space, which separates a staged handoff link from
  * whatever the user types next.
+ *
+ * `replaceEmptySessions` marks the user's own new-session action: gxserver then
+ * closes the project's other sessions that are still fully empty. An older
+ * `ghostex` ignores the flag.
  */
 export function createAgentCommand(
   agentId: string,
   projectId: string,
   firstInputDraft?: string,
   deferStart = false,
+  replaceEmptySessions = false,
 ): string {
   const draft = firstInputDraft ?? '';
   return (
@@ -194,6 +199,7 @@ export function createAgentCommand(
     ` --project-id ${shellQuote(requireId(projectId, 'project id'))}` +
     (draft.trim().length === 0 ? '' : ` --first-input-draft ${shellQuote(draft)}`) +
     (deferStart ? ' --defer-start' : '') +
+    (replaceEmptySessions ? ' --replace-empty-sessions' : '') +
     ' --json'
   );
 }
@@ -234,6 +240,14 @@ export function createCoordinatorCommand(input: CreateCoordinatorInput): string 
     optional('--effort', input.effort) +
     ' --json'
   );
+}
+
+/**
+ * `ghostex coordinator promote`: makes an existing Claude or Codex session a coordinator without
+ * restarting or interrupting it (the desktop's Advanced > Make Coordinator).
+ */
+export function promoteCoordinatorCommand(globalRef: string): string {
+  return `ghostex coordinator promote ${shellQuote(requireId(globalRef, 'session reference'))} --json`;
 }
 
 /** Quick action: `ghostex run-action <commandId> --project-id <id>` (always prints JSON). */
