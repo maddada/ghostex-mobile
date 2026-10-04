@@ -4,7 +4,8 @@
  * and each row's arguments and result, which the core ships only while the row is open.
  */
 
-import { memo } from 'react';
+import * as Clipboard from 'expo-clipboard';
+import { memo, useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
@@ -129,12 +130,18 @@ const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: s
     const input = str(detail, 'input');
     const output = str(detail, 'output');
     const command = tool.glyph === 'terminal';
+    // The first block's label row carries the copy button, which copies the whole call (the core's `copyText`).
+    const copyText = str(detail, 'copyText');
     const parts = [];
     if (input.length > 0) {
-      parts.push(<ToolBody key='input' label={command ? 'Command' : output.length > 0 ? 'Input' : null} content={input} failed={false} />);
+      parts.push(
+        <ToolBody key='input' label={command ? 'Command' : output.length > 0 ? 'Input' : null} content={input} failed={false} copyText={copyText} />,
+      );
     }
     if (output.length > 0) {
-      parts.push(<ToolBody key='output' label={tool.hasCall === true ? 'Result' : null} content={output} failed={failed} />);
+      parts.push(
+        <ToolBody key='output' label={tool.hasCall === true ? 'Result' : null} content={output} failed={failed} copyText={parts.length === 0 ? copyText : ''} />,
+      );
     }
     if (parts.length > 0) {
       body = (
@@ -174,12 +181,39 @@ const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: s
   );
 });
 
-/** One labelled block of a tool's detail: verbatim monospaced text in a height-capped box. */
-function ToolBody({ label, content, failed }: { label: string | null; content: string; failed: boolean }) {
+/**
+ * One labelled block of a tool's detail: verbatim monospaced text in a height-capped box, selectable
+ * with a long press. A non-empty `copyText` puts the copy button for the whole call on its label row
+ * (desktop `tool_run.rs`).
+ */
+function ToolBody({ label, content, failed, copyText }: { label: string | null; content: string; failed: boolean; copyText: string }) {
   const { theme } = useTranscriptEnv();
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    void Clipboard.setStringAsync(copyText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [copyText]);
   return (
     <View style={styles.bodyGroup}>
-      {label !== null ? <Text style={[styles.bodyLabel, { color: theme.muted }]}>{label}</Text> : null}
+      {label !== null || copyText.length > 0 ? (
+        <View style={styles.bodyHeader}>
+          <Text numberOfLines={1} style={[styles.bodyLabel, { color: theme.muted }]}>
+            {label ?? ''}
+          </Text>
+          {copyText.length > 0 ? (
+            <Pressable
+              hitSlop={6}
+              onPress={copy}
+              accessibilityRole='button'
+              accessibilityLabel={copied ? 'Copied' : 'Copy tool call'}
+              style={({ pressed }) => [styles.copyAction, pressed && { backgroundColor: theme.pressed }]}
+            >
+              <Glyph name={copied ? 'check' : 'copy'} size={14} color={theme.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <ScrollView nestedScrollEnabled style={[styles.bodyBox, { backgroundColor: theme.input }]} contentContainerStyle={styles.bodyContent}>
         <Text selectable style={[styles.bodyText, { color: failed ? theme.error : theme.muted }]}>
           {content}
@@ -203,7 +237,9 @@ const styles = StyleSheet.create({
   foldToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4 },
   foldLabel: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
   bodyGroup: { gap: 4, minWidth: 0 },
-  bodyLabel: { fontSize: 12.25 },
+  bodyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 },
+  bodyLabel: { fontSize: 12.25, flexShrink: 1 },
+  copyAction: { width: 22, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   bodyBox: { maxHeight: 220.75, borderRadius: 6 },
   bodyContent: { paddingHorizontal: 10, paddingVertical: 8 },
   bodyText: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: CODE_LINE },
