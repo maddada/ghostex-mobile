@@ -10,7 +10,14 @@
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Text, TextInput, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
+import {
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
+} from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ComposerModelState } from '../../rust/composer';
@@ -28,6 +35,13 @@ type Selection = { start: number; end: number };
  * it; collapsed, it shows only the placeholder's first line.
  */
 export const COLLAPSED_INPUT_HEIGHT = 21 + 2 + 2;
+
+/**
+ * The average glyph advance, in physical pixels, of the pill's hidden markdown.
+ *
+ * CDXC:SessionChat 2026-10-05 WHY: Android rounds a span's font size up to a whole pixel (`TextAttributeProps.setFontSize` ceils), so the "0.1" hidden `](path)` still took about 40px after an image pill, and the keyboard's suggestion/composing underline (drawn in its own color, not the transparent text color) showed there as a faint line. A font size of 0 is not an option: RN's letter-spacing getter requires a positive size. Each hidden glyph is pulled back by about its own 1px advance instead, so the markdown takes next to no width.
+ */
+const HIDDEN_GLYPH_ADVANCE_PX = 0.55;
 
 export const ComposerInput = forwardRef<
   ComposerInputHandle,
@@ -49,6 +63,11 @@ export const ComposerInput = forwardRef<
 >(function ComposerInput({ model, input, references, parsedFor, parse, placeholder, collapsed, maxHeight, dispatch, onTextChange, onCaret }, ref) {
   const styles = useStyles();
   const P = useTranscriptTheme();
+  const { scale, fontScale } = useWindowDimensions();
+  const hidden = useMemo(
+    () => [styles.hidden, { letterSpacing: -HIDDEN_GLYPH_ADVANCE_PX / (scale * fontScale) }],
+    [styles.hidden, scale, fontScale]
+  );
   const field = useRef<TextInput>(null);
   const [text, setText] = useState(model.text);
   const [forced, setForced] = useState<Selection | undefined>(undefined);
@@ -121,7 +140,7 @@ export const ComposerInput = forwardRef<
       if (reference.start > cursor) parts.push(text.slice(cursor, reference.start));
       const tint = P.reference[reference.kind] ?? P.reference.file;
       parts.push(
-        <Text key={`h0:${index}`} style={styles.hidden}>
+        <Text key={`h0:${index}`} style={hidden}>
           {text.slice(reference.start, reference.labelStart)}
         </Text>,
         <Text key={`l:${index}`} style={[styles.pill, { color: tint, backgroundColor: `${tint}26` }]}>
@@ -129,7 +148,7 @@ export const ComposerInput = forwardRef<
         </Text>,
         // The Side Chat pill covers `/btw ` with its space, which stays visible after the pill
         // (core `reference_pill_text`).
-        <Text key={`h1:${index}`} style={reference.kind === 'sideChat' ? undefined : styles.hidden}>
+        <Text key={`h1:${index}`} style={reference.kind === 'sideChat' ? undefined : hidden}>
           {text.slice(reference.labelEnd, reference.end)}
         </Text>
       );
@@ -137,7 +156,7 @@ export const ComposerInput = forwardRef<
     });
     if (cursor < text.length) parts.push(text.slice(cursor));
     return parts;
-  }, [P, live, styles, text]);
+  }, [P, hidden, live, styles, text]);
 
   // A TextInput wraps its placeholder and cannot truncate it, so the collapsed field draws the
   // placeholder's first line itself, cut to one line with an ellipsis.
@@ -188,6 +207,6 @@ const useStyles = themedStyles((P) => ({
   hint: { position: 'absolute', left: 0, right: 0, top: 2, fontSize: 15, lineHeight: 21 },
   collapsed: { height: COLLAPSED_INPUT_HEIGHT, maxHeight: COLLAPSED_INPUT_HEIGHT },
   pill: { fontWeight: '500' },
-  /** The markdown around a pill's label: in the text, drawn with no width. */
-  hidden: { fontSize: 0.1, color: 'transparent', letterSpacing: 0 },
+  /** The markdown around a pill's label: in the text, drawn with no width (letter spacing set per density). */
+  hidden: { fontSize: 0.1, color: 'transparent' },
 }));

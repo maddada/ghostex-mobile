@@ -12,8 +12,9 @@
  * is the only thing separating them from a session title of the same size.
  */
 
-import { useRef, type ReactNode, type RefObject } from 'react';
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import { COMMAND_ICONS, PROJECT_FALLBACK_ICONS } from '../../assets/tablerIcons.generated';
@@ -24,6 +25,7 @@ import {
   type GhostexQuickAction,
 } from '../../contract/mobileSummary';
 import type { SectionStatusCounts } from '../../contract/grouping';
+import { decodeBase64Utf8 } from '../../docs/remoteFiles';
 import { GhostexPalette, mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import {
@@ -127,6 +129,22 @@ const branchStyles = StyleSheet.create({
 // then a typed Tabler glyph, then the folder / worktree fallback.
 // ---------------------------------------------------------------------------
 
+/**
+ * The SVG markup inside an `image/svg+xml` data URL, or null for any other URL.
+ *
+ * CDXC:Icons 2026-10-05 WHY: gxserver publishes a repository's `favicon.svg` as an SVG data URL (the desktop sidebar draws it), but RN's Image cannot decode SVG on Android and drew an empty box for such projects (mastro_ed). SVG icons go through react-native-svg instead, and any icon that still fails to load falls back to the folder glyph.
+ */
+function svgXmlFromDataUrl(uri: string): string | null {
+  const match = /^data:image\/svg\+xml(;[^,]*)?,/i.exec(uri);
+  if (match === null) return null;
+  const payload = uri.slice(match[0].length);
+  try {
+    return /;base64/i.test(match[1] ?? '') ? decodeBase64Utf8(payload) : decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+}
+
 /** Default glyph tint: the same muted header color the desktop glyph uses. */
 const PROJECT_GLYPH_COLOR = mixHexColors(SidebarPalette.FOREGROUND, SidebarPalette.MUTED, 72);
 
@@ -143,12 +161,27 @@ export function ProjectIcon({
       : icon.discoveredIconDataUrl.length > 0
         ? icon.discoveredIconDataUrl
         : '';
-  if (imageUri.length > 0) {
+  const [failedUri, setFailedUri] = useState('');
+  const svgXml = useMemo(() => svgXmlFromDataUrl(imageUri), [imageUri]);
+  if (imageUri.length > 0 && failedUri !== imageUri) {
+    if (svgXml !== null) {
+      return (
+        <View style={{ width: size, height: size, borderRadius: ds(3), overflow: 'hidden' }}>
+          <SvgXml
+            xml={svgXml}
+            width={size}
+            height={size}
+            onError={() => setFailedUri(imageUri)}
+          />
+        </View>
+      );
+    }
     return (
       <Image
         source={{ uri: imageUri }}
         style={{ width: size, height: size, borderRadius: ds(3) }}
         resizeMode="contain"
+        onError={() => setFailedUri(imageUri)}
       />
     );
   }
