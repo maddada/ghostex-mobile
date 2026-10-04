@@ -2,12 +2,13 @@
  * The account-switch card centered over the chat while a Claude or Codex account switch runs,
  * drawn from `accountSwitchCard`. Port of desktop `account_switch_card.rs` (React's
  * `account-switch-card.tsx`): heading and lede, a From / To line per account over its usage
- * tiles, and numbered steps with a moving line under the active one, or the failure with Retry.
+ * tiles, and numbered steps with a moving line under the active one, or the failure with Retry
+ * and a close X that dismisses the failed switch in gxserver.
  * A switch in flight blocks the chat behind it; a failed one lets touches through.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { RustChat } from '../../rust/useRustChat';
 import { AgentMark } from './agentMark';
@@ -20,6 +21,7 @@ import { ChatButton, SWEEP_EASING, useLoop } from './primitives';
 
 export function AccountSwitchCard({ chat }: { chat: RustChat }) {
   const styles = useStyles();
+  const P = useTranscriptTheme();
   const card = obj(chat.state?.document?.accountSwitchCard);
   const appear = useRef(new Animated.Value(0)).current;
   const id = str(card, 'id');
@@ -35,6 +37,7 @@ export function AccountSwitchCard({ chat }: { chat: RustChat }) {
   const failed = (str(card, 'phase') || 'switching') === 'failed';
   const steps = Array.isArray(card.steps) ? card.steps : null;
   const retry = obj(card.retry);
+  const dismissible = isTrue(card, 'dismissible');
 
   let footer: ReactNode;
   if (steps !== null) {
@@ -78,10 +81,21 @@ export function AccountSwitchCard({ chat }: { chat: RustChat }) {
             { transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] },
           ]}
         >
-          <View accessibilityRole="text">
+          <View accessibilityRole="text" style={dismissible ? styles.headerWithClose : undefined}>
             <Text style={styles.heading}>{str(card, 'heading')}</Text>
             <Text style={styles.lede}>{str(card, 'lede')}</Text>
           </View>
+          {dismissible ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              hitSlop={8}
+              onPress={() => chat.dispatch({ type: 'accounts', request: { operation: 'dismissSwitch' } })}
+              style={({ pressed }) => [styles.close, pressed && { backgroundColor: P.floatingTile }]}
+            >
+              <Glyph name="x" size={14} color={P.muted} />
+            </Pressable>
+          ) : null}
           <Account value={card.from} provider={provider} verified={verified} />
           <Account value={card.to} provider={provider} verified={verified} />
           {footer}
@@ -227,6 +241,19 @@ const useStyles = themedStyles((P) => ({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '600',
+  },
+  headerWithClose: {
+    paddingRight: 28,
+  },
+  close: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   lede: {
     marginTop: 2,
