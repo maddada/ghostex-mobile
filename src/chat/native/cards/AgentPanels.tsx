@@ -427,7 +427,7 @@ const useStyles = themedStyles((P) => ({
     fontVariant: ['tabular-nums'],
   },
   threadRows: {
-    maxHeight: 240,
+    maxHeight: 360,
   },
   threadGroup: {
     paddingTop: 4,
