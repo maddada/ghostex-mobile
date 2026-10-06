@@ -436,11 +436,18 @@ function linkDestination(text: string, open: number): { href: string; end: numbe
   let index = open + 1;
   while (text[index] === ' ') index += 1;
   let href = '';
-  if (text[index] === '<') {
+  const bracketed = text[index] === '<';
+  const start = bracketed ? index + 1 : index;
+  const literalEnd = literalDestinationEnd(text, start, bracketed);
+  const literal = literalEnd !== null && isLiteralWindowsDestination(text.slice(start, literalEnd));
+  if (bracketed) {
     const close = text.indexOf('>', index);
     if (close < 0) return null;
     href = text.slice(index + 1, close);
     index = close + 1;
+  } else if (literal) {
+    href = text.slice(start, literalEnd);
+    index = literalEnd;
   } else {
     let depth = 0;
     const begin = index;
@@ -468,7 +475,7 @@ function linkDestination(text: string, open: number): { href: string; end: numbe
     while (text[index] === ' ') index += 1;
   }
   if (text[index] !== ')') return null;
-  return { href: unescapeDestination(href), end: index };
+  return { href: literal ? href : unescapeDestination(href), end: index };
 }
 
 /**
@@ -479,6 +486,40 @@ function linkDestination(text: string, open: number): { href: string; end: numbe
  */
 function unescapeDestination(href: string): string {
   return href.replace(/\\([!-/:-@[-`{-~])/g, '$1');
+}
+
+/**
+ * CDXC:SessionChat 2026-10-06 DECISION:
+ * User: keep backslashes literally whenever a link destination is a Windows absolute path, so
+ * `C:\Users\me\.claude\x.md` keeps its `\.`. The core already doubles such backslashes in the
+ * Markdown it hands both clients; this is the same test (`is_literal_windows_destination`) for
+ * text that does not come through it, and a destination the core doubled fails it and decodes as
+ * ordinary escaped Markdown, so the two never apply twice.
+ * SEE-ALSO: packages/gx-chat-core/src/transcript/native_markdown.rs (`literal_windows_link_destinations`)
+ */
+function isLiteralWindowsDestination(destination: string): boolean {
+  const drive = /^[a-z]:/iu.test(destination);
+  if (drive && destination[2] === '\\') return destination[3] !== '\\';
+  if (drive && destination[2] === '/') return !destination.includes('\\\\');
+  return destination.startsWith('\\\\') && destination[2] !== '\\';
+}
+
+/** Where a destination ends when its backslashes are literal (`literal_destination_end` in the core). */
+function literalDestinationEnd(text: string, start: number, bracketed: boolean): number | null {
+  if (bracketed) {
+    const close = text.indexOf('>', start);
+    return close < 0 ? null : close;
+  }
+  let depth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (character === '(') depth += 1;
+    else if (character === ')') {
+      if (depth === 0) return index;
+      depth -= 1;
+    } else if (character === ' ' || character === '\t' || character === '\r' || character === '\n') return index;
+  }
+  return text.length;
 }
 
 function isSpace(character: string | undefined): boolean {
