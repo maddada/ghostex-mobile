@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import net.schmizz.keepalive.KeepAliveProvider
@@ -66,6 +67,13 @@ class GhostexSshConnection(
   /** Darwin's SSH server is more reliable with a streamed exec upload than SFTP. */
   @Volatile
   private var execUploadPreferred: Boolean? = null
+
+  /**
+   * CDXC:RemoteMachines 2026-10-06 WHY:
+   * Everything the phone does on a machine shares this one SSH connection, and OpenSSH (macOS and Windows alike) refuses a session channel past `MaxSessions`, 10 by default, with the bare reason "open failed". Up to seven warm terminals each hold a channel for as long as they live, so commands and uploads opened on top of them without a limit lost the race whenever a few ran at once: a chat attachment failed with "open failed" while the chat's own polls were running. Commands and uploads therefore take one of the remaining slots and wait for a free one instead of being refused.
+   * SEE-ALSO: MAX_WARM_SESSIONS in src/terminal/sessions.ts (the terminals' share of the budget).
+   */
+  private val commandChannelSlots = Semaphore(COMMAND_CHANNEL_SLOTS, true)
 
   /** Live local port forwards keyed by remote port; owned by this connection. */
   private val portForwards = ConcurrentHashMap<Int, GhostexPortForward>()
@@ -258,6 +266,24 @@ class GhostexSshConnection(
   }
 
   /**
+   * Run [work], which opens one short-lived session channel, inside a command slot. It waits up to
+   * [waitMs] for a free slot; a wait that runs out fails this call only, never the connection.
+   */
+  fun <T> withCommandChannel(waitMs: Long, work: () -> T): T {
+    if (!commandChannelSlots.tryAcquire(waitMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)) {
+      throw GhostexException(
+        GhostexErrorCode.CHANNEL_FAILED,
+        "The computer is still busy with other commands. Try again in a moment."
+      )
+    }
+    try {
+      return work()
+    } finally {
+      commandChannelSlots.release()
+    }
+  }
+
+  /**
    * Run [command] in its own non-interactive session channel, collecting stdout/stderr off
    * the channel while waiting so large outputs cannot stall the remote window.
    */
@@ -299,8 +325,11 @@ class GhostexSshConnection(
       throw GhostexException(GhostexErrorCode.SFTP_FAILED, "Local file not found: $localPath")
     }
     try {
-      if (prefersExecUpload()) uploadViaExec(ssh, localFile, remotePath)
-      else uploadViaSftp(ssh, localFile, remotePath)
+      val viaExec = prefersExecUpload()
+      withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS) {
+        if (viaExec) uploadViaExec(ssh, localFile, remotePath)
+        else uploadViaSftp(ssh, localFile, remotePath)
+      }
     } catch (error: Exception) {
       if (error is GhostexException) throw error
       throw mapSshError(error, fallbackCode = GhostexErrorCode.SFTP_FAILED)
@@ -310,7 +339,9 @@ class GhostexSshConnection(
   /** Cache the remote platform after the first upload; session identity does not change. */
   private fun prefersExecUpload(): Boolean {
     execUploadPreferred?.let { return it }
-    val outcome = exec("uname -s", REMOTE_PLATFORM_DETECTION_TIMEOUT_MS)
+    val outcome = withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS) {
+      exec("uname -s", REMOTE_PLATFORM_DETECTION_TIMEOUT_MS)
+    }
     val preferred = outcome.exitCode == 0 && outcome.stdout.trim() == "Darwin"
     execUploadPreferred = preferred
     return preferred
@@ -591,6 +622,9 @@ class GhostexSshConnection(
     private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
     private const val OWNER_READ_WRITE_PERMISSIONS = 0b110_000_000 // 0600
+
+    /** OpenSSH's default `MaxSessions` (10) less the seven warm terminals `MAX_WARM_SESSIONS` allows. */
+    private const val COMMAND_CHANNEL_SLOTS = 3
 
     /** tailcat forwards listen on loopback only; the tunnel itself carries the traffic. */
     private const val TAILCAT_LOOPBACK_HOST = "127.0.0.1"

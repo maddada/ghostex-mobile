@@ -658,7 +658,7 @@ class GhostexNativeModule : Module() {
         retireConnection(connection, "disconnected", coded)
       }
       promise.reject(coded)
-    }) { connection.exec(command, timeout, input) }
+    }, commandChannel = true) { connection.exec(command, timeout, input) }
   }
 
   // endregion

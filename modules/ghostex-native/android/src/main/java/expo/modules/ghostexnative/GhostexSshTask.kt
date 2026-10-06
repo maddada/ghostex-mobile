@@ -17,34 +17,44 @@ internal object GhostexSshTask {
   fun deadline(timeoutMs: Long, expired: () -> Unit) =
     deadlines.schedule({ expired() }, timeoutMs, TimeUnit.MILLISECONDS)
 
+  /**
+   * [commandChannel] work waits for one of the connection's command slots first
+   * (`GhostexSshConnection.withCommandChannel`); the deadline starts once it has one, so waiting
+   * behind other commands never tears the transport down.
+   */
   fun <T> run(
     connection: GhostexSshConnection,
     timeoutMs: Long,
     success: (T) -> Unit,
     failure: (Throwable) -> Unit,
+    commandChannel: Boolean = false,
     work: () -> T
   ) {
     val settled = AtomicBoolean(false)
-    val deadline = deadlines.schedule({
-      if (settled.compareAndSet(false, true)) {
-        // Settle before teardown: transport callbacks may also report this failure.
-        failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
-        connection.abortTransport()
+    val bounded: () -> T = {
+      val deadline = deadlines.schedule({
+        if (settled.compareAndSet(false, true)) {
+          // Settle before teardown: transport callbacks may also report this failure.
+          failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
+          connection.abortTransport()
+        }
+      }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
+      try {
+        work()
+      } finally {
+        deadline.cancel(false)
       }
-    }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
+    }
     try {
       connection.workExecutor.execute {
         try {
-          val result = work()
+          val result = if (commandChannel) connection.withCommandChannel(timeoutMs, bounded) else bounded()
           if (settled.compareAndSet(false, true)) success(result)
         } catch (error: Throwable) {
           if (settled.compareAndSet(false, true)) failure(error)
-        } finally {
-          deadline.cancel(false)
         }
       }
     } catch (error: Throwable) {
-      deadline.cancel(false)
       if (settled.compareAndSet(false, true)) failure(error)
     }
   }
