@@ -24,7 +24,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Linking, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { docPathForChatFile } from '../../docs/openDoc';
+import { docPathForChatFile, remotePathForChatFile } from '../../docs/openDoc';
 import { isGpuiAvailable } from '../../../modules/gx-chat-core/src/gpui';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
@@ -292,15 +292,17 @@ function useChatViewRequests(
           case 'open':
             if (request.target.kind === 'url') openMachineLink(machineId, request.target.url);
             else {
-              // Markdown and HTML open in the Docs viewer; a relative path is the session project's.
-              const docPath = docPathForChatFile(request.target.path, projectPathFor(machineId, projectId));
+              // Markdown, HTML, text and pictures open in the file viewer; a relative path is the session project's.
+              const projectPath = projectPathFor(machineId, projectId);
+              const docPath = docPathForChatFile(request.target.path, projectPath);
               if (docPath !== null) {
                 navigation.push('DocViewer', { machineId, path: docPath });
                 return;
               }
               // Any other file has no viewer on the phone; the path is what it can offer.
-              void Clipboard.setStringAsync(request.target.path);
-              show(`${request.target.path} (path copied)`, false, 'File');
+              const path = remotePathForChatFile(request.target.path, projectPath) ?? request.target.path;
+              void Clipboard.setStringAsync(path);
+              show(`${path} (path copied)`, false, "Can't preview this file on the phone");
             }
             return;
           case 'markdownSaved':
@@ -357,7 +359,7 @@ function projectPathFor(machineId: string, projectId: string): string {
  * What the transcript menu's rows do on the phone (desktop's `handle_action` and the app shell's
  * `openLink` / `openFile` / `locateFile`). Rows the phone cannot perform are left out: Open in
  * Code (the phone has no code editor), Open File/Folder Location (the file is on the computer), and
- * Open in Docs for a file the Docs viewer cannot show.
+ * Open in Files or Open Image for a file the phone's viewer cannot show.
  */
 function useTranscriptMenuHost(
   machineId: string,
@@ -374,7 +376,8 @@ function useTranscriptMenuHost(
         if (type === 'copyText') return true;
         if (type !== 'host') return false;
         if (command.action === 'openLink') return typeof command.url === 'string';
-        if (command.action === 'openFile') return command.view === 'docs' && docPath(command) !== null;
+        // "Open in Files", and "Open Image" (no `view`: the host picks where a picture opens).
+        if (command.action === 'openFile') return (command.view === 'docs' || command.view === undefined) && docPath(command) !== null;
         return false;
       },
       perform: (command) => {

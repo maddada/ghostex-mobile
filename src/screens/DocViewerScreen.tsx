@@ -1,5 +1,6 @@
 /**
- * Docs viewer: one Markdown or HTML file from the computer, read over SSH and shown in a WebView.
+ * Docs viewer: one file from the computer, read over SSH and shown in a WebView: Markdown or HTML,
+ * and (for file links from chat and terminals) plain text, source code and pictures.
  *
  * Markdown is rendered into a dark reading page; HTML runs as authored, with Agentation injected so
  * the page can be annotated (the header button turns it off and on). Both load from the phone's
@@ -31,7 +32,7 @@ import {
   remotePathForMirrorUrl,
   type DocPage,
 } from '../docs/page';
-import { baseName, docKindForPath, normalizeRemotePath } from '../docs/paths';
+import { baseName, docKindForPath, normalizeRemotePath, previewKindForPath } from '../docs/paths';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { GhostexPalette } from '../theme/palette';
@@ -157,7 +158,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
       const target = normalizeRemotePath(mirrored.remotePath);
       // The page itself, including a jump to one of its own anchors.
       if (target === remotePath || target === `${remotePath}.ghostex-view.html`) return true;
-      if (docKindForPath(target) !== null) {
+      if (previewKindForPath(target) !== null) {
         navigation.push('DocViewer', {
           machineId,
           path: target,

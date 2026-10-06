@@ -468,7 +468,17 @@ function linkDestination(text: string, open: number): { href: string; end: numbe
     while (text[index] === ' ') index += 1;
   }
   if (text[index] !== ')') return null;
-  return { href: href.replace(/\\(.)/g, '$1'), end: index };
+  return { href: unescapeDestination(href), end: index };
+}
+
+/**
+ * CDXC:SessionChat 2026-10-06 WHY:
+ * CommonMark drops a backslash only before ASCII punctuation; dropping every one turned an agent's
+ * `[page.html](C:\Users\me\page.html)` into `C:Usersmepage.html`, which the core reads as an
+ * unknown `C:` scheme, so tapping the link did nothing. The desktop parser (markdown-rs) keeps them.
+ */
+function unescapeDestination(href: string): string {
+  return href.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
 
 function isSpace(character: string | undefined): boolean {

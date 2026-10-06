@@ -26,6 +26,43 @@ export function docKindForPath(path: string): DocKind | null {
   return null;
 }
 
+/**
+ * Plain-text files the viewer shows as monospace text: logs, data, config and source code. Names
+ * without an extension that are always text (`Makefile`) are matched on the whole name.
+ */
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'text', 'log', 'out', 'err', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'xml', 'yaml', 'yml',
+  'toml', 'ini', 'cfg', 'conf', 'config', 'env', 'properties', 'gitignore', 'gitattributes', 'editorconfig',
+  'diff', 'patch', 'rst', 'adoc', 'tex', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd', 'py', 'pyi',
+  'rb', 'pl', 'php', 'lua', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'mts', 'cts', 'tsx', 'vue', 'svelte', 'css', 'scss',
+  'sass', 'less', 'rs', 'go', 'java', 'kt', 'kts', 'gradle', 'scala', 'swift', 'm', 'mm', 'c', 'h', 'cc', 'cpp',
+  'cxx', 'hpp', 'hh', 'cs', 'fs', 'zig', 'dart', 'r', 'ex', 'exs', 'erl', 'hs', 'ml', 'clj', 'elm', 'sql',
+  'graphql', 'gql', 'proto', 'nix', 'tf', 'hcl', 'dockerfile', 'cmake', 'mk', 'lock', 'plist', 'csproj', 'sln',
+]);
+const TEXT_FILE_NAMES = new Set(['makefile', 'dockerfile', 'license', 'readme', 'changelog', 'procfile', 'gemfile', 'rakefile', 'justfile']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']);
+
+/** What the phone's file viewer can show: the two Docs kinds, plain text, and pictures. */
+export type PreviewKind = DocKind | 'text' | 'image';
+
+/**
+ * CDXC:Docs 2026-10-06 DECISION:
+ * User: "For html and md and other similar files we must show those files on the phone app please!"
+ * A file link in chat (or a terminal `file://` link) opens in the phone's viewer when the file is
+ * Markdown, HTML, plain text or source code, or a picture (SVG included); anything else shows that
+ * it cannot be previewed on the phone, with its path. The Docs list keeps to {@link docKindForPath}.
+ */
+export function previewKindForPath(path: string): PreviewKind | null {
+  const doc = docKindForPath(path);
+  if (doc !== null) return doc;
+  const extension = extensionOf(path);
+  if (IMAGE_EXTENSIONS.has(extension)) return 'image';
+  if (TEXT_EXTENSIONS.has(extension)) return 'text';
+  const name = baseName(path).toLowerCase();
+  if (TEXT_FILE_NAMES.has(name) || (name.startsWith('.') && TEXT_EXTENSIONS.has(name.slice(1)))) return 'text';
+  return null;
+}
+
 export function normalizeRemotePath(path: string): string {
   const trimmed = path.trim();
   return /^[a-z]:[\\/]/iu.test(trimmed) || /^\\\\/u.test(trimmed) ? trimmed.replace(/\\/gu, '/') : trimmed;

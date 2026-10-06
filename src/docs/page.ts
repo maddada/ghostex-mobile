@@ -19,18 +19,21 @@ import type { MachineConnectionTarget } from '../machines/credentials';
 import { renderMarkdownDocument } from './markdownDocument';
 import {
   baseName,
-  docKindForPath,
   extensionOf,
   mirrorSegments,
   normalizeRemotePath,
+  previewKindForPath,
   remotePathFromMirrorSegments,
   resolveRemoteReference,
-  type DocKind,
+  type PreviewKind,
 } from './paths';
+import { renderImageDocument, renderTextDocument } from './plainDocument';
 import { decodeBase64Utf8, readRemoteFiles } from './remoteFiles';
 
 export const MIRROR_FOLDER = 'ghostex-docs-view';
 const DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
+/** A WebView lays out a few megabytes of wrapped monospace slowly; logs past this stay on the computer. */
+const TEXT_MAX_BYTES = 2 * 1024 * 1024;
 const ASSET_MAX_BYTES = 12 * 1024 * 1024;
 const ASSETS_MAX_COUNT = 250;
 const ASSETS_MAX_TOTAL_BYTES = 60 * 1024 * 1024;
@@ -39,7 +42,7 @@ const ASSET_BATCH_SIZE = 40;
 const ASSET_MAX_DEPTH = 4;
 
 export type DocPage = {
-  kind: DocKind;
+  kind: PreviewKind;
   /** What the WebView loads. */
   uri: string;
   /** The mirror folder; iOS needs read access widened to it for the page's sibling files. */
@@ -328,8 +331,9 @@ export async function mirrorRequestedAssets(page: DocPage, urls: readonly string
 }
 
 /**
- * Reads a Markdown or HTML file off the computer and mirrors it, with what it embeds, for the
- * viewer. Throws a message fit to show when the file cannot be read.
+ * Reads a file off the computer and mirrors it, with what it embeds, for the viewer: HTML as
+ * authored, Markdown rendered, text and pictures in a page of their own. Throws a message fit to
+ * show when the file cannot be read.
  */
 export async function buildDocPage(
   machine: MachineConnectionTarget,
@@ -337,27 +341,33 @@ export async function buildDocPage(
   isCancelled: () => boolean = () => false
 ): Promise<DocPage> {
   const documentPath = normalizeRemotePath(remotePath);
-  const kind = docKindForPath(documentPath);
-  if (kind === null) throw new Error('Only Markdown and HTML files open here.');
+  const kind = previewKindForPath(documentPath);
+  if (kind === null) throw new Error(`This kind of file can't be previewed on the phone: ${documentPath}`);
   const root = mirrorRoot();
   const rootUri = directoryUri(root);
   const documentUri = mirrorUri(rootUri, documentPath);
   if (documentUri === null) throw new Error(`Not a full path on the computer: ${remotePath}`);
-  const [read] = await readRemoteFiles(machine, [documentPath], DOCUMENT_MAX_BYTES);
+  const maximumBytes = kind === 'image' ? ASSET_MAX_BYTES : kind === 'text' ? TEXT_MAX_BYTES : DOCUMENT_MAX_BYTES;
+  const [read] = await readRemoteFiles(machine, [documentPath], maximumBytes);
   if (read === undefined || read.status === 'missing') throw new Error(`File not found: ${documentPath}`);
   if (read.status === 'tooLarge') throw new Error('This file is too large to open on the phone.');
-  const text = decodeBase64Utf8(read.base64);
   const title = baseName(documentPath);
+  // Beside the file, so a Markdown page's relative images and a picture's own name resolve there.
+  const pageUri = `${documentUri}.ghostex-view.html`;
 
-  const mirror: DocMirror = {
-    machine,
-    rootUri,
-    settled: new Set([documentPath]),
-    copied: new Set(),
-    requests: Promise.resolve(),
-    copiedCount: 0,
-    copiedBytes: 0,
-  };
+  if (kind === 'image') {
+    writeMirrorFile(documentUri, read.base64, 'base64');
+    writeMirrorFile(pageUri, renderImageDocument(title, title), 'utf8');
+    return { kind, uri: pageUri, rootUri, title, skippedAssets: 0, mirror: emptyMirror(machine, rootUri, documentPath) };
+  }
+  const text = decodeBase64Utf8(read.base64);
+  if (kind === 'text') {
+    if (/\u0000/u.test(text)) throw new Error("This file isn't text, so it can't be previewed on the phone.");
+    writeMirrorFile(pageUri, renderTextDocument(text, title), 'utf8');
+    return { kind, uri: pageUri, rootUri, title, skippedAssets: 0, mirror: emptyMirror(machine, rootUri, documentPath) };
+  }
+
+  const mirror = emptyMirror(machine, rootUri, documentPath);
   const referencedPaths = (references: Set<string>) =>
     [...references].map((reference) => resolveRemoteReference(documentPath, reference));
 
@@ -368,9 +378,19 @@ export async function buildDocPage(
   }
 
   const html = renderMarkdownDocument(text, title);
-  // Beside the Markdown file, so its relative images and links resolve from the same folder.
-  const pageUri = `${documentUri}.ghostex-view.html`;
   writeMirrorFile(pageUri, html, 'utf8');
   const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(html)), isCancelled, true);
   return { kind, uri: pageUri, rootUri, title, skippedAssets, mirror };
+}
+
+function emptyMirror(machine: MachineConnectionTarget, rootUri: string, documentPath: string): DocMirror {
+  return {
+    machine,
+    rootUri,
+    settled: new Set([documentPath]),
+    copied: new Set(),
+    requests: Promise.resolve(),
+    copiedCount: 0,
+    copiedBytes: 0,
+  };
 }
