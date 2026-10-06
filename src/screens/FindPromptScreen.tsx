@@ -28,7 +28,7 @@ import { formatLastActiveFull, formatPromptMetaLine } from '../find/findFormat';
 import { useFindPromptsStore } from '../find/findPromptsStore';
 import { FIND_STAR_COLOR } from '../find/findStyles';
 import {
-  FIND_PROMPT_AGENTS,
+  FIND_PROMPT_FORK_AGENTS,
   resolveFindPromptLaunch,
   type FindPromptAgent,
   type FindPromptLaunchResult,
@@ -213,7 +213,7 @@ export default function FindPromptScreen({ navigation, route }: Props) {
       <ActionSheet
         visible={forkOpen}
         title={FindPromptsCopy.forkTitle}
-        items={FIND_PROMPT_AGENTS.map((agent, position) => ({
+        items={FIND_PROMPT_FORK_AGENTS.map((agent, position) => ({
           key: agent,
           label: `${position + 1}  ${agent}`,
           onPress: () => {

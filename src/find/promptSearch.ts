@@ -28,10 +28,13 @@ import {
 import { runGhostexCli } from '../components/sessions/cli';
 import type { MachineConnectionTarget } from '../machines/credentials';
 
-/** The agents Find indexes, in the order the fork picker numbers them. */
-export const FIND_PROMPT_AGENTS = ['claude', 'codex', 'pi', 'opencode', 'cursor', 'grok'] as const;
+/** The agents Find indexes, in filter order. */
+export const FIND_PROMPT_AGENTS = ['claude', 'codex', 'pi', 'opencode', 'cursor', 'grok', 'empryo'] as const;
 
 export type FindPromptAgent = (typeof FIND_PROMPT_AGENTS)[number];
+
+/** The agents a prompt can be forked into, in the order the fork picker numbers them. Empryo's terminal app takes no starting prompt. */
+export const FIND_PROMPT_FORK_AGENTS: readonly FindPromptAgent[] = FIND_PROMPT_AGENTS.filter((agent) => agent !== 'empryo');
 
 export function isFindPromptAgent(value: unknown): value is FindPromptAgent {
   return typeof value === 'string' && (FIND_PROMPT_AGENTS as readonly string[]).includes(value);
@@ -102,6 +105,8 @@ export type FindPromptsSearchResult = {
   offset: number;
   /** Present when an opencode database exists but could not be read. */
   opencodeError?: string;
+  /** Present when Empryo's thread index exists but could not be read. */
+  empryoError?: string;
   projects?: readonly FindPromptProjectFacet[];
   rows: readonly FindPromptRow[];
   /** Every record in the index, before filtering. */
@@ -210,11 +215,13 @@ function parseSearchResult(json: Json | null): FindPromptsSearchResult {
         }))
     : undefined;
   const opencodeError = str(result.opencodeError);
+  const empryoError = str(result.empryoError);
   return {
     agents,
     matched: num(result.matched),
     offset: num(result.offset),
     opencodeError: opencodeError.length > 0 ? opencodeError : undefined,
+    empryoError: empryoError.length > 0 ? empryoError : undefined,
     projects,
     rows,
     total: num(result.total),

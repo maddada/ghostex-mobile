@@ -71,6 +71,16 @@ function errorMessage(error: unknown): string {
   return typeof error === 'string' && error ? error : 'Unknown error';
 }
 
+/** One notice for the agent histories gxserver found but could not read; null when both read fine. */
+function unreadableHistoryNotice(opencodeError?: string, empryoError?: string): FindPromptsNotice | null {
+  if (opencodeError && empryoError) {
+    return { detail: `${opencodeError}\n${empryoError}`, kind: 'info', message: 'opencode and Empryo history could not be read.' };
+  }
+  if (opencodeError) return { detail: opencodeError, kind: 'info', message: 'opencode history could not be read.' };
+  if (empryoError) return { detail: empryoError, kind: 'info', message: 'Empryo history could not be read.' };
+  return null;
+}
+
 const FRESH = {
   query: '',
   agents: [] as readonly FindPromptAgent[],
@@ -139,9 +149,7 @@ export const useFindPromptsStore = create<FindPromptsState>()((set, get) => {
           total: result.total,
           ...(result.agents ? { agentFacets: result.agents } : {}),
           ...(result.projects ? { projectFacets: result.projects } : {}),
-          notice: result.opencodeError
-            ? { detail: result.opencodeError, kind: 'info', message: 'opencode history could not be read.' }
-            : null,
+          notice: unreadableHistoryNotice(result.opencodeError, result.empryoError),
         });
       } catch (error) {
         if (sequence !== searchSequence) return;
