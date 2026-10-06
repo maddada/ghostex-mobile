@@ -216,6 +216,23 @@ export type SessionListToggleItem = {
   collectionColor?: string;
 };
 
+/**
+ * The quiet row at the end of an expanded coordinator's threads that lists its older ones (or
+ * tucks them away again); coordinatorTree.ts decides which threads are older.
+ */
+export type CoordinatorOlderItem = {
+  type: 'COORDINATOR_OLDER';
+  key: string;
+  machineId: string;
+  projectKey: string;
+  /** The coordinator's coordinatorRowKey(), which the shown state is remembered under. */
+  coordinatorKey: string;
+  /** The coordinator's own depth; the row sits one level in. */
+  depth: number;
+  label: string;
+  collectionColor?: string;
+};
+
 export type DrawerItem =
   | StateCardItem
   | MachineHeaderItem
@@ -226,7 +243,8 @@ export type DrawerItem =
   | GroupHeaderItem
   | SessionKindLabelItem
   | SessionItem
-  | SessionListToggleItem;
+  | SessionListToggleItem
+  | CoordinatorOlderItem;
 
 export type DrawerItemType = DrawerItem['type'];
 
@@ -537,7 +555,38 @@ export type DrawerBuildInput = {
   expandedParkedSessionKeys?: ReadonlySet<string>;
   /** Coordinators whose threads are folded away, by coordinatorRowKey() (persisted per machine). */
   collapsedCoordinatorKeys?: ReadonlySet<string>;
+  /** Coordinators whose older threads the user listed, by coordinatorRowKey() (persisted per machine). */
+  expandedCoordinatorOlderKeys?: ReadonlySet<string>;
 };
+
+/** Puts each expanded coordinator's "N older threads" row after the last row of its tree. */
+function withOlderThreadRows(items: DrawerItem[]): DrawerItem[] {
+  const result: DrawerItem[] = [];
+  const open: CoordinatorOlderItem[] = [];
+  const close = (depth: number): void => {
+    while (open.length > 0 && open[open.length - 1].depth >= depth) result.push(open.pop() as CoordinatorOlderItem);
+  };
+  for (const item of items) {
+    close(item.type === 'SESSION' ? item.nesting?.depth ?? 0 : -1);
+    result.push(item);
+    const nesting = item.type === 'SESSION' ? item.nesting : undefined;
+    if (item.type !== 'SESSION' || nesting === undefined || nesting.olderThreads === 0 || nesting.collapsed) continue;
+    open.push({
+      type: 'COORDINATOR_OLDER',
+      key: `older:${item.projectKey}:${item.session.sessionId}`,
+      machineId: item.machineId,
+      projectKey: item.projectKey,
+      coordinatorKey: coordinatorRowKey(item.session),
+      depth: nesting.depth,
+      label: nesting.olderShown
+        ? SessionCopy.hideOlderThreads
+        : SessionCopy.olderThreads(nesting.olderThreads),
+      collectionColor: item.collectionColor,
+    });
+  }
+  close(-1);
+  return result;
+}
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const {
@@ -552,9 +601,10 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     expandedParkedSessionKeys = new Set<string>(),
     expandedDraftSessionKeys = new Set<string>(),
     collapsedCoordinatorKeys = new Set<string>(),
+    expandedCoordinatorOlderKeys = new Set<string>(),
     nowMs = Date.now(),
   } = input;
-  const badges = coordinatorBadges(summary.sessions);
+  const badges = coordinatorBadges(summary.sessions, nowMs);
 
   const projectById = new Map<string, GhostexProject>();
   for (const project of summary.projects) projectById.set(project.projectId, project);
@@ -630,7 +680,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       return section !== 'drafts' && section !== 'parked' && groupedSessionIds.has(session.sessionId);
     };
     /*
-     * Coordinator trees (coordinatorTree.ts, gx-core nest_threads): each open
+     * Coordinator trees (coordinatorTree.ts, gx-core nest_threads): each
      * thread follows its coordinator and takes its section. A named group's
      * members are nested inside that group below.
      */
@@ -639,6 +689,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       allProjectSessions.filter((session) => !inNamedGroup(session)),
       collapsedCoordinatorKeys,
       kindSection,
+      expandedCoordinatorOlderKeys,
+      nowMs,
     );
     const nesting = new Map(tree.nesting);
     const sectionOf = (session: GhostexSession): SessionKindSection =>
@@ -822,7 +874,13 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
           pinnedRank(left) - pinnedRank(right) ||
           (isNewSidebarSession(left, nowMs) || isNewSidebarSession(right, nowMs) ? compareForSidebarOrder(left, right, nowMs) : 0),
       );
-      const groupTree = nestCoordinatorThreads(groupSessions, collapsedCoordinatorKeys, kindSection);
+      const groupTree = nestCoordinatorThreads(
+        groupSessions,
+        collapsedCoordinatorKeys,
+        kindSection,
+        expandedCoordinatorOlderKeys,
+        nowMs,
+      );
       for (const [key, value] of groupTree.nesting) nesting.set(key, value);
       const collapseKey = groupCollapseKey(projectKey, group.groupId);
       const groupCollapsed = !expandedGroupKeys.has(collapseKey);
@@ -1011,5 +1069,5 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     if (emittedProjectKeys.has(projectKey)) continue;
     emitProject(projectKey);
   }
-  return items;
+  return withOlderThreadRows(items);
 }

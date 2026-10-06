@@ -249,7 +249,12 @@ export function useSessionsScreenMenus({
         for (const next of entries.slice(blockIndex + 1)) {
           if (next.kind !== 'row') break;
           if (next.item.type === 'SESSION') below.push(next.item.session);
-          else if (next.item.type !== 'SESSION_KIND_LABEL' && next.item.type !== 'SESSION_LIST_TOGGLE') break;
+          else if (
+            next.item.type !== 'SESSION_KIND_LABEL' &&
+            next.item.type !== 'SESSION_LIST_TOGGLE' &&
+            next.item.type !== 'COORDINATOR_OLDER'
+          )
+            break;
         }
         return below;
       }

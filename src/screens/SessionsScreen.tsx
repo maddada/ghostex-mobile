@@ -325,6 +325,7 @@ export default function SessionsScreen({ navigation }: Props) {
           collapsedSectionsByMachine: collapse.collapsedSectionsByMachine,
           collapsedSessionKindsByMachine: collapse.collapsedSessionKindsByMachine,
           collapsedCoordinatorsByMachine: collapse.collapsedCoordinatorsByMachine,
+          expandedCoordinatorOlderByMachine: collapse.expandedCoordinatorOlderByMachine,
           expandedParkedSessionKeysByMachine: collapse.expandedParkedSessionKeysByMachine,
           expandedDraftSessionKeysByMachine: collapse.expandedDraftSessionKeysByMachine,
         },
@@ -341,6 +342,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.collapsedSectionsByMachine,
       collapse.collapsedSessionKindsByMachine,
       collapse.collapsedCoordinatorsByMachine,
+      collapse.expandedCoordinatorOlderByMachine,
       collapse.expandedParkedSessionKeysByMachine,
       collapse.expandedDraftSessionKeysByMachine,
       sessionListNowMs,
@@ -851,6 +853,16 @@ export default function SessionsScreen({ navigation }: Props) {
             label={child.label}
             quick={false}
             onPress={() => collapse.toggleSessionList(machineId, child.projectKey)}
+          />
+        );
+      case 'COORDINATOR_OLDER':
+        return (
+          <SessionListToggleRow
+            key={child.key}
+            label={child.label}
+            quick={false}
+            threadDepth={child.depth + 1}
+            onPress={() => collapse.toggleCoordinatorOlder(machineId, child.coordinatorKey)}
           />
         );
       default:

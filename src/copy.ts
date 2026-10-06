@@ -185,6 +185,8 @@ export const SessionCopy = {
   showLess: 'Show less',
   /** Desktop session-styled reveal row: "Show 4 more". */
   showCountMore: (count: number) => `Show ${count} more`,
+  olderThreads: (count: number) => (count === 1 ? '1 older thread' : `${count} older threads`),
+  hideOlderThreads: 'Hide older threads',
   chatsTitle: 'Chats',
   /** Desktop reference sidebar section labels. */
   quickSectionTitle: 'Quick',
