@@ -10,6 +10,7 @@ const ACCENTS: Record<string, string> = {
   codex: '#ffffff',
   copilot: '#ffffff',
   devin: '#3ea6ff',
+  empryo: '#1fa31d',
   'factory-droid': '#ff7a1a',
   gemini: '#8b9aff',
   'grok-build': '#ffffff',

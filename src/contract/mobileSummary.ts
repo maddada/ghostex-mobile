@@ -619,6 +619,7 @@ export type AgentIconId =
   | 'cursor-cli'
   | 'codex'
   | 'copilot'
+  | 'empryo'
   | 'factory-droid'
   | 'freebuff'
   | 'gemini'
@@ -644,6 +645,7 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   'cursor-cli': '#EDECEC',
   codex: '#FFFFFF',
   copilot: '#FFFFFF',
+  empryo: '#1FA31D',
   'factory-droid': '#FF7A1A',
   freebuff: '#FFFFFF',
   gemini: '#8B9AFF',

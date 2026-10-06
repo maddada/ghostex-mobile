@@ -28,7 +28,7 @@ import {
 } from '../../contract/mobileSummary';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
 import { effectiveSessionTag, SESSION_TAG_SECTIONS } from '../../contract/sessionTags';
-import { FORK_AGENT_ICONS } from '../../sessions/sessionCommands';
+import { COORDINATOR_AGENT_ICONS, FORK_AGENT_ICONS } from '../../sessions/sessionCommands';
 
 // ---------------------------------------------------------------------------
 // The menu shape (gx-core `MenuItem` JSON and `MenuCommand` payloads).
@@ -224,6 +224,8 @@ function transcriptAgent(candidates: readonly string[]): string | null {
       case 'cursor-agent':
       case 'cursor cli':
         return 'cursor';
+      case 'empryo':
+        return 'empryo';
       case 'grok':
       case 'grok-build':
         return 'grok';
@@ -290,7 +292,7 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
     canFork: terminal && !draft && FORK_AGENT_ICONS.includes(agentIcon),
     canFullReload: terminal && !draft && supportsFullReload(session, agentIcon),
     // gx-core `full_menu` shows Make Coordinator on the same sessions gxserver can promote: Claude,
-    // Codex or ZCode, not a draft, not in a box, and not already a coordinator or a coordinator's thread.
+    // Codex, ZCode or Empryo, not a draft, not in a box, and not already a coordinator or a coordinator's thread.
     canMakeCoordinator:
       terminal &&
       !draft &&
@@ -298,7 +300,7 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
       session.agentbox === undefined &&
       !session.isCoordinator &&
       session.coordinatorSessionId.length === 0 &&
-      (agentIcon === 'claude' || agentIcon === 'codex' || agentIcon === 'zcode'),
+      COORDINATOR_AGENT_ICONS.includes(agentIcon),
     canOpenNote: terminal && hasProject && session.agentSessionId.trim().length > 0,
     canPark: terminal && hasProject,
     canRename: terminal,

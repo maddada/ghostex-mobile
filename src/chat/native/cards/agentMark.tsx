@@ -13,6 +13,7 @@ const ACCENTS: Record<string, string> = {
   claude: '#d97757',
   codebuddy: '#72d6ff',
   'cursor-cli': '#edecec',
+  empryo: '#1fa31d',
   'factory-droid': '#ff7a1a',
   gemini: '#8b9aff',
   'hermes-agent': '#f3c46b',
