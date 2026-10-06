@@ -17,7 +17,14 @@ export type ComposerBootRead = {
   modelOutboxes: Record<string, unknown>;
   modelCatalog: unknown;
   chatSettings: { hideAccountEmails: boolean; title: string | null };
-  contextPreferences: { claude: unknown; codex: unknown; cursor: unknown; basic: unknown };
+  contextPreferences: {
+    claude: unknown;
+    codex: unknown;
+    cursor: unknown;
+    hermes: unknown;
+    pi: unknown;
+    basic: unknown;
+  };
   dismissedNotice: unknown;
   summaryMode: boolean;
   verboseOverride: boolean | null;
@@ -126,6 +133,8 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
   const claude = parse(await load('claudeContext', '', nowMs, reads));
   const codex = parse(await load('codexContext', '', nowMs, reads));
   const cursor = parse(await load('cursorContext', '', nowMs, reads));
+  const hermes = parse(await load('hermesContext', '', nowMs, reads));
+  const pi = parse(await load('piContext', '', nowMs, reads));
   const basic = parse(await load('basicContext', '', nowMs, reads));
   const dismissedNotice = parse(await load('notices', sessionKey, nowMs, reads));
   const summaryMode = decodeSummary(await load('summary', sessionKey, nowMs, reads));
@@ -146,7 +155,7 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
     // same pair of answers the desktop brain reached through its boot read before that setting
     // existed; both stay the boot read's so a future phone setting lands in one place.
     chatSettings: { hideAccountEmails: false, title: null },
-    contextPreferences: { claude, codex, cursor, basic },
+    contextPreferences: { claude, codex, cursor, hermes, pi, basic },
     dismissedNotice,
     summaryMode,
     verboseOverride,

@@ -62,6 +62,8 @@ const STORES: readonly CatalogStore[] = [
   { id: 'claudeContext', prefix: 'ghostex.chat.context-details.v1', collection: false, backend: LOCAL },
   { id: 'codexContext', prefix: 'ghostex.chat.context-details.codex.v1', collection: false, backend: LOCAL },
   { id: 'cursorContext', prefix: 'ghostex.chat.context-details.cursor.v1', collection: false, backend: LOCAL },
+  { id: 'hermesContext', prefix: 'ghostex.chat.context-details.hermes.v1', collection: false, backend: LOCAL },
+  { id: 'piContext', prefix: 'ghostex.chat.context-details.pi.v1', collection: false, backend: LOCAL },
   { id: 'basicContext', prefix: 'ghostex.chat.context-details.basic.v1', collection: false, backend: LOCAL },
   { id: 'notices', prefix: 'ghostex.sessionChat.noticeDismissed.', collection: true, backend: disk() },
   { id: 'sessionOptions', prefix: 'ghostex.sessionChat.options.', collection: true, backend: disk(30 * DAY_MS) },
