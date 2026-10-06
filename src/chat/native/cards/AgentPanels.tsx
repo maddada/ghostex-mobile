@@ -94,22 +94,23 @@ function TaskRow({ row }: { row: unknown }) {
   );
 }
 
-/** The sidebar's colours for a thread that waits on someone and one that works (desktop `coordinator_threads.rs`). */
-const THREAD_WAITING = '#95d7f6';
+/** The sidebar's working colour and the amber of the "Needs your approval" tag (desktop `coordinator_threads.rs`). */
 const THREAD_WORKING = '#c68a06';
+const THREAD_APPROVAL = '#f5a524';
+const NEEDS_APPROVAL_LABEL = 'Needs your approval';
 
 /**
- * A coordinator's Threads panel (`coordinatorThreadsPanel`, desktop `coordinator_threads.rs`): its
- * threads grouped by what they need. Groups, labels and the done fold come from the core; a row
- * opens that thread through the `openCoordinatorThread` host action.
+ * A coordinator's Threads panel (`coordinatorThreadsPanel`, desktop `coordinator_threads.rs`): one
+ * list of its threads, working ones first. Order, labels and the "N more" fold come from the core; a
+ * row opens that thread through the `openCoordinatorThread` host action.
  */
 export function CoordinatorThreadsPanel({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const styles = useStyles();
   const panel = obj(document.coordinatorThreadsPanel);
   if (panel === null) return null;
   const open = panel.collapsed !== true;
-  const showDone = isTrue(panel, 'showDone');
-  const doneLabel = str(panel, 'doneLabel');
+  const showAll = isTrue(panel, 'showAll');
+  const moreLabel = str(panel, 'moreLabel');
   const header = (
     <CardHeader
       icon="users"
@@ -119,7 +120,7 @@ export function CoordinatorThreadsPanel({ chat, document }: { chat: RustChat; do
           {str(panel, 'meta')}
         </Text>
       }
-      trailing={isTrue(panel, 'attention') ? <View style={[styles.threadDot, { backgroundColor: THREAD_WAITING }]} /> : undefined}
+      trailing={isTrue(panel, 'attention') ? <View style={[styles.threadDot, { backgroundColor: THREAD_APPROVAL }]} /> : undefined}
       chevron={open ? 'open' : 'closed'}
       hasBody={open}
       accessibilityLabel={open ? 'Hide threads' : 'Show threads'}
@@ -129,23 +130,19 @@ export function CoordinatorThreadsPanel({ chat, document }: { chat: RustChat; do
   const body = open
     ? [
         <ScrollView key="rows" style={styles.threadRows} contentContainerStyle={styles.rows} nestedScrollEnabled>
-          {arr(panel.groups).map((group, groupIndex) => (
-            <View key={str(group, 'state') || String(groupIndex)} style={styles.rows}>
-              <Text style={styles.threadGroup}>{str(group, 'label').toUpperCase()}</Text>
-              {arr(obj(group)?.rows).map((row, index) => (
-                <ThreadRow key={str(row, 'key') || String(index)} row={row} chat={chat} />
-              ))}
-            </View>
+          {arr(panel.rows).map((row, index) => (
+            <ThreadRow key={str(row, 'key') || String(index)} row={row} chat={chat} />
           ))}
         </ScrollView>,
-        doneLabel.length > 0 ? (
+        moreLabel.length > 0 ? (
           <Text
-            key="done"
+            key="more"
             accessibilityRole="button"
+            accessibilityLabel={showAll ? 'Show fewer threads' : `Show ${moreLabel} threads`}
             style={styles.fold}
-            onPress={() => chat.dispatch({ type: 'toggleCoordinatorThreadsDone', expanded: !showDone })}
+            onPress={() => chat.dispatch({ type: 'toggleCoordinatorThreadsMore', expanded: !showAll })}
           >
-            {doneLabel}
+            {moreLabel}
           </Text>
         ) : null,
       ]
@@ -159,8 +156,6 @@ export function CoordinatorThreadsPanel({ chat, document }: { chat: RustChat; do
 
 function ThreadRow({ row, chat }: { row: unknown; chat: RustChat }) {
   const styles = useStyles();
-  const P = useTranscriptTheme();
-  const state = str(row, 'state') || 'finished';
   const title = str(row, 'title');
   const detail = str(row, 'detail');
   const branch = str(row, 'branch');
@@ -174,20 +169,19 @@ function ThreadRow({ row, chat }: { row: unknown; chat: RustChat }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Open thread ${title}`} onPress={openThread} style={styles.threadRow}>
       <View style={styles.taskMarker}>
-        {state === 'waiting' || state === 'working' ? (
-          <View style={[styles.threadDot, { backgroundColor: state === 'waiting' ? THREAD_WAITING : THREAD_WORKING }]} />
-        ) : state === 'finished' ? (
-          <Glyph name="check" size={13} color={P.primary} />
-        ) : state === 'done' ? (
-          <Glyph name="circle-check-filled" size={13} color={P.muted} />
+        {isTrue(row, 'working') ? (
+          <View style={[styles.threadDot, { backgroundColor: THREAD_WORKING }]} />
         ) : (
           <View style={styles.pendingRing} />
         )}
       </View>
       <View style={styles.threadText}>
-        <Text style={[styles.threadTitle, state === 'done' && styles.taskDone]} numberOfLines={1}>
-          {title}
-        </Text>
+        <View style={styles.threadTitleLine}>
+          <Text style={styles.threadTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {isTrue(row, 'needsApproval') ? <Text style={styles.approvalTag}>{NEEDS_APPROVAL_LABEL}</Text> : null}
+        </View>
         {detail.length > 0 || branch.length > 0 ? (
           <Text style={styles.blocked} numberOfLines={1}>
             {[detail, branch].filter((part) => part.length > 0).join(' · ')}
@@ -429,11 +423,6 @@ const useStyles = themedStyles((P) => ({
   threadRows: {
     maxHeight: 360,
   },
-  threadGroup: {
-    paddingTop: 4,
-    color: P.cardMuted,
-    fontSize: 10.5,
-  },
   threadRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -449,8 +438,22 @@ const useStyles = themedStyles((P) => ({
     flex: 1,
     minWidth: 0,
   },
+  threadTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   threadTitle: {
+    flexShrink: 1,
     color: P.foreground,
     fontSize: 12,
+  },
+  approvalTag: {
+    paddingHorizontal: 5,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(245, 165, 36, 0.16)',
+    color: THREAD_APPROVAL,
+    fontSize: 11,
   },
 }));
