@@ -101,11 +101,13 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
   const tools = arr(message.tools)
     .map((tool) => obj(tool))
     .filter((tool): tool is JsonRecord => tool !== null);
+  // While the command runs, its output streams in from the terminal and the card stays open on it.
+  const live = message.shellCommandLive === true;
   return (
     <View style={styles.shellColumn}>
       <View style={[styles.shellBubble, { backgroundColor: theme.input }]}>
         {tools.map((tool, index) => (
-          <ToolRow key={index} messageId={message.id} index={index} tool={tool} alwaysPreview />
+          <ToolRow key={index} messageId={message.id} index={index} tool={tool} alwaysPreview alwaysOpen={live} />
         ))}
       </View>
     </View>
@@ -117,11 +119,13 @@ const ToolRow = memo(function ToolRow({
   index,
   tool,
   alwaysPreview = false,
+  alwaysOpen = false,
 }: {
   messageId: string;
   index: number;
   tool: JsonRecord;
   alwaysPreview?: boolean;
+  alwaysOpen?: boolean;
 }) {
   const { theme, dispatch, simple: simpleMode } = useTranscriptEnv();
   const simple = simpleMode && !alwaysPreview;
@@ -129,7 +133,7 @@ const ToolRow = memo(function ToolRow({
   const key = `tool:${messageId}:${index}`;
   const [open, toggle] = useDisclosure(disclosures, key);
   const hasDetail = tool.hasDetail === true;
-  const expanded = open && hasDetail;
+  const expanded = (open || alwaysOpen) && hasDetail;
   const detail = obj(useRowDetail(key, 'tool', messageId, index, expanded));
   const failed = tool.failed === true;
   const name = str(tool, 'name');
