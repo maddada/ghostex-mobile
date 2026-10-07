@@ -484,6 +484,12 @@ export type ChatDocument = {
   newSessionWelcome: NewSessionWelcome | null;
   /** `blank`, `indicator` or `retry` while loading; null otherwise. Desktop: `transcript_reveal.rs`. */
   loadingStage: string | null;
+  /** What the loading hold says once a read runs long, above its Try now button; null while it
+   * stays blank. Desktop: `transcript_reveal.rs`. */
+  loadingNotice?: LoadingNotice | null;
+  /** The loading hold draws the skeleton rows: Ghostex is not answering and the core is retrying.
+   * Desktop: `transcript_reveal.rs`. */
+  transcriptSkeleton?: boolean;
   skillsLoading: boolean;
   filesLoading: boolean;
   /** A preview's own display settings; absent on a real session. */
@@ -499,7 +505,9 @@ export type ViewState = {
   error?: string | null;
 };
 
-export type EmptyState = { title: string; detail: string };
+export type EmptyState = { title: string; detail: string; action?: string };
+
+export type LoadingNotice = { title: string; detail: string; action: string };
 
 export type NewSessionWelcome = {
   /** The agent's display name, or null when unknown. */

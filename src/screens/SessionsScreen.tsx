@@ -1039,6 +1039,7 @@ export default function SessionsScreen({ navigation }: Props) {
               machineName={target.name.length > 0 ? target.name : machineDisplayLabel(target)}
               reason={item.body}
               retrying={inventory?.retrying === true}
+              waiting={inventory?.lastErrorCode === 'ghostexNotAnswering'}
               onRetry={() => retryMachineWithStatus(target)}
               onWhatCanICheck={() => navigation.navigate('CantReach', { machineId: target.id })}
             />

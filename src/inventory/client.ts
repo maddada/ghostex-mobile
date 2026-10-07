@@ -126,7 +126,15 @@ export function unwrapNativeException(text: string): string {
  * reach" screen and the "Other reasons" rows under it.
  */
 export type FailureReasonCode =
-  'timeout' | 'noRoute' | 'sshRefused' | 'authFailed' | 'hostKeyChanged' | 'ghostexMissing' | 'unknown';
+  | 'timeout'
+  | 'noRoute'
+  | 'sshRefused'
+  | 'authFailed'
+  | 'hostKeyChanged'
+  | 'ghostexMissing'
+  /** SSH worked and the CLI ran, but the computer's Ghostex service did not answer it. */
+  | 'ghostexNotAnswering'
+  | 'unknown';
 
 export type FailureSummary = {
   /** Actionable copy (sessions-drawer.md §5); unmatched text is truncated to 220 chars. */
@@ -208,6 +216,12 @@ function classifyFailure(error: unknown, hasPassword: boolean): Pick<FailureSumm
       message: hasPassword ? FailureCopy.permissionDeniedWithPassword : FailureCopy.permissionDeniedWithoutPassword,
       reasonCode: 'authFailed',
     };
+  }
+  // The CLI's own words when the computer's Ghostex service is not running or still starting
+  // (`connection_error_for_target` in server/src/ghostex_cli/rpc.rs). Checked before the SSH
+  // matchers: the computer was reached, only Ghostex on it was not.
+  if (lowerText.includes('could not connect to local gxserver')) {
+    return { message: FailureCopy.ghostexNotAnswering, reasonCode: 'ghostexNotAnswering' };
   }
   if (nativeCode === 'sshRefused' || text.includes('Connection refused')) {
     return { message: FailureCopy.refused, reasonCode: 'sshRefused' };

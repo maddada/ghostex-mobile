@@ -28,8 +28,11 @@ import type { ChatRpcError } from './events';
 const PROTOCOL_VERSION = 1;
 /** How long the daemon holds a long poll before answering unchanged (the WebView's value). */
 const LONG_POLL_WAIT_MS = 20_000;
-/** Backoff after a failed poll, before the next attempt. */
-const POLL_ERROR_RETRY_MS = 3_000;
+/**
+ * Backoff after a failed poll, before the next attempt: the 2 s every client waits while Ghostex is
+ * not answering (CDXC:SessionChat 2026-10-08 in `packages/gx-chat-core/src/session/constants.rs`).
+ */
+const POLL_ERROR_RETRY_MS = 2_000;
 /**
  * A daemon older than the fingerprint long poll answers at once and without a fingerprint; pacing
  * those iterations is the WebView's hot-loop guard for that version skew.

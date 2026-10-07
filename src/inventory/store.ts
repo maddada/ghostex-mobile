@@ -15,6 +15,7 @@ import { hasPassword } from '../machines/credentials';
 import { reconnectMachine } from '../remote/connection';
 import { restoreAttachTabs } from '../terminal/sessions';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
+import { FailureCopy } from '../copy';
 import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
 import {
   applyOptimisticMutations,
@@ -24,6 +25,17 @@ import {
 } from './optimistic';
 
 export const INVENTORY_POLL_INTERVAL_MS = 5000;
+/**
+ * While a computer's Ghostex is not answering, its list is read again this soon rather than on the
+ * next 5 s poll (CDXC:Sidebar 2026-10-08 in `packages/gx-core/src/sidebar_view/daemon_wait.rs`):
+ * the user asked every client to retry every 2 seconds until Ghostex is there. Only while the
+ * Sessions screen polls, and one pending retry per machine.
+ */
+const NOT_ANSWERING_RETRY_MS = 2000;
+const notAnsweringRetries = new Map<string, ReturnType<typeof setTimeout>>();
+/** When each machine's Ghostex stopped answering, for the "taking longer than usual" line. */
+const notAnsweringSince = new Map<string, number>();
+const NOT_ANSWERING_LONG_MS = 30_000;
 
 export type MachineInventory = {
   /** Rendered summary: latest server state with pending mutations applied. */
@@ -149,6 +161,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
             previousPending,
             refreshRevision,
           );
+          notAnsweringSince.delete(machine.id);
           useMachinesStore.getState().markConnected(machine.id);
           reportClientHello(machine);
           // Log only connect transitions (first load or recovery), not every poll.
@@ -203,6 +216,13 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           }
           if (refreshRevisions.get(machine.id) !== refreshRevision) return;
           const failure = summarizeFailureDetailed(error, machineHasPassword);
+          if (failure.reasonCode === 'ghostexNotAnswering') {
+            const since = notAnsweringSince.get(machine.id) ?? Date.now();
+            notAnsweringSince.set(machine.id, since);
+            if (Date.now() - since >= NOT_ANSWERING_LONG_MS) failure.message = FailureCopy.ghostexNotAnsweringLong;
+          } else {
+            notAnsweringSince.delete(machine.id);
+          }
           // 5s polling repeats the same failure; log only new failure text.
           if (get().inventoriesByMachineId[machine.id]?.lastError !== failure.message) {
             logAppEvent(`${machineDisplayLabel(machine)}: ${failure.message}`);
@@ -213,6 +233,15 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
             lastError: failure.message,
             lastErrorCode: failure.reasonCode,
           });
+          if (failure.reasonCode === 'ghostexNotAnswering' && pollTimer !== null && !notAnsweringRetries.has(machine.id)) {
+            notAnsweringRetries.set(
+              machine.id,
+              setTimeout(() => {
+                notAnsweringRetries.delete(machine.id);
+                if (pollTimer !== null) void get().refreshMachine(machine);
+              }, NOT_ANSWERING_RETRY_MS),
+            );
+          }
         }
       })();
 
@@ -303,6 +332,8 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      for (const timer of notAnsweringRetries.values()) clearTimeout(timer);
+      notAnsweringRetries.clear();
       set({ polling: false });
     },
 

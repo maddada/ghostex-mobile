@@ -17,6 +17,7 @@ export default function MachineFailedCard({
   machineName,
   reason,
   retrying,
+  waiting = false,
   onRetry,
   onWhatCanICheck,
 }: {
@@ -24,20 +25,25 @@ export default function MachineFailedCard({
   /** Sanitized failure reason from the inventory store (never a raw stderr). */
   reason: string;
   retrying: boolean;
+  /** The computer answered but its Ghostex did not yet: the store keeps retrying on its own, so
+   * the card says it is connecting and its button is Try now. */
+  waiting?: boolean;
   onRetry: () => void;
   onWhatCanICheck: () => void;
 }) {
   return (
     <View style={styles.card}>
       <CloudGlyph size={32} color={SetupPalette.ERROR} />
-      <Text style={styles.title}>{StripCopy.failedCard.title(machineName)}</Text>
+      <Text style={styles.title}>
+        {waiting ? StripCopy.failedCard.waitingTitle(machineName) : StripCopy.failedCard.title(machineName)}
+      </Text>
       <Text style={styles.reason}>{reason}</Text>
       <View style={styles.actions}>
         <SetupButton
           small
           variant="primary"
           busy={retrying}
-          label={StripCopy.failedCard.retry}
+          label={waiting ? StripCopy.failedCard.tryNow : StripCopy.failedCard.retry}
           icon={<RefreshGlyph size={14} color={SetupPalette.PRIMARY_BUTTON_FOREGROUND} />}
           onPress={onRetry}
         />

@@ -296,6 +296,9 @@ export const FailureCopy = {
     'Could not reach the computer. Confirm both devices are online and the computer is awake. For a Tailscale connection, check Tailscale on both devices.',
   timedOut:
     "The computer didn't answer. The connection timed out; check that the computer is awake and Ghostex is open.",
+  ghostexNotAnswering: "They'll appear in a moment.",
+  /** The same failure after about 30 s, the sidebar's and the chat's long-wait line. */
+  ghostexNotAnsweringLong: 'Sessions are taking longer than usual to load. If this keeps happening, restart Ghostex.',
   noCli:
     'Connected over SSH, but the computer could not find the Ghostex CLI. Install Ghostex CLI and make sure ghostex is available in the SSH login shell.',
   oldCli:
@@ -511,7 +514,10 @@ export const StripCopy = {
   },
   failedCard: {
     title: (name: string) => `Can't reach ${name}`,
+    /** The computer answered over SSH but its Ghostex did not: the app keeps trying on its own. */
+    waitingTitle: (name: string) => `Loading sessions on ${name}…`,
     retry: 'Retry',
+    tryNow: 'Try now',
     whatCanICheck: 'What can I check?',
   },
   connectionWarning: {
