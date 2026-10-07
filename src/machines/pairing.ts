@@ -5,8 +5,10 @@
  * 1. Generate an ed25519 key on the phone (`GhostexNative.generateSshKey`).
  * 2. Open a tailcat forward to the computer's gxserver API port (`code.port`).
  * 3. POST `/api/pairDevice` on `http://127.0.0.1:<local>` with the one-time
- *    secret from the code; gxserver appends the public key to
- *    `~/.ssh/authorized_keys`, records the device and consumes the secret.
+ *    secret from the code; gxserver appends the public key to the file sshd
+ *    reads for that account (`~/.ssh/authorized_keys`, or on a Windows
+ *    administrator account `administrators_authorized_keys` after a UAC
+ *    prompt), records the device and consumes the secret.
  * 4. Save the machine (`transport: 'tailcat'`) plus the key, and stop the
  *    pairing forward: the machine's own forward starts on first connect.
  *
@@ -24,7 +26,12 @@ import { tailcatSyntheticHost, useMachinesStore, type MachineRecord } from './st
 /** Mirrors `GXSERVER_PROTOCOL_VERSION` in the gxserver crate. */
 const GXSERVER_PROTOCOL_VERSION = 1;
 const PAIR_DEVICE_PATH = '/api/pairDevice';
-const PAIR_DEVICE_TIMEOUT_MS = 20_000;
+/**
+ * Long enough for the person to answer the computer's administrator prompt: on
+ * a Windows administrator account gxserver adds the key through a UAC prompt
+ * and answers only once it is accepted or declined.
+ */
+const PAIR_DEVICE_TIMEOUT_MS = 180_000;
 /**
  * One forward for every pairing attempt: a fresh id per scan would leave a whole
  * tunnel stack behind each time, and the forward is stopped when pairing ends.
