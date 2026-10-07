@@ -263,6 +263,8 @@ export type ProjectedMessage = {
   toolsShowAllRows?: boolean;
   /** The live terminal tool row synthesized from the agent's screen. Desktop: `terminal_tool_row.rs`. */
   terminalTool?: Json;
+  /** A `!` command the user ran, drawn as its tool card in the user's place. Desktop: `shell_command_card` in `tool_run.rs`. */
+  shellCommand?: boolean;
   /** A placeholder row the backfill has not projected yet. */
   pending?: boolean;
   [key: string]: unknown;

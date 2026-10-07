@@ -90,8 +90,41 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   );
 }
 
-const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: string; index: number; tool: JsonRecord }) {
-  const { theme, dispatch, simple } = useTranscriptEnv();
+/**
+ * A `!` command the user ran (`shellCommand`, gx-chat-core's `fold_shell_commands`): its one tool
+ * row, opening onto the Command and Result blocks, in the user's bubble (desktop
+ * `shell_command_card` in `tool_run.rs`). The command shows in Simple mode too, since it is what the
+ * user typed.
+ */
+export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
+  const { theme } = useTranscriptEnv();
+  const tools = arr(message.tools)
+    .map((tool) => obj(tool))
+    .filter((tool): tool is JsonRecord => tool !== null);
+  return (
+    <View style={styles.shellColumn}>
+      <View style={[styles.shellBubble, { backgroundColor: theme.input }]}>
+        {tools.map((tool, index) => (
+          <ToolRow key={index} messageId={message.id} index={index} tool={tool} alwaysPreview />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const ToolRow = memo(function ToolRow({
+  messageId,
+  index,
+  tool,
+  alwaysPreview = false,
+}: {
+  messageId: string;
+  index: number;
+  tool: JsonRecord;
+  alwaysPreview?: boolean;
+}) {
+  const { theme, dispatch, simple: simpleMode } = useTranscriptEnv();
+  const simple = simpleMode && !alwaysPreview;
   const { disclosures } = useNativeChatUi();
   const key = `tool:${messageId}:${index}`;
   const [open, toggle] = useDisclosure(disclosures, key);
@@ -116,12 +149,17 @@ const ToolRow = memo(function ToolRow({ messageId, index, tool }: { messageId: s
       <View style={styles.glyphSlot}>
         <Glyph name={toolGlyph(str(tool, 'glyph'))} size={14} color={theme.muted} />
       </View>
-      <Text style={[styles.name, { color: failed ? theme.error : theme.primary }]}>{name}</Text>
       {preview.length > 0 && subagent.length === 0 ? (
-        <Text numberOfLines={1} style={[styles.preview, { color: theme.muted }]}>
-          {preview}
+        // One line with two runs (desktop `name_and_preview`): side by side, the mono preview sat
+        // below the name's baseline; nested runs share one.
+        <Text numberOfLines={1} style={styles.nameLine}>
+          <Text style={[styles.name, { color: failed ? theme.error : theme.primary }]}>{name}</Text>
+          {' '}
+          <Text style={[styles.preview, { color: theme.muted }]}>{preview}</Text>
         </Text>
-      ) : null}
+      ) : (
+        <Text style={[styles.name, { color: failed ? theme.error : theme.primary }]}>{name}</Text>
+      )}
       {hasDetail ? <Glyph name={expanded ? 'chevron-down' : 'chevron-right'} size={12} color={theme.muted} /> : null}
     </Pressable>
   );
@@ -225,12 +263,15 @@ function ToolBody({ label, content, failed, copyText }: { label: string | null; 
 
 const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
+  shellColumn: { alignItems: 'flex-end' },
+  shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, gap: ROW_GAP, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
   row: { gap: 4, minWidth: 0 },
   trigger: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, minWidth: 0, flexShrink: 1 },
   triggerFill: { alignSelf: 'stretch' },
   glyphSlot: { width: 16, marginLeft: 2, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, flexShrink: 0 },
   preview: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, flexShrink: 1, minWidth: 0 },
+  nameLine: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, flexShrink: 1, minWidth: 0 },
   subagentLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   subagentLink: { flexShrink: 1, minWidth: 0 },
   subagentText: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
