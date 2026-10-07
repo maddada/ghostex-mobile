@@ -21,7 +21,7 @@ import { useDisclosure } from './state';
 import { estimatedLines, InterAgentCard, SentAgentMessageCards, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
 import { PROSE_LINE, PROSE_SIZE } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
-import { ToolRows } from './ToolRows';
+import { ShellCommandCard, ToolRows } from './ToolRows';
 
 /** React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`). */
 const THINKING_CAP = 288;
@@ -31,6 +31,7 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Proje
   if (message.pending === true) return <PendingRow user={message.role === 'user'} />;
   if (message.role === 'user' && obj(message.interAgentMessage) !== null) return <InterAgentCard message={message} />;
   if (obj(message.terminalTool) !== null) return <TerminalToolRow activity={message.terminalTool} />;
+  if (message.shellCommand === true) return <ShellCommandCard message={message} />;
   if (message.role === 'user' && obj(message.suppressed) === null) return <UserMessage message={message} />;
   if (obj(message.sideQuestion) !== null) return <SideQuestionRow message={message} />;
   if (obj(message.suppressed) !== null) return <SuppressedRow message={message} />;
