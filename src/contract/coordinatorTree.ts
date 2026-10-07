@@ -11,8 +11,8 @@
  *
  * An expanded coordinator lists its threads that are working, waiting, or were active in the last
  * two hours; the older ones, resolved threads included, wait behind one "N older threads" row at the
- * end of its children (the user's 2026-10-06 decision in gx-core threads.rs: "Don't actually 'hide'
- * them please").
+ * end of its children (the user's 2026-10-07 decision in gx-chat-core coordinator_threads.rs: "Don't
+ * actually 'hide' them please"). Both change only when the user taps them.
  */
 
 import type { GhostexSession } from './mobileSummary';

@@ -61,7 +61,7 @@ type CollapseState = {
   collapsedCoordinatorsByMachine: Record<string, string[]>;
   /**
    * Persisted per machine: coordinators whose older threads (idle two hours) the user listed with
-   * their "N older threads" row (coordinatorTree.ts, the user's 2026-10-06 decision in gx-core).
+   * their "N older threads" row (coordinatorTree.ts, the user's 2026-10-07 decision in gx-chat-core).
    */
   expandedCoordinatorOlderByMachine: Record<string, string[]>;
   /** In-memory per project: Parked always starts collapsed after an app restart. */
