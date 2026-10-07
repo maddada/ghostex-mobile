@@ -23,6 +23,11 @@ export type NativeChatUi = {
   demand: RowDetailDemand;
   /** Asks the core for a machine image's bytes once (`loadImage`); the answer lands in `state.images`. */
   requestImage(path: string): void;
+  /**
+   * Lays out one ```visual block at `width` through the core (`renderVisual`): its scene as SVG with
+   * tooltip regions, a page card, or an error; null when the core could not answer.
+   */
+  renderVisual(source: string, width: number, theme: JsonRecord): JsonRecord | null;
 };
 
 const UiContext = createContext<NativeChatUi | null>(null);
@@ -31,6 +36,8 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
   const disclosures = useMemo(() => new DisclosureStore(), []);
   const dispatchRef = useRef(chat.dispatch);
   dispatchRef.current = chat.dispatch;
+  const queryRef = useRef(chat.query);
+  queryRef.current = chat.query;
   const demand = useMemo(() => new RowDetailDemand((action) => dispatchRef.current(action)), []);
   useEffect(() => () => demand.dispose(), [demand]);
   // A new core (the host changed) has forgotten which rows are open and which images it read.
@@ -44,8 +51,21 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
     requested.current.add(path);
     dispatchRef.current({ type: 'loadImage', path });
   }, []);
-  const value = useMemo<NativeChatUi>(() => ({ disclosures, demand, requestImage }), [demand, disclosures, requestImage]);
+  const renderVisual = useCallback(
+    (source: string, width: number, theme: JsonRecord): JsonRecord | null =>
+      obj(queryRef.current('renderVisual', [source, width, theme, 'System'])),
+    []
+  );
+  const value = useMemo<NativeChatUi>(
+    () => ({ disclosures, demand, requestImage, renderVisual }),
+    [demand, disclosures, requestImage, renderVisual]
+  );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
+}
+
+/** The chat screen's shared drawing state, or null outside `NativeChatScreen` (Markdown in a card). */
+export function useOptionalNativeChatUi(): NativeChatUi | null {
+  return useContext(UiContext);
 }
 
 /** The chat screen's shared drawing state. Throws outside `NativeChatScreen`. */
