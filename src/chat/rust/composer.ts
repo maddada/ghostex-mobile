@@ -33,7 +33,7 @@ export type ComposerModelState = {
   revision: number;
   /** The boot read answered; edits and saves go to the core only from here on. */
   ready: boolean;
-  /** A send left the composer and has not settled. */
+  /** A send left the composer and has not settled. Send does not wait for it: the core holds later sends behind it. */
   pendingSend: boolean;
 };
 
@@ -120,7 +120,7 @@ export class ComposerModel {
    */
   submit(mode: 'send' | 'queue' | 'compact' | 'handoff'): boolean {
     const document = this.hooks.document();
-    if (!this.state.ready || this.state.text.trim().length === 0 || this.state.pendingSend) return false;
+    if (!this.state.ready || this.state.text.trim().length === 0) return false;
     if (mode !== 'send' && mode !== 'handoff' && document?.queue.capabilities.canQueue !== true) return false;
     const blocked = document?.sendBlockedReason ?? null;
     if (blocked !== null) {

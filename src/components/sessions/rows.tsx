@@ -1164,24 +1164,32 @@ const kindLabelStyles = StyleSheet.create({
 export function SessionListToggleRow({
   label,
   quick,
+  threadDepth,
   onPress,
 }: {
   label: string;
   /** Quick rows use the flat title inset; card rows use the card inset. */
   quick: boolean;
+  /**
+   * A coordinator's "N older threads" row: the tree level its title lines up with (the thread
+   * rows' THREAD_INDENT in SessionRow.tsx), drawn smaller and quieter than "Show N more".
+   */
+  threadDepth?: number;
   onPress: () => void;
 }) {
+  const thread = threadDepth !== undefined;
   return (
     <Pressable
       accessibilityRole="button"
       style={({ pressed }) => [
         toggleStyles.row,
         quick ? toggleStyles.rowQuick : toggleStyles.rowCard,
+        threadDepth !== undefined ? [toggleStyles.rowThread, { paddingLeft: ds(26) + ds(threadDepth * 16) }] : null,
         pressed ? toggleStyles.rowPressed : null,
       ]}
       onPress={onPress}
     >
-      <Text style={toggleStyles.label} numberOfLines={1}>
+      <Text style={[toggleStyles.label, thread ? toggleStyles.labelThread : null]} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -1204,10 +1212,17 @@ const toggleStyles = StyleSheet.create({
   rowPressed: {
     backgroundColor: 'rgba(200,205,213,0.06)',
   },
+  rowThread: {
+    height: ds(26),
+  },
   label: {
     color: '#B4B8C0',
     fontSize: ds(15.5),
     fontWeight: '300',
     lineHeight: ds(20),
+  },
+  labelThread: {
+    fontSize: ds(13),
+    lineHeight: ds(17),
   },
 });

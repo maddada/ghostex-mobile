@@ -6,7 +6,7 @@
  * The core ships each message's Markdown with its decisions already made and marked with the
  * private-use character U+E000 (`packages/gx-chat-core/src/transcript/native_markdown.rs`): a fence
  * that names a file carries its header JSON after the mark on the info string, a GitHub alert is a
- * marked section, a table and a finished Mermaid fence are wrapped in marks, and a picture written
+ * marked section, a table, a finished Mermaid fence and a finished ```visual block are wrapped in marks, and a picture written
  * into prose is a marked token with its image source. This file only splits on those marks, exactly as desktop's
  * `rich_markdown.rs` and `code_block.rs` do, and parses the plain Markdown between them. No chat
  * rule lives here.
@@ -22,6 +22,8 @@ const TABLE_CLOSE = `${MARK}/table`;
 const IMAGE_OPEN = `${MARK}image:`;
 const MERMAID_OPEN = `${MARK}mermaid`;
 const MERMAID_CLOSE = `${MARK}/mermaid`;
+const VISUAL_OPEN = `${MARK}visual`;
+const VISUAL_CLOSE = `${MARK}/visual`;
 
 export type Inline =
   | { t: 'text'; v: string }
@@ -50,12 +52,24 @@ export type Block =
   | { t: 'quote'; c: Block[] }
   | { t: 'alert'; kind: string; c: Block[] }
   | { t: 'table'; head: Inline[][]; align: Align[]; rows: Inline[][][]; source: string }
+  /** A finished ```visual fence: the block's JSON, drawn by `VisualBlock` (desktop `visual.rs`). */
+  | { t: 'visual'; source: string }
   | { t: 'hr' };
 
 export type ParseOptions = {
   /** Text somebody typed: a single newline is a line break (React's `chatText` mode). */
   breaks?: boolean;
 };
+
+/** A marked fence's text: its lines without the opening and closing runs (desktop `mermaid.rs` `fence_source`). */
+function fenceSource(fence: readonly string[]): string {
+  const indentOf = (line: string) => line.length - line.replace(/^ +/, '').length;
+  const indent = fence.length > 0 ? indentOf(fence[0]!) : 0;
+  return fence
+    .slice(1, Math.max(1, fence.length - 1))
+    .map((line) => line.slice(Math.min(indentOf(line), indent)))
+    .join('\n');
+}
 
 const cache = new Map<string, Block[]>();
 const CACHE_LIMIT = 400;
@@ -156,7 +170,7 @@ class BlockParser {
   /** Whether `line` starts a block that ends a running paragraph. */
   private interrupts(line: string): boolean {
     if (FENCE.test(line) || ATX.test(line) || HR.test(line) || QUOTE.test(line)) return true;
-    if (line.startsWith(ALERT_OPEN) || line === TABLE_OPEN || line === MERMAID_OPEN) return true;
+    if (line.startsWith(ALERT_OPEN) || line === TABLE_OPEN || line === MERMAID_OPEN || line === VISUAL_OPEN) return true;
     const marker = listMarker(line);
     // Only a bullet, or an ordered item starting at 1, interrupts a paragraph (CommonMark).
     return marker !== null && marker.indent <= 3 && marker.rest.length > 0 && (!marker.ordered || marker.start === 1);
@@ -187,6 +201,13 @@ class BlockParser {
       // phone does not draw diagrams yet, so the fence inside shows as the code block it is.
       if (line === MERMAID_OPEN || line === MERMAID_CLOSE) {
         index += 1;
+        continue;
+      }
+      if (line === VISUAL_OPEN) {
+        let end = index + 1;
+        while (end < lines.length && lines[end] !== VISUAL_CLOSE) end += 1;
+        out.push({ t: 'visual', source: fenceSource(lines.slice(index + 1, end)) });
+        index = end + 1;
         continue;
       }
       if (line === TABLE_OPEN) {

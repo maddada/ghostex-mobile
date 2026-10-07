@@ -33,7 +33,7 @@ export type ActionFields = {
   toggleAgentTasksCompleted: { expanded: boolean };
   /** A coordinator's Threads panel fold and its Done group. Desktop: `coordinator_threads.rs`. */
   toggleCoordinatorThreads: { open: boolean };
-  toggleCoordinatorThreadsDone: { expanded: boolean };
+  toggleCoordinatorThreadsMore: { expanded: boolean };
   /** Open one of the coordinator's threads (a host action: wake it if closed, then its tab). */
   openCoordinatorThread: { projectId: string; sessionId: string; lifecycleState?: string };
   searchOpen: {};

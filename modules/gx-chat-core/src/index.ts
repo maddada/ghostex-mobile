@@ -147,13 +147,17 @@ export type ChatCoreEffect =
   /** An effect newer than this binding; `name` is the Rust variant name. */
   | { type: 'unknown'; name: string };
 
-/** The five pure helpers `query()` answers (same arguments as desktop's `nativeChat.<name>`). */
+/**
+ * The pure helpers `query()` answers (same arguments as desktop's `nativeChat.<name>`).
+ * `renderVisual(source, width, theme, fontFamily)` lays out one ```visual block and answers its SVG.
+ */
 export type ChatCoreQuery =
   | 'composerReferences'
   | 'composerKeyIntent'
   | 'referenceMenu'
   | 'transcriptMenu'
-  | 'sendBlockedToast';
+  | 'sendBlockedToast'
+  | 'renderVisual';
 
 // ---------------------------------------------------------------------------------------------
 // The handle

@@ -22,14 +22,12 @@ export function SendControl({
   document,
   hasDraft,
   ready,
-  pendingSend,
   submit,
   dispatch,
 }: {
   document: ChatDocument | null;
   hasDraft: boolean;
   ready: boolean;
-  pendingSend: boolean;
   submit: NonNullable<RustChat['composer']>['submit'];
   dispatch: (action: UserAction) => void;
 }) {
@@ -49,9 +47,9 @@ export function SendControl({
   const working = document?.working === true;
   const stop = (working || cooling) && !hasDraft;
   const pendingAttachments = document?.pendingAttachments ?? 0;
-  const disabled = stop ? cooling : !hasDraft || !ready || pendingSend || pendingAttachments > 0;
+  const disabled = stop ? cooling : !hasDraft || !ready || pendingAttachments > 0;
   const blocked = !stop && typeof document?.sendBlockedReason === 'string';
-  const canQueue = hasDraft && !pendingSend && document?.queue.capabilities.canQueue === true;
+  const canQueue = hasDraft && document?.queue.capabilities.canQueue === true;
   const holdMs = document?.interaction.queueLongPressMs ?? 500;
 
   const onStop = (): void => {

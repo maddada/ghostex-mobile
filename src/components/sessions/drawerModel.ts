@@ -46,6 +46,7 @@ export type DrawerCollapseInput = {
   collapsedSectionsByMachine: Record<string, string[]>;
   collapsedSessionKindsByMachine: Record<string, string[]>;
   collapsedCoordinatorsByMachine?: Record<string, string[]>;
+  expandedCoordinatorOlderByMachine?: Record<string, string[]>;
   expandedParkedSessionKeysByMachine?: Record<string, string[]>;
   expandedDraftSessionKeysByMachine?: Record<string, string[]>;
 };
@@ -72,7 +73,8 @@ function isProjectChild(item: DrawerItem): boolean {
     item.type === 'GROUP_HEADER' ||
     item.type === 'SESSION' ||
     item.type === 'SESSION_KIND_LABEL' ||
-    item.type === 'SESSION_LIST_TOGGLE'
+    item.type === 'SESSION_LIST_TOGGLE' ||
+    item.type === 'COORDINATOR_OLDER'
   );
 }
 
@@ -187,6 +189,7 @@ function machineBlocks(
       ),
       expandedParkedSessionKeys: new Set(collapse.expandedParkedSessionKeysByMachine?.[machine.id] ?? []),
       collapsedCoordinatorKeys: new Set(collapse.collapsedCoordinatorsByMachine?.[machine.id] ?? []),
+      expandedCoordinatorOlderKeys: new Set(collapse.expandedCoordinatorOlderByMachine?.[machine.id] ?? []),
     }),
   );
   if (items.length === 0) {

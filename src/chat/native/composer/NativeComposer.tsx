@@ -332,7 +332,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
     // Send's own menu on desktop (`show_send_actions`), which a phone has no right press to open.
     const compactAndSend =
       model !== null && model.text.trim().length > 0
-        ? { disabled: !(model.ready && !model.pendingSend && document.queue.capabilities.canQueue) }
+        ? { disabled: !(model.ready && document.queue.capabilities.canQueue) }
         : null;
     setMenu({ kind: 'rows', rows: moreActionsRows({ document, simple: simpleSetting, verbose, available, serves, compactAndSend, draft: model?.text ?? '' }) });
   }, [available, document, model, serves, simpleSetting, verboseSetting]);
@@ -426,7 +426,6 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                 document={document}
                 hasDraft={hasDraft}
                 ready={model.ready}
-                pendingSend={model.pendingSend}
                 submit={input.submit}
                 dispatch={dispatch}
               />
@@ -467,7 +466,6 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                   document={document}
                   hasDraft={hasDraft}
                   ready={model.ready}
-                  pendingSend={model.pendingSend}
                   submit={input.submit}
                   dispatch={dispatch}
                 />
