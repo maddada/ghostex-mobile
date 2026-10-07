@@ -93,10 +93,11 @@ export function DisclosureBody({
   children: ReactNode;
 }) {
   const { theme } = useTranscriptEnv();
-  // The centre of the two-pixel line, from the row's left edge (`DisclosureRail::centre`).
-  const centre = rail === 'marker' ? 2.5 : 15;
+  // The line is centred under the chevron or glyph that opens the body, at every depth
+  // (`SLOT_CENTRE` in desktop's `disclosure_body.rs`); the content keeps its own column.
+  const contentX = rail === 'marker' ? 17 : 29.5;
   return (
-    <View style={[styles.body, { marginLeft: centre - RAIL_BOX / 2 }]}>
+    <View style={[styles.body, { marginLeft: SLOT_CENTRE - RAIL_BOX / 2, gap: contentX - SLOT_CENTRE - RAIL_BOX / 2 }]}>
       <Pressable onPress={onCollapse} accessibilityRole='button' accessibilityLabel={label} style={styles.railBox}>
         {({ pressed }) => (
           <View style={[styles.rail, { backgroundColor: pressed ? theme.foreground : theme.muted, opacity: pressed ? 1 : 0.42 }]} />
@@ -107,7 +108,8 @@ export function DisclosureBody({
   );
 }
 
-const RAIL_BOX = 15;
+const SLOT_CENTRE = MARKER_INSET + MARKER_SLOT / 2;
+const RAIL_BOX = 14;
 
 const styles = StyleSheet.create({
   markerSlot: {
@@ -123,7 +125,7 @@ const styles = StyleSheet.create({
   headingText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
   headingBody: { flex: 1, minWidth: 0 },
   medium: { fontWeight: '500' },
-  body: { flexDirection: 'row', minWidth: 0, gap: 7 },
+  body: { flexDirection: 'row', minWidth: 0 },
   railBox: { width: RAIL_BOX, alignItems: 'center', flexShrink: 0 },
   rail: { width: 2, flex: 1, borderRadius: 1 },
   bodyColumn: { flex: 1, minWidth: 0 },
