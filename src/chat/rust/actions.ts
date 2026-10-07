@@ -34,8 +34,8 @@ export type ActionFields = {
   /** A coordinator's Threads panel fold and its Done group. Desktop: `coordinator_threads.rs`. */
   toggleCoordinatorThreads: { open: boolean };
   toggleCoordinatorThreadsMore: { expanded: boolean };
-  /** Open one of the coordinator's threads (a host action: wake it if closed, then its tab). */
-  openCoordinatorThread: { projectId: string; sessionId: string; lifecycleState?: string };
+  /** Open one of the coordinator's threads: gxserver resumes it if closed, then the host opens its tab. */
+  openCoordinatorThread: { projectId: string; sessionId: string };
   searchOpen: {};
   searchClose: {};
   searchQuery: { query: string };

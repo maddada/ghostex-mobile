@@ -164,7 +164,6 @@ function ThreadRow({ row, chat }: { row: unknown; chat: RustChat }) {
       type: 'openCoordinatorThread',
       projectId: str(row, 'projectId'),
       sessionId: str(row, 'sessionId'),
-      lifecycleState: str(row, 'lifecycleState'),
     });
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Open thread ${title}`} onPress={openThread} style={styles.threadRow}>
