@@ -33,9 +33,7 @@ import {
   ChevronDownGlyph,
   ChevronRightGlyph,
   MoreGlyph,
-  PlayGlyph,
   TerminalGlyph,
-  WorldGlyph,
 } from './icons';
 
 /** Sessions page base surface (the resolved sidebar appearance paints over it). */
@@ -779,9 +777,12 @@ const collectionStyles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 // PROJECT_HEADER (desktop project card .group-head): flat 30dp row at the top
 // of the card — project identity icon, 15.55dp/700 title, collapsed count pills,
-// and (expanded) the desktop button cluster: Show less chevron, Actions,
-// Create Terminal, and the agent split-button. The always-visible overflow
-// button and a long-press both open the project menu (desktop right-click).
+// and (expanded) only the agent split-button (New agent + agent picker). Show
+// fewer sessions, Actions and Create Terminal live in the project menu, which
+// the always-visible overflow button and a long-press both open.
+//
+// CDXC:Sessions 2026-10-08 DECISION:
+// User: "move almost all of the buttons that appear next to an expanded project into the 3 dots menu; just keep the agent picker one and the new agent one."
 // ---------------------------------------------------------------------------
 
 export function ProjectHeaderRow({
@@ -792,16 +793,10 @@ export function ProjectHeaderRow({
   attentionCount,
   backgroundWorkCount,
   awakeCount,
-  hasActions,
-  selectedActionType,
   primaryAgent,
-  showSessionListCollapse,
   onToggle,
-  onCreateTerminal,
   onLaunchPrimary,
   onOpenAgentMenu,
-  onOpenActionsMenu,
-  onCollapseSessionList,
   onMenu,
 }: {
   title: string;
@@ -812,18 +807,10 @@ export function ProjectHeaderRow({
   attentionCount: number;
   backgroundWorkCount: number;
   awakeCount: number;
-  hasActions: boolean;
-  /** actionType of the last-run quick action, for the actions-button glyph. */
-  selectedActionType: 'browser' | 'terminal' | null;
   primaryAgent: GhostexAgentLauncher | null;
-  /** True when the expanded list can collapse back to 6 rows (Show less). */
-  showSessionListCollapse: boolean;
   onToggle: () => void;
-  onCreateTerminal: () => void;
   onLaunchPrimary: () => void;
   onOpenAgentMenu: (anchor: MenuAnchor) => void;
-  onOpenActionsMenu: (anchor: MenuAnchor) => void;
-  onCollapseSessionList: () => void;
   onMenu: (anchor: MenuAnchor) => void;
 }) {
   const rowRef = useRef<View | null>(null);
@@ -854,32 +841,6 @@ export function ProjectHeaderRow({
           />
         ) : (
           <View style={projectHeaderStyles.actions}>
-            {showSessionListCollapse ? (
-              <HeaderButton
-                accessibilityLabel={`Show fewer sessions in ${title}`}
-                onPress={onCollapseSessionList}
-              >
-                <ChevronDownGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} rotated />
-              </HeaderButton>
-            ) : null}
-            {hasActions ? (
-              <HeaderButton
-                accessibilityLabel={`${title} actions`}
-                onAnchorPress={onOpenActionsMenu}
-              >
-                {selectedActionType === 'browser' ? (
-                  <WorldGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
-                ) : (
-                  <PlayGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
-                )}
-              </HeaderButton>
-            ) : null}
-            <HeaderButton
-              accessibilityLabel={`Create a terminal in ${title}`}
-              onPress={onCreateTerminal}
-            >
-              <TerminalGlyph size={ds(14)} color={SidebarPalette.HEADER_BUTTON_ICON} />
-            </HeaderButton>
             {primaryAgent !== null ? (
               <AgentSplitButton
                 primaryAgent={primaryAgent}

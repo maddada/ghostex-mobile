@@ -78,12 +78,19 @@ function isProjectChild(item: DrawerItem): boolean {
   );
 }
 
-/** The mobile Sessions page starts at Projects; Quick sessions live in Chat. */
-function withoutQuickSection(items: DrawerItem[]): DrawerItem[] {
+/**
+ * The mobile Sessions page starts at the project list: Quick sessions live in Chat, and the
+ * "Projects" header row is gone.
+ *
+ * CDXC:Sessions 2026-10-08 DECISION:
+ * User: "Please remove the 'Projects' header in the sessions list and instead make holding on the machine itself at the top do what the 3 dots button next to Projects does." The list draws no section header rows; the machine menu (long press on the machine tab or the page title) carries the actions the header's ⋮ button had.
+ */
+function withoutSectionLabels(items: DrawerItem[]): DrawerItem[] {
   let insideQuickSection = false;
   return items.filter((item) => {
     if (item.type === 'SECTION_LABEL') {
       insideQuickSection = item.section === 'quick';
+      return false;
     }
     return !insideQuickSection;
   });
@@ -173,7 +180,7 @@ function machineBlocks(
       ),
     ];
   }
-  const items = withoutQuickSection(
+  const items = withoutSectionLabels(
     buildDrawerItems({
       machineId: machine.id,
       nowMs,

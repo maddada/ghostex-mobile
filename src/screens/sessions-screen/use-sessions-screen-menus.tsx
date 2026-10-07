@@ -53,6 +53,7 @@ import {
   createChatCommand,
   createCoordinatorCommand,
   type CreateCoordinatorInput,
+  createSessionCommand,
   exportSessionTranscriptCommand,
   forkSessionCommand,
   promoteCoordinatorCommand,
@@ -123,6 +124,7 @@ export type SessionsScreenMenusDeps = {
   entries: DrawerBlock[];
   collapse: {
     collapseAllProjects: (machineId: string) => void;
+    toggleSessionList: (machineId: string, projectKey: string) => void;
     expandAllProjects: (machineId: string, projectKeys: string[], collectionIds: string[]) => void;
   };
   lastActionByProject: Record<string, string>;
@@ -594,6 +596,58 @@ export function useSessionsScreenMenus({
       next.splice(destination, 0, projectId);
       return next;
     };
+    /*
+     * CDXC:Sessions 2026-10-08 DECISION:
+     * User: "move almost all of the buttons that appear next to an expanded project into the 3 dots menu; just keep the agent picker one and the new agent one." Show fewer sessions, the project's quick actions and Create Terminal used to be header buttons; they lead this menu, each with the icon it had as a button.
+     */
+    const headerRows: ContextMenuItem[] = [];
+    if (!header.collapsed && header.sessionListClipped && !header.sessionListCollapsed) {
+      headerRows.push({
+        kind: 'item',
+        key: 'show-fewer',
+        label: 'Show fewer sessions',
+        icon: <ChevronDownGlyph size={14} color={menuIconColor} rotated />,
+        onPress: () => {
+          setOverlay(NONE);
+          collapse.toggleSessionList(ctx.machine.id, header.projectKey);
+        },
+      });
+    }
+    if (header.quickActions.length > 0) {
+      const lastAction = header.quickActions.find(
+        (action) => (action.commandId ?? '') === (lastActionByProject[lastActionKey(ctx.machine.id, header.projectId)] ?? ''),
+      ) ?? header.quickActions[0];
+      headerRows.push({
+        kind: 'item',
+        key: 'quick-actions',
+        label: 'Actions…',
+        icon:
+          lastAction.actionType === 'browser' ? (
+            <WorldGlyph size={14} color={menuIconColor} />
+          ) : (
+            <PlayGlyph size={14} color={menuIconColor} />
+          ),
+        onPress: () => setOverlay({ kind: 'actionsMenu', ctx }),
+      });
+    }
+    headerRows.push({
+      kind: 'item',
+      key: 'create-terminal',
+      label: 'Create Terminal',
+      icon: <TerminalGlyph size={14} color={menuIconColor} />,
+      onPress: () => {
+        setOverlay(NONE);
+        void runCreationFlow(
+          ctx.machine,
+          createSessionCommand({
+            projectId: header.projectId.length > 0 ? header.projectId : undefined,
+            groupId:
+              header.projectId.length === 0 && header.legacyGroupId.length > 0 ? header.legacyGroupId : undefined,
+          }),
+          ProgressCopy.creatingTerminal(header.title),
+        );
+      },
+    });
     const phoneRows: ContextMenuItem[] = [{ kind: 'separator', key: 'phone-sep' }];
     if (header.projectId.length > 0 && header.projectPath.length > 0) {
       phoneRows.push({
@@ -653,7 +707,7 @@ export function useSessionsScreenMenus({
         onPress: () => setOverlay({ kind: 'projectDetails', ctx }),
       },
     );
-    return { subtitle: 'Project', items: [...view.items, ...phoneRows] };
+    return { subtitle: 'Project', items: [...headerRows, { kind: 'separator', key: 'header-sep' }, ...view.items, ...phoneRows] };
   };
 
   /** COLLECTION header menu root — desktop project-collection menu. */
@@ -862,19 +916,14 @@ export function useSessionsScreenMenus({
     return items;
   };
 
-  /** Quick/Projects section-label menus — desktop section hover actions. */
-  const sectionMenuItems = (target: MachineRecord, section: 'quick' | 'projects'): ContextMenuItem[] => {
-    if (section === 'quick') {
-      return [
-        {
-          kind: 'item',
-          key: 'new-terminal',
-          label: 'Quick Terminal',
-          icon: <TerminalGlyph size={14} color={menuIconColor} />,
-          onPress: () => void runCreationFlow(target, createChatCommand(), ProgressCopy.creatingQuickSession),
-        },
-      ];
-    }
+  /**
+   * Project-list rows of the machine menu: what the removed "Projects" header's ⋮ button reached
+   * that the machine menu did not already have.
+   *
+   * CDXC:Sessions 2026-10-08 DECISION:
+   * User: "Please remove the 'Projects' header in the sessions list and instead make holding on the machine itself at the top do what the 3 dots button next to Projects does." Recent Projects, Collapse All and Expand All join the machine menu (long press on the machine tab or the page title).
+   */
+  const projectListMenuItems = (target: MachineRecord): ContextMenuItem[] => {
     const summary = summaryFor(target.id);
     const projectKeys: string[] = [];
     for (const project of summary?.projects ?? []) {
@@ -882,16 +931,7 @@ export function useSessionsScreenMenus({
     }
     const collectionIds = (summary?.projectCollections ?? []).map((entry) => entry.collectionId);
     return [
-      {
-        kind: 'item',
-        key: 'add-project',
-        label: 'Add Project',
-        icon: <PlusGlyph size={14} color={menuIconColor} />,
-        onPress: () => {
-          setOverlay(NONE);
-          navigation.navigate('AddProjectSource', { machineId: target.id });
-        },
-      },
+      { kind: 'separator', key: 'sep-project-list' },
       {
         kind: 'item',
         key: 'recent',
@@ -899,7 +939,6 @@ export function useSessionsScreenMenus({
         icon: <RefreshGlyph size={14} color={menuIconColor} />,
         onPress: () => setOverlay({ kind: 'recentProjects', machine: target }),
       },
-      { kind: 'separator', key: 'sep-1' },
       {
         kind: 'item',
         key: 'collapse-all',
@@ -920,6 +959,34 @@ export function useSessionsScreenMenus({
           collapse.expandAllProjects(target.id, projectKeys, collectionIds);
         },
       },
+    ];
+  };
+
+  /** Quick/Projects section-label menus — desktop section hover actions. */
+  const sectionMenuItems = (target: MachineRecord, section: 'quick' | 'projects'): ContextMenuItem[] => {
+    if (section === 'quick') {
+      return [
+        {
+          kind: 'item',
+          key: 'new-terminal',
+          label: 'Quick Terminal',
+          icon: <TerminalGlyph size={14} color={menuIconColor} />,
+          onPress: () => void runCreationFlow(target, createChatCommand(), ProgressCopy.creatingQuickSession),
+        },
+      ];
+    }
+    return [
+      {
+        kind: 'item',
+        key: 'add-project',
+        label: 'Add Project',
+        icon: <PlusGlyph size={14} color={menuIconColor} />,
+        onPress: () => {
+          setOverlay(NONE);
+          navigation.navigate('AddProjectSource', { machineId: target.id });
+        },
+      },
+      ...projectListMenuItems(target),
     ];
   };
 
@@ -1006,6 +1073,7 @@ export function useSessionsScreenMenus({
         navigation.navigate('WebPreviewPorts', { machineId: target.id });
       },
     },
+    ...projectListMenuItems(target),
   ];
 
   /**

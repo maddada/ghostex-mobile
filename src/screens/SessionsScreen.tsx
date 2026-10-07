@@ -49,7 +49,7 @@ import MachineTabs, {
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
 import SpaceTabs from '../components/sessions/SpaceTabs';
-import { useLauncherStore, lastActionKey } from '../components/sessions/launcherStore';
+import { useLauncherStore } from '../components/sessions/launcherStore';
 import {
   CollectionHeaderRow,
   collectionHeaderTint,
@@ -75,7 +75,6 @@ import {
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
   createChatCommand,
-  createSessionCommand,
   delayedSendCommand,
   killSessionCommand,
   renameSessionCommand,
@@ -880,10 +879,6 @@ export default function SessionsScreen({ navigation }: Props) {
   ): ReactElement => {
     const header = card.header;
     const primaryAgent = resolvePrimaryAgent(header.agents);
-    const selectedActionId = lastActionByProject[lastActionKey(machineId, header.projectId)] ?? '';
-    const selectedAction =
-      header.quickActions.find((action) => (action.commandId ?? '') === selectedActionId) ??
-      (header.quickActions.length > 0 ? header.quickActions[0] : null);
     /*
      * Branched project rails (desktop [data-project-group-style="branched"]):
      * the card itself carries no border or fill — its membership is drawn by a
@@ -924,16 +919,7 @@ export default function SessionsScreen({ navigation }: Props) {
             attentionCount={header.attentionCount}
             backgroundWorkCount={header.backgroundWorkCount}
             awakeCount={header.awakeCount}
-            hasActions={header.quickActions.length > 0}
-            selectedActionType={
-              selectedAction === null
-                ? null
-                : selectedAction.actionType === 'browser'
-                  ? 'browser'
-                  : 'terminal'
-            }
             primaryAgent={primaryAgent}
-            showSessionListCollapse={header.sessionListClipped && !header.sessionListCollapsed}
             onToggle={() => collapse.toggleProject(machineId, header.projectKey)}
             onMenu={() => {
               if (target === null) return;
@@ -942,20 +928,6 @@ export default function SessionsScreen({ navigation }: Props) {
                 ctx: { machine: target, header },
                 menuPath: [],
               });
-            }}
-            onCreateTerminal={() => {
-              if (target === null) return;
-              void runCreationFlow(
-                target,
-                createSessionCommand({
-                  projectId: header.projectId.length > 0 ? header.projectId : undefined,
-                  groupId:
-                    header.projectId.length === 0 && header.legacyGroupId.length > 0
-                      ? header.legacyGroupId
-                      : undefined,
-                }),
-                ProgressCopy.creatingTerminal(header.title),
-              );
             }}
             onLaunchPrimary={() => {
               if (target === null || primaryAgent === null) return;
@@ -968,14 +940,6 @@ export default function SessionsScreen({ navigation }: Props) {
                 ctx: { machine: target, header },
               });
             }}
-            onOpenActionsMenu={() => {
-              if (target === null) return;
-              setOverlay({
-                kind: 'actionsMenu',
-                ctx: { machine: target, header },
-              });
-            }}
-            onCollapseSessionList={() => collapse.toggleSessionList(machineId, header.projectKey)}
           />
           {!header.collapsed && card.children.length > 0 ? (
             <View style={styles.cardSessions}>
@@ -1200,6 +1164,7 @@ export default function SessionsScreen({ navigation }: Props) {
         */}
         <Pressable
           accessibilityRole="header"
+          accessibilityHint="Touch and hold for the machine menu"
           onLongPress={() => {
             if (machine === null) return;
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

@@ -192,6 +192,7 @@ export default function MachineTabs({
           <Pressable
             accessibilityRole="tab"
             accessibilityLabel={`${item.label}, ${stateLabel}`}
+            accessibilityHint="Touch and hold for the machine menu"
             accessibilityState={{ selected, busy: item.connectionState === 'busy' }}
             key={item.id}
             onLongPress={() => onLongPress(item.id)}
