@@ -18,7 +18,10 @@ import type { MachineRecord } from '../machines/store';
 import { useTerminalStore } from '../terminal/sessions';
 
 /** Agent icons whose sessions gxserver can fork (desktop sidebar parity). */
-export const FORK_AGENT_ICONS = ['codex', 'claude', 'pi'];
+export const FORK_AGENT_ICONS = ['codex', 'claude', 'pi', 'empryo'];
+
+/** Agent icons gxserver can make a coordinator (`COORDINATOR_AGENT_FAMILIES`, desktop sidebar parity). */
+export const COORDINATOR_AGENT_ICONS = ['claude', 'codex', 'zcode', 'empryo'];
 
 const remoteMutationQueues = new Map<string, Promise<void>>();
 

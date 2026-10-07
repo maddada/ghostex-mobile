@@ -2,4 +2,4 @@
 // SESSION_CHAT_SUPPORTED_AGENTS in the Ghostex main repo's packages/shared/session-chat.ts.
 // Regenerate with `bun run generate:chat-agents`.
 
-export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ["antigravity","antigravity-cli","agy","claude","openclaude","codex","cursor","grok","grok-build","hermes","hermes-agent","pi","omp","zcode","freebuff"];
+export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ["antigravity","antigravity-cli","agy","claude","openclaude","codex","cursor","empryo","grok","grok-build","hermes","hermes-agent","pi","omp","zcode","freebuff"];

@@ -155,6 +155,7 @@ const DEFAULT_SESSION_AGENT_TITLE_NAMES: readonly string[] = [
   'Mastra Code',
   'Devin',
   'Factory Droid',
+  'Empryo',
   'Gemini',
   'Grok Build',
   'Hermes Agent',

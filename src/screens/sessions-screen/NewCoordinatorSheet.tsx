@@ -183,7 +183,7 @@ export default function NewCoordinatorSheet({ projectTitle, loadOptions, onCreat
                 )
               ) : options.agents.length === 0 ? (
                 <Text style={styles.error}>
-                  No Claude, Codex or ZCode agent is set up on this computer. A coordinator runs on one of them.
+                  No Claude, Codex, ZCode or Empryo agent is set up on this computer. A coordinator runs on one of them.
                 </Text>
               ) : (
                 <>
