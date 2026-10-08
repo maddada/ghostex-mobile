@@ -30,7 +30,16 @@ type SpeechNative = {
 
 const speech = requireOptionalNativeModule<SpeechNative>('ExpoSpeechRecognition');
 
+/**
+ * The switch for the Dictate control.
+ *
+ * CDXC:SessionChat 2026-10-09 DECISION: User: "if we can't fix this np release with mic button hidden on all os for now i'll test it later". Dictation returns no words on the desktop and was never confirmed on a phone, so the control is hidden everywhere until it is tested. Set this to `true` to bring it back; the dictation code stays in place.
+ * CDXC:SessionChat 2026-10-09 SEE-ALSO: the desktop's switch is `DICTATION_ENABLED` in `apps/desktop/src/app/native_chat/dictation.rs`.
+ */
+const DICTATION_ENABLED = false;
+
 function recognitionAvailable(): boolean {
+  if (!DICTATION_ENABLED) return false;
   try {
     return speech?.isRecognitionAvailable() ?? false;
   } catch {
