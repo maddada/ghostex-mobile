@@ -15,6 +15,7 @@ export const COMPOSER_CONTROLS = [
   { id: 'note', action: 'sessionNote', label: 'Session note', icon: 'titlebar/note.svg' },
   { id: 'stash', action: 'stashPrompt', label: 'Stash prompt', icon: 'titlebar/stack-push.svg' },
   { id: 'attach', action: 'attachPath', label: 'Attach a file or folder', icon: 'titlebar/paperclip.svg' },
+  { id: 'dictate', action: 'dictate', label: 'Dictate', icon: 'titlebar/microphone.svg' },
   { id: 'terminal', action: 'terminalView', label: 'Terminal View', icon: 'titlebar/terminal-2.svg' },
 ] as const;
 

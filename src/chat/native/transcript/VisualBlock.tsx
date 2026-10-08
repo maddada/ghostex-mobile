@@ -9,8 +9,9 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { SvgXml } from 'react-native-svg';
 
 import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
@@ -19,6 +20,17 @@ import { arr, num, obj, str, type JsonRecord } from './json';
 import { MONO_FONT, type TranscriptTheme } from './theme';
 
 const PADDING = 12;
+/** `packages/gx-chat-core/visual/chart-motion.json`: how long a chart takes to draw in. */
+const DRAW_IN_MS = 1000;
+
+/**
+ * The charts (by source) already drawn in during this run of the app. A chart draws in the first
+ * time it is shown and never again: not when its row scrolls back into the list, which unmounts
+ * rows, nor in a session the reader comes back to.
+ * CDXC:SessionChat 2026-10-08 SEE-ALSO: `packages/gx-visual/src/motion.rs` holds the motion and the
+ * user decision; the desktop draws the same frames in `apps/desktop/src/app/native_chat/visual.rs`.
+ */
+const DRAWN_IN = new Set<string>();
 const TOOLTIP_WIDTH = 200;
 
 type TooltipLine = { label: string; value: string; color: string };
@@ -84,6 +96,30 @@ export function VisualBlock({ source }: { source: string }) {
   );
   const kind = str(answer, 'kind');
   const hits = useMemo(() => regions(answer), [answer]);
+  const reduceMotion = useReducedMotion();
+  const moves = kind === 'drawing' && answer?.motion === true;
+  const [frame, setFrame] = useState<string | null>(null);
+  useEffect(() => {
+    // Checked here rather than in the dependencies: marking the chart drawn must not end its own run.
+    if (!moves || reduceMotion || ui === null || DRAWN_IN.has(source)) return;
+    DRAWN_IN.add(source);
+    const started = Date.now();
+    let request = 0;
+    const step = () => {
+      const progress = (Date.now() - started) / DRAW_IN_MS;
+      if (progress >= 1) {
+        setFrame(null);
+        return;
+      }
+      setFrame(str(ui.renderVisual(source, width, scheme, progress), 'svg') || null);
+      request = requestAnimationFrame(step);
+    };
+    step();
+    return () => {
+      cancelAnimationFrame(request);
+      setFrame(null);
+    };
+  }, [moves, reduceMotion, scheme, source, ui, width]);
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const inner = Math.round(event.nativeEvent.layout.width - PADDING * 2);
     setWidth((current) => (Math.abs(current - inner) >= 4 ? inner : current));
@@ -166,7 +202,7 @@ export function VisualBlock({ source }: { source: string }) {
       <View style={styles.body} onLayout={onLayout}>
         {drawing ? (
           <Pressable onPress={onPress} style={{ width, height }}>
-            <SvgXml xml={str(answer, 'svg')} width={width} height={height} />
+            <SvgXml xml={frame ?? str(answer, 'svg')} width={width} height={height} />
             {tip !== undefined && tip.lines.length > 0 ? (
               <View
                 pointerEvents='none'

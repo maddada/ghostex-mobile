@@ -27,7 +27,7 @@ export type NativeChatUi = {
    * Lays out one ```visual block at `width` through the core (`renderVisual`): its scene as SVG with
    * tooltip regions, a page card, or an error; null when the core could not answer.
    */
-  renderVisual(source: string, width: number, theme: JsonRecord): JsonRecord | null;
+  renderVisual(source: string, width: number, theme: JsonRecord, progress?: number): JsonRecord | null;
 };
 
 const UiContext = createContext<NativeChatUi | null>(null);
@@ -52,8 +52,8 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
     dispatchRef.current({ type: 'loadImage', path });
   }, []);
   const renderVisual = useCallback(
-    (source: string, width: number, theme: JsonRecord): JsonRecord | null =>
-      obj(queryRef.current('renderVisual', [source, width, theme, 'System'])),
+    (source: string, width: number, theme: JsonRecord, progress?: number): JsonRecord | null =>
+      obj(queryRef.current('renderVisual', progress === undefined ? [source, width, theme, 'System'] : [source, width, theme, 'System', progress])),
     []
   );
   const value = useMemo<NativeChatUi>(

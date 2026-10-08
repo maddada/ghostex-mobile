@@ -22,6 +22,13 @@
           "cameraPermission": "Ghostex uses the camera to scan the tailcat pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Ghostex uses the microphone when you dictate a message in the chat or record a video to attach to a session.",
+          "speechRecognitionPermission": "Ghostex turns what you dictate in the chat into text."
+        }
       ]
     ],
     "ios": {
@@ -43,7 +50,8 @@
         "UIAppFonts": ["JetBrainsMonoNerdFont-Regular.ttf"],
         "NSPhotoLibraryUsageDescription": "Ghostex uses your photo library so you can attach images to your sessions.",
         "NSCameraUsageDescription": "Ghostex uses the camera to scan the tailcat pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
-        "NSMicrophoneUsageDescription": "Ghostex uses the microphone when you record a video to attach to a session."
+        "NSMicrophoneUsageDescription": "Ghostex uses the microphone when you dictate a message in the chat or record a video to attach to a session.",
+        "NSSpeechRecognitionUsageDescription": "Ghostex turns what you dictate in the chat into text."
       }
     },
     "android": {

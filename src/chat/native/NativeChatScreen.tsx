@@ -161,6 +161,7 @@ export default function NativeChatScreen({
           show(answer.error.message, true, 'Switch Account failed');
         });
       }
+      else if (action === 'toast') show(String(params.message ?? ''), params.level === 'error');
       else if (action === 'exportTranscript') {
         exportCount.current += 1;
         openHandoff({ id: -exportCount.current, target: null });

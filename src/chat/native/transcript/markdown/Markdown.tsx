@@ -169,6 +169,17 @@ const CELL_PAD_X = 12;
 /** How many of a column's longest words are laid out to find its widest one. */
 const TABLE_MEASURED_WORDS = 4;
 
+/**
+ * `markdown-visual.json` `codeBlock`: a fence longer than `collapseAfterLines` shows `collapsedLines`
+ * lines and scrolls the rest under its header until the reader shows it whole.
+ * CDXC:SessionChat 2026-10-08 SEE-ALSO: the desktop caps its blocks with the same numbers
+ * (`apps/desktop/src/app/native_chat/markdown_style.rs`, `code_block_cap`).
+ */
+const CODE_COLLAPSED_LINES = 20;
+const CODE_COLLAPSE_AFTER_LINES = 26;
+/** `styles.codeText` line height and `styles.codeBody` vertical padding. */
+const CODE_CAP = CODE_COLLAPSED_LINES * 17.5 + 12 * 2;
+
 /** `markdown-visual.json`: the shared heading sizes, gaps and leading. */
 const HEADING_SIZES = [0, 20, 18, 16, 14, 14, 14];
 const HEADING_LINE = 1.3;
@@ -177,7 +188,9 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
   const { theme, dispatch } = useTranscriptEnv();
   const [find, findDone] = useOwnFind(useRowFind());
   const [wrapped, setWrapped] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const long = useMemo(() => block.text.split('\n').length > CODE_COLLAPSE_AFTER_LINES, [block.text]);
   const header: FenceHeader | null = block.header;
   const copy = useCallback(() => {
     void Clipboard.setStringAsync(block.text);
@@ -192,6 +205,13 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
     </Text>
   );
   findDone();
+  const codeContent = wrapped ? (
+    <View style={styles.codeBody}>{body}</View>
+  ) : (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
+      {body}
+    </ScrollView>
+  );
   return (
     <View style={[styles.codeBlock, { backgroundColor: theme.light ? '#fafafa' : '#171717', borderColor: theme.border }]} key={blockKey}>
       <View style={[styles.codeHeader, { borderBottomColor: theme.border }]}>
@@ -215,6 +235,18 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
           </Text>
         )}
         <View style={styles.codeActions}>
+          {long ? (
+            <Pressable
+              hitSlop={6}
+              style={styles.codeAction}
+              onPress={() => setExpanded((value) => !value)}
+              accessibilityRole='button'
+              accessibilityLabel={expanded ? 'Collapse code' : 'Show all code'}
+              accessibilityState={{ expanded }}
+            >
+              <Glyph name={expanded ? 'arrows-diagonal-minimize' : 'arrows-diagonal'} size={14} color={theme.muted} />
+            </Pressable>
+          ) : null}
           <Pressable
             hitSlop={6}
             style={[styles.codeAction, wrapped && { backgroundColor: theme.pressed }]}
@@ -230,12 +262,13 @@ function CodeBlock({ block, blockKey, selectable }: { block: Extract<Block, { t:
           </Pressable>
         </View>
       </View>
-      {wrapped ? (
-        <View style={styles.codeBody}>{body}</View>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
-          {body}
+      {long && !expanded ? (
+        // The transcript is a list too, so Android needs `nestedScrollEnabled` for the code to scroll on its own.
+        <ScrollView nestedScrollEnabled style={{ maxHeight: CODE_CAP }}>
+          {codeContent}
         </ScrollView>
+      ) : (
+        codeContent
       )}
     </View>
   );
@@ -505,7 +538,7 @@ function Blocks({ blocks, context, color, depth, listDepth }: BlockProps) {
                           {item.checked ? <Glyph name='check' size={10} color={theme.background} strokeWidth={3} /> : null}
                         </View>
                       ) : (
-                        <Text style={[styles.prose, { color: block.ordered ? color : theme.muted }]}>
+                        <Text style={[styles.prose, { color: theme.muted }]}>
                           {block.ordered
                             ? orderedLabel(block.start + itemIndex, listDepth.ordered)
                             : BULLETS[listDepth.bullet % BULLETS.length]}
@@ -513,7 +546,8 @@ function Blocks({ blocks, context, color, depth, listDepth }: BlockProps) {
                       )}
                     </View>
                     <View style={styles.listBody}>
-                      <Blocks blocks={item.c} context={context} color={color} depth={depth + 1} listDepth={nested} />
+                      {/* A done task steps back so the open ones stand out, as on the desktop. */}
+                      <Blocks blocks={item.c} context={context} color={item.checked ? theme.muted : color} depth={depth + 1} listDepth={nested} />
                     </View>
                   </View>
                 ))}

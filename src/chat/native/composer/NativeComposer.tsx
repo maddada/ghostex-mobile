@@ -41,6 +41,7 @@ import { SendControl } from './SendControl';
 import { StatusLine, statusLineReserved } from './StatusLine';
 import { Suggestions } from './Suggestions';
 import { useComposerMotion } from './useComposerMotion';
+import { useDictation } from './useDictation';
 import { useKeyboardInset } from './useKeyboardInset';
 
 export type NativeComposerProps = {
@@ -95,6 +96,7 @@ const CONTROL_GLYPHS: Record<ComposerControlId, GlyphName> = {
   note: 'note',
   stash: 'stack-push',
   attach: 'paperclip',
+  dictate: 'microphone',
   terminal: 'terminal-2',
 };
 
@@ -125,6 +127,20 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const [menu, setMenu] = useState<OpenMenu>(null);
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
+  // Dictated phrases go into the draft at the caret, a space apart from the text around them.
+  const draftAt = useRef({ text, caret });
+  draftAt.current = { text, caret };
+  const dictation = useDictation(
+    (phrase) => {
+      const { text: current, caret: at } = draftAt.current;
+      const before = current.slice(0, at);
+      const after = current.slice(at);
+      const lead = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
+      const trail = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
+      input?.replace(before + lead + phrase + trail + after);
+    },
+    (message) => onHostAction?.('toast', { message, level: 'error' })
+  );
   const verboseSetting = useSettingsStore((store) => store.settings.sessionChatVerboseMode);
   const simpleSetting = useSettingsStore((store) => store.settings.sessionChatSimpleMode);
   const setSetting = useSettingsStore((store) => store.setSetting);
@@ -150,12 +166,14 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const available = useCallback(
     (id: ComposerControlId): boolean => {
       if (document === null) return false;
+      // Dictation is the phone's own (the platform recognizer), so the core does not gate it.
+      if (id === 'dictate') return dictation.available;
       const gate = document.composerActions?.[id];
       if (gate === false) return false;
       if (id === 'terminal') return serves('terminalView');
       return true;
     },
-    [document, serves]
+    [dictation.available, document, serves]
   );
   const [footerWidth, setFooterWidth] = useState(0);
   const [optionsWidth, setOptionsWidth] = useState(0);
@@ -214,6 +232,9 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
         case 'attachPath':
           openAttach();
           return;
+        case 'dictate':
+          void dictation.toggle();
+          return;
         case 'stashPrompt':
           if (model !== null && model.text.trim().length > 0) {
             dispatch({ type: 'stash', text: model.text, draftVersion: { draftId: model.draftId, revision: model.revision } });
@@ -225,7 +246,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           host(action);
       }
     },
-    [dispatch, host, model, openAttach, serves]
+    [dictation, dispatch, host, model, openAttach, serves]
   );
 
   /** A menu row's command, routed the way desktop's `handle_action` routes it. */
@@ -438,10 +459,16 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
                 <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
                 {document !== null
                   ? COMPOSER_CONTROLS.filter((control) => available(control.id) && !overflowed(document, control.id)).map((control) => {
-                      const glyph = control.id === 'summary' && document.summaryMode ? 'list-check' : CONTROL_GLYPHS[control.id];
+                      const glyph =
+                        control.id === 'summary' && document.summaryMode
+                          ? 'list-check'
+                          : control.id === 'dictate' && dictation.listening
+                            ? 'player-stop'
+                            : CONTROL_GLYPHS[control.id];
                       const pressed =
                         (control.id === 'summary' && document.composerChrome.summaryPressed) ||
-                        (control.id === 'note' && document.composerChrome.notePressed);
+                        (control.id === 'note' && document.composerChrome.notePressed) ||
+                        (control.id === 'dictate' && dictation.listening);
                       const badge =
                         control.id === 'stash'
                           ? document.composerChrome.stashBadge
