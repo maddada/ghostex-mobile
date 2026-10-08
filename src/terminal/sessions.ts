@@ -24,6 +24,16 @@ import { forgetAttach, noteAttachOpened } from './zmxDisplay';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 
+/**
+ * A terminal that failed to open on a live connection fails alone (the native open deadline no
+ * longer retires the connection, so the session's chat keeps working). The connection is probed
+ * in the background instead and replaced only when it no longer answers, which recovers a wedged
+ * transport the way the old teardown did.
+ */
+function verifyAfterFailedOpen(machine: MachineConnectionTarget): void {
+  void ensureConnected(machine, { verify: true }).catch(() => undefined);
+}
+
 function trackTabOpen<T>(sessionKey: string, work: () => Promise<T>): Promise<T> {
   const request = Promise.resolve().then(work);
   tabOpenRequests.set(sessionKey, request);
@@ -219,8 +229,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       set({ tabs: [...get().tabs, tab], selectedSessionKey: tab.sessionKey });
       touchWarm(tab.sessionKey);
       await evictExcessWarmEntries();
+      let connected = false;
       try {
         await ensureConnected(machine);
+        connected = true;
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
         const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
           fontSize: initialFontSize(tab.sessionKey),
@@ -242,6 +254,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           error: error instanceof Error ? error.message : String(error),
         });
         dropWarm(tab.sessionKey);
+        if (connected) verifyAfterFailedOpen(machine);
         throw error;
       }
       return tab.sessionKey;
@@ -414,6 +427,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         zmxRefreshSent.delete(sessionKey);
         forgetAttach(sessionKey);
         touchWarm(sessionKey);
+        let connected = false;
         try {
           /*
            * Reconnect means "throw the dead terminal away and start over", so the
@@ -424,6 +438,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
            */
           await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
           await ensureConnected(target);
+          connected = true;
           const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
             fontSize: initialFontSize(sessionKey),
             zmxBacked: tab.kind === 'attach',
@@ -447,6 +462,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             state: 'failed',
             error: error instanceof Error ? error.message : String(error),
           });
+          if (connected) verifyAfterFailedOpen(target);
         }
       });
     },

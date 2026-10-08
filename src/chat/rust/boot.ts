@@ -5,7 +5,7 @@
 
 import type { ChatStorageKey } from './events';
 import { decodeStoredDraft, nextDraftVersion, type StoredDraft } from './host-records';
-import { readRecord, scanRecords, writeRecord } from './storage';
+import { readRecords, scanRecords, writeRecord } from './storage';
 
 /** `ComposerBootRead` in `packages/gx-chat-core/src/event.rs`. */
 export type ComposerBootRead = {
@@ -33,14 +33,15 @@ export type ComposerBootRead = {
 /** Reads that refused, and reads attempted: all refused means storage itself is unavailable. */
 type BootReads = { attempts: number; errors: number };
 
-async function load(store: string, suffix: string, nowMs: number, reads: BootReads): Promise<string | null> {
-  reads.attempts += 1;
+/** Every key in one batched read; each key counts as one attempt, and all of them fail together. */
+async function loadAll(keys: readonly ChatStorageKey[], nowMs: number, reads: BootReads): Promise<(string | null)[]> {
+  reads.attempts += keys.length;
   try {
-    const raw = await readRecord({ store, suffix }, nowMs);
-    return raw === null || raw.length === 0 ? null : raw;
+    const raws = await readRecords(keys, nowMs);
+    return raws.map((raw) => (raw === null || raw.length === 0 ? null : raw));
   } catch {
-    reads.errors += 1;
-    return null;
+    reads.errors += keys.length;
+    return keys.map(() => null);
   }
 }
 
@@ -59,8 +60,7 @@ function base36Random(): string {
 }
 
 /** `sessionChatDraftClientId()`: this phone's persisted draft-origin id, minted on first sight. */
-async function clientId(nowMs: number, reads: BootReads): Promise<string> {
-  const stored = await load('chatClient', '', nowMs, reads);
+async function clientId(stored: string | null, nowMs: number, reads: BootReads): Promise<string> {
   if (stored !== null) return stored;
   const created = `gx-${base36Random()}${Math.max(0, nowMs).toString(36)}`;
   reads.attempts += 1;
@@ -126,21 +126,44 @@ function decodeVerbose(raw: string | null): boolean | null {
  */
 export async function readComposerBoot(sessionKey: string, nowMs: number): Promise<ComposerBootRead | null> {
   const reads: BootReads = { attempts: 0, errors: 0 };
-  const id = await clientId(nowMs, reads);
-  const storedRaw = await load('drafts', sessionKey, nowMs, reads);
+  // One multiGet for the records and the two prefix scans beside it, instead of thirteen reads
+  // one after another: the cached transcript cannot paint before this read answers.
+  const [records, optionStates, modelOutboxes] = await Promise.all([
+    loadAll(
+      [
+        { store: 'chatClient', suffix: '' },
+        { store: 'drafts', suffix: sessionKey },
+        { store: 'modelCatalog', suffix: '' },
+        { store: 'claudeContext', suffix: '' },
+        { store: 'codexContext', suffix: '' },
+        { store: 'cursorContext', suffix: '' },
+        { store: 'hermesContext', suffix: '' },
+        { store: 'piContext', suffix: '' },
+        { store: 'basicContext', suffix: '' },
+        { store: 'notices', suffix: sessionKey },
+        { store: 'summary', suffix: sessionKey },
+        { store: 'verbose', suffix: sessionKey },
+      ],
+      nowMs,
+      reads
+    ),
+    scoped('sessionOptions', sessionKey, nowMs, reads),
+    scoped('modelOutbox', sessionKey, nowMs, reads),
+  ]);
+  const [storedClientId, storedRaw, catalogRaw, claudeRaw, codexRaw, cursorRaw, hermesRaw, piRaw, basicRaw, noticeRaw, summaryRaw, verboseRaw] =
+    records;
+  const id = await clientId(storedClientId, nowMs, reads);
   const entry = entryWithVersion(storedRaw === null ? null : decodeStoredDraft(storedRaw));
-  const modelCatalog = parse(await load('modelCatalog', '', nowMs, reads));
-  const claude = parse(await load('claudeContext', '', nowMs, reads));
-  const codex = parse(await load('codexContext', '', nowMs, reads));
-  const cursor = parse(await load('cursorContext', '', nowMs, reads));
-  const hermes = parse(await load('hermesContext', '', nowMs, reads));
-  const pi = parse(await load('piContext', '', nowMs, reads));
-  const basic = parse(await load('basicContext', '', nowMs, reads));
-  const dismissedNotice = parse(await load('notices', sessionKey, nowMs, reads));
-  const summaryMode = decodeSummary(await load('summary', sessionKey, nowMs, reads));
-  const verboseOverride = decodeVerbose(await load('verbose', sessionKey, nowMs, reads));
-  const optionStates = await scoped('sessionOptions', sessionKey, nowMs, reads);
-  const modelOutboxes = await scoped('modelOutbox', sessionKey, nowMs, reads);
+  const modelCatalog = parse(catalogRaw);
+  const claude = parse(claudeRaw);
+  const codex = parse(codexRaw);
+  const cursor = parse(cursorRaw);
+  const hermes = parse(hermesRaw);
+  const pi = parse(piRaw);
+  const basic = parse(basicRaw);
+  const dismissedNotice = parse(noticeRaw);
+  const summaryMode = decodeSummary(summaryRaw);
+  const verboseOverride = decodeVerbose(verboseRaw);
   if (reads.attempts > 0 && reads.errors === reads.attempts) return null;
   return {
     sessionKey,

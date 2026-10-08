@@ -40,22 +40,48 @@ export function forgetGpuiMachineEndpoint(machineId: string): void {
   resolved.delete(machineId);
 }
 
-async function resolveEndpoint(machine: MachineConnectionTarget): Promise<GpuiMachineEndpoint> {
+/**
+ * What `ghostex server endpoint` answered: the daemon's port, token and wire protocol; a computer
+ * whose Ghostex predates the verb; or a verb that ran but found no daemon to describe.
+ */
+export type ServerEndpointAnswer =
+  | { kind: 'endpoint'; port: number; authToken: string; protocolVersion: number | null }
+  | { kind: 'unsupported'; message: string }
+  | { kind: 'failed'; message: string };
+
+/**
+ * Asks the computer where its gxserver is, over one SSH exec. Throws only when SSH itself fails;
+ * the phone's chat link (`../rust/machine-link.ts`) uses the answer as its handshake.
+ */
+export async function readServerEndpoint(machine: MachineConnectionTarget): Promise<ServerEndpointAnswer> {
   await ensureConnected(machine);
   const exec = await execRemoteCommand(machine.id, 'ghostex server endpoint', ENDPOINT_TIMEOUT_MS);
   const answer = lastJsonObject(exec.stdout);
   const port = typeof answer?.port === 'number' ? answer.port : null;
   const authToken = typeof answer?.authToken === 'string' ? answer.authToken : null;
-  if (port === null || authToken === null) {
-    const detail = `${exec.stderr}`.trim() || `${exec.stdout}`.trim();
-    throw new Error(
-      /Unknown gxserver command: endpoint|Unknown command/u.test(detail)
-        ? 'The computer runs an older Ghostex without `ghostex server endpoint`; update it to use the GPUI transcript.'
-        : `Could not read the computer's gxserver endpoint${detail ? `: ${detail.slice(0, 200)}` : '.'}`
-    );
+  if (port !== null && authToken !== null) {
+    const protocolVersion = typeof answer?.protocolVersion === 'number' ? answer.protocolVersion : null;
+    return { kind: 'endpoint', port, authToken, protocolVersion };
   }
-  const { localPort } = await GhostexNative.startPortForward(machine.id, port);
-  return { machineId: machine.id, baseUrl: `http://127.0.0.1:${localPort}`, authToken };
+  const detail = `${exec.stderr}`.trim() || `${exec.stdout}`.trim();
+  if (/Unknown gxserver command: endpoint|Unknown command/u.test(detail)) {
+    return {
+      kind: 'unsupported',
+      message:
+        'The computer runs an older Ghostex without `ghostex server endpoint`; update it to use the GPUI transcript.',
+    };
+  }
+  return {
+    kind: 'failed',
+    message: `Could not read the computer's gxserver endpoint${detail ? `: ${detail.slice(0, 200)}` : '.'}`,
+  };
+}
+
+async function resolveEndpoint(machine: MachineConnectionTarget): Promise<GpuiMachineEndpoint> {
+  const answer = await readServerEndpoint(machine);
+  if (answer.kind !== 'endpoint') throw new Error(answer.message);
+  const { localPort } = await GhostexNative.startPortForward(machine.id, answer.port);
+  return { machineId: machine.id, baseUrl: `http://127.0.0.1:${localPort}`, authToken: answer.authToken };
 }
 
 function lastJsonObject(stdout: string): Record<string, unknown> | null {

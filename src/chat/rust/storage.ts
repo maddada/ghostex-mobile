@@ -149,6 +149,26 @@ export async function readRecord(key: ChatStorageKey, nowMs: number): Promise<st
 }
 
 /**
+ * Reads several records in one AsyncStorage round trip (`multiGet`), in `keys` order; `null` where
+ * nothing (live) is stored. Refuses all of them when the batch read fails.
+ */
+export async function readRecords(keys: readonly ChatStorageKey[], nowMs: number): Promise<(string | null)[]> {
+  const names = keys.map(fullKey);
+  let rows: readonly (readonly [string, string | null])[];
+  try {
+    rows = await AsyncStorage.multiGet(names);
+  } catch {
+    throw new StorageRefused('read');
+  }
+  return keys.map((key, index) => {
+    const stored = rows[index]?.[1] ?? null;
+    const store = catalogStore(key.store);
+    if (store === undefined || store.backend.kind === 'local') return stored;
+    return unwrap(stored, store.backend, nowMs);
+  });
+}
+
+/**
  * Writes one record, or deletes it when `value` is null. A value over the entry bound is REFUSED,
  * never truncated, the rule the desktop door keeps.
  */

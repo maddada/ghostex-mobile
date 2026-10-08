@@ -8,6 +8,7 @@ import {
   type GhostexMobileSummary,
   type GhostexSession,
 } from '../../contract/mobileSummary';
+import { isSessionChatSupportedAgent } from '../../chat/session-chat-helpers';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import { useMachinesStore, type MachineRecord } from '../../machines/store';
@@ -112,6 +113,22 @@ export function sessionAgentIdFor(
     session.agentIcon,
     session.agentName.length > 0 ? session.agentName : session.agent,
   );
+}
+
+/**
+ * Whether tapping `session` opens it in Chat View: the same rule as the Terminal screen's
+ * `chatCapable` and `chatModeActive` (a chat-supported agent with a project, not running in an
+ * agentbox box, and Chat View chosen for the tab or by the Default Agent View setting).
+ */
+export function sessionOpensInChatView(sessionKey: string, session: GhostexSession): boolean {
+  if (session.projectId.length === 0) return false;
+  const agentId = resolveAgentIconId(
+    session.agentIcon,
+    session.agentName.length > 0 ? session.agentName : session.agent,
+  );
+  if (!isSessionChatSupportedAgent(agentId)) return false;
+  if (session.agentbox !== undefined && session.agentbox.pending !== true) return false;
+  return useTerminalStore.getState().chatModeArmed(sessionKey);
 }
 
 /**

@@ -127,7 +127,9 @@ import { resolveSelectedSpaceId, spaceRowItems, spaceSessionCounts } from '../sp
 import { useSpacesStore } from '../spaces/store';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
+import { markSessionOpen, markSessionOpenTap } from '../terminal/openTiming';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
+import { sessionOpensInChatView } from './terminal-screen/session-lookups';
 import { colorWithOpacity, GhostexPalette } from '../theme/palette';
 import { resolveSidebarAppearance } from '../theme/sidebarAppearance';
 import { webPreviewTargetForUrl } from '../webPreview/routing';
@@ -433,6 +435,30 @@ export default function SessionsScreen({ navigation }: Props) {
       // Desktop parity: opening a session from the list acknowledges its
       // attention status.
       acknowledgeSessionAttention(target.id, session.sessionId);
+      const openKey = attachSessionKey(target.id, session.sessionId);
+      markSessionOpenTap(openKey);
+      if (sessionOpensInChatView(openKey, session)) {
+        /**
+         * CDXC:SessionChat 2026-10-08 DECISION:
+         * User: "Clicking on a chat on the Android app to show takes a long time … Terminal is much less useful on phone", picking "Phone opens chat first", with the rule "pls dont break things for users who set default to terminal at all". A session that opens in Chat View navigates at once and paints its cached transcript; the terminal attach carries on in the background, and its errors show only when the user switches to Terminal (the Terminal view's own overlay). A session that opens in Terminal View still waits for the attach before navigating, exactly as before.
+         */
+        const attaching = useTerminalStore.getState().attachSession(target, {
+          sessionId: session.sessionId,
+          projectId: session.projectId.length > 0 ? session.projectId : undefined,
+          title: sessionTitle(session),
+        });
+        navigation.navigate('Terminal', {
+          sessionKey: openKey,
+          machineId: target.id,
+          title: sessionTitle(session),
+        });
+        markSessionOpen(openKey, 'navigate');
+        void attaching.then(
+          () => markSessionOpen(openKey, 'terminalOpen'),
+          () => undefined
+        );
+        return;
+      }
       setTransientStatus(ProgressCopy.preparingAttach(session.alias));
       try {
         const sessionKey = await useTerminalStore.getState().attachSession(target, {
@@ -440,12 +466,14 @@ export default function SessionsScreen({ navigation }: Props) {
           projectId: session.projectId.length > 0 ? session.projectId : undefined,
           title: sessionTitle(session),
         });
+        markSessionOpen(sessionKey, 'terminalOpen');
         setTransientStatus(ProgressCopy.attached(session.alias, machineDisplayLabel(target)));
         navigation.navigate('Terminal', {
           sessionKey,
           machineId: target.id,
           title: sessionTitle(session),
         });
+        markSessionOpen(sessionKey, 'navigate');
       } catch (error) {
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }

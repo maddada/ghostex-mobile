@@ -55,7 +55,8 @@ import {
   type ParkResult,
 } from './host-records';
 import { readRecord, readRetainedSnapshot, writeRecord, writeRetainedSnapshot } from './storage';
-import { SessionChatLongPoll, sessionChatRpc, type RpcAnswer } from './transport';
+import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
+import { markSessionOpen } from '../../terminal/openTiming';
 
 /** Which chat a host serves. */
 export type RustChatTarget = { machine: MachineConnectionTarget; projectId: string; sessionId: string };
@@ -152,7 +153,7 @@ export class RustChatHost {
   readonly sessionKey: string;
 
   private core: ChatCoreHandle | null = null;
-  private readonly poll: SessionChatLongPoll;
+  private readonly poll: SessionChatStream;
   private readonly composer: ComposerModel;
   private state: RustChatState;
   private lastRevision: number | null = null;
@@ -171,11 +172,16 @@ export class RustChatHost {
   private draftRetryFailures = 0;
   private draftRetryBusy = false;
   private appStateSubscription: NativeEventSubscription | null = null;
+  /** Session-open timing (`terminal/openTiming.ts`): the phone tab's `${machineId}:${sessionId}`. */
+  private readonly openTraceKey: string;
+  private retainedTranscriptLoaded = false;
+  private liveReadArrived = false;
 
   constructor(private readonly target: RustChatTarget) {
     const { machine, projectId, sessionId } = target;
     this.retainedKey = JSON.stringify([machine.id, projectId, sessionId]);
     this.sessionKey = `remote-${machine.id}:${projectId}:${sessionId}`;
+    this.openTraceKey = `${machine.id}:${sessionId}`;
     this.composer = new ComposerModel({
       dispatch: (action) => this.dispatch(action),
       document: () => this.state.document,
@@ -196,8 +202,11 @@ export class RustChatHost {
       error: null,
       stats: emptyStats(),
     };
-    this.poll = new SessionChatLongPoll(machine, projectId, sessionId, {
-      onFrame: (frame) => this.enqueue({ type: 'frame', frame }),
+    this.poll = new SessionChatStream(machine, projectId, sessionId, {
+      onFrame: (frame) => {
+        this.liveReadArrived = true;
+        this.enqueue({ type: 'frame', frame });
+      },
       onConnection: (update) => this.enqueue({ type: 'connection', update }),
     });
   }
@@ -465,6 +474,7 @@ export class RustChatHost {
         }
         this.composer.init(read, this.target.sessionId);
         answers.push({ type: 'composerBootRead', read });
+        markSessionOpen(this.openTraceKey, 'bootRead');
         // The boot read clears the core's title, and a retried read comes after `setTitle` already
         // pushed it, so the known title goes back in behind every read.
         if (this.title !== null) {
@@ -472,12 +482,12 @@ export class RustChatHost {
         }
         return;
       }
-      case 'readRetainedSnapshot':
-        answers.push({
-          type: 'retainedSnapshotLoaded',
-          value: await readRetainedSnapshot(this.retainedKey, nowMs).catch(() => null),
-        });
+      case 'readRetainedSnapshot': {
+        const value = await readRetainedSnapshot(this.retainedKey, nowMs).catch(() => null);
+        this.retainedTranscriptLoaded = value !== null;
+        answers.push({ type: 'retainedSnapshotLoaded', value });
         return;
+      }
       case 'writeRetainedSnapshot':
         await writeRetainedSnapshot(this.retainedKey, effect.value, nowMs).catch(() => {
           stats.storageRefused += 1;
@@ -627,7 +637,12 @@ export class RustChatHost {
       if (typeof fields.limit === 'number') this.poll.widen(fields.limit);
     }
     if (method === 'setSessionChatDraft') void this.noteDraftSave(requestId, fields);
-    void sessionChatRpc(this.target.machine, method, fields).then((answer) => {
+    const liveRead = method === 'readSessionChat' && fields.beforeOffset === undefined && fields.subagent === undefined;
+    const pending = sessionChatRpc(this.target.machine, method, fields);
+    // An exec long poll starts from this read's fingerprint instead of reading it all again.
+    if (liveRead) this.poll.seed(pending);
+    void pending.then((answer) => {
+      if (liveRead && answer.error === null) this.liveReadArrived = true;
       if (method === 'setSessionChatDraft') this.settleDraftSave(requestId, answer);
       this.settle(requestId, answer);
     });
@@ -798,6 +813,8 @@ export class RustChatHost {
       next.status = 'running';
     }
     if (Object.keys(next).length === 0) return;
+    if (this.liveReadArrived) markSessionOpen(this.openTraceKey, 'livePaint');
+    else if (this.retainedTranscriptLoaded && (next.items?.length ?? 0) > 0) markSessionOpen(this.openTraceKey, 'cachedPaint');
     this.state.stats.framesPublished += 1;
     this.update({ ...next, revision: frame.revision });
   }

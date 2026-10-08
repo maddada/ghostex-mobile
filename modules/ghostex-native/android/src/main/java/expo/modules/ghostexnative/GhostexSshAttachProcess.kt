@@ -43,8 +43,29 @@ class GhostexSshAttachProcess(
   override fun start(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
     try {
       val channel = connection.openShellChannel(termType, columns, rows, cellWidthPixels, cellHeightPixels, command)
-      session = channel.session
-      shell = channel.shell
+      // close() can run while the channel is still opening (the open deadline gave up on it);
+      // a channel that lands after that is closed here instead of holding one of the
+      // connection's session slots for nothing.
+      val closedWhileOpening = synchronized(resizeLock) {
+        if (!closed) {
+          session = channel.session
+          shell = channel.shell
+        }
+        closed
+      }
+      if (closedWhileOpening) {
+        try {
+          channel.shell.close()
+        } catch (ignored: Exception) {
+          // Best effort: the session close below releases the channel either way.
+        }
+        try {
+          channel.session.close()
+        } catch (ignored: Exception) {
+          // Already gone.
+        }
+        throw IllegalStateException("The terminal was closed while it was opening.")
+      }
       onStarted()
     } catch (error: Exception) {
       onStartFailed(error)

@@ -1,10 +1,13 @@
 /**
- * The Rust chat core's gxserver transport on the phone: one SSH exec per request, and a
- * `readSessionChat` long poll that stands in for the desktop's chat socket.
+ * The Rust chat core's gxserver transport on the phone. A computer with the warm chat link
+ * (`machine-link.ts`: one socket plus direct HTTP calls over the SSH port forward) uses it; an older
+ * Ghostex gets one SSH exec per request and a `readSessionChat` long poll that stands in for the
+ * desktop's chat socket. `sessionChatRpc` and `SessionChatStream` pick the route per computer.
  *
  * CDXC:Mobile 2026-09-24 WHY:
  * The core asks for gxserver calls by method and params (`sendRpc`) and folds gxserver chat frames.
- * The phone reaches the computer only through SSH exec and has no streaming channel, so:
+ * Without the warm link (CDXC:Mobile 2026-10-08 in `machine-link.ts`), the phone reaches the
+ * computer only through SSH exec and has no streaming channel, so:
  * every `sendRpc` is one `ghostex session-chat-rpc <method> --params-base64 <json>` exec (the verb
  * prints the daemon's own `{ok, result}` or refusal), and the live stream is a `readSessionChat`
  * long poll (`waitMs` and `fingerprint`), each changed answer handed to the core as a
@@ -23,6 +26,7 @@ import type { MachineConnectionTarget } from '../../machines/credentials';
 import { execRemoteCommand } from '../../remote/commands';
 import { ensureConnected } from '../../inventory/client';
 import type { ChatRpcError } from './events';
+import { chatMachineLink, type ChatMachineLink, type ChatRoute } from './machine-link';
 
 /** The gxserver wire protocol the synthesized frames claim (`GXSERVER_PROTOCOL_VERSION`). */
 const PROTOCOL_VERSION = 1;
@@ -73,9 +77,12 @@ function utf8Binary(text: string): string {
   return out;
 }
 
+/** A gxserver method name: a command-line word on one route and a URL path on the other. */
+const METHOD_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/;
+
 /** The `session-chat-rpc` command line for one request. Base64 so no shell re-quotes the JSON. */
 export function sessionChatRpcCommand(method: string, params: unknown): string {
-  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(method)) throw new Error(`Invalid chat request method: ${method}`);
+  if (!METHOD_PATTERN.test(method)) throw new Error(`Invalid chat request method: ${method}`);
   return `ghostex session-chat-rpc ${method} --params-base64 ${btoa(utf8Binary(JSON.stringify(params ?? {})))}`;
 }
 
@@ -98,11 +105,27 @@ function lastJsonLine(stdout: string): Record<string, unknown> | null {
 }
 
 /**
- * Performs one gxserver chat request over SSH and answers in the core's terms. Never throws: a
- * transport failure is a refusal too, because a request the core never hears back about keeps its
- * lane in flight for ever.
+ * Performs one gxserver chat request and answers in the core's terms: over the computer's warm
+ * chat link when it has one (`machine-link.ts`), else as one SSH exec. Never throws: a transport
+ * failure is a refusal too, because a request the core never hears back about keeps its lane in
+ * flight for ever.
  */
 export async function sessionChatRpc(
+  machine: MachineConnectionTarget,
+  method: string,
+  params: unknown,
+  timeoutMs = RPC_EXEC_TIMEOUT_MS
+): Promise<RpcAnswer> {
+  if (!METHOD_PATTERN.test(method)) {
+    return { error: { code: null, message: `Invalid chat request method: ${method}`, endpoint: `/api/${method}` } };
+  }
+  const link = chatMachineLink(machine);
+  if ((await link.route()) === 'socket') return link.rpc(method, params, timeoutMs);
+  return sessionChatRpcOverSsh(machine, method, params, timeoutMs);
+}
+
+/** One request as `ghostex session-chat-rpc` over SSH: the route for an older Ghostex. */
+async function sessionChatRpcOverSsh(
   machine: MachineConnectionTarget,
   method: string,
   params: unknown,
@@ -172,6 +195,8 @@ export class SessionChatLongPoll {
   private serverGeneration = 1;
   private lastPosition: { epoch: number; seq: number } | null = null;
   private wake: (() => void) | null = null;
+  /** The core's latest tail read, whose fingerprint a loop without one waits from (`seed`). */
+  private seedRead: Promise<RpcAnswer> | null = null;
 
   constructor(
     private readonly machine: MachineConnectionTarget,
@@ -193,9 +218,19 @@ export class SessionChatLongPoll {
     if (limit > this.limit) this.limit = limit;
   }
 
+  /**
+   * A tail `readSessionChat` the core sent (its seed read, or a resync). A loop without a
+   * fingerprint waits from this read's fingerprint instead of reading the same transcript again:
+   * the core already has the answer through `rpcSettled`.
+   */
+  seed(read: Promise<RpcAnswer>): void {
+    this.seedRead = read;
+  }
+
   stop(): void {
     this.running = false;
     this.generation += 1;
+    this.seedRead = null;
     this.wake?.();
   }
 
@@ -243,7 +278,27 @@ export class SessionChatLongPoll {
     let fingerprint: string | undefined;
     let emitted = false;
     let healthy: boolean | null = null;
+    // CDXC:Mobile 2026-10-08 WHY: the core sends `subscribe` and its seed read together, and this
+    // loop's first read was a second full `readSessionChat` beside the seed. One macrotask lets the
+    // seed register (`seed`), so the loop starts waiting from the seed's fingerprint instead.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     while (generation === this.generation) {
+      const seed = fingerprint === undefined ? this.seedRead : null;
+      if (seed !== null) {
+        this.seedRead = null;
+        const seeded = await seed;
+        if (generation !== this.generation) return;
+        const read = seeded.error === null ? ((seeded.result ?? {}) as ReadAnswer) : null;
+        if (read !== null && typeof read.fingerprint === 'string') {
+          if (healthy === null) this.callbacks.onConnection('subscribed');
+          else if (healthy === false) this.callbacks.onConnection('resubscribed');
+          healthy = true;
+          fingerprint = read.fingerprint;
+          emitted = true;
+          this.notePosition(read);
+          continue;
+        }
+      }
       const params: Record<string, unknown> = {
         projectId: this.projectId,
         sessionId: this.sessionId,
@@ -288,13 +343,7 @@ export class SessionChatLongPoll {
    * socket frame). JSON has no `undefined`, so the WebView's own-property trick has to be a `null`.
    */
   private snapshotFrame(read: ReadAnswer): Record<string, unknown> {
-    const epoch = typeof read.epoch === 'number' ? read.epoch : 0;
-    const seq = typeof read.seq === 'number' ? read.seq : 0;
-    const previous = this.lastPosition;
-    if (previous !== null && (epoch < previous.epoch || (epoch === previous.epoch && seq < previous.seq))) {
-      this.serverGeneration += 1;
-    }
-    this.lastPosition = { epoch, seq };
+    const { epoch, seq } = this.notePosition(read);
     const { fingerprint: _fingerprint, ...rest } = read;
     return {
       ...rest,
@@ -309,5 +358,129 @@ export class SessionChatLongPoll {
       protocolVersion: PROTOCOL_VERSION,
       serverId: `mobile-read:${this.serverGeneration}`,
     };
+  }
+
+  /** Records a read's position, starting a new synthetic server generation when it went backwards. */
+  private notePosition(read: ReadAnswer): { epoch: number; seq: number } {
+    const epoch = typeof read.epoch === 'number' ? read.epoch : 0;
+    const seq = typeof read.seq === 'number' ? read.seq : 0;
+    const previous = this.lastPosition;
+    if (previous !== null && (epoch < previous.epoch || (epoch === previous.epoch && seq < previous.seq))) {
+      this.serverGeneration += 1;
+    }
+    this.lastPosition = { epoch, seq };
+    return { epoch, seq };
+  }
+}
+
+/**
+ * The chat's live stream, whichever way its computer is reached: a follower on the computer's warm
+ * socket (`machine-link.ts`, real gxserver frames, as on desktop), or the `readSessionChat` long
+ * poll above for an older Ghostex. One per open chat, driven like the poll: `start` answers the
+ * core's `subscribe`, `stop` its `unsubscribe`, `restart` its `reconnect`.
+ *
+ * A chat opened while its computer's route is `unavailable` (Ghostex not answering the handshake)
+ * runs the poll, which keeps retrying through the routed `sessionChatRpc`; once a handshake
+ * succeeds the stream moves to the socket. A computer found to be old moves its socket followers to
+ * the poll.
+ */
+export class SessionChatStream {
+  private readonly link: ChatMachineLink;
+  private readonly poll: SessionChatLongPoll;
+  private readonly onFrame: (frame: Record<string, unknown>) => void;
+  private limit = 0;
+  private running = false;
+  private mode: 'none' | 'socket' | 'poll' = 'none';
+  private unlisten: (() => void) | null = null;
+
+  constructor(
+    machine: MachineConnectionTarget,
+    private readonly projectId: string,
+    private readonly sessionId: string,
+    callbacks: LongPollCallbacks
+  ) {
+    this.link = chatMachineLink(machine);
+    this.poll = new SessionChatLongPoll(machine, projectId, sessionId, callbacks);
+    this.onFrame = (frame) => callbacks.onFrame(frame);
+  }
+
+  start(limit: number): void {
+    this.limit = Math.max(this.limit, limit);
+    if (this.running) return;
+    this.running = true;
+    this.unlisten = this.link.onRouteChange((route) => this.routeChanged(route));
+    const known = this.link.current();
+    if (known !== null) {
+      this.use(known);
+      return;
+    }
+    void this.link.route().then((route) => {
+      if (this.running && this.mode === 'none') this.use(route);
+    });
+  }
+
+  /** The core's own tail reads carry its window; the stream must never answer with fewer rows. */
+  widen(limit: number): void {
+    if (limit > this.limit) this.limit = limit;
+    this.poll.widen(limit);
+    if (this.mode === 'socket') this.link.follow(this.projectId, this.sessionId, this.limit, this.onFrame);
+  }
+
+  stop(): void {
+    this.running = false;
+    this.unlisten?.();
+    this.unlisten = null;
+    this.leave();
+  }
+
+  /** `reconnect`: a fresh authoritative snapshot (socket) or a fresh read (poll). */
+  restart(): void {
+    if (this.mode === 'socket') this.link.refresh(this.projectId, this.sessionId);
+    else if (this.mode === 'poll') this.poll.restart();
+  }
+
+  /**
+   * The app went to the background. Only the poll stops; the socket stays open so the chat is
+   * current the moment the phone comes back (the link reconnects on `active` if it dropped).
+   */
+  pause(): void {
+    this.poll.pause();
+  }
+
+  resume(): void {
+    this.poll.resume();
+  }
+
+  /** The core's tail read, for a poll that has not read yet (`SessionChatLongPoll.seed`). */
+  seed(read: Promise<RpcAnswer>): void {
+    this.poll.seed(read);
+  }
+
+  private use(route: ChatRoute): void {
+    if (route === 'socket') {
+      this.mode = 'socket';
+      this.link.follow(this.projectId, this.sessionId, this.limit, this.onFrame);
+    } else {
+      this.mode = 'poll';
+      this.poll.start(this.limit);
+    }
+  }
+
+  private routeChanged(route: ChatRoute): void {
+    if (!this.running) return;
+    if (this.mode === 'none') this.use(route);
+    else if (route === 'socket' && this.mode === 'poll') {
+      this.leave();
+      this.use('socket');
+    } else if (route === 'legacy' && this.mode === 'socket') {
+      this.leave();
+      this.use('legacy');
+    }
+  }
+
+  private leave(): void {
+    if (this.mode === 'socket') this.link.unfollow(this.projectId, this.sessionId);
+    else if (this.mode === 'poll') this.poll.stop();
+    this.mode = 'none';
   }
 }

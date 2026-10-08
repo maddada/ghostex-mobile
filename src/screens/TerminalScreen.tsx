@@ -502,7 +502,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
         </Pressable>
       </View>
 
-      {chatModeActive && activeTab?.state === 'failed' ? (
+      {/*
+        Only a session this phone launched into chat (it carries the launcher's agent id) starts
+        its agent through the attach, so only there is a failed attach an agent startup failure.
+        Any other session's terminal error waits for the Terminal view's own overlay.
+      */}
+      {chatModeActive && activeTab?.state === 'failed' && activeTab.ghostexAgentId !== undefined ? (
         <Pressable
           accessibilityRole='button'
           accessibilityLabel='Retry agent startup'

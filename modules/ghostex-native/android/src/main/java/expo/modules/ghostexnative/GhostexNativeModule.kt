@@ -686,12 +686,16 @@ class GhostexNativeModule : Module() {
       ?: DEFAULT_FONT_SIZE_DP
     val entry = GhostexTerminalEntry(sessionKey, machineId, fontSize, opts.zmxBacked, connection)
     emitTerminalState(sessionKey, "opening", null, null)
+    /**
+     * CDXC:SessionChat 2026-10-08 WHY:
+     * A slow terminal open fails only this terminal. It used to retire the whole SSH connection, which took the session's chat (and every other terminal) down with it. The JS open path probes the connection after any failed open (`ensureConnected` verify in src/terminal/sessions.ts) and replaces it only when the probe fails, so a truly wedged transport is still recovered. The late channel, if one ever opens, is closed by GhostexSshAttachProcess.start.
+     */
     val openDeadline = GhostexSshTask.deadline(20_000L) {
       if (entry.openSettled.compareAndSet(false, true)) {
         entry.lifecycleEnded = true
         terminalRegistry.remove(entry)
         val error = GhostexException(GhostexErrorCode.TIMEOUT, "Opening the terminal timed out.")
-        retireConnection(connection, "disconnected", error)
+        backgroundExecutor.execute { entry.session?.finishIfRunning() }
         emitTerminalState(sessionKey, "failed", error.message, error.errorCode)
         promise.reject(error)
       }

@@ -15,9 +15,9 @@
  * | `start` | `RustChatHost.start()`, once per open chat |
  * | `composerBootRead` / `composerBootFailed` | the `readComposerBoot` effect, answered from AsyncStorage (`boot.ts`) |
  * | `retainedSnapshotLoaded` | the `readRetainedSnapshot` effect, answered from the snapshot files (`storage.ts`) |
- * | `frame` | each changed `readSessionChat` long-poll answer, as a synthesized `sessionChatSnapshot` (`transport.ts`) |
- * | `connection` | the long-poll loop: `subscribed` on its first answer, `lost` on its first failure, `resubscribed` when it recovers |
- * | `rpcSettled` | every `sendRpc`, answered by `ghostex session-chat-rpc` over SSH |
+ * | `frame` | gxserver's own chat frames from the computer's warm chat socket (`machine-link.ts`); on an older Ghostex, each changed `readSessionChat` long-poll answer as a synthesized `sessionChatSnapshot` (`transport.ts`) |
+ * | `connection` | the long-poll loop only: `subscribed` on its first answer, `lost` on its first failure, `resubscribed` when it recovers |
+ * | `rpcSettled` | every `sendRpc`, answered over the warm link's HTTP, or by `ghostex session-chat-rpc` over SSH on an older Ghostex |
  * | `action` | the screen, through `dispatch` |
  * | `tick` | the `setTimer` effect's `setTimeout` |
  * | `storageLoaded` / `storageWritten` / `storageBatch*` | AsyncStorage answers (`storage.ts`, `host-records.ts`) |
