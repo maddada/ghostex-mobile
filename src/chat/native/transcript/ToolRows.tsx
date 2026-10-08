@@ -91,24 +91,77 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
 }
 
 /**
- * A `!` command the user ran (`shellCommand`, gx-chat-core's `fold_shell_commands`): its one tool
- * row, opening onto the Command and Result blocks, in the user's bubble (desktop
- * `shell_command_card` in `tool_run.rs`). The command shows in Simple mode too, since it is what the
- * user typed.
+ * A `!` command the user ran (`shellCard`, gx-chat-core's `shell_card`), in the user's bubble
+ * (desktop `shell_command_card` in `tool_run.rs`): a header with the terminal glyph, the command, its
+ * status and a copy button, opening onto the output alone. It shows in Simple mode too, since it is
+ * what the user typed. A running card opens on its output by default and folds like every
+ * disclosure, from the header or the rail.
  */
 export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
-  const tools = arr(message.tools)
-    .map((tool) => obj(tool))
-    .filter((tool): tool is JsonRecord => tool !== null);
-  // While the command runs, its output streams in from the terminal and the card stays open on it.
-  const live = message.shellCommandLive === true;
+  const { disclosures } = useNativeChatUi();
+  const card = obj(message.shellCard);
+  const hasBody = card?.hasBody === true;
+  const [openState, toggle] = useDisclosure(disclosures, `shell:${message.id}`, card?.openByDefault === true);
+  const [copied, setCopied] = useState(false);
+  const fullCommand = str(card, 'fullCommand');
+  const copy = useCallback(() => {
+    void Clipboard.setStringAsync(fullCommand);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [fullCommand]);
+  const open = hasBody && openState;
+  const failed = card?.failed === true;
+  const status = str(card, 'status');
+  const blocks = (
+    [
+      ['commandBody', false],
+      ['stdout', false],
+      ['stderr', true],
+    ] as const
+  )
+    .map(([part, error]) => ({ part, error, content: str(card, part) }))
+    .filter(({ content }) => content.trim().length > 0);
   return (
     <View style={styles.shellColumn}>
       <View style={[styles.shellBubble, { backgroundColor: theme.input }]}>
-        {tools.map((tool, index) => (
-          <ToolRow key={index} messageId={message.id} index={index} tool={tool} alwaysPreview alwaysOpen={live} />
-        ))}
+        <View style={styles.shellHeader}>
+          <Pressable
+            disabled={!hasBody}
+            onPress={toggle}
+            accessibilityRole='button'
+            accessibilityLabel={`Shell command: ${fullCommand}`}
+            accessibilityState={{ expanded: open }}
+            style={({ pressed }) => [styles.trigger, styles.shellTrigger, pressed && { backgroundColor: theme.pressed }]}
+          >
+            <View style={styles.glyphSlot}>
+              <Glyph name={toolGlyph('terminal')} size={14} color={theme.muted} />
+            </View>
+            <Text numberOfLines={1} style={[styles.shellCommand, { color: failed ? theme.error : theme.primary }]}>
+              {str(card, 'command')}
+            </Text>
+            {hasBody ? <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={theme.muted} /> : null}
+            <View style={styles.shellSpacer} />
+            {status.length > 0 ? <Text style={[styles.shellStatus, { color: failed ? theme.error : theme.muted }]}>{status}</Text> : null}
+          </Pressable>
+          {/* No hover on a phone, so the copy button always shows. */}
+          <Pressable
+            hitSlop={6}
+            onPress={copy}
+            accessibilityRole='button'
+            accessibilityLabel={copied ? 'Copied' : 'Copy command'}
+            style={({ pressed }) => [styles.copyAction, pressed && { backgroundColor: theme.pressed }]}
+          >
+            <Glyph name={copied ? 'check' : 'copy'} size={14} color={theme.muted} />
+          </Pressable>
+        </View>
+        {open && blocks.length > 0 ? (
+          <DisclosureBody onCollapse={toggle} label='Collapse shell command' rail='tool'>
+            {blocks.map(({ part, error, content }) => (
+              <ToolBody key={part} label={null} content={content} failed={error} copyText='' />
+            ))}
+          </DisclosureBody>
+        ) : null}
       </View>
     </View>
   );
@@ -118,22 +171,17 @@ const ToolRow = memo(function ToolRow({
   messageId,
   index,
   tool,
-  alwaysPreview = false,
-  alwaysOpen = false,
 }: {
   messageId: string;
   index: number;
   tool: JsonRecord;
-  alwaysPreview?: boolean;
-  alwaysOpen?: boolean;
 }) {
-  const { theme, dispatch, simple: simpleMode } = useTranscriptEnv();
-  const simple = simpleMode && !alwaysPreview;
+  const { theme, dispatch, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const key = `tool:${messageId}:${index}`;
   const [open, toggle] = useDisclosure(disclosures, key);
   const hasDetail = tool.hasDetail === true;
-  const expanded = (open || alwaysOpen) && hasDetail;
+  const expanded = open && hasDetail;
   const detail = obj(useRowDetail(key, 'tool', messageId, index, expanded));
   const failed = tool.failed === true;
   const name = str(tool, 'name');
@@ -268,7 +316,12 @@ function ToolBody({ label, content, failed, copyText }: { label: string | null; 
 const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
   shellColumn: { alignItems: 'flex-end' },
-  shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, gap: ROW_GAP, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, gap: 4, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  shellHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
+  shellTrigger: { flex: 1 },
+  shellCommand: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: PROSE_LINE, flexShrink: 1, minWidth: 0 },
+  shellSpacer: { flexGrow: 1 },
+  shellStatus: { fontSize: 12.25, flexShrink: 0 },
   row: { gap: 4, minWidth: 0 },
   trigger: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, minWidth: 0, flexShrink: 1 },
   triggerFill: { alignSelf: 'stretch' },
