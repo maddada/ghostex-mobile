@@ -22,10 +22,11 @@ const TRACK_INNER_PAD = 4;
 const TAB_SPACING = 4;
 const MIN_TAB_WIDTH = 120;
 
-/** opening → orange; failed → red; closed → gray; open → no dot. */
+/** opening → orange; failed → red; closed → gray; open and detached (chat only) → no dot. */
 function statusDotColor(state: TerminalTabState): string | null {
   switch (state) {
     case 'open':
+    case 'detached':
       return null;
     case 'opening':
       return GhostexPalette.STATUS_WORKING;

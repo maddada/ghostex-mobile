@@ -360,6 +360,24 @@ export function holdSessionsAwakeCommand(
   );
 }
 
+/** The chat grid claim lease (`chatGridClaim.ts`), with the keep-awake verb's flags. */
+export function holdSessionChatGridCommand(
+  sessions: readonly { projectId: string; sessionId: string }[],
+  options: { holderId: string; ttlMs?: number; release?: boolean },
+): string {
+  if (sessions.length === 0) throw new Error('Ghostex chat grid claim requires at least one session.');
+  const payload = sessions.map((session) => ({
+    projectId: requireId(session.projectId, 'project id'),
+    sessionId: requireId(session.sessionId, 'session id'),
+  }));
+  return (
+    `ghostex hold-session-chat-grid --sessions-json ${shellQuote(JSON.stringify(payload))}` +
+    ` --holder-id ${shellQuote(requireId(options.holderId, 'chat grid holder id'))}` +
+    positiveIntegerFlag('--ttl-ms', options.ttlMs, 'chat grid TTL') +
+    `${options.release === true ? ' --release' : ''} --json`
+  );
+}
+
 export type ClientHelloPlatform = {
   os: 'android' | 'ios';
   osVersion?: string;

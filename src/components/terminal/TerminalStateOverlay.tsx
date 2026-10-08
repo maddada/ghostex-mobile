@@ -29,7 +29,7 @@ export default function TerminalStateOverlay({
 
   return (
     <View style={styles.overlay} pointerEvents="auto">
-      {tab.state === 'opening' && (
+      {(tab.state === 'opening' || tab.state === 'detached') && (
         <View style={styles.stack}>
           <ActivityIndicator size="small" color={GhostexPalette.MUTED} />
           <Text style={styles.secondaryText}>Connecting...</Text>

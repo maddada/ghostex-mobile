@@ -25,6 +25,7 @@ import { useAgentHotkeysStore } from './src/settings/agentHotkeys';
 import { useExtraKeysStore } from './src/settings/extraKeys';
 import { initSettingsNativeSync } from './src/settings/nativeSync';
 import { useSettingsStore } from './src/settings/store';
+import { initChatGridClaim } from './src/terminal/chatGridClaim';
 import { initTerminalKeepAwake } from './src/terminal/keepAwake';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { initZmxDisplayPolicy } from './src/terminal/zmxDisplay';
@@ -94,6 +95,7 @@ export default function App() {
     initAlerts();
     initAutoReconnect();
     initTerminalKeepAwake();
+    initChatGridClaim();
     initAndroidSelfUpdate();
     void useMachinesStore.getState().hydrate();
     void useTerminalStore.getState().hydrate();

@@ -60,7 +60,12 @@ const SESSION_VIEW_MODES_STORAGE_KEY = 'terminal.sessionViewModes.v1';
 const LEGACY_CHAT_MODE_STORAGE_KEY = 'terminal.chatMode.v1';
 
 export type TerminalTabKind = 'attach' | 'shell';
-export type TerminalTabState = 'opening' | 'open' | 'closed' | 'failed';
+/**
+ * `detached`: an attach tab opened in Chat View that has no terminal yet. It holds no SSH channel
+ * and runs no `ghostex attach`; the first switch to its Terminal view attaches it
+ * (`ensureTerminalAttached`).
+ */
+export type TerminalTabState = 'detached' | 'opening' | 'open' | 'closed' | 'failed';
 
 export type TerminalTab = {
   sessionKey: string;
@@ -143,6 +148,16 @@ type TerminalState = {
     machine: MachineConnectionTarget,
     session: { sessionId: string; projectId?: string; title?: string; agentId?: string }
   ) => Promise<string>;
+  /**
+   * Open (or re-select) a session's tab for its Chat View without attaching its terminal. A tab
+   * that already has a terminal keeps it.
+   */
+  openChatTab: (
+    machine: MachineConnectionTarget,
+    session: { sessionId: string; projectId?: string; title?: string }
+  ) => string;
+  /** Attach a `detached` tab's terminal (its first switch to the Terminal view). */
+  ensureTerminalAttached: (sessionKey: string) => Promise<void>;
   /** Open an interactive login-shell tab on a machine (in `cwd` when given). */
   openShellTab: (machine: MachineConnectionTarget, options?: { title?: string; cwd?: string }) => Promise<string>;
   selectTab: (sessionKey: string) => void;
@@ -330,7 +345,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         const opening = tabOpenRequests.get(sessionKey);
         if (opening) await opening;
         const current = get().tabs.find((tab) => tab.sessionKey === sessionKey);
-        if (current?.state === 'closed' || current?.state === 'failed') await get().reopenTab(sessionKey);
+        if (current?.state === 'closed' || current?.state === 'failed' || current?.state === 'detached') {
+          await get().reopenTab(sessionKey);
+        }
         const attached = get().tabs.find((tab) => tab.sessionKey === sessionKey);
         if (attached?.state !== 'open') throw new Error(attached?.error ?? 'The terminal is not connected yet.');
         return sessionKey;
@@ -349,6 +366,47 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       };
       const command = attachCommand(session.sessionId, session.projectId);
       return openTab(machine, tab, command);
+    },
+
+    /**
+     * CDXC:SessionChat 2026-10-08 DECISION:
+     * User: "How about if we don't connect the terminal until user switches to it but if we're just using chat view then we don't do ssh connection for that session", picking "Chat-only, no terminal", with the rule "pls dont break things for users who set default to terminal at all". A session opened in Chat View gets a `detached` tab: no PTY channel, no login shell, no `ghostex attach`. Its chat needs none of them (it talks to gxserver over the warm chat link; a send wakes a sleeping session in gxserver, and gxserver holds the 200-column chat grid while the chat is shown, `chatGridClaim.ts`). The first switch to its Terminal view attaches it. Supersedes the 2026-10-08 "attach in the background" step of "Phone opens chat first".
+     */
+    openChatTab: (machine, session) => {
+      const sessionKey = attachSessionKey(machine.id, session.sessionId);
+      const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
+      const projectId = session.projectId !== undefined && session.projectId.length > 0 ? session.projectId : undefined;
+      if (existing !== undefined) {
+        if (projectId !== undefined) patchTab(sessionKey, { ghostexProjectId: projectId });
+        if (
+          session.title !== undefined &&
+          session.title.length > 0 &&
+          (existing.title.length === 0 || existing.title === session.sessionId)
+        ) {
+          patchTab(sessionKey, { title: session.title });
+        }
+        set({ selectedSessionKey: sessionKey });
+        if (existing.state !== 'detached') touchWarm(sessionKey);
+        return sessionKey;
+      }
+      const tab: TerminalTab = {
+        sessionKey,
+        machineId: machine.id,
+        title: session.title !== undefined && session.title.length > 0 ? session.title : session.sessionId,
+        kind: 'attach',
+        ghostexSessionId: session.sessionId,
+        ...(projectId !== undefined ? { ghostexProjectId: projectId } : {}),
+        state: 'detached',
+      };
+      set({ tabs: [...get().tabs, tab], selectedSessionKey: sessionKey });
+      return sessionKey;
+    },
+
+    ensureTerminalAttached: async (sessionKey) => {
+      const tab = get().tabs.find((entry) => entry.sessionKey === sessionKey);
+      if (tab?.state !== 'detached') return;
+      await get().reopenTab(sessionKey);
+      await evictExcessWarmEntries();
     },
 
     openShellTab: async (machine, options) => {

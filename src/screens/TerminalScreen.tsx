@@ -41,6 +41,7 @@ import { FORK_AGENT_ICONS } from '../sessions/sessionCommands';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
+import { setChatGridSessionKey } from '../terminal/chatGridClaim';
 import { setMountedSessionKeys } from '../terminal/zmxDisplay';
 import { GhostexPalette } from '../theme/palette';
 import { useOpenMachineLink } from '../webPreview/useOpenMachineLink';
@@ -154,8 +155,22 @@ export default function TerminalScreen({ navigation, route }: Props) {
     activeTab !== null && chatModeActive && isFocused ? activeTab.sessionKey : null;
   useEffect(() => {
     setMountedSessionKeys(mountedTerminalSessionKey, mountedChatSessionKey);
+    setChatGridSessionKey(mountedChatSessionKey);
   }, [mountedTerminalSessionKey, mountedChatSessionKey]);
-  useEffect(() => () => setMountedSessionKeys(null, null), []);
+  // A tab opened in Chat View has no terminal yet (`openChatTab`); showing its terminal attaches it.
+  const activeTabDetached = activeTab?.state === 'detached';
+  useEffect(() => {
+    if (mountedTerminalSessionKey !== null && activeTabDetached) {
+      void useTerminalStore.getState().ensureTerminalAttached(mountedTerminalSessionKey);
+    }
+  }, [mountedTerminalSessionKey, activeTabDetached]);
+  useEffect(
+    () => () => {
+      setMountedSessionKeys(null, null);
+      setChatGridSessionKey(null);
+    },
+    []
+  );
 
   /*
    * CDXC:SessionChatPromptQueue 2026-08-21:

@@ -440,9 +440,9 @@ export default function SessionsScreen({ navigation }: Props) {
       if (sessionOpensInChatView(openKey, session)) {
         /**
          * CDXC:SessionChat 2026-10-08 DECISION:
-         * User: "Clicking on a chat on the Android app to show takes a long time … Terminal is much less useful on phone", picking "Phone opens chat first", with the rule "pls dont break things for users who set default to terminal at all". A session that opens in Chat View navigates at once and paints its cached transcript; the terminal attach carries on in the background, and its errors show only when the user switches to Terminal (the Terminal view's own overlay). A session that opens in Terminal View still waits for the attach before navigating, exactly as before.
+         * User: "Clicking on a chat on the Android app to show takes a long time … Terminal is much less useful on phone", picking "Phone opens chat first", with the rule "pls dont break things for users who set default to terminal at all". A session that opens in Chat View navigates at once and paints its cached transcript. Since 2026-10-08 ("Chat-only, no terminal", `openChatTab` in terminal/sessions.ts) it attaches no terminal at all until the user switches to Terminal, where the Terminal view's own overlay shows the attach and its errors. A session that opens in Terminal View still waits for the attach before navigating, exactly as before.
          */
-        const attaching = useTerminalStore.getState().attachSession(target, {
+        useTerminalStore.getState().openChatTab(target, {
           sessionId: session.sessionId,
           projectId: session.projectId.length > 0 ? session.projectId : undefined,
           title: sessionTitle(session),
@@ -453,10 +453,6 @@ export default function SessionsScreen({ navigation }: Props) {
           title: sessionTitle(session),
         });
         markSessionOpen(openKey, 'navigate');
-        void attaching.then(
-          () => markSessionOpen(openKey, 'terminalOpen'),
-          () => undefined
-        );
         return;
       }
       setTransientStatus(ProgressCopy.preparingAttach(session.alias));

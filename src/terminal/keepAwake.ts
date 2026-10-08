@@ -108,7 +108,8 @@ function desiredHolds(): HeldSessions {
   const desired: HeldSessions = new Map();
   for (const tab of useTerminalStore.getState().tabs) {
     if (tab.kind !== 'attach' || tab.ghostexSessionId === undefined) continue;
-    if (tab.state !== 'open' && tab.state !== 'opening') continue;
+    // A chat-only tab (`detached`) is a session on screen too.
+    if (tab.state !== 'open' && tab.state !== 'opening' && tab.state !== 'detached') continue;
     if (unsupportedMachineIds.has(tab.machineId)) continue;
     const projectId = projectIdForSession(tab.machineId, tab.ghostexSessionId, tab.ghostexProjectId);
     if (projectId === null) continue;
