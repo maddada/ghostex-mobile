@@ -124,7 +124,7 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
     .filter(({ content }) => content.trim().length > 0);
   return (
     <View style={styles.shellColumn}>
-      <View style={[styles.shellBubble, { backgroundColor: theme.input }]}>
+      <View style={[styles.shellBubble, styles.shellHeaderBubble, { backgroundColor: theme.input }]}>
         <View style={styles.shellHeader}>
           <Pressable
             disabled={!hasBody}
@@ -155,14 +155,16 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
             <Glyph name={copied ? 'check' : 'copy'} size={14} color={theme.muted} />
           </Pressable>
         </View>
-        {open && blocks.length > 0 ? (
-          <DisclosureBody onCollapse={toggle} label='Collapse shell command' rail='tool'>
-            {blocks.map(({ part, error, content }) => (
-              <ToolBody key={part} label={null} content={content} failed={error} copyText='' />
-            ))}
-          </DisclosureBody>
-        ) : null}
       </View>
+      {/* The output opens in a bubble of its own below the header, which keeps its collapsed size;
+          the header is its toggle, so it carries no rail. */}
+      {open && blocks.length > 0 ? (
+        <View style={[styles.shellBubble, styles.shellOutputBubble, { backgroundColor: theme.input }]}>
+          {blocks.map(({ part, error, content }) => (
+            <ToolBody key={part} label={null} content={content} failed={error} copyText='' />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -315,8 +317,10 @@ function ToolBody({ label, content, failed, copyText }: { label: string | null; 
 
 const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
-  shellColumn: { alignItems: 'flex-end' },
-  shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, gap: 4, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  shellColumn: { alignItems: 'flex-end', gap: 6 },
+  shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, borderRadius: 16 },
+  shellHeaderBubble: { paddingHorizontal: 12, paddingVertical: 8 },
+  shellOutputBubble: { gap: 4, padding: 2 },
   shellHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
   shellTrigger: { flex: 1 },
   shellCommand: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: PROSE_LINE, flexShrink: 1, minWidth: 0 },
