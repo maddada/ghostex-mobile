@@ -415,7 +415,7 @@ export type SessionMenuInput = {
   /** The rows drawn under this one in its group, for Sleep Below and Close Below. */
   below: readonly GhostexSession[];
   /** The session's project, whose title and worktree Copy Details quotes; null when unknown. */
-  project: Pick<GhostexProject, 'name' | 'path' | 'worktree' | 'workMode'> | null;
+  project: Pick<GhostexProject, 'name' | 'path' | 'worktree' | 'workMode' | 'workTracker'> | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -471,8 +471,8 @@ function sessionDetailsText(session: GhostexSession, project: SessionMenuInput['
 }
 
 /**
- * A work-mode session's Link to submenu: pick the PR, Linear issues, Linear project or GitHub issue
- * the session is about, unlink one kind, or hand the links back to the branch. Only sessions of
+ * A work-mode session's Link to submenu: pick the PR, Linear issues, Linear project, GitHub issues
+ * or GitHub project the session is about, unlink one kind, or hand the links back to the branch. Only sessions of
  * projects with work mode on get it.
  *
  * CDXC:WorkMode 2026-10-09 DECISION:
@@ -490,16 +490,27 @@ function linkSubmenu(session: GhostexSession, project: SessionMenuInput['project
   const linearIssues = issues.length > 0 ? issues.map((issue) => issue.identifier).join(', ') : undefined;
   const linearProject = (work?.linearProjectName ?? '').length > 0 ? work?.linearProjectName : undefined;
   const githubIssues = githubNumbers.length > 0 ? githubNumbers.map((number) => `#${number}`).join(', ') : undefined;
+  const githubProject = (work?.githubProjectName ?? '').length > 0 ? work?.githubProjectName : undefined;
   const pick = (label: string, icon: string, kind: WorkLinkKind, linked: string | undefined): SidebarMenuItem => ({
     ...row(label, icon, { type: 'sessionAction', sessionId: id, action: 'linkWork', kind }),
     ...(linked === undefined ? {} : { suffix: linked }),
   });
-  const children: SidebarMenuItem[] = [
-    pick('Pull request…', 'git-pull-request', 'pullRequest', pullRequest),
-    pick('Linear issue…', 'hash', 'linearIssue', linearIssues),
-    pick('Linear project…', 'box', 'linearProject', linearProject),
-    pick('GitHub issue…', 'circle-dot', 'githubIssue', githubIssues),
-  ];
+  const children: SidebarMenuItem[] = [pick('Pull request…', 'git-pull-request', 'pullRequest', pullRequest)];
+  /*
+   * CDXC:WorkMode 2026-10-09 DECISION:
+   * User: in a workspace whose tracker is GitHub, the phone matches the desktop: Link to offers GitHub issues and GitHub projects instead of Linear's (gx-core link_menu.rs, from the project's `workTracker`). Links of the other kind that are already set can still be unlinked below.
+   */
+  if (project.workTracker === 'github') {
+    children.push(
+      pick('GitHub issue…', 'circle-dot', 'githubIssue', githubIssues),
+      pick('GitHub project…', 'box', 'githubProject', githubProject),
+    );
+  } else {
+    children.push(
+      pick('Linear issue…', 'hash', 'linearIssue', linearIssues),
+      pick('Linear project…', 'box', 'linearProject', linearProject),
+    );
+  }
   // Unlink writes "explicitly none" for that kind, so the branch cannot bring it back.
   const unlink = (label: string, links: SessionWorkLinks): SidebarMenuItem =>
     row(label, 'unlink', command({ type: 'setSessionWorkLinks', sessionId: id, links }));
@@ -512,6 +523,7 @@ function linkSubmenu(session: GhostexSession, project: SessionMenuInput['project
   if (githubIssues !== undefined) {
     unlinkRows.push(unlink(githubNumbers.length > 1 ? 'Unlink GitHub issues' : 'Unlink GitHub issue', { githubIssues: [] }));
   }
+  if (githubProject !== undefined) unlinkRows.push(unlink('Unlink GitHub project', { githubProject: 'none' }));
   if (unlinkRows.length > 0) children.push(separator(), ...unlinkRows);
   if (work?.handSet === true) {
     children.push(separator(), row('Back to automatic', 'refresh', command({ type: 'setSessionWorkLinks', sessionId: id, links: { clear: true } })));
@@ -742,6 +754,8 @@ export type ProjectMenuInput = {
   collections: readonly GhostexProjectCollection[];
   /** Work mode is on for the project (`workMode` on the summary's project row). */
   workMode: boolean;
+  /** The computer publishes workspaces (`summary.workspaces` is set), so the Workspaces switch is on. */
+  workspacesPublished: boolean;
 };
 
 /** Add to Group (gx-core `project_membership_menu`); Spaces is off on the desktop's defaults. */
@@ -812,8 +826,11 @@ export function buildProjectMenu(input: ProjectMenuInput): SidebarMenuItem[] {
   /*
    * CDXC:WorkMode 2026-10-09 DECISION:
    * User: work mode is a per-project switch: right-click the project → Work mode. The phone's project menu has the same tick row, between Add to Group and the first separator like the desktop's, and runs `ghostex work-mode on|off --project-id <id>` on the computer.
+   *
+   * CDXC:WorkMode 2026-10-09 DECISION:
+   * User: "yes", the phone hides its Work Mode row while the Workspaces switch is off. The signal is the one gx-core's project menu uses: the computer publishes no workspaces then (packages/gx-core/src/sidebar_menu/project.rs), so no capability flag is added.
    */
-  if (input.projectId.length > 0) {
+  if (input.projectId.length > 0 && input.workspacesPublished) {
     menu.push({
       ...row(
         'Work Mode',

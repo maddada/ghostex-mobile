@@ -382,9 +382,11 @@ export function useSessionsScreenMenus({
         ? { pullRequest: values[0] ?? 'none' }
         : kind === 'linearProject'
           ? { linearProject: values[0] ?? '' }
-          : kind === 'linearIssue'
-            ? { linearIssues: values }
-            : { githubIssues: values };
+          : kind === 'githubProject'
+            ? { githubProject: values[0] ?? 'none' }
+            : kind === 'linearIssue'
+              ? { linearIssues: values }
+              : { githubIssues: values };
     void runSessionCommand(ctx.machine, setSessionWorkLinksCommand(session.sessionId, session.projectId, links));
   };
 
@@ -634,6 +636,7 @@ export function useSessionsScreenMenus({
       collectionId: collectionIdForProject(summary?.projectCollectionsState ?? null, header.projectId),
       collections: summary?.projectCollections ?? [],
       workMode: summary?.projects.find((project) => project.projectId === header.projectId)?.workMode === true,
+      workspacesPublished: summary !== null && summary !== undefined && summary.workspaces !== null,
     });
     const view = sidebarMenuView(menu, menuPath, {
       openPath: (next) => setOverlay({ kind: 'projectMenu', ctx, menuPath: next }),

@@ -1,6 +1,7 @@
 /**
  * A work-mode session card's second line, as data: the PR, the Linear or GitHub issues and the
- * Linear project the session is linked to, plus the merged-PR Clean up / Keep offer.
+ * Linear project or GitHub project the session is linked to, plus the merged-PR Clean up / Keep
+ * offer.
  *
  * CDXC:WorkMode 2026-10-09 SEE-ALSO:
  * The chips, their order, glyphs, colors and labels follow the desktop's
@@ -168,6 +169,20 @@ export function workChips(work: GhostexSessionWork | undefined): WorkChip[] {
       label: work.linearProjectName,
       url: work.linearProjectUrl,
       description: `Linear project: ${work.linearProjectName}`,
+    });
+  }
+  /*
+   * CDXC:WorkMode 2026-10-09 DECISION:
+   * User: in a workspace whose tracker is GitHub, the phone matches the desktop: the card shows the GitHub Project chip (work_chips.rs `github-project`). gxserver sends `githubProject` instead of the Linear project only for such a workspace, so the chip draws whenever it is there.
+   */
+  if (work.githubProjectName.length > 0) {
+    chips.push({
+      key: 'github-project',
+      glyph: 'linearProject',
+      glyphColor: SidebarPalette.WORK_DRAFT,
+      label: work.githubProjectName,
+      url: work.githubProjectUrl,
+      description: joinParts([`GitHub project: ${work.githubProjectName}`, work.githubProjectStatus]),
     });
   }
   return chips;

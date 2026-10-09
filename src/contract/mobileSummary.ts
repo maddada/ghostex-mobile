@@ -144,6 +144,12 @@ export type GhostexProject = {
    * menu's Work Mode row ticks from it.
    */
   workMode?: boolean;
+  /**
+   * The primary tracker of the project's workspace while work mode is on (gx-protocol
+   * `PresentationProject.work_tracker`): `github` makes Link to offer GitHub issues and projects
+   * instead of Linear's. Absent when work mode is off or the computer does not send it (Linear).
+   */
+  workTracker?: 'linear' | 'github';
   /** The worktree's name and branch, which Copy Details quotes; absent for a plain project. */
   worktree?: { name: string; branch: string };
   /** `launchSettings.workspaceId`; absent = the default workspace (a worktree follows its parent's). */
@@ -317,6 +323,8 @@ export type GhostexSessionWork = {
    */
   githubProjectName: string;
   githubProjectUrl: string;
+  /** The item's Status on the GitHub project board; empty until `gh` read it. */
+  githubProjectStatus: string;
   /** Some link was set by hand, so Back to automatic has something to undo. */
   handSet: boolean;
   /** The linked PR is merged and its Clean up / Keep offer is unanswered. */
@@ -969,6 +977,7 @@ function parseSessionWork(value: unknown): GhostexSessionWork | null {
         `${trimmedValue(value.githubProject, 'owner')}/${String(value.githubProject.number ?? '')}`
       : '',
     githubProjectUrl: isObject(value.githubProject) ? trimmedValue(value.githubProject, 'url') : '',
+    githubProjectStatus: isObject(value.githubProject) ? trimmedValue(value.githubProject, 'status') : '',
     handSet: value.handSet === true,
     offerCleanup: value.offerCleanup === true,
   };
@@ -1147,6 +1156,7 @@ function parseProjects(value: unknown): GhostexProject[] {
         ? trimmedValue(entry.worktree, 'parentProjectId')
         : '',
       workMode: entry.workMode === true,
+      workTracker: entry.workTracker === 'github' || entry.workTracker === 'linear' ? entry.workTracker : undefined,
       worktree: isObject(entry.worktree)
         ? { name: trimmedValue(entry.worktree, 'name'), branch: trimmedValue(entry.worktree, 'branch') }
         : undefined,

@@ -76,6 +76,7 @@ const KIND_TITLES: Record<WorkLinkKind, string> = {
   linearIssue: 'Link Linear issues',
   linearProject: 'Link a Linear project',
   githubIssue: 'Link a GitHub issue',
+  githubProject: 'Link a GitHub project',
 };
 
 const KIND_PLACEHOLDERS: Record<WorkLinkKind, string> = {
@@ -83,6 +84,7 @@ const KIND_PLACEHOLDERS: Record<WorkLinkKind, string> = {
   linearIssue: 'Search Linear issues',
   linearProject: 'Search Linear projects',
   githubIssue: 'Search GitHub issues',
+  githubProject: 'Search GitHub projects',
 };
 
 /** Typing waits this long for a pause before asking the computer again. */
