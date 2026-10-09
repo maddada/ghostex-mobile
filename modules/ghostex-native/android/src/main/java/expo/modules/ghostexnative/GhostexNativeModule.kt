@@ -218,15 +218,16 @@ class GhostexNativeModule : Module() {
 
     // SSH local port forwarding over the machine's existing connection: a loopback listener
     // here, one direct-tcpip channel per accepted connection. Nothing is configured on the PC.
-    AsyncFunction("startPortForward") { machineId: String, remotePort: Int, promise: Promise ->
+    AsyncFunction("startPortForward") { machineId: String, remotePort: Int, remoteHost: String?, promise: Promise ->
       val connection = connections[machineId]
       if (connection == null) {
         promise.reject(notConnectedException(machineId))
         return@AsyncFunction
       }
+      val host = remoteHost?.takeIf { it.isNotBlank() } ?: GhostexPortForward.DEFAULT_REMOTE_HOST
       connection.workExecutor.execute {
         try {
-          promise.resolve(mapOf("localPort" to connection.startPortForward(remotePort)))
+          promise.resolve(mapOf("localPort" to connection.startPortForward(remotePort, host)))
         } catch (error: Throwable) {
           promise.reject(mapPortForwardOpenError(error, remotePort))
         }

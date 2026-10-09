@@ -19,7 +19,7 @@ import net.schmizz.sshj.SSHClient
 /**
  * One SSH local port forward on top of an existing, already-authenticated connection: a
  * loopback listener on the phone whose every accepted socket gets its own direct-tcpip
- * channel to `localhost:<remotePort>` on the machine, with bytes piped both ways.
+ * channel to `<remoteHost>:<remotePort>` on the machine, with bytes piped both ways.
  *
  * The forward is owned by [GhostexSshConnection]; it is closed when that connection is
  * disconnected, reconnected, or replaced, so a stale listener can never outlive the SSH
@@ -29,6 +29,8 @@ import net.schmizz.sshj.SSHClient
 internal class GhostexPortForward(
   private val machineId: String,
   val remotePort: Int,
+  /** direct-tcpip target host, resolved on the machine ([DEFAULT_REMOTE_HOST] unless the caller names one). */
+  val remoteHost: String,
   private val clientProvider: () -> SSHClient?
 ) {
 
@@ -100,7 +102,7 @@ internal class GhostexPortForward(
       return
     }
     val channel = try {
-      ssh.newDirectConnection(REMOTE_LOOPBACK_HOST, remotePort)
+      ssh.newDirectConnection(remoteHost, remotePort)
     } catch (error: Exception) {
       Log.w(
         LOG_TAG,
@@ -131,15 +133,28 @@ internal class GhostexPortForward(
     // Remote -> local on a worker, local -> remote on this thread. Whichever direction
     // ends first tears the pair down, which unblocks the other pump's read.
     val remoteToLocalStarted = submit {
-      pump(channel.inputStream, socket.getOutputStream())
-      finish(connection)
+      pumpThenFinish(connection) { pump(channel.inputStream, socket.getOutputStream()) }
     }
     if (!remoteToLocalStarted) {
       finish(connection)
       return
     }
-    pump(socket.getInputStream(), channel.outputStream)
-    finish(connection)
+    pumpThenFinish(connection) { pump(socket.getInputStream(), channel.outputStream) }
+  }
+
+  /**
+   * Runs one pump and retires its connection. `Socket.getInputStream`/`getOutputStream` throw
+   * once the socket is closed, which [close] (a chat link repair stops the forward) or the other
+   * pump can do at any moment, and an exception escaping a pool thread kills the whole app.
+   */
+  private fun pumpThenFinish(connection: ForwardedConnection, work: () -> Unit) {
+    try {
+      work()
+    } catch (ignored: IOException) {
+      // The pair is already closing; ordinary teardown.
+    } finally {
+      finish(connection)
+    }
   }
 
   /**
@@ -181,8 +196,11 @@ internal class GhostexPortForward(
     /** The forward is reachable from this device only; the SSH channel carries the traffic. */
     private const val LOOPBACK_HOST = "127.0.0.1"
 
-    /** direct-tcpip target host, resolved on the remote machine. */
-    private const val REMOTE_LOOPBACK_HOST = "localhost"
+    /**
+     * The direct-tcpip target when the caller names none (Web Preview): `localhost`, so a dev
+     * server bound only to `::1` is reached too. gxserver's own forward names `127.0.0.1`.
+     */
+    const val DEFAULT_REMOTE_HOST = "localhost"
 
     /** 0 asks the OS for a free port, which [localPort] then reports. */
     private const val ANY_LOCAL_PORT = 0

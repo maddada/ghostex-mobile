@@ -30,7 +30,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GhostexNative } from '../../../modules/ghostex-native/src';
 import { ensureConnected } from '../../inventory/client';
 import type { MachineConnectionTarget } from '../../machines/credentials';
-import { readServerEndpoint } from '../gpui/endpoint';
+import { GXSERVER_FORWARD_HOST, readServerEndpoint } from '../gpui/endpoint';
 import type { RpcAnswer } from './transport';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
@@ -208,7 +208,7 @@ class ChatMachineLink {
       if (answer.kind === 'failed') return { route: 'unavailable' };
       // A computer on another wire protocol keeps the exec path, whose CLI speaks its own daemon's.
       if (answer.protocolVersion !== PROTOCOL_VERSION) return { route: 'legacy' };
-      await GhostexNative.startPortForward(this.machine.id, answer.port);
+      await GhostexNative.startPortForward(this.machine.id, answer.port, GXSERVER_FORWARD_HOST);
       const sendLedger = answer.capabilities.includes('sendRequestLedger');
       return { route: 'socket', endpoint: { port: answer.port, authToken: answer.authToken, sendLedger } };
     } catch (error) {
@@ -271,7 +271,7 @@ class ChatMachineLink {
   private async forward(endpoint: Endpoint): Promise<number> {
     await ensureConnected(this.machine);
     try {
-      const { localPort } = await GhostexNative.startPortForward(this.machine.id, endpoint.port);
+      const { localPort } = await GhostexNative.startPortForward(this.machine.id, endpoint.port, GXSERVER_FORWARD_HOST);
       return localPort;
     } catch (error) {
       // Nothing listens on the old port: gxserver is down or moved.

@@ -22,6 +22,13 @@ export type GpuiMachineEndpoint = {
 
 const ENDPOINT_TIMEOUT_MS = 20_000;
 
+/**
+ * The address the computer's end of the forward dials: gxserver binds `127.0.0.1` only, as the
+ * desktop's tunnels (`server/src/ghostex_cli/rpc.rs`) know. The forward's default `localhost` broke
+ * every request to a Windows computer (CDXC:Mobile 2026-10-09 in `GhostexSshConnection.kt`).
+ */
+export const GXSERVER_FORWARD_HOST = '127.0.0.1';
+
 const resolved = new Map<string, Promise<GpuiMachineEndpoint>>();
 
 /** The forward and token for `machine`, resolving them on first use. */
@@ -84,7 +91,7 @@ export async function readServerEndpoint(machine: MachineConnectionTarget): Prom
 async function resolveEndpoint(machine: MachineConnectionTarget): Promise<GpuiMachineEndpoint> {
   const answer = await readServerEndpoint(machine);
   if (answer.kind !== 'endpoint') throw new Error(answer.message);
-  const { localPort } = await GhostexNative.startPortForward(machine.id, answer.port);
+  const { localPort } = await GhostexNative.startPortForward(machine.id, answer.port, GXSERVER_FORWARD_HOST);
   return { machineId: machine.id, baseUrl: `http://127.0.0.1:${localPort}`, authToken: answer.authToken };
 }
 

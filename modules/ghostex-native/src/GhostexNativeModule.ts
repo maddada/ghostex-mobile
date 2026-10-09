@@ -48,7 +48,7 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   /**
    * SSH local port forwarding over the machine's existing, already-authenticated
    * connection: bind a listener on the phone's 127.0.0.1 and give every accepted
-   * connection its own direct-tcpip channel to `localhost:remotePort` on the
+   * connection its own direct-tcpip channel to `remoteHost:remotePort` on the
    * machine. Nothing is configured on the PC.
    *
    * Requires the machine to be connected (call `connect` first) — otherwise the
@@ -61,8 +61,13 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    *
    * Forwards are owned by the connection: disconnecting, reconnecting, or
    * replacing it tears every forward down.
+   *
+   * `remoteHost` is the address the computer dials (default `localhost`). gxserver's forward
+   * names `127.0.0.1`, the only address it binds: Windows OpenSSH tries `::1` for `localhost` and
+   * never falls back. A live forward for the port that dials another host is replaced. The retired
+   * iOS module takes no host.
    */
-  startPortForward(machineId: string, remotePort: number): Promise<{ localPort: number }>;
+  startPortForward(machineId: string, remotePort: number, remoteHost?: string): Promise<{ localPort: number }>;
   /** Close the forward's listener and every in-flight channel. No-op when there is none. */
   stopPortForward(machineId: string, remotePort: number): Promise<void>;
   /** The machine's live forwards. Empty when it has none or is not connected. */

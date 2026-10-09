@@ -446,12 +446,15 @@ class GhostexSshConnection(
   // region local port forwarding
 
   /**
-   * Start (or reuse) the loopback forward for `localhost:[remotePort]` on the machine and
+   * Start (or reuse) the loopback forward for `[remoteHost]:[remotePort]` on the machine and
    * return the port it listens on here. One probe channel is opened and closed first so a
    * port nothing is bound to, and an sshd that refuses forwarding, fail here instead of
-   * leaving the app with a listener that can never carry a byte.
+   * leaving the app with a listener that can never carry a byte. A live forward for the same
+   * port that dials another host is replaced.
+   *
+   * CDXC:Mobile 2026-10-09 WHY: the target host is the caller's. gxserver binds `127.0.0.1` only, and Windows OpenSSH resolves `localhost` to `::1` first, reports the refused connect as connected, and never tries `127.0.0.1`: every request the phone sent through a `localhost` forward to a Windows computer's gxserver ended empty after about 2 seconds, while the probe still passed. The chat link and the GPUI transcript name `127.0.0.1` (the desktop's tunnels already do); Web Preview keeps `localhost` so a dev server bound only to `::1` is still reached.
    */
-  fun startPortForward(remotePort: Int): Int {
+  fun startPortForward(remotePort: Int, remoteHost: String = GhostexPortForward.DEFAULT_REMOTE_HOST): Int {
     if (remotePort !in MIN_TCP_PORT..MAX_TCP_PORT) {
       throw GhostexException(
         GhostexErrorCode.CHANNEL_FAILED,
@@ -459,13 +462,18 @@ class GhostexSshConnection(
       )
     }
     val ssh = client?.takeIf { isConnected() } ?: throw notConnectedException(machineId)
-    portForwards[remotePort]?.let { return it.localPort }
+    portForwards[remotePort]?.takeIf { it.remoteHost == remoteHost }?.let { return it.localPort }
     synchronized(portForwardLock) {
-      portForwards[remotePort]?.let { return it.localPort }
-      Log.i(LOG_TAG, "startPortForward $machineId remotePort=$remotePort")
-      probeRemotePort(ssh, remotePort)
+      val existing = portForwards[remotePort]
+      if (existing != null) {
+        if (existing.remoteHost == remoteHost) return existing.localPort
+        portForwards.remove(remotePort)
+        existing.close()
+      }
+      Log.i(LOG_TAG, "startPortForward $machineId remote=$remoteHost:$remotePort")
+      probeRemotePort(ssh, remoteHost, remotePort)
       val forward = try {
-        GhostexPortForward(machineId, remotePort) { client }
+        GhostexPortForward(machineId, remotePort, remoteHost) { client }
       } catch (error: Exception) {
         throw GhostexException(
           GhostexErrorCode.CHANNEL_FAILED,
@@ -532,13 +540,13 @@ class GhostexSshConnection(
   }
 
   /**
-   * Open one direct-tcpip channel to the remote's `localhost:[remotePort]` and close it
+   * Open one direct-tcpip channel to the remote's `[remoteHost]:[remotePort]` and close it
    * immediately, purely to turn the SSH_MSG_CHANNEL_OPEN_FAILURE reason into a specific
    * error before the caller believes the forward works.
    */
-  private fun probeRemotePort(ssh: SSHClient, remotePort: Int) {
+  private fun probeRemotePort(ssh: SSHClient, remoteHost: String, remotePort: Int) {
     val probe = try {
-      ssh.newDirectConnection(REMOTE_LOOPBACK_HOST, remotePort)
+      ssh.newDirectConnection(remoteHost, remotePort)
     } catch (error: Exception) {
       Log.w(
         LOG_TAG,
@@ -629,8 +637,6 @@ class GhostexSshConnection(
     /** tailcat forwards listen on loopback only; the tunnel itself carries the traffic. */
     private const val TAILCAT_LOOPBACK_HOST = "127.0.0.1"
 
-    /** direct-tcpip target host for port forwards, resolved on the remote machine. */
-    private const val REMOTE_LOOPBACK_HOST = "localhost"
     private const val MIN_TCP_PORT = 1
     private const val MAX_TCP_PORT = 65_535
 
