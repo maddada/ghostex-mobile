@@ -685,7 +685,7 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
     advanced.push(row('Full Reload', 'refresh', command({ type: 'fullReloadSession', sessionId: id })));
   }
   if (caps.canMakeCoordinator) {
-    advanced.push(row('Make Coordinator', 'users-group', command({ type: 'makeCoordinator', sessionId: id })));
+    advanced.push(row('Make Orchestrator', 'users-group', command({ type: 'makeCoordinator', sessionId: id })));
   }
   if (caps.canExportTranscript) {
     advanced.push(

@@ -159,7 +159,7 @@ export default function NewCoordinatorSheet({ projectTitle, loadOptions, onCreat
         <Pressable style={styles.backdrop} onPress={onCancel}>
           <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
             <KeyboardAwareScrollView contentContainerStyle={styles.cardContent}>
-              <Text style={styles.title}>New Coordinator</Text>
+              <Text style={styles.title}>New Orchestrator</Text>
               <Text style={styles.body}>
                 {`One agent you talk to about ${projectTitle}. It plans the work, hands each task to a thread (its own agent session, optionally in its own worktree), and reports back when threads finish or need you.`}
               </Text>
@@ -173,7 +173,7 @@ export default function NewCoordinatorSheet({ projectTitle, loadOptions, onCreat
                   placeholder="e.g. Checkout redesign"
                   placeholderTextColor={GhostexPalette.MUTED}
                 />
-                <Text style={styles.hint}>Shown in the sidebar so you can find this coordinator later. It keeps this name.</Text>
+                <Text style={styles.hint}>Shown in the sidebar so you can find this orchestrator later. It keeps this name.</Text>
               </View>
               {options === null ? (
                 loadError === null ? (
@@ -183,7 +183,7 @@ export default function NewCoordinatorSheet({ projectTitle, loadOptions, onCreat
                 )
               ) : options.agents.length === 0 ? (
                 <Text style={styles.error}>
-                  No Claude, Codex, ZCode or Empryo agent is set up on this computer. A coordinator runs on one of them.
+                  No Claude, Codex, ZCode or Empryo agent is set up on this computer. An orchestrator runs on one of them.
                 </Text>
               ) : (
                 <>
@@ -229,7 +229,7 @@ export default function NewCoordinatorSheet({ projectTitle, loadOptions, onCreat
                   placeholder="Describe the work. It plans it, starts a thread for each task, and reports back."
                   placeholderTextColor={GhostexPalette.MUTED}
                 />
-                <Text style={styles.hint}>Threads show up under the coordinator in the session list.</Text>
+                <Text style={styles.hint}>Threads show up under the orchestrator in the session list.</Text>
               </View>
               <View style={styles.buttonRow}>
                 <Pressable accessibilityRole="button" style={styles.cancelButton} onPress={onCancel}>

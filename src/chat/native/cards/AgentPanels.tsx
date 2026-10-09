@@ -148,7 +148,7 @@ export function CoordinatorThreadsPanel({ chat, document }: { chat: RustChat; do
       ]
     : [];
   return (
-    <View accessibilityLabel="Coordinator threads" style={styles.fill}>
+    <View accessibilityLabel="Orchestrator threads" style={styles.fill}>
       <StatusCard header={header} body={body} />
     </View>
   );

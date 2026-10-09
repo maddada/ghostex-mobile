@@ -347,10 +347,10 @@ export function useSessionsScreenMenus({
 
   /** Make Coordinator: gxserver promotes the session in place; its running turn is never touched. */
   const makeCoordinator = async (machine: MachineRecord, session: GhostexSession): Promise<void> => {
-    setProgress('Making it a coordinator…');
+    setProgress('Making it an orchestrator…');
     try {
       await runGhostexCli(machine, promoteCoordinatorCommand(session.globalRef));
-      setTransientStatus('Now a coordinator');
+      setTransientStatus('Now an orchestrator');
     } catch (error) {
       setTransientStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -462,9 +462,9 @@ export function useSessionsScreenMenus({
         const { session } = requireSession().item;
         setOverlay({
           kind: 'confirmAction',
-          title: 'Make coordinator?',
-          body: `${sessionTitle(session)} keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its coordinator playbook arrives once its current turn is over.`,
-          confirmLabel: 'Make Coordinator',
+          title: 'Make orchestrator?',
+          body: `${sessionTitle(session)} keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its orchestrator playbook arrives once its current turn is over.`,
+          confirmLabel: 'Make Orchestrator',
           run: () => void makeCoordinator(machine, session),
         });
         return;
@@ -1305,7 +1305,7 @@ export function useSessionsScreenMenus({
             {
               kind: 'item',
               key: 'new-coordinator',
-              label: 'New Coordinator…',
+              label: 'New Orchestrator…',
               icon: <CrewGlyph size={14} color={SidebarPalette.MUTED} />,
               onPress: () => setOverlay({ kind: 'newCoordinator', ctx }),
             },
@@ -1342,7 +1342,7 @@ export function useSessionsScreenMenus({
   ): void => {
     const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
     const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
-    const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
+    const title = input.title.trim().length > 0 ? input.title.trim() : 'Orchestrator';
     void runCreationFlow(
       ctx.machine,
       createCoordinatorCommand({ ...input, projectId: ctx.header.projectId }),
