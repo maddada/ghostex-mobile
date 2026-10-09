@@ -376,7 +376,11 @@ function MessageCardHeader({
         {title}
         {detail.length > 0 ? <Text style={{ color: theme.muted }}>{`  ${detail}`}</Text> : null}
       </Text>
-      {tag !== undefined ? <Text style={[styles.queued, { color: tag.color }]}>{tag.label}</Text> : null}
+      {tag !== undefined ? (
+        <View style={styles.cardTag}>
+          <Text style={[styles.cardTagText, { color: tag.color }]}>{tag.label}</Text>
+        </View>
+      ) : null}
       {expandable ? (
         <View style={styles.cardChevron}>
           <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={14} color={theme.muted} />
@@ -541,7 +545,9 @@ const styles = StyleSheet.create({
   suppressedBody: { maxHeight: 400, padding: 10, borderRadius: 8, borderWidth: 1 },
   delivery: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   deliveryAction: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  queued: { fontSize: 11, marginTop: 4 },
+  /** A tag sits on the title's first line, centred on it like the glyph and chevron (desktop `message_header`). */
+  cardTag: { height: PROSE_LINE, justifyContent: 'center' },
+  cardTagText: { fontSize: 11, lineHeight: 14 },
   toolDot: { width: 7, height: 7, borderRadius: 4 },
   terminalDetail: { maxHeight: 300, padding: 10, borderRadius: 6 },
   exchanges: { gap: 12, paddingVertical: 6 },
