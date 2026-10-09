@@ -229,6 +229,11 @@ export type ProjectedMessage = {
   time?: Json;
   /** Links and file references inside `text`, with their ranges. Desktop: `markdown_links.rs`. */
   markdownReferences?: Json;
+  /** A long prompt's first lines, shown with Show more until it is expanded; null when the
+   * prompt is short. Core: `long_prompt.rs`. Desktop: `transcript.rs` `prompt_body`. */
+  collapsedText?: string | null;
+  /** `markdownReferences` for `collapsedText`. */
+  collapsedReferences?: Json;
   /** A reasoning row split into headline and body. Desktop: `thinking.rs`. */
   reasoning?: Json;
   /** A message from another agent, with its display name. Desktop: `inter_agent_message.rs`. */

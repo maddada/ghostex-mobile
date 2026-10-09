@@ -53,9 +53,34 @@ const MENU_HINT = 'Long press for Copy and Add to Chat';
 
 function UserMessage({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
+  const { disclosures } = useNativeChatUi();
   const body = typeof message.text === 'string' ? message.text : '';
+  // A long prompt shows its first lines until it is expanded (core `long_prompt.rs`, desktop `transcript.rs` `prompt_body`).
+  const collapsed = typeof message.collapsedText === 'string' ? message.collapsedText : '';
+  const [open, toggle] = useDisclosure(disclosures, `prompt:${message.id}`);
+  const shortened = collapsed.length > 0 && !open;
   const openMenu = useMessageMenu(message);
-  const bubble = <Markdown text={body} references={message.markdownReferences} color={theme.primary} breaks selectable={openMenu === undefined} />;
+  const prose = (
+    <Markdown
+      text={shortened ? collapsed : body}
+      references={shortened ? message.collapsedReferences : message.markdownReferences}
+      color={theme.primary}
+      breaks
+      selectable={openMenu === undefined}
+    />
+  );
+  const bubble =
+    collapsed.length > 0 ? (
+      <View style={styles.promptColumn}>
+        {prose}
+        <Pressable onPress={toggle} style={styles.showMore} accessibilityRole='button'>
+          <Chevron open={!open} color={theme.muted} />
+          <Text style={[styles.showMoreText, { color: theme.muted }]}>{open ? 'Show less' : 'Show more'}</Text>
+        </Pressable>
+      </View>
+    ) : (
+      prose
+    );
   return (
     <View style={styles.message} accessibilityLabel={`user message: ${body.slice(0, 2000)}`}>
       <StartupDelivery message={message} waitingLine={false} />
@@ -232,6 +257,7 @@ const styles = StyleSheet.create({
   thinking: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingBottom: 13 },
   thinkingColumn: { flex: 1, minWidth: 0, gap: 4 },
   capped: { maxHeight: THINKING_CAP, overflow: 'hidden' },
+  promptColumn: { gap: 8 },
   showMore: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   showMoreText: { fontSize: PROSE_SIZE },
   pendingBubble: { alignSelf: 'flex-end', width: '42%', height: 60, borderRadius: 16 },
