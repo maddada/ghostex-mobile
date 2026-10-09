@@ -48,6 +48,27 @@ const UNAVAILABLE_RECHECK_MS = 5_000;
 const IDLE_CLOSE_MS = 30_000;
 /** The four chat frame types a chat-only stream carries (`FRAME_TYPES` in `wire.rs`). */
 const FRAME_TYPES = new Set(['sessionChatSnapshot', 'sessionChatReplaced', 'sessionChatAppended', 'sessionChatState']);
+/** A forward is rebuilt at most this often; failures in between go straight to the exec route. */
+const REPAIR_MIN_INTERVAL_MS = 5_000;
+/** Requests that only read, so a lost one may simply be asked again. */
+const READ_ONLY_METHODS = new Set([
+  'readSessionChat',
+  'readSessionChatSkills',
+  'readSessionChatFiles',
+  'readSessionChatImage',
+  'readSessionTerminalTail',
+  'readSessionAgentNote',
+  'readCoordinatorThreads',
+  'sessionForkBranches',
+  'agentAccounts',
+  'listStashedPrompts',
+]);
+/** The sends gxserver delivers at most once per `sendRequestId` (`session_chat_send_requests.rs`). */
+const LEDGER_SEND_METHODS = new Set(['sendSessionChatMessage', 'queueSessionChatPrompt', 'answerSessionChatPrompt']);
+
+/** What the user reads when a request never got an answer: one plain sentence, never a Java exception. */
+export const UNREACHABLE_MESSAGE = "Couldn't reach Ghostex on this computer; try again in a moment.";
+const TIMEOUT_MESSAGE = "Ghostex on this computer didn't answer in time.";
 
 /**
  * How this computer's chat traffic travels: `socket` (the warm link), `legacy` (an older Ghostex, or
@@ -56,7 +77,21 @@ const FRAME_TYPES = new Set(['sessionChatSnapshot', 'sessionChatReplaced', 'sess
  */
 export type ChatRoute = 'socket' | 'legacy' | 'unavailable';
 
-type Endpoint = { port: number; authToken: string };
+/** `sendLedger`: the daemon advertised `sendRequestLedger`, so a send may be retried under its id. */
+type Endpoint = { port: number; authToken: string; sendLedger: boolean };
+
+/**
+ * How one request over the link ended: an answer for the core, or `fallBack` when nothing reached
+ * gxserver (or a lost request was safe to repeat) and the exec route should carry it instead.
+ */
+export type LinkAnswer = { kind: 'answered'; answer: RpcAnswer } | { kind: 'fallBack' };
+
+/** One HTTP attempt: answered, never sent (no forward), or lost after it may have been sent. */
+type Attempt = { kind: 'answered'; answer: RpcAnswer } | { kind: 'notSent' } | { kind: 'lost'; timedOut: boolean };
+
+function unreachable(endpoint: string, message: string): LinkAnswer {
+  return { kind: 'answered', answer: { error: { code: 'unreachable', message, endpoint } } };
+}
 
 type LinkState =
   | { kind: 'unknown' }
@@ -110,6 +145,8 @@ class ChatMachineLink {
   private failedOpens = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private repairing: Promise<void> | null = null;
+  private lastRepairAt = 0;
 
   constructor(private machine: MachineConnectionTarget) {
     AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -172,7 +209,8 @@ class ChatMachineLink {
       // A computer on another wire protocol keeps the exec path, whose CLI speaks its own daemon's.
       if (answer.protocolVersion !== PROTOCOL_VERSION) return { route: 'legacy' };
       await GhostexNative.startPortForward(this.machine.id, answer.port);
-      return { route: 'socket', endpoint: { port: answer.port, authToken: answer.authToken } };
+      const sendLedger = answer.capabilities.includes('sendRequestLedger');
+      return { route: 'socket', endpoint: { port: answer.port, authToken: answer.authToken, sendLedger } };
     } catch (error) {
       // An sshd with `AllowTcpForwarding no` will never carry the link; anything else may pass.
       return { route: errorCode(error) === 'E_FORWARDING_PROHIBITED' ? 'legacy' : 'unavailable' };
@@ -182,6 +220,47 @@ class ChatMachineLink {
   /** Forgets the endpoint so the next request or reconnect asks the computer again. */
   private recheck(): void {
     if (this.state.kind === 'socket') this.state = { kind: 'unknown' };
+  }
+
+  /**
+   * Rebuilds the route after a request or socket was lost on the forward.
+   *
+   * CDXC:Mobile 2026-10-09 WHY: the forward's loopback listener accepts every connection even when
+   * the SSH channel behind it cannot be opened (SSH dropped, the tunnel stalled, gxserver
+   * restarting), and it closes each one at once, which OkHttp reports as "unexpected end of
+   * stream". `startPortForward` hands back a cached listener without probing it, so asking it again
+   * kept every request and the chat socket on the dead one. Here the cached forward is closed, the
+   * SSH connection is verified (`ensureConnected` with `verify`, the reconnect rule), and the
+   * handshake runs again, which opens and probes a fresh forward. Once per `REPAIR_MIN_INTERVAL_MS`.
+   */
+  private repair(): Promise<void> {
+    if (this.repairing !== null) return this.repairing;
+    if (Date.now() - this.lastRepairAt < REPAIR_MIN_INTERVAL_MS) return Promise.resolve();
+    this.lastRepairAt = Date.now();
+    const state = this.state;
+    this.repairing = (async () => {
+      if (state.kind === 'socket') {
+        this.state = { kind: 'unknown' };
+        await GhostexNative.stopPortForward(this.machine.id, state.endpoint.port).catch(() => undefined);
+      }
+      await ensureConnected(this.machine, { verify: true }).catch(() => undefined);
+      await this.route();
+    })().finally(() => {
+      this.repairing = null;
+    });
+    return this.repairing;
+  }
+
+  /**
+   * Whether a request lost on the forward may be sent again. Reads may. A send may only when
+   * gxserver advertised its send ledger and the request names its `sendRequestId`: the first attempt
+   * may already have typed the message, and the ledger answers a repeat from that attempt instead of
+   * typing it twice. Every other request is left to the user.
+   */
+  private retrySafe(method: string, params: unknown, endpoint: Endpoint): boolean {
+    if (READ_ONLY_METHODS.has(method)) return true;
+    const sendRequestId = (params as { sendRequestId?: unknown } | null)?.sendRequestId;
+    return LEDGER_SEND_METHODS.has(method) && endpoint.sendLedger && typeof sendRequestId === 'string';
   }
 
   /**
@@ -205,23 +284,56 @@ class ChatMachineLink {
 
   /**
    * One chat request over the forward, answered in the core's terms like `native_chat/rpc.rs`.
-   * Never throws. A request that could not be delivered answers `unreachable`, which is what the
-   * exec path answers for a failed SSH command, so the core's retry rules are the same for both.
+   * Never throws. A request lost on the forward repairs the link, then a read (or a ledger send) is
+   * sent once more over the fresh forward and, failing that, handed to the exec route; anything
+   * else answers `unreachable` with one plain sentence, which the core treats like a failed SSH
+   * command (a read retries quietly, a send returns to the composer under the same
+   * `sendRequestId`).
    */
-  async rpc(method: string, params: unknown, timeoutMs: number): Promise<RpcAnswer> {
+  async request(method: string, params: unknown, timeoutMs: number): Promise<LinkAnswer> {
     const endpoint = `/api/${method}`;
     const state = this.state;
-    if (state.kind !== 'socket') {
-      return { error: { code: 'unreachable', message: 'The computer is not connected.', endpoint } };
+    if (state.kind !== 'socket') return { kind: 'fallBack' };
+    const retrySafe = this.retrySafe(method, params, state.endpoint);
+    const first = await this.attempt(state.endpoint, method, params, timeoutMs);
+    if (first.kind === 'answered') return first;
+    if (first.kind === 'notSent') return { kind: 'fallBack' };
+    // A timed-out request may still be running on the computer; the core decides what follows.
+    if (first.timedOut) return unreachable(endpoint, TIMEOUT_MESSAGE);
+    await this.repair();
+    if (!retrySafe) return unreachable(endpoint, UNREACHABLE_MESSAGE);
+    const repaired = this.state;
+    if (repaired.kind === 'socket') {
+      const second = await this.attempt(repaired.endpoint, method, params, timeoutMs);
+      if (second.kind === 'answered') return second;
+      if (second.kind === 'lost' && second.timedOut) return unreachable(endpoint, TIMEOUT_MESSAGE);
+    }
+    return { kind: 'fallBack' };
+  }
+
+  /** `request` for a caller with no exec route of its own: a fall-back answers `unreachable`. */
+  async rpc(method: string, params: unknown, timeoutMs: number): Promise<RpcAnswer> {
+    const sent = await this.request(method, params, timeoutMs);
+    if (sent.kind === 'answered') return sent.answer;
+    return { error: { code: 'unreachable', message: UNREACHABLE_MESSAGE, endpoint: `/api/${method}` } };
+  }
+
+  /** One HTTP attempt through the forward. */
+  private async attempt(endpointInfo: Endpoint, method: string, params: unknown, timeoutMs: number): Promise<Attempt> {
+    const endpoint = `/api/${method}`;
+    let localPort: number;
+    try {
+      localPort = await this.forward(endpointInfo);
+    } catch {
+      return { kind: 'notSent' };
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const localPort = await this.forward(state.endpoint);
       const response = await fetch(`http://127.0.0.1:${localPort}${endpoint}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${state.endpoint.authToken}`,
+          Authorization: `Bearer ${endpointInfo.authToken}`,
           'Content-Type': 'application/json',
           [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
         },
@@ -238,28 +350,27 @@ class ChatMachineLink {
       } catch {
         // Answered below.
       }
-      if (envelope === null) return { error: { code: null, message: 'gxserver returned invalid JSON.', endpoint } };
+      if (envelope === null) {
+        const message = "Ghostex on this computer sent an answer the phone couldn't read.";
+        return { kind: 'answered', answer: { error: { code: null, message, endpoint } } };
+      }
       if (envelope.ok === false) {
-        return {
-          error: {
-            code: typeof envelope.error === 'string' ? envelope.error : null,
-            message: typeof envelope.message === 'string' ? envelope.message : 'Request failed.',
-            endpoint,
-          },
+        const error = {
+          code: typeof envelope.error === 'string' ? envelope.error : null,
+          message: typeof envelope.message === 'string' ? envelope.message : 'Request failed.',
+          endpoint,
         };
+        return { kind: 'answered', answer: { error } };
       }
       if (!response.ok || envelope.ok !== true) {
-        return { error: { code: null, message: `gxserver request failed with HTTP ${response.status}.`, endpoint } };
+        const message = `gxserver request failed with HTTP ${response.status}.`;
+        return { kind: 'answered', answer: { error: { code: null, message, endpoint } } };
       }
-      return { result: envelope.result ?? null, error: null };
+      return { kind: 'answered', answer: { result: envelope.result ?? null, error: null } };
     } catch (error) {
-      return {
-        error: {
-          code: 'unreachable',
-          message: controller.signal.aborted ? 'The computer did not answer the chat request in time.' : errorMessage(error),
-          endpoint,
-        },
-      };
+      // The raw OkHttp text ("unexpected end of stream on http://127.0.0.1:…") is for logcat only.
+      console.warn(`[chat-link] ${method} lost: ${errorMessage(error)}`);
+      return { kind: 'lost', timedOut: controller.signal.aborted };
     } finally {
       clearTimeout(timer);
     }
@@ -405,7 +516,9 @@ class ChatMachineLink {
     this.failedOpens += 1;
     if (this.failedOpens >= FAILED_OPENS_BEFORE_RECHECK) {
       this.failedOpens = 0;
-      this.recheck();
+      // The same dead listener would refuse every later open too (`repair`).
+      void this.repair().then(() => this.scheduleReconnect());
+      return;
     }
     this.scheduleReconnect();
   }

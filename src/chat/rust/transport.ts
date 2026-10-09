@@ -26,7 +26,7 @@ import type { MachineConnectionTarget } from '../../machines/credentials';
 import { execRemoteCommand } from '../../remote/commands';
 import { ensureConnected } from '../../inventory/client';
 import type { ChatRpcError } from './events';
-import { chatMachineLink, type ChatMachineLink, type ChatRoute } from './machine-link';
+import { chatMachineLink, UNREACHABLE_MESSAGE, type ChatMachineLink, type ChatRoute } from './machine-link';
 
 /** The gxserver wire protocol the synthesized frames claim (`GXSERVER_PROTOCOL_VERSION`). */
 const PROTOCOL_VERSION = 1;
@@ -120,7 +120,10 @@ export async function sessionChatRpc(
     return { error: { code: null, message: `Invalid chat request method: ${method}`, endpoint: `/api/${method}` } };
   }
   const link = chatMachineLink(machine);
-  if ((await link.route()) === 'socket') return link.rpc(method, params, timeoutMs);
+  if ((await link.route()) === 'socket') {
+    const sent = await link.request(method, params, timeoutMs);
+    if (sent.kind === 'answered') return sent.answer;
+  }
   return sessionChatRpcOverSsh(machine, method, params, timeoutMs);
 }
 
@@ -162,9 +165,9 @@ async function sessionChatRpcOverSsh(
       },
     };
   } catch (error) {
-    return {
-      error: { code: 'unreachable', message: error instanceof Error ? error.message : String(error), endpoint },
-    };
+    // The SSH layer's own text (a Java or Swift exception) is for the log, not the chat.
+    console.warn(`[chat-rpc] ${method} over SSH failed: ${error instanceof Error ? error.message : String(error)}`);
+    return { error: { code: 'unreachable', message: UNREACHABLE_MESSAGE, endpoint } };
   }
 }
 

@@ -45,7 +45,7 @@ export function forgetGpuiMachineEndpoint(machineId: string): void {
  * whose Ghostex predates the verb; or a verb that ran but found no daemon to describe.
  */
 export type ServerEndpointAnswer =
-  | { kind: 'endpoint'; port: number; authToken: string; protocolVersion: number | null }
+  | { kind: 'endpoint'; port: number; authToken: string; protocolVersion: number | null; capabilities: string[] }
   | { kind: 'unsupported'; message: string }
   | { kind: 'failed'; message: string };
 
@@ -61,7 +61,11 @@ export async function readServerEndpoint(machine: MachineConnectionTarget): Prom
   const authToken = typeof answer?.authToken === 'string' ? answer.authToken : null;
   if (port !== null && authToken !== null) {
     const protocolVersion = typeof answer?.protocolVersion === 'number' ? answer.protocolVersion : null;
-    return { kind: 'endpoint', port, authToken, protocolVersion };
+    // Older daemons print no list; they promise nothing beyond the port and token.
+    const capabilities = Array.isArray(answer?.capabilities)
+      ? answer.capabilities.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+    return { kind: 'endpoint', port, authToken, protocolVersion, capabilities };
   }
   const detail = `${exec.stderr}`.trim() || `${exec.stdout}`.trim();
   if (/Unknown gxserver command: endpoint|Unknown command/u.test(detail)) {

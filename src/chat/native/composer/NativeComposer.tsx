@@ -378,14 +378,13 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
   const collapsed = motion.collapsed;
   const hasDraft = text.trim().length > 0;
   const placeholder = document?.composerPlaceholder ?? '';
-  const operationError = document?.operationErrorCode === 'composerNotReady' ? null : (document?.operationError ?? null);
   const statusLine = document !== null && statusLineReserved(document);
   const bottom = keyboard > 0 ? keyboard + 8 : Math.max(insets.bottom, 12);
 
   return (
     <View ref={anchor} style={[styles.root, { paddingBottom: bottom }]}>
       {document?.incomingDraft ? <IncomingDraftBar draft={document.incomingDraft} dispatch={dispatch} /> : null}
-      {operationError !== null && operationError.length > 0 ? <Text style={styles.error}>{operationError}</Text> : null}
+      {/* A refused operation's error line is the card band's (`ComposerNotReadyCard`), where desktop draws it; drawing it here too showed it twice. */}
       {document !== null ? <NotePanel note={document.note} dispatch={dispatch} /> : null}
       {document?.suggestions ? <Suggestions data={document.suggestions} dispatch={dispatch} /> : null}
       {document?.runLocation ? <RunLocationRow row={document.runLocation} dispatch={dispatch} /> : null}
