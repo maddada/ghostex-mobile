@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -49,6 +50,8 @@ import MachineTabs, {
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
 import SpaceTabs from '../components/sessions/SpaceTabs';
+import type { WorkChipActions } from '../components/sessions/WorkChips';
+import WorkspaceTile, { workspaceMenuItems } from '../components/sessions/WorkspaceTile';
 import { useLauncherStore } from '../components/sessions/launcherStore';
 import {
   CollectionHeaderRow,
@@ -73,6 +76,7 @@ import WorkLinkPicker from './sessions-screen/work-link-picker';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { WarningTriangleIcon } from '../components/terminal/icons';
 import {
+  answerWorkCleanupCommand,
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
   createChatCommand,
@@ -126,6 +130,8 @@ import {
 import type { RootStackParamList } from '../navigation/types';
 import { resolveSelectedSpaceId, spaceRowItems, spaceSessionCounts } from '../spaces/spaceFilter';
 import { useSpacesStore } from '../spaces/store';
+import { revealSessionWorkspace, useWorkspacesStore } from '../workspaces/store';
+import { filterSummaryForWorkspace, resolveWorkspaceId } from '../workspaces/workspaceFilter';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { markSessionOpen, markSessionOpenTap } from '../terminal/openTiming';
@@ -167,6 +173,8 @@ export default function SessionsScreen({ navigation }: Props) {
   const stopPolling = useInventoryStore((state) => state.stopPolling);
   const selectedSpaceIdByMachine = useSpacesStore((state) => state.selectedSpaceIdByMachine);
   const selectSpace = useSpacesStore((state) => state.selectSpace);
+  const selectedWorkspaceIdByMachine = useWorkspacesStore((state) => state.selectedWorkspaceIdByMachine);
+  const selectWorkspace = useWorkspacesStore((state) => state.selectWorkspace);
 
   const collapse = useCollapseStore();
   const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
@@ -193,6 +201,7 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
   const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   /*
    * Pull-to-refresh replaces the old header Refresh button, and owns its own
@@ -229,6 +238,7 @@ export default function SessionsScreen({ navigation }: Props) {
       void useCollapseStore.getState().hydrate();
       void useLauncherStore.getState().hydrate();
       void useSpacesStore.getState().hydrate();
+      void useWorkspacesStore.getState().hydrate();
       if (machine !== null) startPolling();
       return () => stopPolling();
     }, [machine !== null, startPolling, stopPolling]),
@@ -289,7 +299,35 @@ export default function SessionsScreen({ navigation }: Props) {
   );
 
   const selectedInventory = machine === null ? undefined : inventoriesByMachineId[machine.id];
-  const machineSpaces = selectedInventory?.summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
+  const machineWorkspaces = selectedInventory?.summary?.workspaces ?? null;
+  /*
+   * The workspace the machine's list shows (null while it has no workspaces, which is also every
+   * computer with the Workspaces extension off): the stored pick, or the default workspace.
+   */
+  const selectedWorkspaceId =
+    machineWorkspaces === null
+      ? null
+      : resolveWorkspaceId(machineWorkspaces, machine === null ? undefined : selectedWorkspaceIdByMachine[machine.id]);
+  const selectedWorkspace =
+    machineWorkspaces === null || selectedWorkspaceId === null
+      ? null
+      : (machineWorkspaces.workspaces[selectedWorkspaceId] ?? null);
+  /** The machine's summary as the shown workspace sees it: its projects, sessions and Spaces. */
+  const selectedSummary = useMemo(() => {
+    const summary = selectedInventory?.summary ?? null;
+    return summary === null || selectedWorkspaceId === null
+      ? summary
+      : filterSummaryForWorkspace(summary, selectedWorkspaceId);
+  }, [selectedInventory?.summary, selectedWorkspaceId]);
+  const machineSpaces = selectedSummary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
+  /*
+   * The tile shows whenever the computer has Spaces, and on its own once there is more than one
+   * workspace (desktop `native_sidebar_shows_workspace_tile`).
+   */
+  const showWorkspaceTile =
+    selectedWorkspace !== null &&
+    machineWorkspaces !== null &&
+    ((selectedInventory?.summary?.sidebarSpaces.order.length ?? 0) > 0 || machineWorkspaces.order.length > 1);
   /*
    * A Space id is only ever resolved against the machine that owns it, so a
    * stored id from another machine — or one this daemon has since deleted —
@@ -300,7 +338,6 @@ export default function SessionsScreen({ navigation }: Props) {
     machine === null ? undefined : selectedSpaceIdByMachine[machine.id],
   );
   const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
-  const selectedSummary = selectedInventory?.summary ?? null;
   const spaceCounts = useMemo(
     () => spaceSessionCounts(selectedSummary, spaceItems.map((item) => item.spaceId)),
     [selectedSummary, spaceItems],
@@ -319,6 +356,7 @@ export default function SessionsScreen({ navigation }: Props) {
         selectedMachineId: machine === null ? null : machine.id,
         inventoriesByMachineId,
         selectedSpaceId,
+        selectedWorkspaceId,
         collapse: {
           expandedProjectsByMachine: collapse.expandedProjectsByMachine,
           expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
@@ -337,6 +375,7 @@ export default function SessionsScreen({ navigation }: Props) {
       machine,
       inventoriesByMachineId,
       selectedSpaceId,
+      selectedWorkspaceId,
       collapse.expandedProjectsByMachine,
       collapse.expandedCollectionsByMachine,
       collapse.expandedGroupsByMachine,
@@ -526,6 +565,32 @@ export default function SessionsScreen({ navigation }: Props) {
       });
     },
     [setTransientStatus],
+  );
+
+  /**
+   * What a work-mode card's chips do: a tap opens the link on the phone, a long press copies it,
+   * and Clean up / Keep answer the merged-PR offer on the computer (`ghostex work-mode cleanup`).
+   */
+  const workChipActions = useCallback(
+    (target: MachineRecord | null, session: GhostexSession): WorkChipActions | undefined => {
+      if (target === null) return undefined;
+      return {
+        openLink: (url) => {
+          void Linking.openURL(url).catch(() => setTransientStatus(`Could not open ${url}`));
+        },
+        copyLink: (url) => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          void Clipboard.setStringAsync(url)
+            .then(() => setTransientStatus('Link copied'))
+            .catch((error: unknown) => setTransientStatus(error instanceof Error ? error.message : String(error)));
+        },
+        answerCleanup: (answer) => {
+          if (answer === 'cleanUp') setTransientStatus('Cleaning up…');
+          void runSessionCommand(target, answerWorkCleanupCommand(session.sessionId, session.projectId, answer));
+        },
+      };
+    },
+    [runSessionCommand, setTransientStatus],
   );
 
   /** Run a session batch sequentially, retaining per-session rollback. */
@@ -845,6 +910,7 @@ export default function SessionsScreen({ navigation }: Props) {
             nesting={child.nesting}
             coordinatorBadge={child.coordinatorBadge}
             onToggleThreads={() => collapse.toggleCoordinator(machineId, coordinatorRowKey(child.session))}
+            workActions={workChipActions(target, child.session)}
             onPress={() => {
               if (target !== null) void attach(target, child.session);
             }}
@@ -1152,6 +1218,7 @@ export default function SessionsScreen({ navigation }: Props) {
             sidebarForeground={sidebarAppearance.foreground}
             inCard={false}
             customSessionTags={inventoriesByMachineId[block.machineId]?.summary?.customSessionTags}
+            workActions={workChipActions(target, item.session)}
             onPress={() => {
               if (target !== null) void attach(target, item.session);
             }}
@@ -1333,12 +1400,36 @@ export default function SessionsScreen({ navigation }: Props) {
         A machine with no Spaces has nothing to switch between — Other alone
         would be every project — so the row appears only once it has one.
       */}
-      {machine !== null && spaceItems.length > 0 ? (
+      {machine !== null && showWorkspaceTile && selectedWorkspace !== null ? (
+        <View style={styles.workspaceRow}>
+          <WorkspaceTile workspace={selectedWorkspace} onPress={() => setWorkspaceMenuOpen(true)} />
+          {spaceItems.length > 0 ? (
+            <SpaceTabs
+              spaces={spaceItems}
+              selectedSpaceId={selectedSpaceId}
+              countsBySpaceId={spaceCounts}
+              onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
+              style={styles.workspaceRowSpaces}
+            />
+          ) : null}
+        </View>
+      ) : machine !== null && spaceItems.length > 0 ? (
         <SpaceTabs
           spaces={spaceItems}
           selectedSpaceId={selectedSpaceId}
           countsBySpaceId={spaceCounts}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
+        />
+      ) : null}
+      {machine !== null && workspaceMenuOpen && machineWorkspaces !== null && selectedWorkspaceId !== null ? (
+        <ContextMenu
+          visible
+          title={machineDisplayLabel(machine)}
+          items={workspaceMenuItems(machineWorkspaces, selectedWorkspaceId, (workspaceId) => {
+            setWorkspaceMenuOpen(false);
+            selectWorkspace(machine.id, workspaceId);
+          })}
+          onClose={() => setWorkspaceMenuOpen(false)}
         />
       ) : null}
       <FlatList
@@ -1371,6 +1462,7 @@ export default function SessionsScreen({ navigation }: Props) {
           setSessionSearchOpen(false);
           // A result can come from another computer; show that computer's list, as if the row had been tapped there.
           if (machine?.id !== target.id) selectMachine(target.id);
+          revealSessionWorkspace(target.id, session.sessionId);
           void attach(target, session);
         }}
         onClose={() => setSessionSearchOpen(false)}

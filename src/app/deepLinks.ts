@@ -13,6 +13,7 @@ import { useInventoryStore } from '../inventory/store';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useTerminalStore } from '../terminal/sessions';
+import { revealSessionWorkspace } from '../workspaces/store';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
@@ -65,6 +66,8 @@ function handleUrl(url: string | null): void {
     }
     const machine = machinesState.machines.find((entry) => entry.id === machineId);
     if (machine === undefined) return;
+    // Back from the Terminal lands on the list of the workspace this session is in.
+    revealSessionWorkspace(machineId, sessionId);
     const title = sessionTitleFor(machineId, sessionId, urlTitle);
     void useTerminalStore
       .getState()
@@ -79,6 +82,8 @@ function handleUrl(url: string | null): void {
         { sessionId, title },
       )
       .then((sessionKey) => {
+        // On a cold start the summary may only have arrived during the attach.
+        revealSessionWorkspace(machineId, sessionId);
         navigateWhenReady(() => {
           navigationRef.navigate('Terminal', { sessionKey, machineId: machine.id, title });
         });

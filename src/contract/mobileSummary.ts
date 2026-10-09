@@ -98,6 +98,8 @@ export type MobileSummaryWireRoot = {
   sidebarSpaces?: unknown;
   /** Server-normalized custom session tag catalog: {order, tags}; absent when the daemon has none. */
   customSessionTags?: unknown;
+  /** This computer's workspaces (`SidebarWorkspacesState`); absent on a daemon without workspaces. */
+  sidebarWorkspaces?: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -144,6 +146,10 @@ export type GhostexProject = {
   workMode?: boolean;
   /** The worktree's name and branch, which Copy Details quotes; absent for a plain project. */
   worktree?: { name: string; branch: string };
+  /** `launchSettings.workspaceId`; absent = the default workspace (a worktree follows its parent's). */
+  workspaceId?: string;
+  /** Shown in every workspace (the Ghostex config folder's project, where Help chats live). */
+  everyWorkspace?: boolean;
 };
 
 export type GhostexRecentProject = {
@@ -206,6 +212,8 @@ export type GhostexSidebarSpace = {
   color: string;
   memberCollectionIds: string[];
   memberProjectIds: string[];
+  /** The workspace this Space belongs to; absent = the default workspace. */
+  workspaceId?: string;
 };
 
 /** Ordered Space set for one machine. Empty `order` means the daemon has none. */
@@ -239,6 +247,30 @@ export type GhostexCustomSessionTags = {
 
 export const EMPTY_CUSTOM_SESSION_TAGS: GhostexCustomSessionTags = { order: [], tags: {} };
 
+/**
+ * One of the computer's workspaces (gx-protocol `SidebarWorkspace`): a company (`work`) or
+ * Personal, each with its own projects and Spaces.
+ */
+export type GhostexWorkspace = {
+  workspaceId: string;
+  name: string;
+  /** "#rrggbb" the workspace tile is filled with. */
+  color: string;
+  /** The one character drawn on the tile. */
+  letter: string;
+  /** `work` or `personal`. */
+  kind: string;
+};
+
+/** The computer's workspaces (gx-protocol `SidebarWorkspacesState`). */
+export type GhostexWorkspaces = {
+  /** The workspace a project or Space with no (or an unknown) `workspaceId` belongs to. */
+  defaultWorkspaceId: string;
+  /** Display order; every id names a workspace in `workspaces`. */
+  order: string[];
+  workspaces: Record<string, GhostexWorkspace>;
+};
+
 export type GhostexSessionActions = {
   acknowledgeAttention: boolean;
   attach: boolean;
@@ -260,13 +292,29 @@ export type GhostexSessionWork = {
   pullRequestUrl: string;
   /** The linked PR's number, or null; the Link to submenu shows it as `#123`. */
   pullRequestNumber: number | null;
-  linearIssues: { identifier: string; url: string }[];
+  /** `open`, `draft`, `merged` or `closed`; empty without a PR. */
+  pullRequestState: string;
+  /** `passing`, `failing` or `pending`; empty until the checks were read. */
+  pullRequestChecks: string;
+  linearIssues: {
+    identifier: string;
+    url: string;
+    title: string;
+    /** Linear's workflow state type (`started`, `completed`, ...); empty until Linear answered. */
+    stateType: string;
+    /** The team's own name for the state, e.g. "In Review". */
+    stateName: string;
+  }[];
+  /** `state` is `open` or `closed`. */
+  githubIssues: { number: number; title: string; state: string; url: string }[];
   githubIssueUrls: string[];
   githubIssueNumbers: number[];
   linearProjectName: string;
   linearProjectUrl: string;
   /** Some link was set by hand, so Back to automatic has something to undo. */
   handSet: boolean;
+  /** The linked PR is merged and its Clean up / Keep offer is unanswered. */
+  offerCleanup: boolean;
 };
 
 /** Normalized session row: fallback chains applied, provider guaranteed "zmx". */
@@ -433,6 +481,8 @@ export type GhostexMobileSummary = {
   sidebarSpaces: GhostexSidebarSpaces;
   /** Ordered user-defined session tags; empty when the daemon has none. */
   customSessionTags: GhostexCustomSessionTags;
+  /** The computer's workspaces; null on a daemon without workspaces (nothing is filtered then). */
+  workspaces: GhostexWorkspaces | null;
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not
@@ -870,21 +920,46 @@ function parseSessionWork(value: unknown): GhostexSessionWork | null {
     for (const issue of value.linearIssues) {
       if (!isObject(issue)) continue;
       const identifier = trimmedValue(issue, 'identifier');
-      if (identifier.length > 0) linearIssues.push({ identifier, url: trimmedValue(issue, 'url') });
+      if (identifier.length > 0) {
+        linearIssues.push({
+          identifier,
+          url: trimmedValue(issue, 'url'),
+          title: trimmedValue(issue, 'title'),
+          stateType: trimmedValue(issue, 'stateType'),
+          stateName: trimmedValue(issue, 'stateName'),
+        });
+      }
     }
   }
-  const githubIssues = Array.isArray(value.githubIssues) ? value.githubIssues.filter(isObject) : [];
-  const pullRequestNumber = isObject(value.pullRequest) ? value.pullRequest.number : undefined;
+  const githubIssues = (Array.isArray(value.githubIssues) ? value.githubIssues.filter(isObject) : []).flatMap(
+    (issue) =>
+      typeof issue.number === 'number'
+        ? [
+            {
+              number: issue.number,
+              title: trimmedValue(issue, 'title'),
+              state: trimmedValue(issue, 'state'),
+              url: trimmedValue(issue, 'url'),
+            },
+          ]
+        : [],
+  );
+  const pullRequest = isObject(value.pullRequest) ? value.pullRequest : null;
+  const pullRequestNumber = pullRequest === null ? undefined : pullRequest.number;
   return {
     branch: trimmedValue(value, 'branch'),
-    pullRequestUrl: isObject(value.pullRequest) ? trimmedValue(value.pullRequest, 'url') : '',
+    pullRequestUrl: pullRequest === null ? '' : trimmedValue(pullRequest, 'url'),
     pullRequestNumber: typeof pullRequestNumber === 'number' ? pullRequestNumber : null,
+    pullRequestState: pullRequest === null ? '' : trimmedValue(pullRequest, 'state'),
+    pullRequestChecks: pullRequest === null ? '' : trimmedValue(pullRequest, 'checks'),
     linearIssues,
-    githubIssueUrls: githubIssues.map((issue) => trimmedValue(issue, 'url')).filter((url) => url.length > 0),
-    githubIssueNumbers: githubIssues.flatMap((issue) => (typeof issue.number === 'number' ? [issue.number] : [])),
+    githubIssues,
+    githubIssueUrls: githubIssues.map((issue) => issue.url).filter((url) => url.length > 0),
+    githubIssueNumbers: githubIssues.map((issue) => issue.number),
     linearProjectName: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'name') : '',
     linearProjectUrl: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'url') : '',
     handSet: value.handSet === true,
+    offerCleanup: value.offerCleanup === true,
   };
 }
 
@@ -1064,6 +1139,8 @@ function parseProjects(value: unknown): GhostexProject[] {
       worktree: isObject(entry.worktree)
         ? { name: trimmedValue(entry.worktree, 'name'), branch: trimmedValue(entry.worktree, 'branch') }
         : undefined,
+      workspaceId: trimmedValue(entry, 'workspaceId') || undefined,
+      everyWorkspace: entry.everyWorkspace === true ? true : undefined,
     });
   }
   return projects;
@@ -1277,6 +1354,7 @@ export function parseSidebarSpaces(value: unknown): GhostexSidebarSpaces {
       color: /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#4f5663',
       memberCollectionIds: stringArray(entry, 'memberCollectionIds'),
       memberProjectIds: stringArray(entry, 'memberProjectIds'),
+      workspaceId: trimmedValue(entry, 'workspaceId') || undefined,
     };
   }
   const order: string[] = [];
@@ -1344,6 +1422,46 @@ export function parseCustomSessionTags(value: unknown): GhostexCustomSessionTags
   return { order, tags };
 }
 
+/**
+ * Parse the `sidebarWorkspaces` wire key (gx-protocol `SidebarWorkspacesState`). Null when the
+ * daemon has no workspaces, which is also what leaves the phone's list unfiltered. The default
+ * workspace is `personal` when the document names none, as `SidebarWorkspacesState::default_id`.
+ */
+export function parseWorkspaces(value: unknown): GhostexWorkspaces | null {
+  if (!isObject(value) || !isObject(value.workspaces)) return null;
+  const byId = value.workspaces as JsonObject;
+  const workspaces: Record<string, GhostexWorkspace> = {};
+  for (const workspaceId of Object.keys(byId)) {
+    const entry = byId[workspaceId];
+    if (workspaceId.trim().length === 0 || !isObject(entry)) continue;
+    const name = firstNonEmpty(trimmedValue(entry, 'name')) || workspaceId;
+    const rawColor = trimmedValue(entry, 'color');
+    workspaces[workspaceId] = {
+      workspaceId,
+      name,
+      color: /^#[0-9a-f]{6}$/i.test(rawColor) ? rawColor : '#4f5663',
+      letter: firstNonEmpty(trimmedValue(entry, 'letter')) || name.slice(0, 1).toUpperCase(),
+      kind: trimmedValue(entry, 'kind'),
+    };
+  }
+  if (Object.keys(workspaces).length === 0) return null;
+  // Ids missing from `order` are appended so a workspace can never become unreachable here.
+  const order: string[] = [];
+  if (Array.isArray(value.order)) {
+    for (const entry of value.order) {
+      if (typeof entry === 'string' && entry in workspaces && !order.includes(entry)) order.push(entry);
+    }
+  }
+  for (const workspaceId of Object.keys(workspaces)) {
+    if (!order.includes(workspaceId)) order.push(workspaceId);
+  }
+  return {
+    defaultWorkspaceId: trimmedValue(value, 'defaultWorkspaceId') || 'personal',
+    order,
+    workspaces,
+  };
+}
+
 function normalizeRoot(root: JsonObject): GhostexMobileSummary {
   const rawSessions = Array.isArray(root.sessions) ? root.sessions : [];
   const sessions: GhostexSession[] = [];
@@ -1369,6 +1487,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
       : null,
     sidebarSpaces: parseSidebarSpaces(root.sidebarSpaces),
     customSessionTags: parseCustomSessionTags(root.customSessionTags),
+    workspaces: parseWorkspaces(root.sidebarWorkspaces),
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
   };
 }

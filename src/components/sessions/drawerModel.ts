@@ -7,7 +7,8 @@
  *
  * The drawer shows ONE machine, the one its tab strip has selected (desktop
  * parity: packages/core-ui/sidebar-app/machine-tabs.tsx), filtered to the
- * Space that machine's Space row has selected.
+ * workspace that machine's workspace tile has selected, then to the Space its
+ * Space row has selected.
  */
 
 import {
@@ -21,6 +22,7 @@ import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
 import { filterSummaryForSpace } from '../../spaces/spaceFilter';
+import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 
 export type ProjectCardBlock = {
   header: ProjectHeaderItem;
@@ -60,6 +62,8 @@ export type DrawerListInput = {
   inventoriesByMachineId: Record<string, MachineInventory>;
   /** Resolved Space id for the selected machine (a Space id, or "other"). */
   selectedSpaceId: string;
+  /** Resolved workspace id for the selected machine; null when it has no workspaces. */
+  selectedWorkspaceId: string | null;
   collapse: DrawerCollapseInput;
 };
 
@@ -150,6 +154,7 @@ function machineBlocks(
   machine: MachineRecord,
   inventory: MachineInventory | undefined,
   selectedSpaceId: string,
+  selectedWorkspaceId: string | null,
   collapse: DrawerCollapseInput,
   nowMs: number,
 ): DrawerBlock[] {
@@ -185,7 +190,12 @@ function machineBlocks(
       machineId: machine.id,
       nowMs,
       expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[machine.id] ?? []),
-      summary: filterSummaryForSpace(inventory.summary, selectedSpaceId),
+      summary: filterSummaryForSpace(
+        selectedWorkspaceId === null
+          ? inventory.summary
+          : filterSummaryForWorkspace(inventory.summary, selectedWorkspaceId),
+        selectedSpaceId,
+      ),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
       expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[machine.id] ?? []),
@@ -216,7 +226,8 @@ function machineBlocks(
 }
 
 export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
-  const { machines, selectedMachineId, inventoriesByMachineId, selectedSpaceId, collapse } = input;
+  const { machines, selectedMachineId, inventoriesByMachineId, selectedSpaceId, selectedWorkspaceId, collapse } =
+    input;
   if (machines.length === 0) {
     return [
       rowBlock(
@@ -236,6 +247,7 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     machine,
     inventoriesByMachineId[machine.id],
     selectedSpaceId,
+    selectedWorkspaceId,
     collapse,
     input.nowMs ?? Date.now(),
   );

@@ -30,6 +30,7 @@ import {
   summarizeFailure,
 } from '../inventory/client';
 import { hasPassword, type MachineConnectionTarget } from '../machines/credentials';
+import { addedProjectWorkspaceId } from '../workspaces/store';
 
 /** Discovery probes are 5s each and the CLI's own RPC budget defaults to 15s. */
 const DISCOVERY_RPC_TIMEOUT_MS = 30000;
@@ -265,6 +266,7 @@ export async function cloneRepository(
     cloneRepositoryCommand(remoteUrl, destinationPath, {
       waitTimeoutMs: CLONE_WAIT_TIMEOUT_MS,
       timeoutMs: LOOKUP_RPC_TIMEOUT_MS,
+      workspaceId: addedProjectWorkspaceId(machine.id),
     }),
     CLONE_EXEC_TIMEOUT_MS
   );
@@ -287,7 +289,10 @@ export async function addProjectPath(
 ): Promise<void> {
   await runAddProjectCli(
     machine,
-    addProjectCommand(path, { createIfMissing: options.createIfMissing }),
+    addProjectCommand(path, {
+      createIfMissing: options.createIfMissing,
+      workspaceId: addedProjectWorkspaceId(machine.id),
+    }),
     INVENTORY_EXEC_TIMEOUT_MS
   );
 }

@@ -50,6 +50,7 @@ import {
 } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useSpacesStore } from '../spaces/store';
+import { useWorkspacesStore } from '../workspaces/store';
 import { useWebPreviewStore } from '../webPreview/store';
 import { SetupPalette } from '../theme/palette';
 import AdvancedSection from './machine-form/AdvancedSection';
@@ -276,6 +277,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     setRemoveOpen(false);
     clearMachineInventory(existing.id);
     clearMachineSpace(existing.id);
+    useWorkspacesStore.getState().clearMachine(existing.id);
     try {
       markManualDisconnect(existing.id);
       await GhostexNative.disconnect(existing.id);

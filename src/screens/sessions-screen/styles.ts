@@ -92,6 +92,20 @@ export const styles = StyleSheet.create({
     flex: 1,
     marginTop: 12,
   },
+  /** The workspace tile, its hairline, then the Space row; fixed height so the list cannot squeeze it. */
+  workspaceRow: {
+    marginTop: 6,
+    height: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  /** The Space row beside the tile takes the rest of the line; the row above owns the top margin. */
+  workspaceRowSpaces: {
+    marginTop: 0,
+    flex: 1,
+  },
   listContent: {
     paddingBottom: 24,
   },

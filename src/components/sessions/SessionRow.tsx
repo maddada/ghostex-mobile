@@ -40,6 +40,8 @@ import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import { ds } from './rows';
 import { ChevronRightGlyph, ClockGlyph, CoordinatorGlyph, CrewGlyph, PencilGlyph } from './icons';
+import WorkChips, { WORK_SESSION_ROW_HEIGHT, type WorkChipActions } from './WorkChips';
+import { workChips } from './workChipModel';
 import {
   COMPLETION_FLASH_MS,
   COMPLETION_FLASH_OPACITY,
@@ -136,14 +138,14 @@ function ActivityDot({ kind }: { kind: 'working' | 'attention' | 'backgroundWork
  * down to this row's icon (the last thread) or on through the row (a thread with
  * siblings below it), then across to the icon.
  */
-function ThreadConnector({ iconLeft, last }: { iconLeft: number; last: boolean }) {
+function ThreadConnector({ iconLeft, last, rowHeight }: { iconLeft: number; last: boolean; rowHeight: number }) {
   const mid = ds(17);
   const rise = mid - ds(7.5);
   const left = iconLeft - ds(THREAD_INDENT) + ds(7);
   return (
     <View
       pointerEvents="none"
-      style={[styles.threadLine, { left, top: -rise, height: last ? rise + mid : rise + ds(34) }]}
+      style={[styles.threadLine, { left, top: -rise, height: last ? rise + mid : rise + rowHeight }]}
     >
       <View style={[styles.threadLineAcross, { top: rise + mid - 0.5, width: ds(THREAD_INDENT - 6) }]} />
     </View>
@@ -205,6 +207,8 @@ export type SessionRowProps = {
   coordinatorBadge?: CoordinatorBadge;
   /** Folds or unfolds a coordinator's threads; the chevron shows while threads are drawn under it. */
   onToggleThreads?: () => void;
+  /** What a work-mode card's chips do; the card draws its chip line only when it has chips. */
+  workActions?: WorkChipActions;
 };
 
 /**
@@ -225,6 +229,7 @@ export default function SessionRow({
   nesting,
   coordinatorBadge,
   onToggleThreads,
+  workActions,
 }: SessionRowProps) {
   const rowRef = useRef<View | null>(null);
   const iconId = resolveAgentIconId(
@@ -267,6 +272,10 @@ export default function SessionRow({
   const lightActiveBackground = mixHexColors(sidebarForeground, expandedGroupSurface, 30);
   const activeBackground = mixHexColors('#000000', lightActiveBackground, ACTIVE_DARKEN_PERCENT);
   const pressedBackground = mixHexColors(sidebarBackground, '#000000', 90);
+  const chips = useMemo(() => workChips(session.work), [session.work]);
+  const showChips = chips.length > 0 && workActions !== undefined;
+  const rowHeight = ds(showChips ? WORK_SESSION_ROW_HEIGHT : 34);
+  const linePaddingLeft = (inCard ? ds(26) : ds(47)) + titleIndent;
 
   const openMenuFromRow = (): void => {
     const node = rowRef.current;
@@ -280,9 +289,8 @@ export default function SessionRow({
         ref={rowRef}
         accessibilityRole="button"
         style={({ pressed }) => [
-          styles.row,
-          inCard ? styles.rowCard : styles.rowQuick,
-          titleIndent > 0 ? { paddingLeft: (inCard ? ds(26) : ds(47)) + titleIndent } : null,
+          styles.rowBox,
+          { height: rowHeight },
           active ? { backgroundColor: activeBackground } : null,
           !active && pressed ? { backgroundColor: pressedBackground } : null,
         ]}
@@ -290,126 +298,128 @@ export default function SessionRow({
         onLongPress={openMenuFromRow}
       >
         {active ? <View pointerEvents="none" style={styles.activeOutline} /> : null}
-        {depth > 0 ? <ThreadConnector iconLeft={iconLeft} last={nesting?.lastChild === true} /> : null}
-        <View
-          style={[
-            styles.icon,
-            { left: iconLeft },
-            timerClockColor !== null || tagColor !== null
-              ? styles.iconTimer
-              : active && !draftPencil
-                ? styles.iconActive
-                : null,
-          ]}
-        >
-          {/* The clock is 18dp inside the 15dp slot, overhanging it evenly, as on the desktop. */}
-          {timerClockColor !== null ? (
-            <ClockGlyph size={ds(18)} color={timerClockColor} />
-          ) : TagIcon !== undefined && tagColor !== null ? (
-            <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
-          ) : draftPencil ? (
-            <PencilGlyph size={ds(15)} color={sidebarForeground} />
-          ) : session.isCoordinator ? (
-            <CoordinatorGlyph size={ds(13)} color={SidebarPalette.ROW_COORDINATOR_CROWN} />
-          ) : (
-            <Icon size={iconSize} color={agentIconTint(iconId)} />
-          )}
-        </View>
-        {showChevron ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={nesting?.collapsed === true ? 'Show threads' : 'Hide threads'}
-            hitSlop={ds(10)}
-            onPress={onToggleThreads}
-            style={[styles.threadChevron, { left: iconLeft + ds(18) }]}
-          >
-            <ChevronRightGlyph size={ds(14)} color={SidebarPalette.MUTED} rotated={nesting?.collapsed !== true} />
-          </Pressable>
+        {depth > 0 ? (
+          <ThreadConnector iconLeft={iconLeft} last={nesting?.lastChild === true} rowHeight={rowHeight} />
         ) : null}
-        {/*
-          The row's decorations, placed as the desktop row places them
-          (apps/desktop/src/app/native_sidebar/decorations.rs), measured from the
-          leading icon, which sits 5dp in from the desktop card's edge. Each is a
-          SIBLING of the absolutely-placed icon, never a wrapper around it, so it
-          keeps its own full opacity (the icon slot sits at 48%) and cannot move
-          the row. Painted in the desktop's order: note, draft, queue.
+        {/* Line 1: the row as it always was. A work card adds its chip line under it. */}
+        <View style={[styles.row, { paddingLeft: linePaddingLeft }]}>
+          <View
+            style={[
+              styles.icon,
+              { left: iconLeft },
+              timerClockColor !== null || tagColor !== null
+                ? styles.iconTimer
+                : active && !draftPencil
+                  ? styles.iconActive
+                  : null,
+            ]}
+          >
+            {/* The clock is 18dp inside the 15dp slot, overhanging it evenly, as on the desktop. */}
+            {timerClockColor !== null ? (
+              <ClockGlyph size={ds(18)} color={timerClockColor} />
+            ) : TagIcon !== undefined && tagColor !== null ? (
+              <TagIcon size={ds(15)} color={tagColor} strokeWidth={1.9} />
+            ) : draftPencil ? (
+              <PencilGlyph size={ds(15)} color={sidebarForeground} />
+            ) : session.isCoordinator ? (
+              <CoordinatorGlyph size={ds(13)} color={SidebarPalette.ROW_COORDINATOR_CROWN} />
+            ) : (
+              <Icon size={iconSize} color={agentIconTint(iconId)} />
+            )}
+          </View>
+          {showChevron ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={nesting?.collapsed === true ? 'Show threads' : 'Hide threads'}
+              hitSlop={ds(10)}
+              onPress={onToggleThreads}
+              style={[styles.threadChevron, { left: iconLeft + ds(18) }]}
+            >
+              <ChevronRightGlyph size={ds(14)} color={SidebarPalette.MUTED} rotated={nesting?.collapsed !== true} />
+            </Pressable>
+          ) : null}
+          {/*
+            The row's decorations, placed as the desktop row places them
+            (apps/desktop/src/app/native_sidebar/decorations.rs), measured from the
+            leading icon, which sits 5dp in from the desktop card's edge. Each is a
+            SIBLING of the absolutely-placed icon, never a wrapper around it, so it
+            keeps its own full opacity (the icon slot sits at 48%) and cannot move
+            the row. Painted in the desktop's order: note, draft, queue.
 
-          The note dot: 4dp, white, at the row's left edge, level with the icon.
-        */}
-        {session.sessionNote.length > 0 ? (
-          <View pointerEvents="none" style={[styles.noteDot, { left: iconLeft - ds(5) }]} />
-        ) : null}
-        {/*
-          The unsent-draft dot: 6dp #b9d8fa at the icon's top right, raised and
-          pushed right past the queue badge when one is shown.
-        */}
-        {session.hasComposerDraft === true ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.composerDraftDot,
-              session.queuedPromptCount > 0
-                ? { left: iconLeft + ds(14), top: ds(4.5) }
-                : { left: iconLeft + ds(10), top: ds(8.5) },
-            ]}
-          />
-        ) : null}
-        {/*
-          Prompts waiting in this session's Ghostex queue (plan 016 §6): a 10dp
-          badge over the icon's top right, capped at 99+. Hidden at zero.
-        */}
-        {session.queuedPromptCount > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.queueBadge,
-              session.queuedPromptFailedCount > 0 ? styles.queueBadgeFailed : null,
-              { left: iconLeft + ds(8) },
-            ]}
-          >
-            <Text style={styles.queueBadgeCount} numberOfLines={1}>
-              {session.queuedPromptCount > 99 ? '99+' : String(session.queuedPromptCount)}
-            </Text>
-          </View>
-        ) : null}
-        <Text
-          style={[styles.title, active ? styles.titleActive : null]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {title}
-        </Text>
-        {/* sessions.rs: the status dot, then the time, each 6dp after the one before; or the question indicator alone. */}
-        {question || indicator !== null || timeLabel !== null || coordinatorBadge !== undefined ? (
-          <View style={styles.trailing}>
-            {coordinatorBadge !== undefined ? <CoordinatorBadgeView badge={coordinatorBadge} /> : null}
-            {question ? <QuestionIndicator working={session.activity === 'working'} /> : null}
-            {indicator !== null ? <ActivityDot kind={indicator} /> : null}
-            {timeLabel !== null ? (
-              <Text style={[styles.trailingText, session.isSleeping ? styles.trailingTextSleeping : null]}>
-                {timeLabel}
+            The note dot: 4dp, white, at the row's left edge, level with the icon.
+          */}
+          {session.sessionNote.length > 0 ? (
+            <View pointerEvents="none" style={[styles.noteDot, { left: iconLeft - ds(5) }]} />
+          ) : null}
+          {/*
+            The unsent-draft dot: 6dp #b9d8fa at the icon's top right, raised and
+            pushed right past the queue badge when one is shown.
+          */}
+          {session.hasComposerDraft === true ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.composerDraftDot,
+                session.queuedPromptCount > 0
+                  ? { left: iconLeft + ds(14), top: ds(4.5) }
+                  : { left: iconLeft + ds(10), top: ds(8.5) },
+              ]}
+            />
+          ) : null}
+          {/*
+            Prompts waiting in this session's Ghostex queue (plan 016 §6): a 10dp
+            badge over the icon's top right, capped at 99+. Hidden at zero.
+          */}
+          {session.queuedPromptCount > 0 ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.queueBadge,
+                session.queuedPromptFailedCount > 0 ? styles.queueBadgeFailed : null,
+                { left: iconLeft + ds(8) },
+              ]}
+            >
+              <Text style={styles.queueBadgeCount} numberOfLines={1}>
+                {session.queuedPromptCount > 99 ? '99+' : String(session.queuedPromptCount)}
               </Text>
-            ) : null}
-          </View>
-        ) : null}
+            </View>
+          ) : null}
+          <Text
+            style={[styles.title, active ? styles.titleActive : null]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {title}
+          </Text>
+          {/* sessions.rs: the status dot, then the time, each 6dp after the one before; or the question indicator alone. */}
+          {question || indicator !== null || timeLabel !== null || coordinatorBadge !== undefined ? (
+            <View style={styles.trailing}>
+              {coordinatorBadge !== undefined ? <CoordinatorBadgeView badge={coordinatorBadge} /> : null}
+              {question ? <QuestionIndicator working={session.activity === 'working'} /> : null}
+              {indicator !== null ? <ActivityDot kind={indicator} /> : null}
+              {timeLabel !== null ? (
+                <Text style={[styles.trailingText, session.isSleeping ? styles.trailingTextSleeping : null]}>
+                  {timeLabel}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+        {showChips ? <WorkChips chips={chips} paddingLeft={linePaddingLeft} actions={workActions} /> : null}
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  rowBox: {
+    borderRadius: ds(4),
+  },
   row: {
     height: ds(34),
     flexDirection: 'row',
     alignItems: 'center',
     paddingRight: ds(6),
-    borderRadius: ds(4),
-  },
-  rowCard: {
-    paddingLeft: ds(26),
-  },
-  rowQuick: {
-    paddingLeft: ds(47),
   },
   activeOutline: {
     position: 'absolute',

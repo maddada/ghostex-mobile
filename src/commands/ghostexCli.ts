@@ -512,6 +512,11 @@ export function setSessionWorkLinksCommand(
   return `ghostex link-session ${sessionChatSelector(sessionId, projectId)} ${flags.join(' ')} --json`;
 }
 
+/** The merged-PR offer's answer: `ghostex work-mode cleanup --session-id … --project-id … clean-up|keep --json`. */
+export function answerWorkCleanupCommand(sessionId: string, projectId: string, answer: 'cleanUp' | 'keep'): string {
+  return `ghostex work-mode cleanup ${sessionChatSelector(sessionId, projectId)} ${answer === 'cleanUp' ? 'clean-up' : 'keep'} --json`;
+}
+
 /** Work Mode: `ghostex work-mode on|off --project-id <id> --json`. */
 export function setProjectWorkModeCommand(projectId: string, enabled: boolean): string {
   return `ghostex work-mode ${enabled ? 'on' : 'off'} --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
@@ -523,9 +528,20 @@ export function setProjectWorkModeCommand(projectId: string, enabled: boolean): 
  * user typed but has not created yet; without it gxserver keeps rejecting a
  * missing path.
  */
-export function addProjectCommand(path: string, options?: { createIfMissing?: boolean }): string {
+export function addProjectCommand(
+  path: string,
+  options?: { createIfMissing?: boolean; workspaceId?: string },
+): string {
   const createIfMissing = options?.createIfMissing === true ? ' --create-if-missing' : '';
-  return `ghostex add-project ${shellQuote(requirePositional(path, 'project path'))}${createIfMissing} --json`;
+  return (
+    `ghostex add-project ${shellQuote(requirePositional(path, 'project path'))}${createIfMissing}` +
+    `${workspaceFlag(options?.workspaceId)} --json`
+  );
+}
+
+/** `--workspace <id>` puts an added project in the workspace the phone shows; none = the default one. */
+function workspaceFlag(workspaceId: string | undefined): string {
+  return workspaceId === undefined ? '' : ` --workspace ${shellQuote(requireId(workspaceId, 'workspace id'))}`;
 }
 
 /**
@@ -586,7 +602,7 @@ export function lookupRepositoryCommand(
 export function cloneRepositoryCommand(
   remoteUrl: string,
   destinationPath: string,
-  options?: { waitTimeoutMs?: number; timeoutMs?: number },
+  options?: { waitTimeoutMs?: number; timeoutMs?: number; workspaceId?: string },
 ): string {
   const waitTimeout = positiveIntegerFlag(
     '--wait-timeout-ms',
@@ -597,7 +613,7 @@ export function cloneRepositoryCommand(
   return (
     `ghostex clone-repository ${shellQuote(requirePositional(remoteUrl, 'repository URL'))}` +
     ` ${shellQuote(requirePositional(destinationPath, 'destination path'))}` +
-    `${waitTimeout}${timeout} --json`
+    `${waitTimeout}${timeout}${workspaceFlag(options?.workspaceId)} --json`
   );
 }
 

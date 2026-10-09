@@ -24,6 +24,7 @@ import { useInventoryStore } from '../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useSpacesStore } from '../spaces/store';
+import { useWorkspacesStore } from '../workspaces/store';
 import { SetupPalette } from '../theme/palette';
 import MachineCard from './machines-screen/MachineCard';
 import {
@@ -57,6 +58,7 @@ export default function MachinesScreen({ navigation }: Props) {
       setOverlay(NONE);
       clearMachineInventory(machine.id);
       clearMachineSpace(machine.id);
+      useWorkspacesStore.getState().clearMachine(machine.id);
       try {
         markManualDisconnect(machine.id);
         await GhostexNative.disconnect(machine.id);

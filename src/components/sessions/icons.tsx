@@ -571,6 +571,21 @@ export function BriefcaseGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Tabler user (a Personal workspace in the workspace menu). */
+export function UserGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 8 7 a 4 4 0 1 0 8 0 a 4 4 0 0 0 -8 0 M 6 21 v -2 a 4 4 0 0 1 4 -4 h 4 a 4 4 0 0 1 4 4 v 2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Pin (desktop IconPin, mirrored like the sidebar's pinned marker). */
 export function PinGlyph({ size, color }: GlyphProps) {
   return (

@@ -36,6 +36,7 @@ import {
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useTerminalStore } from '../terminal/sessions';
+import { revealSessionWorkspace } from '../workspaces/store';
 import { GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 import type { Appearance } from '../theme/useAppearance';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
@@ -69,6 +70,7 @@ export default function FindPromptScreen({ navigation, route }: Props) {
     async (plan: FindPromptLaunchResult) => {
       if (machine === undefined) return;
       if (plan.mode === 'focus') {
+        revealSessionWorkspace(machine.id, plan.sessionId);
         const sessionKey = await useTerminalStore
           .getState()
           .attachSession(machine, { projectId: plan.projectId, sessionId: plan.sessionId });

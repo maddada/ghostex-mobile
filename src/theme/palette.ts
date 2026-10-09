@@ -75,6 +75,19 @@ export const SidebarPalette = {
   ROW_THREAD_LINE: '#4A4A4A',
   /** Close After Done leading clock, 18dp (icons.rs). */
   ROW_CLOSE_AFTER_DONE_CLOCK: '#F2A2A2',
+  /*
+   * A work-mode card's chip glyphs (apps/desktop/src/app/native_sidebar/work_chips.rs): GitHub's
+   * PR and issue colors and Linear's workflow-state colors.
+   */
+  WORK_OPEN: '#3FB950',
+  WORK_DRAFT: '#8B949E',
+  WORK_MERGED: '#A371F7',
+  WORK_CLOSED: '#F85149',
+  WORK_PENDING: '#D29922',
+  WORK_STARTED: '#F2C94C',
+  WORK_REVIEW: '#4CB782',
+  WORK_DONE: '#5E6AD2',
+  WORK_LINEAR: '#7C84F0',
   /** Failed queued-prompt badge red (desktop decorations.rs #ff6b6b). */
   ERROR_DOT: '#FF6B6B',
   /** Remote sleeping-row dot: mix(--app-muted 86%, --app-foreground 14%). */

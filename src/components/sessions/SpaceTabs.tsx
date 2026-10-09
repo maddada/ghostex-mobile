@@ -15,7 +15,7 @@
  * under the icon.
  */
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
 import {
@@ -40,6 +40,7 @@ export default function SpaceTabs({
   selectedSpaceId,
   countsBySpaceId,
   onSelect,
+  style,
 }: {
   /** The machine's own Spaces, in order; Other is appended here. */
   spaces: readonly SpaceRowItem[];
@@ -47,6 +48,8 @@ export default function SpaceTabs({
   /** spaceSessionCounts: what each chip's status dots draw. */
   countsBySpaceId: Readonly<Record<string, SessionCounts>>;
   onSelect: (spaceId: string) => void;
+  /** Overrides for the row's own box, e.g. when it shares a line with the workspace tile. */
+  style?: StyleProp<ViewStyle>;
 }) {
   const items = [...spaces, OTHER_ROW_ITEM];
   return (
@@ -54,7 +57,7 @@ export default function SpaceTabs({
       contentContainerStyle={styles.row}
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.scroll}
+      style={[styles.scroll, style]}
     >
       {items.map((item) => {
         const selected = item.spaceId === selectedSpaceId;
