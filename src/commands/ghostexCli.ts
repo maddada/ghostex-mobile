@@ -463,6 +463,11 @@ export function removeProjectCommand(projectId: string): string {
   return `ghostex remove-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
 }
 
+/** Work Mode: `ghostex work-mode on|off --project-id <id> --json`. */
+export function setProjectWorkModeCommand(projectId: string, enabled: boolean): string {
+  return `ghostex work-mode ${enabled ? 'on' : 'off'} --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
+}
+
 /**
  * Add project: `ghostex add-project <path> [--create-if-missing] --json`.
  * `--create-if-missing` is what lets the Add Project flow register a folder the

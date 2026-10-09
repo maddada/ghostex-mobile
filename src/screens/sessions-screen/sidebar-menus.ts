@@ -16,13 +16,14 @@
  * gx-core through UniFFI, the two builders below are replaced by the core's output and the
  * renderer and the command runner stay.
  *
- * SEE-ALSO: packages/gx-core/src/sidebar_menu/{session,project,membership,capabilities}.rs,
+ * SEE-ALSO: packages/gx-core/src/sidebar_menu/{session,project,membership,capabilities,copy,clipboard}.rs,
  * packages/gx-core/src/sidebar_view/tags.rs (the default tag list).
  */
 
 import {
   displayStatus,
   type GhostexCustomSessionTags,
+  type GhostexProject,
   type GhostexProjectCollection,
   type GhostexSession,
 } from '../../contract/mobileSummary';
@@ -49,6 +50,9 @@ export type SidebarMenuMessage =
   | { type: 'makeCoordinator'; sessionId: string }
   | { type: 'exportSessionTranscript'; sessionId: string }
   | { type: 'cancelDelayedSend'; sessionId: string }
+  | { type: 'copySessionDetails'; sessionId: string; text: string }
+  | { type: 'copyText'; text: string }
+  | { type: 'setProjectWorkMode'; projectId: string; enabled: boolean }
   | { type: 'copyWorkspaceProjectPathForGroup'; groupId: string }
   | { type: 'removeWorkspaceProjectForGroup'; groupId: string }
   | { type: 'wakeProjectSleepingSessions'; groupId: string }
@@ -404,7 +408,104 @@ export type SessionMenuInput = {
   customTags: GhostexCustomSessionTags;
   /** The rows drawn under this one in its group, for Sleep Below and Close Below. */
   below: readonly GhostexSession[];
+  /** The session's project, whose title and worktree Copy Details quotes; null when unknown. */
+  project: Pick<GhostexProject, 'name' | 'path' | 'worktree'> | null;
 };
+
+// ---------------------------------------------------------------------------
+// The Copy submenu (gx-core `copy.rs` and `clipboard.rs`).
+// ---------------------------------------------------------------------------
+
+/** gx-core `format_identifier`: a known agent's proper name, else the id split and capitalized. */
+function formatIdentifier(value: string): string {
+  const known: Record<string, string> = {
+    browser: 'Browser',
+    claude: 'Claude',
+    codex: 'Codex',
+    copilot: 'Copilot',
+    'cursor-cli': 'Cursor CLI',
+    gemini: 'Gemini',
+    opencode: 'OpenCode',
+    pi: 'Pi',
+    terminal: 'Terminal',
+  };
+  if (known[value] !== undefined) return known[value];
+  return value
+    .split(/[-_]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/**
+ * gx-core `session_details_text`: what another agent needs to reach this session through
+ * `$ghostex-agents`. The phone sees every session as one on the computer the menu is about, which
+ * is how that computer's own sidebar copies it, so there is no Remote Machine line.
+ */
+function sessionDetailsText(session: GhostexSession, project: SessionMenuInput['project']): string {
+  const lines = ['Ghostex Session'];
+  const line = (label: string, value: string | undefined): void => {
+    const text = (value ?? '').trim();
+    if (text.length > 0) lines.push(`${label}: ${text}`);
+  };
+  const title = [session.title, session.primaryTitle, session.displayTitle]
+    .map((value) => value.trim())
+    .find((value) => value.length > 0);
+  line('Agent', session.agentIcon.length > 0 ? formatIdentifier(session.agentIcon) : undefined);
+  line('Title', title ?? 'Session');
+  line('Global Ref', session.globalRef);
+  line('Agent Session ID', session.agentSessionId);
+  line(session.provider.length > 0 ? session.provider : 'zmx', session.providerSessionName || session.zmxName);
+  line('Project', project?.name ?? session.projectName);
+  line('Project Path', project?.path ?? session.projectPath);
+  line('Worktree', project?.worktree?.name);
+  line('Worktree Branch', project?.worktree?.branch);
+  lines.push('More details: use $ghostex-agents');
+  return lines.join('\n');
+}
+
+/**
+ * The Copy submenu: Copy Details always, the other rows only when the session has something for
+ * them.
+ *
+ * CDXC:ContextMenus 2026-10-09 DECISION:
+ * User: Copy Details moves into a Copy submenu next to Copy Branch, Copy Linear ID, Copy PR Link and the like, for normal and work-mode sessions; it stays always available so anyone can hand a session to another agent. The phone's session menu matches the desktop's (2026-10-01), so it has the same submenu.
+ */
+function copySubmenu(session: GhostexSession, project: SessionMenuInput['project']): SidebarMenuItem {
+  const children: SidebarMenuItem[] = [
+    row(
+      'Copy Details',
+      'copy',
+      command({
+        type: 'copySessionDetails',
+        sessionId: session.sessionId,
+        text: sessionDetailsText(session, project),
+      }),
+    ),
+  ];
+  const copyRow = (label: string, icon: string, text: string): void => {
+    if (text.trim().length > 0) children.push(row(label, icon, command({ type: 'copyText', text })));
+  };
+  const work = session.work;
+  const linearIssues = work?.linearIssues ?? [];
+  const lines = (values: readonly string[]): string =>
+    values
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .join('\n');
+  // The work-mode branch wins over the git probe's, as on the desktop (gx-core rows.rs).
+  copyRow('Copy Branch', 'git-branch', (work?.branch ?? '').trim() || (session.gitBranch ?? ''));
+  copyRow(
+    linearIssues.length > 1 ? 'Copy Linear IDs' : 'Copy Linear ID',
+    'hash',
+    linearIssues.map((issue) => issue.identifier).join(', '),
+  );
+  copyRow('Copy Linear Link', 'link', lines(linearIssues.map((issue) => issue.url)));
+  copyRow('Copy PR Link', 'git-pull-request', work?.pullRequestUrl ?? '');
+  copyRow('Copy Issue Link', 'circle-dot', lines(work?.githubIssueUrls ?? []));
+  copyRow('Copy Linear Project Link', 'box', work?.linearProjectUrl ?? '');
+  return submenu('Copy', 'copy', children);
+}
 
 /**
  * The session row's context menu.
@@ -416,7 +517,7 @@ export type SessionMenuInput = {
  * computer's own panes.
  */
 export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
-  const { session, customTags, below } = input;
+  const { session, customTags, below, project } = input;
   const settings = PHONE_MENU_SETTINGS;
   const caps = sessionCapabilities(session);
   const id = session.sessionId;
@@ -555,8 +656,9 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
       ]),
     );
   }
+  if (menu.length > 0) menu.push(separator());
+  menu.push(copySubmenu(session, project));
   if (advanced.length > 1) {
-    menu.push(separator());
     menu.push(submenu('Advanced', 'dots', advanced));
   }
   if (!enabled.includes('close') && rows.close !== undefined) {
@@ -581,6 +683,8 @@ export type ProjectMenuInput = {
   /** The collection the project belongs to, or null. */
   collectionId: string | null;
   collections: readonly GhostexProjectCollection[];
+  /** Work mode is on for the project (`workMode` on the summary's project row). */
+  workMode: boolean;
 };
 
 /** Add to Group (gx-core `project_membership_menu`); Spaces is off on the desktop's defaults. */
@@ -648,6 +752,20 @@ export function buildProjectMenu(input: ProjectMenuInput): SidebarMenuItem[] {
     return menu;
   }
   menu.push(...projectMembershipMenu(input));
+  /*
+   * CDXC:WorkMode 2026-10-09 DECISION:
+   * User: work mode is a per-project switch: right-click the project → Work mode. The phone's project menu has the same tick row, between Add to Group and the first separator like the desktop's, and runs `ghostex work-mode on|off --project-id <id>` on the computer.
+   */
+  if (input.projectId.length > 0) {
+    menu.push({
+      ...row(
+        'Work Mode',
+        'briefcase',
+        command({ type: 'setProjectWorkMode', projectId: input.projectId, enabled: !input.workMode }),
+      ),
+      checked: input.workMode,
+    });
+  }
   menu.push(separator());
   const sleeping = input.sessions.some(isSleepingSession);
   const running = input.sessions.some(isRunningSession);

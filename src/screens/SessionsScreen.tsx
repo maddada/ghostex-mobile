@@ -765,6 +765,7 @@ export default function SessionsScreen({ navigation }: Props) {
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
+    parkedMenuItems,
     machineMenuItems,
     appMenuItems,
     sectionMenuItems,
@@ -867,6 +868,14 @@ export default function SessionsScreen({ navigation }: Props) {
               (sessionId) => attachSessionKey(machineId, sessionId) === selectedSessionKey,
             )}
             onPress={() => collapse.toggleSessionKind(machineId, child.kindCollapseKey)}
+            onMenu={
+              child.section === 'parked' && target !== null
+                ? () => {
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setOverlay({ kind: 'parkedMenu', ctx: { machine: target, item: child } });
+                  }
+                : undefined
+            }
           />
         );
       case 'SESSION_LIST_TOGGLE':
@@ -1511,6 +1520,16 @@ export default function SessionsScreen({ navigation }: Props) {
           title={overlay.ctx.item.title}
           subtitle="Session group"
           items={groupMenuItems(overlay.ctx)}
+          onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'parkedMenu' ? (
+        <ContextMenu
+          visible
+          title={overlay.ctx.item.label}
+          subtitle="Section"
+          items={parkedMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
         />
       ) : null}

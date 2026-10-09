@@ -76,6 +76,10 @@ export type MobileSummaryWireSession = {
   pendingQuestionCount?: number;
   /** Present while a background shell or monitor the agent started still runs after its turn. */
   backgroundWorkDetectedAt?: string;
+  /** Branch of the session's cwd; Copy Branch reads it (`GxserverPresentationSessionGitStatus`). */
+  gitStatus?: { branch?: string | null };
+  /** What a work-mode session is linked to (`GxserverPresentationSessionWork`); absent outside work mode. */
+  work?: unknown;
   /** When an armed Close After Done closes the session, while it counts down. */
   closeAfterDoneDeadlineAt?: string;
   actions?: Partial<GhostexSessionActions>;
@@ -133,6 +137,13 @@ export type GhostexProject = {
    * parent (see src/spaces/otherSpace.ts).
    */
   worktreeParentProjectId: string;
+  /**
+   * Work mode is on for this project (`workMode: true` on the wire, absent when off). The project
+   * menu's Work Mode row ticks from it.
+   */
+  workMode?: boolean;
+  /** The worktree's name and branch, which Copy Details quotes; absent for a plain project. */
+  worktree?: { name: string; branch: string };
 };
 
 export type GhostexRecentProject = {
@@ -240,6 +251,18 @@ export type GhostexSessionActions = {
   wake: boolean;
 };
 
+/**
+ * The links of a work-mode session that the Copy submenu copies (gx-core `SessionWork`); every
+ * field is empty when the session has no such link.
+ */
+export type GhostexSessionWork = {
+  branch: string;
+  pullRequestUrl: string;
+  linearIssues: { identifier: string; url: string }[];
+  githubIssueUrls: string[];
+  linearProjectUrl: string;
+};
+
 /** Normalized session row: fallback chains applied, provider guaranteed "zmx". */
 export type GhostexSession = {
   /** Display-only compact badge; derived from first 4 chars of sessionId when omitted. */
@@ -296,6 +319,10 @@ export type GhostexSession = {
   isFavorite: boolean;
   isPinned: boolean;
   isParked?: boolean;
+  /** The git probe's branch for the session's cwd ('' when none); Copy Branch falls back to it. */
+  gitBranch?: string;
+  /** Present only for a session of a project with work mode on. */
+  work?: GhostexSessionWork;
   /**
    * Current session tag ('' when untagged): a built-in SIDEBAR_SESSION_TAGS
    * value or a `custom-…` id resolved against the machine's `customSessionTags`.
@@ -829,6 +856,29 @@ function aliasFromSessionId(sessionId: string): string {
   return sessionId.length <= 4 ? sessionId : sessionId.slice(0, 4);
 }
 
+/** `work` on the wire (`GxserverPresentationSessionWork`); null when the session has none. */
+function parseSessionWork(value: unknown): GhostexSessionWork | null {
+  if (!isObject(value)) return null;
+  const linearIssues: GhostexSessionWork['linearIssues'] = [];
+  if (Array.isArray(value.linearIssues)) {
+    for (const issue of value.linearIssues) {
+      if (!isObject(issue)) continue;
+      const identifier = trimmedValue(issue, 'identifier');
+      if (identifier.length > 0) linearIssues.push({ identifier, url: trimmedValue(issue, 'url') });
+    }
+  }
+  const githubIssueUrls = Array.isArray(value.githubIssues)
+    ? value.githubIssues.flatMap((issue) => (isObject(issue) ? [trimmedValue(issue, 'url')] : []))
+    : [];
+  return {
+    branch: trimmedValue(value, 'branch'),
+    pullRequestUrl: isObject(value.pullRequest) ? trimmedValue(value.pullRequest, 'url') : '',
+    linearIssues,
+    githubIssueUrls: githubIssueUrls.filter((url) => url.length > 0),
+    linearProjectUrl: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'url') : '',
+  };
+}
+
 /** Parse and normalize one wire session; null when sessionId is missing/empty. */
 export function parseSession(value: unknown): GhostexSession | null {
   if (!isObject(value)) return null;
@@ -915,6 +965,8 @@ export function parseSession(value: unknown): GhostexSession | null {
     isFavorite: boolValue(value, 'isFavorite', false),
     isPinned: boolValue(value, 'isPinned', false),
     isParked: boolValue(value, 'isParked', false),
+    gitBranch: isObject(value.gitStatus) ? trimmedValue(value.gitStatus, 'branch') : '',
+    work: parseSessionWork(value.work) ?? undefined,
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
     delayedSendDeadlineAt: trimmedValue(value, 'delayedSendDeadlineAt'),
@@ -999,6 +1051,10 @@ function parseProjects(value: unknown): GhostexProject[] {
       worktreeParentProjectId: isObject(entry.worktree)
         ? trimmedValue(entry.worktree, 'parentProjectId')
         : '',
+      workMode: entry.workMode === true,
+      worktree: isObject(entry.worktree)
+        ? { name: trimmedValue(entry.worktree, 'name'), branch: trimmedValue(entry.worktree, 'branch') }
+        : undefined,
     });
   }
   return projects;

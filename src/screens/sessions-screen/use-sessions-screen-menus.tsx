@@ -59,6 +59,7 @@ import {
   promoteCoordinatorCommand,
   moveProjectCommand,
   removeProjectCommand,
+  setProjectWorkModeCommand,
   updateProjectCollectionsCommand,
 } from '../../commands/ghostexCli';
 import {
@@ -105,6 +106,7 @@ import {
   type CollectionContext,
   type GroupContext,
   type Overlay,
+  type ParkedContext,
   type ProjectContext,
   type SessionContext,
 } from './session-actions';
@@ -114,6 +116,8 @@ import {
   buildProjectMenu,
   buildSessionMenu,
   isInactiveSession,
+  isRunningSession as isRunningMenuSession,
+  isBrowserSession as isBrowserMenuSession,
   type SidebarMenuCommand,
   type SidebarMenuMessage,
 } from './sidebar-menus';
@@ -364,6 +368,14 @@ export function useSessionsScreenMenus({
     );
   };
 
+  /** Close the menu, put `text` on the phone's clipboard and say so. */
+  const copyToClipboard = (text: string, notice: string): void => {
+    setOverlay(NONE);
+    void Clipboard.setStringAsync(text)
+      .then(() => setTransientStatus(notice))
+      .catch((error: unknown) => setTransientStatus(error instanceof Error ? error.message : String(error)));
+  };
+
   /** One `command` message from a session or project menu. */
   const runMenuMessage = (
     machine: MachineRecord,
@@ -423,12 +435,19 @@ export function useSessionsScreenMenus({
       }
       case 'copyWorkspaceProjectPathForGroup': {
         const { header } = requireProject();
-        setOverlay(NONE);
-        void Clipboard.setStringAsync(header.projectPath)
-          .then(() => setTransientStatus('Path copied'))
-          .catch((error: unknown) => setTransientStatus(error instanceof Error ? error.message : String(error)));
+        copyToClipboard(header.projectPath, 'Path copied');
         return;
       }
+      case 'copySessionDetails':
+        copyToClipboard(message.text, 'Details copied');
+        return;
+      case 'copyText':
+        copyToClipboard(message.text, 'Copied');
+        return;
+      case 'setProjectWorkMode':
+        setOverlay(NONE);
+        void runSessionCommand(machine, setProjectWorkModeCommand(message.projectId, message.enabled));
+        return;
       case 'removeWorkspaceProjectForGroup': {
         const { header } = requireProject();
         setOverlay({
@@ -543,6 +562,10 @@ export function useSessionsScreenMenus({
       session: ctx.item.session,
       customTags: summaryFor(ctx.machine.id)?.customSessionTags ?? EMPTY_CUSTOM_SESSION_TAGS,
       below: sessionsBelow(ctx),
+      project:
+        summaryFor(ctx.machine.id)?.projects.find(
+          (project) => project.projectId === ctx.item.session.projectId,
+        ) ?? null,
     });
     const view = sidebarMenuView(menu, menuPath, {
       openPath: (next) => setOverlay({ kind: 'sessionMenu', ctx, menuPath: next }),
@@ -568,6 +591,7 @@ export function useSessionsScreenMenus({
       sessions: sessionsForProject(ctx.machine, header),
       collectionId: collectionIdForProject(summary?.projectCollectionsState ?? null, header.projectId),
       collections: summary?.projectCollections ?? [],
+      workMode: summary?.projects.find((project) => project.projectId === header.projectId)?.workMode === true,
     });
     const view = sidebarMenuView(menu, menuPath, {
       openPath: (next) => setOverlay({ kind: 'projectMenu', ctx, menuPath: next }),
@@ -914,6 +938,59 @@ export function useSessionsScreenMenus({
         }),
     });
     return items;
+  };
+
+  /**
+   * The Parked heading's menu (gx-core `section_menu`): Sleep All and Close All act on every parked
+   * session of the project, the ones a collapsed heading hides too.
+   *
+   * CDXC:Sessions 2026-10-09 DECISION:
+   * User: right-clicking the Parked header offers Sleep All and Close All; the phone's long press on the Parked heading opens the same menu. Sleep All sleeps the running parked sessions and is greyed when there are none; Close All asks first, like the other bulk closes.
+   *
+   * SEE-ALSO: packages/gx-core/src/sidebar_menu/section.rs.
+   */
+  const parkedMenuItems = (ctx: ParkedContext): ContextMenuItem[] => {
+    const summary = summaryFor(ctx.machine.id);
+    const parked = ctx.item.status.sessionIds.flatMap((sessionId) => {
+      const session = summary?.sessions.find((entry) => entry.sessionId === sessionId);
+      return session === undefined ? [] : [session];
+    });
+    const sleepable = parked.filter(
+      (session) => !isBrowserMenuSession(session) && isRunningMenuSession(session),
+    );
+    return [
+      {
+        kind: 'item',
+        key: 'sleep-all',
+        label: 'Sleep All',
+        icon: <SleepGlyph size={14} color={menuIconColor} />,
+        disabled: sleepable.length === 0,
+        onPress: () => {
+          setOverlay(NONE);
+          void runBulkSessionActions(
+            ctx.machine,
+            sleepable.map((session) => lifecycleSessionAction(session, true)),
+          );
+        },
+      },
+      { kind: 'separator', key: 'sep-1' },
+      {
+        kind: 'item',
+        key: 'close-all',
+        label: 'Close All',
+        icon: <XGlyph size={14} color={dangerIconColor} />,
+        destructive: true,
+        disabled: parked.length === 0,
+        onPress: () =>
+          setOverlay({
+            kind: 'confirmAction',
+            title: 'Close parked sessions?',
+            body: `This stops ${parked.length} parked session(s) on the connected machine.`,
+            confirmLabel: 'Close',
+            run: () => void runBulkSessionActions(ctx.machine, parked.map(closeSessionAction)),
+          }),
+      },
+    ];
   };
 
   /**
@@ -1325,6 +1402,7 @@ export function useSessionsScreenMenus({
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
+    parkedMenuItems,
     machineMenuItems,
     appMenuItems,
     sectionMenuItems,

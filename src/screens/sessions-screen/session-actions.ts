@@ -15,7 +15,13 @@ import {
   tagSessionCommand,
   wakeSessionCommand,
 } from '../../commands/ghostexCli';
-import type { CollectionHeaderItem, GroupHeaderItem, ProjectHeaderItem, SessionItem } from '../../contract/grouping';
+import type {
+  CollectionHeaderItem,
+  GroupHeaderItem,
+  ProjectHeaderItem,
+  SessionItem,
+  SessionKindLabelItem,
+} from '../../contract/grouping';
 import type { GhostexQuickAction, GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
@@ -33,6 +39,8 @@ export type ProjectContext = { machine: MachineRecord; header: ProjectHeaderItem
 
 export type CollectionContext = { machine: MachineRecord; header: CollectionHeaderItem };
 export type GroupContext = { machine: MachineRecord; item: GroupHeaderItem };
+/** A Parked section heading (the only section heading with a menu). */
+export type ParkedContext = { machine: MachineRecord; item: SessionKindLabelItem };
 export type MachineContext = { machine: MachineRecord };
 
 export type Overlay =
@@ -54,6 +62,7 @@ export type Overlay =
   | { kind: 'collectionMenu'; ctx: CollectionContext; view: 'root' | 'colors' }
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }
   | { kind: 'groupMenu'; ctx: GroupContext }
+  | { kind: 'parkedMenu'; ctx: ParkedContext }
   | { kind: 'machineMenu'; ctx: MachineContext }
   /** Header hamburger: Search Prompts, Settings, Logout. */
   | { kind: 'appMenu' }

@@ -1046,6 +1046,7 @@ export function SessionKindLabelRow({
   status,
   active,
   onPress,
+  onMenu,
 }: {
   label: string;
   collapsed: boolean;
@@ -1054,6 +1055,8 @@ export function SessionKindLabelRow({
   /** The selected session is one of this section's. */
   active: boolean;
   onPress: () => void;
+  /** Long press: the heading's menu. Only the Parked heading has one. */
+  onMenu?: () => void;
 }) {
   return (
     <View style={kindLabelStyles.row}>
@@ -1067,6 +1070,7 @@ export function SessionKindLabelRow({
           pressed ? kindLabelStyles.buttonPressed : null,
         ]}
         onPress={onPress}
+        onLongPress={onMenu}
       >
         <Text style={kindLabelStyles.label} numberOfLines={1}>
           {label.toUpperCase()}
