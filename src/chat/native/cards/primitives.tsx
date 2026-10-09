@@ -193,19 +193,17 @@ export function ChoiceRowLabelMeasure({ label, onWidth }: { label: string; onWid
   );
 }
 
-/** The question card's footer button (`question_button`): bordered, or ghost without a border. */
+/** The question card's footer button (`question_button`): always bordered (CDXC:SessionChat 2026-10-09 on the desktop's `question_button`). */
 export function CardButton({
   label,
   onPress,
   disabled,
-  ghost,
   wide,
   tint,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  ghost?: boolean;
   wide?: boolean;
   tint?: string;
 }) {
@@ -221,7 +219,6 @@ export function CardButton({
       hitSlop={6}
       style={({ pressed }) => [
         styles.cardButton,
-        ghost ? styles.cardButtonGhost : null,
         wide ? styles.cardButtonWide : null,
         disabled === true && styles.disabled,
         pressed && { backgroundColor: P.input },
@@ -423,9 +420,6 @@ const useStyles = themedStyles((P) => ({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: P.controlBorder,
-  },
-  cardButtonGhost: {
-    borderColor: 'transparent',
   },
   cardButtonWide: {
     minWidth: 96,

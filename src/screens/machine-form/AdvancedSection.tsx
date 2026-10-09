@@ -171,7 +171,7 @@ function HostKeyRow({ onResetHostKey }: AdvancedSectionProps) {
         onResetHostKey === null ? (
           <Text style={formStyles.rowValue}>{copy.hostKeyNew}</Text>
         ) : (
-          <SetupButton small variant="ghost" label={copy.hostKeyReset} busy={resetting} onPress={reset} />
+          <SetupButton small label={copy.hostKeyReset} busy={resetting} onPress={reset} />
         )
       }
     />
@@ -233,7 +233,6 @@ function EasyConnectRows(props: AdvancedSectionProps) {
             address.length > 0 ? (
               <SetupButton
                 small
-                variant="ghost"
                 label={addressCopied ? copy.copied : copy.copyAddress}
                 onPress={() => copyAddress(address)}
               />
@@ -256,7 +255,6 @@ function EasyConnectRows(props: AdvancedSectionProps) {
             hasKey ? (
               <SetupButton
                 small
-                variant="ghost"
                 label={keyCopied ? copy.copied : copy.copyPublicKey}
                 onPress={() => copyKey(props.publicKey ?? '')}
               />

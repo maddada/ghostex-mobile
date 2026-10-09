@@ -197,7 +197,6 @@ export default function ConnectedScreen({ navigation, route }: Props) {
       <View style={styles.footer}>
         <SetupButton variant='primary' large label={ConnectedCopy.openSessions} onPress={openSessions} />
         <SetupButton
-          variant='ghost'
           label={ConnectedCopy.addAnother}
           onPress={() => navigation.navigate('ConnectChoose')}
         />

@@ -116,7 +116,7 @@ export default function UpdatesPage() {
                 label={UpdatesCopy.downloading(downloadPercent(download))}
                 onPress={() => undefined}
               />
-              <SetupButton variant='ghost' label={UpdatesCopy.cancelButton} onPress={cancelDownload} />
+              <SetupButton label={UpdatesCopy.cancelButton} onPress={cancelDownload} />
             </>
           ) : (
             <SetupButton

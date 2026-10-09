@@ -133,7 +133,7 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
 
   const actions = [
     index > 0 ? (
-      <CardButton key="back" label="←" ghost disabled={busy} onPress={() => dispatch({ type: 'questionBack' })} />
+      <CardButton key="back" label="←" disabled={busy} onPress={() => dispatch({ type: 'questionBack' })} />
     ) : null,
     allowCustom ? (
       <TextInput
@@ -153,7 +153,7 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
     ) : (
       <View key="spacer" style={styles.spacer} />
     ),
-    <CardButton key="cancel" label="Cancel" ghost disabled={busy} onPress={() => dispatch({ type: 'questionCancel' })} />,
+    <CardButton key="cancel" label="Cancel" disabled={busy} onPress={() => dispatch({ type: 'questionCancel' })} />,
     <CardButton
       key="next"
       label={card.controls.label}

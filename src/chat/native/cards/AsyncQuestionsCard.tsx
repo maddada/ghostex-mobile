@@ -115,7 +115,7 @@ export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; documen
               </>
             ) : null}
             <View style={styles.spacer} />
-            <CardButton label="Skip" ghost tint={P.primary} disabled={busy} onPress={() => dispatch({ type: 'asyncQuestionSkip' })} />
+            <CardButton label="Skip" tint={P.primary} disabled={busy} onPress={() => dispatch({ type: 'asyncQuestionSkip' })} />
             <CardButton
               label={state.submitting ? 'Sending…' : 'Send answer'}
               disabled={busy || state.answer.trim().length === 0}

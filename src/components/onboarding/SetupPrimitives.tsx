@@ -2,7 +2,8 @@
  * Shared building blocks of the setup flow, styled with SetupPalette so every
  * screen renders the same button, row group, callout and text styles as the
  * mockup (docs/2026-09-03/mobile-setup/shared.css): white primary button,
- * bordered secondary, ghost tertiary; #1d1d1d row groups with hairline
+ * bordered secondary (no borderless buttons: CDXC:AppModal 2026-10-09 in the desktop's
+ * `settings_button_sized`); #1d1d1d row groups with hairline
  * dividers; 12px sections, 8px controls.
  */
 
@@ -23,7 +24,7 @@ import { GhostexRadii, GhostexStrokeWidth, SetupPalette } from '../../theme/pale
 
 export const SETUP_MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
-export type SetupButtonVariant = 'primary' | 'secondary' | 'ghost';
+export type SetupButtonVariant = 'primary' | 'secondary';
 
 export type SetupButtonProps = {
   label: string;
@@ -53,11 +54,7 @@ export function SetupButton({
   accessibilityLabel,
 }: SetupButtonProps) {
   const labelColor =
-    variant === 'primary'
-      ? SetupPalette.PRIMARY_BUTTON_FOREGROUND
-      : variant === 'ghost'
-        ? SetupPalette.MUTED
-        : SetupPalette.FOREGROUND;
+    variant === 'primary' ? SetupPalette.PRIMARY_BUTTON_FOREGROUND : SetupPalette.FOREGROUND;
   return (
     <Pressable
       accessibilityRole="button"
@@ -68,7 +65,6 @@ export function SetupButton({
         buttonStyles.base,
         variant === 'primary' ? buttonStyles.primary : null,
         variant === 'secondary' ? buttonStyles.secondary : null,
-        variant === 'ghost' ? buttonStyles.ghost : null,
         large ? buttonStyles.large : null,
         small ? buttonStyles.small : null,
         pressed ? buttonStyles.pressed : null,
@@ -116,10 +112,6 @@ const buttonStyles = StyleSheet.create({
   secondary: {
     backgroundColor: SetupPalette.CARD,
     borderColor: SetupPalette.BORDER_STRONG,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
   },
   large: {
     height: 48,
