@@ -15,7 +15,7 @@ import { FileChangeStack } from './FileChanges';
 import { ImageRow } from './Images';
 import { arr, obj, str } from './json';
 import { Markdown } from './markdown/Markdown';
-import { DeliveryIndicator, hasReplyActions, ReplyActions, UserActions } from './MessageActions';
+import { DeliveryIndicator, hasReplyActions, isFlushReply, ReplyActions, UserActions } from './MessageActions';
 import { openTranscriptMenu } from './transcriptMenuStore';
 import { useDisclosure } from './state';
 import { estimatedLines, InterAgentCard, SentAgentMessageCards, StartupDelivery, SuppressedRow, SystemCard, TerminalToolRow } from './SystemRows';
@@ -117,6 +117,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const body = typeof message.text === 'string' ? message.text : '';
   const reasoning = message.role === 'reasoning';
   const hasTools = arr(message.tools).length > 0;
+  const flush = isFlushReply(message, flags.finalIds);
   const toolsKey = reasoning ? `reasoning:${id}` : `tools:${id}`;
   const [toolsOpen, toggleTools] = useDisclosure(disclosures, toolsKey, verbose);
   const openMenu = useMessageMenu(message);
@@ -144,7 +145,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
       // An agent's own words are the heading its tool calls hang from (React's AgentToolsDisclosure).
       const heading = (
         <View style={styles.heading}>
-          {hasTools ? <Chevron open={toolsOpen} color={theme.primary} /> : <LaneMarker color={theme.primary} />}
+          {hasTools ? <Chevron open={toolsOpen} color={theme.primary} /> : flush ? null : <LaneMarker color={theme.primary} />}
           <View style={styles.headingBody}>
             <Markdown text={body} references={message.markdownReferences} color={proseColor} selectable={openMenu === undefined} />
           </View>
@@ -187,7 +188,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
       {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. */}
       {!inWorkFold ? <QuestionExchangeCards exchanges={message.questions} /> : null}
       {!inWorkFold ? <SentAgentMessageCards cards={message.sentMessages} /> : null}
-      {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} /> : null}
+      {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} flush={flush} /> : null}
     </View>
   );
 }

@@ -12,7 +12,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import type { ProjectedMessage } from '../../rust/document';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { Glyph, type GlyphName } from './icons';
-import { obj, str } from './json';
+import { arr, obj, str } from './json';
 import { rememberSaveMarkdown } from './saveMarkdownStore';
 import { PROSE_COLUMN } from './theme';
 
@@ -57,6 +57,14 @@ function MessageTime({ message }: { message: ProjectedMessage }) {
   );
 }
 
+/**
+ * A turn's final answer with no tool calls of its own: drawn flush with the chat column, without
+ * the reply dot (desktop `is_flush_reply` in native_chat/message_actions.rs).
+ */
+export function isFlushReply(message: ProjectedMessage, finalIds: ReadonlySet<string>): boolean {
+  return message.role === 'assistant' && arr(message.tools).length === 0 && finalIds.has(message.id);
+}
+
 /** Whether a reply gets its actions: a copyable assistant row whose turn is final. */
 export function hasReplyActions(message: ProjectedMessage, finalIds: ReadonlySet<string>): boolean {
   return message.role === 'assistant' && obj(message.actionContent)?.copyable === true && finalIds.has(message.id);
@@ -67,12 +75,12 @@ export function hasReplyActions(message: ProjectedMessage, finalIds: ReadonlySet
  * opens the reply in the desktop Docs review surface, which the phone does not have, so it is left
  * out rather than drawn as a control that does nothing.
  */
-export const ReplyActions = memo(function ReplyActions({ message }: { message: ProjectedMessage }) {
+export const ReplyActions = memo(function ReplyActions({ message, flush }: { message: ProjectedMessage; flush: boolean }) {
   const { dispatch } = useTranscriptEnv();
   const markdown = typeof message.copyText === 'string' ? message.copyText : '';
   const canSave = obj(message.actionContent)?.canSaveMarkdown === true;
   return (
-    <View style={[styles.row, { paddingLeft: PROSE_COLUMN }]}>
+    <View style={[styles.row, { paddingLeft: flush ? 0 : PROSE_COLUMN }]}>
       <View style={styles.buttons}>
         <CopyButton text={markdown} label='Copy message' />
         {canSave ? (
