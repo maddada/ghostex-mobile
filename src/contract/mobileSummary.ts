@@ -311,6 +311,12 @@ export type GhostexSessionWork = {
   githubIssueNumbers: number[];
   linearProjectName: string;
   linearProjectUrl: string;
+  /**
+   * A GitHub Project (gx-protocol `PresentationWorkGithubProject`), sent instead of the Linear
+   * project when the workspace's primary tracker is GitHub: its title, else `owner/number`.
+   */
+  githubProjectName: string;
+  githubProjectUrl: string;
   /** Some link was set by hand, so Back to automatic has something to undo. */
   handSet: boolean;
   /** The linked PR is merged and its Clean up / Keep offer is unanswered. */
@@ -958,6 +964,11 @@ function parseSessionWork(value: unknown): GhostexSessionWork | null {
     githubIssueNumbers: githubIssues.map((issue) => issue.number),
     linearProjectName: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'name') : '',
     linearProjectUrl: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'url') : '',
+    githubProjectName: isObject(value.githubProject)
+      ? trimmedValue(value.githubProject, 'title') ||
+        `${trimmedValue(value.githubProject, 'owner')}/${String(value.githubProject.number ?? '')}`
+      : '',
+    githubProjectUrl: isObject(value.githubProject) ? trimmedValue(value.githubProject, 'url') : '',
     handSet: value.handSet === true,
     offerCleanup: value.offerCleanup === true,
   };
