@@ -63,7 +63,8 @@ export function ForkBranchBadge({ chat }: { chat: RustChat }) {
 
 const styles = StyleSheet.create({
   // Clear of the list's own scroll indicator at the right edge, as desktop keeps it off its scrollbar.
-  anchor: { position: 'absolute', top: 6, right: 10 },
+  // 27 = 10 + the 17 the user moved it left on desktop (2026-10-10), so the two chats match.
+  anchor: { position: 'absolute', top: 6, right: 27 },
   badge: { height: 24, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, borderWidth: 1 },
   count: { fontSize: 11 },
 });
