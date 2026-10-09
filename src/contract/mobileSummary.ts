@@ -258,9 +258,15 @@ export type GhostexSessionActions = {
 export type GhostexSessionWork = {
   branch: string;
   pullRequestUrl: string;
+  /** The linked PR's number, or null; the Link to submenu shows it as `#123`. */
+  pullRequestNumber: number | null;
   linearIssues: { identifier: string; url: string }[];
   githubIssueUrls: string[];
+  githubIssueNumbers: number[];
+  linearProjectName: string;
   linearProjectUrl: string;
+  /** Some link was set by hand, so Back to automatic has something to undo. */
+  handSet: boolean;
 };
 
 /** Normalized session row: fallback chains applied, provider guaranteed "zmx". */
@@ -867,15 +873,18 @@ function parseSessionWork(value: unknown): GhostexSessionWork | null {
       if (identifier.length > 0) linearIssues.push({ identifier, url: trimmedValue(issue, 'url') });
     }
   }
-  const githubIssueUrls = Array.isArray(value.githubIssues)
-    ? value.githubIssues.flatMap((issue) => (isObject(issue) ? [trimmedValue(issue, 'url')] : []))
-    : [];
+  const githubIssues = Array.isArray(value.githubIssues) ? value.githubIssues.filter(isObject) : [];
+  const pullRequestNumber = isObject(value.pullRequest) ? value.pullRequest.number : undefined;
   return {
     branch: trimmedValue(value, 'branch'),
     pullRequestUrl: isObject(value.pullRequest) ? trimmedValue(value.pullRequest, 'url') : '',
+    pullRequestNumber: typeof pullRequestNumber === 'number' ? pullRequestNumber : null,
     linearIssues,
-    githubIssueUrls: githubIssueUrls.filter((url) => url.length > 0),
+    githubIssueUrls: githubIssues.map((issue) => trimmedValue(issue, 'url')).filter((url) => url.length > 0),
+    githubIssueNumbers: githubIssues.flatMap((issue) => (typeof issue.number === 'number' ? [issue.number] : [])),
+    linearProjectName: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'name') : '',
     linearProjectUrl: isObject(value.linearProject) ? trimmedValue(value.linearProject, 'url') : '',
+    handSet: value.handSet === true,
   };
 }
 

@@ -5,6 +5,7 @@
  */
 
 import {
+  type WorkLinkKind,
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
   killSessionCommand,
@@ -49,6 +50,8 @@ export type Overlay =
   | { kind: 'sessionMenu'; ctx: SessionContext; menuPath: readonly string[] }
   | { kind: 'rename'; ctx: SessionContext; error: string | null }
   | { kind: 'sessionNote'; ctx: SessionContext }
+  /** The Link to picker for one kind of work link. */
+  | { kind: 'workLinkPicker'; ctx: SessionContext; linkKind: WorkLinkKind }
   | { kind: 'delayedSend'; ctx: SessionContext }
   | { kind: 'closeConfirm'; ctx: SessionContext }
   /** Handoff / Export's result: the exported path and the follow-up conversation. */

@@ -60,6 +60,9 @@ import {
   moveProjectCommand,
   removeProjectCommand,
   setProjectWorkModeCommand,
+  setSessionWorkLinksCommand,
+  workLinkCandidatesCommand,
+  type WorkLinkKind,
   updateProjectCollectionsCommand,
 } from '../../commands/ghostexCli';
 import {
@@ -111,6 +114,7 @@ import {
   type SessionContext,
 } from './session-actions';
 import { parseCoordinatorOptions, type CoordinatorOptions } from './NewCoordinatorSheet';
+import { parseWorkLinkCandidates, type WorkLinkCandidates } from './work-link-picker';
 import { sidebarMenuView } from './sidebar-menu-view';
 import {
   buildProjectMenu,
@@ -354,6 +358,36 @@ export function useSessionsScreenMenus({
     }
   };
 
+  /** The Link to picker's suggestions for `query` (`ghostex link-session --candidates`). */
+  const loadWorkLinkCandidates = async (
+    ctx: SessionContext,
+    kind: WorkLinkKind,
+    query: string,
+  ): Promise<WorkLinkCandidates> => {
+    const { session } = ctx.item;
+    const result = await runGhostexCli(
+      ctx.machine,
+      workLinkCandidatesCommand(session.sessionId, session.projectId, kind, query),
+      { timeoutMs: 45_000 },
+    );
+    return parseWorkLinkCandidates(result.json);
+  };
+
+  /** A pick in the Link to picker: the chosen values replace what that kind linked to. */
+  const saveWorkLinks = (ctx: SessionContext, kind: WorkLinkKind, values: readonly string[]): void => {
+    const { session } = ctx.item;
+    setOverlay(NONE);
+    const links =
+      kind === 'pullRequest'
+        ? { pullRequest: values[0] ?? 'none' }
+        : kind === 'linearProject'
+          ? { linearProject: values[0] ?? '' }
+          : kind === 'linearIssue'
+            ? { linearIssues: values }
+            : { githubIssues: values };
+    void runSessionCommand(ctx.machine, setSessionWorkLinksCommand(session.sessionId, session.projectId, links));
+  };
+
   /** The exported transcript's follow-up: the same agent, with the path staged as its first input. */
   const startTranscriptConversation = (exported: ExportedTranscript, projectTitle: string): void => {
     if (exported.agentId.length === 0) return;
@@ -444,6 +478,12 @@ export function useSessionsScreenMenus({
       case 'copyText':
         copyToClipboard(message.text, 'Copied');
         return;
+      case 'setSessionWorkLinks': {
+        const { session } = requireSession().item;
+        setOverlay(NONE);
+        void runSessionCommand(machine, setSessionWorkLinksCommand(session.sessionId, session.projectId, message.links));
+        return;
+      }
       case 'setProjectWorkMode':
         setOverlay(NONE);
         void runSessionCommand(machine, setProjectWorkModeCommand(message.projectId, message.enabled));
@@ -527,7 +567,9 @@ export function useSessionsScreenMenus({
           if (ctx === undefined) throw new Error('A session action needs a session.');
           if (menuCommand.action === 'rename') setOverlay({ kind: 'rename', ctx, error: null });
           else if (menuCommand.action === 'note') setOverlay({ kind: 'sessionNote', ctx });
-          else setOverlay({ kind: 'delayedSend', ctx });
+          else if (menuCommand.action === 'linkWork') {
+            setOverlay({ kind: 'workLinkPicker', ctx, linkKind: menuCommand.kind });
+          } else setOverlay({ kind: 'delayedSend', ctx });
           return;
         }
         case 'projectMembership': {
@@ -1399,6 +1441,8 @@ export function useSessionsScreenMenus({
     sessionMenuView,
     projectMenuView,
     startTranscriptConversation,
+    loadWorkLinkCandidates,
+    saveWorkLinks,
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,

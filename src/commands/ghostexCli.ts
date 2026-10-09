@@ -463,6 +463,55 @@ export function removeProjectCommand(projectId: string): string {
   return `ghostex remove-project --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;
 }
 
+/** The four things a session's work links name (`WorkLinkKind` in server/src/work_mode/candidates.rs). */
+export type WorkLinkKind = 'pullRequest' | 'linearIssue' | 'linearProject' | 'githubIssue';
+
+/**
+ * A change to a session's work links, in the shape `/api/setSessionWorkLinks` takes (and the
+ * desktop's Unlink rows send): `pullRequest: 'none'`, `linearIssues: []`, `githubIssues: []` and
+ * `linearProject: ''` unlink a kind, `clear` hands every kind back to the branch.
+ */
+export type SessionWorkLinks = {
+  clear?: true;
+  pullRequest?: string;
+  linearIssues?: readonly string[];
+  githubIssues?: readonly string[];
+  linearProject?: string;
+};
+
+/** Link to picker suggestions: `ghostex link-session --session-id … --project-id … --candidates <kind> [--query q] --json`. */
+export function workLinkCandidatesCommand(
+  sessionId: string,
+  projectId: string,
+  kind: WorkLinkKind,
+  query: string,
+): string {
+  const trimmed = query.trim();
+  return (
+    `ghostex link-session ${sessionChatSelector(sessionId, projectId)} --candidates ${kind}` +
+    `${trimmed.length > 0 ? ` --query ${shellQuote(trimmed)}` : ''} --json`
+  );
+}
+
+/** Link or unlink: `ghostex link-session … [--pr n|none] [--linear A,B|none] [--issue n|none] [--linear-project name|none] [--auto] --json`. */
+export function setSessionWorkLinksCommand(
+  sessionId: string,
+  projectId: string,
+  links: SessionWorkLinks,
+): string {
+  const list = (values: readonly string[]): string => shellQuote(values.length > 0 ? values.join(',') : 'none');
+  const flags: string[] = [];
+  if (links.clear === true) flags.push('--auto');
+  if (links.pullRequest !== undefined) flags.push(`--pr ${shellQuote(links.pullRequest.trim() || 'none')}`);
+  if (links.linearIssues !== undefined) flags.push(`--linear ${list(links.linearIssues)}`);
+  if (links.githubIssues !== undefined) flags.push(`--issue ${list(links.githubIssues)}`);
+  if (links.linearProject !== undefined) {
+    flags.push(`--linear-project ${shellQuote(links.linearProject.trim() || 'none')}`);
+  }
+  if (flags.length === 0) throw new Error('There is no link to change.');
+  return `ghostex link-session ${sessionChatSelector(sessionId, projectId)} ${flags.join(' ')} --json`;
+}
+
 /** Work Mode: `ghostex work-mode on|off --project-id <id> --json`. */
 export function setProjectWorkModeCommand(projectId: string, enabled: boolean): string {
   return `ghostex work-mode ${enabled ? 'on' : 'off'} --project-id ${shellQuote(requireId(projectId, 'project id'))} --json`;

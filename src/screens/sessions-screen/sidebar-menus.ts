@@ -28,6 +28,7 @@ import {
   type GhostexSession,
 } from '../../contract/mobileSummary';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
+import type { SessionWorkLinks, WorkLinkKind } from '../../commands/ghostexCli';
 import { effectiveSessionTag, SESSION_TAG_SECTIONS } from '../../contract/sessionTags';
 import { COORDINATOR_AGENT_ICONS, FORK_AGENT_ICONS } from '../../sessions/sessionCommands';
 
@@ -52,6 +53,7 @@ export type SidebarMenuMessage =
   | { type: 'cancelDelayedSend'; sessionId: string }
   | { type: 'copySessionDetails'; sessionId: string; text: string }
   | { type: 'copyText'; text: string }
+  | { type: 'setSessionWorkLinks'; sessionId: string; links: SessionWorkLinks }
   | { type: 'setProjectWorkMode'; projectId: string; enabled: boolean }
   | { type: 'copyWorkspaceProjectPathForGroup'; groupId: string }
   | { type: 'removeWorkspaceProjectForGroup'; groupId: string }
@@ -64,6 +66,8 @@ export type SidebarMenuCommand =
   | { type: 'command'; message: SidebarMenuMessage }
   | { type: 'batch'; messages: SidebarMenuMessage[] }
   | { type: 'sessionAction'; sessionId: string; action: 'rename' | 'note' | 'delayedSend' }
+  /** Opens the Link to picker for one kind (gx-core `MenuCommand::link_work`). */
+  | { type: 'sessionAction'; sessionId: string; action: 'linkWork'; kind: WorkLinkKind }
   | {
       type: 'projectMembership';
       groupId: string;
@@ -74,6 +78,8 @@ export type SidebarMenuCommand =
 /** One menu row: a label with an action, a submenu, a heading, or a separator. */
 export type SidebarMenuItem = {
   label?: string;
+  /** Dimmed text after the label: what a Link to row is linked to. */
+  suffix?: string;
   /** Desktop icon id (`titlebar/<id>.svg`), or a custom tag's catalog icon id. */
   icon?: string;
   iconColor?: string;
@@ -409,7 +415,7 @@ export type SessionMenuInput = {
   /** The rows drawn under this one in its group, for Sleep Below and Close Below. */
   below: readonly GhostexSession[];
   /** The session's project, whose title and worktree Copy Details quotes; null when unknown. */
-  project: Pick<GhostexProject, 'name' | 'path' | 'worktree'> | null;
+  project: Pick<GhostexProject, 'name' | 'path' | 'worktree' | 'workMode'> | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -462,6 +468,55 @@ function sessionDetailsText(session: GhostexSession, project: SessionMenuInput['
   line('Worktree Branch', project?.worktree?.branch);
   lines.push('More details: use $ghostex-agents');
   return lines.join('\n');
+}
+
+/**
+ * A work-mode session's Link to submenu: pick the PR, Linear issues, Linear project or GitHub issue
+ * the session is about, unlink one kind, or hand the links back to the branch. Only sessions of
+ * projects with work mode on get it.
+ *
+ * CDXC:WorkMode 2026-10-09 DECISION:
+ * User: start any session the normal way and link it later: right-click → Link to → Pull request…, Linear issue…, Linear project…, GitHub issue…. Something already linked shows its ID in the menu; picking another one replaces it and Unlink removes it. Only sessions of projects with work mode on get the submenu. The phone's session menu matches the desktop's, so it has the same submenu, and its picker is a searchable list over the computer's suggestions (`ghostex link-session --candidates`).
+ *
+ * SEE-ALSO: packages/gx-core/src/sidebar_menu/link_menu.rs, ./work-link-picker.tsx.
+ */
+function linkSubmenu(session: GhostexSession, project: SessionMenuInput['project']): SidebarMenuItem | null {
+  if (project?.workMode !== true || session.projectId.length === 0) return null;
+  const id = session.sessionId;
+  const work = session.work;
+  const issues = work?.linearIssues ?? [];
+  const githubNumbers = work?.githubIssueNumbers ?? [];
+  const pullRequest = work?.pullRequestNumber != null ? `#${work.pullRequestNumber}` : undefined;
+  const linearIssues = issues.length > 0 ? issues.map((issue) => issue.identifier).join(', ') : undefined;
+  const linearProject = (work?.linearProjectName ?? '').length > 0 ? work?.linearProjectName : undefined;
+  const githubIssues = githubNumbers.length > 0 ? githubNumbers.map((number) => `#${number}`).join(', ') : undefined;
+  const pick = (label: string, icon: string, kind: WorkLinkKind, linked: string | undefined): SidebarMenuItem => ({
+    ...row(label, icon, { type: 'sessionAction', sessionId: id, action: 'linkWork', kind }),
+    ...(linked === undefined ? {} : { suffix: linked }),
+  });
+  const children: SidebarMenuItem[] = [
+    pick('Pull request…', 'git-pull-request', 'pullRequest', pullRequest),
+    pick('Linear issue…', 'hash', 'linearIssue', linearIssues),
+    pick('Linear project…', 'box', 'linearProject', linearProject),
+    pick('GitHub issue…', 'circle-dot', 'githubIssue', githubIssues),
+  ];
+  // Unlink writes "explicitly none" for that kind, so the branch cannot bring it back.
+  const unlink = (label: string, links: SessionWorkLinks): SidebarMenuItem =>
+    row(label, 'unlink', command({ type: 'setSessionWorkLinks', sessionId: id, links }));
+  const unlinkRows: SidebarMenuItem[] = [];
+  if (pullRequest !== undefined) unlinkRows.push(unlink('Unlink pull request', { pullRequest: 'none' }));
+  if (linearIssues !== undefined) {
+    unlinkRows.push(unlink(issues.length > 1 ? 'Unlink Linear issues' : 'Unlink Linear issue', { linearIssues: [] }));
+  }
+  if (linearProject !== undefined) unlinkRows.push(unlink('Unlink Linear project', { linearProject: '' }));
+  if (githubIssues !== undefined) {
+    unlinkRows.push(unlink(githubNumbers.length > 1 ? 'Unlink GitHub issues' : 'Unlink GitHub issue', { githubIssues: [] }));
+  }
+  if (unlinkRows.length > 0) children.push(separator(), ...unlinkRows);
+  if (work?.handSet === true) {
+    children.push(separator(), row('Back to automatic', 'refresh', command({ type: 'setSessionWorkLinks', sessionId: id, links: { clear: true } })));
+  }
+  return submenu('Link to', 'link', children);
 }
 
 /**
@@ -657,6 +712,8 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
     );
   }
   if (menu.length > 0) menu.push(separator());
+  const link = linkSubmenu(session, project);
+  if (link !== null) menu.push(link);
   menu.push(copySubmenu(session, project));
   if (advanced.length > 1) {
     menu.push(submenu('Advanced', 'dots', advanced));

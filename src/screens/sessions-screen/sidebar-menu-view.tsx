@@ -38,6 +38,7 @@ import {
   SleepGlyph,
   TagGlyph,
   TagOffGlyph,
+  UnlinkGlyph,
   XGlyph,
   type GlyphProps,
 } from '../../components/sessions/icons';
@@ -74,6 +75,7 @@ const MENU_GLYPHS: Readonly<Record<string, (props: GlyphProps) => ReactElement>>
   refresh: RefreshGlyph,
   tag: TagGlyph,
   'tag-off': TagOffGlyph,
+  unlink: UnlinkGlyph,
   x: XGlyph,
 };
 
@@ -166,6 +168,7 @@ export function sidebarMenuView(
       submenu: children !== undefined,
       destructive: item.danger === true,
       disabled: item.disabled || (children === undefined && command === undefined),
+      suffix: item.suffix,
       onPress,
     };
     if (item.color !== undefined) {

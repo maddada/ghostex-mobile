@@ -35,6 +35,8 @@ type ContextMenuAction = {
   /** Optional right-aligned informational glyph. */
   trailingIcon?: ReactElement;
   trailingIconLabel?: string;
+  /** Dimmed text after the label (what a Link to row is linked to). */
+  suffix?: string;
   /** Trailing chevron marking a submenu row. */
   submenu?: boolean;
   destructive?: boolean;
@@ -230,6 +232,11 @@ export default function ContextMenu({
                   >
                     {item.label}
                   </Text>
+                  {item.suffix !== undefined ? (
+                    <Text style={styles.itemSuffix} numberOfLines={1}>
+                      {item.suffix}
+                    </Text>
+                  ) : null}
                   {item.trailingIcon !== undefined ? (
                     <View style={styles.itemTrailingIcon}>{item.trailingIcon}</View>
                   ) : null}
@@ -320,6 +327,12 @@ const styles = StyleSheet.create({
     color: SidebarPalette.FOREGROUND,
     fontSize: 13,
     lineHeight: 18,
+  },
+  itemSuffix: {
+    color: SidebarPalette.MUTED,
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 120,
   },
   itemLabelSelected: {
     color: GhostexPalette.FOREGROUND,

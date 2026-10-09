@@ -69,6 +69,7 @@ import SessionRow from '../components/sessions/SessionRow';
 import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import NewCoordinatorSheet from './sessions-screen/NewCoordinatorSheet';
+import WorkLinkPicker from './sessions-screen/work-link-picker';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { WarningTriangleIcon } from '../components/terminal/icons';
 import {
@@ -762,6 +763,8 @@ export default function SessionsScreen({ navigation }: Props) {
     sessionMenuView,
     projectMenuView,
     startTranscriptConversation,
+    loadWorkLinkCandidates,
+    saveWorkLinks,
     collectionMenuRootItems,
     collectionColorItems,
     groupMenuItems,
@@ -1612,6 +1615,16 @@ export default function SessionsScreen({ navigation }: Props) {
           subtitle="Start an agent session"
           items={agentMenuItems(overlay.ctx)}
           onClose={() => setOverlay(NONE)}
+        />
+      ) : null}
+
+      {overlay.kind === 'workLinkPicker' ? (
+        <WorkLinkPicker
+          kind={overlay.linkKind}
+          sessionTitle={sessionTitle(overlay.ctx.item.session)}
+          load={(query) => loadWorkLinkCandidates(overlay.ctx, overlay.linkKind, query)}
+          onPick={(values) => saveWorkLinks(overlay.ctx, overlay.linkKind, values)}
+          onCancel={() => setOverlay(NONE)}
         />
       ) : null}
 

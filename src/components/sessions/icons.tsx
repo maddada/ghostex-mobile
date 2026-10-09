@@ -498,6 +498,21 @@ export function LinkGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** Tabler unlink (the Link to submenu's Unlink rows). */
+export function UnlinkGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 17 22 v -2 M 9 15 l 6 -6 M 11 6 l 0.463 -0.536 a 5 5 0 0 1 7.071 7.072 l -0.534 0.464 M 13 18 l -0.397 0.534 a 5.068 5.068 0 0 1 -7.127 0 a 4.972 4.972 0 0 1 0 -7.071 l 0.524 -0.463 M 20 17 h 2 M 2 7 h 2 M 7 2 v 2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Tabler git-pull-request (Copy PR Link). */
 export function GitPullRequestGlyph({ size, color }: GlyphProps) {
   return (
