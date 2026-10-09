@@ -183,7 +183,7 @@ const useStyles = themedStyles((P) => ({
     textAlign: 'center',
   },
   notice: {
-    maxWidth: 360,
+    maxWidth: '100%',
     alignItems: 'center',
     gap: 6,
   },
