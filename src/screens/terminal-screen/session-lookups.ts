@@ -19,7 +19,27 @@ export type AgentOverlay =
   | { kind: 'none' }
   | { kind: 'rename'; error: string | null }
   | { kind: 'delayedSend' }
-  | { kind: 'promptEditor'; sending: boolean };
+  | { kind: 'promptEditor'; sending: boolean }
+  /** The ⋯ menu's Skills list; `rows` is null while gxserver's skill read runs. */
+  | { kind: 'skills'; rows: TerminalSkillRow[] | null; error: string | null };
+
+/** One Ghostex skill the terminal's Skills list types into the agent's input. */
+export type TerminalSkillRow = { name: string; invocation: string };
+
+/**
+ * The Ghostex skills among `ghostex read-session-chat-skills` output: the ones gxserver marks
+ * `ghostex`, each once, by name (gx-chat-core `composer/ghostex_skills.rs` keeps the same rule).
+ */
+export function terminalSkillRows(output: unknown): TerminalSkillRow[] {
+  const skills = (output as { skills?: unknown } | null)?.skills;
+  const rows: TerminalSkillRow[] = [];
+  for (const skill of Array.isArray(skills) ? skills : []) {
+    const { ghostex, name, invocation } = (skill ?? {}) as { ghostex?: unknown; name?: unknown; invocation?: unknown };
+    if (ghostex !== true || typeof name !== 'string' || typeof invocation !== 'string') continue;
+    if (!rows.some((row) => row.name === name)) rows.push({ name, invocation });
+  }
+  return rows.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
 
 export const AGENT_OVERLAY_NONE: AgentOverlay = { kind: 'none' };
 

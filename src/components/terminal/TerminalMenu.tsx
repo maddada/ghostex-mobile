@@ -27,6 +27,7 @@ import {
   SearchGlyph,
   SettingsGlyph,
   SleepGlyph,
+  SparklesGlyph,
   TerminalGlyph,
 } from '../sessions/icons';
 import { PaperclipIcon, PencilIcon } from './icons';
@@ -47,7 +48,8 @@ export type TerminalMenuActionId =
   | 'newTerminal'
   | 'settings'
   | 'disconnect'
-  | 'killSession';
+  | 'killSession'
+  | 'skills';
 
 export type TerminalMenuProps = {
   visible: boolean;
@@ -73,6 +75,8 @@ export type TerminalMenuProps = {
   disconnectEnabled: boolean;
   /** Kill Session needs a resolved gxserver session identity. */
   killSessionEnabled: boolean;
+  /** Skills lists the agent's Ghostex skills and types one into its terminal input. */
+  skillsEnabled: boolean;
   onSelect: (id: TerminalMenuActionId) => void;
   onClose: () => void;
   /**
@@ -98,6 +102,7 @@ export default function TerminalMenu({
   attachEnabled,
   disconnectEnabled,
   killSessionEnabled,
+  skillsEnabled,
   onSelect,
   onClose,
   onDismissed,
@@ -242,6 +247,19 @@ export default function TerminalMenu({
       icon: <AxeGlyph size={ICON_SIZE} color={GhostexPalette.DANGER} />,
       destructive: true,
       onPress: () => onSelect('killSession'),
+    });
+  }
+
+  // Second from the bottom, as in the desktop terminal's ⋯ menu (gx-chat-core
+  // `composer/ghostex_skills.rs`); its list opens as a menu of its own.
+  if (skillsEnabled) {
+    items.splice(Math.max(items.length - 1, 0), 0, {
+      kind: 'item',
+      key: 'skills',
+      label: 'Skills',
+      icon: <SparklesGlyph size={ICON_SIZE} color={iconColor} />,
+      submenu: true,
+      onPress: () => onSelect('skills'),
     });
   }
 

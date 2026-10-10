@@ -275,6 +275,16 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           // account leads (Settings > Accounts); the phone says where instead of doing nothing.
           else Alert.alert('Add accounts on your computer', 'Open Ghostex on your computer and go to Settings > Accounts to sign in to another account.');
           return false;
+        case 'insertSkill':
+          if (model !== null) {
+            dispatch({ type: 'insertSkill', name: str(command, 'name'), text: model.text, start: model.selection.start, end: model.selection.end });
+          }
+          return false;
+        case 'openSkillsSettings':
+          // Skills install on the computer the agents run on, where desktop's row leads
+          // (Settings > Integrations > Agent skills); the phone says where, like Add account.
+          Alert.alert('Install skills on your computer', 'Open Ghostex on your computer and go to Settings > Integrations > Agent skills to install or remove Ghostex skills.');
+          return false;
         case 'copyText':
           void Clipboard.setStringAsync(str(command, 'text'));
           return false;
@@ -290,7 +300,7 @@ export function NativeComposer({ chat, onHostAction, hostActions = DEFAULT_HOST_
           return false;
       }
     },
-    [dispatch, host, input, openAttach, performComposerAction, serves, setSetting]
+    [dispatch, host, input, model, openAttach, performComposerAction, serves, setSetting]
   );
 
   const launchPick = useCallback(

@@ -102,6 +102,21 @@ function branchesRow(document: ChatDocument): MenuRow | null {
   return { label: 'Branches', iconPath: 'titlebar/git-branch.svg', detail: String(branches?.count ?? ''), children };
 }
 
+/**
+ * The Skills row: the Ghostex skills the agent has installed, each putting its pill in the chat box
+ * (core `composer/ghostex_skills.rs`, a user decision there), then Configure / Install more.
+ */
+function skillsRow(document: ChatDocument): MenuRow {
+  const skills: MenuRow[] = (document.ghostexSkills ?? []).map((skill) => ({
+    label: skill.name,
+    description: skill.description ?? null,
+    command: { type: 'insertSkill', name: skill.name },
+  }));
+  if (skills.length === 0) skills.push({ label: 'No Ghostex skills installed', disabled: true });
+  skills.push({ separator: true }, { label: 'Configure / Install more', iconPath: 'titlebar/settings.svg', command: { type: 'openSkillsSettings' } });
+  return { label: 'Skills', iconPath: 'titlebar/sparkles.svg', children: skills };
+}
+
 export function moreActionsRows({ document, simple, verbose, available, serves, compactAndSend = null, draft = '' }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   if (compactAndSend !== null) {
@@ -181,6 +196,8 @@ export function moreActionsRows({ document, simple, verbose, available, serves, 
   }
   const other = actions.filter((action) => action.group !== 'agent' && !CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id));
   if (other.length > 0) rows.push({ separator: true }, ...other.map(hostRow));
+  // Second from the bottom, as on desktop (actions.rs `skills_row`).
+  rows.splice(Math.max(rows.length - 1, 0), 0, skillsRow(document));
   return rows;
 }
 

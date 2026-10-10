@@ -27,6 +27,7 @@ import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
 import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
+import TerminalSkillsMenu from '../components/terminal/TerminalSkillsMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar from '../components/terminal/TerminalTabsBar';
 import { ChatBubbleIcon, ChevronLeftIcon, EllipsisIcon, TerminalPromptIcon } from '../components/terminal/icons';
@@ -393,6 +394,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
     handleRefresh,
     handleMenuAction,
     handleMenuDismissed,
+    pickSkill,
+    configureSkills,
   } = useTerminalAgentActions({
     activeTab,
     activeProjectId,
@@ -661,6 +664,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         killSessionEnabled={activeTab !== null && activeSession !== null}
+        // The terminal's own input; chat mode has the composer's More actions > Skills.
+        skillsEnabled={agentActionsCapable && activeSession !== null && !chatModeActive}
         onSelect={handleTerminalMenuAction}
         onClose={() => setMenuVisible(false)}
         onDismissed={handleMenuDismissed}
@@ -696,6 +701,16 @@ export default function TerminalScreen({ navigation, route }: Props) {
               onCancelTimer={() => void cancelDelayedSend()}
               onToggleCloseAfterDone={() => toggleCloseAfterDone()}
               onCancel={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
+            />
+          ) : null}
+          {agentOverlay.kind === 'skills' ? (
+            <TerminalSkillsMenu
+              sessionTitle={agentSessionTitle}
+              rows={agentOverlay.rows}
+              error={agentOverlay.error}
+              onPick={pickSkill}
+              onConfigure={configureSkills}
+              onClose={() => setAgentOverlay(AGENT_OVERLAY_NONE)}
             />
           ) : null}
           {agentOverlay.kind === 'promptEditor' ? (

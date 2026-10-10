@@ -707,6 +707,11 @@ function inlineTextFlag(name: string, value: string): string {
   return `${name}=${shellQuote(value)}`;
 }
 
+/** The skills the session's agent has installed, Ghostex's marked: `ghostex read-session-chat-skills …`. */
+export function readSessionChatSkillsCommand(sessionId: string, projectId: string): string {
+  return `ghostex read-session-chat-skills ${sessionChatSelector(sessionId, projectId)} --json`;
+}
+
 /** Read the queue and the synced draft: `ghostex read-session-chat-queue …`. */
 export function readSessionChatQueueCommand(sessionId: string, projectId: string): string {
   return `ghostex read-session-chat-queue ${sessionChatSelector(sessionId, projectId)} --json`;

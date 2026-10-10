@@ -93,6 +93,8 @@ export type ActionFields = {
   removeAttachment: { text: string; start: number; end: number };
   /** Side chat on or off: adds or removes the `/btw ` prefix on `text` (core `side_chat.rs`). */
   toggleSideChat: { text: string };
+  /** More actions > Skills: the Ghostex skill's pill at the selection, not sent (core `ghostex_skills.rs`). */
+  insertSkill: { name: string; text: string; start: number; end: number };
   /** Read an image's bytes for a thumbnail or the viewer; answered as a `chatImage` request. */
   loadImage: { path: string };
 

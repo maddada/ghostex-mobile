@@ -392,6 +392,8 @@ export type ChatDocument = {
   hostActions: HostActionRow[];
   /** The Side chat prefix (`/btw `) when the agent takes side questions, else null (`side_chat.rs`). */
   sideChat?: string | null;
+  /** More actions > Skills: the Ghostex skills the agent has installed (core `ghostex_skills.rs`). */
+  ghostexSkills?: GhostexSkill[];
 
   // ---- questions and notices --------------------------------------------------------------
 
@@ -598,6 +600,9 @@ export type IncomingDraft = { content: string; version?: Json; [key: string]: un
 
 /** One More actions row. `group` is `agent` or `session`. Pressing it is an app-shell action. */
 export type HostActionRow = { id: string; label: string; hotkey?: string | null; group: string; [key: string]: unknown };
+
+/** One row of More actions > Skills (core `composer/ghostex_skills.rs`). */
+export type GhostexSkill = { name: string; description?: string | null; invocation?: string | null };
 
 export type QuestionCard = {
   visible: boolean;

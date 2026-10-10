@@ -23,6 +23,7 @@ import {
   exportSessionTranscriptCommand,
   forkSessionCommand,
   killSessionCommand,
+  readSessionChatSkillsCommand,
   reloadSessionCommand,
   requestSessionRenameCommand,
   sendSessionChatMessageCommand,
@@ -54,7 +55,9 @@ import {
   machineTargetFor,
   sessionFolderFor,
   transcriptMentionDraft,
+  terminalSkillRows,
   type AgentOverlay,
+  type TerminalSkillRow,
   type ExportedTranscript,
 } from './session-lookups';
 
@@ -68,7 +71,7 @@ export type TerminalAgentActionsDeps = {
   chatModeActive: boolean;
   uploading: boolean;
   setUploading: (uploading: boolean) => void;
-  setAgentOverlay: (overlay: AgentOverlay) => void;
+  setAgentOverlay: Dispatch<SetStateAction<AgentOverlay>>;
   setAgentProgress: (progress: string | null) => void;
   exportedTranscript: ExportedTranscript | null;
   setExportedTranscript: (exported: ExportedTranscript | null) => void;
@@ -569,6 +572,46 @@ export function useTerminalAgentActions({
     ]);
   }, [handleUpload]);
 
+  /** Skills: the list opens with a loading row and fills from gxserver's skill read. */
+  const openSkills = useCallback((): void => {
+    const target = agentTarget();
+    if (target === null) return;
+    setAgentOverlay({ kind: 'skills', rows: null, error: null });
+    runGhostexCli(target.machine, readSessionChatSkillsCommand(target.session.sessionId, target.projectId))
+      .then((result) => {
+        setAgentOverlay((current) =>
+          current.kind === 'skills' ? { kind: 'skills', rows: terminalSkillRows(result.json), error: null } : current,
+        );
+      })
+      .catch(() => {
+        setAgentOverlay((current) =>
+          current.kind === 'skills' ? { kind: 'skills', rows: null, error: 'Skills could not be loaded.' } : current,
+        );
+      });
+  }, [agentTarget, setAgentOverlay]);
+
+  /** A skill row: its invocation into the agent's input, the way Prompt Editor inserts, never Enter. */
+  const pickSkill = useCallback(
+    (row: TerminalSkillRow): void => {
+      setAgentOverlay(AGENT_OVERLAY_NONE);
+      const target = agentTarget();
+      if (target === null) return;
+      GhostexNative.sendText(target.tab.sessionKey, `${row.invocation} `).catch((error: unknown) =>
+        reportAgentFailure('Send Failed', error),
+      );
+    },
+    [agentTarget, reportAgentFailure, setAgentOverlay],
+  );
+
+  /** Skills install on the computer the agents run on (desktop: Settings > Integrations > Agent skills). */
+  const configureSkills = useCallback((): void => {
+    setAgentOverlay(AGENT_OVERLAY_NONE);
+    Alert.alert(
+      'Install skills on your computer',
+      'Open Ghostex on your computer and go to Settings > Integrations > Agent skills to install or remove Ghostex skills.',
+    );
+  }, [setAgentOverlay]);
+
   const handleMenuAction = useCallback(
     (id: TerminalMenuActionId): void => {
       // One menu, one dismissal point: every row closes the card before the
@@ -635,11 +678,20 @@ export function useTerminalAgentActions({
         case 'killSession':
           requestKillSession();
           return;
+        case 'skills':
+          // A second menu cannot present while the first is still dismissing on iOS (see attachPath).
+          if (Platform.OS === 'ios') {
+            pendingAfterMenuDismiss.current = openSkills;
+            return;
+          }
+          openSkills();
+          return;
       }
     },
     [
       activeTab,
       handleNewTerminal,
+      openSkills,
       navigation,
       promptAttachmentSource,
       requestCloseTab,
@@ -672,5 +724,7 @@ export function useTerminalAgentActions({
     handleRefresh,
     handleMenuAction,
     handleMenuDismissed,
+    pickSkill,
+    configureSkills,
   };
 }
