@@ -14,7 +14,6 @@ export { questionReplacesComposer } from './QuestionCard';
 export { composerNotReady } from './ComposerNotReadyCard';
 export type { CardHostAction } from './types';
 export type { ArmedAction } from './WorkingStrip';
-export { ForkBranchBadge } from './ForkBranches';
 
 // Inline pieces the transcript draws inside its rows.
 export { EmptyTranscript } from './EmptyTranscript';

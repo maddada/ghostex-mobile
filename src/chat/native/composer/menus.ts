@@ -6,7 +6,7 @@
 
 import type { ChatDocument } from '../../rust/document';
 import { arr, isTrue, obj, str } from './json';
-import type { MenuRow } from './MenuSheet';
+import { rowsOf, type MenuRow } from './MenuSheet';
 
 /** The toolbar controls in desktop's order, which is also the order they fold into More actions
  * (`toolbar.rs`, `COMPOSER_CONTROLS`). Maximize is desktop-only. */
@@ -89,6 +89,19 @@ function viewModesRow(document: ChatDocument, simple: boolean, verbose: boolean,
   return { label: 'View', iconPath: 'titlebar/eye.svg', detail: on.length > 0 ? on.join(', ') : 'Standard', children: modes };
 }
 
+/**
+ * The Branches row: the core's own list of this conversation's forks, only when it has any
+ * (desktop's `fork_branches_row` in `fork_branches.rs`, where the user decision is recorded).
+ */
+function branchesRow(document: ChatDocument): MenuRow | null {
+  const branches = obj(document.forkBranches);
+  const tooltip = str(branches, 'tooltip');
+  // A phone has no hover, so the summary sentence sits under the list's heading.
+  const children = rowsOf(branches?.menu).map((row) => (row.heading === true && tooltip.length > 0 ? { ...row, description: tooltip } : row));
+  if (children.length === 0) return null;
+  return { label: 'Branches', iconPath: 'titlebar/git-branch.svg', detail: String(branches?.count ?? ''), children };
+}
+
 export function moreActionsRows({ document, simple, verbose, available, serves, compactAndSend = null, draft = '' }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   if (compactAndSend !== null) {
@@ -117,6 +130,8 @@ export function moreActionsRows({ document, simple, verbose, available, serves, 
     rows.push({ separator: true });
   }
   rows.push({ heading: true, label: 'Chat' });
+  const branches = branchesRow(document);
+  if (branches !== null) rows.push(branches);
   rows.push(viewModesRow(document, simple, verbose, available('summary')));
   // Side chat: offered only for agents that take `/btw` (core `composer/side_chat.rs`).
   if (typeof document.sideChat === 'string') {

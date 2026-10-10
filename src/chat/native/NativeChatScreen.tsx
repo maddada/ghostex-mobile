@@ -38,7 +38,7 @@ import GpuiTranscript from '../gpui/GpuiTranscript';
 import { useGpuiChat } from '../gpui/useGpuiChat';
 import { useSettingsStore } from '../../settings/store';
 import { useArmedActions } from './armedActions';
-import { ForkBranchBadge, NativeChatCards, NativeChatOverlays, questionReplacesComposer } from './cards';
+import { NativeChatCards, NativeChatOverlays, questionReplacesComposer } from './cards';
 import { NativeComposer } from './composer';
 import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
 import type { MenuRow } from './composer/MenuSheet';
@@ -214,14 +214,11 @@ export default function NativeChatScreen({
         {gpui ? null : <TranscriptSearchBar chat={chat} />}
         <View style={styles.transcript}>
           {gpui ? (
-            // GPUI draws the whole transcript region itself: search, the fork badge, the subagent
-            // viewer and the account switch card included.
+            // GPUI draws the whole transcript region itself: search, the subagent viewer and the
+            // account switch card included.
             <GpuiTranscript style={StyleSheet.absoluteFill} />
           ) : (
-            <>
-              <NativeTranscript chat={chat} />
-              <ForkBranchBadge chat={chat} />
-            </>
+            <NativeTranscript chat={chat} />
           )}
         </View>
         <NativeChatCards chat={chat} onHostAction={hostAction} armed={armed} {...(openDelayedActions !== undefined ? { onArmedPress: openDelayedActions } : {})} />
