@@ -132,16 +132,7 @@ export default function AdvancedPage() {
         valueLabel={`${settings.sidebarGroupsOpacityPercent}%`}
         onValueChange={(value) => setSetting('sidebarGroupsOpacityPercent', value)}
       />
-      <SettingsSlider
-        label='Sidebar projects opacity'
-        maximumValue={SIDEBAR_SURFACE_OPACITY_MAX}
-        minimumValue={SIDEBAR_SURFACE_OPACITY_MIN}
-        step={1}
-        value={settings.sidebarProjectsOpacityPercent}
-        valueLabel={`${settings.sidebarProjectsOpacityPercent}%`}
-        onValueChange={(value) => setSetting('sidebarProjectsOpacityPercent', value)}
-      />
-      <Caption>Changes only group and project backgrounds and borders.</Caption>
+      <Caption>Changes only group backgrounds and borders.</Caption>
 
       <SectionHeader title='SSH connection' />
       <SettingToggle settingKey='keepAliveEnabled' label='Send keep-alive packets' />

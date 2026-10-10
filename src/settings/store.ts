@@ -53,8 +53,6 @@ export type GhostexSettings = {
   sidebarBackgroundTint: string;
   /** Opacity percentage for sidebar collection-panel backgrounds and borders. */
   sidebarGroupsOpacityPercent: number;
-  /** Opacity percentage for sidebar project-card backgrounds and borders. */
-  sidebarProjectsOpacityPercent: number;
   /**
    * Which view chat-capable agent sessions open in when the user has not
    * flipped that session's own toggle yet (desktop-parity Default Agent View).
@@ -143,7 +141,6 @@ export function defaultSettings(): GhostexSettings {
     sidebarBackgroundContrast: DEFAULT_SIDEBAR_BACKGROUND_CONTRAST,
     sidebarBackgroundTint: DEFAULT_SIDEBAR_BACKGROUND_TINT,
     sidebarGroupsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
-    sidebarProjectsOpacityPercent: SIDEBAR_SURFACE_OPACITY_MIN,
     preferredAgentInterface: 'chat',
     sessionChatTheme: 'dark',
     sessionChatCustomTranscriptWidthEnabled: false,
@@ -209,10 +206,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     typeof record.sidebarGroupsOpacityPercent === 'number'
       ? clampSidebarSurfaceOpacity(record.sidebarGroupsOpacityPercent, defaults.sidebarGroupsOpacityPercent)
       : defaults.sidebarGroupsOpacityPercent;
-  const sidebarProjectsOpacityPercent =
-    typeof record.sidebarProjectsOpacityPercent === 'number'
-      ? clampSidebarSurfaceOpacity(record.sidebarProjectsOpacityPercent, defaults.sidebarProjectsOpacityPercent)
-      : defaults.sidebarProjectsOpacityPercent;
   const preferredAgentInterface =
     record.preferredAgentInterface === 'terminal' || record.preferredAgentInterface === 'chat'
       ? record.preferredAgentInterface
@@ -246,7 +239,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sidebarBackgroundContrast,
     sidebarBackgroundTint,
     sidebarGroupsOpacityPercent,
-    sidebarProjectsOpacityPercent,
     preferredAgentInterface,
     sessionChatTheme,
     sessionChatCustomTranscriptWidthEnabled: bool(
