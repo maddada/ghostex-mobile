@@ -240,10 +240,16 @@ actor SSHConnection {
         var output = Data()
         var stderr = Data()
         var isStarted = false
+        /// The command's stdin, written once it starts and then closed with EOF. Nil leaves
+        /// stdin open, which is what a plain `exec` has always done.
+        let input: [UInt8]?
+        var inputOffset = 0
+        var sentInputEOF = false
 
-        init(id: UUID, command: String, continuation: CheckedContinuation<SSHExecResult, Error>) {
+        init(id: UUID, command: String, input: [UInt8]?, continuation: CheckedContinuation<SSHExecResult, Error>) {
             self.id = id
             self.command = command
+            self.input = input
             self.continuation = continuation
         }
     }
@@ -1038,6 +1044,7 @@ actor SSHConnection {
                     guard ensureExecChannelReady(request) else { continue }
 
                     guard let execChannel = request.channel else { continue }
+                    guard pumpExecInput(request, channel: execChannel, didWork: &didWork) else { continue }
 
                     let bytesRead = libssh2_channel_read_ex(execChannel, 0, &buffer, buffer.count)
                     if bytesRead > 0 {
@@ -1199,6 +1206,46 @@ actor SSHConnection {
         return true
     }
 
+    /**
+     * Write as much of a started request's stdin as the channel takes, then send EOF.
+     * Runs on every loop pass next to the reads, so a command that answers while it is
+     * still being fed can never fill its window and stall the write. False when a write
+     * failure finished the request.
+     */
+    private func pumpExecInput(_ request: ExecRequest, channel: OpaquePointer, didWork: inout Bool) -> Bool {
+        guard let input = request.input, !request.sentInputEOF else { return true }
+
+        while request.inputOffset < input.count {
+            let written = input.withUnsafeBufferPointer { buffer -> Int in
+                guard let baseAddress = buffer.baseAddress else { return 0 }
+                let pointer = UnsafeRawPointer(baseAddress.advanced(by: request.inputOffset))
+                    .assumingMemoryBound(to: CChar.self)
+                return Int(libssh2_channel_write_ex(channel, 0, pointer, input.count - request.inputOffset))
+            }
+            if written > 0 {
+                request.inputOffset += written
+                didWork = true
+            } else if written == 0 || written == Int(LIBSSH2_ERROR_EAGAIN) {
+                return true
+            } else {
+                noteTransportError(written)
+                finishExecRequest(request.id, error: SSHError.socketError("Exec stdin write failed: \(written)"))
+                return false
+            }
+        }
+
+        let eofResult = libssh2_channel_send_eof(channel)
+        if eofResult == 0 {
+            request.sentInputEOF = true
+            didWork = true
+        } else if eofResult != Int32(LIBSSH2_ERROR_EAGAIN) {
+            noteTransportError(Int(eofResult))
+            finishExecRequest(request.id, error: SSHError.socketError("Exec stdin EOF failed: \(eofResult)"))
+            return false
+        }
+        return true
+    }
+
     private func cancelExecRequest(_ requestId: UUID, error: Error) {
         guard execRequests[requestId] != nil else { return }
         finishExecRequest(requestId, error: error)
@@ -1300,7 +1347,9 @@ actor SSHConnection {
 
     // MARK: - Execute Command
 
-    func execute(_ command: String, timeout: TimeInterval? = nil) async throws -> SSHExecResult {
+    /// Run `command` on its own exec channel. `input`, when given, becomes its stdin and is
+    /// closed afterwards (Windows scripts travel this way, past OpenSSH's command-line limit).
+    func execute(_ command: String, input: String? = nil, timeout: TimeInterval? = nil) async throws -> SSHExecResult {
         guard libssh2Session != nil else {
             throw SSHError.notConnected
         }
@@ -1321,7 +1370,12 @@ actor SSHConnection {
 
         return try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { continuation in
-                let request = ExecRequest(id: requestId, command: command, continuation: continuation)
+                let request = ExecRequest(
+                    id: requestId,
+                    command: command,
+                    input: input.map { Array($0.utf8) },
+                    continuation: continuation
+                )
                 execRequests[request.id] = request
             }
         }, onCancel: { [weak self] in

@@ -198,6 +198,25 @@ public class GhostexNativeModule: Module {
             }
         }
 
+        // `exec` with `input` written to the command's stdin, then EOF. Windows computers run
+        // every PowerShell and WSL script this way (src/remote/commands.ts).
+        AsyncFunction("execWithInput") { (machineId: String, command: String, input: String, timeoutMs: Double?) async throws -> [String: Any] in
+            guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else {
+                throw GhostexException(code: .notConnected, reason: "No connection for machine \(machineId)")
+            }
+            do {
+                let timeout = timeoutMs.map { $0 / 1000.0 }
+                let result = try await connection.execute(command, input: input, timeout: timeout)
+                return [
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "exitCode": result.exitCode,
+                ]
+            } catch {
+                throw ghostexException(from: error)
+            }
+        }
+
         // MARK: Local port forwarding
 
         // SSH local port forwarding over the machine's existing connection: a loopback
@@ -212,16 +231,18 @@ public class GhostexNativeModule: Module {
          * and its contract code — through untouched, exactly as the Android
          * module does.
          */
-        AsyncFunction("startPortForward") { (machineId: String, remotePort: Int, promise: Promise) in
+        AsyncFunction("startPortForward") { (machineId: String, remotePort: Int, remoteHost: String?, promise: Promise) in
             guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else {
                 promise.reject(
                     GhostexException(code: .notConnected, reason: "No connection for machine \(machineId)")
                 )
                 return
             }
+            let host = remoteHost.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+                ?? SSHConnection.defaultForwardRemoteHost
             Task {
                 do {
-                    let localPort = try await connection.startPortForward(remotePort: remotePort)
+                    let localPort = try await connection.startPortForward(remotePort: remotePort, remoteHost: host)
                     promise.resolve(["localPort": localPort])
                 } catch {
                     promise.reject(ghostexException(from: error))

@@ -4,7 +4,7 @@
 //
 //  SSH local port forwarding (direct-tcpip) on top of the machine's existing,
 //  already-authenticated libssh2 session: a loopback listener on the phone whose
-//  every accepted connection gets its own channel to `localhost:<remotePort>` on
+//  every accepted connection gets its own channel to `<remoteHost>:<remotePort>` on
 //  the remote. Nothing is configured on the PC.
 //
 //  All libssh2 calls stay on the SSHConnection actor, and the channels are
@@ -49,6 +49,8 @@ final class PortForwardChannel {
 /// One live forward: the loopback listener plus the channels it has spawned.
 final class PortForwardListener {
     let remotePort: Int
+    /// direct-tcpip target host, resolved on the remote machine.
+    let remoteHost: String
     let localPort: Int
     let listener: NWListener
     var channelIds: Set<UUID> = []
@@ -56,8 +58,9 @@ final class PortForwardListener {
     /// Every listener and connection callback runs here; the actor owns the state.
     static let queue = DispatchQueue(label: "app.ghostex.mobile.portforward", qos: .userInitiated)
 
-    init(remotePort: Int, localPort: Int, listener: NWListener) {
+    init(remotePort: Int, remoteHost: String, localPort: Int, listener: NWListener) {
         self.remotePort = remotePort
+        self.remoteHost = remoteHost
         self.localPort = localPort
         self.listener = listener
     }
@@ -106,8 +109,8 @@ private final class ListenerReadyGate: @unchecked Sendable {
 // MARK: - SSHConnection port forwarding
 
 extension SSHConnection {
-    /// direct-tcpip target host, resolved on the remote machine.
-    private static var remoteLoopbackHost: String { "localhost" }
+    /// direct-tcpip target host when the caller names none, resolved on the remote machine.
+    static let defaultForwardRemoteHost = "localhost"
     /// The forward is reachable from this device only; the SSH channel carries the traffic.
     private static var forwardLoopbackHost: String { "127.0.0.1" }
     private static var forwardBufferBytes: Int { 32768 }
@@ -126,22 +129,31 @@ extension SSHConnection {
     private static var channelCloseTimeout: TimeInterval { 5 }
 
     /**
-     * Start (or reuse) the loopback forward for `localhost:remotePort` on the machine and
+     * Start (or reuse) the loopback forward for `remoteHost:remotePort` on the machine and
      * return the port it listens on here. One probe channel is opened and closed first, so
      * a port nothing is bound to, and an sshd that refuses forwarding, fail here instead of
-     * leaving the app with a listener that can never carry a byte.
+     * leaving the app with a listener that can never carry a byte. A live forward for the
+     * same port that dials another host is replaced.
+     *
+     * The host is the caller's for the reason in the Android module's `startPortForward`
+     * (GhostexSshConnection.kt): gxserver binds `127.0.0.1` only, and Windows OpenSSH resolves
+     * `localhost` to `::1` without falling back, so the chat names `127.0.0.1` while Web Preview
+     * keeps `localhost`.
      */
-    func startPortForward(remotePort: Int) async throws -> Int {
+    func startPortForward(remotePort: Int, remoteHost: String) async throws -> Int {
         guard remotePort >= Self.minTCPPort, remotePort <= Self.maxTCPPort else {
             throw SSHError.portOutOfRange(remotePort)
         }
         guard isConnected else { throw SSHError.notConnected }
         if let existing = portForwards[remotePort] {
-            return existing.localPort
+            if existing.remoteHost == remoteHost {
+                return existing.localPort
+            }
+            stopPortForward(remotePort: remotePort)
         }
 
         logger.info(
-            "startPortForward \(self.config.machineId, privacy: .public) remotePort=\(remotePort)"
+            "startPortForward \(self.config.machineId, privacy: .public) remote=\(remoteHost, privacy: .public):\(remotePort)"
         )
 
         /*
@@ -152,25 +164,29 @@ extension SSHConnection {
          */
         let generation = portForwardTeardownGeneration
 
-        let probe = try await openDirectChannel(remotePort: remotePort)
+        let probe = try await openDirectChannel(remoteHost: remoteHost, remotePort: remotePort)
         retireForwardChannel(probe)
 
         guard isConnected, portForwardTeardownGeneration == generation else {
             throw SSHError.notConnected
         }
         // A concurrent start for the same port may have finished while the probe ran.
-        if let existing = portForwards[remotePort] {
+        if let existing = portForwards[remotePort], existing.remoteHost == remoteHost {
             return existing.localPort
         }
 
-        let forward = try await makeLoopbackListener(remotePort: remotePort)
-        if let existing = portForwards[remotePort] {
+        let forward = try await makeLoopbackListener(remotePort: remotePort, remoteHost: remoteHost)
+        if let existing = portForwards[remotePort], existing.remoteHost == remoteHost {
             forward.listener.cancel()
             return existing.localPort
         }
         guard isConnected, portForwardTeardownGeneration == generation else {
             forward.listener.cancel()
             throw SSHError.notConnected
+        }
+        // A concurrent start that dials another host finished first; the later one replaces it.
+        if portForwards[remotePort] != nil {
+            stopPortForward(remotePort: remotePort)
         }
         portForwards[remotePort] = forward
         watchForwardListener(forward)
@@ -219,7 +235,7 @@ extension SSHConnection {
 
     // MARK: Listener
 
-    private func makeLoopbackListener(remotePort: Int) async throws -> PortForwardListener {
+    private func makeLoopbackListener(remotePort: Int, remoteHost: String) async throws -> PortForwardListener {
         let parameters = NWParameters.tcp
         // Loopback only: the phone must never republish the remote's app to its network.
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
@@ -294,7 +310,7 @@ extension SSHConnection {
             listener.cancel()
             throw SSHError.socketError("Loopback listener did not report a port")
         }
-        return PortForwardListener(remotePort: remotePort, localPort: Int(port), listener: listener)
+        return PortForwardListener(remotePort: remotePort, remoteHost: remoteHost, localPort: Int(port), listener: listener)
     }
 
     /**
@@ -334,7 +350,7 @@ extension SSHConnection {
 
         let channel: OpaquePointer
         do {
-            channel = try await openDirectChannel(remotePort: remotePort)
+            channel = try await openDirectChannel(remoteHost: forward.remoteHost, remotePort: remotePort)
         } catch {
             let detail = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             logger.warning(
@@ -366,11 +382,11 @@ extension SSHConnection {
     // MARK: Channel open
 
     /**
-     * Open one direct-tcpip channel to the remote's `localhost:remotePort`. Non-blocking so
+     * Open one direct-tcpip channel to the remote's `remoteHost:remotePort`. Non-blocking so
      * the shell and exec channels keep flowing while the remote answers; the channel-open
      * claim is what keeps this from clobbering another opener's session state.
      */
-    private func openDirectChannel(remotePort: Int) async throws -> OpaquePointer {
+    private func openDirectChannel(remoteHost: String, remotePort: Int) async throws -> OpaquePointer {
         /*
          * Bounded on both halves: waiting for the claim, and holding it across
          * the EAGAIN retries below. A remote that never answers the open would
@@ -386,7 +402,7 @@ extension SSHConnection {
             guard let session = libssh2Session else { throw SSHError.notConnected }
             if let channel = libssh2_channel_direct_tcpip_ex(
                 session,
-                Self.remoteLoopbackHost,
+                remoteHost,
                 Int32(remotePort),
                 Self.forwardLoopbackHost,
                 0

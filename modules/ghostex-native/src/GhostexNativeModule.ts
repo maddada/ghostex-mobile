@@ -43,6 +43,7 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
 
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
+  /** `exec` with `input` written to the command's stdin, then EOF (Windows scripts; both platforms). */
   execWithInput(machineId: string, command: string, input: string, timeoutMs?: number): Promise<ExecResult>;
 
   /**
@@ -64,8 +65,8 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    *
    * `remoteHost` is the address the computer dials (default `localhost`). gxserver's forward
    * names `127.0.0.1`, the only address it binds: Windows OpenSSH tries `::1` for `localhost` and
-   * never falls back. A live forward for the port that dials another host is replaced. The retired
-   * iOS module takes no host.
+   * never falls back. A live forward for the port that dials another host is replaced, on Android
+   * and iOS alike.
    */
   startPortForward(machineId: string, remotePort: number, remoteHost?: string): Promise<{ localPort: number }>;
   /** Close the forward's listener and every in-flight channel. No-op when there is none. */
