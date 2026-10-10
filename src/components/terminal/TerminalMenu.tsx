@@ -173,6 +173,18 @@ export default function TerminalMenu({
         onPress: () => onSelect('sessionNote'),
       });
     }
+    // Just above Handoff / Export, as in the desktop terminal's ⋯ menu (gx-chat-core
+    // `composer/ghostex_skills.rs`); its list opens as a menu of its own.
+    if (skillsEnabled) {
+      items.push({
+        kind: 'item',
+        key: 'skills',
+        label: 'Skills',
+        icon: <SparklesGlyph size={ICON_SIZE} color={iconColor} />,
+        submenu: true,
+        onPress: () => onSelect('skills'),
+      });
+    }
     if (exportTranscriptEnabled) {
       items.push({
         kind: 'item',
@@ -247,19 +259,6 @@ export default function TerminalMenu({
       icon: <AxeGlyph size={ICON_SIZE} color={GhostexPalette.DANGER} />,
       destructive: true,
       onPress: () => onSelect('killSession'),
-    });
-  }
-
-  // Second from the bottom, as in the desktop terminal's ⋯ menu (gx-chat-core
-  // `composer/ghostex_skills.rs`); its list opens as a menu of its own.
-  if (skillsEnabled) {
-    items.splice(Math.max(items.length - 1, 0), 0, {
-      kind: 'item',
-      key: 'skills',
-      label: 'Skills',
-      icon: <SparklesGlyph size={ICON_SIZE} color={iconColor} />,
-      submenu: true,
-      onPress: () => onSelect('skills'),
     });
   }
 
