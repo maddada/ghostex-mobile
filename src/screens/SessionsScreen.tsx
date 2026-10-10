@@ -63,7 +63,6 @@ import {
   ProjectEmptyRow,
   ProjectHeaderRow,
   projectRailColor,
-  TOP_LEVEL_BRANCH_WIDTH,
   SectionLabelRow,
   SessionKindLabelRow,
   SessionListToggleRow,
@@ -131,7 +130,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { resolveSelectedSpaceId, spaceRowItems, spaceSessionCounts } from '../spaces/spaceFilter';
 import { useSpacesStore } from '../spaces/store';
 import { revealSessionWorkspace, useWorkspacesStore } from '../workspaces/store';
-import { filterSummaryForWorkspace, resolveWorkspaceId } from '../workspaces/workspaceFilter';
+import { filterSummaryForWorkspace, resolveWorkspaceId, workspaceSwitchTarget } from '../workspaces/workspaceFilter';
 import { useSettingsStore } from '../settings/store';
 import { acknowledgeSessionAttention } from '../terminal/attention';
 import { markSessionOpen, markSessionOpenTap } from '../terminal/openTiming';
@@ -174,6 +173,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const selectedSpaceIdByMachine = useSpacesStore((state) => state.selectedSpaceIdByMachine);
   const selectSpace = useSpacesStore((state) => state.selectSpace);
   const selectedWorkspaceIdByMachine = useWorkspacesStore((state) => state.selectedWorkspaceIdByMachine);
+  const recentWorkspaceIdsByMachine = useWorkspacesStore((state) => state.recentWorkspaceIdsByMachine);
   const selectWorkspace = useWorkspacesStore((state) => state.selectWorkspace);
 
   const collapse = useCollapseStore();
@@ -186,9 +186,6 @@ export default function SessionsScreen({ navigation }: Props) {
   const sidebarBackgroundTint = useSettingsStore((state) => state.settings.sidebarBackgroundTint);
   const sidebarGroupsOpacityPercent = useSettingsStore(
     (state) => state.settings.sidebarGroupsOpacityPercent,
-  );
-  const sidebarProjectsOpacityPercent = useSettingsStore(
-    (state) => state.settings.sidebarProjectsOpacityPercent,
   );
   const sidebarAppearance = useMemo(
     () => resolveSidebarAppearance(sidebarBackgroundTint, sidebarBackgroundContrast),
@@ -312,6 +309,14 @@ export default function SessionsScreen({ navigation }: Props) {
     machineWorkspaces === null || selectedWorkspaceId === null
       ? null
       : (machineWorkspaces.workspaces[selectedWorkspaceId] ?? null);
+  const workspaceSwitchTo =
+    machineWorkspaces === null || selectedWorkspaceId === null
+      ? null
+      : workspaceSwitchTarget(
+          machineWorkspaces,
+          selectedWorkspaceId,
+          machine === null ? [] : (recentWorkspaceIdsByMachine[machine.id] ?? []),
+        );
   /** The machine's summary as the shown workspace sees it: its projects, sessions and Spaces. */
   const selectedSummary = useMemo(() => {
     const summary = selectedInventory?.summary ?? null;
@@ -982,23 +987,18 @@ export default function SessionsScreen({ navigation }: Props) {
     const header = card.header;
     const primaryAgent = resolvePrimaryAgent(header.agents);
     /*
-     * Branched project rails (desktop [data-project-group-style="branched"]):
-     * the card itself carries no border or fill — its membership is drawn by a
-     * short branch reaching in from the owning collection's rail, or, for a
-     * top-level project, from its own workspace theme color.
+     * A project in a collection is marked by a short branch reaching in from the collection's rail
+     * (desktop `native_sidebar/collections.rs`); the card itself carries no border or fill.
+     *
+     * CDXC:Projects 2026-10-10 WHY:
+     * A top-level project draws no branch column: the desktop's native sidebar has none for it, and
+     * the phone's old one (a leftover of the deleted React `hierarchy-panels.css`) pushed every
+     * project header and row ~20dp right of the Space row and the rest of the screen.
      */
-    const branchColor = inCollection
-      ? colorWithOpacity(
-          projectRailColor(header.collectionColor ?? 'transparent', sidebarAppearance.background),
-          sidebarGroupsOpacityPercent,
-        )
-      : colorWithOpacity(
-          projectRailColor(
-            header.themeColor.length > 0 ? header.themeColor : 'transparent',
-            sidebarAppearance.background,
-          ),
-          sidebarProjectsOpacityPercent,
-        );
+    const branchColor = colorWithOpacity(
+      projectRailColor(header.collectionColor ?? 'transparent', sidebarAppearance.background),
+      sidebarGroupsOpacityPercent,
+    );
     return (
       <View
         key={`card:${header.key}`}
@@ -1008,10 +1008,7 @@ export default function SessionsScreen({ navigation }: Props) {
           inCollection && !header.collapsed ? styles.projectCardExpanded : null,
         ]}
       >
-        <ProjectBranch
-          color={branchColor}
-          width={inCollection ? COLLECTION_BRANCH_WIDTH : TOP_LEVEL_BRANCH_WIDTH}
-        />
+        {inCollection ? <ProjectBranch color={branchColor} width={COLLECTION_BRANCH_WIDTH} /> : null}
         <View style={styles.projectCardBody}>
           <ProjectHeaderRow
             title={header.title}
@@ -1402,7 +1399,12 @@ export default function SessionsScreen({ navigation }: Props) {
       */}
       {machine !== null && showWorkspaceTile && selectedWorkspace !== null ? (
         <View style={styles.workspaceRow}>
-          <WorkspaceTile workspace={selectedWorkspace} onPress={() => setWorkspaceMenuOpen(true)} />
+          <WorkspaceTile
+            workspace={selectedWorkspace}
+            switchTo={workspaceSwitchTo}
+            onSwitch={(workspaceId) => selectWorkspace(machine.id, workspaceId)}
+            onOpenMenu={() => setWorkspaceMenuOpen(true)}
+          />
           {spaceItems.length > 0 ? (
             <SpaceTabs
               spaces={spaceItems}

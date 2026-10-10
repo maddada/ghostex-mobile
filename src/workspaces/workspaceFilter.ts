@@ -32,6 +32,30 @@ export function orderedWorkspaces(workspaces: GhostexWorkspaces): GhostexWorkspa
   });
 }
 
+/**
+ * The workspace one tap on the workspace tile's letter switches to: the most recently shown other
+ * workspace, else the next one in display order. Null with a single workspace, when the letter
+ * opens the menu instead. Mirrors gx-core `workspace_switch_target` (sidebar_menu/workspace.rs).
+ */
+export function workspaceSwitchTarget(
+  workspaces: GhostexWorkspaces,
+  currentId: string,
+  recentIds: readonly string[],
+): GhostexWorkspace | null {
+  for (const id of recentIds) {
+    if (id === currentId) continue;
+    const recent = workspaces.workspaces[id];
+    if (recent !== undefined) return recent;
+  }
+  const ordered = orderedWorkspaces(workspaces);
+  const position = ordered.findIndex((workspace) => workspace.workspaceId === currentId);
+  for (let offset = 0; offset < ordered.length; offset += 1) {
+    const candidate = ordered[(position + 1 + offset) % ordered.length];
+    if (candidate.workspaceId !== currentId) return candidate;
+  }
+  return null;
+}
+
 /** The workspace a project belongs to: its own, or its parent checkout's for a worktree project. */
 function projectWorkspaceId(
   workspaces: GhostexWorkspaces,

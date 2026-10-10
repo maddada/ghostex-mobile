@@ -61,8 +61,8 @@ export function expandedGroupBackground(sidebarBackground: string): string {
 // packages/core-ui/styles/hierarchy-panels.css). A collection is marked by a 2dp rail in
 // its own color at 18%, with a short horizontal branch reaching from that rail
 // to each member project's header; nested cards carry no border or fill of
-// their own. Top-level projects show the same branch marker derived from their
-// workspace theme color without inventing a parent rail.
+// their own. A top-level project has no branch (the desktop's native sidebar
+// draws none), so it starts at the list's left edge.
 //
 // The desktop draws both with negatively-offset ::before pseudo-elements. RN
 // gives no reliable cross-platform guarantee for a child painted outside its
@@ -73,7 +73,6 @@ export function expandedGroupBackground(sidebarBackground: string): string {
 /** Rail + branch width, and the gutter each reserves. */
 export const PROJECT_RAIL_WIDTH = ds(2);
 export const COLLECTION_BRANCH_WIDTH = ds(18);
-export const TOP_LEVEL_BRANCH_WIDTH = ds(13);
 /** Vertical center of a project header row, where its branch meets the card. */
 const PROJECT_HEADER_CENTER = ds(15);
 

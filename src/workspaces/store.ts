@@ -26,6 +26,11 @@ type WorkspacesState = {
   hydrated: boolean;
   /** Raw stored workspace ids per machine. */
   selectedWorkspaceIdByMachine: Record<string, string>;
+  /**
+   * Workspaces each machine's list showed, newest first, for the tile's one-tap switch
+   * (`workspaceSwitchTarget`). Kept for this run only, like the desktop window's recents.
+   */
+  recentWorkspaceIdsByMachine: Record<string, string[]>;
   hydrate: () => Promise<void>;
   selectWorkspace: (machineId: string, workspaceId: string) => void;
   /** Drop a removed machine's pick so the map cannot grow forever. */
@@ -50,6 +55,7 @@ function persistedRecord(raw: string | null): Record<string, string> {
 export const useWorkspacesStore = create<WorkspacesState>()((set, get) => ({
   hydrated: false,
   selectedWorkspaceIdByMachine: {},
+  recentWorkspaceIdsByMachine: {},
 
   hydrate: async () => {
     if (get().hydrated) return;
@@ -64,7 +70,14 @@ export const useWorkspacesStore = create<WorkspacesState>()((set, get) => ({
   selectWorkspace: (machineId, workspaceId) => {
     if (get().selectedWorkspaceIdByMachine[machineId] === workspaceId) return;
     const next = { ...get().selectedWorkspaceIdByMachine, [machineId]: workspaceId };
-    set({ selectedWorkspaceIdByMachine: next });
+    const recent = (get().recentWorkspaceIdsByMachine[machineId] ?? []).filter((id) => id !== workspaceId);
+    set({
+      selectedWorkspaceIdByMachine: next,
+      recentWorkspaceIdsByMachine: {
+        ...get().recentWorkspaceIdsByMachine,
+        [machineId]: [workspaceId, ...recent].slice(0, 8),
+      },
+    });
     void AsyncStorage.setItem(SELECTED_WORKSPACE_STORAGE_KEY, JSON.stringify(next));
   },
 

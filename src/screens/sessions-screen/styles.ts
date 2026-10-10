@@ -92,7 +92,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     marginTop: 12,
   },
-  /** The workspace tile, its hairline, then the Space row; fixed height so the list cannot squeeze it. */
+  /** The workspace tile, then the Space row; fixed height so the list cannot squeeze it. */
   workspaceRow: {
     marginTop: 6,
     height: 30,
@@ -101,10 +101,18 @@ export const styles = StyleSheet.create({
     gap: 6,
     flexShrink: 0,
   },
-  /** The Space row beside the tile takes the rest of the line; the row above owns the top margin. */
+  /**
+   * The Space row beside the tile takes the rest of the line; the row above owns the top margin.
+   * SpaceTabs' own box sets `flexGrow: 0, flexShrink: 0`, and Yoga lets an explicit flexGrow win
+   * over the `flex` shorthand while `flex: 1` still zeroes the basis, so a bare `flex: 1` here left
+   * the chips a 0-wide box. The grow, shrink and basis are therefore all spelled out.
+   */
   workspaceRowSpaces: {
     marginTop: 0,
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
   },
   listContent: {
     paddingBottom: 24,
@@ -145,8 +153,8 @@ export const styles = StyleSheet.create({
   projectCardBody: {
     flex: 1,
   },
+  /** No left inset: a top-level card starts at the page's edge, like the Space row above it. */
   projectCardTopLevel: {
-    marginLeft: ds(3),
     marginRight: ds(5),
     marginBottom: ds(10),
   },
