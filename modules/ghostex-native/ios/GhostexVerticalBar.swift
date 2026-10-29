@@ -164,10 +164,17 @@ enum GhostexVerticalBar {
         rectValue(window.bounds.inset(by: window.edgeInsets(for: region)))
     }
 
-    /// G3 D4's record of the fold: each division region the observer read, in the screen coordinate
-    /// space of the display showing the window (WDA's frames are screen coordinates), unrounded and as
-    /// `CGRectIntegral` (how WDA's `/source` rounds frames), and the window's own frame there as the
-    /// calibration line (WDA lists the window with its frame). The display is told by its size.
+    #endif
+
+    #if DEBUG
+    // CDXC:VerticalBar 2026-10-29 WHY: these lines record the measured bar and fold geometry while the
+    // iPhone Duo layout is tuned on a device; release builds write nothing on every layout pass.
+
+    #if canImport(UIKit, _version: 9127.0.85)
+    /// The fold as the observer read it: each division region in the screen coordinates of the display
+    /// showing the window, unrounded and rounded out (`CGRectIntegral`, as UI test tools report frames),
+    /// after the window's own frame there, to line them up with a UI test's view of the screen. The
+    /// display is told by its size.
     @available(iOS 27.1, *)
     static func logDivisions(_ regions: [UIView.ReservedRegion], of view: UIView, in window: UIWindow) {
         guard let screen = window.windowScene?.screen else { return }
@@ -175,12 +182,12 @@ enum GhostexVerticalBar {
         let windowFrame = window.convert(window.bounds, to: space)
         let display = "\(Int(screen.bounds.width))x\(Int(screen.bounds.height))"
         logger.log(
-            "D4 calibration display=\(display, privacy: .public) source=GhostexBarLayoutObserver window=\(describe(windowFrame), privacy: .public) windowIntegral=\(describe(windowFrame.integral), privacy: .public) divisions=\(regions.count, privacy: .public)"
+            "fold window display=\(display, privacy: .public) source=GhostexBarLayoutObserver window=\(describe(windowFrame), privacy: .public) windowIntegral=\(describe(windowFrame.integral), privacy: .public) divisions=\(regions.count, privacy: .public)"
         )
         for region in regions {
             let frame = view.convert(region.frame, to: space)
             logger.log(
-                "D4 division display=\(display, privacy: .public) active=\(region.isActive, privacy: .public) frame=\(describe(frame), privacy: .public) integral=\(describe(frame.integral), privacy: .public)"
+                "fold division display=\(display, privacy: .public) active=\(region.isActive, privacy: .public) frame=\(describe(frame), privacy: .public) integral=\(describe(frame.integral), privacy: .public)"
             )
         }
     }
@@ -209,6 +216,7 @@ enum GhostexVerticalBar {
     private static func describe(_ frame: CGRect) -> String {
         "\(frame.minX),\(frame.minY),\(frame.width),\(frame.height)"
     }
+    #endif
 
     /// A rectangle as JS reads it (`WindowRect`).
     static func rectValue(_ frame: CGRect) -> [String: CGFloat] {
@@ -282,7 +290,9 @@ final class GhostexBarLayoutObserver: UIView {
         layoutIfNeeded()
         let layout = currentLayout(in: window)
         reported = layout as NSDictionary
+        #if DEBUG
         GhostexVerticalBar.logLayout(layout)
+        #endif
         return layout
     }
 
@@ -304,7 +314,9 @@ final class GhostexBarLayoutObserver: UIView {
         let snapshot = layout as NSDictionary
         guard snapshot != reported else { return }
         reported = snapshot
+        #if DEBUG
         GhostexVerticalBar.logLayout(layout)
+        #endif
         onChange(layout)
     }
 
@@ -390,7 +402,9 @@ final class GhostexBarLayoutObserver: UIView {
             let read = regions.map { FoldDivision(frame: convert($0.frame, to: window), active: $0.isActive) }
             guard read != divisions else { return }
             divisions = read
+            #if DEBUG
             GhostexVerticalBar.logDivisions(regions, of: self, in: window)
+            #endif
             setNeedsLayout()
         }
         #endif
