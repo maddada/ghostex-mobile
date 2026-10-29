@@ -31,7 +31,7 @@ import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { CoordinatorBadge, FoldedStatus, RowNesting } from '../../contract/coordinatorTree';
 import {
   agentIconTint,
-  resolveAgentIconId,
+  resolveAgentArtId,
   type GhostexCustomSessionTags,
   type GhostexSession,
 } from '../../contract/mobileSummary';
@@ -404,7 +404,7 @@ export default function SessionRow({
   voiceCall = false,
 }: SessionRowProps) {
   const rowRef = useRef<ViewInstance | null>(null);
-  const iconId = resolveAgentIconId(
+  const iconId = resolveAgentArtId(
     session.agentIcon,
     session.agentName.length > 0 ? session.agentName : session.agent,
   );

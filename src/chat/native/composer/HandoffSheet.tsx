@@ -21,7 +21,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
 import type { GhostexAgentLauncher } from '../../../contract/mobileSummary';
-import { resolveAgentIconId } from '../../../contract/mobileSummary';
+import { resolveAgentArtId } from '../../../contract/mobileSummary';
 import type { MachineConnectionTarget } from '../../../machines/credentials';
 import {
   exportTranscript,
@@ -332,7 +332,7 @@ function agentName(agent: GhostexAgentLauncher): string {
 
 function AgentMark({ agent }: { agent: GhostexAgentLauncher }) {
   const P = useTranscriptTheme();
-  const Icon = AGENT_ICONS[resolveAgentIconId(agent.icon, agentName(agent))];
+  const Icon = AGENT_ICONS[resolveAgentArtId(agent.icon, agentName(agent))];
   return Icon !== undefined ? <Icon size={16} color={P.foreground} /> : null;
 }
 

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { claudeCloudPageUrl, claudeCloudTakesTask, parseClaudeCloud } from './claudeCloud';
+import { agentIconTint, resolveAgentArtId, resolveAgentIconId } from './mobileSummary';
 
 const cloud = (state: string, url = 'https://claude.ai/code/session_01Test') =>
   parseClaudeCloud({ state, url, accountName: 'MS' });
@@ -23,5 +24,13 @@ describe('a Claude cloud row on the phone', () => {
     assert.equal(claudeCloudPageUrl(cloud('running')), 'https://claude.ai/code/session_01Test');
     assert.equal(claudeCloudPageUrl(cloud('draft', '')), null);
     assert.equal(claudeCloudPageUrl(cloud('starting', '')), null);
+  });
+
+  test('the Claude (cloud) agent draws an orange cloud but behaves as Claude', () => {
+    assert.equal(resolveAgentArtId('claude-cloud', 'Claude (cloud)'), 'claude-cloud');
+    assert.equal(resolveAgentArtId('', 'Claude (cloud)'), 'claude-cloud');
+    assert.equal(agentIconTint('claude-cloud'), '#D67556');
+    assert.equal(resolveAgentIconId('claude-cloud', 'Claude (cloud)'), 'claude');
+    assert.equal(resolveAgentArtId('claude', 'Claude'), 'claude');
   });
 });

@@ -81,6 +81,7 @@ import {
   agentIconTint,
   displayStatus,
   EMPTY_CUSTOM_SESSION_TAGS,
+  resolveAgentArtId,
   resolveAgentIconId,
   type GhostexAgentLauncher,
   type GhostexQuickAction,
@@ -1456,13 +1457,14 @@ export function useSessionsScreenMenus({
       ...ctx.header.agents.map((agent): ContextMenuItem => {
         const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
         const iconId = resolveAgentIconId(agent.icon, name);
-        const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
+        const artId = resolveAgentArtId(agent.icon, name);
+        const Icon = AGENT_ICONS[artId] ?? AGENT_ICONS.terminal;
         const supportsChat = isSessionChatSupportedAgent(agent.agentId) || isSessionChatSupportedAgent(iconId);
         return {
           kind: 'item' as const,
           key: agent.agentId,
           label: name,
-          icon: <Icon size={14} color={agentIconTint(iconId)} />,
+          icon: <Icon size={14} color={agentIconTint(artId)} />,
           selected: selected !== null && selected.agentId === agent.agentId,
           selectedPresentation: 'emphasis' as const,
           trailingIcon: supportsChat ? <MessageCircleGlyph size={14} color={SidebarPalette.MUTED} /> : undefined,

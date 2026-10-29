@@ -20,7 +20,7 @@ import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
 import {
   agentIconTint,
-  resolveAgentIconId,
+  resolveAgentArtId,
   type GhostexAgentLauncher,
   type GhostexProjectIcon,
 } from '../../contract/mobileSummary';
@@ -462,7 +462,7 @@ function AgentSplitButton({
   const iconId =
     primaryAgent === null
       ? 'terminal'
-      : resolveAgentIconId(primaryAgent.icon, primaryAgent.name ?? primaryAgent.agentId);
+      : resolveAgentArtId(primaryAgent.icon, primaryAgent.name ?? primaryAgent.agentId);
   const Icon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
   return (
     <>

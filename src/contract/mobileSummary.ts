@@ -853,7 +853,8 @@ const AGENT_NAME_ALIASES: Record<string, AgentIconId> = {
   'codex cli': 'codex',
   claude: 'claude',
   'claude code': 'claude',
-  // The "Claude (cloud)" agent (gx-core agent_logos.rs draws Claude's logo for it too).
+  // The "Claude (cloud)" agent behaves as Claude here (chat support, key bar, launches); only its
+  // artwork differs (`resolveAgentArtId`).
   'claude-cloud': 'claude',
   'claude (cloud)': 'claude',
   openclaude: 'openclaude',
@@ -925,8 +926,26 @@ export function resolveAgentIconId(agentIcon?: string, agentName?: string): Agen
   return 'terminal';
 }
 
-export function agentIconTint(iconId: AgentIconId): string {
-  return AGENT_ICON_TINTS[iconId];
+/**
+ * The artwork a row, menu or dialog draws for an agent: its icon id, except the Claude (cloud)
+ * agent, which resolves to Claude for behaviour but draws an orange cloud.
+ *
+ * CDXC:ClaudeCloud 2026-10-29 DECISION:
+ * User: "please change the icon for claude cloud to an orange cloud icon instead (same color as claude #D67556". The desktop draws it from gx-core `sidebar_menu/agent_logos.rs`; the phone matches with `IconClaudeCloud` in #D67556.
+ */
+export type AgentArtId = AgentIconId | 'claude-cloud';
+
+export function resolveAgentArtId(agentIcon?: string, agentName?: string): AgentArtId {
+  const icon = (agentIcon ?? '').trim().toLowerCase();
+  const name = (agentName ?? '').trim().toLowerCase();
+  if (icon === 'claude-cloud' || (icon.length === 0 && (name === 'claude-cloud' || name === 'claude (cloud)'))) {
+    return 'claude-cloud';
+  }
+  return resolveAgentIconId(agentIcon, agentName);
+}
+
+export function agentIconTint(iconId: AgentArtId): string {
+  return iconId === 'claude-cloud' ? '#D67556' : AGENT_ICON_TINTS[iconId];
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
-import { agentIconTint, resolveAgentIconId, type GhostexSession } from '../../contract/mobileSummary';
+import { agentIconTint, resolveAgentArtId, type GhostexSession } from '../../contract/mobileSummary';
 import { resolveSessionTag } from '../../contract/sessionTags';
 import { SessionSearchCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
@@ -188,7 +188,7 @@ export default function SessionSearchSheet({ visible, machines, onOpen, onRestor
 
   const renderRow = ({ item }: { item: SessionSearchRow }) => {
     const tag = resolveSessionTag(item, item.customSessionTags);
-    const iconId = resolveAgentIconId(item.agentIcon, item.agentName);
+    const iconId = resolveAgentArtId(item.agentIcon, item.agentName);
     const AgentIcon = AGENT_ICONS[iconId] ?? AGENT_ICONS.terminal;
     // quick_access/sessions.rs `session_icon`: the tag, then the agent's colored logo, then the terminal glyph in a tile.
     const glyph =

@@ -10,7 +10,7 @@ import { Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View }
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { DelayedSendTrigger } from '../../commands/ghostexCli';
-import { agentIconTint, resolveAgentIconId } from '../../contract/mobileSummary';
+import { agentIconTint, resolveAgentArtId } from '../../contract/mobileSummary';
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
 import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from '../common/keyboard/KeyboardAwareScrollView';
@@ -165,7 +165,7 @@ export default function DelayedSendDialog({
   const canSave = sendEnterEnabled ? hasStatusTrigger || isValidDelay : hasActiveTimer || closeAfterDoneChanged;
   const trimmedTitle = sessionTitle.trim();
   const sessionTargetLabel = trimmedTitle.length > 0 ? trimmedTitle : 'Current agent session';
-  const targetIconId = resolveAgentIconId(agentIcon, agentName);
+  const targetIconId = resolveAgentArtId(agentIcon, agentName);
   const TargetIcon = AGENT_ICONS[targetIconId] ?? AGENT_ICONS.terminal;
 
   const saveChanges = async (): Promise<void> => {
