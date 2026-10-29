@@ -183,7 +183,7 @@ export const ConnectedCopy = {
 export const SessionCopy = {
   /** Row/menu title fallback when a session has no display title. */
   fallbackTitle: 'Ghostex Session',
-  /** A Claude cloud session row's cloud glyph, for screen readers. */
+  /** A Claude cloud session row's leading orange cloud, for screen readers. */
   claudeCloud: "Runs in Claude's cloud",
   /** Tapping a cloud row when the phone could not open its claude.ai page. */
   claudeCloudOpenFailed: "Couldn't open Claude's page for this session",

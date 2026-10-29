@@ -532,7 +532,10 @@ export default function SessionRow({
         ) : null}
         {/* Line 1: the row as it always was. A work card adds its chip line under it. */}
         <View style={[styles.row, { paddingLeft: linePaddingLeft }]}>
+          {/* A Claude cloud row's only cloud is its leading orange logo (CDXC:ClaudeCloud 2026-10-29 in the desktop's native_sidebar/claude_cloud.rs), so this slot says where it runs. */}
           <View
+            accessible={session.claudeCloud !== undefined}
+            accessibilityLabel={session.claudeCloud !== undefined ? SessionCopy.claudeCloud : undefined}
             style={[
               styles.icon,
               { left: iconLeft },
@@ -632,10 +635,9 @@ export default function SessionRow({
           shownCoordinatorBadge !== undefined ||
           linksBadge !== null ||
           voiceCall ||
-          session.agentbox !== undefined ||
-          session.claudeCloud !== undefined ? (
+          session.agentbox !== undefined ? (
             <View style={styles.trailing}>
-              {/* sessions.rs: the links badge, the crew badge, the voice headset, the box and the cloud, then the status (CDXC:Sidebar 2026-10-29: the user swapped the links badge before the crew badge). */}
+              {/* sessions.rs: the links badge, the crew badge, the voice headset and the box, then the status (CDXC:Sidebar 2026-10-29: the user swapped the links badge before the crew badge). */}
               {linksBadge !== null ? (
                 <View
                   accessible
@@ -668,12 +670,6 @@ export default function SessionRow({
               {shownCoordinatorBadge !== undefined ? <CoordinatorBadgeView badge={shownCoordinatorBadge} /> : null}
               {voiceCall ? <VoiceCallBadge /> : null}
               {session.agentbox !== undefined ? <AgentboxBadge agentbox={session.agentbox} /> : null}
-              {/* A Claude cloud session: the desktop's plain 12dp muted cloud before the status (claudeCloud.ts). */}
-              {session.claudeCloud !== undefined ? (
-                <View accessible accessibilityLabel={SessionCopy.claudeCloud}>
-                  <CloudGlyph size={ds(12)} color={SidebarPalette.MUTED} />
-                </View>
-              ) : null}
               {question ? (
                 <QuestionIndicator
                   activity={session.activity}

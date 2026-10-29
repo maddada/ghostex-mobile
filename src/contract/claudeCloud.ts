@@ -3,11 +3,13 @@
  * (`claudeCloud`, gx-protocol `PresentationClaudeCloud`) and what tapping the row opens.
  *
  * CDXC:ClaudeCloud 2026-10-23 DECISION:
- * User (Q411): the phone shows cloud sessions' rows too, after the computer. A cloud row carries
- * the desktop's plain cloud glyph, kept in every state the row is listed in ("please make the cloud
- * keep shown when that session goes asleep"), and tapping it opens Claude's page for the session
- * while the session runs on claude.ai, the same rule as the desktop's row click (gx-core
- * `session_claude_cloud_page`); in any other state the row opens like every row.
+ * User (Q411): the phone shows cloud sessions' rows too, after the computer. Tapping one opens
+ * Claude's page for the session while the session runs on claude.ai, the same rule as the
+ * desktop's row click (gx-core `session_claude_cloud_page`); in any other state the row opens like
+ * every row.
+ *
+ * CDXC:ClaudeCloud 2026-10-29 DECISION:
+ * User, asked "A Claude cloud session's sidebar row now starts with the orange cloud and still has a grey cloud after its title. Keep the grey one?" (Q753): "Drop the grey cloud". The row's leading orange cloud (the Claude (cloud) agent's icon) is its only cloud mark, and that icon slot carries the "Runs in Claude's cloud" accessibility label the grey glyph had (SessionRow.tsx). Supersedes the 2026-10-23 grey glyph kept in every state.
  *
  * CDXC:ClaudeCloud 2026-10-26 DECISION:
  * User, asked how the phone follows the computer's cloud chat (the first message typed in Chat View starts the session, then the computer's chat pane shows its claude.ai page): "Swap A (long press to see terminal, tap to open claude.ai)". A cloud session waiting for its task (or whose start failed) opens its chat, whatever the Default Agent View, and the first message sent there starts it (gxserver routes the send, server/src/claude_cloud/chat.rs). Once it exists on claude.ai, a tap opens its page and the long-press menu's Open Terminal shows its terminal, where Ghostex's cloud client shows the conversation and sends follow-ups. Supersedes "No, tap is enough" (no long-press cloud actions) from 2026-10-23.
