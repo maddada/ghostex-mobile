@@ -69,6 +69,7 @@ import { useTranscriptTheme } from '../chat/native/transcript/theme';
 import { DuoChromeCopy, RenameCopy, SessionCopy, TerminalHeaderCopy } from '../copy';
 import { summarizeFailure } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
+import { sessionNotesOnIn } from '../sessions/sessionNotesSwitch';
 import type { RootStackParamList } from '../navigation/types';
 import { FORK_AGENT_ICONS, renameInitialTitle } from '../sessions/sessionCommands';
 import { useSettingsStore } from '../settings/store';
@@ -185,6 +186,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
       activeTab,
       activeTab === null ? undefined : state.inventoriesByMachineId[activeTab.machineId]?.summary,
     ),
+  );
+  // Session Note in the menu and the chat's More actions only while the computer has Session notes on.
+  const sessionNotesOn = useInventoryStore((state) =>
+    activeTab === null ? true : sessionNotesOnIn(state.inventoriesByMachineId[activeTab.machineId]?.summary),
   );
   const sessionViewModeBySessionKey = useTerminalStore((state) => state.sessionViewModeBySessionKey);
   const sessionLinkOpenTarget = useInventoryStore((state) =>
@@ -920,7 +925,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         // gxserver only parses the transcripts of the agents the chat view
         // supports, so anything else would only ever get `unsupportedAgent`.
         exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
-        sessionNoteEnabled={chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
+        sessionNoteEnabled={sessionNotesOn && chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
         searchConversationEnabled={chatModeActive}
         docsEnabled={activeProject !== null && (activeProject.path ?? '').length > 0}
         attachEnabled={uploadEnabled && !uploading}

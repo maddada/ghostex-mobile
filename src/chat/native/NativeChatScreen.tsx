@@ -38,6 +38,7 @@ import { sessionChatRpc } from '../rust/transport';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
 import { callVoiceAbout } from '../../voice/callAbout';
 import { useVoiceCapability } from '../../voice/VoiceButton';
+import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, questionReplacesComposer } from './cards';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
@@ -161,6 +162,10 @@ export default function NativeChatScreen({
   // More actions' "Voice call about this chat", on a computer whose gxserver has the voice agent.
   const voiceNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const voiceCallable = useVoiceCapability(machine) && sessionId.length > 0 && projectId.length > 0;
+  // More actions' Session note, while the computer has Session notes on (Settings > Extensions).
+  const sessionNotesOn = useInventoryStore((store) =>
+    sessionNotesOnIn(store.inventoriesByMachineId[machine.id]?.summary),
+  );
 
   // A Handoff's new conversation opens with the handover link gxserver staged for it.
   const composerReady = chat.state?.composer.ready === true;
@@ -236,9 +241,10 @@ export default function NativeChatScreen({
       'terminalView',
       ...(sessionId.length > 0 && projectId.length > 0 ? ['exportTranscript', 'stashedPrompts', 'switchAccount'] : []),
       ...(voiceCallable ? ['voiceCall'] : []),
+      ...(sessionNotesOn ? ['sessionNote'] : []),
       ...hostActions.filter((action) => action !== 'exportTranscript'),
     ],
-    [hostActions, projectId, sessionId, voiceCallable],
+    [hostActions, projectId, sessionId, sessionNotesOn, voiceCallable],
   );
 
   // The header's requests, one per new value (0 runs nothing).
@@ -252,8 +258,10 @@ export default function NativeChatScreen({
   useEffect(() => {
     if (openSessionNoteRequestId === handledNote.current) return;
     handledNote.current = openSessionNoteRequestId;
-    if (openSessionNoteRequestId > 0 && document?.note.open !== true) chat.dispatch({ type: 'toggleNote' });
-  }, [chat, document?.note.open, openSessionNoteRequestId]);
+    if (openSessionNoteRequestId > 0 && sessionNotesOn && document?.note.open !== true) {
+      chat.dispatch({ type: 'toggleNote' });
+    }
+  }, [chat, document?.note.open, openSessionNoteRequestId, sessionNotesOn]);
 
   const queueSupported = document?.queue.capabilities.supported === true;
   const queueCount = document?.queue.prompts.length ?? 0;

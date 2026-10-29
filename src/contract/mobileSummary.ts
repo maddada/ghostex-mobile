@@ -6,6 +6,7 @@
 
 import { type GhostexClaudeCloud, parseClaudeCloud } from './claudeCloud';
 import { programStatusFailed, programStatusLine } from './programStatus';
+import { sessionNotesOnIn } from '../sessions/sessionNotesSwitch';
 
 // ---------------------------------------------------------------------------
 // Wire types (what the CLI emits; everything except sessionId is optional).
@@ -1618,11 +1619,17 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
   const rawSessions = Array.isArray(root.sessions) ? root.sessions : [];
   const sessions: GhostexSession[] = [];
   let anySortOrder = false;
+  const builtInFeaturesOff = Array.isArray(root.builtInFeaturesOff)
+    ? root.builtInFeaturesOff.filter((id): id is string => typeof id === 'string')
+    : undefined;
+  // While Session notes is off on the computer a row draws no note dot; the note stays saved there.
+  const sessionNotesOn = sessionNotesOnIn({ builtInFeaturesOff });
   for (const entry of rawSessions) {
     if (isObject(entry) && typeof entry.sortOrder === 'number' && Number.isFinite(entry.sortOrder)) {
       anySortOrder = true;
     }
     const session = parseSession(entry);
+    if (session !== null && !sessionNotesOn) session.sessionNote = '';
     if (session !== null && session.provider === 'zmx') sessions.push(session);
   }
   const workspaceGroups = parseWorkspaceGroups(root.workspaceGroups);
@@ -1642,9 +1649,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     builtInFeatures: Array.isArray(root.builtInFeatures)
       ? root.builtInFeatures.filter((id): id is string => typeof id === 'string')
       : [],
-    builtInFeaturesOff: Array.isArray(root.builtInFeaturesOff)
-      ? root.builtInFeaturesOff.filter((id): id is string => typeof id === 'string')
-      : undefined,
+    builtInFeaturesOff,
     sessionLinkOpenTarget: root.sessionLinkOpenTarget === 'external' ? 'external' : 'embedded',
     sidebarSessionLinks: typeof root.sidebarSessionLinks === 'string' ? root.sidebarSessionLinks : 'badge',
     dimSleepingSessions: root.dimSleepingSessions === true,

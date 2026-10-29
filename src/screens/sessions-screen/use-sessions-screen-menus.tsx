@@ -133,6 +133,7 @@ import { chatMachineLink } from '../../chat/rust/machine-link';
 import { callVoiceAbout } from '../../voice/callAbout';
 import { VOICE_SUPPORTED } from '../../voice/conversation';
 import { voiceAgentOnFor } from '../../voice/VoiceButton';
+import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import {
   buildProjectMenu,
   buildSessionMenu,
@@ -735,6 +736,7 @@ export function useSessionsScreenMenus({
         VOICE_SUPPORTED &&
         chatMachineLink(ctx.machine).capabilities()?.includes('voiceAgent') === true &&
         voiceAgentOnFor(ctx.machine.id),
+      sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
     });
     const view = sidebarMenuView(menu, menuPath, {
       openPath: (next) => setOverlay({ kind: 'sessionMenu', ctx, menuPath: next }),

@@ -431,6 +431,8 @@ export type SessionMenuInput = {
   > | null;
   /** The computer's gxserver has the voice agent, so the menu offers Voice Call. */
   voiceCall?: boolean;
+  /** The computer has Session notes on (`sessions/sessionNotesSwitch.ts`), so the menu offers Note. */
+  sessionNotes?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -661,7 +663,7 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
  * computer's own panes.
  */
 export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
-  const { session, customTags, below, threads, project, voiceCall = false } = input;
+  const { session, customTags, below, threads, project, voiceCall = false, sessionNotes = true } = input;
   const settings = PHONE_MENU_SETTINGS;
   const caps = sessionCapabilities(session);
   const id = session.sessionId;
@@ -691,7 +693,7 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
     ...(caps.canRename
       ? { rename: row('Rename', 'pencil', { type: 'sessionAction', sessionId: id, action: 'rename' }) }
       : {}),
-    ...(caps.canOpenNote
+    ...(sessionNotes && caps.canOpenNote
       ? { note: row('Note', 'note', { type: 'sessionAction', sessionId: id, action: 'note' }) }
       : {}),
     ...(caps.canSleep
