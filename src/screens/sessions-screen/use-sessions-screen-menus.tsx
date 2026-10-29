@@ -46,6 +46,11 @@ import {
   WorldGlyph,
   XGlyph,
 } from '../../components/sessions/icons';
+import {
+  resolveAgentChoice,
+  type AgentChoiceContext,
+  type AgentChoices,
+} from '../../components/sessions/agentChoice';
 import { useLauncherStore, lastActionKey } from '../../components/sessions/launcherStore';
 import {
   coordinatorOptionsCommand,
@@ -150,7 +155,10 @@ export type SessionsScreenMenusDeps = {
   navigation: SessionsNavigation;
   /** Opens a session on its terminal, whatever a tap on its row opens (a Claude cloud session's page). */
   openSessionTerminal: (target: MachineRecord, session: GhostexSession) => Promise<void>;
-  primaryAgentId: string;
+  /** The phone's remembered agent picks (last anywhere, per project, per Space). */
+  agentChoices: AgentChoices;
+  /** The computer's "Remember the agent you pick" and where a project's pick is remembered. */
+  agentChoiceContext: (machineId: string, projectId: string) => AgentChoiceContext;
   /** Full-screen progress line (null hides it). */
   setProgress: (message: string | null) => void;
   /** Drop and re-establish one machine's SSH connection, then refresh it. */
@@ -184,7 +192,8 @@ export function useSessionsScreenMenus({
   lastActionByProject,
   navigation,
   openSessionTerminal,
-  primaryAgentId,
+  agentChoices,
+  agentChoiceContext,
   setProgress,
   reconnectMachine,
   refreshAll,
@@ -1401,12 +1410,13 @@ export function useSessionsScreenMenus({
 
   // Desktop agent split-button + actions button menus -----------------------
 
+  /** The agent a project's button starts: its remembered pick while offered, else the last pick, else the first agent. */
   const resolvePrimaryAgent = useCallback(
-    (agents: GhostexAgentLauncher[]): GhostexAgentLauncher | null => {
-      if (agents.length === 0) return null;
-      return agents.find((agent) => agent.agentId === primaryAgentId) ?? agents[0];
+    (header: ProjectHeaderItem): GhostexAgentLauncher | null => {
+      const { scope, place } = agentChoiceContext(header.machineId, header.projectId);
+      return resolveAgentChoice(header.agents, agentChoices, scope, place);
     },
-    [primaryAgentId],
+    [agentChoiceContext, agentChoices],
   );
 
   const launchAgent = useCallback(
@@ -1415,6 +1425,10 @@ export function useSessionsScreenMenus({
         setTransientStatus(ProgressCopy.noStableProjectId);
         return;
       }
+      // Every launch from a project (its button or its agent menu) becomes that project's pick, as on the desktop.
+      useLauncherStore
+        .getState()
+        .rememberAgent(agent.agentId, agentChoiceContext(header.machineId, header.projectId).place);
       const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, agentName);
       const chatFirst =
@@ -1426,7 +1440,7 @@ export function useSessionsScreenMenus({
         chatFirst ? { agentId: iconId, projectId: header.projectId, title: agentName } : undefined,
       );
     },
-    [runCreationFlow, setTransientStatus],
+    [agentChoiceContext, runCreationFlow, setTransientStatus],
   );
 
   /**
@@ -1437,7 +1451,7 @@ export function useSessionsScreenMenus({
    * User: "On mobile app I can't start a coordinator thread from the agents drop down" and "Please move this to the top in both apps". The phone's agent menu offers New Coordinator… as its first row, as the desktop launcher does (gx-core `agent_launcher_items_with_accounts`), and it opens the phone's New Coordinator form.
    */
   const agentMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
-    const selected = resolvePrimaryAgent(ctx.header.agents);
+    const selected = resolvePrimaryAgent(ctx.header);
     const newCoordinator: ContextMenuItem[] =
       ctx.header.projectId.length > 0
         ? [
@@ -1471,7 +1485,6 @@ export function useSessionsScreenMenus({
           trailingIconLabel: supportsChat ? 'Supports chat' : undefined,
           onPress: () => {
             setOverlay(NONE);
-            useLauncherStore.getState().setPrimaryAgent(agent.agentId);
             launchAgent(ctx.machine, ctx.header, agent);
           },
         };

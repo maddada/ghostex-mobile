@@ -62,6 +62,7 @@ import MachineTabs, {
 import SpaceTabs from '../components/sessions/SpaceTabs';
 import type { WorkChipActions } from '../components/sessions/WorkChips';
 import WorkspaceTile, { workspaceMenuItems } from '../components/sessions/WorkspaceTile';
+import { agentChoicePlace, parseAgentChoiceScope, type AgentChoiceContext } from '../components/sessions/agentChoice';
 import { useLauncherStore } from '../components/sessions/launcherStore';
 import { expandedGroupBackground } from '../components/sessions/rows';
 import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
@@ -181,6 +182,12 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const collapse = useCollapseStore();
   const primaryAgentId = useLauncherStore((state) => state.primaryAgentId);
+  const agentByProject = useLauncherStore((state) => state.agentByProject);
+  const agentBySpace = useLauncherStore((state) => state.agentBySpace);
+  const agentChoices = useMemo(
+    () => ({ last: primaryAgentId, byProject: agentByProject, bySpace: agentBySpace }),
+    [primaryAgentId, agentByProject, agentBySpace],
+  );
   const lastActionByProject = useLauncherStore((state) => state.lastActionByProject);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
   const sidebarBackgroundContrast = useSettingsStore((state) => state.settings.sidebarBackgroundContrast);
@@ -342,6 +349,30 @@ export default function SessionsScreen({ navigation }: Props) {
     machine === null ? undefined : selectedSpaceIdByMachine[machine.id],
   );
   const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
+  /**
+   * Where a project's agent pick is remembered and which pick it starts (./agentChoice.ts): the
+   * computer's "Remember the agent you pick", the project (a worktree counts as its parent) and the
+   * Space the drawer shows it in, since the drawer lists only the selected Space's projects.
+   */
+  const agentChoiceContext = useCallback(
+    (machineId: string, projectId: string): AgentChoiceContext => {
+      const summary = machineId === machine?.id ? selectedSummary : (inventoriesByMachineId[machineId]?.summary ?? null);
+      const spaces = machineId === machine?.id ? machineSpaces : (summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES);
+      const spaceId =
+        spaces.order.length === 0
+          ? null
+          : machineId === machine?.id
+            ? selectedSpaceId
+            : resolveSelectedSpaceId(spaces, selectedSpaceIdByMachine[machineId]);
+      const worktreeParent =
+        summary?.projects.find((project) => project.projectId === projectId)?.worktreeParentProjectId ?? '';
+      return {
+        scope: parseAgentChoiceScope(summary?.newSessionAgentScope),
+        place: agentChoicePlace(machineId, projectId, worktreeParent, spaceId),
+      };
+    },
+    [machine?.id, selectedSummary, inventoriesByMachineId, machineSpaces, selectedSpaceId, selectedSpaceIdByMachine],
+  );
   const spaceCounts = useMemo(
     () =>
       spaceSessionCounts(
@@ -880,7 +911,8 @@ export default function SessionsScreen({ navigation }: Props) {
     lastActionByProject,
     navigation,
     openSessionTerminal,
-    primaryAgentId,
+    agentChoices,
+    agentChoiceContext,
     setProgress,
     reconnectMachine,
     refreshAll,
@@ -969,7 +1001,7 @@ export default function SessionsScreen({ navigation }: Props) {
       groupsOpacityPercent={sidebarGroupsOpacityPercent}
       summary={inventoriesByMachineId[block.machineId]?.summary ?? null}
       voiceCallSessionKey={voiceCallSessionKey}
-      primaryAgent={(header) => resolvePrimaryAgent(header.agents)}
+      primaryAgent={resolvePrimaryAgent}
       // The floating MachineNotice over the list says these two.
       hideStateCard={(item) =>
         (item.variant === 'failure' || item.variant === 'connecting') && machineById(block.machineId) !== null

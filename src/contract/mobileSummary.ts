@@ -613,6 +613,11 @@ export type GhostexMobileSummary = {
   sidebarSessionLinks?: string;
   /** The computer's Advanced > Dim sleeping sessions: a sleeping row fades to half strength. Off when absent. */
   dimSleepingSessions?: boolean;
+  /**
+   * The computer's Settings > Agents > Remember the agent you pick (`space` or `everywhere`); absent
+   * means per project, the default (src/components/sessions/agentChoice.ts).
+   */
+  newSessionAgentScope?: 'space' | 'everywhere';
 };
 
 // ---------------------------------------------------------------------------
@@ -1643,6 +1648,10 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     sessionLinkOpenTarget: root.sessionLinkOpenTarget === 'external' ? 'external' : 'embedded',
     sidebarSessionLinks: typeof root.sidebarSessionLinks === 'string' ? root.sidebarSessionLinks : 'badge',
     dimSleepingSessions: root.dimSleepingSessions === true,
+    newSessionAgentScope:
+      root.newSessionAgentScope === 'space' || root.newSessionAgentScope === 'everywhere'
+        ? root.newSessionAgentScope
+        : undefined,
   };
 }
 
