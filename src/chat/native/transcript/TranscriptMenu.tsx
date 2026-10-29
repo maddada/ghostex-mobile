@@ -15,14 +15,19 @@
  * selection menu's Add to Chat asks the core for the selection's row
  * (`quote` below), so the quote reads exactly as this menu's Add to Chat. The subagent viewer opens
  * the same menu (user decision 2026-10-12), nested in its own modal.
+ *
+ * Reply (`replyToSelection`, CDXC:SessionChat 2026-10-29 DECISION on `reply_item` in the core) opens
+ * `ReplySheet` once this sheet is gone: iOS cannot present one modal while another slides away.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { MenuSheet, type MenuRow } from '../composer/MenuSheet';
 import { arr, obj, str } from './json';
+import { ReplySheet, type ReplyAction } from './ReplySheet';
 import { closeTranscriptMenu, useTranscriptMenuStore } from './transcriptMenuStore';
 
 /** What the screen answers for the menu's rows. */
@@ -65,7 +70,8 @@ export function TranscriptMenuSheet({
       .map((row) => obj(row))
       .filter((row): row is MenuRow => {
         const command = obj(row?.command);
-        return command !== null && (str(command, 'type') === 'appendToDraft' || host.serves(command));
+        const type = str(command, 'type');
+        return command !== null && (type === 'appendToDraft' || type === 'replyToSelection' || host.serves(command));
       });
     // The message's own actions follow Copy and Add to Chat: the phone shows none of them until
     // the message is held (desktop shows them on hover).
@@ -102,6 +108,26 @@ export function TranscriptMenuSheet({
       if (useTranscriptMenuStore.getState().quote === quote) useTranscriptMenuStore.setState({ quote: null });
     };
   }, [enabled, quote]);
+  // The Reply sheet's quote, and the one waiting for the menu sheet to finish going away (iOS).
+  const [replyQuote, setReplyQuote] = useState<string | null>(null);
+  const replyAfterDismiss = useRef<string | null>(null);
+  const onMenuDismissed = useCallback(() => {
+    const quote = replyAfterDismiss.current;
+    replyAfterDismiss.current = null;
+    if (quote !== null) setReplyQuote(quote);
+  }, []);
+  // The core composes the chat box (`transcriptReply`); Send reply then sends it as Send does.
+  const onReply = useCallback(
+    (quote: string, reply: string, action: ReplyAction) => {
+      setReplyQuote(null);
+      void queryAsync('transcriptReply', [{ draft: composerText, quote, reply }]).then((draft) => {
+        if (typeof draft !== 'string' || chat.composer === null) return;
+        chat.composer.replace(draft);
+        if (action === 'send') chat.composer.submit('send');
+      });
+    },
+    [chat.composer, composerText, queryAsync],
+  );
   const onCommand = useCallback(
     (command: MenuRow): boolean => {
       if (str(command, 'type') === 'messageAction') {
@@ -114,10 +140,22 @@ export function TranscriptMenuSheet({
         if (text.length > 0) chat.dispatch({ type: 'appendToDraft', text, draft: composerText });
         return false;
       }
+      if (str(command, 'type') === 'replyToSelection') {
+        const quote = str(command, 'quote');
+        if (quote.length === 0) return false;
+        if (Platform.OS === 'ios') replyAfterDismiss.current = quote;
+        else setReplyQuote(quote);
+        return false;
+      }
       host.perform(command);
       return false;
     },
     [chat, composerText, host],
   );
-  return <MenuSheet rows={rows} onClose={closeTranscriptMenu} onCommand={onCommand} />;
+  return (
+    <>
+      <MenuSheet rows={rows} onClose={closeTranscriptMenu} onCommand={onCommand} onDismissed={onMenuDismissed} />
+      <ReplySheet quote={replyQuote} onClose={() => setReplyQuote(null)} onReply={onReply} />
+    </>
+  );
 }

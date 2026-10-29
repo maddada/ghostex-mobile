@@ -211,6 +211,8 @@ export type ChatCoreQuery =
   | 'composerKeyIntent'
   | 'referenceMenu'
   | 'transcriptMenu'
+  /** `transcriptReply({draft, quote, reply})`: the chat box after the transcript menu's Reply adds a reply. */
+  | 'transcriptReply'
   | 'sendBlockedToast'
   | 'renderVisual'
   | 'speakableSegments'
