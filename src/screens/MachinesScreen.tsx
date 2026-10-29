@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { markManualDisconnect } from '../app/autoReconnect';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
 import { CameraGlyph, QrcodeGlyph, ShieldGlyph } from '../components/onboarding/SetupIcons';
 import { setupText } from '../components/onboarding/SetupPrimitives';
@@ -46,6 +47,8 @@ const NONE: Overlay = { kind: 'none' };
 
 export default function MachinesScreen({ navigation }: Props) {
   const machines = useMachinesStore((state) => state.machines);
+  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(styles.content);
   const removeMachine = useMachinesStore((state) => state.removeMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
   const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
@@ -93,7 +96,7 @@ export default function MachinesScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={edges.scroll} contentContainerStyle={[styles.content, edges.content]}>
         {machines.length > 0 ? (
           <>
             <View style={styles.cards}>

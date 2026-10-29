@@ -18,6 +18,7 @@
 //  ConnectionSessionManager integration, macOS paths.
 //
 
+import ExpoModulesCore
 import UIKit
 import OSLog
 import GhosttyKit
@@ -71,6 +72,11 @@ class GhosttyTerminalView: UIView {
 
     /// Fired after software-keyboard input consumes the RN accessory's one-shot modifiers.
     var onKeyModifiersConsumed: (() -> Void)?
+
+    /// Fired with the top edge of the cursor row (points from this view's top) when it changes; see
+    /// `reportCaretIfNeeded`. The host view forwards it to React, which slides the view with the keyboard.
+    var onCaretTopChange: ((CGFloat) -> Void)?
+    var lastReportedCaretTop: CGFloat?
 
     /// Per-surface presentation overrides (font size)
     var surfacePresentationOverrides = TerminalPresentationOverrides.empty
@@ -271,6 +277,7 @@ class GhosttyTerminalView: UIView {
             self.configureIOSurfaceLayers(size: self.bounds.size)
             ghostty_surface_refresh(surface)
             ghostty_surface_draw(surface)
+            self.reportCaretIfNeeded()
             self.markIOSurfaceLayersForDisplay()
         }
     }
@@ -303,8 +310,10 @@ class GhosttyTerminalView: UIView {
 
         backgroundColor = .black
 
-        // Set content scale factor for retina rendering (important before surface creation)
-        self.contentScaleFactor = UIScreen.main.scale
+        // Set content scale factor for retina rendering (important before surface creation). The view
+        // has no window yet, so the foreground window scene gives the scale of the display it will be
+        // shown on (Expo's `SceneGeometry`); `didMoveToWindow` then follows the window's own.
+        self.contentScaleFactor = SceneGeometry.displayScale()
 
         setupSurface()
 

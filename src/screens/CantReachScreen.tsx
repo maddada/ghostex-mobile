@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { formatAppLog, useAppLogStore } from '../app/appLog';
 import { Accordion, type AccordionItem } from '../components/common/Collapsible';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { SetupButton, StatusDot, setupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { SshOsButtons, type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { CantReachCopy } from '../copy';
@@ -42,6 +43,8 @@ export default function CantReachScreen({ navigation, route }: Props) {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hostKeyReset, setHostKeyReset] = useState<'idle' | 'resetting' | 'done'>('idle');
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(formStyles.scroll);
 
   useEffect(
     () => () => {
@@ -192,7 +195,7 @@ export default function CantReachScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={formStyles.page} edges={['bottom']}>
-      <ScrollView contentContainerStyle={formStyles.scroll}>
+      <ScrollView style={edges.scroll} contentContainerStyle={[formStyles.scroll, edges.content]}>
         <View style={styles.hero}>
           <View style={styles.eyebrow}>
             <StatusDot color={SetupPalette.ERROR} />

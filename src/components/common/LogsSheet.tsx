@@ -6,6 +6,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
 import { formatAppLog, formatLogTime, useAppLogStore } from '../../app/appLog';
@@ -17,6 +19,7 @@ export type LogsSheetProps = {
 };
 
 export default function LogsSheet({ visible, onClose }: LogsSheetProps) {
+  const bar = useVerticalBarSpace();
   const entries = useAppLogStore((state) => state.entries);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,7 +41,7 @@ export default function LogsSheet({ visible, onClose }: LogsSheetProps) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Logs</Text>

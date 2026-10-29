@@ -6,12 +6,15 @@
 
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { barPadding } from '../../../components/common/verticalBar/layout';
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import type { RustChat } from '../../rust/useRustChat';
 import { isTrue, obj, str } from './json';
 import { useTranscriptTheme } from './Transcript';
 
 export function RewindDialog({ chat }: { chat: RustChat }) {
   const theme = useTranscriptTheme();
+  const bar = useVerticalBarSpace();
   const state = obj(chat.state?.document?.rewind);
   if (state === null) return null;
   const busy = isTrue(state, 'busy');
@@ -39,7 +42,7 @@ export function RewindDialog({ chat }: { chat: RustChat }) {
   );
   return (
     <Modal visible transparent animationType="fade" onRequestClose={cancel} statusBarTranslucent>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, barPadding(bar, 16)]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={busy ? undefined : cancel}

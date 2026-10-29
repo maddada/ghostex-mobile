@@ -19,6 +19,7 @@ import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextIn
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { WorkLinkKind } from '../../commands/ghostexCli';
+import { useScrollToBarEdges, useVerticalBarSpace } from '../../components/common/verticalBar/VerticalBarArea';
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
 
 export type WorkLinkCandidate = {
@@ -101,6 +102,9 @@ export type WorkLinkPickerProps = {
 
 export default function WorkLinkPicker({ kind, sessionTitle, load, onPick, onCancel }: WorkLinkPickerProps) {
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
+  // The list reaches under the side bar, its rows keep clear of it (FL-LAY-05).
+  const listEdges = useScrollToBarEdges();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<WorkLinkCandidates | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,7 +154,7 @@ export default function WorkLinkPicker({ kind, sessionTitle, load, onPick, onCan
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
-      <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }, bar.padding]}>
         <View style={styles.header}>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={onCancel}>
             <Text style={styles.headerAction}>Cancel</Text>
@@ -194,6 +198,8 @@ export default function WorkLinkPicker({ kind, sessionTitle, load, onPick, onCan
         {error !== null ? <Text style={styles.error}>{error}</Text> : null}
         {result !== null && result.notice.length > 0 ? <Text style={styles.notice}>{result.notice}</Text> : null}
         <FlatList
+          style={listEdges.scroll}
+          contentContainerStyle={listEdges.content}
           data={result?.candidates ?? []}
           keyExtractor={(item) => item.value}
           keyboardShouldPersistTaps="handled"

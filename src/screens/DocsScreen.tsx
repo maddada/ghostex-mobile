@@ -32,6 +32,8 @@ import {
   WorldGlyph,
   XGlyph,
 } from '../components/sessions/icons';
+import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { RefreshIcon } from '../components/terminal/icons';
 import { DocsCopy } from '../copy';
 import { listProjectDocs, resolveDocsEntryPath } from '../docs/client';
@@ -83,6 +85,8 @@ function folderOf(file: DocsFileNode): string {
 
 export default function DocsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  const listEdges = useScrollToBarEdges(styles.listContent);
   const { machineId, projectId, projectName, projectPath } = route.params;
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));
   const machineRef = useRef(machine);
@@ -151,6 +155,23 @@ export default function DocsScreen({ navigation, route }: Props) {
       ),
     });
   }, [navigation, projectName, refresh]);
+  // On the iPhone Duo, Reload stands in the side bar under Back; the filter field takes the keyboard.
+  useStackScreenRail(
+    useMemo(
+      () => ({
+        entries: [
+          {
+            key: 'reload',
+            label: DocsCopy.reload,
+            icon: (size: number) => <RefreshIcon size={size} color={GhostexPalette.FOREGROUND} />,
+            onPress: refresh,
+          },
+        ],
+        reserveKeyboard: true,
+      }),
+      [refresh],
+    ),
+  );
 
   // Top-level folders start open; everything deeper starts closed.
   const expandedSet = useMemo(() => {
@@ -345,7 +366,8 @@ export default function DocsScreen({ navigation, route }: Props) {
         renderItem={renderRow}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+        style={listEdges.scroll}
+        contentContainerStyle={[styles.listContent, listEdges.content, { paddingBottom: insets.bottom + 24 }]}
         ListEmptyComponent={error === null ? (empty ?? undefined) : undefined}
         ListFooterComponent={
           query.trim().length > 0 && rows.length <= 1 ? (

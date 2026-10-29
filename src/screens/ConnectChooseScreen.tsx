@@ -9,6 +9,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
 import { CameraGlyph, QrcodeGlyph, ShieldGlyph } from '../components/onboarding/SetupIcons';
 import { setupText } from '../components/onboarding/SetupPrimitives';
@@ -20,9 +21,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ConnectChoose'>;
 
 export default function ConnectChooseScreen({ navigation }: Props) {
   const openScanner = (): void => navigation.navigate('ScanCode');
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={edges.scroll} contentContainerStyle={[styles.content, edges.content]}>
         <View style={styles.intro}>
           <Text style={setupText.eyebrow}>{ConnectChooseCopy.eyebrow}</Text>
           <Text style={setupText.titleLg}>{ConnectChooseCopy.title}</Text>

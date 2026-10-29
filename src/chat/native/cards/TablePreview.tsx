@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import { Glyph } from './icons';
 import { useChatOverlayStore } from './overlayStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -27,6 +28,7 @@ export function TablePreview() {
   const P = useTranscriptTheme();
   const preview = useChatOverlayStore((state) => state.tablePreview);
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const { width: screenWidth } = useWindowDimensions();
   const [copied, setCopied] = useState<string | null>(null);
   if (preview === null) return null;
@@ -47,14 +49,14 @@ export function TablePreview() {
       min: longest(texts.flatMap((text) => text.split(/\s+/).map((word) => word.length))),
     };
   });
-  const widths = fitTableColumns(extents, CELL_INSET, screenWidth - SHEET_MARGIN_X, 14);
+  const widths = fitTableColumns(extents, CELL_INSET, screenWidth - bar.left - bar.right - SHEET_MARGIN_X, 14);
   const copy = (label: string, text: string) => {
     void Clipboard.setStringAsync(text).then(() => setCopied(label));
   };
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
       <View style={[styles.backdrop, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.card}>
+        <View style={[styles.card, bar.margin]}>
           <View style={styles.header}>
             <Text style={styles.title}>Table</Text>
             <View style={styles.headerActions}>

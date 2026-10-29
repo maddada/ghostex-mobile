@@ -113,6 +113,8 @@ export default function TerminalKeyBar({ sessionKey, agentId, onDismissKeyboard 
   const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pageHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A focus hand-over to the terminal is in flight; the pen ignores further presses until it answers. */
+  const handOverPending = useRef(false);
 
   const showPageHint = useCallback((hint: string): void => {
     if (pageHintTimer.current !== null) clearTimeout(pageHintTimer.current);
@@ -247,17 +249,33 @@ export default function TerminalKeyBar({ sessionKey, agentId, onDismissKeyboard 
     });
   };
 
+  /**
+   * Pen pressed. Opening swaps the key rows for the editor. Closing asks the terminal for first responder
+   * while the editor, which holds it now, is still mounted: UIKit then moves the responder straight over and
+   * the keyboard stays up. Removing the editor first would resign it, hide the keyboard and show it again.
+   * The editor goes only once the native call has answered. A refusal or an error still closes it (the
+   * keyboard then hides with the editor) and is logged, so the failure is not silent.
+   */
   const toggleEditor = (): void => {
     clearRepeat();
     clearModifiers();
-    setEditorVisible((current) => {
-      if (current) {
-        setTimeout(() => {
-          void GhostexNative.focusTerminal(sessionKey).catch(() => undefined);
-        }, 0);
+    if (!editorVisible) {
+      setEditorVisible(true);
+      return;
+    }
+    if (handOverPending.current) return;
+    handOverPending.current = true;
+    void (async () => {
+      try {
+        if (!(await GhostexNative.focusTerminal(sessionKey))) {
+          console.warn(`Terminal key bar: the terminal refused the keyboard focus for session ${sessionKey}.`);
+        }
+      } catch (error) {
+        console.warn(`Terminal key bar: handing the keyboard to the terminal failed for session ${sessionKey}.`, error);
       }
-      return !current;
-    });
+      handOverPending.current = false;
+      setEditorVisible(false);
+    })();
   };
 
   const submitEditor = (): void => {

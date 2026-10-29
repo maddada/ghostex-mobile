@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PortSections } from './web-preview/PortSections';
 import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { WebPreviewCopy } from '../copy';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -148,6 +149,8 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
 
   const addressValid = parseAddressInput(addressText) !== null;
   const listedPorts = listing.kind === 'loaded' ? listing.ports : [];
+  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const pickerEdges = useScrollToBarEdges(styles.pickerContent);
 
   // A machine deleted while this screen was open has nothing left to preview.
   if (machine === undefined) {
@@ -163,7 +166,8 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.screen} edges={['bottom']}>
       <KeyboardAwareScrollView
-        contentContainerStyle={styles.pickerContent}
+        style={pickerEdges.scroll}
+        contentContainerStyle={[styles.pickerContent, pickerEdges.content]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={

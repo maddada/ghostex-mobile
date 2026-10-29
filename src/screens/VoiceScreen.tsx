@@ -26,6 +26,7 @@ import Svg, { Path } from 'react-native-svg';
 import { IconPill } from '../chat/native/cards/ChatPills';
 import { useTranscriptTheme } from '../chat/native/transcript/theme';
 import BottomSheet from '../components/common/BottomSheet';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { CheckGlyph } from '../components/onboarding/SetupIcons';
 import { SettingsGlyph } from '../components/sessions/icons';
 import { useMachinesStore } from '../machines/store';
@@ -309,7 +310,11 @@ function FocusBanner() {
         accessibilityLabel="All sessions: talk about every session"
         disabled={phase !== 'live'}
         hitSlop={8}
-        style={({ pressed }) => [styles.allSessions, phase !== 'live' && styles.controlDisabled, pressed && styles.controlPressed]}
+        style={({ pressed }) => [
+          styles.allSessions,
+          phase !== 'live' && styles.controlDisabled,
+          pressed && styles.controlPressed,
+        ]}
         onPress={() => focusVoiceOn(null)}
       >
         <Text style={styles.allSessionsText}>All sessions</Text>
@@ -326,7 +331,10 @@ function Line({ line }: { line: VoiceLine }) {
         <View style={[styles.caption, line.role === 'user' ? styles.captionUser : styles.captionAgent]}>
           <Text style={styles.captionWho}>{line.role === 'user' ? 'You' : 'Agent'}</Text>
           {parts.map((part, at) => (
-            <Text key={at} style={[styles.captionText, at > 0 && styles.captionParagraph, !line.final && styles.captionDraft]}>
+            <Text
+              key={at}
+              style={[styles.captionText, at > 0 && styles.captionParagraph, !line.final && styles.captionDraft]}
+            >
               {line.cut && at === parts.length - 1 ? (part.trim().length > 0 ? `${part} …` : '…') : part}
             </Text>
           ))}
@@ -376,6 +384,8 @@ export default function VoiceScreen({ navigation }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canPickVoice = active && voice.voiceOptions.length > 0;
+  // The conversation reaches under the iPhone Duo's side bar, its lines keep clear of it (FL-LAY-05).
+  const linesEdges = useScrollToBarEdges(styles.linesContent);
 
   /**
    * CDXC:VoiceMode 2026-10-20 DECISION:
@@ -497,7 +507,11 @@ export default function VoiceScreen({ navigation }: Props) {
       <FocusBanner />
 
       <View style={styles.lines}>
-        <ScrollView {...scrollProps} style={styles.lines} contentContainerStyle={styles.linesContent}>
+        <ScrollView
+          {...scrollProps}
+          style={[styles.lines, linesEdges.scroll]}
+          contentContainerStyle={[styles.linesContent, linesEdges.content]}
+        >
           {voice.phase === 'live' ? <VoiceMemoryCard /> : null}
           {voice.lines.length === 0 && active ? (
             <Text style={styles.hint}>

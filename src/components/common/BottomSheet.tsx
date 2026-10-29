@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import { useKeyboardTop } from './keyboard/keyboardFrame';
+import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
 
@@ -22,13 +23,14 @@ export type BottomSheetProps = {
 
 export default function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   // The navigation bar's inset is under the keyboard while it is open; the sheet sits right on top of it.
   const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingContainer style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(bottomInset, 16) + 12 }]}>
+        <View style={[styles.sheet, bar.margin, { paddingBottom: Math.max(bottomInset, 16) + 12 }]}>
           <View style={styles.grabber} />
           <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.content}>
             {children}

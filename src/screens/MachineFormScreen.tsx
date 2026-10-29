@@ -15,7 +15,7 @@
  * Sections live in ./machine-form/; this file owns the state and the save.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,8 +25,16 @@ import { markManualDisconnect } from '../app/autoReconnect';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
+import type { RailEntry } from '../components/common/verticalBar/railSlot';
+import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
+import {
+  RoundBarButton,
+  useHeaderPlacement,
+  useScrollToBarEdges,
+} from '../components/common/verticalBar/VerticalBarArea';
 import { SetupButton, setupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
+import { CheckIcon } from '../components/terminal/icons';
 import { EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
@@ -70,6 +78,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MachineForm' | 'Tailsca
 
 /** "Connected now" on the Easy Connect summary: the machine answered within the last 3 minutes. */
 const CONNECTED_NOW_WINDOW_MS = 3 * 60 * 1000;
+/** The round Save in the iPhone Duo's status band: the side bar's smallest button, to sit in the 44-pt row. */
+const BAND_SAVE_SIZE = 40;
+const BAND_SAVE_GLYPH = 20;
 
 function parsePort(value: string): number | null {
   const parsed = Number.parseInt(value.trim(), 10);
@@ -79,6 +90,8 @@ function parsePort(value: string): number | null {
 
 export default function MachineFormScreen({ navigation, route }: Props) {
   const machineId = route.params?.machineId ?? null;
+  // The form reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const scrollEdges = useScrollToBarEdges(formStyles.scroll);
   const scannedToken = route.params?.tailcatToken;
   const machines = useMachinesStore((state) => state.machines);
   const addMachine = useMachinesStore((state) => state.addMachine);
@@ -334,6 +347,19 @@ export default function MachineFormScreen({ navigation, route }: Props) {
    * react-native-screens on Android crashes ("View already has a parent") when views inside a screen's header or content are re-parented while that screen's removal transition runs (react-native-screens #4677, #3249). This header was set again on every render, and Save re-renders right around goBack() (saving, the store update, a renamed title). So it is set only when what it shows changes, never once the form is leaving, and the title stays the name the form opened with.
    */
   const saveDisabled = !canSave || saving;
+  // On the iPhone Duo (band and side bar) Save is a round button with a checkmark (owner D2,
+  // 2026-10-26); the system header on other iPhones keeps the text.
+  const roundSave = useHeaderPlacement().kind !== 'top';
+  const saveEntry = useMemo<RailEntry>(
+    () => ({
+      key: 'save',
+      label: EditMachineCopy.save,
+      icon: (size) => <CheckIcon size={size} color={SetupPalette.ACCENT} />,
+      onPress: () => void saveRef.current(),
+      disabled: saveDisabled,
+    }),
+    [saveDisabled],
+  );
   useLayoutEffect(() => {
     if (removed !== 'no' || leaving.current) return;
     if (!editing) {
@@ -342,15 +368,24 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     }
     navigation.setOptions({
       title: headerName.length > 0 ? headerName : MachineCopy.editor.editTitle,
-      headerRight: () => (
-        <Pressable accessibilityRole="button" disabled={saveDisabled} onPress={() => void saveRef.current()}>
-          <Text style={[setupText.accent, styles.headerAction, saveDisabled ? setupText.dim : null]}>
-            {EditMachineCopy.save}
-          </Text>
-        </Pressable>
-      ),
+      headerRight: roundSave
+        ? () => <RoundBarButton entry={saveEntry} size={BAND_SAVE_SIZE} glyphSize={BAND_SAVE_GLYPH} />
+        : () => (
+            <Pressable accessibilityRole="button" disabled={saveDisabled} onPress={() => void saveRef.current()}>
+              <Text style={[setupText.accent, styles.headerAction, saveDisabled ? setupText.dim : null]}>
+                {EditMachineCopy.save}
+              </Text>
+            </Pressable>
+          ),
     });
-  }, [navigation, removed, editing, easyConnect, headerName, saveDisabled]);
+  }, [navigation, removed, editing, easyConnect, headerName, saveDisabled, roundSave, saveEntry]);
+  // The side bar shows Save under Back; every field of the form takes the keyboard.
+  useStackScreenRail(
+    useMemo(
+      () => ({ entries: editing && removed === 'no' ? [saveEntry] : [], reserveKeyboard: true }),
+      [editing, removed, saveEntry],
+    ),
+  );
 
   const connectedNow =
     existing !== null &&
@@ -451,7 +486,11 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     <SafeAreaView style={formStyles.page} edges={['bottom']}>
       {/* The Connect footer rides above the keyboard with the form on devices that do not resize the window. */}
       <KeyboardAvoidingContainer style={formStyles.keyboardArea}>
-        <KeyboardAwareScrollView contentContainerStyle={formStyles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView
+          style={scrollEdges.scroll}
+          contentContainerStyle={[formStyles.scroll, scrollEdges.content]}
+          keyboardShouldPersistTaps="handled"
+        >
           {existing !== null ? (
             <>
               {inventory?.lastError !== undefined && inventory.lastError !== null ? (

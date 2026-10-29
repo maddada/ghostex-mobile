@@ -88,8 +88,11 @@ extension GhosttyTerminalView {
         }
     }
 
+    /// Follows the display scale of the window the view is shown in, read from the window's traits: on a
+    /// device with two displays (iPhone Duo) the main screen is ambiguous. A view outside a window keeps
+    /// its scale until it moves into one (`didMoveToWindow` updates it).
     func updateContentScaleIfNeeded() {
-        let targetScale = window?.screen.scale ?? UIScreen.main.scale
+        guard let targetScale = window?.traitCollection.displayScale, targetScale > 0 else { return }
         if contentScaleFactor != targetScale {
             contentScaleFactor = targetScale
         }

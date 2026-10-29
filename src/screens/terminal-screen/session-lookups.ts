@@ -59,6 +59,8 @@ export type ExportedTranscript = {
 };
 
 export const HEADER_HEIGHT = 44;
+/** The header row's side padding. */
+export const HEADER_PADDING = 4;
 /** Deliberate separation between the Android IME boundary and the screen's bottom edge. */
 export const ANDROID_KEYBOARD_GAP = 3;
 /** How long an onSingleTap keeps the key bar optimistic before keyboard events decide. */

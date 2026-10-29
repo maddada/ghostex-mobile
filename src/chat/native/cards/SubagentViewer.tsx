@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import { transcriptItemKey, type ProjectedMessage, type TranscriptItem } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
@@ -35,6 +36,7 @@ export function SubagentViewer({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const state = obj(chat.state?.document?.subagent);
   const items = chat.state?.subagentItems ?? [];
   if (state === null) return null;
@@ -48,7 +50,7 @@ export function SubagentViewer({
     <Modal visible transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
       <View style={[styles.backdrop, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
         <Pressable accessibilityLabel="Close subagent transcript" style={StyleSheet.absoluteFill} onPress={close} />
-        <View style={styles.card}>
+        <View style={[styles.card, bar.margin]}>
           <View style={styles.header}>
             {isTrue(state, 'canBack') ? (
               <IconButton

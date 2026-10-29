@@ -22,8 +22,8 @@
  * navigation would lose the request body.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
@@ -36,14 +36,38 @@ import {
   TextInput,
   View,
   type TextInputInstance,
+  type ViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { ArrowIcon, CloseIcon, DesktopIcon, ExternalLinkIcon, RefreshIcon } from '../components/terminal/icons';
-import { WebPreviewCopy } from '../copy';
+import { measureInWindow } from '../components/common/measureInWindow';
+import { bandRowFrame } from '../components/common/verticalBar/layout';
+import {
+  barBackgroundToEdges,
+  railMenuItems,
+  useBandOverflow,
+  useContentTop,
+  useHeaderPlacement,
+  useLiveMenuAnchor,
+  useRailButtons,
+  useRailOverflow,
+  useVerticalBarSpace,
+  type RailButtons,
+  type RailEntry,
+} from '../components/common/verticalBar/VerticalBarArea';
+import ContextMenu, { type MenuAnchor } from '../components/sessions/ContextMenu';
+import {
+  ArrowIcon,
+  CloseIcon,
+  DesktopIcon,
+  EllipsisIcon,
+  ExternalLinkIcon,
+  RefreshIcon,
+} from '../components/terminal/icons';
+import { DuoChromeCopy, WebPreviewCopy } from '../copy';
 import { ensureConnected } from '../inventory/client';
 import { hasPassword } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
@@ -61,7 +85,7 @@ import {
   parseAddressInput,
   remoteDisplayAddress,
 } from '../webPreview/urls';
-import { styles } from './web-preview/styles';
+import { BAND_ROW_HEIGHT, BAND_ROW_PADDING, TOOLBAR_BUTTON_SIZE, TOOLBAR_PADDING, styles } from './web-preview/styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WebPreview'>;
 
@@ -186,8 +210,12 @@ function buildLinkRewriteScript(forwarded: ReadonlyArray<readonly [number, numbe
 })();`;
 }
 
+/** The toolbar buttons of the status band's row: side by side, `TOOLBAR_BUTTON_SIZE` wide. */
+const WEB_BAND_BUTTONS = { size: TOOLBAR_BUTTON_SIZE, gap: 0 } as const;
+
 export default function WebPreviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const headerPlacement = useHeaderPlacement();
   /**
    * CDXC:Mobile 2026-10-25 WHY: react-native-webview 14.0.1 declares `class WebView<P = undefined>`,
    * so its props become `WebViewProps & undefined`, which TypeScript reduces to `never` and every
@@ -700,6 +728,113 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
 
   const linkRewriteScript = useMemo(() => buildLinkRewriteScript(forwardedPairs), [forwardedPairs]);
 
+  // On the iPhone Duo's side bar, as the approved panes mockup (owner D1, 2026-10-26): Close, Back,
+  // Reload and "More options", whose menu holds Forward, Desktop Site and Open in Browser, and Reload
+  // too while the side bar has no room for it. Same labels, actions and states as the toolbar. The
+  // address field takes the keyboard.
+  const isFocused = useIsFocused();
+  const inRail = headerPlacement.kind === 'rail' && isFocused;
+  // The "…" menu while open, at its button (F3). It stays open when the pose changes (FL-LAY-14),
+  // following its button, or centred while the toolbar holds its items instead (status band, top).
+  const [railMenu, setRailMenu] = useState<{ anchor?: MenuAnchor } | null>(null);
+  const moreButtonRef = useRef<ViewInstance | null>(null);
+  const railMenuAnchor = useLiveMenuAnchor(
+    railMenu === null ? null : { key: 'more', pressed: railMenu.anchor },
+    moreButtonRef,
+  );
+  const contentTop = useContentTop();
+  const bar = useVerticalBarSpace();
+  const reloadDisabled = source === null || failure !== null;
+  const railButtons = useMemo<RailButtons>(
+    () => ({
+      pinned: 1,
+      moreMenu: 'always',
+      reserveKeyboard: true,
+      entries: [
+        {
+          key: 'close',
+          label: WebPreviewCopy.closeLabel,
+          icon: (size) => <CloseIcon size={size} color={GhostexPalette.FOREGROUND} />,
+          onPress: () => navigation.goBack(),
+        },
+        {
+          key: 'back',
+          label: WebPreviewCopy.backLabel,
+          icon: (size) => <ArrowIcon direction="left" size={size} color={GhostexPalette.FOREGROUND} />,
+          onPress: goBack,
+          disabled: !canGoBack,
+        },
+        {
+          key: 'reload',
+          label: WebPreviewCopy.reloadLabel,
+          icon: (size) => <RefreshIcon size={size} color={GhostexPalette.FOREGROUND} />,
+          onPress: reload,
+          disabled: reloadDisabled,
+        },
+        {
+          key: 'more',
+          label: DuoChromeCopy.more,
+          icon: (size) => <EllipsisIcon size={size} color={GhostexPalette.FOREGROUND} />,
+          onPress: (anchor) => setRailMenu({ anchor }),
+        },
+      ],
+    }),
+    [canGoBack, goBack, navigation, reload, reloadDisabled],
+  );
+  useRailButtons(railButtons, GhostexPalette.BACKGROUND, inRail);
+  const railOverflow = useRailOverflow(railButtons, inRail);
+  // The status band's row (§12 "1b"): the rail's buttons (Close, Back, Reload, "…"), those that do not
+  // fit moving into the "…" menu, last first.
+  const inBand = headerPlacement.kind === 'band';
+  const bandOverflow = useBandOverflow(
+    railButtons,
+    inBand ? headerPlacement.frame.width - 2 * BAND_ROW_PADDING : 0,
+    WEB_BAND_BUTTONS,
+    inBand,
+  );
+  const overflowEntries = inBand ? bandOverflow.menu : railOverflow;
+  const railMenuEntries = useMemo<RailEntry[]>(
+    () => [
+      ...overflowEntries,
+      {
+        key: 'forward',
+        label: WebPreviewCopy.forwardLabel,
+        icon: (size) => <ArrowIcon direction="right" size={size} color={GhostexPalette.FOREGROUND} />,
+        onPress: goForward,
+        disabled: !canGoForward,
+      },
+      {
+        key: 'desktop-site',
+        label: WebPreviewCopy.desktopSiteLabel,
+        icon: (size) => (
+          <DesktopIcon size={size} color={desktopMode ? GhostexPalette.ACCENT : GhostexPalette.FOREGROUND} />
+        ),
+        onPress: toggleDesktopSite,
+        disabled: siteKey === null || failure !== null,
+        selected: desktopMode,
+      },
+      {
+        key: 'open-in-browser',
+        label: WebPreviewCopy.openInBrowserLabel,
+        icon: (size) => <ExternalLinkIcon size={size} color={GhostexPalette.FOREGROUND} />,
+        onPress: openInBrowser,
+        disabled: currentUrl === null || address.kind === 'remote',
+      },
+    ],
+    [
+      address.kind,
+      canGoForward,
+      currentUrl,
+      desktopMode,
+      failure,
+      goForward,
+      openInBrowser,
+      overflowEntries,
+      siteKey,
+      toggleDesktopSite,
+    ],
+  );
+
   /*
    * RNCWebView keeps the WebView mounted and draws this over it, so the page's
    * history and scroll position survive a failure. It stays in its error state
@@ -718,47 +853,83 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
-      <View style={[styles.toolbar, { paddingTop: insets.top + 6 }]}>
-        <View style={styles.toolbarButtons}>
-          <ToolbarButton
-            label={WebPreviewCopy.closeLabel}
-            onPress={() => navigation.goBack()}
-            icon={<CloseIcon size={18} color={GhostexPalette.FOREGROUND} />}
-          />
-          <View style={styles.toolbarNavGroup}>
+      <View
+        style={[
+          styles.toolbar,
+          // In the side bar's poses the address row is the top row: below the system's top margin (F1),
+          // its background running on under the side bar (F4).
+          headerPlacement.kind === 'rail'
+            ? [{ paddingTop: contentTop }, barBackgroundToEdges(bar, TOOLBAR_PADDING)]
+            : { paddingTop: insets.top + 6 },
+        ]}
+      >
+        {/* On the iPhone Duo unfolded in portrait the buttons stand in the status band; the address row stays below it.
+            In the side bar's poses they stand there instead (railButtons). */}
+        {headerPlacement.kind === 'band' ? (
+          <View
+            style={[
+              styles.toolbarButtons,
+              styles.bandToolbarButtons,
+              bandRowFrame(headerPlacement.frame, BAND_ROW_HEIGHT),
+            ]}
+          >
+            {railButtons.entries
+              .filter((entry) => bandOverflow.shows(entry.key))
+              .map((entry) => (
+                <ToolbarButton
+                  key={entry.key}
+                  buttonRef={entry.key === 'more' ? moreButtonRef : undefined}
+                  label={entry.label}
+                  disabled={entry.disabled}
+                  onPress={() =>
+                    entry.key === 'more' ? measureInWindow(moreButtonRef, entry.onPress) : entry.onPress()
+                  }
+                  icon={entry.icon(18)}
+                />
+              ))}
+          </View>
+        ) : headerPlacement.kind === 'rail' ? null : (
+          <View style={[styles.toolbarButtons]}>
             <ToolbarButton
-              label={WebPreviewCopy.backLabel}
-              disabled={!canGoBack}
-              onPress={goBack}
-              icon={<ArrowIcon direction="left" size={18} color={GhostexPalette.FOREGROUND} />}
+              label={WebPreviewCopy.closeLabel}
+              onPress={() => navigation.goBack()}
+              icon={<CloseIcon size={18} color={GhostexPalette.FOREGROUND} />}
+            />
+            <View style={styles.toolbarNavGroup}>
+              <ToolbarButton
+                label={WebPreviewCopy.backLabel}
+                disabled={!canGoBack}
+                onPress={goBack}
+                icon={<ArrowIcon direction="left" size={18} color={GhostexPalette.FOREGROUND} />}
+              />
+              <ToolbarButton
+                label={WebPreviewCopy.forwardLabel}
+                disabled={!canGoForward}
+                onPress={goForward}
+                icon={<ArrowIcon direction="right" size={18} color={GhostexPalette.FOREGROUND} />}
+              />
+              <ToolbarButton
+                label={WebPreviewCopy.reloadLabel}
+                disabled={source === null || failure !== null}
+                onPress={reload}
+                icon={<RefreshIcon size={18} color={GhostexPalette.FOREGROUND} />}
+              />
+            </View>
+            <ToolbarButton
+              label={WebPreviewCopy.desktopSiteLabel}
+              disabled={siteKey === null || failure !== null}
+              active={desktopMode}
+              onPress={toggleDesktopSite}
+              icon={<DesktopIcon size={18} color={desktopMode ? GhostexPalette.ACCENT : GhostexPalette.FOREGROUND} />}
             />
             <ToolbarButton
-              label={WebPreviewCopy.forwardLabel}
-              disabled={!canGoForward}
-              onPress={goForward}
-              icon={<ArrowIcon direction="right" size={18} color={GhostexPalette.FOREGROUND} />}
-            />
-            <ToolbarButton
-              label={WebPreviewCopy.reloadLabel}
-              disabled={source === null || failure !== null}
-              onPress={reload}
-              icon={<RefreshIcon size={18} color={GhostexPalette.FOREGROUND} />}
+              label={WebPreviewCopy.openInBrowserLabel}
+              disabled={currentUrl === null || address.kind === 'remote'}
+              onPress={openInBrowser}
+              icon={<ExternalLinkIcon size={18} color={GhostexPalette.FOREGROUND} />}
             />
           </View>
-          <ToolbarButton
-            label={WebPreviewCopy.desktopSiteLabel}
-            disabled={siteKey === null || failure !== null}
-            active={desktopMode}
-            onPress={toggleDesktopSite}
-            icon={<DesktopIcon size={18} color={desktopMode ? GhostexPalette.ACCENT : GhostexPalette.FOREGROUND} />}
-          />
-          <ToolbarButton
-            label={WebPreviewCopy.openInBrowserLabel}
-            disabled={currentUrl === null || address.kind === 'remote'}
-            onPress={openInBrowser}
-            icon={<ExternalLinkIcon size={18} color={GhostexPalette.FOREGROUND} />}
-          />
-        </View>
+        )}
         <View style={styles.addressBar}>
           <TextInput
             ref={addressInputRef}
@@ -848,6 +1019,15 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
           <LoadProgressBar progress={pageLoading ? loadProgress : 0} />
         ) : null}
       </View>
+      {railMenu !== null ? (
+        <ContextMenu
+          visible
+          title={WebPreviewCopy.previewTitle}
+          items={railMenuItems(railMenuEntries, () => setRailMenu(null))}
+          onClose={() => setRailMenu(null)}
+          anchor={railMenuAnchor}
+        />
+      ) : null}
     </View>
   );
 }
@@ -913,11 +1093,14 @@ function PreviewFailure({ failure, onRetry }: { failure: WebPreviewFailure; onRe
 
 function ToolbarButton({
   active,
+  buttonRef,
   disabled,
   icon,
   label,
   onPress,
 }: {
+  /** The button's own view, for a menu that stands at it (the band's "…"). */
+  buttonRef?: RefObject<ViewInstance | null>;
   /** A switch that is on: the button reads as pressed in and is announced as a checked switch. */
   active?: boolean;
   disabled?: boolean;
@@ -928,6 +1111,7 @@ function ToolbarButton({
   const isDisabled = disabled === true;
   return (
     <Pressable
+      ref={buttonRef}
       accessibilityRole={active === undefined ? 'button' : 'switch'}
       accessibilityLabel={label}
       accessibilityState={active === undefined ? { disabled: isDisabled } : { disabled: isDisabled, checked: active }}

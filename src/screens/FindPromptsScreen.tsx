@@ -30,6 +30,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
 import { useKeyboardTop } from '../components/common/keyboard/keyboardFrame';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { ChevronDownGlyph, SearchGlyph, XGlyph } from '../components/sessions/icons';
 import { FindPromptsCopy } from '../copy';
 import FindPromptRow from '../find/FindPromptRow';
@@ -130,6 +131,8 @@ export default function FindPromptsScreen({ navigation, route }: Props) {
   useAppearanceHeader();
   const { appearance, styles } = useFindStyles();
   const insets = useSafeAreaInsets();
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  const listEdges = useScrollToBarEdges(styles.listContent);
   const keyboardOpen = useKeyboardTop() !== null;
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));
   const machineRef = useRef(machine);
@@ -307,7 +310,8 @@ export default function FindPromptsScreen({ navigation, route }: Props) {
           stickySectionHeadersEnabled={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={styles.listContent}
+          style={listEdges.scroll}
+          contentContainerStyle={[styles.listContent, listEdges.content]}
           onEndReachedThreshold={0.6}
           onEndReached={() => void actions.loadMore(machine)}
           refreshControl={

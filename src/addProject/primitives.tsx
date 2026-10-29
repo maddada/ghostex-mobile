@@ -9,16 +9,20 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, Vi
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { CaretRightGlyph } from '../components/sessions/icons';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 
 const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 export function AddProjectShell({ children }: { children: ReactNode }): ReactElement {
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAwareScrollView
-        contentContainerStyle={styles.content}
+        style={edges.scroll}
+        contentContainerStyle={[styles.content, edges.content]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >

@@ -4,7 +4,9 @@
  * sizes to its content, scrolls once the item list outgrows the safe viewport,
  * and wraps long labels instead of truncating them. Items are icon + label +
  * optional trailing check, with press feedback, 1dp dividers, and danger
- * tinting carried over from the desktop sidebar menu.
+ * tinting carried over from the desktop sidebar menu. On the iPhone Duo a menu
+ * opened from a header button in the status band or the side bar stands at
+ * that button instead (`anchor`, F3 2026-10-26), as an iOS pull-down does.
  */
 
 import { Fragment, useState, type ReactElement } from 'react';
@@ -12,6 +14,13 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
+import { anchoredMenuOrigin, menuRoomBeside, type MenuRoom } from '../common/verticalBar/layout';
+import {
+  useFoldDivisions,
+  useHeaderPlacement,
+  useVerticalBarEdge,
+  useVerticalBarSpace,
+} from '../common/verticalBar/VerticalBarArea';
 import { InfoGlyph } from './icons';
 
 /** Window-coordinate frame of the pressed button (measureInWindow). */
@@ -85,11 +94,18 @@ export type ContextMenuProps = {
    * settles, so such work has to wait for the dismissal to finish.
    */
   onDismissed?: () => void;
+  /**
+   * The header button it opened from (window frame). On the iPhone Duo, where that button stands in the
+   * status band or the side bar, the menu stands at it; elsewhere it stays centred.
+   */
+  anchor?: MenuAnchor;
 };
 
 /** Comfortable reading width; the card shrinks on narrow screens. */
 const MENU_MAX_WIDTH = 360;
 const EDGE_MARGIN = 20;
+/** How far an anchored menu keeps off the safe area and the side bar. */
+const ANCHORED_MARGIN = 8;
 /** Leave the list visibly floating over the sessions list, never full-bleed. */
 const MAX_HEIGHT_RATIO = 0.78;
 
@@ -125,25 +141,86 @@ const checkStyles = StyleSheet.create({
   },
 });
 
-export default function ContextMenu({ visible, title, subtitle, items, onClose, onDismissed }: ContextMenuProps) {
+function sameFrame(a: MenuAnchor | undefined, b: MenuAnchor | undefined): boolean {
+  return (
+    a === b ||
+    (a !== undefined && b !== undefined && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
+  );
+}
+
+export default function ContextMenu({
+  visible,
+  title,
+  subtitle,
+  items,
+  onClose,
+  onDismissed,
+  anchor: liveAnchor,
+}: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
+  const barEdge = useVerticalBarEdge();
+  const placement = useHeaderPlacement();
+  const divisions = useFoldDivisions();
   const [openInfo, setOpenInfo] = useState<string | null>(null);
+  // The card's height once laid out, for an anchored menu to stay inside the window.
+  const [cardHeight, setCardHeight] = useState<number | null>(null);
 
-  const horizontalRoom = screenWidth - Math.max(EDGE_MARGIN, safeArea.left) - Math.max(EDGE_MARGIN, safeArea.right);
+  // The card stays where it was shown until the Modal is gone: once `visible` turns false the owner of the
+  // menu stops passing an anchor (its open menu is gone), which would put the still fading card in the
+  // centre for its last frames (owner finding 2026-10-28). So the last anchor of the open menu is held.
+  const [heldAnchor, setHeldAnchor] = useState(liveAnchor);
+  if (visible && !sameFrame(liveAnchor, heldAnchor)) setHeldAnchor(liveAnchor);
+  const anchor = visible ? liveAnchor : heldAnchor;
+  const anchoredFrom = anchor !== undefined && placement.kind !== 'top' ? placement.kind : null;
+  const windowRoom: MenuRoom = {
+    left: Math.max(safeArea.left, bar.left) + ANCHORED_MARGIN,
+    top: safeArea.top + ANCHORED_MARGIN,
+    right: screenWidth - Math.max(safeArea.right, bar.right) - ANCHORED_MARGIN,
+    bottom: screenHeight - safeArea.bottom - ANCHORED_MARGIN,
+  };
+  // On the button's side of the fold while it is folded (FL-DUO-03, owner B1, 2026-10-27); flat, across it.
+  const room = anchor === undefined ? windowRoom : menuRoomBeside(windowRoom, anchor, divisions);
+  const horizontalRoom =
+    anchoredFrom === null
+      ? screenWidth - Math.max(EDGE_MARGIN, safeArea.left) - Math.max(EDGE_MARGIN, safeArea.right)
+      : room.right - room.left;
   const menuWidth = Math.max(1, Math.min(MENU_MAX_WIDTH, horizontalRoom));
   const verticalRoom = screenHeight - Math.max(EDGE_MARGIN, safeArea.top) - Math.max(EDGE_MARGIN, safeArea.bottom);
-  const maxHeight = Math.max(1, verticalRoom * MAX_HEIGHT_RATIO);
+  const maxHeight = Math.max(1, anchoredFrom === null ? verticalRoom * MAX_HEIGHT_RATIO : room.bottom - room.top);
+  const anchoredStyle =
+    anchor === undefined || anchoredFrom === null
+      ? null
+      : {
+          position: 'absolute' as const,
+          ...anchoredMenuOrigin(anchor, { width: menuWidth, height: cardHeight ?? 0 }, room, anchoredFrom, barEdge),
+          // Shown once its height keeps it inside the window.
+          opacity: cardHeight === null ? 0 : 1,
+        };
 
   // The Modal stays mounted while `visible` is false (it renders nothing then,
   // exactly like the old early return) so `onDismiss` can still fire after a
   // close instead of being unmounted out from under the dismissal.
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismissed}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/*
+        Centred in the room the width above was taken from, so the card stays clear of side insets; an
+        anchored card is placed in window points, so the backdrop keeps no padding then.
+      */}
+      <Pressable
+        style={[
+          styles.backdrop,
+          anchoredFrom === null
+            ? { paddingLeft: Math.max(EDGE_MARGIN, safeArea.left), paddingRight: Math.max(EDGE_MARGIN, safeArea.right) }
+            : null,
+        ]}
+        onPress={onClose}
+      >
         {/* Swallows presses on the card itself so only the backdrop closes. */}
         <Pressable
-          style={[styles.menu, { width: menuWidth, maxHeight }]}
+          style={[styles.menu, { width: menuWidth, maxHeight }, anchoredStyle]}
+          onLayout={anchoredFrom === null ? undefined : (event) => setCardHeight(event.nativeEvent.layout.height)}
           onPress={() => {
             /* card body is not a dismiss target */
           }}

@@ -12,6 +12,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { useVerticalBarSpace } from '../common/verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
@@ -44,6 +46,7 @@ export default function ExportTranscriptSheet({
   onStartNewConversation,
   onClose,
 }: ExportTranscriptSheetProps) {
+  const bar = useVerticalBarSpace();
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,7 +67,7 @@ export default function ExportTranscriptSheet({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
           <Text style={styles.title}>Transcript Exported</Text>
           <Text style={styles.subtitle} numberOfLines={2}>

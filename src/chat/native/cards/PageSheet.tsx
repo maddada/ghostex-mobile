@@ -21,6 +21,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
 import { GhostexNative } from '../../../../modules/ghostex-native/src';
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import { WebPreviewCopy } from '../../../copy';
 import type { MachineConnectionTarget } from '../../../machines/credentials';
 import { useSettingsStore } from '../../../settings/store';
@@ -88,6 +89,7 @@ export function PageSheet({ chat, machine, page, onClose, onOpenLink }: PageShee
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const webviewRef = useRef<WebView<object>>(null);
   // The machine record is rebuilt on every connection the inventory records; only its id matters.
   const machineRef = useRef(machine);
@@ -324,7 +326,7 @@ export function PageSheet({ chat, machine, page, onClose, onOpenLink }: PageShee
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <View style={[styles.sheet, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={[styles.sheet, { paddingTop: insets.top, paddingBottom: insets.bottom }, bar.padding]}>
         <View style={styles.bar}>
           <View style={styles.heading}>
             <Text numberOfLines={1} style={styles.title}>

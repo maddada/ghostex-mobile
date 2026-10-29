@@ -463,9 +463,8 @@ class GhostexNativeModule : Module() {
         promise.reject(noTerminalException(sessionKey))
         return@AsyncFunction
       }
-      // No-op when no view is attached (warm background session).
-      mainHandler.post { entry.attachedView?.focusTerminal() }
-      promise.resolve(null)
+      // Resolves false when no view is attached (warm background session) or the view took no focus.
+      mainHandler.post { promise.resolve(entry.attachedView?.focusTerminal() ?: false) }
     }
 
     AsyncFunction("blurTerminal") { sessionKey: String, promise: Promise ->

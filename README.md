@@ -18,13 +18,17 @@ bunx expo prebuild            # generates ios/ + android/ (gitignored, CNG)
 bunx expo run:ios             # or: xcodebuild against ios/Ghostex.xcworkspace
 bunx expo run:android         # or: cd android && ./gradlew :app:assembleDebug
 bunx tsc --noEmit             # typecheck
+bun test src                  # logic tests (*.test.ts, node:test)
+bun run test:jest             # component and lifecycle tests (*.rntl.tsx, Jest + jest-expo + React Native Testing Library)
 ```
 
 Notes:
 - iOS simulator builds are **arm64-only** (`ARCHS=arm64`); the vendored GhosttyKit xcframework has no x86_64 slice.
+- Build iOS with Xcode 27.1 (iOS 27.1 SDK) for the iPhone Duo. Per Apple ([Prepare your app for iPhone Duo](https://developer.apple.com/iphone-duo/prepare)), an app built with the iOS 26 SDK or earlier runs in a centred phone-sized window on the unfolded inner display, one built with the iOS 27 SDK fills most of the inner display clear of the status bar, and one built with the iOS 27.1 SDK or later reaches the edges. The app's root view controller (`GhostexRootViewController`, registered as an Expo react delegate handler) turns the system's vertical bar off, so the status items stay in one row along the top in every pose and the app's header stands in the status band beside them, its buttons that do not fit moving into the screen's … menu (`src/components/common/verticalBar/`). Check a build with `plutil -extract DTSDKName raw <Ghostex.app>/Info.plist` (`iphoneos27.1`).
 - `plugins/withPodfileMinDeploymentTarget.js` clamps pod deployment targets to 15.0 for new Xcode versions.
 - `ios.entitlements` in `app.json` (`application-identifier` + `keychain-access-groups`) is required: iOS 26 simulators reject expo-secure-store (`KeyChainException: A required entitlement isn't present`) when the app carries no keychain entitlement. Prebuild writes it into `ios/Ghostex/Ghostex.entitlements`; do not hand-edit that file. Keep the default simulator ad-hoc signing (`CODE_SIGN_IDENTITY=-`, what `expo run:ios` does): passing `CODE_SIGNING_ALLOWED=NO` to `xcodebuild` skips entitlement processing entirely, so the app ends up with no entitlements no matter what the file says.
 - `bunfig.toml` relaxes bun's minimum-release-age gate (Expo SDK point releases are often newer than 10 days).
+- Two test runners, each with its own files: `bun test src` runs the logic tests (`*.test.ts`), `bun run test:jest` the component and lifecycle tests (`*.rntl.tsx`: a hook wired into a screen, state kept across a fold or a column switch), which need React Native's runtime under Jest (`jest-expo` preset, `jest` block in `package.json`; `testTimeout` 30 s because a cold first run spends longer than Jest's default 5 s transforming React Native). Neither picks up the other's files. A component test file starts with `/// <reference types="jest" />`, as the logic tests reference `node` (TypeScript 6 includes no `@types` package by default).
 - Native module layout and the exact JS↔native contract: `docs/ARCHITECTURE.md`.
 - `assets/chat-core/chat-core.html` is the Rust chat brain (`packages/gx-chat-core` in the Ghostex main repo) as WebAssembly, run by a hidden WebView (`src/chat/rust/wasm-core/`); the JSON it takes and answers is in `src/chat/rust/core-types.ts`. It ships with over-the-air updates, so chat-core changes reach phones without a new app. The app imports it, so Metro and `expo export` fail until `cargo xtask build-mobile-chat-wasm` has written it; rerun that after `packages/gx-chat-core` changes.
 

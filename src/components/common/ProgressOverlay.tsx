@@ -6,6 +6,8 @@
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 
 import { GhostexPalette, GhostexStrokeWidth } from '../../theme/palette';
+import { barPadding } from './verticalBar/layout';
+import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 
 export type ProgressOverlayProps = {
   visible: boolean;
@@ -13,9 +15,10 @@ export type ProgressOverlayProps = {
 };
 
 export default function ProgressOverlay({ visible, message }: ProgressOverlayProps) {
+  const bar = useVerticalBarSpace();
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, barPadding(bar, 24)]}>
         <View style={styles.card}>
           <ActivityIndicator size="small" color={GhostexPalette.ACCENT} />
           <Text style={styles.message}>{message}</Text>

@@ -16,8 +16,9 @@ import {
   RefreshControl,
   Text,
   View,
+  type ViewInstance,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +33,17 @@ import DetailsSheet from '../components/common/DetailsSheet';
 import LogsSheet from '../components/common/LogsSheet';
 import ProgressOverlay from '../components/common/ProgressOverlay';
 import PromptDialog from '../components/common/PromptDialog';
+import { measureInWindow } from '../components/common/measureInWindow';
+import { bandRowFrame } from '../components/common/verticalBar/layout';
+import {
+  useContentTop,
+  useHeaderPlacement,
+  useLiveMenuAnchor,
+  useRailButtons,
+  useScrollToBarEdges,
+  type RailButtons,
+  type RailEntry,
+} from '../components/common/verticalBar/VerticalBarArea';
 import { createdSessionId, runGhostexCli } from '../components/sessions/cli';
 import { useCollapseStore } from '../components/sessions/collapseStore';
 import { useSessionListClock } from '../components/sessions/useSessionListClock';
@@ -82,6 +94,7 @@ import { coordinatorRowKey } from '../contract/coordinatorTree';
 import { claudeCloudPageUrl } from '../contract/claudeCloud';
 import { EMPTY_SIDEBAR_SPACES, type GhostexQuickAction, type GhostexSession } from '../contract/mobileSummary';
 import {
+  DuoChromeCopy,
   ProgressCopy,
   RenameCopy,
   SessionCopy,
@@ -138,12 +151,15 @@ import {
   type ProjectContext,
   type SessionContext,
 } from './sessions-screen/session-actions';
-import { styles } from './sessions-screen/styles';
+import { SessionsBottomBar } from './sessions-screen/BottomBar';
+import { SESSIONS_HEADER_HEIGHT, styles } from './sessions-screen/styles';
 import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-menus';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 
 export default function SessionsScreen({ navigation }: Props) {
+  const headerPlacement = useHeaderPlacement();
+  const isFocused = useIsFocused();
   const savedMachines = useMachinesStore((state) => state.machines);
   // Only machines the user keeps visible reach the tab strip, the drawer, and
   // the polling loop; hidden ones stay in Machines and are never connected to.
@@ -970,12 +986,69 @@ export default function SessionsScreen({ navigation }: Props) {
    */
   const tailscaleApplies = machine === null || machine.transport !== 'tailcat';
 
+  const moreButtonRef = useRef<ViewInstance | null>(null);
+  const contentTop = useContentTop();
+  // The session list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  const listEdges = useScrollToBarEdges(styles.listContent);
+  // The app menu stays at its More options button while it is open, wherever that moves (S1-5).
+  const appMenuAnchor = useLiveMenuAnchor(
+    overlay.kind === 'appMenu' ? { key: 'more', pressed: overlay.anchor } : null,
+    moreButtonRef,
+  );
+  const inRail = headerPlacement.kind === 'rail';
+  // The header keeps only the title and this menu button (Voice, Search, Web and Machines stand in the
+  // bottom bar, CDXC:Sessions 2026-10-27). On the iPhone Duo the status band holds the same row. In the
+  // side bar (a system that stands one) the button stands there as the rail's one entry.
+  const moreButton = (
+    <Pressable
+      ref={moreButtonRef}
+      accessibilityRole="button"
+      accessibilityLabel={DuoChromeCopy.more}
+      style={styles.headerButton}
+      // In the iPhone Duo's status band the menu opens below this button (F3).
+      onPress={() =>
+        headerPlacement.kind === 'top'
+          ? setOverlay({ kind: 'appMenu' })
+          : measureInWindow(moreButtonRef, (anchor) => setOverlay({ kind: 'appMenu', anchor }))
+      }
+    >
+      <MenuGlyph size={20} color={sidebarAppearance.foreground} />
+    </Pressable>
+  );
+  // Memoized on the header's inputs, so unrelated list updates do not republish the side bar.
+  const railButtons = useMemo<RailButtons>(() => {
+    const color = sidebarAppearance.foreground;
+    const entries: RailEntry[] = [
+      {
+        key: 'more',
+        label: DuoChromeCopy.more,
+        icon: (size) => <MenuGlyph size={size} color={color} />,
+        onPress: (anchor) => setOverlay({ kind: 'appMenu', anchor }),
+      },
+    ];
+    // The session search sheet and the rename and note dialogs take the keyboard.
+    return { entries, pinned: 0, moreMenu: 'always', reserveKeyboard: true };
+  }, [sidebarAppearance.foreground]);
+  useRailButtons(railButtons, sidebarAppearance.background, inRail && isFocused);
+
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: sidebarAppearance.background }]}
-      edges={['top', 'bottom']}
+      style={[
+        styles.container,
+        { backgroundColor: sidebarAppearance.background },
+        // In the side bar's poses the title row starts below the system's top margin (F1).
+        inRail ? { paddingTop: contentTop } : null,
+      ]}
+      edges={inRail ? [] : ['top']}
     >
-      <View style={styles.headerRow}>
+      <View
+        style={[
+          styles.headerRow,
+          headerPlacement.kind === 'band'
+            ? [styles.bandRow, bandRowFrame(headerPlacement.frame, SESSIONS_HEADER_HEIGHT)]
+            : null,
+        ]}
+      >
         {/*
           Manual refresh is pull-to-refresh on the list below, so the title has
           the header row's leading space to itself. Long-pressing it opens the
@@ -993,20 +1066,7 @@ export default function SessionsScreen({ navigation }: Props) {
         >
           <Text style={[styles.title, { color: sidebarAppearance.foreground }]}>Ghostex</Text>
         </Pressable>
-        {/*
-          Search Prompts, Settings and Logout each used to own a header button.
-          They are one-off destinations rather than things the list is read
-          against, so they live behind this menu and give the header back to
-          the surfaces that stay on screen.
-        */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More options"
-          style={styles.headerButton}
-          onPress={() => setOverlay({ kind: 'appMenu' })}
-        >
-          <MenuGlyph size={20} color={sidebarAppearance.foreground} />
-        </Pressable>
+        {inRail ? null : moreButton}
       </View>
       {machines.length > 0 ? (
         <MachineTabs
@@ -1108,8 +1168,8 @@ export default function SessionsScreen({ navigation }: Props) {
           data={entries}
           keyExtractor={(entry) => entry.listKey}
           renderItem={renderBlock}
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
+          style={[styles.list, listEdges.scroll]}
+          contentContainerStyle={[styles.listContent, listEdges.content]}
           refreshControl={
             <RefreshControl
               colors={[GhostexPalette.ACCENT]}
@@ -1148,7 +1208,11 @@ export default function SessionsScreen({ navigation }: Props) {
         CDXC:Sessions 2026-10-27 DECISION:
         User picked option E for the Sessions screen's top bar buttons (Q362, docs/2026-10-21/phone-sessions-screen/top-bar-buttons.html): "Voice, Search, Web and Machines move to a labelled bar at the bottom; the top keeps only the title and the menu." The bottom bar holds the four, labelled, within thumb reach. Search still opens SessionSearchSheet, which searches every visible computer's open and closed sessions with the desktop's Sessions search rules and restores a closed one when tapped (the 2026-10-01 decision); only its place moves from the top right to the bar. Voice shows only where the computer runs the voice agent, and Web only once a computer is chosen.
       */}
-      <View style={styles.bottomBar}>
+      {/*
+        S1 2026-10-28: the bar's background runs to the bottom screen edge as iOS tab bars do; this screen
+        leaves the bottom safe area to it (SafeAreaView edges), and its items stay above the home indicator.
+      */}
+      <SessionsBottomBar>
         <VoiceButton
           machine={machine}
           style={styles.bottomItem}
@@ -1193,7 +1257,7 @@ export default function SessionsScreen({ navigation }: Props) {
           <MachinesGlyph size={20} color={styles.bottomIconColor.color} />
           <Text style={styles.bottomLabel}>Machines</Text>
         </Pressable>
-      </View>
+      </SessionsBottomBar>
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
 
       <SessionSearchSheet
@@ -1395,6 +1459,7 @@ export default function SessionsScreen({ navigation }: Props) {
           subtitle={machine === null ? undefined : machineDisplayLabel(machine)}
           items={appMenuItems(machine)}
           onClose={() => setOverlay(NONE)}
+          anchor={appMenuAnchor}
         />
       ) : null}
 

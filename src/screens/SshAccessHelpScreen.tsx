@@ -9,6 +9,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { SshAccessHelpContent, SshOsButtons, type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import type { RootStackParamList } from '../navigation/types';
 import { SetupPalette } from '../theme/palette';
@@ -17,9 +18,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SshAccessHelp'>;
 
 export default function SshAccessHelpScreen({ route }: Props) {
   const [os, setOs] = useState<SshOs>(route.params?.platform ?? 'macos');
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={edges.scroll} contentContainerStyle={[styles.content, edges.content]}>
         <SshOsButtons current={os} onSelect={setOs} />
         <View style={styles.body}>
           <SshAccessHelpContent os={os} />

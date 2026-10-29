@@ -12,6 +12,12 @@ export const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' })
 
 /** Square toolbar button edge, also its minimum touch target. */
 export const TOOLBAR_BUTTON_SIZE = 40;
+/** The toolbar buttons' row in the iPhone Duo's status band, centred on the band's bar region. */
+export const BAND_ROW_HEIGHT = 44;
+/** The side padding of that row. */
+export const BAND_ROW_PADDING = 8;
+/** The toolbar's side padding. */
+export const TOOLBAR_PADDING = 8;
 
 export const styles = StyleSheet.create({
   screen: {
@@ -223,7 +229,7 @@ export const styles = StyleSheet.create({
     backgroundColor: GhostexPalette.BACKGROUND,
     borderBottomWidth: GhostexStrokeWidth,
     borderBottomColor: GhostexPalette.BORDER,
-    paddingHorizontal: 8,
+    paddingHorizontal: TOOLBAR_PADDING,
     paddingBottom: 8,
     gap: 6,
   },
@@ -231,6 +237,12 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  /** In the iPhone Duo's status band (VerticalBarArea): the row floats there, out of the toolbar's flow. */
+  bandToolbarButtons: {
+    position: 'absolute',
+    height: BAND_ROW_HEIGHT,
+    paddingHorizontal: BAND_ROW_PADDING,
   },
   toolbarNavGroup: {
     flexDirection: 'row',

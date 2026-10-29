@@ -9,9 +9,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, type ViewInstance, type ViewProps } from 'react-native';
+import { View, type ViewInstance, type ViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { stylePadding, useVerticalBarSpace } from '../verticalBar/VerticalBarArea';
 import { useKeyboardTop } from './keyboardFrame';
 
 /** How far below the keyboard's top edge the view's frame reaches; 0 while the keyboard is hidden. */
@@ -40,15 +41,10 @@ export function useKeyboardOverlap(): {
   return { ref, onLayout, overlap, keyboardTop, frame };
 }
 
-function basePadding(style: ViewProps['style'], edge: 'paddingTop' | 'paddingBottom'): number {
-  const flat = StyleSheet.flatten(style) ?? {};
-  const value = flat[edge] ?? flat.paddingVertical ?? flat.padding ?? 0;
-  return typeof value === 'number' ? value : 0;
-}
-
 export type KeyboardAvoidingContainerProps = ViewProps & {
   /**
-   * Keep the content below the status bar. Modals are edge-to-edge on Android, and a centred card
+   * Keep the content clear of the status bar: below it, and beside it where it stands on a side of
+   * the window (iPhone Duo, VerticalBarArea). Modals are edge-to-edge on Android, and a centred card
    * squeezed into the space above the keyboard would otherwise grow up under it.
    */
   safeAreaTop?: boolean;
@@ -62,6 +58,7 @@ export default function KeyboardAvoidingContainer({
 }: KeyboardAvoidingContainerProps) {
   const keyboard = useKeyboardOverlap();
   const topInset = useSafeAreaInsets().top;
+  const bar = useVerticalBarSpace();
   return (
     <View
       {...props}
@@ -72,8 +69,10 @@ export default function KeyboardAvoidingContainer({
       }}
       style={[
         style,
-        safeAreaTop ? { paddingTop: basePadding(style, 'paddingTop') + topInset } : null,
-        keyboard.overlap > 0 ? { paddingBottom: basePadding(style, 'paddingBottom') + keyboard.overlap } : null,
+        safeAreaTop ? { paddingTop: stylePadding(style, 'paddingTop') + topInset } : null,
+        safeAreaTop && bar.left > 0 ? { paddingLeft: stylePadding(style, 'paddingLeft') + bar.left } : null,
+        safeAreaTop && bar.right > 0 ? { paddingRight: stylePadding(style, 'paddingRight') + bar.right } : null,
+        keyboard.overlap > 0 ? { paddingBottom: stylePadding(style, 'paddingBottom') + keyboard.overlap } : null,
       ]}
     />
   );

@@ -113,4 +113,27 @@ extension GhosttyTerminalView {
             height: max(CGFloat(height), cellHeight)
         )
     }
+
+    /// The top edge of the cursor row in points from this view's top. Ghostty's `imePoint` (Surface.zig,
+    /// v1.3.1) reports `y` as the bottom of the cursor cell (top-left origin, padding included) and `height`
+    /// as the cell's height, so the row's top edge is `y - height`; `textInputCaretRect` above treats `y` as
+    /// a top, which is upstream's IME rect and not used here. nil while there is no surface.
+    func caretRowTop() -> CGFloat? {
+        guard let surface = surface?.unsafeCValue else { return nil }
+        var x: Double = 0
+        var y: Double = 0
+        var width: Double = 0
+        var height: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        return CGFloat(y - height)
+    }
+
+    /// Tells `onCaretTopChange` where the cursor row starts, when that changed (whole points, so a
+    /// sub-point drift sends nothing) or with `force`, as a view that has just been shown needs it once.
+    func reportCaretIfNeeded(force: Bool = false) {
+        guard let onCaretTopChange, let top = caretRowTop()?.rounded() else { return }
+        if !force && top == lastReportedCaretTop { return }
+        lastReportedCaretTop = top
+        onCaretTopChange(top)
+    }
 }

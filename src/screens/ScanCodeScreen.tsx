@@ -13,13 +13,14 @@
  * back after it was closed or a code failed to pair.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import PasteCodeSheet from '../components/onboarding/PasteCodeSheet';
+import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
 import { HelpCircleGlyph, PasteGlyph } from '../components/onboarding/SetupIcons';
 import { SetupButton, SetupRow, SetupRows, setupText } from '../components/onboarding/SetupPrimitives';
 import TailscalePasswordSheet from '../components/onboarding/TailscalePasswordSheet';
@@ -110,6 +111,26 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
         ),
     });
   }, [navigation, pairing, setSheet]);
+  // On the iPhone Duo, Help stands in the side bar under Back; the paste-code and password sheets take
+  // the keyboard.
+  useStackScreenRail(
+    useMemo(
+      () => ({
+        entries: pairing
+          ? []
+          : [
+              {
+                key: 'help',
+                label: ScanCopy.helpAccessibilityLabel,
+                icon: (size: number) => <HelpCircleGlyph size={size} color={SetupPalette.FOREGROUND} />,
+                onPress: () => setSheet('where'),
+              },
+            ],
+        reserveKeyboard: true,
+      }),
+      [pairing, setSheet],
+    ),
+  );
 
   const onBarcode = (result: BarcodeScanningResult): void => {
     if (sheet !== 'none') return;

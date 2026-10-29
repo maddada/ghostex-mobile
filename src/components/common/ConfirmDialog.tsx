@@ -8,6 +8,9 @@
 
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { barPadding } from './verticalBar/layout';
+import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
+
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 
 export type ConfirmDialogProps = {
@@ -38,9 +41,10 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const bar = useVerticalBarSpace();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
+      <Pressable style={[styles.backdrop, barPadding(bar, 24)]} onPress={onCancel}>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           {body !== undefined && body.length > 0 ? (

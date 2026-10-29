@@ -5,7 +5,7 @@
 import { StyleSheet } from 'react-native';
 
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
-import { HEADER_HEIGHT } from './session-lookups';
+import { HEADER_HEIGHT, HEADER_PADDING } from './session-lookups';
 
 export const styles = StyleSheet.create({
   container: {
@@ -16,8 +16,12 @@ export const styles = StyleSheet.create({
     height: HEADER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: HEADER_PADDING,
     backgroundColor: GhostexPalette.TERMINAL_BACKGROUND,
+  },
+  /** In the iPhone Duo's status band the header floats there (VerticalBarArea). */
+  bandHeader: {
+    position: 'absolute',
   },
   headerButton: {
     width: 44,
@@ -27,6 +31,10 @@ export const styles = StyleSheet.create({
   },
   terminalArea: {
     flex: 1,
+  },
+  /** The iOS terminal slides up with the keyboard: rows moved above this area are cut off, under the header. */
+  terminalAreaSliding: {
+    overflow: 'hidden',
   },
   chatStartupError: {
     paddingHorizontal: 12,

@@ -20,6 +20,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ActionSheet from '../components/common/ActionSheet';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { CopyGlyph, GitForkGlyph, PlayGlyph, StarGlyph } from '../components/sessions/icons';
 import { quickTerminalCommand } from '../commands/ghostexCli';
 import { runGhostexCli } from '../components/sessions/cli';
@@ -54,6 +55,8 @@ export default function FindPromptScreen({ navigation, route }: Props) {
   const appearance = useAppearanceHeader();
   const styles = createStyles(appearance);
   const insets = useSafeAreaInsets();
+  // The prompt reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  const edges = useScrollToBarEdges(styles.scrollContent);
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));
   const row = useFindPromptsStore((state) => state.rows.find((candidate) => candidate.key === promptKey));
   const fullText = useFindPromptsStore((state) => state.fullText[promptKey]);
@@ -134,7 +137,7 @@ export default function FindPromptScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.page, { paddingBottom: insets.bottom }]}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={[styles.scroll, edges.scroll]} contentContainerStyle={[styles.scrollContent, edges.content]}>
         <View style={styles.headerLine}>
           <Text style={[styles.agent, { color: row.agentColor || appearance.muted }]}>{row.agent}</Text>
           <Text style={styles.title} numberOfLines={2}>

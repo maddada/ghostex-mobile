@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useKeyboardTop } from '../../../components/common/keyboard/keyboardFrame';
 import KeyboardAvoidingContainer from '../../../components/common/keyboard/KeyboardAvoidingContainer';
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
@@ -46,6 +47,7 @@ export function Sheet(props: SheetProps) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const windowHeight = useWindowDimensions().height;
   // The navigation bar's inset is under the keyboard while it is open; the sheet sits right on top of it.
   const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
@@ -105,7 +107,11 @@ export function Sheet(props: SheetProps) {
         </Pressable>
         <Animated.View
           onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
-          style={[styles.panel, { maxHeight, paddingBottom: Math.max(bottomInset, 12), transform: [{ translateY }] }]}
+          style={[
+            styles.panel,
+            bar.margin,
+            { maxHeight, paddingBottom: Math.max(bottomInset, 12), transform: [{ translateY }] },
+          ]}
         >
           <View style={styles.grabber} />
           {title !== undefined || onBack !== undefined || accessory !== undefined ? (

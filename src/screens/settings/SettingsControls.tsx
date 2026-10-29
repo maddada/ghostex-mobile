@@ -3,12 +3,14 @@
  * come from the current appearance (Settings > Theme), never the static palette.
  */
 
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { createContext, useContext, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type ScrollViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SteppedSlider from '../../components/common/SteppedSlider';
 import KeyboardAwareScrollView from '../../components/common/keyboard/KeyboardAwareScrollView';
+import type { HorizontalInsets } from '../../components/common/verticalBar/layout';
+import { useHeaderPlacement, useScrollToBarEdges } from '../../components/common/verticalBar/VerticalBarArea';
 import { useSettingsStore, type GhostexSettings } from '../../settings/store';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
@@ -186,16 +188,61 @@ export function useSettingsStyles(): ReturnType<typeof createSettingsStyles> {
   return styles;
 }
 
+/**
+ * One-column Settings pages keep a readable column of at most 640 pt, centred, wherever the app's header
+ * stands in the Duo's chrome (status band or side bar), so a wide single column (the unfolded Duo in
+ * portrait) is not stretched across the window; regular iPhones stay as they were, and a window
+ * narrower than the column is not affected. Where the window holds the list and a page the page
+ * stands beside the Settings list instead (owner decision F2, 2026-10-26: `SettingsColumnsFrame`), in a
+ * column narrower than this one. The 640 pt of the S1 mockup is this fallback, not the Settings layout.
+ */
+const READABLE_COLUMN = { width: '100%', maxWidth: 640, alignSelf: 'center' } as const;
+
+/**
+ * The side bar's insets a Settings page's scroll view reaches over (FL-LAY-05): both of them, or in two
+ * columns only the one beside the page column (`SettingsColumnsFrame` provides it; the list column
+ * takes the other).
+ */
+export const SettingsPageEdgesContext = createContext<HorizontalInsets | null>(null);
+
+/**
+ * A Settings page's scroll view (the pages' and the editors'): it spans the window under the side bar
+ * and its content keeps its own padding clear of it (FL-LAY-05); unchanged without a side bar.
+ * `keyboardAware` for a page with text fields.
+ */
+export function SettingsPageScrollView({
+  keyboardAware = false,
+  style,
+  contentContainerStyle,
+  children,
+  ...props
+}: ScrollViewProps & { keyboardAware?: boolean }) {
+  const edges = useScrollToBarEdges(contentContainerStyle, useContext(SettingsPageEdgesContext));
+  const Scroll = keyboardAware ? KeyboardAwareScrollView : ScrollView;
+  return (
+    <Scroll {...props} style={[style, edges.scroll]} contentContainerStyle={[contentContainerStyle, edges.content]}>
+      {children}
+    </Scroll>
+  );
+}
+
 /** A scrolling Settings screen whose page and header follow the appearance. */
 export function SettingsScreenLayout({ intro, children }: { intro?: string; children: ReactNode }) {
   useAppearanceHeader();
   const styles = useSettingsStyles();
+  // The iPhone Duo's chrome (status band, side bar) gives the pages wide windows (unfolded, landscape):
+  // they keep a readable column there, as on any wide screen. Narrower windows are unaffected.
+  const readable = useHeaderPlacement().kind !== 'top';
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <KeyboardAwareScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+      <SettingsPageScrollView
+        keyboardAware
+        contentContainerStyle={[styles.list, readable ? READABLE_COLUMN : null]}
+        keyboardShouldPersistTaps="handled"
+      >
         {intro !== undefined ? <Text style={styles.intro}>{intro}</Text> : null}
         {children}
-      </KeyboardAwareScrollView>
+      </SettingsPageScrollView>
     </SafeAreaView>
   );
 }
@@ -303,11 +350,14 @@ export function LinkRow({
   title,
   description,
   descriptionAccent = false,
+  selected = false,
   onPress,
 }: {
   title: string;
   description?: string;
   descriptionAccent?: boolean;
+  /** The page open beside the list (Settings in two columns). */
+  selected?: boolean;
   onPress: () => void;
 }) {
   const styles = useSettingsStyles();
@@ -315,7 +365,8 @@ export function LinkRow({
     <Pressable
       accessibilityRole="button"
       accessibilityHint={description}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.row, (pressed || selected) && styles.rowPressed]}
       onPress={onPress}
     >
       <View style={styles.linkText}>

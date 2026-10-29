@@ -15,7 +15,11 @@ import {
 } from '../settings/agentHotkeys';
 import { destructiveButtonFills, GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 import type { Appearance } from '../theme/useAppearance';
-import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
+import { barPadding } from '../components/common/verticalBar/layout';
+import { useVerticalBarSpace } from '../components/common/verticalBar/VerticalBarArea';
+import { SettingsCopy } from '../copy';
+import { SettingsColumnsFrame } from './settings/SettingsColumns';
+import { SettingsPageScrollView } from './settings/SettingsControls';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 function makeHotkeyId(agentId: ConfigurableAgentId): string {
@@ -25,6 +29,7 @@ function makeHotkeyId(agentId: ConfigurableAgentId): string {
 export default function AgentHotkeysEditorScreen() {
   const appearance = useAppearanceHeader();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
+  const bar = useVerticalBarSpace();
   const profiles = useAgentHotkeysStore((state) => state.profiles);
   const saveProfile = useAgentHotkeysStore((state) => state.saveProfile);
   const resetAgent = useAgentHotkeysStore((state) => state.resetAgent);
@@ -134,156 +139,158 @@ export default function AgentHotkeysEditorScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <KeyboardAwareScrollView contentContainerStyle={styles.list}>
-        <Text style={styles.status}>
-          Configure the exact terminal shortcuts shown on each agent's key page. These keys never type slash commands.
-        </Text>
+    <SettingsColumnsFrame title={SettingsCopy.agentHotkeysTitle}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SettingsPageScrollView keyboardAware contentContainerStyle={styles.list}>
+          <Text style={styles.status}>
+            Configure the exact terminal shortcuts shown on each agent's key page. These keys never type slash commands.
+          </Text>
 
-        <Text style={styles.fieldLabel}>Agent</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Select agent"
-          accessibilityValue={{ text: AGENT_NAMES[agentId] }}
-          style={styles.dropdown}
-          onPress={() => setAgentPickerVisible(true)}
-        >
-          <Text style={styles.dropdownLabel}>{AGENT_NAMES[agentId]}</Text>
-          <Text style={styles.dropdownChevron}>⌄</Text>
-        </Pressable>
+          <Text style={styles.fieldLabel}>Agent</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Select agent"
+            accessibilityValue={{ text: AGENT_NAMES[agentId] }}
+            style={styles.dropdown}
+            onPress={() => setAgentPickerVisible(true)}
+          >
+            <Text style={styles.dropdownLabel}>{AGENT_NAMES[agentId]}</Text>
+            <Text style={styles.dropdownChevron}>⌄</Text>
+          </Pressable>
 
-        <Text style={styles.sectionHeader}>Current hotkeys</Text>
-        {agentHotkeys.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No agent hotkeys configured.</Text>
-          </View>
-        ) : (
-          agentHotkeys.map((item, index) => (
-            <View key={item.id} style={styles.hotkeyRow}>
+          <Text style={styles.sectionHeader}>Current hotkeys</Text>
+          {agentHotkeys.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No agent hotkeys configured.</Text>
+            </View>
+          ) : (
+            agentHotkeys.map((item, index) => (
+              <View key={item.id} style={styles.hotkeyRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${item.label}`}
+                  style={styles.hotkeyMain}
+                  onPress={() => editHotkey(item)}
+                >
+                  <Text style={styles.hotkeyLabel}>{item.label}</Text>
+                  <Text style={styles.hotkeyChord}>{formatAgentHotkeySteps(item.steps)}</Text>
+                </Pressable>
+                <View style={styles.rowActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Move ${item.label} earlier`}
+                    disabled={index === 0}
+                    style={({ pressed }) => [
+                      styles.smallButton,
+                      pressed && styles.smallButtonPressed,
+                      index === 0 && styles.disabled,
+                    ]}
+                    onPress={() => moveHotkey(index, -1)}
+                  >
+                    <Text style={styles.smallButtonLabel}>↑</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Move ${item.label} later`}
+                    disabled={index === agentHotkeys.length - 1}
+                    style={({ pressed }) => [
+                      styles.smallButton,
+                      pressed && styles.smallButtonPressed,
+                      index === agentHotkeys.length - 1 && styles.disabled,
+                    ]}
+                    onPress={() => moveHotkey(index, 1)}
+                  >
+                    <Text style={styles.smallButtonLabel}>↓</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${item.label}`}
+                    style={({ pressed }) => [styles.smallButton, pressed && styles.smallButtonPressed]}
+                    onPress={() => removeHotkey(item.id)}
+                  >
+                    <Text style={styles.removeLabel}>×</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
+
+          <Text style={styles.sectionHeader}>{editingIndex >= 0 ? 'Edit hotkey' : 'Add hotkey'}</Text>
+          <Text style={styles.fieldLabel}>Label</Text>
+          <TextInput
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={AGENT_HOTKEY_LABEL_MAX_LENGTH}
+            placeholder="e.g. HISTORY"
+            placeholderTextColor={appearance.muted}
+            style={styles.input}
+            value={label}
+            onChangeText={setLabel}
+          />
+          <Text style={styles.fieldLabel}>Hotkey</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="e.g. Ctrl+R"
+            placeholderTextColor={appearance.muted}
+            style={styles.input}
+            value={hotkey}
+            onChangeText={setHotkey}
+          />
+          <Text style={styles.help}>
+            Use Ctrl, Option, or Shift with a character or named key. For a sequence, use “then”: Ctrl+C then Ctrl+C.
+          </Text>
+
+          <View style={styles.editorActions}>
+            <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={submitHotkey}>
+              <Text style={styles.primaryButtonLabel}>{editingIndex >= 0 ? 'Update hotkey' : 'Add hotkey'}</Text>
+            </Pressable>
+            {editingIndex >= 0 ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Edit ${item.label}`}
-                style={styles.hotkeyMain}
-                onPress={() => editHotkey(item)}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+                onPress={clearEditor}
               >
-                <Text style={styles.hotkeyLabel}>{item.label}</Text>
-                <Text style={styles.hotkeyChord}>{formatAgentHotkeySteps(item.steps)}</Text>
+                <Text style={styles.secondaryButtonLabel}>Cancel edit</Text>
               </Pressable>
-              <View style={styles.rowActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${item.label} earlier`}
-                  disabled={index === 0}
-                  style={({ pressed }) => [
-                    styles.smallButton,
-                    pressed && styles.smallButtonPressed,
-                    index === 0 && styles.disabled,
-                  ]}
-                  onPress={() => moveHotkey(index, -1)}
-                >
-                  <Text style={styles.smallButtonLabel}>↑</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${item.label} later`}
-                  disabled={index === agentHotkeys.length - 1}
-                  style={({ pressed }) => [
-                    styles.smallButton,
-                    pressed && styles.smallButtonPressed,
-                    index === agentHotkeys.length - 1 && styles.disabled,
-                  ]}
-                  onPress={() => moveHotkey(index, 1)}
-                >
-                  <Text style={styles.smallButtonLabel}>↓</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${item.label}`}
-                  style={({ pressed }) => [styles.smallButton, pressed && styles.smallButtonPressed]}
-                  onPress={() => removeHotkey(item.id)}
-                >
-                  <Text style={styles.removeLabel}>×</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))
-        )}
+            ) : null}
+          </View>
 
-        <Text style={styles.sectionHeader}>{editingIndex >= 0 ? 'Edit hotkey' : 'Add hotkey'}</Text>
-        <Text style={styles.fieldLabel}>Label</Text>
-        <TextInput
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={AGENT_HOTKEY_LABEL_MAX_LENGTH}
-          placeholder="e.g. HISTORY"
-          placeholderTextColor={appearance.muted}
-          style={styles.input}
-          value={label}
-          onChangeText={setLabel}
-        />
-        <Text style={styles.fieldLabel}>Hotkey</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="e.g. Ctrl+R"
-          placeholderTextColor={appearance.muted}
-          style={styles.input}
-          value={hotkey}
-          onChangeText={setHotkey}
-        />
-        <Text style={styles.help}>
-          Use Ctrl, Option, or Shift with a character or named key. For a sequence, use “then”: Ctrl+C then Ctrl+C.
-        </Text>
-
-        <View style={styles.editorActions}>
-          <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={submitHotkey}>
-            <Text style={styles.primaryButtonLabel}>{editingIndex >= 0 ? 'Update hotkey' : 'Add hotkey'}</Text>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.resetButton, pressed && styles.resetButtonPressed]}
+            onPress={handleReset}
+          >
+            <Text style={styles.resetButtonLabel}>Restore {AGENT_NAMES[agentId]} defaults</Text>
           </Pressable>
-          {editingIndex >= 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
-              onPress={clearEditor}
-            >
-              <Text style={styles.secondaryButtonLabel}>Cancel edit</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        </SettingsPageScrollView>
 
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.resetButton, pressed && styles.resetButtonPressed]}
-          onPress={handleReset}
+        <Modal
+          animationType="fade"
+          transparent
+          visible={agentPickerVisible}
+          onRequestClose={() => setAgentPickerVisible(false)}
         >
-          <Text style={styles.resetButtonLabel}>Restore {AGENT_NAMES[agentId]} defaults</Text>
-        </Pressable>
-      </KeyboardAwareScrollView>
-
-      <Modal
-        animationType="fade"
-        transparent
-        visible={agentPickerVisible}
-        onRequestClose={() => setAgentPickerVisible(false)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setAgentPickerVisible(false)}>
-          <Pressable style={styles.pickerCard} onPress={() => undefined}>
-            <Text style={styles.pickerTitle}>Select agent</Text>
-            {CONFIGURABLE_AGENT_IDS.map((option) => (
-              <Pressable
-                key={option}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: option === agentId }}
-                style={styles.pickerRow}
-                onPress={() => chooseAgent(option)}
-              >
-                <Text style={styles.pickerRowLabel}>{AGENT_NAMES[option]}</Text>
-                {option === agentId ? <Text style={styles.selectedMark}>✓</Text> : null}
-              </Pressable>
-            ))}
+          <Pressable style={[styles.backdrop, barPadding(bar, 24)]} onPress={() => setAgentPickerVisible(false)}>
+            <Pressable style={styles.pickerCard} onPress={() => undefined}>
+              <Text style={styles.pickerTitle}>Select agent</Text>
+              {CONFIGURABLE_AGENT_IDS.map((option) => (
+                <Pressable
+                  key={option}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: option === agentId }}
+                  style={styles.pickerRow}
+                  onPress={() => chooseAgent(option)}
+                >
+                  <Text style={styles.pickerRowLabel}>{AGENT_NAMES[option]}</Text>
+                  {option === agentId ? <Text style={styles.selectedMark}>✓</Text> : null}
+                </Pressable>
+              ))}
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+      </SafeAreaView>
+    </SettingsColumnsFrame>
   );
 }
 

@@ -34,6 +34,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
 import { ImageUnavailable } from './ImageUnavailable';
@@ -72,6 +73,7 @@ export function ImageViewerModal({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const { width, height } = useWindowDimensions();
   const [completed, setCompleted] = useState<string | null>(null);
   /** The zoom (`Zoom`), kept here so a new picture starts unzoomed. */
@@ -128,7 +130,7 @@ export function ImageViewerModal({
       {/* A Modal is its own native root on Android, so its gestures need their own root view. */}
       <GestureHandlerRootView style={styles.backdrop}>
         <Pressable accessibilityLabel="Close image preview" style={StyleSheet.absoluteFill} onPress={close} />
-        <View style={[styles.toolbar, { top: insets.top + 8 }]}>
+        <View style={[styles.toolbar, { top: insets.top + 8 }, bar.margin]}>
           <View style={styles.toolbarSpacer} />
           <View style={styles.actions}>
             {copyPath.length > 0 ? (

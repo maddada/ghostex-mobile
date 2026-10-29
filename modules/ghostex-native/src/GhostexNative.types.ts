@@ -72,6 +72,48 @@ export type TerminalRuntimeSettings = {
 /** Short app alert sounds played natively (no bundled JS audio dependency). */
 export type TerminalAlertSoundKind = 'bell' | 'attention';
 
+/** The side of the app's window where the system stands its vertical bar (iPhone Duo; iOS 27.1 SDK). */
+export type VerticalBarEdge = 'leading' | 'trailing';
+
+/** A rectangle in window points. */
+export type WindowRect = { x: number; y: number; width: number; height: number };
+
+/**
+ * Where the system's bars sit in the app's window (iOS 27.1 `UIView.LayoutRegion.bar`): the side bar
+ * while the status bar stands on a side (`edge`), the bar region along the top, the window's size and
+ * its top, left and right safe-area insets, and the fold's division regions. Before iOS 27.1 only the
+ * size and insets.
+ */
+export type BarLayout = {
+  edge?: VerticalBarEdge;
+  sideBar?: WindowRect;
+  topBar?: WindowRect;
+  windowWidth?: number;
+  windowHeight?: number;
+  safeTop?: number;
+  safeLeft?: number;
+  safeRight?: number;
+  /** The top of the system layout margins of a view filling the window: safe area plus UIKit's margin. */
+  marginTop?: number;
+  horizontalSizeClass?: SizeClass;
+  verticalSizeClass?: SizeClass;
+  /**
+   * The fold's division regions in window points, margins included (iOS 27.1
+   * `reservedRegions(kind: .division, options: .includeInactive)`): active (half folded) and inactive
+   * (flat) alike, so the persistent chrome keeps off the fold before it folds and nothing moves when it
+   * does; menus keep off only the active ones.
+   */
+  divisions?: FoldDivision[];
+};
+
+/** A division region of the fold (`BarLayout.divisions`), and whether the fold divides the display there now. */
+export type FoldDivision = WindowRect & {
+  /** `UIView.ReservedRegion.isActive`: true while the device is half folded, false while it lies flat. */
+  active: boolean;
+};
+
+export type SizeClass = 'regular' | 'compact';
+
 export type TerminalKey =
   | 'escape'
   | 'tab'
@@ -198,6 +240,7 @@ export type GhostexNativeEvents = {
   onVisibleWindowFrameChange: (event: VisibleWindowFrameChangeEvent) => void;
   onTerminalGridChange: (event: TerminalGridChangeEvent) => void;
   onConnectionState: (event: ConnectionStateEvent) => void;
+  onBarLayoutChange: (event: BarLayout) => void;
   onVoiceEvent: (event: VoiceEvent) => void;
   onSpeechEvent: (event: SpeechEvent) => void;
 };
@@ -332,6 +375,13 @@ export type GhostexTerminalViewProps = {
   /** Fired on a single tap that did not interact with a selection. */
   onSingleTap?: () => void;
   onOpenUrl: (event: { nativeEvent: { url: string } }) => void;
+  /**
+   * iOS only (REQ-NFR-005 AC2; the Android view declares no such event): the top edge of the cursor row in
+   * this view's own points, from its top edge (Ghostty v1.3.1 `imePoint`: `y` is the cell's bottom, `height`
+   * the cell's height, so the top is `y - height`), whenever it changes and once when the terminal is
+   * attached. The terminal screen slides the view with the keyboard by it.
+   */
+  onCaretChange?: (event: { nativeEvent: { top: number } }) => void;
 };
 
 export type GhostexSelectionMenuViewProps = import('react-native').ViewProps & {

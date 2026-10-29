@@ -67,6 +67,22 @@ struct KeyModifiersRecord: Record {
 // MARK: - Module
 
 public class GhostexNativeModule: Module {
+    /// The bar layout observation this module instance started (`observeBarLayout`), set on the main queue.
+    private var barObservationID: Int?
+    /// The system notifications that move the bar observation to another window, held while JS listens
+    /// to `onBarLayoutChange` (OnStartObserving / OnStopObserving); this instance's own, so a stale
+    /// instance's teardown never removes a newer instance's.
+    private var barWindowObservers: [NSObjectProtocol] = []
+    private let barWindowObserversLock = NSLock()
+
+    /// Starts (`listening`) or ends following the app to another window for the bar observation.
+    private func followBarWindows(_ listening: Bool) {
+        barWindowObserversLock.lock()
+        defer { barWindowObserversLock.unlock() }
+        barWindowObservers.forEach(NotificationCenter.default.removeObserver)
+        barWindowObservers = listening ? GhostexVerticalBar.windowChangeObservers() : []
+    }
+
     public func definition() -> ModuleDefinition {
         Name("GhostexNative")
 
@@ -77,7 +93,8 @@ public class GhostexNativeModule: Module {
             "onFontSizeChange",
             "onKeyModifiersConsumed",
             "onTerminalGridChange",
-            "onConnectionState"
+            "onConnectionState",
+            "onBarLayoutChange"
         )
 
         // The chat core's hidden WebView: post a script without waiting for the next frame
@@ -546,15 +563,15 @@ public class GhostexNativeModule: Module {
             }
         }
 
-        AsyncFunction("focusTerminal") { (sessionKey: String) async in
+        AsyncFunction("focusTerminal") { (sessionKey: String) async -> Bool in
             await MainActor.run {
                 guard let entry = GhostexTerminalRegistry.shared.entry(for: sessionKey),
                       let view = entry.view,
                       view.window != nil else {
-                    // No-op when the terminal view is not attached anywhere.
-                    return
+                    // No view attached anywhere: nothing took the focus.
+                    return false
                 }
-                _ = view.requestKeyboardFocus(for: .explicitUserRequest)
+                return view.requestKeyboardFocus(for: .explicitUserRequest)
             }
         }
 
@@ -663,6 +680,44 @@ public class GhostexNativeModule: Module {
             }
         }
 
+        // The hosting window's bar layout now (with the observation's id), then `onBarLayoutChange`
+        // whenever UIKit moves a region or the app moves to another window. Runs on the main queue,
+        // where UIKit is.
+        AsyncFunction("observeBarLayout") { [weak self] (sideExtent: Double, topExtent: Double) -> [String: Any] in
+            MainActor.assumeIsolated {
+                let observation = GhostexVerticalBar.observe(
+                    sideExtent: CGFloat(sideExtent),
+                    topExtent: CGFloat(topExtent)
+                ) { layout in
+                    self?.sendEvent("onBarLayoutChange", layout)
+                }
+                self?.barObservationID = observation.id
+                return ["id": observation.id, "layout": observation.layout]
+            }
+        }.runOnQueue(.main)
+
+        AsyncFunction("stopObservingBarLayout") { (id: Int) async in
+            await MainActor.run { GhostexVerticalBar.stop(id: id) }
+        }
+
+        // The window-change notifications live while JS listens for bar layout changes.
+        OnStartObserving("onBarLayoutChange") { [weak self] in
+            self?.followBarWindows(true)
+        }
+
+        OnStopObserving("onBarLayoutChange") { [weak self] in
+            self?.followBarWindows(false)
+        }
+
+        // A reload or teardown drops the module: the observation this instance started leaves the
+        // window with it and its notifications end; a newer module's observation keeps running.
+        OnDestroy { [weak self] in
+            guard let self else { return }
+            self.followBarWindows(false)
+            guard let id = self.barObservationID else { return }
+            Task { @MainActor in GhostexVerticalBar.stop(id: id) }
+        }
+
         AsyncFunction("playAlertSound") { (kind: String) throws in
             // System sound IDs (AudioToolbox): 1057 is a short audible
             // SIM-toolkit beep for terminal bells; 1007 is the notification
@@ -732,7 +787,7 @@ public class GhostexNativeModule: Module {
 
         View(GhostexTerminalHostView.self) {
             ViewName("GhostexTerminalView")
-            Events("onSingleTap", "onOpenUrl")
+            Events("onSingleTap", "onOpenUrl", "onCaretChange")
 
             Prop("sessionKey") { (view: GhostexTerminalHostView, sessionKey: String) in
                 view.setSessionKey(sessionKey)

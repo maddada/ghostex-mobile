@@ -6,6 +6,8 @@
 
 import { Modal, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
+import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
+
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 
 export type ActionSheetItem = {
@@ -27,9 +29,10 @@ export type ActionSheetProps = {
 };
 
 export default function ActionSheet({ visible, title, subtitle, items, onClose }: ActionSheetProps) {
+  const bar = useVerticalBarSpace();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
           <Text style={styles.title} numberOfLines={1}>
             {title}

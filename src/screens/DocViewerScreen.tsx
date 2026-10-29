@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
+import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
 import { CopyGlyph, PencilGlyph } from '../components/sessions/icons';
 import { RefreshIcon } from '../components/terminal/icons';
 import { DocsCopy } from '../copy';
@@ -150,6 +151,44 @@ export default function DocViewerScreen({ navigation, route }: Props) {
       ),
     });
   }, [annotate, copyPath, isHtml, navigation, reload, remotePath, toggleAnnotate]);
+  // On the iPhone Duo the same buttons stand in the side bar under Back. An HTML page's annotation tool
+  // has text fields, so there the rail keeps clear of the keyboard, annotating or not (it never moves
+  // when the switch flips).
+  useStackScreenRail(
+    useMemo(
+      () => ({
+        entries: [
+          ...(isHtml
+            ? [
+                {
+                  key: 'annotate',
+                  label: annotate ? DocsCopy.annotateOn : DocsCopy.annotateOff,
+                  icon: (size: number) => (
+                    <PencilGlyph size={size} color={annotate ? GhostexPalette.ACCENT : GhostexPalette.FOREGROUND} />
+                  ),
+                  onPress: toggleAnnotate,
+                  selected: annotate,
+                },
+              ]
+            : []),
+          {
+            key: 'copy-path',
+            label: DocsCopy.copyPath,
+            icon: (size: number) => <CopyGlyph size={size} color={GhostexPalette.FOREGROUND} />,
+            onPress: copyPath,
+          },
+          {
+            key: 'reload',
+            label: DocsCopy.reload,
+            icon: (size: number) => <RefreshIcon size={size} color={GhostexPalette.FOREGROUND} />,
+            onPress: reload,
+          },
+        ],
+        reserveKeyboard: isHtml,
+      }),
+      [annotate, copyPath, isHtml, reload, toggleAnnotate],
+    ),
+  );
 
   const page = load.kind === 'ready' ? load.page : null;
   const loadedPage = useRef<DocPage | null>(null);

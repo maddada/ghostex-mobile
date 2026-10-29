@@ -43,6 +43,7 @@ extension GhosttyTerminalView {
         if !isPaused {
             ghostty_surface_refresh(surface)
             ghostty_surface_draw(surface)
+            reportCaretIfNeeded()
             if usesNativeTouchSelection {
                 refreshNativeSelectionSnapshot()
             }

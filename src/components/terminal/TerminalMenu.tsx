@@ -13,7 +13,7 @@
  * behaves exactly like the session context menu one screen back.
  */
 
-import ContextMenu, { type ContextMenuItem } from '../sessions/ContextMenu';
+import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../sessions/ContextMenu';
 import {
   AxeGlyph,
   ClockGlyph,
@@ -81,6 +81,8 @@ export type TerminalMenuProps = {
   /** Skills lists the agent's Ghostex skills and types one into its terminal input. */
   skillsEnabled: boolean;
   onSelect: (id: TerminalMenuActionId) => void;
+  /** Items shown before the menu's own, each with its own action (the iPhone Duo rail's overflow). */
+  leadingItems?: readonly ContextMenuItem[];
   onClose: () => void;
   /**
    * Fires once the menu's dismissal has fully completed (iOS only). Actions
@@ -88,6 +90,8 @@ export type TerminalMenuProps = {
    * File — have to run from here, never from `onSelect`.
    */
   onDismissed?: () => void;
+  /** The button it opened from, so on the iPhone Duo it stands there (ContextMenu's `anchor`). */
+  anchor?: MenuAnchor;
 };
 
 const ICON_SIZE = 14;
@@ -107,11 +111,13 @@ export default function TerminalMenu({
   killSessionEnabled,
   skillsEnabled,
   onSelect,
+  leadingItems = [],
   onClose,
   onDismissed,
+  anchor,
 }: TerminalMenuProps) {
   const iconColor = GhostexPalette.FOREGROUND;
-  const items: ContextMenuItem[] = [];
+  const items: ContextMenuItem[] = [...leadingItems];
 
   if (agentActionsEnabled) {
     items.push(
@@ -274,6 +280,13 @@ export default function TerminalMenu({
   }
 
   return (
-    <ContextMenu visible={visible} title={sessionTitle} items={items} onClose={onClose} onDismissed={onDismissed} />
+    <ContextMenu
+      visible={visible}
+      title={sessionTitle}
+      items={items}
+      onClose={onClose}
+      onDismissed={onDismissed}
+      anchor={anchor}
+    />
   );
 }

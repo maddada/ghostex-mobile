@@ -42,6 +42,7 @@ import {
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import { useKeyboardTop } from '../common/keyboard/keyboardFrame';
 import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
+import { useVerticalBarSpace } from '../common/verticalBar/VerticalBarArea';
 import { ChevronLeftGlyph, SearchGlyph, XGlyph } from './icons';
 
 export type SessionSearchSheetProps = {
@@ -64,6 +65,7 @@ const CLOSED_QUERY_DEBOUNCE_MS = 300;
 
 export default function SessionSearchSheet({ visible, machines, onOpen, onRestore, onClose }: SessionSearchSheetProps) {
   const insets = useSafeAreaInsets();
+  const bar = useVerticalBarSpace();
   const inputRef = useRef<TextInputInstance | null>(null);
   const [query, setQuery] = useState('');
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
@@ -280,7 +282,7 @@ export default function SessionSearchSheet({ visible, machines, onOpen, onRestor
           accessibilityLabel={SessionSearchCopy.close}
           onPress={close}
         />
-        <View style={styles.panel}>
+        <View style={[styles.panel, bar.margin]}>
           <View style={styles.header}>
             <Pressable
               accessibilityRole="button"

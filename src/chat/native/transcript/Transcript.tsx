@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,6 +22,8 @@ import {
   type ViewInstance,
 } from 'react-native';
 
+import { NO_BAR_INSETS } from '../../../components/common/verticalBar/layout';
+import { useScrollToBarEdges } from '../../../components/common/verticalBar/VerticalBarArea';
 import { useSettingsStore } from '../../../settings/store';
 import { transcriptItemKey, type TranscriptItem } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -193,6 +196,9 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
   const { dispatch } = chat;
 
   const listRef = useRef<FlatList<Row>>(null);
+  // The chat view's list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05);
+  // a transcript inside a card (a subagent's) keeps to the card.
+  const listEdges = useScrollToBarEdges(undefined, main ? null : NO_BAR_INSETS);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   const data = useMemo(() => {
     const reversed: Row[] = [];
@@ -404,7 +410,7 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
 
   let body: ReactNode;
   if (rows.length === 0) {
-    body =
+    const empty =
       main && hasMore ? (
         // React's one manual case: a transcript with no rows yet.
         <View style={styles.empty}>
@@ -425,6 +431,26 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
         // The loading hold, the new-session welcome and the empty state are the cards area's.
         <EmptyTranscript chat={chat} document={document} />
       ) : null;
+    /*
+     * CDXC:SessionChat 2026-10-26 DECISION:
+     * User (owner, 2026-10-26T09:07:46Z): "kbdfix: Gleich in S1" (the chat keyboard dismissal goes into S1). In
+     * chat view, tapping the free area or swiping down closes the keyboard. With rows the
+     * list already does both (a tap no control handles, `keyboardShouldPersistTaps="handled"`; the interactive drag);
+     * the empty state gets them from a scroll view that only exists for that, where any drag closes the keyboard
+     * (`on-drag`: there is nothing to drag along).
+     */
+    body =
+      empty === null ? null : (
+        <ScrollView
+          style={[styles.list, listEdges.scroll]}
+          contentContainerStyle={[styles.emptyScroll, listEdges.content]}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          alwaysBounceVertical
+        >
+          {empty}
+        </ScrollView>
+      );
   } else {
     body = (
       <FlatList
@@ -458,7 +484,8 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
             </View>
           ) : undefined
         }
-        style={styles.list}
+        style={[styles.list, listEdges.scroll]}
+        contentContainerStyle={listEdges.content}
       />
     );
   }
@@ -592,6 +619,7 @@ const styles = StyleSheet.create({
   rowFirst: { paddingTop: TOP_PADDING },
   rowInner: { width: '100%', maxWidth: ROW_MAX_WIDTH, paddingHorizontal: 16, paddingBottom: ROW_GAP },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  emptyScroll: { flexGrow: 1 },
   subagentRow: { paddingHorizontal: 4, paddingBottom: 16 },
   button: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   buttonText: { fontSize: 14 },

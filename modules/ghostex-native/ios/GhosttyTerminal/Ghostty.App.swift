@@ -391,8 +391,9 @@ extension Ghostty {
                 let cellSize = action.action.cell_size
                 DispatchQueue.main.async {
                     guard let terminalView = terminalView else { return }
-                    // Convert from backing (pixel) coordinates to points
-                    let scale = terminalView.window?.screen.scale ?? UIScreen.main.scale
+                    // Convert from backing (pixel) coordinates to points, at the scale the surface
+                    // renders with (the view's window display scale, see updateContentScaleIfNeeded)
+                    let scale = terminalView.contentScaleFactor
                     terminalView.cellSize = CGSize(
                         width: Double(cellSize.width) / scale,
                         height: Double(cellSize.height) / scale

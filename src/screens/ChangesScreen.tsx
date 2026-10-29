@@ -44,6 +44,8 @@ import {
   type TokenKind,
 } from '../changes/model';
 import { GitBranchGlyph, PencilGlyph } from '../components/sessions/icons';
+import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
+import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { RefreshIcon } from '../components/terminal/icons';
 import { ChangesCopy } from '../copy';
 import { FILE_LIST_DETAIL_SIZE, FILE_LIST_NAME_SIZE, FILE_VIEWER_CODE_SIZE } from '../docs/textSizes';
@@ -285,6 +287,8 @@ function ScopeMenu({
 
 export default function ChangesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  const listEdges = useScrollToBarEdges();
   const theme = useTranscriptTheme();
   const styles = useStyles();
   const colors = useMemo(() => palette(theme), [theme]);
@@ -384,6 +388,23 @@ export default function ChangesScreen({ navigation, route }: Props) {
       ),
     });
   }, [navigation, projectName, refresh, styles, theme]);
+  // On the iPhone Duo, Reload stands in the side bar under Back; nothing here takes the keyboard.
+  useStackScreenRail(
+    useMemo(
+      () => ({
+        entries: [
+          {
+            key: 'reload',
+            label: ChangesCopy.reload,
+            icon: (size: number) => <RefreshIcon size={size} color={theme.foreground} />,
+            onPress: refresh,
+          },
+        ],
+        reserveKeyboard: false,
+      }),
+      [refresh, theme.foreground],
+    ),
+  );
 
   const data: ChangesData | null = answer?.kind === 'repo' ? answer.data : null;
   const columns = listWidth > 0 ? Math.floor((listWidth - CODE_INSET) / charWidth) : 0;
@@ -618,7 +639,8 @@ export default function ChangesScreen({ navigation, route }: Props) {
         renderItem={renderRow}
         stickyHeaderIndices={empty === null ? stickyIndices : undefined}
         getItemLayout={getItemLayout}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        style={listEdges.scroll}
+        contentContainerStyle={[listEdges.content, { paddingBottom: insets.bottom + 24 }]}
         ListEmptyComponent={empty ?? undefined}
         refreshControl={
           <RefreshControl refreshing={loading && answer !== null} onRefresh={refresh} tintColor={theme.muted} />

@@ -13,6 +13,7 @@ import ExpoModulesCore
 final class GhostexTerminalHostView: ExpoView {
     let onSingleTap = EventDispatcher()
     let onOpenUrl = EventDispatcher()
+    let onCaretChange = EventDispatcher()
 
     private(set) var sessionKey: String?
     private weak var attachedTerminalView: GhosttyTerminalView?
@@ -68,13 +69,20 @@ final class GhostexTerminalHostView: ExpoView {
             self?.onOpenUrl(["url": url])
         }
 
+        terminalView.onCaretTopChange = { [weak self] top in
+            self?.onCaretChange(["top": Double(top)])
+        }
+
         terminalView.resumeRendering()
         terminalView.sizeDidChange(bounds.size)
+        // A view that was shown just now has not told React where its cursor row ends.
+        terminalView.reportCaretIfNeeded(force: true)
     }
 
     func detachTerminalView() {
         guard let terminalView = attachedTerminalView else { return }
         terminalView.onSingleTap = nil
+        terminalView.onCaretTopChange = nil
         terminalView.onOpenUrl = nil
         terminalView.pauseRendering()
         terminalView.removeFromSuperview()

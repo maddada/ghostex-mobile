@@ -12,7 +12,7 @@
  * is the only thing separating them from a session title of the same size.
  */
 
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 
@@ -27,6 +27,7 @@ import {
 import type { SectionStatusCounts } from '../../contract/grouping';
 import { decodeBase64Utf8 } from '../../docs/remoteFiles';
 import { GhostexPalette, mixHexColors, SidebarPalette } from '../../theme/palette';
+import { measureInWindow as measurePress } from '../common/measureInWindow';
 import type { MenuAnchor } from './ContextMenu';
 import {
   CaretRightGlyph,
@@ -400,12 +401,6 @@ const statusStyles = StyleSheet.create({
 // split is 24 + 17 with the chevron pulled 2px left so the halves touch. Each
 // touch area is the header's full 44pt height but only as wide as its button.
 // ---------------------------------------------------------------------------
-
-function measurePress(ref: RefObject<ViewInstance | null>, onAnchor: (anchor: MenuAnchor) => void): void {
-  const node = ref.current;
-  if (node === null) return;
-  node.measureInWindow((x, y, width, height) => onAnchor({ x, y, width, height }));
-}
 
 type FaceShape = 'whole' | 'start' | 'end';
 

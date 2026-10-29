@@ -7,6 +7,11 @@ import { StyleSheet } from 'react-native';
 import { SIDEBAR_BACKGROUND } from '../../components/sessions/rows';
 import { GhostexPalette, GhostexRadii } from '../../theme/palette';
 
+/** The header row's height: its title and buttons are 48 pt tall. */
+export const SESSIONS_HEADER_HEIGHT = 48;
+
+const BAND_ROW_PADDING = 12;
+
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -17,6 +22,11 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  /** In the iPhone Duo's status band the row floats there (VerticalBarArea), with the screen's side padding. */
+  bandRow: {
+    position: 'absolute',
+    paddingHorizontal: BAND_ROW_PADDING,
   },
   /** Owns the header row's leading space so the title can be long-pressed. */
   titlePressable: {
@@ -38,20 +48,6 @@ export const styles = StyleSheet.create({
     borderRadius: GhostexRadii.card,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  /*
-   * Option E's bottom bar (top-bar-buttons.html `.tb-bottom-bar`): 58pt, a hairline on top, #121212,
-   * edge to edge under the list (it reaches through the screen's 12pt padding).
-   */
-  bottomBar: {
-    flexDirection: 'row',
-    height: 58,
-    marginHorizontal: -12,
-    marginBottom: -12,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#121212',
   },
   bottomItem: {
     flex: 1,

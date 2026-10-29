@@ -976,3 +976,26 @@ export const CrashReportCopy = {
   send: 'Send Report',
   dismiss: 'Dismiss',
 } as const;
+
+/**
+ * Header buttons shared by the system header, the screens' own headers and the iPhone Duo's chrome
+ * (status band and side bar).
+ */
+export const DuoChromeCopy = {
+  back: 'Back',
+  /** A screen's "…", and the side bar's own one holding the buttons it has no room for. */
+  more: 'More options',
+} as const;
+
+/** The terminal screen's header buttons, on top, in the status band or in the side bar. */
+export const TerminalHeaderCopy = {
+  chatView: 'Chat view',
+  terminalView: 'Terminal view',
+} as const;
+
+/** Titles of the Settings screens that are not pages of their own (the pages' are in screens/settings/pages.ts). */
+export const SettingsCopy = {
+  title: 'Settings',
+  extraKeysTitle: 'Extra Keys',
+  agentHotkeysTitle: 'Agent Hotkeys',
+} as const;

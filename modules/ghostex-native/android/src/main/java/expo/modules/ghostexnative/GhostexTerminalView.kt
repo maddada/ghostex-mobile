@@ -216,10 +216,8 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     if (consumedOneShot) sessionKey?.let { module?.emitKeyModifiersConsumed(it) }
   }
 
-  /** focusTerminal(sessionKey): make the terminal first responder and show the IME. */
-  internal fun focusTerminal() {
-    showSoftKeyboard()
-  }
+  /** focusTerminal(sessionKey): make the terminal first responder and show the IME; true when it took the focus. */
+  internal fun focusTerminal(): Boolean = showSoftKeyboard()
 
   /** blurTerminal(sessionKey): drop focus and hide the IME. */
   internal fun blurTerminal() {
@@ -324,10 +322,11 @@ class GhostexTerminalView(context: Context, appContext: AppContext) :
     module?.emitFontSizeChange(current.sessionKey, next)
   }
 
-  private fun showSoftKeyboard() {
-    terminalView.requestFocus()
+  private fun showSoftKeyboard(): Boolean {
+    val focused = terminalView.requestFocus()
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
     imm?.showSoftInput(terminalView, 0)
+    return focused
   }
 
   // region TerminalViewClient

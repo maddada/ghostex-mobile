@@ -6,9 +6,9 @@
  * moment the first machine is saved mid-flow.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { DarkTheme, NavigationContainer, type Theme } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, type NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -36,6 +36,9 @@ import { initOverTheAirUpdates } from './src/updates/overTheAir';
 import { addProjectSourceLabel } from './src/addProject/sources';
 import { GhostexPalette } from './src/theme/palette';
 import CrashReportPrompt from './src/components/common/CrashReportPrompt';
+import { useBarGeometryStore } from './src/components/common/verticalBar/barGeometry';
+import { useStackHeaderOptions } from './src/components/common/verticalBar/StackHeader';
+import VerticalBarArea, { useTwoColumns } from './src/components/common/verticalBar/VerticalBarArea';
 import { ChatCoreWebViewHost } from './src/chat/rust/wasm-core/ChatCoreWebView';
 import ExtraKeysEditorScreen from './src/screens/ExtraKeysEditorScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
@@ -74,12 +77,36 @@ import {
   FeedbackCopy,
   FindPromptsCopy,
   MachineCopy,
+  SettingsCopy,
   SshAccessCopy,
   TailscaleFormCopy,
   WebPreviewCopy,
 } from './src/copy';
+import { isSettingsRoute } from './src/screens/settings/columnRules';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/**
+ * The stack, with the iPhone Duo's header in the status band or side bar (StackHeader) where it has one.
+ * While Settings shows two columns (F2) its screens change without a push or pop animation: picking a
+ * page swaps the right column, as iPad Settings does.
+ */
+function DuoStackNavigator({
+  screenOptions,
+  children,
+}: {
+  screenOptions: NativeStackNavigationOptions;
+  children: ReactNode;
+}) {
+  const duoOptions = useStackHeaderOptions();
+  const twoColumns = useTwoColumns();
+  const options = useMemo(() => {
+    const merged = { ...screenOptions, ...duoOptions };
+    return ({ route }: { route: { name: string } }): NativeStackNavigationOptions =>
+      twoColumns && isSettingsRoute(route.name) ? { ...merged, animation: 'none' } : merged;
+  }, [screenOptions, duoOptions, twoColumns]);
+  return <Stack.Navigator screenOptions={options}>{children}</Stack.Navigator>;
+}
 
 const navigationTheme: Theme = {
   ...DarkTheme,
@@ -116,6 +143,7 @@ export default function App() {
     void useExtraKeysStore.getState().hydrate();
     void useAgentHotkeysStore.getState().hydrate();
     void useWebPreviewStore.getState().hydrate();
+    void useBarGeometryStore.getState().hydrate();
     // Native sync installs after hydration so it pushes the persisted values.
     void useSettingsStore
       .getState()
@@ -132,137 +160,140 @@ export default function App() {
       <SafeAreaProvider>
         {/* The chat core's hidden WebView, the phone's chat brain: 1×1, under the screens, never touched. */}
         <ChatCoreWebViewHost />
-        <NavigationContainer
-          ref={navigationRef}
-          theme={navigationTheme}
-          onReady={() => {
-            flushPendingDeepLink();
-            noteCrashRoute(navigationRef.getCurrentRoute()?.name);
-          }}
-          onStateChange={() => {
-            noteCrashRoute(navigationRef.getCurrentRoute()?.name);
-            reportMobileView(navigationRef.getCurrentRoute());
-          }}
-        >
-          <StatusBar style="light" />
-          <Stack.Navigator
-            screenOptions={{
-              headerStyle: { backgroundColor: GhostexPalette.BACKGROUND },
-              headerTintColor: GhostexPalette.FOREGROUND,
-              contentStyle: { backgroundColor: GhostexPalette.BACKGROUND },
+        {/* The screens stay clear of the iPhone Duo's side status bar (VerticalBarArea). */}
+        <VerticalBarArea>
+          <NavigationContainer
+            ref={navigationRef}
+            theme={navigationTheme}
+            onReady={() => {
+              flushPendingDeepLink();
+              noteCrashRoute(navigationRef.getCurrentRoute()?.name);
+            }}
+            onStateChange={() => {
+              noteCrashRoute(navigationRef.getCurrentRoute()?.name);
+              reportMobileView(navigationRef.getCurrentRoute());
             }}
           >
-            {!hasMachines ? (
-              <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
-            ) : (
-              <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
-            )}
-            <Stack.Screen
-              name="Voice"
-              component={VoiceScreen}
-              options={{ headerShown: false, animation: 'slide_from_bottom' }}
-            />
-            <Stack.Screen name="ConnectChoose" component={ConnectChooseScreen} options={{ title: '' }} />
-            <Stack.Screen name="ScanCode" component={ScanCodeScreen} options={{ title: 'Scan code' }} />
-            <Stack.Screen
-              name="TailscaleForm"
-              component={MachineFormScreen}
-              options={{ title: TailscaleFormCopy.navTitle }}
-            />
-            <Stack.Screen
-              name="SshAccessHelp"
-              component={SshAccessHelpScreen}
-              options={{ title: SshAccessCopy.routeTitle }}
-            />
-            <Stack.Screen
-              name="MachineForm"
-              component={MachineFormScreen}
-              options={({ route }) => ({
-                title:
-                  route.params?.machineId !== undefined ? MachineCopy.editor.editTitle : MachineCopy.editor.addTitle,
-              })}
-            />
-            <Stack.Screen
-              name="Connected"
-              component={ConnectedScreen}
-              options={{ headerShown: false, gestureEnabled: false }}
-            />
-            {/* Outside the machine routes: feedback posts with no computer connected. */}
-            <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: FeedbackCopy.title }} />
-            {hasMachines ? (
-              <>
-                <Stack.Screen name="Machines" component={MachinesScreen} options={{ title: 'Machines' }} />
-                <Stack.Screen name="CantReach" component={CantReachScreen} options={{ title: '' }} />
-                <Stack.Screen
-                  name="Terminal"
-                  component={TerminalScreen}
-                  options={({ route }) => ({
-                    title: route.params.title ?? 'Terminal',
-                    headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
-                    contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
-                  })}
-                />
-                <Stack.Screen
-                  name="FindPrompts"
-                  component={FindPromptsScreen}
-                  options={{ title: FindPromptsCopy.title }}
-                />
-                <Stack.Screen
-                  name="FindPrompt"
-                  component={FindPromptScreen}
-                  options={{ title: FindPromptsCopy.promptTitle }}
-                />
-                <Stack.Screen
-                  name="WebPreviewPorts"
-                  component={WebPreviewPortsScreen}
-                  options={{ title: WebPreviewCopy.pickerTitle }}
-                />
-                <Stack.Screen name="WebPreview" component={WebPreviewScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
-                <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
-                <Stack.Screen name="Changes" component={ChangesScreen} options={{ title: ChangesCopy.title }} />
-                <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-                <Stack.Screen
-                  name="SettingsPage"
-                  component={SettingsPageScreen}
-                  options={({ route }) => ({ title: SETTINGS_PAGES[route.params.page].title })}
-                />
-                <Stack.Screen
-                  name="ExtraKeysEditor"
-                  component={ExtraKeysEditorScreen}
-                  options={{ title: 'Extra Keys' }}
-                />
-                <Stack.Screen
-                  name="AgentHotkeysEditor"
-                  component={AgentHotkeysEditorScreen}
-                  options={{ title: 'Agent Hotkeys' }}
-                />
-                <Stack.Screen
-                  name="AddProjectSource"
-                  component={AddProjectSourceScreen}
-                  options={{ title: AddProjectCopy.sourceTitle }}
-                />
-                <Stack.Screen
-                  name="AddProjectLocal"
-                  component={AddProjectLocalScreen}
-                  options={{ title: AddProjectCopy.localTitle }}
-                />
-                <Stack.Screen
-                  name="AddProjectRepository"
-                  component={AddProjectRepositoryScreen}
-                  options={({ route }) => ({ title: addProjectSourceLabel(route.params.source) })}
-                />
-                <Stack.Screen
-                  name="AddProjectDestination"
-                  component={AddProjectDestinationScreen}
-                  options={{ title: AddProjectCopy.destinationTitle }}
-                />
-              </>
-            ) : null}
-          </Stack.Navigator>
-        </NavigationContainer>
-        {/* Under the screens, not over them: the once-per-crash offer to send its report. */}
-        <CrashReportPrompt />
+            <StatusBar style="light" />
+            <DuoStackNavigator
+              screenOptions={{
+                headerStyle: { backgroundColor: GhostexPalette.BACKGROUND },
+                headerTintColor: GhostexPalette.FOREGROUND,
+                contentStyle: { backgroundColor: GhostexPalette.BACKGROUND },
+              }}
+            >
+              {!hasMachines ? (
+                <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+              ) : (
+                <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
+              )}
+              <Stack.Screen
+                name="Voice"
+                component={VoiceScreen}
+                options={{ headerShown: false, animation: 'slide_from_bottom' }}
+              />
+              <Stack.Screen name="ConnectChoose" component={ConnectChooseScreen} options={{ title: '' }} />
+              <Stack.Screen name="ScanCode" component={ScanCodeScreen} options={{ title: 'Scan code' }} />
+              <Stack.Screen
+                name="TailscaleForm"
+                component={MachineFormScreen}
+                options={{ title: TailscaleFormCopy.navTitle }}
+              />
+              <Stack.Screen
+                name="SshAccessHelp"
+                component={SshAccessHelpScreen}
+                options={{ title: SshAccessCopy.routeTitle }}
+              />
+              <Stack.Screen
+                name="MachineForm"
+                component={MachineFormScreen}
+                options={({ route }) => ({
+                  title:
+                    route.params?.machineId !== undefined ? MachineCopy.editor.editTitle : MachineCopy.editor.addTitle,
+                })}
+              />
+              <Stack.Screen
+                name="Connected"
+                component={ConnectedScreen}
+                options={{ headerShown: false, gestureEnabled: false }}
+              />
+              {/* Outside the machine routes: feedback posts with no computer connected. */}
+              <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: FeedbackCopy.title }} />
+              {hasMachines ? (
+                <>
+                  <Stack.Screen name="Machines" component={MachinesScreen} options={{ title: 'Machines' }} />
+                  <Stack.Screen name="CantReach" component={CantReachScreen} options={{ title: '' }} />
+                  <Stack.Screen
+                    name="Terminal"
+                    component={TerminalScreen}
+                    options={({ route }) => ({
+                      title: route.params.title ?? 'Terminal',
+                      headerStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
+                      contentStyle: { backgroundColor: GhostexPalette.TERMINAL_BACKGROUND },
+                    })}
+                  />
+                  <Stack.Screen
+                    name="FindPrompts"
+                    component={FindPromptsScreen}
+                    options={{ title: FindPromptsCopy.title }}
+                  />
+                  <Stack.Screen
+                    name="FindPrompt"
+                    component={FindPromptScreen}
+                    options={{ title: FindPromptsCopy.promptTitle }}
+                  />
+                  <Stack.Screen
+                    name="WebPreviewPorts"
+                    component={WebPreviewPortsScreen}
+                    options={{ title: WebPreviewCopy.pickerTitle }}
+                  />
+                  <Stack.Screen name="WebPreview" component={WebPreviewScreen} options={{ headerShown: false }} />
+                  <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
+                  <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
+                  <Stack.Screen name="Changes" component={ChangesScreen} options={{ title: ChangesCopy.title }} />
+                  <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: SettingsCopy.title }} />
+                  <Stack.Screen
+                    name="SettingsPage"
+                    component={SettingsPageScreen}
+                    options={({ route }) => ({ title: SETTINGS_PAGES[route.params.page].title })}
+                  />
+                  <Stack.Screen
+                    name="ExtraKeysEditor"
+                    component={ExtraKeysEditorScreen}
+                    options={{ title: SettingsCopy.extraKeysTitle }}
+                  />
+                  <Stack.Screen
+                    name="AgentHotkeysEditor"
+                    component={AgentHotkeysEditorScreen}
+                    options={{ title: SettingsCopy.agentHotkeysTitle }}
+                  />
+                  <Stack.Screen
+                    name="AddProjectSource"
+                    component={AddProjectSourceScreen}
+                    options={{ title: AddProjectCopy.sourceTitle }}
+                  />
+                  <Stack.Screen
+                    name="AddProjectLocal"
+                    component={AddProjectLocalScreen}
+                    options={{ title: AddProjectCopy.localTitle }}
+                  />
+                  <Stack.Screen
+                    name="AddProjectRepository"
+                    component={AddProjectRepositoryScreen}
+                    options={({ route }) => ({ title: addProjectSourceLabel(route.params.source) })}
+                  />
+                  <Stack.Screen
+                    name="AddProjectDestination"
+                    component={AddProjectDestinationScreen}
+                    options={{ title: AddProjectCopy.destinationTitle }}
+                  />
+                </>
+              ) : null}
+            </DuoStackNavigator>
+          </NavigationContainer>
+          {/* Under the screens, not over them: the once-per-crash offer to send its report. */}
+          <CrashReportPrompt />
+        </VerticalBarArea>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

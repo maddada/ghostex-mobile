@@ -24,6 +24,7 @@ import type {
   SessionKindLabelItem,
 } from '../../contract/grouping';
 import { claudeCloudCloseSleeps } from '../../contract/claudeCloud';
+import type { MenuAnchor } from '../../components/sessions/ContextMenu';
 import type { GhostexQuickAction, GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
@@ -68,8 +69,8 @@ export type Overlay =
   | { kind: 'groupMenu'; ctx: GroupContext }
   | { kind: 'parkedMenu'; ctx: ParkedContext }
   | { kind: 'machineMenu'; ctx: MachineContext }
-  /** Header hamburger: Search Prompts, Settings, Logout. */
-  | { kind: 'appMenu' }
+  /** Header hamburger: Search Prompts, Settings, Logout; at its button on the iPhone Duo (`anchor`). */
+  | { kind: 'appMenu'; anchor?: MenuAnchor }
   | { kind: 'sectionMenu'; machine: MachineRecord; section: 'projects' }
   | {
       kind: 'confirmAction';

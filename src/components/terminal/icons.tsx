@@ -28,6 +28,22 @@ export function ChevronLeftIcon(props: IconProps) {
   );
 }
 
+/** Checkmark: Save as a round header button on the iPhone Duo (owner, 2026-10-26). */
+export function CheckIcon(props: IconProps) {
+  const { size, color, strokeWidth } = iconDefaults(props);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M5 12.5l4.5 4.5L19 7.5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function EllipsisIcon(props: IconProps) {
   const { size, color } = iconDefaults(props);
   return (
