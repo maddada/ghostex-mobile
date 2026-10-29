@@ -728,13 +728,13 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
 
   const linkRewriteScript = useMemo(() => buildLinkRewriteScript(forwardedPairs), [forwardedPairs]);
 
-  // On the iPhone Duo's side bar, as the approved panes mockup (owner D1, 2026-10-26): Close, Back,
+  // On the iPhone Duo's side bar: Close, Back,
   // Reload and "More options", whose menu holds Forward, Desktop Site and Open in Browser, and Reload
   // too while the side bar has no room for it. Same labels, actions and states as the toolbar. The
   // address field takes the keyboard.
   const isFocused = useIsFocused();
   const inRail = headerPlacement.kind === 'rail' && isFocused;
-  // The "…" menu while open, at its button (F3). It stays open when the pose changes (FL-LAY-14),
+  // The "…" menu while open, at its button. It stays open when the pose changes,
   // following its button, or centred while the toolbar holds its items instead (status band, top).
   const [railMenu, setRailMenu] = useState<{ anchor?: MenuAnchor } | null>(null);
   const moreButtonRef = useRef<ViewInstance | null>(null);
@@ -783,7 +783,7 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
   );
   useRailButtons(railButtons, GhostexPalette.BACKGROUND, inRail);
   const railOverflow = useRailOverflow(railButtons, inRail);
-  // The status band's row (§12 "1b"): the rail's buttons (Close, Back, Reload, "…"), those that do not
+  // The status band's row: the rail's buttons (Close, Back, Reload, "…"), those that do not
   // fit moving into the "…" menu, last first.
   const inBand = headerPlacement.kind === 'band';
   const bandOverflow = useBandOverflow(
@@ -856,8 +856,8 @@ export default function WebPreviewScreen({ navigation, route }: Props) {
       <View
         style={[
           styles.toolbar,
-          // In the side bar's poses the address row is the top row: below the system's top margin (F1),
-          // its background running on under the side bar (F4).
+          // In the side bar's poses the address row is the top row: below the system's top margin,
+          // its background running on under the side bar.
           headerPlacement.kind === 'rail'
             ? [{ paddingTop: contentTop }, barBackgroundToEdges(bar, TOOLBAR_PADDING)]
             : { paddingTop: insets.top + 6 },

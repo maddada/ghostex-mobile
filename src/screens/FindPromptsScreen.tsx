@@ -131,7 +131,7 @@ export default function FindPromptsScreen({ navigation, route }: Props) {
   useAppearanceHeader();
   const { appearance, styles } = useFindStyles();
   const insets = useSafeAreaInsets();
-  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it.
   const listEdges = useScrollToBarEdges(styles.listContent);
   const keyboardOpen = useKeyboardTop() !== null;
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));

@@ -1,11 +1,11 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-NFR-001 AC1 (the chat composer stays above the keyboard as before). The
+ * Run with `bun run test:jest`. The chat composer stays above the keyboard as before. The
  * chat composer's lift follows the keyboard as a synchronous consumer of the
- * shared keyboard store (owner 2026-10-28, "Ja, in S1"; recordings of the installed build: the composer jumped
+ * shared keyboard store (recordings of the installed build: the composer jumped
  * before the keyboard on show and before its sibling row on hide): the lift changes in the render the store
  * publishes in, the animation request is the store's single one (show = spring 1.8 / 580 ms, hide = ease-out /
- * 250 ms; keyboardMotion.ts), the composer registers no keyboard listener and requests none; FL-A11Y-05: nothing
+ * 250 ms; keyboardMotion.ts), the composer registers no keyboard listener and requests none; nothing
  * with Reduce Motion on. Geometry: padding = lift + 8, else the larger of the safe area's bottom (34 here) and 12.
  * Frames: window 402x874, keyboard top 538, height 336.
  */

@@ -149,7 +149,7 @@ export default function WebPreviewPortsScreen({ navigation, route }: Props) {
 
   const addressValid = parseAddressInput(addressText) !== null;
   const listedPorts = listing.kind === 'loaded' ? listing.ports : [];
-  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const pickerEdges = useScrollToBarEdges(styles.pickerContent);
 
   // A machine deleted while this screen was open has nothing left to preview.

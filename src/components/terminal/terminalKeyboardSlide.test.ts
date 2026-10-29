@@ -2,13 +2,11 @@
 /**
  * Run with `bun test src/components/terminal/terminalKeyboardSlide.test.ts`.
  *
- * REQ-NFR-001 AC1 (the terminal keeps working as before) for the owner report "springt das terminal wenn
- * die tastatur hochgeht" (2026-10-28) and its decision A, "Raster bleibt, Terminal gleitet": the terminal
- * view keeps its size and slides up. The slide rule is the owner's decision of 2026-10-28T19:54:22Z
- * ("Unterkante sichtbar, Cursor gewinnt", on the report that the keyboard covered the question card omp
- * draws below the cursor): always as far as the bottom row stands above the key bar, only when the cursor
+ * The terminal keeps working as before when the keyboard goes up, on the report that the terminal jumped: the
+ * terminal grid stays, the terminal view keeps its size and slides up. The slide rule (on the report that the
+ * keyboard covered the question card omp draws below the cursor): always as far as the bottom row stands above the key bar, only when the cursor
  * row would vanish at the top, as far as it stays visible: offset = min(covered height, cursor row top).
- * Expectations are written out from that decision with an iPhone 17 (402x874 pt window, home indicator
+ * Expectations are written out from that rule with an iPhone 17 (402x874 pt window, home indicator
  * inset 34, keyboard 336 pt tall, key bar 88 pt): the terminal view is 700 pt tall (its bottom is 34 pt
  * above the window's), 20 pt rows.
  */

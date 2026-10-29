@@ -1,8 +1,7 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-NFR-001 AC1 (the terminal key bar keeps working as before, and its
- * keyboard hand-over does not regress) for the owner report "pen, 2026-10-27T14:44:42Z": "when the pen is
- * pressed the bar with the keys should come back WITHOUT JUMPING". The software keyboard stays up only if
+ * Run with `bun run test:jest`. The terminal key bar keeps working as before, and its keyboard hand-over
+ * does not regress: when the pen is pressed the bar with the keys should come back without jumping. The software keyboard stays up only if
  * the terminal asks for first responder while the editor still holds it; removing the editor first makes
  * UIKit resign it and the keyboard hides, then shows again. The real `TerminalKeyBar` with its real stores;
  * mocked are the boundaries only: the native module (the deferred `focusTerminal` is the hand-over),
@@ -77,8 +76,8 @@ async function pressPenToClose(): Promise<void> {
   });
 }
 
-describe('the pen button brings the key rows back without the keyboard jumping (REQ-NFR-001 AC1, owner report "pen, 2026-10-27T14:44:42Z")', () => {
-  test('REQ-NFR-001 AC1: the terminal is asked for focus while the editor still holds it, and the editor stays until the answer', async () => {
+describe('the pen button brings the key rows back without the keyboard jumping', () => {
+  test('the terminal is asked for focus while the editor still holds it, and the editor stays until the answer', async () => {
     await openEditor();
     await pressPenToClose();
 
@@ -90,7 +89,7 @@ describe('the pen button brings the key rows back without the keyboard jumping (
     expect(screen.queryByLabelText('ESC')).toBeNull();
   });
 
-  test('REQ-NFR-001 AC1: once the terminal took the focus, the key rows are back and the editor is gone', async () => {
+  test('once the terminal took the focus, the key rows are back and the editor is gone', async () => {
     await openEditor();
     await pressPenToClose();
     await act(async () => {
@@ -103,7 +102,7 @@ describe('the pen button brings the key rows back without the keyboard jumping (
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  test('REQ-NFR-001 AC1: a second pen press while the hand-over is pending does not ask again', async () => {
+  test('a second pen press while the hand-over is pending does not ask again', async () => {
     await openEditor();
     await pressPenToClose();
     await fireEvent.press(screen.getByLabelText(PEN_CLOSE));
@@ -111,7 +110,7 @@ describe('the pen button brings the key rows back without the keyboard jumping (
     expect(mockFocusTerminal).toHaveBeenCalledTimes(1);
   });
 
-  test('REQ-NFR-001 AC1: the terminal could not take the focus: the keys come back anyway and the refusal is logged', async () => {
+  test('the terminal could not take the focus: the keys come back anyway and the refusal is logged', async () => {
     await openEditor();
     await pressPenToClose();
     await act(async () => {
@@ -124,7 +123,7 @@ describe('the pen button brings the key rows back without the keyboard jumping (
     expect(warnSpy.mock.calls[0]).toEqual([expect.stringMatching(/refused the keyboard focus for session s1/)]);
   });
 
-  test('REQ-NFR-001 AC1: the hand-over rejects: the keys come back anyway and the error is logged', async () => {
+  test('the hand-over rejects: the keys come back anyway and the error is logged', async () => {
     const failure = new Error('no terminal');
     await openEditor();
     await pressPenToClose();

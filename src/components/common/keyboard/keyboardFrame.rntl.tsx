@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-NFR-001 AC1 (the terminal keeps working with the keyboard as before). The
+ * Run with `bun run test:jest`. The terminal keeps working with the keyboard as before. The
  * keyboard store (`keyboardFrame.ts`) and its terminal consumer
  * (`useKeyboardMetrics`) against the notifications iOS posts, each with its start and end frame
  * (keyboardEventFixtures.ts): the one writer of the layout animation (spring 1.8 / 580 ms for a show,

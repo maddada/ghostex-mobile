@@ -20,7 +20,7 @@ export type RailEntry = {
   /** The button's glyph at `size` points. */
   readonly icon: (size: number) => ReactElement;
   /**
-   * Pressed: as a button with its window frame, for a menu it opens to stand at it (F3); as a menu item
+   * Pressed: as a button with its window frame, for a menu it opens to stand at it; as a menu item
    * without one.
    */
   readonly onPress: (anchor?: WindowRect) => void;
@@ -34,8 +34,7 @@ export type RailEntry = {
  * A screen's rail: its buttons top to bottom with its "More options" last, how many leading ones never
  * move, whether that "More options" always shows or only when the other buttons do not fit
  * (`RailMoreMenu`), and whether a keyboard can appear while the rail shows (its own text inputs, or a
- * sheet, menu or dialog it opens with one), so the rail keeps clear of it (owner decisions K-15, D1,
- * D3, 2026-10-26).
+ * sheet, menu or dialog it opens with one), so the rail keeps clear of it.
  */
 export type RailButtons = {
   readonly entries: readonly RailEntry[];
@@ -71,8 +70,8 @@ export const RailContext = createContext<SetRailSlot>(() => undefined);
  * Stands `buttons` in the side bar region (VerticalBarArea) on a strip of the screen's own `background`
  * while `active` (the screen is focused and its header is in the rail); inactive or unmounted clears
  * what this caller put there. Pass `buttons` memoized on the header's inputs: the side bar republishes
- * only when they change (REQ-NFR-003). Published before the frame is painted, so the buttons arrive in
- * the rail in the same frame the header leaves the top (owner, 2026-10-26: nothing may jump).
+ * only when they change. Published before the frame is painted, so the buttons arrive in
+ * the rail in the same frame the header leaves the top, so nothing jumps.
  */
 export function useRailButtons(buttons: RailButtons, background: string, active: boolean): void {
   const setSlot = useContext(RailContext);

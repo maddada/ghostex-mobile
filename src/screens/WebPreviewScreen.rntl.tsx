@@ -1,9 +1,9 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-DUO-001 AC5 with owner D1 (2026-10-26): Web Preview's side bar "…"
+ * Run with `bun run test:jest`. Web Preview's side bar "…"
  * (its menu holds Forward, Desktop Site and Open in Browser) stays open when the Duo is turned from
  * landscape (side bar) to portrait (status band), where the toolbar holds those buttons again and the
- * menu is centred (§1.5 S1-5, FL-LAY-14; review s1-floor-r1 #15: no Effect that closes it on a pose
+ * menu is centred (no Effect closes it on a pose
  * change). The page's connection is a stand-in that never connects; the chrome is the real
  * `VerticalBarArea`.
  */
@@ -94,7 +94,7 @@ async function setWindow(width: number, height: number): Promise<void> {
   });
 }
 
-test('REQ-DUO-001 AC5, owner D1, FL-LAY-14: the side bar "…" menu stays open when the Duo turns to portrait', async () => {
+test('the side bar "…" menu stays open when the Duo turns to portrait', async () => {
   useBarGeometryStore.setState({ hydrated: false, keyboardHeights: {}, layouts: {} });
   await useBarGeometryStore.getState().hydrate();
   await setWindow(951, 669);

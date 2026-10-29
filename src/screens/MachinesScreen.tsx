@@ -47,7 +47,7 @@ const NONE: Overlay = { kind: 'none' };
 
 export default function MachinesScreen({ navigation }: Props) {
   const machines = useMachinesStore((state) => state.machines);
-  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The list reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   const removeMachine = useMachinesStore((state) => state.removeMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);

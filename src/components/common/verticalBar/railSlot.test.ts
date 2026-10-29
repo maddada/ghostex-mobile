@@ -2,11 +2,11 @@
 /**
  * Run with `bun test src/components/common/verticalBar/railSlot.test.ts`.
  *
- * REQ-NFR-003 AC3 (no avoidable work): showing the header the side bar already holds changes nothing,
- * so the side bar does not render again. Approved S1 mockup (rail): the focused screen's header
- * buttons stand in the side bar, and a screen leaving it takes only its own buttons away.
- * REQ-DUO-001 AC5 (no letterbox-like bars): the strip under the side bar shows the focused screen's
- * own background, so it changes with the screen (chat view and terminal view differ).
+ * No avoidable work: showing the header the side bar already holds changes nothing, so the side bar
+ * does not render again. The focused screen's header buttons stand in the side bar, and a screen
+ * leaving it takes only its own buttons away. No letterbox-like bars: the strip under the side bar
+ * shows the focused screen's own background, so it changes with the screen (chat view and terminal
+ * view differ).
  */
 
 import assert from 'node:assert/strict';
@@ -30,14 +30,14 @@ function buttons(...keys: string[]): RailButtons {
   return { entries, pinned: 0, moreMenu: 'always', reserveKeyboard: false };
 }
 
-describe('side bar slot (REQ-NFR-003 AC3, REQ-DUO-001 AC5)', () => {
-  test('REQ-NFR-003 AC3: the same header again keeps the slot as it is', () => {
+describe('side bar slot', () => {
+  test('the same header again keeps the slot as it is', () => {
     const more = buttons('more');
     const shown = nextRailSlot(null, { kind: 'show', owner: 'sessions', buttons: more, background: PAGE });
     assert.equal(nextRailSlot(shown, { kind: 'show', owner: 'sessions', buttons: more, background: PAGE }), shown);
   });
 
-  test('REQ-NFR-003 AC3: a changed header replaces the buttons in one step', () => {
+  test('a changed header replaces the buttons in one step', () => {
     const before = buttons('back', 'view', 'more');
     const after = buttons('back', 'more');
     const shown = nextRailSlot(null, { kind: 'show', owner: 'terminal', buttons: before, background: TERMINAL });
@@ -48,7 +48,7 @@ describe('side bar slot (REQ-NFR-003 AC3, REQ-DUO-001 AC5)', () => {
     });
   });
 
-  test('REQ-DUO-001 AC5: switching the terminal to chat view gives the strip the chat background', () => {
+  test('switching the terminal to chat view gives the strip the chat background', () => {
     const header = buttons('back', 'more');
     const terminal = nextRailSlot(null, { kind: 'show', owner: 'terminal', buttons: header, background: TERMINAL });
     assert.deepEqual(nextRailSlot(terminal, { kind: 'show', owner: 'terminal', buttons: header, background: CHAT }), {
@@ -58,7 +58,7 @@ describe('side bar slot (REQ-NFR-003 AC3, REQ-DUO-001 AC5)', () => {
     });
   });
 
-  test('REQ-NFR-003 AC3: the screen focused next puts its own buttons there', () => {
+  test('the screen focused next puts its own buttons there', () => {
     const terminalButtons = buttons('back', 'more');
     const sessions = nextRailSlot(null, {
       kind: 'show',
@@ -72,7 +72,7 @@ describe('side bar slot (REQ-NFR-003 AC3, REQ-DUO-001 AC5)', () => {
     );
   });
 
-  test('REQ-NFR-003 AC3: leaving clears only the leaving screen buttons', () => {
+  test('leaving clears only the leaving screen buttons', () => {
     const terminal = nextRailSlot(null, {
       kind: 'show',
       owner: 'terminal',

@@ -126,7 +126,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   const isFocused = useIsFocused();
   const [tapKeyboardHint, setTapKeyboardHint] = useState(false);
-  // The "More options" menu; on the iPhone Duo at its button as it is now (F3, S1-5).
+  // The "More options" menu; on the iPhone Duo at its button as it is now.
   const {
     visible: menuVisible,
     setVisible: setMenuVisible,
@@ -620,7 +620,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         accessibilityLabel={DuoChromeCopy.more}
         hitSlop={8}
         style={buttonStyle}
-        // In the iPhone Duo's status band the menu opens below this button (F3).
+        // In the iPhone Duo's status band the menu opens below this button.
         onPress={() => (headerPlacement.kind === 'top' ? openMenu() : measureInWindow(moreButtonRef, openMenu))}
       >
         <EllipsisIcon size={22} color={GhostexPalette.FOREGROUND} />
@@ -695,7 +695,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   );
   useRailButtons(railButtons, surfaceBackground, inRail && isFocused);
   const railOverflow = useRailOverflow(railButtons, inRail && isFocused);
-  // The status band's row (§12 "1b"): Back, the tab strip (one tab wide at least, it scrolls), the chat
+  // The status band's row: Back, the tab strip (one tab wide at least, it scrolls), the chat
   // toggle and "…"; the toggle moves into the "…" menu when the band is too narrow for all of them.
   const inBand = headerPlacement.kind === 'band';
   const bandOverflow = useBandOverflow(
@@ -730,8 +730,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
           headerPlacement.kind === 'band'
             ? [styles.bandHeader, bandRowFrame(headerPlacement.frame, HEADER_HEIGHT)]
             : null,
-          // In the side bar's poses: below the system's top margin (F1), and its background runs to the
-          // window edge under the side bar, as an iOS bar's does (F4).
+          // In the side bar's poses: below the system's top margin, and its background runs to the
+          // window edge under the side bar, as an iOS bar's does.
           inRail
             ? [
                 { paddingTop: contentTop, height: contentTop + HEADER_HEIGHT },

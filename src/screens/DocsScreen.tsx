@@ -85,7 +85,7 @@ function folderOf(file: DocsFileNode): string {
 
 export default function DocsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it.
   const listEdges = useScrollToBarEdges(styles.listContent);
   const { machineId, projectId, projectName, projectPath } = route.params;
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));

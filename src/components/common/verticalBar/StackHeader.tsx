@@ -1,12 +1,11 @@
 /**
- * The stack screens' header on the iPhone Duo (approved S1 chrome, as Sessions and Terminal do it).
+ * The stack screens' header on the iPhone Duo (as Sessions and Terminal do it).
  * The system header stays on every other iPhone (`useStackHeaderOptions` adds this one only for the
- * band and the rail). With the app's root view controller disabling the system's vertical bar (owner
- * §12 "1b", 2026-10-27) the Duo has the band in every pose where the top bar region lies in the status
- * band, and the system header otherwise (e.g. folded with the camera at the bottom):
+ * band and the rail). With the app's root view controller disabling the system's vertical bar the Duo
+ * has the band in every pose where the top bar region lies in the status band, and the system header otherwise (e.g. folded with the camera at the bottom):
  * - band: Back, the title and the header buttons stand in the status band beside the status items; the
  *   band is painted with the header's background. Buttons that do not fit beside Back and a title
- *   `BAND_TITLE_MIN` wide move last first into a "…" menu (owner overflow rule, 2026-10-26); Back and
+ *   `BAND_TITLE_MIN` wide move last first into a "…" menu; Back and
  *   the "…" stay. A screen whose title heads its content (Settings in two columns) keeps only Back;
  * - rail: Back and the screen's rail entries (`useStackScreenRail`) stand in the side bar below the
  *   status items, with the same "…" overflow. Unreachable while the app disables the vertical bar; kept
@@ -70,9 +69,9 @@ export function StackHeader({ navigation, route, options, back }: NativeStackHea
   const title = typeof options.title === 'string' ? options.title : route.name;
   const canGoBack = back !== undefined && options.headerBackVisible !== false;
 
-  // The "…" menu while open: the button it opened from (F3) and the entries it held then. It stays open
+  // The "…" menu while open: the button it opened from and the entries it held then. It stays open
   // with them across every pose change, standing at its button while the side bar shows it and centred
-  // otherwise (FL-LAY-14, S1-5; review s1-floor-r2 #4), until it is closed or used.
+  // otherwise, until it is closed or used.
   const [openMenu, setOpenMenu] = useState<{ anchor?: MenuAnchor; keys: readonly string[] } | null>(null);
   // The entries the "…" holds now, for its press (`useRailOverflow` is known only after the buttons are).
   const heldKeys = useRef<readonly string[]>([]);
@@ -103,7 +102,7 @@ export function StackHeader({ navigation, route, options, back }: NativeStackHea
   const inRail = placement.kind === 'rail' && focused && railButtons.entries.length > 1;
   useRailButtons(railButtons, background, inRail);
   const railOverflow = useRailOverflow(railButtons, inRail);
-  // The status band's row (§12 "1b"): Back, the title and the screen's buttons. Where they do not all fit
+  // The status band's row: Back, the title and the screen's buttons. Where they do not all fit
   // beside a title `BAND_TITLE_MIN` wide, the buttons that do not move into the "…" menu, last first.
   const inBand = placement.kind === 'band';
   const bandButtons = useMemo<RailButtons>(
@@ -191,10 +190,10 @@ export function StackHeader({ navigation, route, options, back }: NativeStackHea
       </View>
     );
   } else if (placement.kind !== 'rail' || screenRail?.titleInContent !== true) {
-    // Rail (and, should the placement change under it, top): the title row heads the content (F1), its
-    // background running on under the side bar (F4); buttons with rail entries stand in the side bar,
+    // Rail (and, should the placement change under it, top): the title row heads the content, its
+    // background running on under the side bar; buttons with rail entries stand in the side bar,
     // any others keep their place at the row's end. Settings in two columns draws a title row over each
-    // column itself (F2).
+    // column itself.
     header = (
       <View style={[{ backgroundColor: background }, barBackgroundToEdges(bar, 0)]}>
         <ContentTitleRow title={title} tint={tint} trailing={screenRail === undefined ? right : null} />
@@ -211,9 +210,9 @@ export function StackHeader({ navigation, route, options, back }: NativeStackHea
 }
 
 /**
- * A screen's title row at the top of its content in the side bar's poses (F1, 2026-10-26): a standard
+ * A screen's title row at the top of its content in the side bar's poses: a standard
  * bar's height below the system's top layout margin, the title 17 pt semibold at the content margin;
- * with a Back of its own where it heads a page opened inside a column (Settings in two columns, F2).
+ * with a Back of its own where it heads a page opened inside a column (Settings in two columns).
  */
 export function ContentTitleRow({
   title,

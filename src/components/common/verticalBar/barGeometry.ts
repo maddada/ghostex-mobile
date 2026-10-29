@@ -2,14 +2,14 @@
  * What the side bar keeps across launches, persisted to AsyncStorage like the settings
  * (`settings/store.ts`):
  * - the keyboard height it reserves per window size (layout.ts `keyboardHeightFor`): the tallest seen
- *   there, never less (owner A1, 2026-10-27), so the rail rearranges only when a keyboard first appears
+ *   there, never less, so the rail rearranges only when a keyboard first appears
  *   in a window size or a taller one does, and never moves back;
  * - the last bar layout the system reported per window size and side bar edge (layout.ts
  *   `chromeLayout`), so when React Native reports a new window size first the chrome can take the
  *   system's layout for it instead of waiting; a report that contradicts a kept one drops the others
  *   (`layoutsAfterReport`: the status items moved since they were taken).
  * Nothing is written before the stored geometry is read: what is measured meanwhile is kept in memory,
- * merged with what was stored, and written as one (FL-STA-04), so a launch never overwrites the stored
+ * merged with what was stored, and written as one, so a launch never overwrites the stored
  * maximum with less. A failed read starts from nothing and a failed write keeps what this launch
  * measured; both are logged to the app log (Logs sheet), the geometry is measured again either way.
  */

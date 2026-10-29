@@ -1,11 +1,9 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-DUO-005 AC2 and REQ-DUO-001 AC5 with the owner's overflow rule
- * and D1 (2026-10-26): a stack screen's side bar "…" holds the buttons the side bar has no room for.
- * Once open, its menu stays open with what it holds when the pose changes, standing at its button while
- * the side bar shows it and centred otherwise (§1.5 S1-5, FL-LAY-14; reviews s1-floor-r1 #15 and
- * s1-floor-r2 #4). The side bar is the folded display's, short enough that two of the screen's three
- * buttons go into the "…"; the band is the unfolded display's in portrait.
+ * Run with `bun run test:jest`. A stack screen's side bar "…" holds the buttons the side bar has no room
+ * for. Once open, its menu stays open with what it holds when the pose changes, standing at its button
+ * while the side bar shows it and centred otherwise. The side bar is the folded display's, short enough
+ * that two of the screen's three buttons go into the "…"; the band is the unfolded display's in portrait.
  */
 
 import type { ParamListBase, Route } from '@react-navigation/native';
@@ -145,14 +143,14 @@ describe('in the side bar (the system standing a vertical bar)', () => {
     expect(screen.getByText('copy')).toBeTruthy();
   });
 
-  test('REQ-DUO-005 AC2, owner S1-5: the "…" menu stays open when a Live Activity lowers the side bar, at its button', async () => {
+  test('the "…" menu stays open when a Live Activity lowers the side bar, at its button', async () => {
     await report(folded(230));
     expect(screen.getByText('reload')).toBeTruthy();
     // At the "…" where it stands now: third of 44-pt buttons 4 pt apart from y 230.
     expect(anchoredCardTop('copy')).toBe(230 + 2 * 48);
   });
 
-  test('REQ-DUO-001 AC5, FL-LAY-14: the open "…" menu keeps its items from side bar to band and back', async () => {
+  test('the open "…" menu keeps its items from side bar to band and back', async () => {
     // Unfolded in portrait: the header stands in the band, which has no "…"; the menu stays, centred.
     mockInsets = { top: 80, bottom: 20, left: 0, right: 0 };
     await setWindow(669, 951);
@@ -171,10 +169,10 @@ describe('in the side bar (the system standing a vertical bar)', () => {
 });
 
 /*
- * Owner decision 2026-10-27 (§12, "1b"): the vertical bar is disabled, so the Duo's header stands in the
+ * The vertical bar is disabled, so the Duo's header stands in the
  * status band in every pose; the band measured for `.disabled` folded in portrait is 263.7 pt wide.
  */
-describe('in the status band with the vertical bar disabled (owner §12 "1b", 2026-10-27)', () => {
+describe('in the status band with the vertical bar disabled', () => {
   const FOLDED_BAND: BarLayout = {
     windowWidth: 466,
     windowHeight: 678,
@@ -203,7 +201,7 @@ describe('in the status band with the vertical bar disabled (owner §12 "1b", 20
     });
   }
 
-  test('owner overflow rule: buttons that do not fit beside Back and the title move into the "…", last first', async () => {
+  test('buttons that do not fit beside Back and the title move into the "…", last first', async () => {
     await showBand({
       byRoute: {
         doc: {
@@ -221,11 +219,11 @@ describe('in the status band with the vertical bar disabled (owner §12 "1b", 20
     await fireEvent.press(screen.getByLabelText(DuoChromeCopy.more));
     expect(screen.getByText('reload')).toBeTruthy();
     expect(screen.getByText('export')).toBeTruthy();
-    // S1-5: the menu stands at its button in the band, below it, as measured.
+    // The menu stands at its button in the band, below it, as measured.
     expect(anchoredCardTop('reload')).toBe(268 + 44 + 8);
   });
 
-  test('owner overflow rule: while the buttons fit there is no "…" and nothing moves', async () => {
+  test('while the buttons fit there is no "…" and nothing moves', async () => {
     await showBand({
       byRoute: { doc: { entries: [entry('annotate'), entry('copy')], reserveKeyboard: false } },
     });

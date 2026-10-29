@@ -1,10 +1,9 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-NFR-001 AC1 (the terminal keeps working as before) and REQ-DUO-003
- * AC1/AC2 (the key bar stays within the window width, over the keyboard) for the owner report "springt das
- * terminal wenn die tastatur hochgeht + wenn ich die tastatur wegmache, scrollt es super seltsam runter und
- * springt wieder hoch" (2026-10-28) with the owner's decision A, "Raster bleibt, Terminal gleitet" (the
- * terminal grid stays, the terminal slides with the keyboard so the cursor row stays visible).
+ * Run with `bun run test:jest`. The terminal keeps working as before and the key bar stays within the window
+ * width, over the keyboard, on the report that the terminal jumped when the keyboard went up and, when the
+ * keyboard went away, scrolled down oddly and jumped back up (the terminal grid stays, the terminal slides
+ * with the keyboard so the cursor row stays visible).
  *
  * The real `TerminalScreen` with its real stores, `KeyBarDock`, `TerminalKeyBar` and `useKeyboardMetrics`;
  * mocked are the boundaries only: the native module (the terminal view is a stand-in that shows its props
@@ -91,7 +90,7 @@ const WINDOW = { width: 402, height: 874 };
 const KEYBOARD = { top: 538, height: 336 };
 const KEY_BAR = 88;
 const DURATION = 250;
-// The measured keyboard motion on the iPhone Duo (owner recording, iOS 27.2), as the app requests it: the
+// The measured keyboard motion on the iPhone Duo (screen recording, iOS 27.2), as the app requests it: the
 // show is a spring (damping 1.8, 580 ms), the hide an ease-out (250 ms), not the event's own duration.
 const SHOW_MOTION = { duration: 580, update: { type: 'spring', springDamping: 1.8 } };
 const HIDE_MOTION = { duration: 250, update: { type: 'easeOut' } };
@@ -259,7 +258,7 @@ afterEach(async () => {
   jest.useRealTimers();
 });
 
-describe('REQ-NFR-001 AC1, owner decision A (2026-10-28): the terminal grid stays while the keyboard comes and goes', () => {
+describe('the terminal grid stays while the keyboard comes and goes', () => {
   test('showing, changing and hiding the keyboard changes nothing that decides the terminal view height', async () => {
     await renderScreen();
     await layoutTerminalArea(700);
@@ -277,7 +276,7 @@ describe('REQ-NFR-001 AC1, owner decision A (2026-10-28): the terminal grid stay
   });
 });
 
-describe('REQ-NFR-001 AC1, owner decision A: the terminal slides with the keyboard, the cursor row stays visible', () => {
+describe('the terminal slides with the keyboard, the cursor row stays visible', () => {
   test('the cursor row at the bottom: the view moves up the whole covered height, keyboard and key bar less the home inset', async () => {
     await renderScreen();
     await layoutTerminalArea(700);
@@ -379,7 +378,7 @@ describe('REQ-NFR-001 AC1, owner decision A: the terminal slides with the keyboa
     expect(configureNext).toHaveBeenLastCalledWith(HIDE_MOTION);
   });
 
-  test('a window size change with the keyboard up recomputes the overlap from the last keyboard frame (FL-LAY-11)', async () => {
+  test('a window size change with the keyboard up recomputes the overlap from the last keyboard frame', async () => {
     await renderScreen();
     await layoutTerminalArea(500);
     await caretAt(480);
@@ -411,7 +410,7 @@ describe('REQ-NFR-001 AC1, owner decision A: the terminal slides with the keyboa
   });
 });
 
-describe('REQ-DUO-003 AC1/AC2, owner decision A: the key bar rides on top of the keyboard', () => {
+describe('the key bar rides on top of the keyboard', () => {
   test("the key bar stands on the keyboard across the window width, in the keyboard's animation", async () => {
     await renderScreen();
     await layoutTerminalArea(700);
@@ -482,7 +481,7 @@ describe('REQ-DUO-003 AC1/AC2, owner decision A: the key bar rides on top of the
   });
 });
 
-describe('owner decision A, extra keys toolbar off: the keyboard alone decides', () => {
+describe('extra keys toolbar off: the keyboard alone decides', () => {
   test('with the key bar off the view moves up the keyboard less the home inset', async () => {
     const before = useSettingsStore.getState().settings;
     useSettingsStore.setState({ settings: { ...before, extraKeysToolbarVisible: false } });
@@ -505,7 +504,7 @@ describe('owner decision A, extra keys toolbar off: the keyboard alone decides',
   });
 });
 
-describe('REQ-NFR-005: Android keeps its path', () => {
+describe('Android keeps its path', () => {
   const ios = Platform.OS;
   beforeEach(() => {
     Platform.OS = 'android';
@@ -534,7 +533,7 @@ describe('REQ-NFR-005: Android keeps its path', () => {
   });
 });
 
-describe('owner 2026-10-28: the keyboard summoned while scrolled back shows the input area', () => {
+describe('the keyboard summoned while scrolled back shows the input area', () => {
   test('the active session is scrolled to the bottom once when the keyboard comes up, not on a frame change while it is up, again after it was away', async () => {
     await renderScreen();
     expect(mockScrollToBottom).not.toHaveBeenCalled();
@@ -589,7 +588,7 @@ describe('the chat box keeps the bottom spacer it had outside the iPhone Duo (de
   });
 });
 
-describe('FL-A11Y-05: Reduce Motion', () => {
+describe('Reduce Motion', () => {
   test('with Reduce Motion on no animation is requested and every end position is the same', async () => {
     reduceMotion.enabled = true;
     await renderScreen();
@@ -633,7 +632,7 @@ describe('FL-A11Y-05: Reduce Motion', () => {
   });
 });
 
-describe('FL-A11Y-05 at the shared root: the app chrome follows Reduce Motion too', () => {
+describe('at the shared root: the app chrome follows Reduce Motion too', () => {
   test('with Reduce Motion on, a keyboard event through VerticalBarArea and the terminal screen requests no layout animation from either', async () => {
     reduceMotion.enabled = true;
     await renderScreen(SHELL_TAB, true);
@@ -662,7 +661,7 @@ describe('FL-A11Y-05 at the shared root: the app chrome follows Reduce Motion to
   });
 });
 
-describe('REQ-NFR-001 AC1: the scroll to the input area follows the keyboard really coming up, in the terminal on screen', () => {
+describe('the scroll to the input area follows the keyboard really coming up, in the terminal on screen', () => {
   test('a frame change that ends below the window after a hide is no new appearance: one scroll, key bar gone', async () => {
     await renderScreen();
     await keyboardWillShow();

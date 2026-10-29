@@ -988,9 +988,9 @@ export default function SessionsScreen({ navigation }: Props) {
 
   const moreButtonRef = useRef<ViewInstance | null>(null);
   const contentTop = useContentTop();
-  // The session list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  // The session list reaches under the iPhone Duo's side bar, its rows keep clear of it.
   const listEdges = useScrollToBarEdges(styles.listContent);
-  // The app menu stays at its More options button while it is open, wherever that moves (S1-5).
+  // The app menu stays at its More options button while it is open, wherever that moves.
   const appMenuAnchor = useLiveMenuAnchor(
     overlay.kind === 'appMenu' ? { key: 'more', pressed: overlay.anchor } : null,
     moreButtonRef,
@@ -1005,7 +1005,7 @@ export default function SessionsScreen({ navigation }: Props) {
       accessibilityRole="button"
       accessibilityLabel={DuoChromeCopy.more}
       style={styles.headerButton}
-      // In the iPhone Duo's status band the menu opens below this button (F3).
+      // In the iPhone Duo's status band the menu opens below this button.
       onPress={() =>
         headerPlacement.kind === 'top'
           ? setOverlay({ kind: 'appMenu' })
@@ -1036,7 +1036,7 @@ export default function SessionsScreen({ navigation }: Props) {
       style={[
         styles.container,
         { backgroundColor: sidebarAppearance.background },
-        // In the side bar's poses the title row starts below the system's top margin (F1).
+        // In the side bar's poses the title row starts below the system's top margin.
         inRail ? { paddingTop: contentTop } : null,
       ]}
       // iOS leaves the bottom safe area to the bottom bar, whose background runs to the screen edge; Android
@@ -1211,7 +1211,7 @@ export default function SessionsScreen({ navigation }: Props) {
         User picked option E for the Sessions screen's top bar buttons (Q362, docs/2026-10-21/phone-sessions-screen/top-bar-buttons.html): "Voice, Search, Web and Machines move to a labelled bar at the bottom; the top keeps only the title and the menu." The bottom bar holds the four, labelled, within thumb reach. Search still opens SessionSearchSheet, which searches every visible computer's open and closed sessions with the desktop's Sessions search rules and restores a closed one when tapped (the 2026-10-01 decision); only its place moves from the top right to the bar. Voice shows only where the computer runs the voice agent, and Web only once a computer is chosen.
       */}
       {/*
-        S1 2026-10-28: the bar's background runs to the bottom screen edge as iOS tab bars do; this screen
+        On iOS the bar's background runs to the bottom screen edge as iOS tab bars do; this screen
         leaves the bottom safe area to it (SafeAreaView edges), and its items stay above the home indicator.
       */}
       <SessionsBottomBar>

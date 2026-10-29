@@ -230,8 +230,8 @@ enum GhostexVerticalBar {
 /// Layout lays this view out again (as on rotation, a safe-area change, or a change of the traits that
 /// decide the side bar), and it reports the window's bar layout when that differs from the last report.
 /// The probes move to the other side's guide in `updateConstraints`, after the traits that decide the
-/// side changed, and the fold's division regions are read there too (`readDivisions`, FL-DUO-03);
-/// `layoutSubviews` only reads the settled layout (FL-LAY-12).
+/// side changed, and the fold's division regions are read there too (`readDivisions`);
+/// `layoutSubviews` only reads the settled layout.
 @MainActor
 final class GhostexBarLayoutObserver: UIView {
     private let sideExtent: CGFloat
@@ -388,7 +388,7 @@ final class GhostexBarLayoutObserver: UIView {
         NSLayoutConstraint.activate(regionConstraints)
     }
 
-    /// The fold's division regions (FL-DUO-03): read here, in the view that measures where the chrome
+    /// The fold's division regions: read here, in the view that measures where the chrome
     /// goes, inside `updateConstraints`, which UIKit runs again when the regions change. The frames are
     /// taken as given, margins included, and inactive ones too (`.includeInactive`), each with its
     /// `isActive`: the persistent chrome keeps off the fold while the display is flat, so nothing moves

@@ -53,8 +53,8 @@ export function useKeyboardMetrics({ slides = false, onAppear }: KeyboardMetrics
   const [visibleWindowBottom, setVisibleWindowBottom] = useState<number | null>(null);
   const reportAppear = useEffectEvent(() => onAppear?.());
   const ios = Platform.OS === 'ios';
-  // iOS: the window decides how far the keyboard reaches into it (FL-LAY-01), also after a window size change
-  // without a keyboard event (FL-LAY-11). A frame the store still holds that no longer reaches into this window
+  // iOS: the window decides how far the keyboard reaches into it, also after a window size change
+  // without a keyboard event. A frame the store still holds that no longer reaches into this window
   // (an end frame after a turn or fold, before its keyboardWillHide) is a hidden keyboard here.
   const windowTop = keyboardTopInWindow(shared.frame?.top ?? null, viewportHeight);
   const keyboardVisible = ios ? shared.visible && windowTop !== null : android.keyboardVisible;

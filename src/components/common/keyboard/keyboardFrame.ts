@@ -70,7 +70,7 @@ function startFrameFromEvent(event: KeyboardEvent): KeyboardFrame | null {
  * Whether a change-frame notification takes the keyboard off the screen: its end frame starts at or below
  * the bottom edge of its start frame. Decided from the one notification (`startCoordinates` and
  * `endCoordinates` share a coordinate space, so a turn or fold cannot skew it, and no window or screen size
- * is needed: REQ-DUO-002 AC2); only when the notification has no start frame, from the stored frame.
+ * is needed); only when the notification has no start frame, from the stored frame.
  */
 function leavesScreen(event: KeyboardEvent, end: KeyboardFrame): boolean {
   const from = startFrameFromEvent(event) ?? state.frame;

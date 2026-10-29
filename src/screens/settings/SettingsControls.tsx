@@ -193,13 +193,13 @@ export function useSettingsStyles(): ReturnType<typeof createSettingsStyles> {
  * stands in the Duo's chrome (status band or side bar), so a wide single column (the unfolded Duo in
  * portrait) is not stretched across the window; regular iPhones stay as they were, and a window
  * narrower than the column is not affected. Where the window holds the list and a page the page
- * stands beside the Settings list instead (owner decision F2, 2026-10-26: `SettingsColumnsFrame`), in a
- * column narrower than this one. The 640 pt of the S1 mockup is this fallback, not the Settings layout.
+ * stands beside the Settings list instead (`SettingsColumnsFrame`), in a
+ * column narrower than this one. The 640 pt is this fallback, not the Settings layout.
  */
 const READABLE_COLUMN = { width: '100%', maxWidth: 640, alignSelf: 'center' } as const;
 
 /**
- * The side bar's insets a Settings page's scroll view reaches over (FL-LAY-05): both of them, or in two
+ * The side bar's insets a Settings page's scroll view reaches over: both of them, or in two
  * columns only the one beside the page column (`SettingsColumnsFrame` provides it; the list column
  * takes the other).
  */
@@ -207,7 +207,7 @@ export const SettingsPageEdgesContext = createContext<HorizontalInsets | null>(n
 
 /**
  * A Settings page's scroll view (the pages' and the editors'): it spans the window under the side bar
- * and its content keeps its own padding clear of it (FL-LAY-05); unchanged without a side bar.
+ * and its content keeps its own padding clear of it; unchanged without a side bar.
  * `keyboardAware` for a page with text fields.
  */
 export function SettingsPageScrollView({

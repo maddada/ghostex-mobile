@@ -1,11 +1,10 @@
 /// <reference types="jest" />
 /**
  * Run with `bun run test:jest`. The chrome's lifecycle paths in `VerticalBarArea` that a logic test cannot
- * reach: the gate before the system's first report and the order of the two reports of a window change
- * (§1.5 S1-10, FL-STA-04, FL-LAY-08), an open menu following its button (S1-5), the rail stepping over
- * the fold's division (FL-DUO-03, owner B1), the keyboard reserve that only grows (S1-4, owner A1), and
- * a style's own padding (FL-LAY-05). The system's bar layout comes from a stand-in for the native module;
- * window frames are the iPhone Duo's (mockup kit devices.js: inner 669x951 and 951x669, folded 466x678).
+ * reach: the gate before the system's first report and the order of the two reports of a window change,
+ * an open menu following its button, the rail stepping over the fold's division, the keyboard reserve
+ * that only grows, and a style's own padding. The system's bar layout comes from a stand-in for the native module;
+ * window frames are the iPhone Duo's (inner 669x951 and 951x669, folded 466x678).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -159,7 +158,7 @@ afterEach(() => {
 });
 
 /*
- * Owner decision 2026-10-27 (§12, "1b"): the vertical bar is disabled; these are the bar layouts the iPhone
+ * The vertical bar is disabled; these are the bar layouts the iPhone
  * Duo simulator (Xcode 27.1) measured for `.disabled`, folded: no side bar, safe area top 82 (portrait and
  * the landscape with the camera top left), 0 with the camera at the bottom.
  */
@@ -194,7 +193,7 @@ const DISABLED_LANDSCAPE_LEFT: BarLayout = {
   divisions: [],
 };
 
-describe('the Duo with the vertical bar disabled (owner §12 "1b", 2026-10-27)', () => {
+describe('the Duo with the vertical bar disabled', () => {
   test('folded in portrait the header is placed in the band beside the status items, with the measured frame', async () => {
     mockInsets = { top: 82, bottom: 34, left: 0, right: 0 };
     await setWindow(466, 678);
@@ -226,7 +225,7 @@ describe('the Duo with the vertical bar disabled (owner §12 "1b", 2026-10-27)',
   });
 });
 
-describe('the chrome waits for the system and follows its reports (owner S1-10, FL-STA-04)', () => {
+describe('the chrome waits for the system and follows its reports', () => {
   test('the screens are laid out at once, the header on top, before the first report on a first launch', async () => {
     await render(
       <VerticalBarArea>
@@ -252,7 +251,7 @@ describe('the chrome waits for the system and follows its reports (owner S1-10, 
     expect(placements.every((placement) => placement.kind === 'band')).toBe(true);
   });
 
-  test('owner S1-10: at a size the system has not reported yet, the old layout stays until its report; never top', async () => {
+  test('at a size the system has not reported yet, the old layout stays until its report; never top', async () => {
     await render(
       <VerticalBarArea>
         <PlacementProbe />
@@ -268,7 +267,7 @@ describe('the chrome waits for the system and follows its reports (owner S1-10, 
     expect(placements.at(-1)).toEqual({ kind: 'rail', frame: LANDSCAPE.sideBar });
   });
 
-  test('owner S1-10: the system reporting first is taken at once, before React Native reports the new size', async () => {
+  test('the system reporting first is taken at once, before React Native reports the new size', async () => {
     mockInsets = { top: 0, bottom: 20, left: 0, right: 84 };
     await setWindow(466, 678);
     await render(
@@ -282,7 +281,7 @@ describe('the chrome waits for the system and follows its reports (owner S1-10, 
     expect(placements.at(-1)).toEqual({ kind: 'rail', frame: LANDSCAPE.sideBar });
   });
 
-  test('REQ-DUO-001 AC5, owner S1-10: a layout kept from before a Live Activity moved the status items is not used', async () => {
+  test('a layout kept from before a Live Activity moved the status items is not used', async () => {
     mockInsets = { top: 0, bottom: 20, left: 0, right: 84 };
     await setWindow(466, 678);
     await render(
@@ -336,7 +335,7 @@ function HeaderMenuScreen() {
   ) : null;
 }
 
-test("REQ-DUO-001 AC5, owner S1-5: Terminal's menu, opened at its band button, stands at its side bar button after the turn", async () => {
+test("Terminal's menu, opened at its band button, stands at its side bar button after the turn", async () => {
   anchors.length = 0;
   const BAND_BUTTON = { x: 600, y: 26, width: 44, height: 44 };
   mockNativeMethods.measureInWindow.mockImplementation(
@@ -360,7 +359,7 @@ test("REQ-DUO-001 AC5, owner S1-5: Terminal's menu, opened at its band button, s
 /**
  * Terminal's "More options" menu as it is drawn: a card at its band button. React Native's native Modal keeps
  * its content on screen while it fades out after `visible` turns false; this stand-in does the same (the
- * Jest preset's mock drops it at once, which would hide exactly the frames the owner saw).
+ * Jest preset's mock drops it at once, which would hide exactly the frames a device test showed).
  */
 jest.mock('react-native/Libraries/Modal/Modal', () => {
   const { View: MockView } = jest.requireActual('react-native');
@@ -396,7 +395,7 @@ function MenuCloseScreen() {
   );
 }
 
-describe('REQ-DUO-001 AC5, owner finding 2026-10-28: the menu card stays where it is while the menu fades out', () => {
+describe('the menu card stays where it is while the menu fades out', () => {
   /** The card's position style: the title's nearest container with a width. */
   const cardPosition = () => {
     let card = screen.getByText('Menu').parent;
@@ -459,7 +458,7 @@ describe('REQ-DUO-001 AC5, owner finding 2026-10-28: the menu card stays where i
   );
 });
 
-describe("the side bar keeps off the fold's division (FL-DUO-03, owner B1, 2026-10-27)", () => {
+describe("the side bar keeps off the fold's division", () => {
   const ACROSS_RAIL = { x: 0, y: 330, width: 951, height: 18, active: true };
   const LAPTOP_DIVISION = { x: 0, y: 466, width: 669, height: 18, active: true };
   /** The anchored menu's card: the title's nearest container with a height limit. */
@@ -480,7 +479,7 @@ describe("the side bar keeps off the fold's division (FL-DUO-03, owner B1, 2026-
     </VerticalBarArea>
   );
 
-  test('owner B1: a button that would stand in the division stands below it, the others as before', async () => {
+  test('a button that would stand in the division stands below it, the others as before', async () => {
     await setWindow(951, 669);
     await render(
       <VerticalBarArea>
@@ -494,14 +493,14 @@ describe("the side bar keeps off the fold's division (FL-DUO-03, owner B1, 2026-
     expect(marginTop('more')).toBe(348 - 290);
   });
 
-  test('owner B1, laptop: a menu at a band button keeps above the division and scrolls in that room', async () => {
+  test('laptop: a menu at a band button keeps above the division and scrolls in that room', async () => {
     await render(bandMenu);
     await firstReport({ ...PORTRAIT, divisions: [LAPTOP_DIVISION] });
     // From 8 pt below the safe area (80) to the division's top.
     expect(cardMaxHeight()).toBe(466 - 88);
   });
 
-  test('device finding 2026-10-27: flat in portrait the menu reaches past the fold line, and folding then keeps it above', async () => {
+  test('flat in portrait the menu reaches past the fold line, and folding then keeps it above', async () => {
     await render(bandMenu);
     await firstReport({ ...PORTRAIT, divisions: [{ ...LAPTOP_DIVISION, active: false }] });
     // From 8 pt below the safe area (80) to 8 pt above the bottom inset (951 - 20).
@@ -511,12 +510,12 @@ describe("the side bar keeps off the fold's division (FL-DUO-03, owner B1, 2026-
   });
 });
 
-describe('the keyboard reserve only grows (REQ-DUO-005 AC2, owner A1, 2026-10-27)', () => {
+describe('the keyboard reserve only grows', () => {
   const keyboard = (top: number, height: number) => act(() => keyboardEvents.show(top, height, 0));
   const hide = () => act(() => keyboardEvents.hide(0));
   const sizeOf = (label: string) => StyleSheet.flatten(screen.getByLabelText(label).props.style).width;
 
-  test('owner A1: the first keyboard rearranges the rail once, a lower one never moves it back, a taller one once more', async () => {
+  test('the first keyboard rearranges the rail once, a lower one never moves it back, a taller one once more', async () => {
     mockInsets = { top: 0, bottom: 20, left: 0, right: 84 };
     await setWindow(466, 678);
     const keys = ['back', 'a', 'b', 'c', 'd', 'more'];
@@ -546,7 +545,7 @@ describe('the keyboard reserve only grows (REQ-DUO-005 AC2, owner A1, 2026-10-27
     expect(useBarGeometryStore.getState().keyboardHeights).toEqual({ '466x678': 300 });
   });
 
-  test('owner A1: turning with the keyboard up learns only the keyboard reported for the new window', async () => {
+  test('turning with the keyboard up learns only the keyboard reported for the new window', async () => {
     // Folded and turned to landscape (678 x 466 pt) with the keyboard up, then turned back.
     mockInsets = { top: 0, bottom: 20, left: 0, right: 84 };
     await setWindow(678, 466);
@@ -566,8 +565,8 @@ describe('the keyboard reserve only grows (REQ-DUO-005 AC2, owner A1, 2026-10-27
   });
 });
 
-describe('a style keeps its own padding under the side bar (FL-LAY-05)', () => {
-  test("FL-LAY-05: a side's own padding, else its axis', else the style's padding, through arrays", () => {
+describe('a style keeps its own padding under the side bar', () => {
+  test("a side's own padding, else its axis', else the style's padding, through arrays", () => {
     const styles = StyleSheet.create({
       all: { padding: 16 },
       axis: { paddingHorizontal: 12 },

@@ -90,7 +90,7 @@ function parsePort(value: string): number | null {
 
 export default function MachineFormScreen({ navigation, route }: Props) {
   const machineId = route.params?.machineId ?? null;
-  // The form reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The form reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const scrollEdges = useScrollToBarEdges(formStyles.scroll);
   const scannedToken = route.params?.tailcatToken;
   const machines = useMachinesStore((state) => state.machines);
@@ -347,8 +347,8 @@ export default function MachineFormScreen({ navigation, route }: Props) {
    * react-native-screens on Android crashes ("View already has a parent") when views inside a screen's header or content are re-parented while that screen's removal transition runs (react-native-screens #4677, #3249). This header was set again on every render, and Save re-renders right around goBack() (saving, the store update, a renamed title). So it is set only when what it shows changes, never once the form is leaving, and the title stays the name the form opened with.
    */
   const saveDisabled = !canSave || saving;
-  // On the iPhone Duo (band and side bar) Save is a round button with a checkmark (owner D2,
-  // 2026-10-26); the system header on other iPhones keeps the text.
+  // On the iPhone Duo (band and side bar) Save is a round button with a checkmark;
+  // the system header on other iPhones keeps the text.
   const roundSave = useHeaderPlacement().kind !== 'top';
   const saveEntry = useMemo<RailEntry>(
     () => ({

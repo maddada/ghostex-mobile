@@ -13,7 +13,7 @@
  * layout, never measured at keyboard time) less the keyboard's top edge. The lift is padding inside the view,
  * so its bottom edge stays put with and without it. The resting bottom edge is measured again when the view's
  * own layout changes (`onAnchorLayout` for its `onLayout`) and when the window's height does (a fold, an
- * unfold or a rotation: FL-LAY-11); until the first measurement the window's bottom stands in for it.
+ * unfold or a rotation); until the first measurement the window's bottom stands in for it.
  */
 
 import { useCallback, useEffect, useState, type RefObject } from 'react';

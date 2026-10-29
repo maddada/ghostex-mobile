@@ -25,8 +25,7 @@ export function keyboardFrameOf(screenY: number, height: number, width: number):
 }
 
 /**
- * The keyboard height a window of `window`'s size learns from `frame` (owner A1, 2026-10-27; review
- * s1-floor-r2 #7): only from a frame reported for that window, docked at its bottom and as wide as it
+ * The keyboard height a window of `window`'s size learns from `frame`: only from a frame reported for that window, docked at its bottom and as wide as it
  * at least. Turning or folding with the keyboard up reports the window's new size and the keyboard's
  * new frame separately, in either order; the frame left from before the change is not this window's,
  * so it teaches nothing, and the new frame does once it comes.

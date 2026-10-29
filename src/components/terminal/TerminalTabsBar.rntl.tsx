@@ -1,8 +1,7 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-DUO-005 AC2 (folded: the Terminal tabs stay usable in the status band)
- * and REQ-DUO-001 AC5 (inner display). Owner decisions 2026-10-28 (Terminal tabs stay in the status band, "es muss
- * deutlich sein, dass man wischen kann"): in a strip too narrow for every tab the second tab shows by at
+ * Run with `bun run test:jest`. The Terminal tabs stay usable in the status band (folded) and on the inner
+ * display, and it must be clear that the strip scrolls: in a strip too narrow for every tab the second tab shows by at
  * least a quarter of a tab and the edge that hides more tabs fades; one tab and a strip that fits are
  * unchanged. The real `TerminalTabsBar`; the test renderer measures nothing, so the track's and the
  * scroll content's sizes are fired as the layout events React Native would send.
@@ -184,8 +183,8 @@ describe('the strip scrolls to the active tab only when the active tab changes',
 });
 
 /*
- * The real component, not the model: the offset it actually hands to the ScrollView. Owner 2026-10-28,
- * "es muss deutlich sein, dass man wischen kann": with a narrow strip the neighbour of the active tab peeks
+ * The real component, not the model: the offset it actually hands to the ScrollView. So that it is clear the
+ * strip scrolls: with a narrow strip the neighbour of the active tab peeks
  * in by at least a quarter of a tab (the previous one for the last tab), and the active tab is whole.
  */
 describe('the offset the strip scrolls to (116 pt track, 3 tabs)', () => {

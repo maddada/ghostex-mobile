@@ -21,7 +21,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ConnectChoose'>;
 
 export default function ConnectChooseScreen({ navigation }: Props) {
   const openScanner = (): void => navigation.navigate('ScanCode');
-  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>

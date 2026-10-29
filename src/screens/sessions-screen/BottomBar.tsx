@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** The height of the bar's items (upstream's option E bar: 58 pt). */
+/** The height of the bar's items (58 pt). */
 export const BOTTOM_BAR_ITEMS_HEIGHT = 58;
 
 /**

@@ -287,7 +287,7 @@ function ScopeMenu({
 
 export default function ChangesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05).
+  // The list reaches under the iPhone Duo's side bar, its rows keep clear of it.
   const listEdges = useScrollToBarEdges();
   const theme = useTranscriptTheme();
   const styles = useStyles();

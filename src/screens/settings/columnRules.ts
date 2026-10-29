@@ -1,6 +1,5 @@
 /**
- * Settings in two columns on the iPhone Duo's inner display in landscape (owner decision F2, 2026-10-26,
- * "Zweispaltig wie iPad-Einstellungen"): the Settings list on the left, the open page on the right.
+ * Settings in two columns on the iPhone Duo's inner display in landscape, like the iPad's Settings: the Settings list on the left, the open page on the right.
  *
  * The stack stays the one source of where the user is: Settings, then the open page (a `SettingsPage`
  * route), then any page opened from it (Keyboard's editors, Chat's read-aloud voice). The two columns
@@ -19,7 +18,7 @@ const SETTINGS_ROUTES: ReadonlySet<string> = new Set([
   'AgentHotkeysEditor',
 ]);
 
-/** The page selected while none was opened yet: the first of the list (owner F2: Theme). */
+/** The page selected while none was opened yet: the first of the list (Theme). */
 export const DEFAULT_SETTINGS_PAGE: SettingsPageId = 'theme';
 
 export function isSettingsRoute(name: string): boolean {

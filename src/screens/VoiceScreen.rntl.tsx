@@ -1,7 +1,6 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-DUO-001 AC5 with FL-LAY-05 (review s1-floor-r2 #5, s1-floor-r3): the
- * Voice screen opens on iOS through `ghostex://voice`, so its conversation, a scroll view, spans the window
+ * Run with `bun run test:jest`. The Voice screen opens on iOS through `ghostex://voice`, so its conversation, a scroll view, spans the window
  * under the iPhone Duo's side bar while its lines keep their own 16 pt padding plus the side bar's inset,
  * on whichever side the bar stands. Without a side bar (every other iPhone, also in landscape with the
  * notch's insets) its styling is what it was. The real `VoiceScreen` inside the real `VerticalBarArea`;
@@ -126,20 +125,20 @@ beforeEach(async () => {
   useVoiceStore.setState({ phase: 'ended', endedMessage: ENDED, problem: null, lines: [] });
 });
 
-describe('the Voice conversation clear of the side bar (REQ-DUO-001 AC5, FL-LAY-05)', () => {
-  test('REQ-DUO-001 AC5, FL-LAY-05: a leading side bar: the view reaches under it, the lines keep 16 pt past it', async () => {
+describe('the Voice conversation clear of the side bar', () => {
+  test('a leading side bar: the view reaches under it, the lines keep 16 pt past it', async () => {
     const { scroll, content } = await conversationStyles(FOLDED_TURNED, { top: 0, bottom: 20, left: 84, right: 0 });
     expect(scroll).toMatchObject({ marginLeft: -84, marginRight: 0 });
     expect(content).toMatchObject({ paddingLeft: 16 + 84, paddingRight: 16 });
   });
 
-  test('REQ-DUO-001 AC5, FL-LAY-05: a trailing side bar: the view reaches under it, the lines keep 16 pt past it', async () => {
+  test('a trailing side bar: the view reaches under it, the lines keep 16 pt past it', async () => {
     const { scroll, content } = await conversationStyles(INNER_LANDSCAPE, { top: 10, bottom: 20, left: 0, right: 81 });
     expect(scroll).toMatchObject({ marginLeft: 0, marginRight: -81 });
     expect(content).toMatchObject({ paddingLeft: 16, paddingRight: 16 + 81 });
   });
 
-  test('REQ-NFR-001 AC1, FL-LAY-05: without a side bar (a regular iPhone in landscape) the styling is unchanged', async () => {
+  test('without a side bar (a regular iPhone in landscape) the styling is unchanged', async () => {
     const { scroll, content } = await conversationStyles(IPHONE_LANDSCAPE, { top: 0, bottom: 21, left: 62, right: 62 });
     expect(scroll?.marginLeft).toBeUndefined();
     expect(scroll?.marginRight).toBeUndefined();

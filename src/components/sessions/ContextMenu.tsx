@@ -6,7 +6,7 @@
  * optional trailing check, with press feedback, 1dp dividers, and danger
  * tinting carried over from the desktop sidebar menu. On the iPhone Duo a menu
  * opened from a header button in the status band or the side bar stands at
- * that button instead (`anchor`, F3 2026-10-26), as an iOS pull-down does.
+ * that button instead (`anchor`), as an iOS pull-down does.
  */
 
 import { Fragment, useState, type ReactElement } from 'react';
@@ -167,9 +167,9 @@ export default function ContextMenu({
   // The card's height once laid out, for an anchored menu to stay inside the window.
   const [cardHeight, setCardHeight] = useState<number | null>(null);
 
-  // The card stays where it was shown until the Modal is gone: once `visible` turns false the owner of the
-  // menu stops passing an anchor (its open menu is gone), which would put the still fading card in the
-  // centre for its last frames (owner finding 2026-10-28). So the last anchor of the open menu is held.
+  // The card stays where it was shown until the Modal is gone: once `visible` turns false the component that
+  // owns the menu stops passing an anchor (its open menu is gone), which would put the still fading card in the
+  // centre for its last frames (seen on a device). So the last anchor of the open menu is held.
   const [heldAnchor, setHeldAnchor] = useState(liveAnchor);
   if (visible && !sameFrame(liveAnchor, heldAnchor)) setHeldAnchor(liveAnchor);
   const anchor = visible ? liveAnchor : heldAnchor;
@@ -180,7 +180,7 @@ export default function ContextMenu({
     right: screenWidth - Math.max(safeArea.right, bar.right) - ANCHORED_MARGIN,
     bottom: screenHeight - safeArea.bottom - ANCHORED_MARGIN,
   };
-  // On the button's side of the fold while it is folded (FL-DUO-03, owner B1, 2026-10-27); flat, across it.
+  // On the button's side of the fold while it is folded; flat, across it.
   const room = anchor === undefined ? windowRoom : menuRoomBeside(windowRoom, anchor, divisions);
   // A centred card keeps the same margin on both sides, the larger inset's, so it stays centred in the
   // window and clear of a notch on either side (landscape has an inset on one side only).

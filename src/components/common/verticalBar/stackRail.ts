@@ -11,9 +11,9 @@ import { create } from 'zustand';
 import type { RailEntry } from './railSlot';
 
 /**
- * A screen's rail entries and whether a keyboard can appear while its rail shows (owner D3, 2026-10-26);
+ * A screen's rail entries and whether a keyboard can appear while its rail shows;
  * optionally what its Back does (when it leaves more than this screen) and whether the screen draws its
- * title row in the side bar's poses itself (Settings in two columns, F2).
+ * title row in the side bar's poses itself (Settings in two columns).
  */
 export type ScreenRail = {
   readonly entries: readonly RailEntry[];

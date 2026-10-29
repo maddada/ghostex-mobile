@@ -88,7 +88,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /**
  * The stack, with the iPhone Duo's header in the status band or side bar (StackHeader) where it has one.
- * While Settings shows two columns (F2) its screens change without a push or pop animation: picking a
+ * While Settings shows two columns its screens change without a push or pop animation: picking a
  * page swaps the right column, as iPad Settings does.
  */
 function DuoStackNavigator({

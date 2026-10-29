@@ -43,7 +43,7 @@ export default function CantReachScreen({ navigation, route }: Props) {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hostKeyReset, setHostKeyReset] = useState<'idle' | 'resetting' | 'done'>('idle');
-  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(formStyles.scroll);
 
   useEffect(

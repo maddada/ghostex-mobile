@@ -108,7 +108,7 @@ function columnRoute(route: { readonly name: string; readonly params?: object })
 /**
  * A Settings screen: in two columns the list beside `children` (the open page, under `title`), else
  * `single` (the Settings list itself) or `children` as before. Also gives the screen's side bar its
- * Back and keeps it clear of the keyboard (the pages and editors have text fields, owner D3).
+ * Back and keeps it clear of the keyboard (the pages and editors have text fields).
  */
 export function SettingsColumnsFrame({
   title,
@@ -167,12 +167,12 @@ export function SettingsColumnsFrame({
   const bar = useVerticalBarSpace();
   const { bottom } = useSafeAreaInsets();
   // In two columns the list's scroll view reaches over a side bar on its side, the page's over one on
-  // the other (FL-LAY-05).
+  // the other.
   const listInsets = useMemo<HorizontalInsets>(() => ({ left: bar.left, right: 0 }), [bar.left]);
   const pageEdges = useMemo<HorizontalInsets>(() => ({ left: 0, right: bar.right }), [bar.right]);
   const listEdges = useScrollToBarEdges(settingsStyles.list, listInsets);
-  // One tree in both layouts, so turning the phone keeps the page's state (a draft, its scroll, focus:
-  // FL-LAY-14): two columns add the list before the page and a title row over it, never a new parent.
+  // One tree in both layouts, so turning the phone keeps the page's state (a draft, its scroll, focus):
+  // two columns add the list before the page and a title row over it, never a new parent.
   return (
     <View style={split ? [styles.columns, { backgroundColor: appearance.background }] : styles.page}>
       {columns === null || covered ? null : (

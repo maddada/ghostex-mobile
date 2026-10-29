@@ -16,7 +16,7 @@ import { GhostexPalette, GhostexRadii, GhostexStrokeWidth } from '../theme/palet
 const MONOSPACE = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 export function AddProjectShell({ children }: { children: ReactNode }): ReactElement {
-  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>

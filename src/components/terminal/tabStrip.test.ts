@@ -1,8 +1,7 @@
 /**
- * Run with `bun test src/components/terminal/tabStrip.test.ts`. REQ-DUO-005 AC2 (folded: the Terminal tabs
- * stay usable in the status band) and REQ-DUO-001 AC5 (inner display). Owner decisions 2026-10-28 (Terminal
- * tabs stay in the narrow status band, the chat button stays): "es muss deutlich sein, dass man wischen
- * kann", so where the strip cannot show all tabs the next tab peeks in by at least a quarter of a tab.
+ * Run with `bun test src/components/terminal/tabStrip.test.ts`. The Terminal tabs stay usable in the narrow
+ * status band (folded) and on the inner display, and the chat button stays. So that it is clear the strip
+ * scrolls, where the strip cannot show all tabs the next tab peeks in by at least a quarter of a tab.
  */
 
 import assert from 'node:assert/strict';
@@ -91,8 +90,7 @@ describe('fade colour follows the header (no hard-coded colour)', () => {
 });
 
 /*
- * Owner 2026-10-28, "es muss deutlich sein, dass man wischen kann", with the agreed rule that the next tab
- * peeks in by at least a quarter of a tab: written here as the number, not imported from the code under test.
+ * So that it is clear the strip scrolls, the next tab peeks in by at least a quarter of a tab: written here as the number, not imported from the code under test.
  */
 describe('the active tab never hides that more tabs follow', () => {
   const QUARTER = 0.25;

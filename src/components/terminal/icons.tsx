@@ -28,7 +28,7 @@ export function ChevronLeftIcon(props: IconProps) {
   );
 }
 
-/** Checkmark: Save as a round header button on the iPhone Duo (owner, 2026-10-26). */
+/** Checkmark: Save as a round header button on the iPhone Duo. */
 export function CheckIcon(props: IconProps) {
   const { size, color, strokeWidth } = iconDefaults(props);
   return (

@@ -384,7 +384,7 @@ export default function VoiceScreen({ navigation }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const canPickVoice = active && voice.voiceOptions.length > 0;
-  // The conversation reaches under the iPhone Duo's side bar, its lines keep clear of it (FL-LAY-05).
+  // The conversation reaches under the iPhone Duo's side bar, its lines keep clear of it.
   const linesEdges = useScrollToBarEdges(styles.linesContent);
 
   /**

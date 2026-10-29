@@ -3,7 +3,7 @@
 //  GhostexNative
 //
 //  The app's root view controller, supplied to Expo through its public `ExpoReactDelegateHandler`
-//  (`createRootViewController()`; registered in expo-module.config.json, no swizzling, FL-NAT-09).
+//  (`createRootViewController()`; registered in expo-module.config.json, no swizzling).
 //
 //  Built with the iOS 27.1 SDK, the iPhone Duo's status items stand in a vertical column and UIKit lays
 //  vertical bars beside it when the system's vertical-bar behavior is automatic (the default of a plain

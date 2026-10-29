@@ -1,9 +1,9 @@
 /**
  * Where the app's content and its screen headers go, from the system's bar regions (BarLayout).
  *
- * Built with the iOS 27.1 SDK the app reaches the screen edges on the iPhone Duo (approved S1 mockup).
- * Owner decision 2026-10-27 (§12, "1b"): the app's root view controller turns the system's vertical bar
- * off (`GhostexRootViewController`), so the status items run along the top in every pose and:
+ * Built with the iOS 27.1 SDK the app reaches the screen edges on the iPhone Duo. The app's root view
+ * controller turns the system's vertical bar off (`GhostexRootViewController`), so the status items run
+ * along the top in every pose and:
  * - band: the top bar region lies inside the status band, beside the status items (folded, unfolded in
  *   portrait and, where the system reports it so, in landscape). The header row sits there, its buttons
  *   overflowing into the screen's "…" menu when they do not fit (`bandSplit`);
@@ -44,7 +44,7 @@ export type ScrollEdges = { readonly scroll: ViewStyle; readonly content: ViewSt
 const NO_SCROLL_EDGES: ScrollEdges = Object.freeze({ scroll: {}, content: {} });
 
 /**
- * FL-LAY-05: a scroll view in the content column spans the window under the side bar, and keeps its
+ * A scroll view in the content column spans the window under the side bar, and keeps its
  * content clear of it: the side bar's insets go into the content's horizontal padding (added to the
  * content's own `contentPadding`, the same on both sides or per side), not around the scroll view.
  * Without a side bar (every other iPhone, also in landscape) nothing changes.
@@ -62,7 +62,7 @@ export function scrollToBarEdges(space: HorizontalInsets, contentPadding: number
 /**
  * A full-window layer (a modal's dimmed backdrop) that keeps what it holds clear of the side bar: its
  * own horizontal padding `base` plus the side bar's insets, so the layer itself still covers the whole
- * window (FL-LAY-05).
+ * window.
  */
 export function barPadding(space: HorizontalInsets, base: number): ViewStyle {
   return { paddingLeft: base + space.left, paddingRight: base + space.right };
@@ -78,7 +78,7 @@ export type StoredBarLayouts = Readonly<Record<string, BarLayout>>;
 export type LiveBarLayout = { readonly layout: BarLayout; readonly seenAt: string };
 
 /**
- * The bar layout the chrome follows in a window of `size` (owner, 2026-10-26: nothing may jump), or
+ * The bar layout the chrome follows in a window of `size` (so nothing jumps), or
  * null before the system has reported one (the chrome then waits, `VerticalBarArea`). Only layouts the
  * system took are used, never a guessed fallback:
  * - the live one while it belongs to this window: taken at this size, or newer than React Native's size
@@ -130,7 +130,7 @@ export function layoutGeometryKey(layout: BarLayout): string | null {
 }
 
 /**
- * The kept layouts after the system reported `layout` (§1.5 S1-10, review s1-floor-r2 #3): a stored
+ * The kept layouts after the system reported `layout` (`layoutsAfterReport`): a stored
  * layout stands in for a window size only while the system has not contradicted it. A report that
  * differs from the layout kept for its own window size and side bar edge means the status items moved
  * since (a Live Activity starting or ending), and they moved for every window: every other kept layout
@@ -186,9 +186,8 @@ export function headerPlacement(layout: BarLayout | null): HeaderPlacement {
 }
 
 /**
- * FL-DUO-03 (owner B1, 2026-10-27): the part of `rect` clear of the fold's divisions, for the band's
- * row: a division across it cuts it along the division's long side, and the larger part stays, so no
- * band button stands in a division.
+ * The part of `rect` clear of the fold's divisions, for the band's row: a division across it cuts it
+ * along the division's long side, and the larger part stays, so no band button stands in a division.
  */
 export function clearOfDivisions(rect: WindowRect, divisions: readonly WindowRect[] | undefined): WindowRect {
   let clear = rect;
@@ -210,11 +209,11 @@ export function clearOfDivisions(rect: WindowRect, divisions: readonly WindowRec
   return clear;
 }
 
-/** A content row on top of a screen in the side bar's poses: a standard bar's height (F1, 2026-10-26). */
+/** A content row on top of a screen in the side bar's poses: a standard bar's height. */
 export const CONTENT_ROW_HEIGHT = 44;
 
 /**
- * Where a screen's top row starts in the side bar's poses (F1, 2026-10-26: nothing touches the window's
+ * Where a screen's top row starts in the side bar's poses (so nothing touches the window's
  * top edge): below the system's top layout margin of the window, never above its safe area.
  */
 export function railContentTop(layout: BarLayout | null, safeTop: number): number {
@@ -235,11 +234,11 @@ export const SETTINGS_LIST_WIDTH = 320;
 export const SETTINGS_PAGE_MIN_WIDTH = 375;
 
 /**
- * Owner decision F2 (2026-10-26, "Zweispaltig wie iPad-Einstellungen"): Settings shows two columns where
- * the iPhone Duo's chrome is in place (status band or side bar) and the content's width holds the list
- * and a page at least `SETTINGS_PAGE_MIN_WIDTH` wide. From the window's content, not its orientation:
- * that is the unfolded Duo in landscape; unfolded in portrait, folded, Split View and every other
- * iPhone or iPad keep one column.
+ * Settings shows, as the iPad's Settings does, two columns where the iPhone Duo's chrome is in place
+ * (status band or side bar) and the content's width holds the list and a page at least
+ * `SETTINGS_PAGE_MIN_WIDTH` wide. From the window's content, not its orientation: that is the unfolded
+ * Duo in landscape; unfolded in portrait, folded, Split View and every other iPhone or iPad keep one
+ * column.
  */
 export function twoColumnWindow(layout: BarLayout | null): boolean {
   if (layout === null || layout.windowWidth === undefined || headerPlacement(layout).kind === 'top') return false;
@@ -259,10 +258,10 @@ export type MenuRoom = { readonly left: number; readonly top: number; readonly r
 const MENU_GAP = 8;
 
 /**
- * F3 (2026-10-26, the owner's rule that menus do not float in the middle): a menu opened from a header
- * button on the iPhone Duo stands at that button as an iOS pull-down does. From a side bar button it
- * opens beside the side bar, toward the content, top-aligned with the button; from a status band button
- * it opens below the button, its trailing edge at the button's. Either way it stays inside `room`.
+ * A menu opened from a header button on the iPhone Duo does not float in the middle: it stands at that
+ * button as an iOS pull-down does. From a side bar button it opens beside the side bar, toward the
+ * content, top-aligned with the button; from a status band button it opens below the button, its
+ * trailing edge at the button's. Either way it stays inside `room`.
  */
 export function anchoredMenuOrigin(
   anchor: WindowRect,
@@ -286,10 +285,10 @@ export function anchoredMenuOrigin(
 }
 
 /**
- * FL-DUO-03 (owner B1, 2026-10-27): the part of `room` on the side of the fold's active divisions where
- * the menu's button is, so a menu at its button stays wholly on that side (it scrolls in what is left).
- * An inactive division (the device lies flat) divides nothing, so a menu reaches across it (device
- * finding 2026-10-27: flat in portrait, Terminal's menu was cut at the fold line).
+ * The part of `room` on the side of the fold's active divisions where the menu's button is, so a menu
+ * at its button stays wholly on that side (it scrolls in what is left). An inactive division (the
+ * device lies flat) divides nothing, so a menu reaches across it (a device test showed it: flat in
+ * portrait, Terminal's menu was cut at the fold line).
  */
 export function menuRoomBeside(
   room: MenuRoom,
@@ -327,14 +326,14 @@ export function railButtonFrame(frame: WindowRect, fit: RailFit, top: number): W
 
 /**
  * How much further down than the rail's flow (`step` from one button's top to the next, from `top`)
- * each button stands: the room of a division it steps over (owner B1), else 0.
+ * each button stands: the room of a division it steps over, else 0.
  */
 export function railStepOffsets(tops: readonly number[], top: number, step: number): number[] {
   return tops.map((buttonTop, index) => Math.max(0, buttonTop - (index === 0 ? top : tops[index - 1] + step)));
 }
 
 /**
- * Where an open menu stands (S1-5, F3: at its button): at that button as it is now, not where it was
+ * Where an open menu stands (at its button): at that button as it is now, not where it was
  * pressed. In the side bar its frame follows from the side bar's layout (`railButtonFrame`); in the
  * status band it is the screen's own button (`hasBandButton`), measured again after each change of the
  * bar layout; until either is known, where it was pressed. A menu whose button has no place in the
@@ -355,7 +354,7 @@ export function liveMenuAnchor(
 /** The side bar's round buttons and the space between them, in points. */
 export type RailFit = { readonly size: number; readonly gap: number };
 
-/** Approved mockup: 46-pt buttons 12 pt apart; tightest allowed: 40-pt buttons 4 pt apart. */
+/** 46-pt buttons 12 pt apart; tightest allowed: 40-pt buttons 4 pt apart. */
 export const RAIL_FIT: RailFit = Object.freeze({ size: 46, gap: 12 });
 const RAIL_MIN: RailFit = Object.freeze({ size: 40, gap: 4 });
 /** The smallest touch target (Apple HIG), kept by hit slop when a button is drawn smaller. */
@@ -374,9 +373,9 @@ export type RailSegment = { readonly top: number; readonly bottom: number };
 export type RailRoom = number | readonly RailSegment[];
 
 /**
- * FL-DUO-03 (owner B1, 2026-10-27): the side bar's span in window points with the fold's divisions
- * across it left out, so no button stands in a division; one stretch where none crosses it. A division
- * along the side bar (taller than wide) cannot be stepped over and is left to the system's layout.
+ * The side bar's span in window points with the fold's divisions across it left out, so no button
+ * stands in a division; one stretch where none crosses it. A division along the side bar (taller than
+ * wide) cannot be stepped over and is left to the system's layout.
  */
 export function railSegments(
   frame: WindowRect,
@@ -403,7 +402,7 @@ export function railSegments(
 
 /**
  * The tops of `count` buttons placed down the room `fit.gap` apart: a button that would reach past a
- * stretch's end stands at the next stretch's top (owner B1: the buttons flow past a division).
+ * stretch's end stands at the next stretch's top (the buttons flow past a division).
  * `fitted` of them have room; any others follow on below the last, as the kept Back and More options
  * do when even they have no room.
  */
@@ -431,7 +430,7 @@ function placeButtons(room: RailRoom, count: number, fit: RailFit): { tops: numb
 }
 
 /**
- * `count` buttons in `room`: as the mockup draws them when they fit; otherwise the gap shrinks
+ * `count` buttons in `room`: at full size when they fit; otherwise the gap shrinks
  * (to 4 pt at least), then the buttons (to 40 pt at least). Below that they keep the minimum and
  * `railCapacity` says how many of them stay.
  */
@@ -458,9 +457,9 @@ export function railCapacity(room: RailRoom, count: number): number {
 }
 
 /**
- * Owner decision 2026-10-26 ("Überzählige ins …-Menü"): the buttons that do not fit move into the
- * screen's "More options" menu, lowest first. The last button (More options itself) and the first
- * `pinned` ones (Terminal's Back) never move; `shown` comes from `railCapacity`.
+ * The buttons that do not fit move into the screen's "More options" menu, lowest first. The last
+ * button (More options itself) and the first `pinned` ones (Terminal's Back) never move; `shown` comes
+ * from `railCapacity`.
  */
 export function railSplit<T>(buttons: readonly T[], shown: number, pinned: number): { rail: T[]; menu: T[] } {
   const movable = Math.max(0, buttons.length - 1 - pinned);
@@ -474,9 +473,8 @@ export function railSplit<T>(buttons: readonly T[], shown: number, pinned: numbe
 export type BandButtons = { readonly size: number; readonly gap: number };
 
 /**
- * Owner decisions 2026-10-26 ("Überzählige ins …-Menü") and 2026-10-27 (§12, "1b": the header stands in
- * the status band beside the status items in every pose): how many of `count` buttons fit in `room`
- * points across, as `railCapacity` says it for the side bar, and always one ("More options", the last).
+ * How many of `count` buttons fit in `room` points across, as `railCapacity` says it for the side bar,
+ * and always one ("More options", the last).
  */
 export function bandCapacity(room: number, count: number, buttons: BandButtons): number {
   if (count <= 1) return count;
@@ -511,12 +509,12 @@ export function bandSplit<T>(
 }
 
 /**
- * Owner decision 2026-10-26, refined 2026-10-27 (choice A1, §1.5 S1-4): the rail does not move when the
- * keyboard shows or hides. Where a keyboard can reach the rail, it is laid out for the keyboard being
- * up, keyboard or not, so the rail reserves the keyboard's height for its window: the tallest measured
- * in a window of this size on this install (`barGeometry.ts` keeps them). Until a keyboard has appeared
- * there it reserves none. The reserve only grows, so the rail rearranges at most when a keyboard first
- * appears in a window size or a taller one does, and never moves back.
+ * The rail does not move when the keyboard shows or hides. Where a keyboard can reach the rail, it is
+ * laid out for the keyboard being up, keyboard or not, so the rail reserves the keyboard's height for
+ * its window: the tallest measured in a window of this size on this install (`barGeometry.ts` keeps
+ * them). Until a keyboard has appeared there it reserves none. The reserve only grows, so the rail
+ * rearranges at most when a keyboard first appears in a window size or a taller one does, and never
+ * moves back.
  */
 export type WindowSize = { readonly width: number; readonly height: number };
 
@@ -534,7 +532,7 @@ export function keyboardHeightFor(size: WindowSize, measured: KeyboardHeights): 
 }
 
 /**
- * `heights` after a keyboard `height` points tall showed in a window of `sizeKey` (owner A1): the height,
+ * `heights` after a keyboard `height` points tall showed in a window of `sizeKey`: the height,
  * rounded, when it is taller than the one kept for that size, else null, since nothing changes.
  */
 export function grownKeyboardHeights(
@@ -548,7 +546,7 @@ export function grownKeyboardHeights(
   return { ...heights, [sizeKey]: rounded };
 }
 
-/** Two sets of kept heights as one, each window size keeping the taller (owner A1: never shrinks). */
+/** Two sets of kept heights as one, each window size keeping the taller (never shrinks). */
 export function mergedKeyboardHeights(first: KeyboardHeights, second: KeyboardHeights): KeyboardHeights {
   const merged: Record<string, number> = { ...first };
   for (const [key, height] of Object.entries(second)) merged[key] = Math.max(merged[key] ?? 0, height);
@@ -648,7 +646,7 @@ export function railLayout<T>(
 /**
  * Whose "More options" the rail's last button is: the screen's own, always in the rail (Sessions,
  * Terminal, Web Preview), or one the rail shows only when the screen's other buttons do not fit, holding
- * those that do not (owner overflow rule and D1, 2026-10-26; the stack screens, e.g. DocViewer).
+ * those that do not (the stack screens, e.g. DocViewer).
  */
 export type RailMoreMenu = 'always' | 'whenNeeded';
 

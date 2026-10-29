@@ -196,7 +196,7 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
   const { dispatch } = chat;
 
   const listRef = useRef<FlatList<Row>>(null);
-  // The chat view's list reaches under the iPhone Duo's side bar, its rows keep clear of it (FL-LAY-05);
+  // The chat view's list reaches under the iPhone Duo's side bar, its rows keep clear of it;
   // a transcript inside a card (a subagent's) keeps to the card.
   const listEdges = useScrollToBarEdges(undefined, main ? null : NO_BAR_INSETS);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
@@ -432,9 +432,8 @@ export function NativeTranscript({ chat, items, main = true }: NativeTranscriptP
         <EmptyTranscript chat={chat} document={document} />
       ) : null;
     /*
-     * CDXC:SessionChat 2026-10-26 DECISION:
-     * User (owner, 2026-10-26T09:07:46Z): "kbdfix: Gleich in S1" (the chat keyboard dismissal goes into S1). In
-     * chat view, tapping the free area or swiping down closes the keyboard. With rows the
+     * CDXC:SessionChat 2026-10-26 WHY:
+     * In chat view, tapping the free area or swiping down closes the keyboard. With rows the
      * list already does both (a tap no control handles, `keyboardShouldPersistTaps="handled"`; the interactive drag);
      * the empty state gets them from a scroll view that only exists for that, where any drag closes the keyboard
      * (`on-drag`: there is nothing to drag along).

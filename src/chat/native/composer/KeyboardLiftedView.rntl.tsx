@@ -1,11 +1,10 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-NFR-001 AC1 (the chat composer stays above the keyboard as before)
- * with owner S1-8 (the bottom inset counted once) and FL-LAY-11 (review s1-floor-r1 #12, s1-floor-r2
- * #12): the composer's frame (`KeyboardLiftedView`, NativeComposer's root) lifts it from the keyboard's
+ * Run with `bun run test:jest`. The chat composer stays above the keyboard as before, with the bottom
+ * inset counted once: the composer's frame (`KeyboardLiftedView`, NativeComposer's root) lifts it from the keyboard's
  * last reported frame, again when the window's height changes without a keyboard event (a fold, unfold or
  * rotation) and when its own layout changes. Frames in window points: the folded display 466x678 with
- * the keyboard's top at 413 (owner's device session), the home indicator inset 20.
+ * the keyboard's top at 413 (measured on a device), the home indicator inset 20.
  */
 
 import { Dimensions, StyleSheet, Text } from 'react-native';
@@ -67,13 +66,13 @@ afterEach(() => {
   mockNativeMethods.measureInWindow.mockReset();
 });
 
-test('REQ-NFR-001 AC1, owner S1-8: the bottom inset once without a keyboard, 8 pt above the keyboard with one', async () => {
+test('the bottom inset once without a keyboard, 8 pt above the keyboard with one', async () => {
   expect(bottomPadding()).toBe(20);
   await keyboardAt(413, 265);
   expect(bottomPadding()).toBe(678 - 413 + 8);
 });
 
-test('REQ-NFR-001 AC1, FL-LAY-11: a window height change without a keyboard event lifts it from the last keyboard frame', async () => {
+test('a window height change without a keyboard event lifts it from the last keyboard frame', async () => {
   await keyboardAt(413, 265);
   // Unfolded in landscape: the window is 669 pt tall, the composer still on its bottom.
   composer = { y: 569, height: 100 };
@@ -81,7 +80,7 @@ test('REQ-NFR-001 AC1, FL-LAY-11: a window height change without a keyboard even
   expect(bottomPadding()).toBe(669 - 413 + 8);
 });
 
-test("REQ-NFR-001 AC1, FL-LAY-11: the composer's own layout change measures the overlap again", async () => {
+test("the composer's own layout change measures the overlap again", async () => {
   await keyboardAt(413, 265);
   // The composer's bottom moves up 40 pt (a bar under it appeared): 40 pt less to lift.
   composer = { y: 538, height: 100 };

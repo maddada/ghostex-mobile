@@ -51,7 +51,7 @@ export function keyboardMoveDirection(fromTop: number | null, toTop: number | nu
 }
 
 /**
- * Requests the animation for the next layout commit. Nothing with Reduce Motion on (FL-A11Y-05) or when the
+ * Requests the animation for the next layout commit. Nothing with Reduce Motion on or when the
  * event reports no duration (`eventDuration` <= 0: the keyboard does not animate).
  */
 export function configureKeyboardMotion(direction: KeyboardMotionDirection, eventDuration: number | undefined): void {

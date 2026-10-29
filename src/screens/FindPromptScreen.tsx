@@ -55,7 +55,7 @@ export default function FindPromptScreen({ navigation, route }: Props) {
   const appearance = useAppearanceHeader();
   const styles = createStyles(appearance);
   const insets = useSafeAreaInsets();
-  // The prompt reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The prompt reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.scrollContent);
   const machine = useMachinesStore((state) => state.machines.find((candidate) => candidate.id === machineId));
   const row = useFindPromptsStore((state) => state.rows.find((candidate) => candidate.key === promptKey));

@@ -103,7 +103,7 @@ export type WorkLinkPickerProps = {
 export default function WorkLinkPicker({ kind, sessionTitle, load, onPick, onCancel }: WorkLinkPickerProps) {
   const insets = useSafeAreaInsets();
   const bar = useVerticalBarSpace();
-  // The list reaches under the side bar, its rows keep clear of it (FL-LAY-05).
+  // The list reaches under the side bar, its rows keep clear of it.
   const listEdges = useScrollToBarEdges();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<WorkLinkCandidates | null>(null);

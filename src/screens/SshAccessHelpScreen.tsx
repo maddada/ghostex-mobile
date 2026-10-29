@@ -18,7 +18,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SshAccessHelp'>;
 
 export default function SshAccessHelpScreen({ route }: Props) {
   const [os, setOs] = useState<SshOs>(route.params?.platform ?? 'macos');
-  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it (FL-LAY-05).
+  // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
