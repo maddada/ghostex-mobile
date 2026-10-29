@@ -36,10 +36,20 @@ export function ComposerNotReadyCard({
   const P = useTranscriptTheme();
   if (!composerNotReady(document)) {
     if (typeof document.operationError !== 'string') return null;
-    return (
+    const error = (
       <Text accessibilityRole="alert" style={cardText.error}>
         {document.operationError}
       </Text>
+    );
+    // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way there, as desktop does.
+    if (document.operationErrorCode !== 'answerInTerminal' || !onHostAction) return error;
+    return (
+      <View style={styles.answerInTerminal}>
+        {error}
+        <View style={styles.answerInTerminalActions}>
+          <ChatButton icon="terminal-2" label="Open terminal" onPress={() => onHostAction('terminalView')} />
+        </View>
+      </View>
     );
   }
   const notice = document.terminalTail?.notice;
@@ -100,6 +110,13 @@ export function ComposerNotReadyCard({
 const useStyles = themedStyles((P) => ({
   fill: {
     width: '100%',
+  },
+  answerInTerminal: {
+    width: '100%',
+    gap: 6,
+  },
+  answerInTerminalActions: {
+    flexDirection: 'row',
   },
   header: {
     flexDirection: 'row',
