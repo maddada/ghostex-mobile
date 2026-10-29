@@ -240,8 +240,9 @@ export type ProjectedMessage = {
   /** A prompt sitting in the agent CLI's own queue, not handed to the model yet. */
   queued?: boolean;
   /** A client echo of an accepted send still waiting for the terminal: `{promptId, state:
-   * 'queued' | 'sending' | 'reconnecting' | 'failed', errorMessage?}`. Desktop: `startup_delivery.rs`. */
-  startupDelivery?: { promptId: string; state: string; errorMessage?: string };
+   * 'queued' | 'sending' | 'reconnecting' | 'failed', errorMessage?, waitReason?}`; `waitReason` says why
+   * gxserver still holds it once it has waited about a minute. Desktop: `startup_delivery.rs`. */
+  startupDelivery?: { promptId: string; state: string; errorMessage?: string; waitReason?: string };
   /** Markdown body with the native marks (code block headers, alerts, typed file paths).
    * Desktop: `rich_markdown.rs`, `markdown_style.rs`, `code_block.rs`. */
   text?: string;
@@ -661,6 +662,8 @@ export type QueuedPrompt = {
   state: string;
   /** Why the delivery failed, only when `state` is `failed`. */
   errorMessage?: string | null;
+  /** Why gxserver still holds a waiting row, once it has waited about a minute. */
+  waitReason?: string | null;
   createdAt: string;
   updatedAt: string;
   /** The one line the row shows. */

@@ -109,6 +109,8 @@ const AgentCard = memo(function AgentCard({
   const open = expandable && openState;
   const status = obj(card.status);
   const failure = str(card, 'failure');
+  // A message still waiting says why in the same footer, once gxserver has held it a minute.
+  const footer = failure.length > 0 ? failure : str(card, 'waitReason');
   const retry = typeof card.retryPromptId === 'string' ? card.retryPromptId : null;
   const session = obj(card.session);
   const time = str(card, 'time');
@@ -213,9 +215,9 @@ const AgentCard = memo(function AgentCard({
           <Markdown text={body} references={references} color={theme.cardMuted} />
         </View>
       ) : null}
-      {failure.length > 0 ? (
+      {footer.length > 0 ? (
         <View style={[styles.failure, { borderTopColor: hairline }]}>
-          <Text style={[styles.small, styles.failureText, { color: theme.muted }]}>{failure}</Text>
+          <Text style={[styles.small, styles.failureText, { color: theme.muted }]}>{footer}</Text>
           {retry !== null ? (
             <>
               <Pressable style={styles.action} onPress={() => dispatch({ type: 'retryQueue', promptId: retry })}>

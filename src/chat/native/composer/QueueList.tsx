@@ -23,6 +23,10 @@ export function QueueList({ document, dispatch }: { document: ChatDocument; disp
   if (!capabilities.supported || prompts.length === 0) return null;
   const blocked = typeof document.sendBlockedReason === 'string';
   const canDrag = !blocked && prompts.length > 1 && capabilities.canReorder;
+  // Why gxserver still holds the first row, once it has waited about a minute. It sits under the
+  // list rather than in the row, whose fixed height the drag math counts on (desktop: queue.rs).
+  const head = prompts[0];
+  const reason = head !== undefined && head.state !== 'failed' ? (head.waitReason ?? '') : '';
   return (
     <View style={styles.list} accessibilityLabel="Queued prompts">
       {prompts.map((prompt, index) => (
@@ -42,6 +46,11 @@ export function QueueList({ document, dispatch }: { document: ChatDocument; disp
           dispatch={dispatch}
         />
       ))}
+      {reason.length > 0 ? (
+        <Text style={styles.waitReason} accessibilityRole="text">
+          {reason}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -212,6 +221,7 @@ const useStyles = themedStyles((P) => ({
   textSending: { opacity: 0.7 },
   error: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, maxWidth: '45%' },
   errorText: { color: P.error, fontSize: 11.5, flexShrink: 1 },
+  waitReason: { color: P.muted, fontSize: 11.5, paddingLeft: 26, paddingRight: 8 },
   action: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   actionPressed: { backgroundColor: P.controlPressed },
   disabled: { opacity: 0.4 },

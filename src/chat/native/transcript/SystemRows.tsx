@@ -373,12 +373,16 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
   const delivery = message.startupDelivery;
   if (delivery === undefined || delivery === null) return null;
   const failed = delivery.state === 'failed';
-  if (!failed && !waitingLine) return null;
+  // Why gxserver still holds it, once it has waited about a minute (desktop: startup_delivery.rs).
+  const reason = delivery.waitReason ?? '';
+  if (!failed && !waitingLine && reason.length === 0) return null;
   const status = failed
     ? delivery.errorMessage?.length
       ? delivery.errorMessage
       : 'Message could not be delivered.'
-    : 'Waiting for agent…';
+    : reason.length > 0
+      ? reason
+      : 'Waiting for agent…';
   return (
     <View style={styles.delivery} accessibilityRole="text">
       <Text style={[styles.small, { color: theme.muted }]}>{status}</Text>

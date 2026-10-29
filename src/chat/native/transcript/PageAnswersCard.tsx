@@ -64,7 +64,9 @@ export function PageAnswersCard({ message }: { message: ProjectedMessage }) {
             <ActivityIndicator size={12} color={theme.muted} />
             <Text style={[styles.deliveryText, { color: theme.muted }]}>
               {delivery.state === 'queued'
-                ? 'Waiting for the agent to be free…'
+                ? delivery.waitReason?.length
+                  ? delivery.waitReason
+                  : 'Waiting for the agent to be free…'
                 : delivery.state === 'reconnecting'
                   ? "Reconnecting to Ghostex… your answers go out as soon as it's back."
                   : 'Sending to the agent…'}
