@@ -34,7 +34,7 @@ import { LinkRow, SettingsPageEdgesContext, useSettingsStyles } from './Settings
 import { settingsColumnsFor, type ColumnRoute } from './columnRules';
 
 /** The Updates row with its "update ready" summary, which reads the update state and can throw. */
-function UpdatesNoticeRow({ onPress, selected }: { onPress: () => void; selected: boolean }) {
+function UpdatesNoticeRow({ onPress, selected }: { onPress: () => void; selected: boolean | undefined }) {
   const notice = useUpdateNotice();
   return (
     <LinkRow
@@ -55,6 +55,9 @@ export function SettingsPageList({
   selected?: SettingsPageId;
   onOpen: (page: SettingsPageId) => void;
 }) {
+  // Rows report a selection only beside an open page; the one-column list has none.
+  const rowSelected = (page: SettingsPageId): boolean | undefined =>
+    selected === undefined ? undefined : page === selected;
   return (
     <>
       {SETTINGS_PAGE_ORDER.map((page) => {
@@ -69,12 +72,12 @@ export function SettingsPageList({
                 <LinkRow
                   title={SETTINGS_PAGES[page].title}
                   description={SETTINGS_PAGES[page].description}
-                  selected={page === selected}
+                  selected={rowSelected(page)}
                   onPress={open}
                 />
               )}
             >
-              <UpdatesNoticeRow selected={page === selected} onPress={open} />
+              <UpdatesNoticeRow selected={rowSelected(page)} onPress={open} />
             </ErrorBoundary>
           );
         }
@@ -83,7 +86,7 @@ export function SettingsPageList({
             key={page}
             title={SETTINGS_PAGES[page].title}
             description={SETTINGS_PAGES[page].description}
-            selected={page === selected}
+            selected={rowSelected(page)}
             onPress={open}
           />
         );

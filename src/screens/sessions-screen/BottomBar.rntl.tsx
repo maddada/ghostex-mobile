@@ -1,13 +1,13 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. REQ-DUO-001 AC5 (no margins on the unfolded display: the owner saw the strip
- * under the bar as empty space there) and REQ-DUO-005 AC2 (folded). Owner decision 2026-10-28 (S1 improvement on upstream's Sessions bottom
- * bar): like iOS's own tab bars, the bar's background runs to the bottom screen edge while its buttons and
- * labels stay above the home indicator: the bar is the usual 58 pt of items plus the bottom safe-area inset,
- * the inset as padding inside it. Without an inset (an iPhone with a home button) nothing changes.
+ * Run with `bun run test:jest`. On iOS, like iOS's own tab bars, the bar's background runs to the bottom
+ * screen edge while its buttons and labels stay above the home indicator: the bar is the usual 58 pt of items
+ * plus the bottom safe-area inset, the inset as padding inside it (on the unfolded iPhone Duo the strip under
+ * the bar read as empty space). Without an inset (an iPhone with a home button) nothing changes, and Android
+ * keeps the bar as it was.
  */
 
-import { StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
 import { BOTTOM_BAR_ITEMS_HEIGHT, SessionsBottomBar } from './BottomBar';
@@ -40,4 +40,16 @@ test('without an inset the bar is the 58 pt it was', async () => {
   const style = await bar();
   expect(style.height).toBe(58);
   expect(style.paddingBottom).toBe(0);
+});
+
+test('on Android the bar stays the 58 pt it was: the screen keeps the bottom inset', async () => {
+  mockInsets = { top: 0, bottom: 34, left: 0, right: 0 };
+  const os = jest.replaceProperty(Platform, 'OS', 'android');
+  try {
+    const style = await bar();
+    expect(style.height).toBe(58);
+    expect(style.paddingBottom).toBe(0);
+  } finally {
+    os.restore();
+  }
 });

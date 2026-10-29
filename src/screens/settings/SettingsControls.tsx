@@ -350,7 +350,7 @@ export function LinkRow({
   title,
   description,
   descriptionAccent = false,
-  selected = false,
+  selected,
   onPress,
 }: {
   title: string;
@@ -365,8 +365,9 @@ export function LinkRow({
     <Pressable
       accessibilityRole="button"
       accessibilityHint={description}
-      accessibilityState={{ selected }}
-      style={({ pressed }) => [styles.row, (pressed || selected) && styles.rowPressed]}
+      // Only a list beside its page (two columns) has a selected row; a plain list reports no selection.
+      accessibilityState={selected === undefined ? undefined : { selected }}
+      style={({ pressed }) => [styles.row, (pressed || selected === true) && styles.rowPressed]}
       onPress={onPress}
     >
       <View style={styles.linkText}>

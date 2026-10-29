@@ -1,18 +1,20 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** The height of the bar's items (upstream's option E bar: 58 pt). */
 export const BOTTOM_BAR_ITEMS_HEIGHT = 58;
 
 /**
- * The Sessions screen's bottom bar. Like iOS's own tab bars its background runs to the bottom screen edge
- * (S1, owner 2026-10-28): the screen leaves the bottom safe area to the bar, which adds the inset as padding
- * below its items, so the buttons and labels stay above the home indicator and no black strip shows under
- * the bar. Without an inset the bar is exactly the 58 pt it was.
+ * The Sessions screen's bottom bar. On iOS, like iOS's own tab bars, its background runs to the bottom screen
+ * edge: the screen leaves the bottom safe area to the bar, which adds the inset as padding below its items,
+ * so the buttons and labels stay above the home indicator and no black strip shows under the bar. Android
+ * keeps the bar as it was, above the screen's own bottom inset. Without an inset the bar is the 58 pt it was.
  */
 export function SessionsBottomBar({ children }: { children: ReactNode }) {
-  const { bottom } = useSafeAreaInsets();
+  // Android: the screen keeps the bottom inset itself (SessionsScreen's safe area edges), as it always has.
+  const inset = useSafeAreaInsets().bottom;
+  const bottom = Platform.OS === 'ios' ? inset : 0;
   return (
     <View
       testID="sessions-bottom-bar"

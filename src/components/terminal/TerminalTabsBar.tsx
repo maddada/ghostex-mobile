@@ -3,8 +3,8 @@
  * row (between the back and overflow buttons) and fills its remaining width;
  * there is no separate title text. 36-high capsule track; equal-width tabs when
  * each would be ≥120 wide, otherwise a horizontal scroll whose tabs are sized
- * so the next one always peeks in (`tabStripLayout`, owner 2026-10-28: it must
- * be clear that the strip swipes) with a soft fade at each edge that hides
+ * so the next one always peeks in (`tabStripLayout`, which records the decision:
+ * it must be clear that the strip swipes) with a soft fade at each edge that hides
  * more tabs. In scroll mode the active tab rests at the strip's start (the last
  * one at its end), so the neighbour always peeks in (`stripScrollOffset`); that
  * happens on tap and after a close, so the track re-clamps immediately instead
@@ -121,7 +121,10 @@ export default function TerminalTabsBar({
   const scrollRef = useRef<ScrollViewInstance>(null);
   const contentWidth = useRef(0);
 
-  const [scrollX, setScrollX] = useState(0);
+  // The strip's scroll offset as it moves, and the one the fades were last drawn for: a scroll only re-renders
+  // the strip when an edge fade appears or goes, not on every frame.
+  const scrollOffset = useRef(0);
+  const [fadeOffset, setFadeOffset] = useState(0);
   const [scrollContentWidth, setScrollContentWidth] = useState(0);
 
   const strip = tabStripLayout(trackWidth, tabs.length);
@@ -129,7 +132,13 @@ export default function TerminalTabsBar({
   const tabWidth = strip.equal ? undefined : strip.tabWidth;
   const selectedIndex = tabs.findIndex((entry) => entry.sessionKey === selectedSessionKey);
   const fadeColor = stripFadeColor(headerColor);
-  const fades = equalWidth ? { left: false, right: false } : stripFades(scrollX, scrollContentWidth, trackWidth);
+  const fades = equalWidth ? { left: false, right: false } : stripFades(fadeOffset, scrollContentWidth, trackWidth);
+  const onStripScroll = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const offset = event.nativeEvent.contentOffset.x;
+    scrollOffset.current = offset;
+    const next = stripFades(offset, scrollContentWidth, trackWidth);
+    if (next.left !== fades.left || next.right !== fades.right) setFadeOffset(offset);
+  };
 
   // Whether the strip still owes the active tab a scroll to the centre: when the active tab, the tab count
   // or the track changes, until the user takes the strip into their own hands. A re-render or a reflow with
@@ -178,7 +187,13 @@ export default function TerminalTabsBar({
 
   return (
     <View style={styles.container}>
-      <View style={styles.track} onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}>
+      <View
+        style={styles.track}
+        onLayout={(event) => {
+          setTrackWidth(event.nativeEvent.layout.width);
+          setFadeOffset(scrollOffset.current);
+        }}
+      >
         {equalWidth ? (
           <View style={styles.equalRow}>{tabs.map(renderTab)}</View>
         ) : (
@@ -191,10 +206,11 @@ export default function TerminalTabsBar({
             onScrollBeginDrag={() => {
               centerPending.current = false;
             }}
-            onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => setScrollX(event.nativeEvent.contentOffset.x)}
+            onScroll={onStripScroll}
             onContentSizeChange={(width) => {
               contentWidth.current = width;
               setScrollContentWidth(width);
+              setFadeOffset(scrollOffset.current);
               centerSelected(false);
             }}
           >

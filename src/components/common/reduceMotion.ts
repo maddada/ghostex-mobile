@@ -1,10 +1,10 @@
 /**
- * The system's Reduce Motion setting, in one place (FL-A11Y-05, FL-STR-03): readable from React
- * (`useReduceMotion`) and from non-React code (`isReduceMotionOn`, e.g. the keyboard store that requests
- * the app-wide `LayoutAnimation`). It follows `AccessibilityInfo.isReduceMotionEnabled()` and
- * `reduceMotionChanged` while at least one subscriber is mounted; the last one leaving stops following
- * (and forgets the value, so the next subscriber reads it afresh). Until the first read resolves the
- * value is false.
+ * The system's Reduce Motion setting, in one place: readable from React (`useReduceMotion`) and from
+ * non-React code (`isReduceMotionOn`, e.g. the keyboard store that requests the app-wide
+ * `LayoutAnimation`). It follows `AccessibilityInfo.isReduceMotionEnabled()` and `reduceMotionChanged`
+ * while at least one subscriber is mounted; the last one leaving stops following. The value last read
+ * stays until the next subscriber's fresh read replaces it, so a screen that remounts never sees the
+ * setting off for a moment while it is on. Until the very first read resolves the value is false.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -34,7 +34,6 @@ function stopFollowing(): void {
   generation += 1;
   following?.remove();
   following = null;
-  value = false;
 }
 
 /** Follows the setting for as long as the returned function is not called. */
@@ -47,7 +46,7 @@ export function subscribeReduceMotion(listener: () => void): () => void {
   };
 }
 
-/** The setting as last read; only current while someone is subscribed. */
+/** The setting as last read; kept up to date while someone is subscribed. */
 export function isReduceMotionOn(): boolean {
   return value;
 }

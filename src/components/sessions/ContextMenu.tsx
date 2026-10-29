@@ -182,10 +182,10 @@ export default function ContextMenu({
   };
   // On the button's side of the fold while it is folded (FL-DUO-03, owner B1, 2026-10-27); flat, across it.
   const room = anchor === undefined ? windowRoom : menuRoomBeside(windowRoom, anchor, divisions);
-  const horizontalRoom =
-    anchoredFrom === null
-      ? screenWidth - Math.max(EDGE_MARGIN, safeArea.left) - Math.max(EDGE_MARGIN, safeArea.right)
-      : room.right - room.left;
+  // A centred card keeps the same margin on both sides, the larger inset's, so it stays centred in the
+  // window and clear of a notch on either side (landscape has an inset on one side only).
+  const sideMargin = Math.max(EDGE_MARGIN, safeArea.left, safeArea.right);
+  const horizontalRoom = anchoredFrom === null ? screenWidth - 2 * sideMargin : room.right - room.left;
   const menuWidth = Math.max(1, Math.min(MENU_MAX_WIDTH, horizontalRoom));
   const verticalRoom = screenHeight - Math.max(EDGE_MARGIN, safeArea.top) - Math.max(EDGE_MARGIN, safeArea.bottom);
   const maxHeight = Math.max(1, anchoredFrom === null ? verticalRoom * MAX_HEIGHT_RATIO : room.bottom - room.top);
@@ -204,19 +204,7 @@ export default function ContextMenu({
   // close instead of being unmounted out from under the dismissal.
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismissed}>
-      {/*
-        Centred in the room the width above was taken from, so the card stays clear of side insets; an
-        anchored card is placed in window points, so the backdrop keeps no padding then.
-      */}
-      <Pressable
-        style={[
-          styles.backdrop,
-          anchoredFrom === null
-            ? { paddingLeft: Math.max(EDGE_MARGIN, safeArea.left), paddingRight: Math.max(EDGE_MARGIN, safeArea.right) }
-            : null,
-        ]}
-        onPress={onClose}
-      >
+      <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Swallows presses on the card itself so only the backdrop closes. */}
         <Pressable
           style={[styles.menu, { width: menuWidth, maxHeight }, anchoredStyle]}

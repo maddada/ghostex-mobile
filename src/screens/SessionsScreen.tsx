@@ -1039,7 +1039,9 @@ export default function SessionsScreen({ navigation }: Props) {
         // In the side bar's poses the title row starts below the system's top margin (F1).
         inRail ? { paddingTop: contentTop } : null,
       ]}
-      edges={inRail ? [] : ['top']}
+      // iOS leaves the bottom safe area to the bottom bar, whose background runs to the screen edge; Android
+      // keeps it here as before, so its navigation bar area shows the screen's background, not the bar's.
+      edges={inRail ? [] : Platform.OS === 'ios' ? ['top'] : ['top', 'bottom']}
     >
       <View
         style={[
