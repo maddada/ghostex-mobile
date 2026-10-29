@@ -7,9 +7,13 @@
  * `useVerticalBarSpace()` itself.
  *
  * The bar regions come from the native side (`observeBarLayout`), which reports each change itself:
- * a fold, an unfold, a rotation, or status items moving (a Live Activity lowers the side ones). The
- * screens appear once the system has reported the window's bars, so no screen is first laid out
- * with a header placement the system did not report (owner, 2026-10-26: nothing may jump).
+ * a fold, an unfold, a rotation, or status items moving (a Live Activity lowers the side ones). Until the
+ * first report the screens are laid out with the layout an earlier launch kept for this window size, or
+ * with the header on top (`provisionalLayout`).
+ *
+ * CDXC:VerticalBar 2026-10-29 WHY: the screens render at once instead of behind an empty page until the
+ * system's first report. Waiting cost every iPhone a native round trip before the first screen and the
+ * deep links; the kept layout means only a first launch on an iPhone Duo can move the header once.
  */
 
 import {
@@ -55,6 +59,7 @@ import {
   headerPlacement,
   keyboardHeightFor,
   liveMenuAnchor,
+  provisionalLayout,
   railButtonFrame,
   railContentTop,
   railHitSlop,
@@ -336,8 +341,20 @@ export function railMenuItems(entries: readonly RailEntry[], close: () => void):
 }
 
 /**
+ * Whether the window's bars can be observed here: an iPhone whose native module has `observeBarLayout`.
+ * An app binary built before it has no such function, and calling it would throw before any promise
+ * exists, so an over-the-air update meeting such a binary keeps the headers on top instead of failing
+ * on launch. An iPad never has the iPhone Duo's bars, so its headers stay on top whatever its window
+ * reports.
+ */
+export function canObserveBarLayout(): boolean {
+  return Platform.OS === 'ios' && !Platform.isPad && typeof GhostexNative.observeBarLayout === 'function';
+}
+
+/**
  * The system's bar layout as far as it is known: waiting for the first report, reported (with the window
- * size React Native had then), or none to have (not iOS, or the observation failed).
+ * size React Native had then), or none to have (not an iPhone, a binary without the call, or the
+ * observation failed).
  */
 type Observation =
   { readonly kind: 'waiting' } | { readonly kind: 'none' } | { readonly kind: 'live'; readonly live: LiveBarLayout };
@@ -348,8 +365,8 @@ export default function VerticalBarArea({ children }: { children: ReactNode }) {
   // page, as the approved mockup does.
   const page = useAppearance().background;
   // The system's latest bar layout with the window size React Native reported when it arrived.
-  const [observation, setObservation] = useState<Observation>(
-    Platform.OS === 'ios' ? { kind: 'waiting' } : { kind: 'none' },
+  const [observation, setObservation] = useState<Observation>(() =>
+    canObserveBarLayout() ? { kind: 'waiting' } : { kind: 'none' },
   );
   const [rail, setRail] = useState<RailSlot | null>(null);
   const keyboardFrame = useKeyboardFrame();
@@ -376,10 +393,19 @@ export default function VerticalBarArea({ children }: { children: ReactNode }) {
     if (height !== null) recordKeyboardHeight(sizeKey, height);
   }, [keyboardFrame, windowSize, sizeKey, recordKeyboardHeight]);
   const live = observation.kind === 'live' ? observation.live : null;
-  const layout = useMemo(() => chromeLayout(windowSize, live, storedLayouts), [windowSize, live, storedLayouts]);
+  const waiting = observation.kind === 'waiting';
+  const layout = useMemo(
+    () =>
+      live !== null
+        ? chromeLayout(windowSize, live, storedLayouts)
+        : waiting
+          ? provisionalLayout(windowSize, storedLayouts)
+          : null,
+    [windowSize, live, waiting, storedLayouts],
+  );
 
   useEffect(() => {
-    if (Platform.OS !== 'ios') return undefined;
+    if (!canObserveBarLayout()) return undefined;
     const report = (next: BarLayout): void => {
       setObservation({ kind: 'live', live: { layout: next, seenAt: sizeKeyRef.current } });
       recordLayout(next);
@@ -463,9 +489,6 @@ export default function VerticalBarArea({ children }: { children: ReactNode }) {
     },
     [placement, railShown, railView],
   );
-
-  // Until the system has reported the window's bars there is no placement to lay the screens out with.
-  if (observation.kind === 'waiting') return <View style={[styles.fill, { backgroundColor: page }]} />;
 
   return (
     <SpaceContext.Provider value={space}>

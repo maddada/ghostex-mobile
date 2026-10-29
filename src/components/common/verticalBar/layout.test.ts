@@ -28,6 +28,7 @@ import {
   barPadding,
   chromeLayout,
   geometryKey,
+  provisionalLayout,
   grownKeyboardHeights,
   headerPlacement,
   keyboardHeightFor,
@@ -410,6 +411,13 @@ describe('the chrome follows only reported bar layouts (REQ-DUO-001 AC1, owner S
       chromeLayout(LANDSCAPE, reported(LANDSCAPE_RAIL, LANDSCAPE), {}),
     ].map((layout) => headerPlacement(layout).kind);
     assert.deepEqual(steps, ['band', 'band', 'rail']);
+  });
+
+  test('before the first report: the layout kept for this window size, else none (header on top)', () => {
+    const stored = { [geometryKey(PORTRAIT, undefined)]: PORTRAIT_BAND };
+    assert.equal(headerPlacement(provisionalLayout(PORTRAIT, stored)).kind, 'band');
+    assert.equal(provisionalLayout(LANDSCAPE, stored), null);
+    assert.equal(headerPlacement(provisionalLayout(PORTRAIT, {})).kind, 'top');
   });
 
   test('owner S1-10: the system reports first, the chrome takes its layout at once', () => {

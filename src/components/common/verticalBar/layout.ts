@@ -95,6 +95,16 @@ export function chromeLayout(size: WindowSize, live: LiveBarLayout | null, store
   return stored[geometryKey(size, live.layout.edge)] ?? live.layout;
 }
 
+/**
+ * The layout the screens start with before the system's first report: the one an earlier launch kept for
+ * this window size (the app keeps the vertical bar off, so it is stored without a side), else none, which
+ * puts the header on top. A returning iPhone Duo starts in its band; every other iPhone shows its screens at
+ * once instead of waiting a native round trip on an empty page.
+ */
+export function provisionalLayout(size: WindowSize, stored: StoredBarLayouts): BarLayout | null {
+  return stored[geometryKey(size, undefined)] ?? null;
+}
+
 /** The window size a layout was taken at, as a `windowSizeKey`, or null when it carries none. */
 export function layoutSizeKey(layout: BarLayout): string | null {
   const { windowWidth, windowHeight } = layout;

@@ -227,15 +227,28 @@ describe('the Duo with the vertical bar disabled (owner §12 "1b", 2026-10-27)',
 });
 
 describe('the chrome waits for the system and follows its reports (owner S1-10, FL-STA-04)', () => {
-  test('FL-STA-04: no screen is laid out before the system has reported the window bars', async () => {
+  test('the screens are laid out at once, the header on top, before the first report on a first launch', async () => {
     await render(
       <VerticalBarArea>
         <PlacementProbe />
       </VerticalBarArea>,
     );
-    expect(placements).toEqual([]);
-    await firstReport(PORTRAIT);
     expect(placements.length).toBeGreaterThan(0);
+    expect(placements.every((placement) => placement.kind === 'top')).toBe(true);
+    await firstReport(PORTRAIT);
+    expect(placements.at(-1)).toEqual({ kind: 'band', frame: PORTRAIT.topBar });
+  });
+
+  test('a layout an earlier launch kept for this window size places the header from the first frame', async () => {
+    useBarGeometryStore.getState().recordLayout(PORTRAIT);
+    await render(
+      <VerticalBarArea>
+        <PlacementProbe />
+      </VerticalBarArea>,
+    );
+    expect(placements.length).toBeGreaterThan(0);
+    expect(placements.every((placement) => placement.kind === 'band')).toBe(true);
+    await firstReport(PORTRAIT);
     expect(placements.every((placement) => placement.kind === 'band')).toBe(true);
   });
 
