@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { ageLabel, laterAction, rowAge } from './questionAge';
+import { ageLabel, laterAction, removeAction, rowAge, statusLabel } from './questionAge';
 
 const AT = 1_000_000_000_000;
 const ago = (ms: number) => ageLabel(AT + ms, AT);
@@ -47,9 +47,31 @@ describe('laterAction', () => {
   });
 
   test('offers nothing on answered, withdrawn, other rows or a missing status', () => {
-    for (const status of ['answered', 'withdrawn', 'other', undefined]) {
+    for (const status of ['answered', 'withdrawn', 'canceled', 'other', undefined]) {
       assert.equal(laterAction(status, 'form', 'x'), null);
     }
     assert.equal(laterAction('waiting', 'chart', 'c'), null);
+  });
+});
+
+describe('removeAction and statusLabel', () => {
+  test('only a For later form or page offers the X, which removes it without answering', () => {
+    assert.deepEqual(removeAction('later', 'form', 'f1'), {
+      label: 'Remove without answering',
+      glyph: 'x',
+      action: { type: 'questionRemove', id: 'f1' },
+    });
+    for (const status of ['waiting', 'answered', 'withdrawn', 'canceled', 'other', undefined]) {
+      assert.equal(removeAction(status, 'form', 'x'), null);
+    }
+    assert.equal(removeAction('later', 'chart', 'c'), null);
+  });
+
+  test('a row says For later or Canceled before its age', () => {
+    assert.equal(statusLabel('later'), 'For later');
+    assert.equal(statusLabel('canceled'), 'Canceled');
+    for (const status of ['waiting', 'answered', 'withdrawn', 'other', undefined]) {
+      assert.equal(statusLabel(status), null);
+    }
   });
 });

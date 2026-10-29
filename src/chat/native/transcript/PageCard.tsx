@@ -74,8 +74,11 @@ function PageCardBody({
   // Its questions a later block withdrew, some or all (desktop `page_card.rs`): the card says so
   // where an answered page says Answered.
   const withdrawnEntry = !answered && pageId.length > 0 ? flags.withdrawnPages[pageId] : undefined;
-  const withdrawn =
-    withdrawnEntry === undefined
+  // One the reader removed without answering says Canceled in the same place (gx-chat-core `questions/later.rs`).
+  const canceled = !answered && flags.canceledQuestions.has(pageId);
+  const withdrawn = canceled
+    ? { label: 'Canceled', hint: 'Canceled, no answer needed' }
+    : withdrawnEntry === undefined
       ? null
       : withdrawnEntry.tags.length >= withdrawnEntry.total
         ? { label: 'Withdrawn', hint: 'Withdrawn, no answer needed' }

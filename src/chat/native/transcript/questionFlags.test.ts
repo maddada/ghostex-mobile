@@ -31,4 +31,32 @@ describe('question flags', () => {
     assert.deepEqual([...flags.laterQuestions], ['page-later']);
     assert.equal(flags.unansweredQuestions.has('page-done'), false);
   });
+
+  test('cards learn which questions the reader canceled', () => {
+    const document = {
+      finalIds: [],
+      openQuestions: {
+        count: 0,
+        text: '',
+        accessibilityLabel: '',
+        jump: null,
+        total: 2,
+        summary: '0 unanswered',
+        sections: [
+          {
+            id: 'earlier',
+            title: '',
+            count: 2,
+            rows: [
+              { id: 'form-gone', kind: 'form', title: 'Q', status: 'canceled', tags: [], time: '', timeTitle: '' },
+              { id: 'page-done', kind: 'page', title: 'D', status: 'answered', tags: [], time: '', timeTitle: '' },
+            ],
+          },
+        ],
+      },
+    } as unknown as ChatDocument;
+    const flags = transcriptFlags(document);
+    assert.deepEqual([...flags.canceledQuestions], ['form-gone']);
+    assert.equal(flags.unansweredQuestions.size, 0);
+  });
 });

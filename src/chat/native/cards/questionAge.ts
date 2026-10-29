@@ -38,3 +38,24 @@ export function laterAction(
   }
   return null;
 }
+
+/**
+ * The X a For later row offers beside Back to open: removes the question without answering it
+ * (`questionRemove`, gx-chat-core `questions/later.rs`). Only a put-off form or page gets it.
+ * Desktop: `questions_list.rs` `remove_action`.
+ */
+export function removeAction(
+  status: string | undefined,
+  kind: string,
+  id: string,
+): { label: string; glyph: 'x'; action: { type: 'questionRemove'; id: string } } | null {
+  if (status !== 'later' || kind === 'chart') return null;
+  return { label: 'Remove without answering', glyph: 'x', action: { type: 'questionRemove', id } };
+}
+
+/** The word a row carries before its age: "For later" or "Canceled" (desktop `status_label`). */
+export function statusLabel(status: string | undefined): string | null {
+  if (status === 'later') return 'For later';
+  if (status === 'canceled') return 'Canceled';
+  return null;
+}

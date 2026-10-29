@@ -84,6 +84,8 @@ export type ActionFields = {
   jumpToQuestion: { id: string };
   /** "For later" (`later: true`) or "Back to unanswered" on a question form or page (gx-chat-core `questions/later.rs`). */
   questionForLater: { id: string; later: boolean };
+  /** The X on a For later row: removes a form or page without answering it; it reads Canceled (gx-chat-core `questions/later.rs`). */
+  questionRemove: { id: string };
   /** The ? pill's list shows what the filter picks: `all`, `html`, `qa` or `charts`. */
   questionListFilter: { filter: string };
   /** The list's "Show more" (and scrolling to its end after one): one more page of rows (gx-chat-core `questions/open_questions.rs`). */

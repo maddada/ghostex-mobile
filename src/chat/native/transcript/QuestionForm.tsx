@@ -140,6 +140,8 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
   // Put off For later (gx-chat-core `questions/later.rs`): grey instead of the amber Waiting, and
   // still answerable; desktop question_form.rs.
   const later = form.later === true;
+  // Removed without an answer (gx-chat-core `questions/later.rs`): it opens to be read, takes no answer.
+  const canceled = phase === 'canceled';
   const error = str(form, 'error');
   const questions = arr(form.questions);
   // The form's state is a pill on the right, as "Answered" is once it folds (desktop question_form.rs).
@@ -154,9 +156,19 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
       <SingleLinePill label="Not shown" color={theme.error} />
     ) : (
       <SingleLinePill
-        {...(phase === 'sending' ? {} : { icon: 'clock' as const })}
-        label={phase === 'sending' ? 'Sending…' : phase === 'queued' ? 'Queued' : later ? 'For later' : 'Waiting'}
-        color={later ? theme.muted : askColor(theme.light)}
+        {...(phase === 'sending' ? {} : { icon: canceled ? ('x' as const) : ('clock' as const) })}
+        label={
+          phase === 'sending'
+            ? 'Sending…'
+            : phase === 'queued'
+              ? 'Queued'
+              : canceled
+                ? 'Canceled'
+                : later
+                  ? 'For later'
+                  : 'Waiting'
+        }
+        color={later || canceled ? theme.muted : askColor(theme.light)}
       />
     );
   const drafts = arr(form.drafts);
@@ -243,9 +255,11 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
           ? form.reconnecting === true
             ? "Reconnecting to Ghostex… your answers go out as soon as it's back."
             : 'Sending…'
-          : sendError.length > 0
-            ? sendError
-            : '';
+          : canceled
+            ? 'Canceled: it takes no answer.'
+            : sendError.length > 0
+              ? sendError
+              : '';
   const sendLabel = phase === 'answered' ? 'Sent' : phase === 'queued' ? 'Queued' : str(form, 'submit');
   const footer = (
     <>
@@ -269,7 +283,9 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
         // SessionChat 2026-10-16 DECISION on `SKIPPED` in packages/gx-visual/src/questions.rs).
         <SoftButton tight label="Skip all" onPress={() => dispatch({ type: 'formSkipAll', form: id })} />
       ) : null}
-      <PrimaryButton tight label={sendLabel} disabled={!canSend} onPress={() => dispatch({ type: 'formSend', form: id })} />
+      {canceled ? null : (
+        <PrimaryButton tight label={sendLabel} disabled={!canSend} onPress={() => dispatch({ type: 'formSend', form: id })} />
+      )}
     </>
   );
   return (

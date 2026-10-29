@@ -798,9 +798,10 @@ export type QuestionListRow = {
   atMs?: number | null;
   /**
    * Where it stands: `waiting`, `later` (put off For later, still unanswered), `answered`,
-   * `withdrawn`, or `other` for a page or chart that asks nothing.
+   * `withdrawn`, `canceled` (removed by the reader without an answer), or `other` for a page or
+   * chart that asks nothing.
    */
-  status?: 'waiting' | 'later' | 'answered' | 'withdrawn' | 'other';
+  status?: 'waiting' | 'later' | 'answered' | 'withdrawn' | 'canceled' | 'other';
   timeTitle: string;
 };
 

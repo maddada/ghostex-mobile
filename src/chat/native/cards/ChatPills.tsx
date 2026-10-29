@@ -49,7 +49,7 @@ import type { ChatDocument, ChatPill, QuestionListRow, QuestionListSection } fro
 import type { RustChat } from '../../rust/useRustChat';
 import { Sheet } from '../composer/Sheet';
 import { answeredColor } from './askCard';
-import { laterAction, rowAge } from './questionAge';
+import { laterAction, removeAction, rowAge, statusLabel } from './questionAge';
 import type { SessionLinksChatPill } from '../sessionLinks';
 import { Glyph as TranscriptGlyph } from '../transcript/icons';
 import { AgentFleetMenu, AgentTasksMenu, CoordinatorThreadsMenu, waitingColor } from './AgentPanels';
@@ -327,7 +327,9 @@ function QuestionsSection({
   folded: boolean;
   now: number;
   onToggle: () => void;
-  onLater: (action: { type: 'questionForLater'; id: string; later: boolean }) => void;
+  onLater: (
+    action: { type: 'questionForLater'; id: string; later: boolean } | { type: 'questionRemove'; id: string },
+  ) => void;
   onPick: (row: QuestionListRow) => void;
 }) {
   const styles = useStyles();
@@ -352,9 +354,14 @@ function QuestionsSection({
         ? null
         : section.rows.map((row) => {
             const answered = row.status === 'answered';
-            const withdrawn = row.status === 'withdrawn';
+            const withdrawn = row.status === 'withdrawn' || row.status === 'canceled';
             const age = rowAge(row, now);
-            const later = laterAction(row.status, row.kind, row.id);
+            const label = statusLabel(row.status);
+            // No hover on a phone, so the buttons always show. They sit before the label and age so
+            // every row's age ends at the same right edge.
+            const buttons = [laterAction(row.status, row.kind, row.id), removeAction(row.status, row.kind, row.id)].filter(
+              (button) => button !== null,
+            );
             return (
               <Pressable
                 key={row.id}
@@ -373,20 +380,21 @@ function QuestionsSection({
                 >
                   {row.title}
                 </Text>
-                {row.status === 'later' ? <Text style={styles.questionsMeta}>For later</Text> : null}
-                {age.length > 0 ? <Text style={styles.questionsMeta}>{age}</Text> : null}
-                {later !== null ? (
+                {buttons.map((button) => (
                   // Its own press: it never also jumps to the question.
                   <Pressable
+                    key={button.label}
                     accessibilityRole="button"
-                    accessibilityLabel={later.label}
-                    onPress={() => onLater(later.action)}
+                    accessibilityLabel={button.label}
+                    onPress={() => onLater(button.action)}
                     hitSlop={6}
                     style={({ pressed }) => [styles.questionsLater, pressed && styles.pillPressed]}
                   >
-                    <Glyph name={later.glyph} size={14} color={P.cardMuted} />
+                    <Glyph name={button.glyph} size={14} color={P.cardMuted} />
                   </Pressable>
-                ) : null}
+                ))}
+                {label !== null ? <Text style={styles.questionsMeta}>{label}</Text> : null}
+                {age.length > 0 ? <Text style={styles.questionsMeta}>{age}</Text> : null}
               </Pressable>
             );
           })}

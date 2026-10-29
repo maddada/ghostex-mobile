@@ -171,6 +171,8 @@ export type TranscriptFlags = {
   unansweredQuestions: ReadonlySet<string>;
   /** Question pages and forms put off For later, which offer Back to unanswered. */
   laterQuestions: ReadonlySet<string>;
+  /** Question pages and forms the reader removed without answering: their cards read Canceled. */
+  canceledQuestions: ReadonlySet<string>;
   savedPrompts: { [messageId: string]: Json };
   rewindAvailable: boolean;
   rewindEnabled: boolean;
@@ -202,6 +204,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   withdrawnPages: {},
   unansweredQuestions: new Set(),
   laterQuestions: new Set(),
+  canceledQuestions: new Set(),
   savedPrompts: {},
   rewindAvailable: false,
   rewindEnabled: false,
@@ -237,6 +240,11 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
         .flatMap((section) => section.rows.filter((row) => row.status !== 'later').map((row) => row.id)),
     ),
     laterQuestions: new Set(arr(document.laterQuestions).filter((id): id is string => typeof id === 'string')),
+    canceledQuestions: new Set(
+      (document.openQuestions?.sections ?? []).flatMap((section) =>
+        section.rows.filter((row) => row.status === 'canceled').map((row) => row.id),
+      ),
+    ),
     savedPrompts: obj(document.savedPrompts) === null ? {} : document.savedPrompts,
     rewindAvailable: document.rewindAvailable === true,
     rewindEnabled: document.rewindEnabled === true,
