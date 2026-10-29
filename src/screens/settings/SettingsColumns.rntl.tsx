@@ -1,8 +1,8 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. Owner decision F2 (2026-10-26, "Zweispaltig wie iPad-Einstellungen";
- * §1.5 S1-6) with FL-LAY-14: turning the unfolded Duo between one and two Settings columns keeps the
- * user's place, so a page open in one column keeps its local state (an unsaved draft) in the other.
+ * Run with `bun run test:jest`. Settings in two columns on the unfolded iPhone Duo: turning between one and
+ * two columns keeps the user's place, so a page open in one column keeps its local state (an unsaved draft)
+ * in the other; and the stack shows one list, the top screen's, not one per Settings screen in it.
  */
 
 import { useEffect, useState } from 'react';
@@ -12,6 +12,7 @@ import { act, render } from '@testing-library/react-native';
 import { SettingsColumnsFrame } from './SettingsColumns';
 
 let mockTwoColumns = false;
+let mockRouteIndex = 2;
 const mockRoutes = [
   { name: 'Sessions', key: 'sessions' },
   { name: 'Settings', key: 'settings' },
@@ -23,7 +24,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({}),
-  useRoute: () => mockRoutes[2],
+  useRoute: () => mockRoutes[mockRouteIndex],
   useNavigationState: (select: (state: { routes: typeof mockRoutes }) => unknown) => select({ routes: mockRoutes }),
   CommonActions: {},
   StackActions: {},
@@ -40,7 +41,8 @@ jest.mock('../../theme/useAppearance', () => ({
 }));
 jest.mock('../../updates/updateNotice', () => ({ useUpdateNotice: () => null }));
 jest.mock('./SettingsControls', () => ({
-  LinkRow: () => null,
+  LinkRow: ({ title }: { title: string }) =>
+    jest.requireActual('react').createElement(jest.requireActual('react-native').Text, null, `row:${title}`),
   useSettingsStyles: () => ({ list: {} }),
   SettingsPageEdgesContext: jest.requireActual('react').createContext(null),
 }));
@@ -49,7 +51,33 @@ jest.mock('./pages', () => ({
   SETTINGS_PAGE_ORDER: ['theme', 'chat'],
 }));
 
-test('REQ-DUO-001 AC5, owner F2, FL-LAY-14: a Settings page keeps its unsaved draft across one, two and one columns', async () => {
+beforeEach(() => {
+  mockRouteIndex = 2;
+});
+
+describe('in two columns the stack holds one list', () => {
+  const frame = () => (
+    <SettingsColumnsFrame title="Chat">
+      <Text>page</Text>
+    </SettingsColumnsFrame>
+  );
+
+  test('the top Settings screen draws the list beside its page', async () => {
+    mockTwoColumns = true;
+    const top = await render(frame());
+    expect(top.getAllByText(/^row:/).map((row) => row.props.children)).toEqual(['row:Theme', 'row:Chat']);
+  });
+
+  test('the Settings screen under it draws no list, only its page', async () => {
+    mockTwoColumns = true;
+    mockRouteIndex = 1;
+    const covered = await render(frame());
+    expect(covered.queryAllByText(/^row:/)).toEqual([]);
+    expect(covered.getByText('page')).toBeTruthy();
+  });
+});
+
+test('a Settings page keeps its unsaved draft across one, two and one columns', async () => {
   let mounts = 0;
   let unmounts = 0;
   function Page() {

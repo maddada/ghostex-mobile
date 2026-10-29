@@ -1,6 +1,6 @@
 /**
  * The Settings list, and Settings in two columns where the iPhone Duo's chrome is in place and the content
- * is wide enough for them (owner decision F2, 2026-10-26): the list column (320 pt) on the left with the
+ * is wide enough for them: the list column (320 pt) on the left with the
  * open page selected, the page (at least 375 pt) on the right, each under its own title row. The rule
  * reads the window's content width, not its orientation (`twoColumnWindow` in layout.ts): in practice
  * the unfolded Duo in landscape. Which page is open comes from the stack (settingsColumns.ts); picking a
@@ -138,19 +138,20 @@ export function SettingsColumnsFrame({
     (page: SettingsPageId) => {
       if (settingsIndex === undefined) return;
       const state = navigation.getState();
-      const kept = state.routes.slice(0, settingsIndex + 1);
+      // The routes up to Settings as they are (their keys keep those screens mounted), then the page. Only
+      // routes and index: the rest of the old state (its key, `stale`, the route names) is the navigator's.
+      const kept = state.routes.slice(0, settingsIndex + 1).map(({ key, name, params }) => ({ key, name, params }));
       navigation.dispatch(
-        CommonActions.reset({
-          ...state,
-          index: kept.length,
-          routes: [...kept, { name: 'SettingsPage', params: { page } }],
-        }),
+        CommonActions.reset({ index: kept.length, routes: [...kept, { name: 'SettingsPage', params: { page } }] }),
       );
     },
     [navigation, settingsIndex],
   );
 
   const split = columns !== null;
+  // A Settings screen with another one above it is out of sight (two columns change screens without an
+  // animation), so it leaves the list to the screen on top: the stack holds one list, not one per screen.
+  const covered = routes.at(-1)?.key !== routeKey;
   useStackScreenRail(
     useMemo(
       () => ({ entries: [], reserveKeyboard: true, titleInContent: split, onBack: split ? leave : undefined }),
@@ -171,7 +172,7 @@ export function SettingsColumnsFrame({
   // FL-LAY-14): two columns add the list before the page and a title row over it, never a new parent.
   return (
     <View style={split ? [styles.columns, { backgroundColor: appearance.background }] : styles.page}>
-      {columns === null ? null : (
+      {columns === null || covered ? null : (
         <View style={[styles.list, { borderRightColor: appearance.border }]}>
           <ContentTitleRow title={SettingsCopy.title} tint={appearance.foreground} />
           <ScrollView
