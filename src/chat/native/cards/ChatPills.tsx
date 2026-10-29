@@ -155,7 +155,7 @@ const FOLDED_BY_DEFAULT: ReadonlySet<string> = new Set();
 /**
  * The ? pill's list (Chat Resources): every question form, page and chart in the chat, under the
  * filter the header's dropdown picks, in the core's sections, each folding under its chevron, rows
- * newest first. A row scrolls the transcript to it and flashes it. Desktop: `questions_list.rs`.
+ * newest first (Unanswered: oldest first, the order they were asked). A row scrolls the transcript to it and flashes it. Desktop: `questions_list.rs`.
  */
 export function QuestionsMenu({
   chat,
