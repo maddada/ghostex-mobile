@@ -1,4 +1,12 @@
 /**
+ * CDXC:Terminal 2026-10-29 DECISION:
+ * User, asked "when the keyboard opens, the terminal slides up (top hidden) instead of shrinking, and jumps to
+ * the bottom. On regular iPhones too?" (Q761): "Every iPhone". The iOS terminal keeps its grid while the
+ * keyboard comes and goes and slides up instead, on every iPhone, and scrolls to the input when the keyboard
+ * comes up (TerminalScreen `onAppear`). WHY the slide stops where it does: the bottom row stands right above
+ * the key bar, so what the program draws below the cursor stays visible, unless that would push the cursor
+ * row out at the top; then the cursor row wins.
+ *
  * Keyboard geometry of the iOS terminal (docs/specs/terminal-screen.md §2 "Keyboard: the terminal slides").
  * The terminal view keeps its size while the software keyboard comes and goes, so its grid (columns x
  * rows) and the pty behind it stay as they are; the view slides up instead, by as much as the cursor row
@@ -18,8 +26,7 @@ export function terminalObstruction(keyboardOverlap: number, keyBarHeight: numbe
 }
 
 /**
- * How far the terminal view moves up with the keyboard (owner decision 2026-10-28T19:54:22Z, "Unterkante
- * sichtbar, Cursor gewinnt"): as far as the bottom row stands directly above the covered part (`obstruction`),
+ * How far the terminal view moves up with the keyboard: as far as the bottom row stands directly above the covered part (`obstruction`),
  * so what the program draws below the cursor stays visible, but never so far that the cursor row's top edge
  * (`caretTop`) would leave the top of the visible part; then the cursor row stands at that top edge.
  * `caretTop` is null while the terminal has not reported one: the bottom is visible then, no known cursor

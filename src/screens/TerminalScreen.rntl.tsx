@@ -563,6 +563,32 @@ describe('owner 2026-10-28: the keyboard summoned while scrolled back shows the 
   });
 });
 
+describe('the chat box keeps the bottom spacer it had outside the iPhone Duo (decision Q764)', () => {
+  const spacerHeight = () => StyleSheet.flatten(screen.getByTestId('terminal-bottom-spacer').props.style).height;
+
+  test('in chat view the home indicator inset stays under the chat box, with and without the keyboard', async () => {
+    useTerminalStore.setState({ sessionViewModeBySessionKey: { 'chat-1': 'chat' } });
+    try {
+      await renderScreen(CHAT_TAB);
+      expect(spacerHeight()).toBe(34);
+      await keyboardWillShow();
+      expect(spacerHeight()).toBe(34);
+    } finally {
+      await act(() => useTerminalStore.setState({ sessionViewModeBySessionKey: {} }));
+    }
+  });
+
+  test('on Android the terminal keeps the inset only while the keyboard is down, as before', async () => {
+    const os = jest.replaceProperty(Platform, 'OS', 'android');
+    try {
+      await renderScreen(SHELL_TAB);
+      expect(spacerHeight()).toBe(34);
+    } finally {
+      os.restore();
+    }
+  });
+});
+
 describe('FL-A11Y-05: Reduce Motion', () => {
   test('with Reduce Motion on no animation is requested and every end position is the same', async () => {
     reduceMotion.enabled = true;

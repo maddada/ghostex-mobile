@@ -221,7 +221,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const chatMachineTarget = chatCapable && activeTab !== null ? machineTargetFor(activeTab.machineId) : null;
   useSessionLinksRefresh(activeMachine, activeSession?.sessionId, chatModeActive);
   // iOS terminal mode: the terminal view keeps its size, so its grid and the pty stay put, and slides with
-  // the keyboard instead (terminal-screen.md §2). The one place that decides it.
+  // the keyboard instead (terminal-screen.md §2), on every iPhone (decision Q761 in terminalKeyboardSlide.ts).
+  // The one place that decides it.
   const slidesWithKeyboard = Platform.OS === 'ios' && !chatModeActive;
   const mountedTerminalSessionKey = activeTab !== null && !chatModeActive && isFocused ? activeTab.sessionKey : null;
   const { keyboardVisible, bottomInset, visibleWindowBottom, hideMotionMs } = useKeyboardMetrics({
@@ -638,6 +639,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
     </Pressable>
   );
   const inRail = headerPlacement.kind === 'rail';
+  /*
+   * CDXC:SessionChat 2026-10-29 DECISION:
+   * User, asked "drops the chat box's bottom spacer, so on Android (and iPhones with the keyboard down) the
+   * chat box sits lower. Take that?" (Q764): "Keep today's spacing". The spacer under the chat composer stays
+   * on Android and on every iPhone; only the iPhone Duo, whose header stands in the status band or the side
+   * bar, leaves the composer's own bottom margin alone below it.
+   */
+  const chatBottomSpacer = headerPlacement.kind === 'top';
   // The screen reaches the window edges: the strip under the iPhone Duo's rail shows what the screen
   // shows (the chat theme's page in chat view, black in the terminal).
   const chatBackground = useTranscriptTheme().background;
@@ -880,10 +889,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
           // With the keyboard up the container's bottom padding already clears
           // the IME, so the terminal surface takes all of it and only adds the
           // home-indicator inset while the keyboard is down. The chat composer
-          // keeps its own bottom margin in both states (the home-indicator inset,
-          // at least 12 pt, with the keyboard down; 8 pt above the keyboard), so
-          // the inset is not added here a second time.
-          <View style={{ height: !keyboardVisible && !chatModeActive ? insets.bottom : 0 }} />
+          // is a control rather than a full-bleed surface: it keeps the margin
+          // it has with the keyboard down so its bottom row never sits flush
+          // against the keyboard. On the iPhone Duo the composer's own bottom
+          // margin is the only one (`chatBottomSpacer`).
+          <View
+            testID="terminal-bottom-spacer"
+            style={{ height: (chatModeActive ? chatBottomSpacer : !keyboardVisible) ? insets.bottom : 0 }}
+          />
         )}
       </View>
       {slidesWithKeyboard ? (

@@ -1,5 +1,11 @@
 /**
- * How the app animates what moves with the iOS software keyboard (FL-STR-03): `LayoutAnimation` is app-wide
+ * CDXC:Keyboard 2026-10-29 DECISION:
+ * User, asked "the keyboard and everything that follows it move with a 580 ms spring instead of the keyboard's
+ * own timing. On regular iPhones too?" (Q763): "Every iPhone". The fitted motion below drives everything that
+ * follows the keyboard (terminal, chat composer, sheets, search) on every iPhone, and nothing moves with
+ * Reduce Motion on.
+ *
+ * How the app animates what moves with the iOS software keyboard: `LayoutAnimation` is app-wide
  * and its pending config is last-writer-wins, so the writers matter. The shared frame store `keyboardFrame.ts`
  * is the one writer for everything that follows it (the app chrome, the sheets, the terminal and the chat
  * composer: their hooks only read the store, synchronously); one request per keyboard move, from here.
@@ -9,9 +15,9 @@
  *
  * React Native's Fabric renderer (0.88) has no keyboard curve (`LayoutAnimation.Types.keyboard` falls through
  * to linear there; `ReactCommon/react/renderer/animations/utils.cpp`), so the system's motion is approximated
- * with interpolators Fabric has. The two configs are fitted to one owner recording (iPhone Duo inner display,
- * iOS 27.2, 60 fps, 6 shows and 5 hides, keyboard offset per frame against the interpolators; owner accepted an
- * approximation, 2026-10-28):
+ * with interpolators Fabric has. The two configs are fitted to one screen recording (iPhone Duo inner display,
+ * iOS 27.2, 60 fps, 6 shows and 5 hides, keyboard offset per frame against the interpolators); an
+ * approximation, kept until React Native can follow the keyboard's own curve:
  * - show: spring, `springDamping` 1.8 (Fabric reads it only as a non-integer double), 580 ms; rmse 5.6 pt, worst
  *   14 pt. The same recording against linear over an assumed 250 ms: rmse 20 pt, worst 49 pt.
  * - hide: easeOut, 250 ms; rmse 13 pt, worst 27 pt (a hide is only on screen for about 0.17 s, so this fit is

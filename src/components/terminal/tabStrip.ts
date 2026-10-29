@@ -1,8 +1,13 @@
 /**
  * How the Terminal's tab strip sizes its tabs and when it fades its edges (kept free of React Native so
- * `bun test` reaches it). Owner decisions 2026-10-28: the tabs stay in the narrow status band of the
- * iPhone Duo with the chat button kept, and "es muss deutlich sein, dass man wischen kann": where the
- * strip cannot show every tab, the next tab always peeks in.
+ * `bun test` reaches it).
+ *
+ * CDXC:Terminal 2026-10-29 DECISION:
+ * User, asked "terminal tabs get wider with the next one peeking in, and only the active tab has a close
+ * button. On every phone?" (Q762): "Every phone". Where the strip cannot show every tab, the next tab always
+ * peeks in and only the active tab shows its close button, on Android and every iPhone. WHY the peek: in the
+ * iPhone Duo's narrow status band (which keeps the chat button) a strip of whole tabs gave no sign that it
+ * swipes; a quarter of the next tab does, and a peeking tab shows its title rather than a lone close button.
  */
 
 export const TRACK_INNER_PAD = 4;
