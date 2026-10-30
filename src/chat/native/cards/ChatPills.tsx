@@ -380,6 +380,12 @@ function QuestionsSection({
                 >
                   {row.title}
                 </Text>
+                {row.thread !== undefined && row.thread.length > 0 ? (
+                  // A page a thread posted names the thread (a coordinator's Thread pages group).
+                  <Text numberOfLines={1} style={styles.questionsMeta}>
+                    {row.thread}
+                  </Text>
+                ) : null}
                 {buttons.map((button) => (
                   // Its own press: it never also jumps to the question.
                   <Pressable

@@ -802,6 +802,8 @@ export type QuestionListRow = {
    * chart that asks nothing.
    */
   status?: 'waiting' | 'later' | 'answered' | 'withdrawn' | 'canceled' | 'other';
+  /** The thread that posted this page, on a row of a coordinator's Thread pages group. */
+  thread?: string;
   timeTitle: string;
 };
 
