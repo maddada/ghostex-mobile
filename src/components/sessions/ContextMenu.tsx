@@ -99,6 +99,11 @@ export type ContextMenuProps = {
    * status band or the side bar, the menu stands at it; elsewhere it stays centred.
    */
   anchor?: MenuAnchor;
+  /**
+   * The tallest the card may grow, in points, below the usual cap; its rows scroll inside it. The
+   * Unified list's filter menu caps itself like the desktop's filter dropdown (420).
+   */
+  maxHeight?: number;
 };
 
 /** Comfortable reading width; the card shrinks on narrow screens. */
@@ -156,6 +161,7 @@ export default function ContextMenu({
   onClose,
   onDismissed,
   anchor: liveAnchor,
+  maxHeight: cap,
 }: ContextMenuProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
@@ -188,7 +194,10 @@ export default function ContextMenu({
   const horizontalRoom = anchoredFrom === null ? screenWidth - 2 * sideMargin : room.right - room.left;
   const menuWidth = Math.max(1, Math.min(MENU_MAX_WIDTH, horizontalRoom));
   const verticalRoom = screenHeight - Math.max(EDGE_MARGIN, safeArea.top) - Math.max(EDGE_MARGIN, safeArea.bottom);
-  const maxHeight = Math.max(1, anchoredFrom === null ? verticalRoom * MAX_HEIGHT_RATIO : room.bottom - room.top);
+  const maxHeight = Math.min(
+    cap ?? Number.POSITIVE_INFINITY,
+    Math.max(1, anchoredFrom === null ? verticalRoom * MAX_HEIGHT_RATIO : room.bottom - room.top),
+  );
   const anchoredStyle =
     anchor === undefined || anchoredFrom === null
       ? null

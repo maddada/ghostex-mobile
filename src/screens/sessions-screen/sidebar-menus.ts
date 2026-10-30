@@ -20,6 +20,7 @@
  * packages/gx-core/src/sidebar_view/tags.rs (the default tag list).
  */
 
+import { SNOOZE_PRESETS, type SnoozePreset } from '../../contract/unified/snooze';
 import {
   displayStatus,
   type GhostexCustomSessionTags,
@@ -73,6 +74,10 @@ export type SidebarMenuCommand =
   | { type: 'sessionAction'; sessionId: string; action: 'linkWork'; kind: WorkLinkKind }
   /** The phone's own row: a voice call about this session (`src/voice/callAbout.ts`). */
   | { type: 'voiceCall'; sessionId: string }
+  /** The Unified list's Snooze row: gxserver's `/api/snoozeSession` at the preset's wake time, then a sleep (`contract/unified/snooze.ts`). */
+  | { type: 'snooze'; sessionId: string; preset: SnoozePreset }
+  /** The Unified list's Unsnooze row: gxserver's `/api/unsnoozeSession`. */
+  | { type: 'unsnooze'; sessionId: string }
   /** The phone's own row: the session's links sheet (`src/chat/native/SessionLinksSheet.tsx`). */
   | { type: 'sessionLinks'; sessionId: string }
   /** The phone's own row: the session's project's Changes screen (`src/screens/ChangesScreen.tsx`). */
@@ -433,6 +438,11 @@ export type SessionMenuInput = {
   voiceCall?: boolean;
   /** The computer has Session notes on (`sessions/sessionNotesSwitch.ts`), so the menu offers Note. */
   sessionNotes?: boolean;
+  /**
+   * The menu offers Snooze (or Unsnooze), as the desktop's does: the Unified list, which runs it
+   * through gxserver directly. The Project list's menu leaves it out.
+   */
+  snooze?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -662,8 +672,14 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
  * message), Generate Title, Move to New Group, and New Tag…; Split Right and Focus act on the
  * computer's own panes.
  */
+/** A wake time still ahead (gx-core `session_is_snoozed`). */
+function isSnoozedNow(session: GhostexSession): boolean {
+  const wake = Date.parse(session.snoozedUntil ?? '');
+  return Number.isFinite(wake) && wake > Date.now();
+}
+
 export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
-  const { session, customTags, below, threads, project, voiceCall = false, sessionNotes = true } = input;
+  const { session, customTags, below, threads, project, voiceCall = false, sessionNotes = true, snooze = false } = input;
   const settings = PHONE_MENU_SETTINGS;
   const caps = sessionCapabilities(session);
   const id = session.sessionId;
@@ -711,6 +727,18 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
       command({ type: 'setSessionPinned', sessionId: id, pinned: !pinned }),
     ),
     ...(!caps.isBrowser && settings.enableSessionParking && caps.canPark ? { park } : {}),
+    // CDXC:Sidebar 2026-10-30 SEE-ALSO: gx-core `session.rs` `snooze`: Unsnooze on a snoozed session, else the presets.
+    ...(snooze && !caps.isBrowser
+      ? {
+          snooze: isSnoozedNow(session)
+            ? row('Unsnooze', 'alarm', { type: 'unsnooze', sessionId: id })
+            : submenu(
+                'Snooze',
+                'alarm',
+                SNOOZE_PRESETS.map(({ preset, label }) => row(label, 'alarm', { type: 'snooze', sessionId: id, preset })),
+              ),
+        }
+      : {}),
     ...(caps.canTag && tags.length > 0 ? { tag: submenu('Tag As', 'tag', tags) } : {}),
     ...(caps.canCloseAfterDone
       ? {

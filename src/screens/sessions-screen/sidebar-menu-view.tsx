@@ -10,6 +10,7 @@
 
 import type { ReactElement } from 'react';
 
+import { AlarmGlyph } from '../../components/sessions/unified/glyphs';
 import { COMMAND_ICONS, TAG_ICONS } from '../../assets/tablerIcons.generated';
 import type { ContextMenuItem } from '../../components/sessions/ContextMenu';
 import {
@@ -53,6 +54,7 @@ const MENU_ICON_COLOR = GhostexPalette.FOREGROUND;
 
 /** The desktop menu icon ids the phone's menus use (`titlebar/<id>.svg`). */
 const MENU_GLYPHS: Readonly<Record<string, (props: GlyphProps) => ReactElement>> = {
+  alarm: AlarmGlyph,
   archive: ArchiveGlyph,
   box: BoxGlyph,
   brain: COMMAND_ICONS.brain,

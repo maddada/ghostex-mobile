@@ -7,6 +7,7 @@
  * launchAgent) run in their original relative order.
  */
 
+import { snoozeWakeAt } from '../../contract/unified/snooze';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -185,6 +186,8 @@ export type SessionsScreenMenusDeps = {
   sessionsForProject: (target: MachineRecord, header: ProjectHeaderItem) => GhostexSession[];
   setOverlay: (overlay: Overlay) => void;
   setTransientStatus: (message: string | null) => void;
+  /** The Unified list's Snooze (a wake time) and Unsnooze (`null`), through gxserver. */
+  snoozeSession?: (target: MachineRecord, session: GhostexSession, wakeAt: Date | null) => Promise<void>;
 };
 
 export function useSessionsScreenMenus({
@@ -206,6 +209,7 @@ export function useSessionsScreenMenus({
   sessionsForProject,
   setOverlay,
   setTransientStatus,
+  snoozeSession,
 }: SessionsScreenMenusDeps) {
   // Desktop-parity context menus ---------------------------------------------
 
@@ -638,6 +642,15 @@ export function useSessionsScreenMenus({
           } else setOverlay({ kind: 'delayedSend', ctx });
           return;
         }
+        case 'snooze':
+        case 'unsnooze': {
+          const ctx = scope.session;
+          if (ctx === undefined || snoozeSession === undefined) throw new Error('Snooze needs a session.');
+          setOverlay(NONE);
+          const wakeAt = menuCommand.type === 'snooze' ? snoozeWakeAt(menuCommand.preset, new Date()) : null;
+          void snoozeSession(machine, ctx.item.session, wakeAt);
+          return;
+        }
         case 'sessionLinks': {
           const ctx = scope.session;
           if (ctx === undefined) throw new Error('Links need a session.');
@@ -737,6 +750,7 @@ export function useSessionsScreenMenus({
         chatMachineLink(ctx.machine).capabilities()?.includes('voiceAgent') === true &&
         voiceAgentOnFor(ctx.machine.id),
       sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
+      snooze: ctx.unified === true,
     });
     const view = sidebarMenuView(menu, menuPath, {
       openPath: (next) => setOverlay({ kind: 'sessionMenu', ctx, menuPath: next }),

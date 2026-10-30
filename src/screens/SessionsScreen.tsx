@@ -155,6 +155,7 @@ import {
 import { SessionsBottomBar } from './sessions-screen/BottomBar';
 import { SESSIONS_HEADER_HEIGHT, styles } from './sessions-screen/styles';
 import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-menus';
+import { makeSnoozeSession, useUnifiedList } from './sessions-screen/use-unified-list';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
 
@@ -880,6 +881,25 @@ export default function SessionsScreen({ navigation }: Props) {
     (target: MachineRecord, session: GhostexSession): Promise<void> => attach(target, session, { terminal: true }),
     [attach],
   );
+  // The Unified list's Snooze and Unsnooze (./sessions-screen/use-unified-list.tsx).
+  const snoozeSession = useMemo(
+    () => makeSnoozeSession({ runBulkSessionActions, refreshMachine, setTransientStatus }),
+    [runBulkSessionActions, refreshMachine, setTransientStatus],
+  );
+  const unified = useUnifiedList({
+    machines,
+    selectedMachine: machine,
+    inventoriesByMachineId,
+    selectedWorkspaceIdByMachine,
+    selectedSessionKey,
+    sidebarBackground: sidebarAppearance.background,
+    setOverlay,
+    attach: (target, session) => attach(target, session),
+    runBulkSessionActions,
+    snoozeSession,
+    openAddProject: (machineId) => navigation.navigate('AddProjectSource', { machineId }),
+  });
+
   const {
     summaryFor,
     runCollectionsUpdate,
@@ -906,6 +926,7 @@ export default function SessionsScreen({ navigation }: Props) {
     actionsMenuItems,
     recoveryItems,
   } = useSessionsScreenMenus({
+    snoozeSession,
     entries,
     collapse,
     lastActionByProject,
@@ -991,6 +1012,21 @@ export default function SessionsScreen({ navigation }: Props) {
     stateCard: (machineId) => setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
     workChipActions: (machineId, item) => workChipActions(machineById(machineId), item.session),
   };
+
+  const listRefreshControl = (
+    <RefreshControl
+      colors={[GhostexPalette.ACCENT]}
+      tintColor={sidebarAppearance.muted}
+      progressBackgroundColor={sidebarAppearance.background}
+      refreshing={pullRefreshing}
+      onRefresh={pullRefresh}
+    />
+  );
+  const listFooter = (
+    <Text style={styles.longPressHint} numberOfLines={1}>
+      Long-press any item for more options.
+    </Text>
+  );
 
   const renderBlock = ({ item: block }: { item: DrawerBlock }) => (
     <DrawerBlockView
@@ -1160,7 +1196,10 @@ export default function SessionsScreen({ navigation }: Props) {
         A machine with no Spaces has nothing to switch between — Other alone
         would be every project — so the row appears only once it has one.
       */}
-      {machine !== null && showWorkspaceTile && selectedWorkspace !== null ? (
+      {unified.on ? (
+        // The Unified list's header stands where the Workspace and Space tiles stand: its filter narrows by them.
+        unified.header
+      ) : machine !== null && showWorkspaceTile && selectedWorkspace !== null ? (
         <View style={styles.workspaceRow}>
           <WorkspaceTile
             workspace={selectedWorkspace}
@@ -1198,27 +1237,27 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
       <View style={styles.listArea}>
-        <FlatList
-          data={entries}
-          keyExtractor={(entry) => entry.listKey}
-          renderItem={renderBlock}
-          style={[styles.list, listEdges.scroll]}
-          contentContainerStyle={[styles.listContent, listEdges.content]}
-          refreshControl={
-            <RefreshControl
-              colors={[GhostexPalette.ACCENT]}
-              tintColor={sidebarAppearance.muted}
-              progressBackgroundColor={sidebarAppearance.background}
-              refreshing={pullRefreshing}
-              onRefresh={pullRefresh}
-            />
-          }
-          ListFooterComponent={
-            <Text style={styles.longPressHint} numberOfLines={1}>
-              Long-press any item for more options.
-            </Text>
-          }
-        />
+        {unified.on ? (
+          <FlatList
+            data={unified.items}
+            keyExtractor={unified.keyExtractor}
+            renderItem={unified.renderItem}
+            style={[styles.list, listEdges.scroll]}
+            contentContainerStyle={[styles.listContent, listEdges.content]}
+            refreshControl={listRefreshControl}
+            ListFooterComponent={listFooter}
+          />
+        ) : (
+          <FlatList
+            data={entries}
+            keyExtractor={(entry) => entry.listKey}
+            renderItem={renderBlock}
+            style={[styles.list, listEdges.scroll]}
+            contentContainerStyle={[styles.listContent, listEdges.content]}
+            refreshControl={listRefreshControl}
+            ListFooterComponent={listFooter}
+          />
+        )}
         {machine !== null && selectedNotice !== null ? (
           <MachineNotice
             notice={selectedNotice}
@@ -1547,6 +1586,8 @@ export default function SessionsScreen({ navigation }: Props) {
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}
+
+      {unified.overlays}
 
       {overlay.kind === 'agentMenu' ? (
         <ContextMenu

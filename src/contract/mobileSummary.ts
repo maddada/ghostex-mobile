@@ -101,6 +101,12 @@ export type MobileSummaryWireSession = {
   links?: unknown;
   /** When an armed Close After Done closes the session, while it counts down. */
   closeAfterDoneDeadlineAt?: string;
+  /** When the agent's current working stint began; absent while it is not working. */
+  workingStartedAt?: string;
+  /** Why the last model change failed; absent when it did not. */
+  modelSelectionFailure?: string;
+  /** When a snoozed session wakes; absent when it is not snoozed. */
+  snoozedUntil?: string;
   actions?: Partial<GhostexSessionActions>;
 };
 
@@ -183,6 +189,11 @@ export type GhostexProject = {
   workspaceId?: string;
   /** Shown in every workspace (the Ghostex config folder's project, where Help chats live). */
   everyWorkspace?: boolean;
+  /**
+   * The project's git origin as the computer probed it, raw; the Unified list names the project by
+   * its repository from it (contract/unified/repo.ts). Absent without a remote or from an older computer.
+   */
+  gitRemoteOriginUrl?: string;
 };
 
 export type GhostexRecentProject = {
@@ -549,6 +560,15 @@ export type GhostexSession = {
   programStatusLine: string;
   /** The program reported `error` while its reports drive the status (contract/programStatus.ts). */
   programStatusFailed: boolean;
+  /**
+   * When the agent's current working stint began ('' when it is not working, or from a computer
+   * that predates the field): the Unified list's "came back" moment and Working timer.
+   */
+  workingStartedAt?: string;
+  /** The last model change failed (the Unified list's Failed status); false from an older computer. */
+  modelSelectionFailed?: boolean;
+  /** When a snoozed session wakes ('' when it is not snoozed): the Unified list's Snoozed shelf. */
+  snoozedUntil?: string;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
   isSleeping: boolean;
   isLive: boolean;
@@ -619,6 +639,15 @@ export type GhostexMobileSummary = {
    * means per project, the default (src/components/sessions/agentChoice.ts).
    */
   newSessionAgentScope?: 'space' | 'everywhere';
+  /**
+   * The computer's Settings > Sidebar & Sessions > Sidebar: `unified` draws the session list as the
+   * Unified sidebar (contract/unified/); absent means the Project sidebar, the default.
+   */
+  sidebarView?: 'project' | 'unified';
+  /** The Unified sidebar's Working section switch; on unless the computer sends `false`. */
+  unifiedWorkingSection?: boolean;
+  /** The computer's Enable session parking; on unless the computer sends `false`. */
+  enableSessionParking?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -1261,6 +1290,9 @@ export function parseSession(value: unknown): GhostexSession | null {
     awaitingApproval: boolValue(value, 'awaitingApproval', false),
     programStatusLine: programStatusLine(value.programStatus),
     programStatusFailed: programStatusFailed(value.programStatus),
+    workingStartedAt: trimmedValue(value, 'workingStartedAt'),
+    modelSelectionFailed: trimmedValue(value, 'modelSelectionFailure').length > 0,
+    snoozedUntil: trimmedValue(value, 'snoozedUntil'),
     isSleeping: legacySleeping && !isLive,
     isLive,
     isPrimaryTitleTerminalTitle: boolValue(value, 'isPrimaryTitleTerminalTitle', false),
@@ -1298,6 +1330,7 @@ function parseProjects(value: unknown): GhostexProject[] {
         : undefined,
       workspaceId: trimmedValue(entry, 'workspaceId') || undefined,
       everyWorkspace: entry.everyWorkspace === true ? true : undefined,
+      gitRemoteOriginUrl: trimmedValue(entry, 'gitRemoteOriginUrl') || undefined,
     });
   }
   return projects;
@@ -1657,6 +1690,9 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
       root.newSessionAgentScope === 'space' || root.newSessionAgentScope === 'everywhere'
         ? root.newSessionAgentScope
         : undefined,
+    sidebarView: root.sidebarView === 'unified' ? 'unified' : 'project',
+    unifiedWorkingSection: root.unifiedWorkingSection !== false,
+    enableSessionParking: root.enableSessionParking !== false,
   };
 }
 

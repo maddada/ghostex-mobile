@@ -48,7 +48,7 @@ export function resolveSelectedSpaceId(spaces: GhostexSidebarSpaces, storedSpace
  * worktree inheritance — mirroring `createProjectCollectionIdByProjectId` in
  * packages/core-ui/sidebar-app/drag-drop-geometry.ts.
  */
-function collectionIdByProjectId(summary: GhostexMobileSummary): Map<string, string> {
+export function collectionIdByProjectId(summary: GhostexMobileSummary): Map<string, string> {
   const result = new Map<string, string>();
   for (const collection of summary.projectCollections) {
     for (const projectId of collection.projectIds) result.set(projectId, collection.collectionId);
