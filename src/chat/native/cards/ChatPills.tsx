@@ -237,7 +237,9 @@ export function QuestionsMenu({
             onToggle={() => toggle(section.id)}
             onLater={(action) => chat.dispatch(action)}
             onPick={(row) => {
-              chat.dispatch({ type: 'jumpToQuestion', id: row.id });
+              // A form or chart opens in the sheet and the chat stays where it is; a page opens as before.
+              if (row.kind === 'form' || row.kind === 'chart') chat.dispatch({ type: 'openResource', id: row.id });
+              else chat.dispatch({ type: 'jumpToQuestion', id: row.id });
               onDone();
             }}
           />

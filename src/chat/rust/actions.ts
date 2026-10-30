@@ -86,6 +86,11 @@ export type ActionFields = {
   questionForLater: { id: string; later: boolean };
   /** The X on a For later row: removes a form or page without answering it; it reads Canceled (gx-chat-core `questions/later.rs`). */
   questionRemove: { id: string };
+  /** A form or chart of the Resources list opens in the sheet and the chat stays where it is (gx-chat-core `questions/resource_modal.rs`). */
+  openResource: { id: string };
+  closeResource: {};
+  /** The sheet's Go to chat: scrolls to the item, loading earlier messages first when it is older than the loaded rows. */
+  goToResource: { id: string };
   /** The ? pill's list shows what the filter picks: `all`, `html`, `qa` or `charts`. */
   questionListFilter: { filter: string };
   /** The list's "Show more" (and scrolling to its end after one): one more page of rows (gx-chat-core `questions/open_questions.rs`). */

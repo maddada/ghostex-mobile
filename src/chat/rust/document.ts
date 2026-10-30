@@ -407,6 +407,11 @@ export type ChatDocument = {
   laterQuestions?: string[];
   /** The question forms (```questions blocks) by id (`questions/forms.rs`). */
   questionForms?: { [id: string]: Json };
+  /**
+   * The form or chart a Resources row opened in the sheet, or null (gx-chat-core
+   * `questions/resource_modal.rs`); a form's picks are in `questionForms` under its id.
+   */
+  resourceModal?: ResourceModalView | null;
   /** The Previous question pill and the jumps to a question (`questions/open_questions.rs`).
    * Desktop: `open_questions.rs`. */
   openQuestions?: OpenQuestionsState;
@@ -781,6 +786,24 @@ export type QuestionListSection = {
   title: string;
   count: number;
   rows: QuestionListRow[];
+};
+
+/** The Resources sheet's item (`document.resourceModal`). */
+export type ResourceModalView = {
+  id: string;
+  /** `form` or `chart`. */
+  kind: 'form' | 'chart';
+  title: string;
+  /** Where it stands: `waiting`, `later`, `answered`, `withdrawn`, `canceled` or `other`. */
+  status: string;
+  /** It is being read back from the transcript. */
+  loading: boolean;
+  /** Why it could not be read; empty when it could. */
+  missing: string;
+  /** A chart's source. */
+  source: string;
+  /** Go to chat is loading earlier messages. */
+  going: boolean;
 };
 
 /** One form or question page in the list; a tap sends `jumpToQuestion`. */

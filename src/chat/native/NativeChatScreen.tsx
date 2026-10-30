@@ -40,7 +40,7 @@ import { callVoiceAbout } from '../../voice/callAbout';
 import { useVoiceCapability } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import { useArmedActions } from './armedActions';
-import { NativeChatCards, NativeChatOverlays, PageSheet, questionReplacesComposer } from './cards';
+import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
 import { PillsStrip, type PillsStripLinks } from './cards/PillsStrip';
 import { LoneScrollBottom, WorkingCard } from './cards/WorkingCard';
@@ -395,6 +395,7 @@ export default function NativeChatScreen({
             subagentMenu={<TranscriptMenuSheet chat={chat} host={menuHost} />}
           />
           <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
+          <ResourceSheet chat={chat} document={document} />
           <ChatToast toast={toast} />
           {dropActive ? (
             <View

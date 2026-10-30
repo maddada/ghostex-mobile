@@ -129,7 +129,8 @@ export function QuestionForm({ id, source }: { id: string; source: string }) {
   );
 }
 
-function QuestionFormCard({ id, source }: { id: string; source: string }) {
+/** The form's card; the Resources sheet draws it too (`ResourceSheet.tsx`). */
+export function QuestionFormCard({ id, source }: { id: string; source: string }) {
   const { theme, dispatch } = useTranscriptEnv();
   const form = obj(useContext(FormsContext)[id]);
   if (form === null) {
@@ -141,7 +142,9 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
   // still answerable; desktop question_form.rs.
   const later = form.later === true;
   // Removed without an answer (gx-chat-core `questions/later.rs`): it opens to be read, takes no answer.
-  const canceled = phase === 'canceled';
+  // Withdrawn by the agent (the Resources sheet shows it): the same, read-only look.
+  const withdrawn = phase === 'withdrawn';
+  const canceled = phase === 'canceled' || withdrawn;
   const error = str(form, 'error');
   const questions = arr(form.questions);
   // The form's state is a pill on the right, as "Answered" is once it folds (desktop question_form.rs).
@@ -163,7 +166,9 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
             : phase === 'queued'
               ? 'Queued'
               : canceled
-                ? 'Canceled'
+                ? withdrawn
+                  ? 'Withdrawn'
+                  : 'Canceled'
                 : later
                   ? 'For later'
                   : 'Waiting'
@@ -256,7 +261,9 @@ function QuestionFormCard({ id, source }: { id: string; source: string }) {
             ? "Reconnecting to Ghostex… your answers go out as soon as it's back."
             : 'Sending…'
           : canceled
-            ? 'Canceled: it takes no answer.'
+            ? withdrawn
+              ? 'Withdrawn: no answer needed.'
+              : 'Canceled: it takes no answer.'
             : sendError.length > 0
               ? sendError
               : '';
