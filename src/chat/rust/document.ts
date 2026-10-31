@@ -31,6 +31,8 @@ export type JsonObject = { [key: string]: Json };
 /** The worktree tray on top of a new chat's message box (gx-chat-core `menus/draft_worktree.rs`). */
 export type WorktreeTray = {
   mode: 'folder' | 'newWorktree' | 'existingWorktree';
+  /** The project the draft is in; its chip moves the draft. Null from an older computer. */
+  projectName: string | null;
   segments: { mode: 'folder' | 'newWorktree' | 'existingWorktree'; label: string }[];
   currentBranch: string | null;
   baseBranch: string | null;
@@ -805,6 +807,8 @@ export type QuestionListSection = {
   title: string;
   count: number;
   rows: QuestionListRow[];
+  /** How many of this group's rows the page cut: its own "Show more" sits under its rows. */
+  remaining?: number;
 };
 
 /** The Resources sheet's item (`document.resourceModal`). */

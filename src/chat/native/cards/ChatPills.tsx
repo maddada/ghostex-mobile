@@ -183,7 +183,6 @@ export function QuestionsMenu({
   const sections = document.openQuestions?.sections ?? [];
   const filters = document.openQuestions?.filters ?? [];
   const picked = document.openQuestions?.filter ?? 'all';
-  const remaining = document.openQuestions?.remaining ?? 0;
   // The list pages (gx-chat-core `page_sections`): one page, a Show more row, and once it has been
   // tapped, scrolling to the end adds the next page by itself. Closing the list or picking another
   // filter starts again from one page (desktop `questions_list.rs`).
@@ -205,6 +204,8 @@ export function QuestionsMenu({
     chat.dispatch({ type: 'questionListMore' });
   };
   const folded = (id: string) => FOLDED_BY_DEFAULT.has(id) !== toggled.has(id);
+  // The rows still to come in the groups that are open: what scrolling to the end loads.
+  const remaining = sections.filter((section) => !folded(section.id)).reduce((sum, section) => sum + (section.remaining ?? 0), 0);
   const toggle = (id: string) =>
     setToggled((was) => {
       const next = new Set(was);
@@ -234,6 +235,7 @@ export function QuestionsMenu({
             section={section}
             folded={folded(section.id)}
             now={now}
+            onShowMore={showMore}
             onToggle={() => toggle(section.id)}
             onLater={(action) => chat.dispatch(action)}
             onPick={(row) => {
@@ -244,17 +246,6 @@ export function QuestionsMenu({
             }}
           />
         ))}
-        {remaining > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Show more, ${remaining} left`}
-            onPress={showMore}
-            style={({ pressed }) => [styles.questionsMore, pressed && styles.pillPressed]}
-          >
-            <Text style={styles.questionsSectionLabel}>Show more</Text>
-            <Text style={styles.questionsMeta}>{String(remaining)}</Text>
-          </Pressable>
-        ) : null}
       </ScrollView>
       {filtersOpen ? (
         // The filter's pick list, under its trigger at the sheet header's right end.
@@ -322,12 +313,14 @@ function QuestionsSection({
   folded,
   now,
   onToggle,
+  onShowMore,
   onLater,
   onPick,
 }: {
   section: QuestionListSection;
   folded: boolean;
   now: number;
+  onShowMore: () => void;
   onToggle: () => void;
   onLater: (
     action: { type: 'questionForLater'; id: string; later: boolean } | { type: 'questionRemove'; id: string },
@@ -352,9 +345,9 @@ function QuestionsSection({
           <Text style={styles.questionsSectionLabel}>{String(section.count)}</Text>
         </Pressable>
       ) : null}
-      {folded
-        ? null
-        : section.rows.map((row) => {
+      {folded ? null : (
+        <>
+          {section.rows.map((row) => {
             const answered = row.status === 'answered';
             const withdrawn = row.status === 'withdrawn' || row.status === 'canceled';
             const age = rowAge(row, now);
@@ -406,6 +399,20 @@ function QuestionsSection({
               </Pressable>
             );
           })}
+          {(section.remaining ?? 0) > 0 ? (
+            // This group's own Show more, under its own rows; a folded group shows none.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Show more, ${section.remaining} left`}
+              onPress={onShowMore}
+              style={({ pressed }) => [styles.questionsMore, pressed && styles.pillPressed]}
+            >
+              <Text style={styles.questionsSectionLabel}>Show more</Text>
+              <Text style={styles.questionsMeta}>{String(section.remaining)}</Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
     </View>
   );
 }
