@@ -7,7 +7,9 @@
  *
  * It is drawn edge to edge directly under the title as one joined strip whose
  * segments share hairlines, because machine names are user-supplied and the
- * phone is narrow, so segments stretch and their labels truncate.
+ * phone is narrow, so segments stretch and their labels truncate. With more
+ * machines than fit at a readable width the tabs scroll sideways and the "+"
+ * stays put (machineTabLayout.ts).
  *
  * The cloud glyph is the connection control, exactly like the desktop tab:
  * it spins while the machine is busy (the whole tab dims to 0.72), turns red
@@ -20,12 +22,24 @@
  * user. A long press opens the tab's menu.
  */
 
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type ScrollViewInstance,
+} from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { StripCopy } from '../../copy';
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import { CloudGlyph, LoaderGlyph, PlusGlyph } from './icons';
+import { machineTabLayout, machineTabRevealOffset, machineTabsOutOfView } from './machineTabLayout';
 import StatusDotStack from './StatusDotStack';
 
 export type MachineTabConnectionState = 'busy' | 'connected' | 'disconnected' | 'failed';
@@ -63,6 +77,8 @@ function isAddItem(item: MachineTabStripItem): item is MachineTabAddItem {
 }
 
 const GLYPH_SIZE = 16;
+const ADD_TAB_WIDTH = 40;
+const FADE_WIDTH = 20;
 const GLYPH_COLOR: Record<MachineTabConnectionState, string> = {
   busy: SetupPalette.ACCENT,
   connected: SetupPalette.MUTED,
@@ -169,6 +185,85 @@ function StatusDots({ item }: { item: MachineTabItem }) {
   );
 }
 
+function MachineTab({
+  item,
+  divided,
+  width,
+  selected,
+  onSelect,
+  onLongPress,
+}: {
+  item: MachineTabItem;
+  divided: boolean;
+  /** Fixed while the row scrolls; absent while the tabs share it. */
+  width?: number;
+  selected: boolean;
+  onSelect: (machineId: string) => void;
+  onLongPress: (machineId: string) => void;
+}) {
+  const stateLabel = item.connectionLabel ?? StripCopy.connection[item.connectionState];
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={`${item.label}, ${stateLabel}`}
+      accessibilityHint="Touch and hold for the machine menu"
+      accessibilityState={{ selected, busy: item.connectionState === 'busy' }}
+      onLongPress={() => onLongPress(item.id)}
+      onPress={() => onSelect(item.id)}
+      style={({ pressed }) => [
+        styles.tab,
+        width !== undefined ? { width } : styles.tabShared,
+        divided ? styles.tabDivided : null,
+        selected ? styles.tabSelected : null,
+        pressed ? styles.tabPressed : null,
+        item.connectionState === 'busy' ? styles.tabBusy : null,
+      ]}
+    >
+      <ConnectionGlyph item={item} />
+      <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.label, selected ? styles.labelSelected : null]}>
+        {item.label}
+      </Text>
+      {selected ? null : <StatusDots item={item} />}
+    </Pressable>
+  );
+}
+
+/** A soft edge on the scrolling row, so tabs run out of sight rather than stop at a line. */
+function EdgeFade({ side }: { side: 'left' | 'right' }) {
+  const id = `machine-tabs-fade-${side}`;
+  return (
+    <View pointerEvents="none" style={[styles.fade, side === 'left' ? styles.fadeLeft : styles.fadeRight]}>
+      <Svg width={FADE_WIDTH} height="100%">
+        <Defs>
+          <LinearGradient id={id} x1={side === 'left' ? '1' : '0'} y1="0" x2={side === 'left' ? '0' : '1'} y2="0">
+            <Stop offset="0" stopColor={SetupPalette.PANEL} stopOpacity={0} />
+            <Stop offset="1" stopColor={SetupPalette.PANEL} stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width={FADE_WIDTH} height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/** What the tabs past one edge have to say, on that edge. */
+function EdgeDots({ side, hidden }: { side: 'left' | 'right'; hidden: readonly MachineTabItem[] }) {
+  const sum = (count: (item: MachineTabItem) => number): number => hidden.reduce((total, item) => total + count(item), 0);
+  const counts = {
+    workingCount: sum((item) => item.workingCount),
+    attentionCount: sum((item) => item.attentionCount),
+    backgroundWorkCount: sum((item) => item.backgroundWorkCount),
+    questionCount: sum((item) => item.questionCount),
+    approvalCount: sum((item) => item.approvalCount),
+  };
+  if (Object.values(counts).every((count) => count <= 0)) return null;
+  return (
+    <View pointerEvents="none" style={[styles.edgeDots, side === 'left' ? styles.edgeDotsLeft : styles.edgeDotsRight]}>
+      <StatusDotStack {...counts} ringColor={SetupPalette.PANEL} />
+    </View>
+  );
+}
+
 export default function MachineTabs({
   items,
   selectedMachineId,
@@ -183,53 +278,97 @@ export default function MachineTabs({
   /** The trailing "+" tab: add a computer through the onboarding chooser. */
   onAdd: () => void;
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const [stripWidth, setStripWidth] = useState(windowWidth);
+  const machines = items.filter((item): item is MachineTabItem => !isAddItem(item));
+  const hasAdd = machines.length < items.length;
+  const rowWidth = stripWidth - (hasAdd ? ADD_TAB_WIDTH : 0);
+  const layout = machineTabLayout(machines.length, rowWidth);
+  const tabWidth = layout.kind === 'scroll' ? layout.tabWidth : null;
+
+  const scroller = useRef<ScrollViewInstance | null>(null);
+  const [offset, setOffset] = useState(0);
+  const offsetNow = useRef(0);
+  const selectedIndex = machines.findIndex((machine) => machine.id === selectedMachineId);
+  const revealed = useRef<string | null>(null);
+  useEffect(() => {
+    if (tabWidth === null || selectedIndex < 0) return;
+    const key = `${selectedMachineId}:${rowWidth}`;
+    if (revealed.current === key) return;
+    const first = revealed.current === null;
+    revealed.current = key;
+    const x = machineTabRevealOffset(selectedIndex, machines.length, tabWidth, rowWidth, offsetNow.current);
+    offsetNow.current = x;
+    setOffset(x);
+    scroller.current?.scrollTo({ x, animated: !first });
+  }, [machines.length, rowWidth, selectedIndex, selectedMachineId, tabWidth]);
+
+  const add = hasAdd ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={StripCopy.addTab}
+      key="add"
+      onPress={onAdd}
+      style={({ pressed }) => [
+        styles.addTab,
+        machines.length > 0 ? styles.tabDivided : null,
+        pressed ? styles.tabPressed : null,
+      ]}
+    >
+      <PlusGlyph size={16} color={SetupPalette.MUTED} />
+    </Pressable>
+  ) : null;
+  const [firstVisible, firstAfter] =
+    tabWidth === null ? [0, machines.length] : machineTabsOutOfView(machines.length, tabWidth, rowWidth, offset);
+  const unselected = (machine: MachineTabItem): boolean => machine.id !== selectedMachineId;
   return (
-    <View accessibilityRole="tablist" style={styles.strip}>
-      {items.map((item, index) => {
-        if (isAddItem(item)) {
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={StripCopy.addTab}
-              key="add"
-              onPress={onAdd}
-              style={({ pressed }) => [
-                styles.addTab,
-                index > 0 ? styles.tabDivided : null,
-                pressed ? styles.tabPressed : null,
-              ]}
-            >
-              <PlusGlyph size={16} color={SetupPalette.MUTED} />
-            </Pressable>
-          );
-        }
-        const selected = item.id === selectedMachineId;
-        const stateLabel = item.connectionLabel ?? StripCopy.connection[item.connectionState];
-        return (
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityLabel={`${item.label}, ${stateLabel}`}
-            accessibilityHint="Touch and hold for the machine menu"
-            accessibilityState={{ selected, busy: item.connectionState === 'busy' }}
+    <View
+      accessibilityRole="tablist"
+      style={styles.strip}
+      onLayout={(event) => setStripWidth(event.nativeEvent.layout.width)}
+    >
+      {tabWidth === null ? (
+        machines.map((item, index) => (
+          <MachineTab
             key={item.id}
-            onLongPress={() => onLongPress(item.id)}
-            onPress={() => onSelect(item.id)}
-            style={({ pressed }) => [
-              styles.tab,
-              index > 0 ? styles.tabDivided : null,
-              selected ? styles.tabSelected : null,
-              pressed ? styles.tabPressed : null,
-              item.connectionState === 'busy' ? styles.tabBusy : null,
-            ]}
+            item={item}
+            divided={index > 0}
+            selected={item.id === selectedMachineId}
+            onSelect={onSelect}
+            onLongPress={onLongPress}
+          />
+        ))
+      ) : (
+        <View style={styles.scrollArea}>
+          <ScrollView
+            ref={scroller}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={32}
+            onScroll={(event) => {
+              offsetNow.current = event.nativeEvent.contentOffset.x;
+              setOffset(offsetNow.current);
+            }}
           >
-            <ConnectionGlyph item={item} />
-            <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.label, selected ? styles.labelSelected : null]}>
-              {item.label}
-            </Text>
-            {selected ? null : <StatusDots item={item} />}
-          </Pressable>
-        );
-      })}
+            {machines.map((item, index) => (
+              <MachineTab
+                key={item.id}
+                item={item}
+                divided={index > 0}
+                width={tabWidth}
+                selected={item.id === selectedMachineId}
+                onSelect={onSelect}
+                onLongPress={onLongPress}
+              />
+            ))}
+          </ScrollView>
+          {offset > 0.5 ? <EdgeFade side="left" /> : null}
+          {offset < machines.length * tabWidth - rowWidth - 0.5 ? <EdgeFade side="right" /> : null}
+          <EdgeDots side="left" hidden={machines.slice(0, firstVisible).filter(unselected)} />
+          <EdgeDots side="right" hidden={machines.slice(firstAfter).filter(unselected)} />
+        </View>
+      )}
+      {add}
     </View>
   );
 }
@@ -250,9 +389,11 @@ const styles = StyleSheet.create({
     borderColor: SetupPalette.BORDER,
     backgroundColor: SetupPalette.PANEL,
   },
-  tab: {
+  tabShared: {
     flex: 1,
     minWidth: 0,
+  },
+  tab: {
     height: 36,
     flexDirection: 'row',
     alignItems: 'center',
@@ -268,8 +409,26 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
   },
+  scrollArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: FADE_WIDTH,
+  },
+  fadeLeft: { left: 0 },
+  fadeRight: { right: 0 },
+  edgeDots: {
+    position: 'absolute',
+    bottom: 0,
+  },
+  edgeDotsLeft: { left: 4 },
+  edgeDotsRight: { right: 4 },
   addTab: {
-    width: 40,
+    width: ADD_TAB_WIDTH,
     flexGrow: 0,
     flexShrink: 0,
     height: 36,
