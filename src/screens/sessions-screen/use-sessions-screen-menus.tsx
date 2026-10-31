@@ -101,7 +101,9 @@ import { useSettingsStore } from '../../settings/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
 import { useUpdateNotice } from '../../updates/updateNotice';
-import { transcriptMentionDraft, type ExportedTranscript } from '../terminal-screen/session-lookups';
+import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
+import { stagedHandoffDraft } from '../../chat/native/sessionShell';
+import type { ExportedTranscript } from '../terminal-screen/session-lookups';
 import {
   cancelDelayedSendSessionAction,
   closeAfterDoneSessionAction,
@@ -341,7 +343,8 @@ export function useSessionsScreenMenus({
     setOverlay(NONE);
     setProgress('Exporting transcript…');
     try {
-      const result = await runGhostexCli(machine, exportSessionTranscriptCommand(session.sessionId, session.projectId));
+      const { include } = await loadHandoffPrefs();
+      const result = await runGhostexCli(machine, exportSessionTranscriptCommand(session.sessionId, session.projectId, include));
       const path = typeof result.json?.path === 'string' ? result.json.path.trim() : '';
       if (path.length === 0) {
         throw new Error('gxserver exported the transcript without reporting its path.');
@@ -459,14 +462,16 @@ export function useSessionsScreenMenus({
   /** The exported transcript's follow-up: the same agent, with the path staged as its first input. */
   const startTranscriptConversation = (exported: ExportedTranscript, projectTitle: string): void => {
     if (exported.agentId.length === 0) return;
-    void runCreationFlow(
-      exported.machine,
-      createAgentCommand(
-        exported.agentId,
-        exported.projectId,
-        transcriptMentionDraft(exported.path, exported.sessionTitle),
+    void stagedHandoffDraft(exported.machine, {
+      path: exported.path,
+      sessionTitle: exported.sessionTitle,
+      projectTitle,
+    }).then((draft) =>
+      runCreationFlow(
+        exported.machine,
+        createAgentCommand(exported.agentId, exported.projectId, draft),
+        ProgressCopy.startingAgent(exported.agentLabel, projectTitle),
       ),
-      ProgressCopy.startingAgent(exported.agentLabel, projectTitle),
     );
   };
 

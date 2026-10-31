@@ -32,7 +32,8 @@ import {
   writeSessionChatSyncedDraft,
   type SessionChatSyncedDraft,
 } from '../../chat/session-chat-helpers';
-import { createAgentWithFirstInputDraft, machineAgents } from '../../chat/native/sessionShell';
+import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
+import { createAgentWithFirstInputDraft, machineAgents, projectTitle, stagedHandoffDraft } from '../../chat/native/sessionShell';
 import type { GhostexSession } from '../../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
@@ -47,7 +48,6 @@ import {
   machineRecordFor,
   machineTargetFor,
   sessionFolderFor,
-  transcriptMentionDraft,
   terminalSkillRows,
   type AgentOverlay,
   type TerminalSkillRow,
@@ -313,7 +313,8 @@ export function useTerminalAgentActions({
     const { machine, projectId, session } = target;
     setAgentProgress('Exporting transcript…');
     try {
-      const result = await runGhostexCli(machine, exportSessionTranscriptCommand(session.sessionId, projectId));
+      const { include } = await loadHandoffPrefs();
+      const result = await runGhostexCli(machine, exportSessionTranscriptCommand(session.sessionId, projectId, include));
       setAgentProgress(null);
       const path = typeof result.json?.path === 'string' ? result.json.path.trim() : '';
       if (path.length === 0) {
@@ -354,7 +355,7 @@ export function useTerminalAgentActions({
       const sessionId = await createAgentWithFirstInputDraft(machine, {
         projectId,
         agent: machineAgents(machine.id).find((agent) => agent.agentId === agentId) ?? { agentId },
-        draft: transcriptMentionDraft(path, sessionTitle),
+        draft: await stagedHandoffDraft(machine, { path, sessionTitle, projectTitle: projectTitle(machine.id, projectId) }),
       });
       await useInventoryStore.getState().refreshMachine(machine);
       // Creation-flow parity with Fork: the new conversation becomes the

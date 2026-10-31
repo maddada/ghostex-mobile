@@ -1,0 +1,691 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "draft": "You are continuing from \"Landing page ideas\" in Scratch.\n\n[Landing page ideas Handoff](/Users/me/exports/a.md)\n\n",
+        "leadIn": "You are continuing from \"Landing page ideas\" in Scratch."
+      },
+      "kind": "draft",
+      "name": "the lead-in, the link and two line breaks",
+      "path": "/Users/me/exports/a.md",
+      "projectTitle": "Scratch",
+      "sessionTitle": "Landing page ideas"
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from \"A title\" in my project.\n\n[A title Handoff](/a.md)\n\n",
+        "leadIn": "You are continuing from \"A title\" in my project."
+      },
+      "kind": "draft",
+      "name": "a title's own spacing folds to one line",
+      "path": "/a.md",
+      "projectTitle": " my   project ",
+      "sessionTitle": "  A\n title "
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from \"T\".\n\n[T Handoff](/a.md)\n\n",
+        "leadIn": "You are continuing from \"T\"."
+      },
+      "kind": "draft",
+      "name": "no project name",
+      "path": "/a.md",
+      "projectTitle": "",
+      "sessionTitle": "T"
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from a session in Scratch.\n\n[Handoff](/a.md)\n\n",
+        "leadIn": "You are continuing from a session in Scratch."
+      },
+      "kind": "draft",
+      "name": "no session name",
+      "path": "/a.md",
+      "projectTitle": "Scratch",
+      "sessionTitle": ""
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from another session.\n\n[Handoff](/a.md)\n\n",
+        "leadIn": "You are continuing from another session."
+      },
+      "kind": "draft",
+      "name": "neither name",
+      "path": "/a.md",
+      "projectTitle": " ",
+      "sessionTitle": " "
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from \"Fix [x]\" in P.\n\n[Fix \\[x\\] Handoff](</a b/(c).md>)\n\n",
+        "leadIn": "You are continuing from \"Fix [x]\" in P."
+      },
+      "kind": "draft",
+      "name": "a path with spaces and brackets in the title",
+      "path": "/a b/(c).md",
+      "projectTitle": "P",
+      "sessionTitle": "Fix [x]"
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from \"T\" in P.\n\n[T Handoff](/a/\\(c\\).md)\n\n",
+        "leadIn": "You are continuing from \"T\" in P."
+      },
+      "kind": "draft",
+      "name": "a path with parentheses",
+      "path": "/a/(c).md",
+      "projectTitle": "P",
+      "sessionTitle": "T"
+    },
+    {
+      "expected": {
+        "draft": "You are continuing from \"T\" in P.\n\n[T Handoff](<C:\\\\Users\\\\me\\\\\\<a\\>.md>)\n\n",
+        "leadIn": "You are continuing from \"T\" in P."
+      },
+      "kind": "draft",
+      "name": "angle brackets and a backslash in the path",
+      "path": "C:\\Users\\me\\<a>.md",
+      "projectTitle": "P",
+      "sessionTitle": "T"
+    },
+    {
+      "expected": {
+        "key": "github.com/maddada/ghostex",
+        "name": "ghostex"
+      },
+      "kind": "repository",
+      "name": "scp form",
+      "url": "git@github.com:maddada/Ghostex.git"
+    },
+    {
+      "expected": {
+        "key": "github.com/maddada/ghostex",
+        "name": "ghostex"
+      },
+      "kind": "repository",
+      "name": "https form",
+      "url": "https://github.com/maddada/ghostex"
+    },
+    {
+      "expected": {
+        "key": "github.com/maddada/ghostex",
+        "name": "ghostex"
+      },
+      "kind": "repository",
+      "name": "ssh form with a port and a user",
+      "url": "ssh://git@GitHub.com:22/Maddada/ghostex.git/"
+    },
+    {
+      "expected": {
+        "key": "github.com/o/r",
+        "name": "r"
+      },
+      "kind": "repository",
+      "name": "www is not part of the host",
+      "url": "https://www.github.com/o/r.git"
+    },
+    {
+      "expected": {
+        "key": null,
+        "name": null
+      },
+      "kind": "repository",
+      "name": "empty",
+      "url": "  "
+    },
+    {
+      "expected": {
+        "key": null,
+        "name": null
+      },
+      "kind": "repository",
+      "name": "a host with no path",
+      "url": "https://github.com"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": "git@github.com:maddada/Ghostex.git",
+          "path": "/dev/ghostex",
+          "projectId": "own",
+          "title": "Ghostex"
+        },
+        {
+          "isWorktree": false,
+          "originUrl": "git@github.com:o/acme.git",
+          "path": "/dev/acme",
+          "projectId": "acme",
+          "title": "acme-web"
+        },
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": "/dev/docs",
+          "projectId": "docs",
+          "title": "gamma-docs"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": true,
+            "label": "Ghostex (this project) · /dev/ghostex",
+            "projectId": "own",
+            "sameRepo": true
+          },
+          {
+            "isOwn": false,
+            "label": "acme-web · /dev/acme",
+            "projectId": "acme",
+            "sameRepo": false
+          },
+          {
+            "isOwn": false,
+            "label": "gamma-docs · /dev/docs",
+            "projectId": "docs",
+            "sameRepo": false
+          }
+        ],
+        "missingRepository": null,
+        "preferredProjectId": "own"
+      },
+      "kind": "computer",
+      "name": "own computer starts on this project, no clone",
+      "originUrl": "git@github.com:maddada/Ghostex.git",
+      "ownProject": "own",
+      "sourcePath": "/dev/ghostex"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": "git@github.com:maddada/Ghostex.git",
+          "path": "/dev/ghostex",
+          "projectId": "own",
+          "title": "Ghostex"
+        },
+        {
+          "isWorktree": false,
+          "originUrl": "git@github.com:maddada/Ghostex.git",
+          "path": "/dev/other",
+          "projectId": "other",
+          "title": "Other copy"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": true,
+            "label": "Ghostex (this project) · /dev/ghostex",
+            "projectId": "own",
+            "sameRepo": true
+          },
+          {
+            "isOwn": false,
+            "label": "Other copy (same repo) · /dev/other",
+            "projectId": "other",
+            "sameRepo": true
+          }
+        ],
+        "missingRepository": null,
+        "preferredProjectId": "own"
+      },
+      "kind": "computer",
+      "name": "a second checkout on the own computer comes after this project",
+      "originUrl": "git@github.com:maddada/Ghostex.git",
+      "ownProject": "own",
+      "sourcePath": "/dev/ghostex"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": "~/notes",
+          "projectId": "notes",
+          "title": "notes"
+        },
+        {
+          "isWorktree": true,
+          "originUrl": "https://github.com/maddada/ghostex",
+          "path": "~/wt",
+          "projectId": "wt",
+          "title": "wt"
+        },
+        {
+          "isWorktree": false,
+          "originUrl": "https://github.com/maddada/ghostex.git",
+          "path": "~/dev/Ghostex",
+          "projectId": "main",
+          "title": "Ghostex"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": false,
+            "label": "Ghostex (same repo) · ~/dev/Ghostex",
+            "projectId": "main",
+            "sameRepo": true
+          },
+          {
+            "isOwn": false,
+            "label": "wt (same repo) · ~/wt",
+            "projectId": "wt",
+            "sameRepo": true
+          },
+          {
+            "isOwn": false,
+            "label": "notes · ~/notes",
+            "projectId": "notes",
+            "sameRepo": false
+          }
+        ],
+        "missingRepository": null,
+        "preferredProjectId": "main"
+      },
+      "kind": "computer",
+      "name": "another computer: same repository first, main checkout before its worktree",
+      "originUrl": "git@github.com:maddada/Ghostex.git",
+      "ownProject": null,
+      "sourcePath": "/dev/ghostex"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": "~/notes",
+          "projectId": "notes",
+          "title": "notes"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": false,
+            "label": "notes · ~/notes",
+            "projectId": "notes",
+            "sameRepo": false
+          }
+        ],
+        "missingRepository": "ghostex",
+        "preferredProjectId": null
+      },
+      "kind": "computer",
+      "name": "another computer lacks the repository",
+      "originUrl": "git@github.com:maddada/Ghostex.git",
+      "ownProject": null,
+      "sourcePath": "/dev/ghostex"
+    },
+    {
+      "candidates": [],
+      "expected": {
+        "choices": [],
+        "missingRepository": "ghostex",
+        "preferredProjectId": null
+      },
+      "kind": "computer",
+      "name": "another computer with no projects lacks it too",
+      "originUrl": "git@github.com:maddada/Ghostex.git",
+      "ownProject": null,
+      "sourcePath": "/dev/ghostex"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": "/x/other",
+          "projectId": "a",
+          "title": "a"
+        },
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": "/y/scratch",
+          "projectId": "b",
+          "title": "b"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": false,
+            "label": "b (same repo) · /y/scratch",
+            "projectId": "b",
+            "sameRepo": true
+          },
+          {
+            "isOwn": false,
+            "label": "a · /x/other",
+            "projectId": "a",
+            "sameRepo": false
+          }
+        ],
+        "missingRepository": null,
+        "preferredProjectId": "b"
+      },
+      "kind": "computer",
+      "name": "no origin: the folder name stands in, and nothing is missing",
+      "originUrl": null,
+      "ownProject": null,
+      "sourcePath": "/dev/Scratch/"
+    },
+    {
+      "candidates": [
+        {
+          "isWorktree": false,
+          "originUrl": null,
+          "path": null,
+          "projectId": "a",
+          "title": "a"
+        }
+      ],
+      "expected": {
+        "choices": [
+          {
+            "isOwn": false,
+            "label": "a",
+            "projectId": "a",
+            "sameRepo": false
+          }
+        ],
+        "missingRepository": null,
+        "preferredProjectId": null
+      },
+      "kind": "computer",
+      "name": "no path on a project",
+      "originUrl": null,
+      "ownProject": null,
+      "sourcePath": null
+    },
+    {
+      "expected": {
+        "line": "This session is on feature-x; the project on studio is on main."
+      },
+      "kind": "branch",
+      "label": "studio",
+      "name": "different branches",
+      "source": "feature-x",
+      "target": "main"
+    },
+    {
+      "expected": {
+        "line": null
+      },
+      "kind": "branch",
+      "label": "studio",
+      "name": "same branch",
+      "source": "main",
+      "target": " main "
+    },
+    {
+      "expected": {
+        "line": null
+      },
+      "kind": "branch",
+      "label": "studio",
+      "name": "an unknown branch",
+      "source": null,
+      "target": "main"
+    },
+    {
+      "computerLabel": "Macbook",
+      "expected": {
+        "label": "Handoff to acme-web"
+      },
+      "isSource": true,
+      "kind": "button",
+      "name": "the session's own computer",
+      "projectTitle": "acme-web"
+    },
+    {
+      "computerLabel": "Studio",
+      "expected": {
+        "label": "Handoff to acme-web on Studio"
+      },
+      "isSource": false,
+      "kind": "button",
+      "name": "another computer",
+      "projectTitle": "acme-web"
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "nothing saved",
+      "saved": null
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "an old value at the old defaults starts at the new ones",
+      "saved": {
+        "includeCommands": true,
+        "includePatches": true,
+        "includeReasoning": false,
+        "mode": "handoff"
+      }
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "export",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "an old export keeps its card",
+      "saved": {
+        "includeCommands": true,
+        "mode": "export"
+      }
+    },
+    {
+      "expected": {
+        "destinationOpen": true,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "an old handoffRemote opens the destination",
+      "saved": {
+        "includeCommands": true,
+        "includePatches": true,
+        "mode": "handoffRemote"
+      }
+    },
+    {
+      "expected": {
+        "agentId": "codex",
+        "destination": {
+          "machineId": "studio",
+          "projectId": "acme"
+        },
+        "destinationOpen": false,
+        "includeCommands": true,
+        "includeOpen": true,
+        "includePatches": false,
+        "includeReasoning": true,
+        "mode": "export",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "a saved value of this shape comes back whole",
+      "saved": {
+        "agentId": "codex",
+        "destination": {
+          "machineId": "studio",
+          "projectId": "acme"
+        },
+        "destinationOpen": false,
+        "includeCommands": true,
+        "includeOpen": true,
+        "includePatches": false,
+        "includeReasoning": true,
+        "mode": "export",
+        "version": 2
+      }
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "switches turned back off stay off",
+      "saved": {
+        "includeCommands": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      }
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "handoff",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "half a destination is none",
+      "saved": {
+        "destination": {
+          "machineId": "studio"
+        },
+        "version": 2
+      }
+    },
+    {
+      "expected": {
+        "destinationOpen": false,
+        "includeCommands": false,
+        "includeOpen": false,
+        "includePatches": false,
+        "includeReasoning": false,
+        "mode": "export",
+        "version": 2
+      },
+      "kind": "prefs",
+      "name": "a version from the future is read as old",
+      "saved": {
+        "includeCommands": true,
+        "mode": "export",
+        "version": 3
+      }
+    },
+    {
+      "expected": {
+        "destination": {
+          "machineId": "studio",
+          "projectId": "acme"
+        }
+      },
+      "kind": "destination",
+      "name": "still offered",
+      "offered": [
+        {
+          "machineId": "studio",
+          "projectId": "acme"
+        }
+      ],
+      "own": {
+        "machineId": "local",
+        "projectId": "scratch"
+      },
+      "remembered": {
+        "machineId": "studio",
+        "projectId": "acme"
+      }
+    },
+    {
+      "expected": {
+        "destination": null
+      },
+      "kind": "destination",
+      "name": "its project or computer is gone",
+      "offered": [
+        {
+          "machineId": "local",
+          "projectId": "acme"
+        }
+      ],
+      "own": {
+        "machineId": "local",
+        "projectId": "scratch"
+      },
+      "remembered": {
+        "machineId": "studio",
+        "projectId": "acme"
+      }
+    },
+    {
+      "expected": {
+        "destination": null
+      },
+      "kind": "destination",
+      "name": "it is the session's own project",
+      "offered": [
+        {
+          "machineId": "local",
+          "projectId": "scratch"
+        }
+      ],
+      "own": {
+        "machineId": "local",
+        "projectId": "scratch"
+      },
+      "remembered": {
+        "machineId": "local",
+        "projectId": "scratch"
+      }
+    },
+    {
+      "expected": {
+        "destination": null
+      },
+      "kind": "destination",
+      "name": "nothing remembered",
+      "offered": [],
+      "own": {
+        "machineId": "local",
+        "projectId": "scratch"
+      },
+      "remembered": null
+    }
+  ]
+}

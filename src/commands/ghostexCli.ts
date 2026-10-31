@@ -820,13 +820,22 @@ export function setSessionChatDraftCommand(
 
 /**
  * Export the session's agent transcript to markdown:
- * `ghostex export-transcript --session-id <id> --project-id <id> --json`.
+ * `ghostex export-transcript --session-id <id> --project-id <id> --include-commands <bool> … --json`.
  *
  * The transcript and the exported file both live on the daemon's machine, so
- * the phone only ever receives the absolute path the daemon wrote to.
+ * the phone only ever receives the absolute path the daemon wrote to. A computer
+ * too old for the include flags ignores them and writes its default selection.
  */
-export function exportSessionTranscriptCommand(sessionId: string, projectId: string): string {
-  return `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)} --json`;
+export function exportSessionTranscriptCommand(
+  sessionId: string,
+  projectId: string,
+  include: { commands: boolean; patches: boolean; reasoning: boolean },
+): string {
+  return (
+    `ghostex export-transcript ${sessionChatSelector(sessionId, projectId)}` +
+    ` --include-commands ${include.commands} --include-patches ${include.patches}` +
+    ` --include-reasoning ${include.reasoning} --json`
+  );
 }
 
 /*

@@ -6,7 +6,10 @@
  * and the terminal tabs, the same ones the terminal screen's Fork and Export use.
  */
 
+import { Directory, File, Paths } from 'expo-file-system';
+
 import { createdSessionId, runGhostexCli } from '../../components/sessions/cli';
+import { sanitizeAttachmentFilename } from '../../components/terminal/uploads';
 import {
   createAgentCommand,
   exportSessionTranscriptCommand,
@@ -14,15 +17,29 @@ import {
   shellQuote,
   wakeSessionCommand,
 } from '../../commands/ghostexCli';
+import {
+  computerStagesLineBreaks,
+  handoffDraft,
+  singleLineHandoffDraft,
+  type HandoffInclude,
+} from '../../contract/handoff/handoff';
 import { resolveAgentIconId, type GhostexAgentLauncher, type GhostexSession } from '../../contract/mobileSummary';
 import { SessionCopy } from '../../copy';
+import { decodeBase64Utf8, readRemoteFiles } from '../../docs/remoteFiles';
+import { ensureConnected } from '../../inventory/client';
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineConnectionTarget } from '../../machines/credentials';
-import { machineRecordFor, transcriptMentionDraft } from '../../screens/terminal-screen/session-lookups';
+import { execRemoteScript } from '../../remote/commands';
+import { powershellQuote } from '../../remote/powershell';
+import { machineRecordFor } from '../../screens/terminal-screen/session-lookups';
 import { useSettingsStore } from '../../settings/store';
 import { useTerminalStore } from '../../terminal/sessions';
 import { sessionChatRpc } from '../rust/transport';
-import { isSessionChatSupportedAgent } from '../session-chat-helpers';
+import { isSessionChatSupportedAgent, uploadSessionChatLocalFile } from '../session-chat-helpers';
+
+const BRANCH_READ_TIMEOUT_MS = 15_000;
+/** The desktop's own limit for carrying a transcript (`ATTACHMENT_MAX_BYTES`). */
+const TRANSCRIPT_CARRY_MAX_BYTES = 32 * 1024 * 1024;
 
 /** This machine's row for a session, or null before the inventory has it. */
 export function sessionRecord(machineId: string, sessionId: string): GhostexSession | null {
@@ -119,11 +136,88 @@ export async function exportTranscript(
   machine: MachineConnectionTarget,
   sessionId: string,
   projectId: string,
+  include: HandoffInclude,
 ): Promise<string> {
-  const result = await runGhostexCli(machine, exportSessionTranscriptCommand(sessionId, projectId));
+  const result = await runGhostexCli(machine, exportSessionTranscriptCommand(sessionId, projectId, include));
   const path = typeof result.json?.path === 'string' ? result.json.path.trim() : '';
   if (path.length === 0) throw new Error('gxserver did not return the exported file.');
   return path;
+}
+
+/** The project's name, as a handoff's lead-in says it. */
+export function projectTitle(machineId: string, projectId: string): string {
+  const project = useInventoryStore
+    .getState()
+    .inventoriesByMachineId[machineId]?.summary?.projects.find((entry) => entry.projectId === projectId);
+  return project?.name ?? '';
+}
+
+/**
+ * A handoff's first input for the computer that will stage it (`handoffDraft`). The computer's
+ * version decides its form: one that predates the staged paste gets it on one line, so a phone
+ * updated over the air never presses Return on a computer that has not been updated.
+ */
+export async function stagedHandoffDraft(
+  machine: MachineConnectionTarget,
+  input: { path: string; sessionTitle: string; projectTitle: string },
+): Promise<string> {
+  const draft = handoffDraft(input.path, input.sessionTitle, input.projectTitle);
+  const version = await runGhostexCli(machine, 'ghostex server status --json').then(
+    (status) => {
+      const health = status.json?.health as { version?: unknown } | undefined;
+      return typeof health?.version === 'string' ? health.version : null;
+    },
+    () => null,
+  );
+  return computerStagesLineBreaks(version) ? draft : singleLineHandoffDraft(draft);
+}
+
+/** The branch a project's folder is on, or null when it can't be read. */
+export async function projectBranch(machine: MachineConnectionTarget, path: string): Promise<string | null> {
+  try {
+    await ensureConnected(machine);
+    const answer = await execRemoteScript(
+      machine.id,
+      {
+        posix: `git -C ${shellQuote(path)} rev-parse --abbrev-ref HEAD`,
+        powershell: `git -C ${powershellQuote(path)} rev-parse --abbrev-ref HEAD`,
+      },
+      BRANCH_READ_TIMEOUT_MS,
+    );
+    const branch = answer.stdout.trim().split(/\r?\n/u).pop()?.trim() ?? '';
+    return answer.exitCode === 0 && branch.length > 0 && branch !== 'HEAD' ? branch : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A handoff to another computer: the transcript is on the session's computer, where a path
+ * means nothing to the other one, so the phone reads it and saves a copy there. Answers the copy's
+ * path. Both ends are this app's own routes: `readRemoteFiles` and the chat's attachment upload.
+ *
+ * CDXC:TranscriptExport 2026-10-31 WHY:
+ * The computers never talk to each other (export_handoff_remote.rs). The desktop gets the text with the export (`includeMarkdown`), but the phone exports through `ghostex export-transcript`, which has no such flag on computers already out there, and has no HTTP path to gxserver.
+ */
+export async function carryTranscript(
+  from: MachineConnectionTarget,
+  path: string,
+  to: MachineConnectionTarget,
+): Promise<string> {
+  const [read] = await readRemoteFiles(from, [path], TRANSCRIPT_CARRY_MAX_BYTES);
+  if (read?.status === 'tooLarge') throw new Error('This conversation is too long to carry to another computer.');
+  if (read?.status !== 'ok') throw new Error('The transcript could not be read on its computer.');
+  const name = path.split(/[/\\]/).pop() ?? 'handoff.md';
+  const folder = new Directory(Paths.cache, 'handoff');
+  folder.create({ idempotent: true, intermediates: true });
+  const file = new File(folder, `${Date.now()}-${sanitizeAttachmentFilename(name)}`);
+  file.create({ overwrite: true });
+  try {
+    file.write(decodeBase64Utf8(read.base64));
+    return await uploadSessionChatLocalFile(to, file.uri, name, 'file');
+  } finally {
+    file.delete();
+  }
 }
 
 /** Staged first-input drafts claimed for a chat composer, by `[machineId, projectId, sessionId]`. */
@@ -191,9 +285,10 @@ export async function createAgentWithFirstInputDraft(
 }
 
 /**
- * Handoff's new conversation: the agent starts in the same project with the exported file staged
- * as its first input (never sent), on the picked model when the agent belongs to the picked
- * model's family and that family's launch line carries a model (Claude and Codex).
+ * Handoff's new conversation: the agent starts with the exported file staged as its first input
+ * (never sent), in the same project or in the picked project on the picked computer, and the old
+ * session keeps running. It takes the picked model when the agent belongs to
+ * the picked model's family and that family's launch line carries a model (Claude and Codex).
  */
 export async function startHandoffConversation(
   machine: MachineConnectionTarget,
@@ -203,20 +298,29 @@ export async function startHandoffConversation(
     path: string;
     sessionTitle: string;
     target: { provider: string; model: string; effort: string } | null;
+    /** Where it goes when that is not this project here. */
+    destination?: { machine: MachineConnectionTarget; projectId: string };
   },
 ): Promise<void> {
   const { agent, target } = input;
+  const to = input.destination?.machine ?? machine;
+  const toProjectId = input.destination?.projectId ?? input.projectId;
+  const path = to.id === machine.id ? input.path : await carryTranscript(machine, input.path, to);
   const launchModel =
     target !== null &&
     (target.provider === 'claude' || target.provider === 'codex') &&
     modelPickerProvider(agent.icon) === target.provider
       ? target
       : null;
-  const sessionId = await createAgentWithFirstInputDraft(machine, {
-    projectId: input.projectId,
+  const sessionId = await createAgentWithFirstInputDraft(to, {
+    projectId: toProjectId,
     agent,
-    draft: transcriptMentionDraft(input.path, input.sessionTitle),
+    draft: await stagedHandoffDraft(to, {
+      path,
+      sessionTitle: input.sessionTitle,
+      projectTitle: projectTitle(machine.id, input.projectId),
+    }),
     model: launchModel,
   });
-  await openSessionTab(machine, sessionId, input.projectId);
+  await openSessionTab(to, sessionId, toProjectId);
 }
