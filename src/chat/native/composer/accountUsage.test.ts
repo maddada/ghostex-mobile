@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { contextText, usageColumns, usageLines } from './accountUsage';
+import { currentProblem, usageColumns, usageLines } from './accountUsage';
 
 const windows = [
   { label: '5h: 16%', name: '5h', value: '16%', percent: 16.4, reset: 'Resets 2h 36m', resetIn: '2h 36m' },
@@ -40,8 +40,18 @@ describe('account usage row', () => {
     assert.deepEqual(usageLines([]), []);
   });
 
-  test('writes the context on one line', () => {
-    assert.equal(contextText({ value: '38%', tokens: '380k / 1m' }), '38% · 380k / 1m');
-    assert.equal(contextText({ value: 'Usage unavailable', tokens: '' }), 'Usage unavailable');
+  test('reads the current account problem and its action', () => {
+    assert.equal(currentProblem({ problem: null }), null);
+    assert.equal(currentProblem({}), null);
+    assert.deepEqual(
+      currentProblem({
+        problem: { message: 'The saved login expired. Reconnect this account.', action: 'Reconnect' },
+      }),
+      { message: 'The saved login expired. Reconnect this account.', action: 'Reconnect' },
+    );
+    assert.deepEqual(
+      currentProblem({ problem: { message: 'Usage could not be read yet. Ghostex keeps trying.', action: null } }),
+      { message: 'Usage could not be read yet. Ghostex keeps trying.' },
+    );
   });
 });

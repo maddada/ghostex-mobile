@@ -4,7 +4,7 @@
  * "7d", "Fable") and percent over a thin bar, three columns to a line.
  */
 
-import { arr, num, str } from './json';
+import { arr, num, obj, str } from './json';
 
 export type UsageColumn = {
   name: string;
@@ -37,7 +37,11 @@ export function usageLines(columns: UsageColumn[]): (UsageColumn | null)[][] {
   return lines;
 }
 
-/** The context line's text: "38% · 380k / 1m". */
-export function contextText(context: unknown): string {
-  return [str(context, 'value'), str(context, 'tokens')].filter((part) => part.length > 0).join(' · ');
+/** What is wrong with the current account: the core's words, and the action if Settings can fix it. */
+export function currentProblem(session: unknown): { message: string; action?: string } | null {
+  const problem = obj(session)?.problem;
+  const message = str(problem, 'message');
+  if (message.length === 0) return null;
+  const action = str(problem, 'action');
+  return action.length > 0 ? { message, action } : { message };
 }

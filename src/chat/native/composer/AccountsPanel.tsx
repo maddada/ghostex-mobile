@@ -4,16 +4,20 @@
  * usage meters, the accounts the session can switch to, and the keep-going policy.
  *
  * CDXC:AgentProviders 2026-10-28 DECISION: User: "this menu is too huge please make it smaller".
- * Each account is a name line over one row of compact 5h / 7d / Fable columns, and the context is
- * one line. A phone has no hover, so the current account's columns keep their reset countdown in
- * small text under the bar; the switch rows drop it to stay short.
+ * Each account is a name line over one row of compact 5h / 7d / Fable columns. A phone has no hover,
+ * so the current account's columns keep their reset countdown in small text under the bar; the
+ * switch rows drop it to stay short.
+ *
+ * CDXC:AgentProviders 2026-10-31 DECISION: User marked up the panel: the current account says it is
+ * active and shows its error on that row, with the action the Switch account rows use, and the
+ * Context row and the "Switching resumes" sentence go.
  */
 
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
-import { contextText, usageColumns, usageLines } from './accountUsage';
+import { currentProblem, usageColumns, usageLines } from './accountUsage';
 import { Glyph } from './icons';
 import { arr, isTrue, num, obj, str, type JsonRecord } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -104,7 +108,6 @@ function SessionBlocks({
   const P = useTranscriptTheme();
   const recovery = obj(session.recovery);
   const usage = usageColumns(session.usage);
-  const context = obj(session.context);
   const policyState = obj(session.policy);
   const policy = obj(policyState?.value);
   const custom = isTrue(policyState, 'custom');
@@ -112,7 +115,7 @@ function SessionBlocks({
   const enabled = isTrue(policy, 'enabled');
   const dim = busy || !enabled;
   const atLimitSwitch = str(policy, 'atLimit') === 'switch';
-  const usageError = str(session, 'usageError');
+  const problem = currentProblem(session);
   const email = str(session, 'email');
   return (
     <>
@@ -127,21 +130,28 @@ function SessionBlocks({
           />
         </View>
       ) : null}
-      <NameLine account={obj(session.current)} name={str(session, 'name')} email={email} />
-      {usageError.length > 0 ? <Text style={styles.paragraph}>{usageError}</Text> : null}
-      {usage.length === 0 ? (
-        <Text style={styles.paragraph}>Usage is unavailable for this login.</Text>
-      ) : (
+      <NameLine
+        account={obj(session.current)}
+        name={str(session, 'name')}
+        email={email}
+        active={str(session, 'activeLabel')}
+      >
+        {problem?.action !== undefined ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={problem.action}
+            hitSlop={8}
+            onPress={() => onCommand({ type: 'openAccountsSettings' }, false)}
+          >
+            <Text style={styles.accountAction}>{problem.action}</Text>
+          </Pressable>
+        ) : null}
+      </NameLine>
+      {problem !== null ? <Text style={styles.paragraph}>{problem.message}</Text> : null}
+      {usage.length > 0 ? (
         <UsageRow session={session} resets />
-      )}
-      {context !== null ? (
-        <View style={styles.contextLine}>
-          <Text style={styles.columnLabel}>Context</Text>
-          <View style={[styles.track, styles.grow]}>
-            <View style={[styles.fill, { width: `${Math.min(100, Math.max(0, num(context, 'percent') ?? 0))}%` }]} />
-          </View>
-          <Text style={styles.columnLabel}>{contextText(context)}</Text>
-        </View>
+      ) : problem === null ? (
+        <Text style={styles.paragraph}>Usage is unavailable for this login.</Text>
       ) : null}
       <Text style={styles.sectionHeading}>{str(session, 'switchHeading')}</Text>
       {arr(session.others).map((row, index) => {
@@ -168,18 +178,13 @@ function SessionBlocks({
               <Text style={styles.accountAction}>{str(row, 'action')}</Text>
             </NameLine>
             {rowError.length > 0 ? (
-              <Text style={styles.paragraph} numberOfLines={1}>
-                {rowError}
-              </Text>
+              <Text style={styles.paragraph}>{rowError}</Text>
             ) : (
               <UsageRow session={record} resets={false} />
             )}
           </Pressable>
         );
       })}
-      <Text style={styles.paragraph}>
-        Switching resumes the same conversation. Stop an active turn before switching.
-      </Text>
       <View style={styles.divider} />
       <View style={styles.header}>
         <Text style={styles.strong}>Keep going at a limit</Text>
@@ -282,11 +287,14 @@ function NameLine({
   account,
   name,
   email,
+  active = '',
   children,
 }: {
   account: JsonRecord | null;
   name: string;
   email: string;
+  /** The tag beside the current account's name. */
+  active?: string;
   children?: ReactNode;
 }) {
   const styles = useStyles();
@@ -299,6 +307,11 @@ function NameLine({
       <Text style={styles.name} numberOfLines={1}>
         {name}
       </Text>
+      {active.length > 0 ? (
+        <View style={styles.activeTag}>
+          <Text style={styles.activeTagText}>{active}</Text>
+        </View>
+      ) : null}
       {email.length > 0 ? (
         <Text style={[styles.email, styles.grow]} numberOfLines={1}>
           {email}
@@ -417,6 +430,13 @@ const useStyles = themedStyles((P) => ({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 20 },
   name: { color: P.foreground, fontSize: 14, fontWeight: '600', flexShrink: 1 },
   email: { color: P.muted, fontSize: 12 },
+  activeTag: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: P.menuBorder,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+  },
+  activeTagText: { color: P.muted, fontSize: 10, lineHeight: 14, fontWeight: '500' },
   accountName: { color: P.foreground, fontSize: 14 },
   accountAction: { color: P.primary, fontSize: 13 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: P.menuBorder },
@@ -457,7 +477,6 @@ const useStyles = themedStyles((P) => ({
   columnLabel: { color: P.muted, fontSize: 12, lineHeight: 15, fontWeight: '500', flexShrink: 1 },
   columnValue: { color: P.foreground, fontSize: 12, lineHeight: 15, fontWeight: '600' },
   columnReset: { color: P.muted, fontSize: 10, lineHeight: 12 },
-  contextLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   track: { height: 3, borderRadius: 2, overflow: 'hidden', backgroundColor: P.meterTrack },
   fill: { height: '100%', borderRadius: 2, backgroundColor: P.meterFill },
   filledWide: { height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
