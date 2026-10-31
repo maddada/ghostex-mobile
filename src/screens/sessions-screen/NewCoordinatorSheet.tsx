@@ -5,7 +5,7 @@
  * The desktop's dialog is apps/desktop/src/app/window/new_coordinator_modal.rs; the copy and the
  * defaults match it. The choices come from `ghostex coordinator options` and the orchestrator is
  * created by `ghostex coordinator create`, so the agent list, the Claude-on-Opus-5.5 default, the
- * Medium/High/XHigh efforts with High first choice and each agent's skill line are gxserver's
+ * Low/Medium/High/XHigh efforts with High first choice and each agent's skill line are gxserver's
  * (server/src/ghostex_cli/coordinator/command.rs), and an unnamed orchestrator gets gxserver's
  * placeholder title.
  *

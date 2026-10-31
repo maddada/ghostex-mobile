@@ -44,6 +44,10 @@ type InlineContext = {
   strips: boolean;
   /** The heading colour (levels 1 to 5): the theme's `primary` unless the row's lane sets one. */
   heading: string;
+  /** The inline code colour: the theme's `primary` unless the row's Text strength raises it. */
+  inlineCode: string;
+  /** A table's body text: the row's running text colour. */
+  body: string;
 };
 
 function referenceMap(references: unknown): Map<string, Reference> {
@@ -102,7 +106,7 @@ function renderInlines(
             style={[
               style,
               styles.inlineCode,
-              { backgroundColor: context.theme.inlineCodeSurface, color: context.theme.primary },
+              { backgroundColor: context.theme.inlineCodeSurface, color: context.inlineCode },
             ]}
           >
             {'\u00a0'}
@@ -559,7 +563,7 @@ function Table({ block, context: rowContext }: { block: Extract<Block, { t: 'tab
                   <Text
                     numberOfLines={lines}
                     selectable={context.selectable}
-                    style={[styles.tableText, { color: theme.prose }]}
+                    style={[styles.tableText, { color: context.body }]}
                   >
                     {renderInlines(cell, context, `r${rowIndex}.${column}`)}
                   </Text>
@@ -889,6 +893,8 @@ export type MarkdownProps = {
   color?: string;
   /** The headings' colour; defaults to the theme's `primary` (Grey thinking sets it, desktop `thinking_lane`). */
   headingColor?: string;
+  /** The inline code colour; defaults to the theme's `primary` (Text strength sets it). */
+  codeColor?: string;
   /** Text somebody typed: single newlines are line breaks. */
   breaks?: boolean;
   /** False on iOS for a message with a menu, whose native view selects its words (`messageSelection.tsx`). */
@@ -902,6 +908,7 @@ export const Markdown = memo(function Markdown({
   references,
   color,
   headingColor,
+  codeColor,
   breaks = false,
   selectable = true,
   strips = true,
@@ -924,8 +931,10 @@ export const Markdown = memo(function Markdown({
       find,
       strips,
       heading: headingColor ?? theme.primary,
+      inlineCode: codeColor ?? theme.primary,
+      body: color ?? theme.prose,
     }),
-    [find, headingColor, openLink, referencesMap, selectable, strips, theme],
+    [codeColor, color, find, headingColor, openLink, referencesMap, selectable, strips, theme],
   );
   return (
     <View style={styles.root}>

@@ -38,6 +38,7 @@ import { PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
 import { ShellCommandCard, ToolRows } from './ToolRows';
 import { Glyph } from './icons';
+import { strengthenedText } from './textStrength';
 
 /** React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`). */
 /** The space between the parts of one message row (desktop `MESSAGE_PART_GAP` in transcript.rs). */
@@ -97,6 +98,7 @@ function useMessageMenu(message: ProjectedMessage, actions: MessageMenuAction[] 
 
 function UserMessage({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
+  const { chatTextStrength } = useTranscriptFlags();
   const { disclosures } = useNativeChatUi();
   const body = typeof message.text === 'string' ? message.text : '';
   // A long prompt shows its first lines until it is expanded (core `long_prompt.rs`, desktop `transcript.rs` `prompt_body`).
@@ -108,7 +110,8 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
     <Markdown
       text={shortened ? collapsed : body}
       references={shortened ? message.collapsedReferences : message.markdownReferences}
-      color={theme.primary}
+      color={strengthenedText(theme.primary, chatTextStrength, theme.light)}
+      codeColor={strengthenedText(theme.primary, chatTextStrength, theme.light)}
       breaks
       selectable={openMenu === undefined || MESSAGE_TEXT_SELECTABLE}
       strips={false}
@@ -153,6 +156,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const { theme, workOpen, mutedThinking, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
+  const strengthened = (color: string) => strengthenedText(color, flags.chatTextStrength, theme.light);
   const { inWorkFold, hideFileChanges } = useFoldPlace();
   const id = message.id;
   const body = typeof message.text === 'string' ? message.text : '';
@@ -221,8 +225,15 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
             <Markdown
               text={body}
               references={message.markdownReferences}
-              color={proseColor}
-              headingColor={mutedThinking ? theme.foreground : undefined}
+              color={strengthened(proseColor)}
+              headingColor={
+                mutedThinking
+                  ? strengthened(theme.foreground)
+                  : flags.chatTextStrength > 0
+                    ? strengthened(theme.primary)
+                    : undefined
+              }
+              codeColor={strengthened(theme.primary)}
               selectable={openMenu === undefined || MESSAGE_TEXT_SELECTABLE}
             />
           </View>

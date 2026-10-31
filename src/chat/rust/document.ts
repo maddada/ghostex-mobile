@@ -548,6 +548,9 @@ export type ChatDocument = {
   /** Handover heading color strength, 0 to 99 percent; absent at full colour
    * (gx-chat-core `transcript/marked_sections.rs` `heading_strength`). */
   markedHeadingStrength?: number;
+  /** Text strength, 10 to 100 percent; absent at 0%, today's colour
+   * (gx-chat-core `transcript/text_strength.rs` `text_strength`). */
+  chatTextStrength?: number;
   /** The switch gxserver reports, or null. */
   accountSwitch: Json;
   /** A model selection waiting on the agent. */

@@ -147,6 +147,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
           document.queueTakeBackBusy,
           document.deferredWork,
           document.markedHeadingStrength,
+          document.chatTextStrength,
           document.readAloud?.available,
           document.readAloud?.speakingId,
         ]);
