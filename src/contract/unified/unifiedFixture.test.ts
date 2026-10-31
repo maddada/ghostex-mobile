@@ -18,6 +18,8 @@ import {
   type UnifiedRow,
   type UnifiedSessionInput,
 } from './build';
+import { filterProjectChoices, unifiedNewSessionTarget, unifiedProjectChoices } from './choices';
+import { groupUnifiedList, moveUnifiedProject } from './grouping';
 
 type Json = Record<string, any>;
 
@@ -29,6 +31,8 @@ function sessionOf(raw: Json): UnifiedSessionInput {
   return {
     sessionId: raw.sessionId,
     projectId: raw.projectId,
+    title: raw.title ?? '',
+    branch: raw.branch ?? '',
     activity: raw.activity ?? 'idle',
     awaitingApproval: raw.awaitingApproval === true,
     pendingQuestionCount: raw.pendingQuestionCount ?? 0,
@@ -90,8 +94,60 @@ describe('the Unified list matches the desktop builder', () => {
           repos: fixtureCase.filter?.repos ?? [],
           machines: fixtureCase.filter?.machines ?? [],
           spaces: fixtureCase.filter?.spaces ?? [],
+          query: fixtureCase.filter?.query ?? '',
         },
         fixtureCase.nowMs,
+      );
+      const order: string[] = fixtureCase.order ?? [];
+      assert.deepEqual(
+        groupUnifiedList(view, order).map((group) => ({
+          repoKey: group.repoKey,
+          label: group.label,
+          pinned: ids(group.pinned),
+          active: ids(group.active),
+          working: ids(group.working),
+          snoozed: ids(group.snoozed),
+          parked: ids(group.parked),
+        })),
+        expected.groups,
+        'groups',
+      );
+      assert.deepEqual(
+        ((fixtureCase.moves ?? []) as Json[]).map((step) =>
+          moveUnifiedProject(order, view.options.repos, step.moved, step.target, step.after === true),
+        ),
+        expected.moves,
+        'moves',
+      );
+      const allChoices = unifiedProjectChoices(
+        (fixtureCase.machines as Json[]).map((machine) => ({
+          machine: machine.machine,
+          label: machine.label,
+          connected: machine.connected !== false,
+          projects: (machine.projects as Json[]).map((project) => ({
+            projectId: project.projectId,
+            title: project.title,
+            path: project.path,
+            gitRemoteOriginUrl: project.gitRemoteOriginUrl ?? null,
+            worktreeParentPath: project.worktreeParentPath ?? null,
+          })),
+        })),
+        fixtureCase.lastMachines ?? {},
+        fixtureCase.currentMachine ?? 'local',
+      );
+      assert.deepEqual(filterProjectChoices(allChoices, fixtureCase.choiceQuery ?? ''), expected.choices, 'choices');
+      assert.deepEqual(
+        unifiedNewSessionTarget(
+          {
+            repos: fixtureCase.filter?.repos ?? [],
+            machines: fixtureCase.filter?.machines ?? [],
+            spaces: fixtureCase.filter?.spaces ?? [],
+          },
+          allChoices,
+          fixtureCase.activeProjectId ?? null,
+        ),
+        expected.newSessionTarget,
+        'new session target',
       );
       for (const shelf of ['drafts', 'pinned', 'active', 'working', 'snoozed', 'parked'] as const) {
         assert.deepEqual(ids(view[shelf]), expected[shelf], shelf);

@@ -646,6 +646,14 @@ export type GhostexMobileSummary = {
   sidebarView?: 'project' | 'unified';
   /** The Unified sidebar's Working section switch; on unless the computer sends `false`. */
   unifiedWorkingSection?: boolean;
+  /** Group by Project in the Unified sidebar. */
+  unifiedGroupByProject?: boolean;
+  /** Repository keys in the order the user arranged the project groups. */
+  unifiedProjectOrder?: string[];
+  /** The Unified sidebar's own hover strip, which the phone's swipe buttons follow. */
+  unifiedSessionCardHoverButtons?: unknown;
+  /** The Project sidebar leaves projects with no sessions out, behind a Show all projects row. */
+  sidebarHideProjectsWithoutSessions?: boolean;
   /** The computer's Enable session parking; on unless the computer sends `false`. */
   enableSessionParking?: boolean;
 };
@@ -1692,6 +1700,14 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
         : undefined,
     sidebarView: root.sidebarView === 'unified' ? 'unified' : 'project',
     unifiedWorkingSection: root.unifiedWorkingSection !== false,
+    unifiedGroupByProject: root.unifiedGroupByProject === true,
+    unifiedProjectOrder: Array.isArray(root.unifiedProjectOrder)
+      ? root.unifiedProjectOrder.filter((key): key is string => typeof key === 'string')
+      : [],
+    unifiedSessionCardHoverButtons: Array.isArray(root.unifiedSessionCardHoverButtons)
+      ? root.unifiedSessionCardHoverButtons
+      : undefined,
+    sidebarHideProjectsWithoutSessions: root.sidebarHideProjectsWithoutSessions === true,
     enableSessionParking: root.enableSessionParking !== false,
   };
 }

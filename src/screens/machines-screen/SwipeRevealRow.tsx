@@ -28,10 +28,12 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /** Fires when the row finishes opening or closing, for the parent's tap handling. */
   onOpenChange?: (open: boolean) => void;
+  /** The panel's width, for a row with more or fewer actions than a Machines card. */
+  revealWidth?: number;
 };
 
 const SwipeRevealRow = forwardRef<SwipeRevealRowMethods, Props>(function SwipeRevealRow(
-  { actions, children, style, onOpenChange },
+  { actions, children, style, onOpenChange, revealWidth = SWIPE_REVEAL_WIDTH },
   ref,
 ) {
   const reveal = useSharedValue(0);
@@ -40,7 +42,7 @@ const SwipeRevealRow = forwardRef<SwipeRevealRowMethods, Props>(function SwipeRe
 
   const settle = (nextOpen: boolean): void => {
     'worklet';
-    reveal.value = withTiming(nextOpen ? SWIPE_REVEAL_WIDTH : 0, { duration: SNAP_DURATION_MS });
+    reveal.value = withTiming(nextOpen ? revealWidth : 0, { duration: SNAP_DURATION_MS });
     runOnJS(setOpen)(nextOpen);
     if (onOpenChange !== undefined) runOnJS(onOpenChange)(nextOpen);
   };
@@ -55,7 +57,7 @@ const SwipeRevealRow = forwardRef<SwipeRevealRowMethods, Props>(function SwipeRe
       startReveal.value = reveal.value;
     },
     onUpdate: (event) => {
-      reveal.value = Math.min(SWIPE_REVEAL_WIDTH, Math.max(0, startReveal.value - event.translationX));
+      reveal.value = Math.min(revealWidth, Math.max(0, startReveal.value - event.translationX));
     },
     onDeactivate: (event) => {
       const nextOpen =
@@ -63,7 +65,7 @@ const SwipeRevealRow = forwardRef<SwipeRevealRowMethods, Props>(function SwipeRe
           ? true
           : event.velocityX > FLICK_VELOCITY
             ? false
-            : reveal.value > SWIPE_REVEAL_WIDTH / 2;
+            : reveal.value > revealWidth / 2;
       settle(nextOpen);
     },
   });
@@ -105,7 +107,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     right: 0,
-    width: SWIPE_REVEAL_WIDTH,
     flexDirection: 'row',
   },
   card: {

@@ -24,6 +24,9 @@ export const OTHER_SPACE_ID = 'other';
 export type UnifiedSessionInput = {
   sessionId: string;
   projectId: string;
+  /** What the search field reads besides the project and the computer. */
+  title?: string;
+  branch?: string;
   activity: string;
   awaitingApproval: boolean;
   pendingQuestionCount: number;
@@ -86,9 +89,11 @@ export type UnifiedFilter = {
   repos: string[];
   machines: string[];
   spaces: string[];
+  /** What is typed in the header's search field; no pick of the filter menu, and not saved. */
+  query?: string;
 };
 
-export const EMPTY_UNIFIED_FILTER: UnifiedFilter = { repos: [], machines: [], spaces: [] };
+export const EMPTY_UNIFIED_FILTER: UnifiedFilter = { repos: [], machines: [], spaces: [], query: '' };
 
 export function isUnifiedFilterEmpty(filter: UnifiedFilter): boolean {
   return filter.repos.length === 0 && filter.machines.length === 0 && filter.spaces.length === 0;
@@ -222,6 +227,16 @@ function keeps(filter: UnifiedFilter, row: UnifiedRow<unknown>, machineKey: stri
 }
 
 /** Builds the list. */
+/** Whether every word typed in the search field is in a row's title, project, branch or computer. */
+function queryMatches(query: string, row: UnifiedRow<unknown>): boolean {
+  const words = query.toLowerCase().split(/\s+/u).filter((word) => word.length > 0);
+  if (words.length === 0) return true;
+  const haystack = [row.session.title ?? '', row.repo.label, row.session.branch ?? '', row.machineLabel ?? '']
+    .join('\n')
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
 export function buildUnifiedList<S>(
   machines: UnifiedMachineInput<S>[],
   settings: UnifiedSettings,
@@ -321,7 +336,7 @@ export function buildUnifiedList<S>(
     total: rows.length,
   };
   for (const { row, machineKey } of rows) {
-    if (keeps(filter, row, machineKey)) view[row.shelf].push(row);
+    if (keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row)) view[row.shelf].push(row);
   }
   const tie = (left: UnifiedRow<S>, right: UnifiedRow<S>) =>
     compareText(left.sidebarSessionId, right.sidebarSessionId);

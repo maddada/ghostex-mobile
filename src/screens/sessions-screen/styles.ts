@@ -168,6 +168,8 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
+  showAllProjects: { paddingHorizontal: 14, paddingVertical: 10 },
+  showAllProjectsText: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
   tailscaleIndicatorLabel: {
     fontSize: 11,
     lineHeight: 14,

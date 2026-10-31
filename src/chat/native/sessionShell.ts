@@ -45,7 +45,7 @@ export function sessionTitle(machineId: string, sessionId: string): string {
 }
 
 /** Opens (or re-selects) a session's tab, which puts that session's chat on screen. */
-async function openSessionTab(machine: MachineConnectionTarget, sessionId: string, projectId: string): Promise<void> {
+export async function openSessionTab(machine: MachineConnectionTarget, sessionId: string, projectId: string): Promise<void> {
   const record = machineRecordFor(machine.id);
   if (record !== null) await useInventoryStore.getState().refreshMachine(record);
   const title = sessionRecord(machine.id, sessionId)?.displayTitle;

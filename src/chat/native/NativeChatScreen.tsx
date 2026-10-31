@@ -347,6 +347,8 @@ export default function NativeChatScreen({
               }}
             >
               <NativeComposer
+                projectId={projectId}
+                sessionId={sessionId}
                 chat={chat}
                 onHostAction={hostAction}
                 hostActions={composerHostActions}

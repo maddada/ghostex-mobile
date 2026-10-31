@@ -46,6 +46,11 @@ import { CatchUpCard } from '../cards/CatchUpCard';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
 import { OptionPills, type PillKind } from './OptionPills';
 import { RunLocationRow } from './RunLocationRow';
+import { ProjectPickerSheet } from './ProjectPickerSheet';
+import { draftProjectChoices, moveDraftToProject } from './draftProjectChoices';
+import { machineTargetFor } from '../../../screens/terminal-screen/session-lookups';
+import type { UnifiedProjectChoice } from '../../../contract/unified/choices';
+import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../../machines/store';
 import { WorktreeTray } from './WorktreeTray';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
@@ -59,6 +64,9 @@ import { dictationClock, useDictation } from './useDictation';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
 
 export type NativeComposerProps = {
+  /** The draft's own place, which the tray's project chip moves it from. */
+  projectId: string;
+  sessionId: string;
   chat: RustChat;
   /**
    * Runs an app-shell action the composer cannot do itself (desktop's `NativeChatEvent::Host`):
@@ -130,6 +138,8 @@ const CONTROL_GLYPHS: Record<ComposerControlId, GlyphName> = {
 type OpenMenu = { kind: 'rows'; title?: string; rows: MenuRow[] } | { kind: 'model' } | null;
 
 export function NativeComposer({
+  projectId,
+  sessionId,
   chat,
   onHostAction,
   hostActions = DEFAULT_HOST_ACTIONS,
@@ -148,6 +158,35 @@ export function NativeComposer({
   const input = chat.composer;
   const model = state?.composer ?? null;
   const dispatch = chat.dispatch;
+  const [projectChoices, setProjectChoices] = useState<UnifiedProjectChoice[] | null>(null);
+  const moveDraftHere = (repoKey: string, machineId: string, toProjectId: string): void => {
+    const from = chat.machine;
+    const agentId = document?.sessionAgentId ?? null;
+    if (from === null || agentId === null) return;
+    if (machineId === from.id && toProjectId === projectId) return;
+    const to = machineId === from.id ? from : machineTargetFor(machineId);
+    if (to === null) return;
+    void moveDraftToProject({
+      from,
+      fromProjectId: projectId,
+      fromSessionId: sessionId,
+      agentId,
+      text: draftAt.current.text,
+      repoKey,
+      to,
+      toProjectId,
+    }).catch((error: unknown) => {
+      onHostAction?.('toast', { message: error instanceof Error ? error.message : String(error), level: 'error' });
+    });
+  };
+  const projectChipLabel = ((): string | null => {
+    const name = document?.worktreeTray?.projectName ?? null;
+    if (name === null) return null;
+    const machine = chat.machine;
+    const machines = enabledMachines(useMachinesStore.getState());
+    const record = machines.length > 1 ? machines.find((entry) => entry.id === machine?.id) : undefined;
+    return record === undefined ? name : `${name} · ${machineDisplayLabel(record)}`;
+  })();
   /**
    * What the expanded composer measures around its field: the card's top inside the composer, the
    * card's content at its natural height and the field's own height. The room left for the field is
@@ -572,12 +611,23 @@ export function NativeComposer({
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
           />
+          <ProjectPickerSheet
+            visible={projectChoices !== null}
+            choices={projectChoices ?? []}
+            onClose={() => setProjectChoices(null)}
+            onPick={(choice, picked) => {
+              setProjectChoices(null);
+              moveDraftHere(choice.repoKey, picked.machineId, picked.projectId);
+            }}
+          />
           {document?.worktreeTray ? (
             <WorktreeTray
               tray={document.worktreeTray}
               dispatch={dispatch}
               openRows={(title, rows) => setMenu({ kind: 'rows', title, rows })}
               retry={() => input?.submit('send')}
+              projectLabel={projectChipLabel}
+              openProjects={() => setProjectChoices(chat.machine === null ? [] : draftProjectChoices(chat.machine.id))}
             />
           ) : null}
           <View

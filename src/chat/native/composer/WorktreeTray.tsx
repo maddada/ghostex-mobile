@@ -1,6 +1,6 @@
 /**
- * The worktree tray on top of a new chat's message box (`worktree_tray.rs` on desktop): This folder,
- * New worktree (from a base branch) or Existing, from the document's `worktreeTray` key. gx-chat-core
+ * The worktree tray on top of a new chat's message box (`worktree_tray.rs` on desktop): the project
+ * and machine chip, This folder, New worktree (from a base branch) or Existing, from the document's `worktreeTray` key. gx-chat-core
  * decides when it shows, what it offers and what is picked; this only lays it out, opens the base
  * branch and worktree lists in the composer's menu sheet, and reports picks. No branch name is shown:
  * gxserver makes it from the first message.
@@ -19,6 +19,8 @@ export function WorktreeTray({
   dispatch,
   openRows,
   retry,
+  projectLabel,
+  openProjects,
 }: {
   tray: Tray;
   dispatch: (action: UserAction) => void;
@@ -26,6 +28,10 @@ export function WorktreeTray({
   openRows: (title: string, rows: MenuRow[]) => void;
   /** Sends the box's text again (Try again after a failure). */
   retry: () => void;
+  /** The project chip's words, or null while the tray can't offer one. */
+  projectLabel: string | null;
+  /** Opens the project and machine search. */
+  openProjects: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -47,6 +53,22 @@ export function WorktreeTray({
   );
   return (
     <View style={styles.tray}>
+      {projectLabel !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Project: ${projectLabel}`}
+          disabled={tray.busy}
+          onPress={openProjects}
+          style={({ pressed }) => [styles.chip, pressed ? styles.pressed : null]}
+        >
+          <Glyph name="folder" size={13} color={P.muted} />
+          <Text style={styles.chipText} numberOfLines={1}>
+            {projectLabel}
+          </Text>
+          <Glyph name="chevron-down" size={12} color={P.muted} />
+        </Pressable>
+      ) : null}
+      {tray.segments.length > 0 ? (
       <View style={styles.segments} accessibilityRole="radiogroup">
         {tray.segments.map((segment, index) => {
           const on = segment.mode === tray.mode;
@@ -67,6 +89,7 @@ export function WorktreeTray({
           );
         })}
       </View>
+      ) : null}
       {status?.state === 'creating' || status?.state === 'opened' ? (
         <View style={styles.status}>
           <Glyph name="loader" size={13} color={P.muted} />
@@ -115,7 +138,7 @@ export function WorktreeTray({
             })),
           )
         : null}
-      {status === null && tray.mode === 'folder' && tray.currentBranch !== null ? (
+      {status === null && tray.segments.length > 0 && tray.mode === 'folder' && tray.currentBranch !== null ? (
         <View style={styles.current}>
           <Glyph name="git-branch" size={13} color={P.muted} />
           <Text style={styles.statusText} numberOfLines={1}>

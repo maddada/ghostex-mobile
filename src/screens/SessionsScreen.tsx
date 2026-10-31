@@ -46,7 +46,7 @@ import { useCollapseStore } from '../components/sessions/collapseStore';
 import { useSessionListClock } from '../components/sessions/useSessionListClock';
 import ContextMenu from '../components/sessions/ContextMenu';
 import SessionLinksSheet from '../chat/native/SessionLinksSheet';
-import { buildDrawerList, type DrawerBlock } from '../components/sessions/drawerModel';
+import { buildDrawerList, hideProjectsWithoutSessions, type DrawerBlock } from '../components/sessions/drawerModel';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { MachinesGlyph, MenuGlyph, SearchGlyph, WorldGlyph } from '../components/sessions/icons';
 import { VoiceButton } from '../voice/VoiceButton';
@@ -535,6 +535,16 @@ export default function SessionsScreen({ navigation }: Props) {
     () => makeSnoozeSession({ runBulkSessionActions, refreshMachine, setTransientStatus }),
     [runBulkSessionActions, refreshMachine, setTransientStatus],
   );
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const visibleEntries = useMemo(
+    () =>
+      hideProjectsWithoutSessions(
+        entries,
+        machine === null ? null : (inventoriesByMachineId[machine.id]?.summary ?? null),
+        showAllProjects,
+      ),
+    [entries, machine, inventoriesByMachineId, showAllProjects],
+  );
   const unified = useUnifiedList({
     machines,
     selectedMachine: machine,
@@ -898,13 +908,30 @@ export default function SessionsScreen({ navigation }: Props) {
           />
         ) : (
           <FlatList
-            data={entries}
+            data={visibleEntries.blocks}
             keyExtractor={(entry) => entry.listKey}
             renderItem={renderBlock}
             style={[styles.list, listEdges.scroll]}
             contentContainerStyle={[styles.listContent, listEdges.content]}
             refreshControl={listRefreshControl}
-            ListFooterComponent={listFooter}
+            ListFooterComponent={
+              <>
+                {visibleEntries.emptyProjects > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setShowAllProjects((showing) => !showing)}
+                    style={styles.showAllProjects}
+                  >
+                    <Text style={styles.showAllProjectsText}>
+                      {showAllProjects
+                        ? 'Hide projects without sessions'
+                        : `Show all projects (${visibleEntries.emptyProjects} hidden)`}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {listFooter}
+              </>
+            }
           />
         )}
         {machine !== null && selectedNotice !== null ? (

@@ -18,6 +18,7 @@ import {
   type DrawerItem,
   type ProjectHeaderItem,
 } from '../../contract/grouping';
+import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
@@ -236,4 +237,36 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     input.nowMs ?? Date.now(),
     input.selectedSessionKey ?? null,
   );
+}
+
+/**
+ * `sidebarHideProjectsWithoutSessions`: the list without projects that have no session in any state,
+ * and how many it left out, for the Show all projects row (`sidebar_view/assemble.rs` on desktop).
+ *
+ * CDXC:Sidebar 2026-10-31 DECISION:
+ * User (Q851, "show all row"; Q856): the phone follows the computer's switch and has the same row. With `showAll` they come back in their own places and the row stays, as the way back.
+ */
+export function hideProjectsWithoutSessions(
+  blocks: DrawerBlock[],
+  summary: GhostexMobileSummary | null | undefined,
+  showAll: boolean,
+): { blocks: DrawerBlock[]; emptyProjects: number } {
+  if (summary?.sidebarHideProjectsWithoutSessions !== true) return { blocks, emptyProjects: 0 };
+  const withSessions = new Set(summary.sessions.map((session) => session.projectId));
+  const hasSessions = (card: ProjectCardBlock): boolean => withSessions.has(card.header.projectId);
+  let emptyProjects = 0;
+  const kept: DrawerBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === 'project') {
+      if (hasSessions(block.card)) kept.push(block);
+      else emptyProjects += 1;
+    } else if (block.kind === 'collection') {
+      const projects = block.projects.filter(hasSessions);
+      emptyProjects += block.projects.length - projects.length;
+      if (projects.length > 0) kept.push({ ...block, projects });
+    } else {
+      kept.push(block);
+    }
+  }
+  return { blocks: showAll ? blocks : kept, emptyProjects };
 }

@@ -42,6 +42,8 @@ export function unifiedSessionInput(session: GhostexSession): UnifiedSessionInpu
   return {
     sessionId: session.sessionId,
     projectId: session.projectId ?? '',
+    title: session.displayTitle,
+    branch: session.gitBranch !== undefined && session.gitBranch.length > 0 ? session.gitBranch : (session.work?.branch ?? ''),
     activity: session.activity,
     awaitingApproval: session.awaitingApproval === true,
     pendingQuestionCount: session.pendingQuestionCount ?? 0,
@@ -113,6 +115,14 @@ export function unifiedSettingsOf(summary: GhostexMobileSummary | null): Unified
   };
 }
 
+/** Group by Project and the arranged order, from the computer whose setting picked the layout. */
+export function unifiedLayoutOf(summary: GhostexMobileSummary | null): { groupByProject: boolean; projectOrder: string[] } {
+  return {
+    groupByProject: summary?.unifiedGroupByProject === true,
+    projectOrder: summary?.unifiedProjectOrder ?? [],
+  };
+}
+
 /** Whether the computer asks for the Unified sidebar (Settings › Sidebar & Sessions › Sidebar). */
 export function wantsUnifiedSidebar(summary: GhostexMobileSummary | null | undefined): boolean {
   return summary?.sidebarView === 'unified';
@@ -126,6 +136,7 @@ export function filterWithinOptions(filter: UnifiedFilter, options: UnifiedFilte
     repos: within(filter.repos, options.repos),
     machines: within(filter.machines, options.machines),
     spaces: within(filter.spaces, options.spaces),
+    query: filter.query ?? '',
   };
 }
 
@@ -140,6 +151,9 @@ export function unifiedListOf(
   // The options do not depend on the filter, so a pick they no longer offer is let go first.
   const everything = buildUnifiedList(inputs, settings, EMPTY_UNIFIED_FILTER, nowMs);
   const kept = filterWithinOptions(filter, everything.options);
-  const view = isUnifiedFilterEmpty(kept) ? everything : buildUnifiedList(inputs, settings, kept, nowMs);
+  const view =
+    isUnifiedFilterEmpty(kept) && (kept.query ?? '').trim().length === 0
+      ? everything
+      : buildUnifiedList(inputs, settings, kept, nowMs);
   return { ...view, filter: kept };
 }

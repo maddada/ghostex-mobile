@@ -30,9 +30,10 @@ import { SessionCopy } from '../../../copy';
 import { SidebarPalette } from '../../../theme/palette';
 import SwipeRevealRow from '../../../screens/machines-screen/SwipeRevealRow';
 import type { MenuAnchor } from '../ContextMenu';
-import { ChevronDownGlyph, ChevronRightGlyph, GitPullRequestGlyph, PencilGlyph } from '../icons';
+import { ChevronDownGlyph, ChevronRightGlyph, GitPullRequestGlyph, PencilGlyph, PlusGlyph } from '../icons';
 import { ds, LetterTile, ProjectIcon, SelectedCardOutline, selectedFill, SELECTED_TEXT, SIDEBAR_MUTED, SIDEBAR_TEXT } from '../rows';
 import { lastInteractionLabel } from '../sessionStatus';
+import type { UnifiedSwipeAction } from '../../../contract/unified/strip';
 import {
   AlarmGlyph,
   AlertCircleGlyph,
@@ -137,38 +138,60 @@ function pullRequestColor(state: string): string {
   return '#3FB950';
 }
 
-/** Snooze and Park under a swiped card (hover.rs `render_unified_card_actions`). */
+/** What a swipe reveals: the Unified strip's buttons right of its chevron (contract/unified/strip.ts). */
 function CardActions({
+  actions,
   onSnooze,
   onPark,
+  onSleep,
 }: {
+  actions: readonly UnifiedSwipeAction[];
   onSnooze: (anchor: MenuAnchor) => void;
-  onPark: (() => void) | null;
+  onPark: () => void;
+  onSleep: () => void;
 }) {
   const snoozeRef = useRef<ViewInstance | null>(null);
   return (
     <View style={styles.actions}>
-      <Pressable
-        ref={snoozeRef}
-        accessibilityRole="button"
-        accessibilityLabel="Snooze session"
-        style={styles.actionButton}
-        onPress={() =>
-          snoozeRef.current?.measureInWindow((x, y, width, height) => onSnooze({ x, y, width, height }))
+      {actions.map((action) => {
+        switch (action) {
+          case 'snooze':
+            return (
+              <Pressable
+                key={action}
+                ref={snoozeRef}
+                accessibilityRole="button"
+                accessibilityLabel="Snooze session"
+                style={styles.actionButton}
+                onPress={() =>
+                  snoozeRef.current?.measureInWindow((x, y, width, height) => onSnooze({ x, y, width, height }))
+                }
+              >
+                <AlarmGlyph size={ds(15)} color={SIDEBAR_TEXT} />
+                <Text style={styles.actionWord}>Snooze</Text>
+              </Pressable>
+            );
+          case 'park':
+            return (
+              <Pressable key={action} accessibilityRole="button" accessibilityLabel="Park session" style={styles.actionButton} onPress={onPark}>
+                <CheckGlyph size={ds(15)} color={SIDEBAR_TEXT} />
+                <Text style={styles.actionWord}>Park</Text>
+              </Pressable>
+            );
+          case 'sleep':
+            return (
+              <Pressable key={action} accessibilityRole="button" accessibilityLabel="Sleep session" style={styles.actionButton} onPress={onSleep}>
+                <Text style={styles.actionWord}>Sleep</Text>
+              </Pressable>
+            );
         }
-      >
-        <AlarmGlyph size={ds(15)} color={SIDEBAR_TEXT} />
-        <Text style={styles.actionWord}>Snooze</Text>
-      </Pressable>
-      {onPark !== null ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Park session" style={styles.actionButton} onPress={onPark}>
-          <CheckGlyph size={ds(15)} color={SIDEBAR_TEXT} />
-          <Text style={styles.actionWord}>Park</Text>
-        </Pressable>
-      ) : null}
+      })}
     </View>
   );
 }
+
+/** A swiped card's panel, by how many buttons it holds. */
+const SWIPE_ACTION_WIDTH = 88;
 
 export type UnifiedCardProps = {
   row: UnifiedRow<GhostexSession>;
@@ -179,18 +202,28 @@ export type UnifiedCardProps = {
   onPress: () => void;
   onMenu: (anchor: MenuAnchor) => void;
   onSnooze: (anchor: MenuAnchor) => void;
-  /** Absent while parking is off: a parked card would have no shelf. */
-  onPark: (() => void) | null;
+  onPark: () => void;
+  onSleep: () => void;
+  /** The strip's buttons a swipe shows (contract/unified/strip.ts). */
+  swipeActions: readonly UnifiedSwipeAction[];
+  /** Under its project's header, which names the project. */
+  inGroup?: boolean;
 };
 
 /** A card: three lines, or two when there is no branch or pull request to show. */
-export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, onPress, onMenu, onSnooze, onPark }: UnifiedCardProps) {
+export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, onPress, onMenu, onSnooze, onPark, onSleep, swipeActions, inGroup = false }: UnifiedCardProps) {
   const cardRef = useRef<ViewInstance | null>(null);
   const session = row.session.source!;
   const needsYou = row.status === 'Approval' || row.status === 'Question' || row.status === 'Done' || row.status === 'Failed';
   // A card that waits on nobody recedes, so the ones that need you stand out.
   const recede = !active && !needsYou && (row.status === null || row.status === 'Working' || row.status === 'Waiting');
-  const project = row.machineLabel === null ? row.repo.label : `${row.repo.label} · ${row.machineLabel}`;
+  const project = inGroup
+    ? (row.machineLabel ?? '')
+    : row.machineLabel === null
+      ? row.repo.label
+      : `${row.repo.label} · ${row.machineLabel}`;
+  // With no computer to name either, the status moves up beside the title (cards.rs).
+  const titleLineOnly = inGroup && row.machineLabel === null;
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
   const branch = session.gitBranch !== undefined && session.gitBranch.length > 0 ? session.gitBranch : (session.work?.branch ?? '');
   const prNumber = session.work?.pullRequestNumber ?? null;
@@ -200,7 +233,10 @@ export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, o
   };
   return (
     <View style={styles.cardGap}>
-      <SwipeRevealRow actions={<CardActions onSnooze={onSnooze} onPark={onPark} />}>
+      <SwipeRevealRow
+        revealWidth={SWIPE_ACTION_WIDTH * swipeActions.length}
+        actions={<CardActions actions={swipeActions} onSnooze={onSnooze} onPark={onPark} onSleep={onSleep} />}
+      >
         <Pressable
           ref={cardRef}
           accessibilityRole="button"
@@ -214,15 +250,18 @@ export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, o
           ]}
         >
           {active ? <SelectedCardOutline /> : null}
-          <View style={styles.lineOne}>
-            <RepoTile icon={repoIcon} label={row.repo.label} />
-            {session.isPinned ? <PinFilledGlyph size={ds(13)} color={SIDEBAR_MUTED} /> : null}
-            <Text numberOfLines={1} style={styles.project}>
-              {project}
-            </Text>
-            <StatusSlot row={row} nowMs={nowMs} />
-          </View>
+          {titleLineOnly ? null : (
+            <View style={styles.lineOne}>
+              {inGroup ? null : <RepoTile icon={repoIcon} label={row.repo.label} />}
+              {session.isPinned ? <PinFilledGlyph size={ds(13)} color={SIDEBAR_MUTED} /> : null}
+              <Text numberOfLines={1} style={styles.project}>
+                {project}
+              </Text>
+              <StatusSlot row={row} nowMs={nowMs} />
+            </View>
+          )}
           <View style={styles.lineTwo}>
+            {titleLineOnly && session.isPinned ? <PinFilledGlyph size={ds(13)} color={SIDEBAR_MUTED} /> : null}
             <Text
               numberOfLines={1}
               style={[styles.title, needsYou || active ? styles.titleBright : null, recede ? styles.recede : null]}
@@ -234,6 +273,7 @@ export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, o
                 <AgentIcon session={session} />
               </View>
             ) : null}
+            {titleLineOnly ? <StatusSlot row={row} nowMs={nowMs} /> : null}
           </View>
           {hasMeta ? (
             <View style={styles.lineThree}>
@@ -359,7 +399,47 @@ export function UnifiedShelfHeader({ shelf, count, open, onToggle }: { shelf: Un
   );
 }
 
+/** A project group's header: chevron, icon, name, a "+" for New session there, and the count. */
+export function UnifiedGroupHeader({
+  label,
+  icon,
+  count,
+  open,
+  onToggle,
+  onNew,
+}: {
+  label: string;
+  icon: GhostexProjectIcon | null;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  onNew: () => void;
+}) {
+  const Chevron = open ? ChevronDownGlyph : ChevronRightGlyph;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label} (${count})`}
+      accessibilityState={{ expanded: open }}
+      onPress={onToggle}
+      style={({ pressed }) => [styles.shelfHeader, pressed ? styles.shelfPressed : null]}
+    >
+      <Chevron size={ds(13)} color={SIDEBAR_MUTED} />
+      <RepoTile icon={icon} label={label} />
+      <Text numberOfLines={1} style={styles.groupLabel}>
+        {label}
+      </Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`New session in ${label}`} hitSlop={8} onPress={onNew} style={styles.groupNew}>
+        <PlusGlyph size={ds(14)} color={SIDEBAR_MUTED} />
+      </Pressable>
+      <Text style={styles.shelfCount}>{count}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  groupLabel: { flex: 1, minWidth: 0, color: SIDEBAR_TEXT, fontSize: ds(13.5), fontWeight: '400' },
+  groupNew: { width: ds(24), height: ds(24), alignItems: 'center', justifyContent: 'center' },
   cardGap: { paddingHorizontal: ds(3), paddingBottom: ds(2) },
   card: {
     paddingHorizontal: ds(8),
