@@ -151,14 +151,18 @@ export function WorktreeTray({
 }
 
 const useStyles = themedStyles((P) => ({
-  /** Attached to the box like a tab: inset from its corners, no bottom edge, over the root's gap. */
+  /**
+   * Part of the message box, like desktop's `worktree_tray.rs`: the box's own fill and border, ending
+   * exactly on its top edge (the root's 8pt gap) so the two fills never stack, inset by the box's 22pt
+   * corner radius so its sides meet the straight part of that edge.
+   */
   tray: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
-    marginHorizontal: 14,
-    marginBottom: -9,
+    marginHorizontal: 22,
+    marginBottom: -8,
     paddingHorizontal: 8,
     paddingTop: 6,
     paddingBottom: 7,
@@ -167,7 +171,7 @@ const useStyles = themedStyles((P) => ({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: P.composerBorder,
-    backgroundColor: P.background,
+    backgroundColor: P.composerBackground,
   },
   segments: {
     flexDirection: 'row',
@@ -191,7 +195,6 @@ const useStyles = themedStyles((P) => ({
     borderRadius: 7,
     borderWidth: 1,
     borderColor: P.composerBorder,
-    backgroundColor: P.composerBackground,
     maxWidth: 200,
   },
   pressed: { backgroundColor: P.border },
