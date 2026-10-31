@@ -20,7 +20,7 @@ import { PageCard } from './PageCard';
 import { chartId } from './chartId';
 import { QuestionFlashFrame } from './OpenQuestions';
 import { arr, num, obj, str, type JsonRecord } from './json';
-import { MONO_FONT, type TranscriptTheme } from './theme';
+import { MONO_FONT, PROSE_SIZE, type TranscriptTheme } from './theme';
 
 const PADDING = 12;
 /** `packages/gx-chat-core/visual/chart-motion.json`: how long a chart takes to draw in. */
@@ -38,7 +38,9 @@ const DRAW_IN_LATE_MS = 250;
  * user decision; the desktop draws the same frames in `apps/desktop/src/app/native_chat/visual.rs`.
  */
 const DRAWN_IN = new Set<string>();
-const TOOLTIP_WIDTH = 200;
+const TOOLTIP_WIDTH = 240;
+/** A tooltip line: the transcript's prose size plus its leading. */
+const TOOLTIP_LINE = Math.round(PROSE_SIZE * 1.4);
 
 type TooltipLine = { label: string; value: string; color: string };
 /** `shape` is a pie slice's outline: a tap is matched to the slice it lands in, not its box. */
@@ -67,7 +69,8 @@ function hexColor(color: string): string | undefined {
 
 /** The chat's own colours for the scene's text and lines; the series palette stays the crate's. */
 function visualTheme(theme: TranscriptTheme): JsonRecord {
-  const entries: JsonRecord = { light: theme.light };
+  // The scene's text is drawn at the transcript's prose size (desktop `visual.rs` `theme`).
+  const entries: JsonRecord = { light: theme.light, textSize: PROSE_SIZE };
   const set = (key: string, color: string) => {
     const value = hexColor(color);
     if (value !== undefined) entries[key] = value;
@@ -189,7 +192,7 @@ export function VisualBlock({ source }: { source: string }) {
   const height = num(answer, 'height') ?? 0;
   const tip = active !== null ? hits[active.region] : undefined;
   // Beside the tap, flipped to the other side near the drawing's edge (desktop `visual.rs` `tooltip`).
-  const tipHeight = tip === undefined ? 0 : tip.lines.length * 17 + 16;
+  const tipHeight = tip === undefined ? 0 : tip.lines.length * TOOLTIP_LINE + 16;
   const tipLeft =
     active === null
       ? 0
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, minWidth: 0 },
-  headerText: { fontSize: 11, flexShrink: 1 },
+  headerText: { fontSize: PROSE_SIZE, flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   action: {
     minWidth: 26,
@@ -296,7 +299,7 @@ const styles = StyleSheet.create({
   },
   actionText: { fontSize: 11, fontWeight: '500' },
   body: { padding: PADDING },
-  note: { fontSize: 12, marginBottom: 8 },
+  note: { fontSize: PROSE_SIZE, marginBottom: 8 },
   source: { fontFamily: MONO_FONT, fontSize: 12, lineHeight: 19 },
   tooltip: {
     position: 'absolute',
@@ -309,6 +312,6 @@ const styles = StyleSheet.create({
   },
   tooltipLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   swatch: { width: 8, height: 8, borderRadius: 2 },
-  tooltipText: { fontSize: 11.5 },
+  tooltipText: { fontSize: PROSE_SIZE },
   tooltipValue: { fontWeight: '500', flexShrink: 1 },
 });
