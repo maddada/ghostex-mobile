@@ -3,7 +3,8 @@ import { remoteTerminalCommand, remoteShellCommand } from '../remote/commands';
  * Terminal tab/session orchestration.
  * - sessionKey = `${machineId}:${sessionId}` for attach tabs,
  *   `${machineId}:tab:${uuid}` for plain shells (docs/ARCHITECTURE.md).
- * - Warm-session policy: up to 7 native terminal entries stay alive; the least
+ * - Warm-session policy: up to 7 native terminal entries stay alive, fewer when
+ *   their scrollback would pass the shared budget (./warmBudget.ts); the least
  *   recently used non-selected entry is evicted via closeTerminal.
  * - Attach flow (sessions-drawer.md §5 / terminal-screen.md §6): connect if
  *   needed → openTerminal with the login-shell-wrapped attach command → ~2s
@@ -20,9 +21,19 @@ import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
+import { WARM_SCROLLBACK_ROW_BUDGET, warmPoolOverBudget } from './warmBudget';
 import { forgetAttach, noteAttachOpened } from './zmxDisplay';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
+/** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
+const warmScrollbackRows = new Map<string, number>();
+
+/** The scrollback setting for a terminal being opened now, remembered for the warm budget. */
+function scrollbackRowsForNewTerminal(sessionKey: string): number {
+  const rows = useSettingsStore.getState().settings.scrollbackRows;
+  warmScrollbackRows.set(sessionKey, rows);
+  return rows;
+}
 
 /**
  * A terminal that failed to open on a live connection fails alone (the native open deadline no
@@ -206,12 +217,16 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
   };
 
   const dropWarm = (sessionKey: string): void => {
+    warmScrollbackRows.delete(sessionKey);
     set({ warmOrder: get().warmOrder.filter((key) => key !== sessionKey) });
   };
 
-  /** Enforce the max-7 warm policy by closing least recently used entries. */
+  /** Enforce the warm policy (max 7, within the scrollback budget) by closing least recently used entries. */
   const evictExcessWarmEntries = async (): Promise<void> => {
-    while (get().warmOrder.length > MAX_WARM_SESSIONS) {
+    const rowsOf = (key: string): number =>
+      warmScrollbackRows.get(key) ?? useSettingsStore.getState().settings.scrollbackRows;
+    const rowBudget = Platform.OS === 'android' ? WARM_SCROLLBACK_ROW_BUDGET : Number.POSITIVE_INFINITY;
+    while (warmPoolOverBudget(get().warmOrder.map(rowsOf), MAX_WARM_SESSIONS, rowBudget)) {
       const { warmOrder, selectedSessionKey } = get();
       const victim = warmOrder.find((key) => key !== selectedSessionKey) ?? warmOrder[0];
       await get().closeTab(victim);
@@ -252,7 +267,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
           fontSize: initialFontSize(tab.sessionKey),
           zmxBacked: tab.kind === 'attach',
-          scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
+          scrollbackRows: scrollbackRowsForNewTerminal(tab.sessionKey),
         };
         const remoteCommand =
           command !== null
@@ -485,6 +500,11 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         zmxRefreshSent.delete(sessionKey);
         forgetAttach(sessionKey);
         touchWarm(sessionKey);
+        // The reopened terminal takes the current scrollback setting, which may no longer fit beside
+        // the others; a background tab that does not fit is the one closed, and stays closed.
+        scrollbackRowsForNewTerminal(sessionKey);
+        await evictExcessWarmEntries();
+        if (!get().tabs.some((entry) => entry.sessionKey === sessionKey)) return;
         let connected = false;
         try {
           /*
@@ -500,7 +520,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
             fontSize: initialFontSize(sessionKey),
             zmxBacked: tab.kind === 'attach',
-            scrollbackRows: useSettingsStore.getState().settings.scrollbackRows,
+            scrollbackRows: scrollbackRowsForNewTerminal(sessionKey),
           };
           if (tab.kind === 'attach' && tab.ghostexSessionId !== undefined) {
             // Same project-scoped selector the first attach used. A bare session

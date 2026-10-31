@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { CursorStyle } from '../../../modules/ghostex-native/src/GhostexNative.types';
 import {
   KEEP_ALIVE_INTERVAL_MAX_SEC,
@@ -14,6 +16,8 @@ import {
   useSettingsStore,
   type BellBehavior,
 } from '../../settings/store';
+import { MAX_WARM_SESSIONS } from '../../terminal/sessions';
+import { warmTerminalsFor } from '../../terminal/warmBudget';
 import { SettingsSection } from './SectionBoundary';
 import {
   Caption,
@@ -25,6 +29,15 @@ import {
   StepperRow,
   type BooleanSettingKey,
 } from './SettingsControls';
+
+/** Why fewer terminals stay open with a large scrollback (they share one memory budget), or null. */
+function warmTerminalsCaption(scrollbackRows: number): string | null {
+  if (Platform.OS !== 'android') return null;
+  const count = warmTerminalsFor(scrollbackRows, MAX_WARM_SESSIONS);
+  if (count >= MAX_WARM_SESSIONS) return null;
+  const kept = count === 1 ? 'only the terminal you are using stays open' : `${count} terminals stay open`;
+  return `At this size ${kept}; others reconnect when you open them again, so the phone does not run out of memory.`;
+}
 
 /** Terminal toggles carried over from the older Android app, in its order. */
 const LEGACY_TERMINAL_TOGGLES: { key: BooleanSettingKey; label: string }[] = [
@@ -97,6 +110,9 @@ export default function AdvancedPage() {
           onValueChange={(value) => setSetting('scrollbackRows', value)}
         />
         <Caption>Applies to newly opened terminals.</Caption>
+        {warmTerminalsCaption(settings.scrollbackRows) !== null ? (
+          <Caption>{warmTerminalsCaption(settings.scrollbackRows)}</Caption>
+        ) : null}
       </SettingsSection>
       <SettingsSection name="settings:advanced:terminal-bell">
         <SectionHeader title="Terminal bell" />

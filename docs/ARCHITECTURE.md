@@ -17,7 +17,7 @@ mobile/
     contract/                 # mobile-summary TS types + parser + displayStatus()
     machines/                 # machine store (AsyncStorage) + credentials (expo-secure-store)
     inventory/                # inventory client (exec over native ssh), 5s polling, per-machine fan-out
-    terminal/                 # tab/session state, warm-session policy (max 7), attach orchestration
+    terminal/                 # tab/session state, warm-session policy (max 7, within a scrollback-row budget), attach orchestration
     commands/                 # ghostex CLI command builders (login-shell wrapping, quoting)
     components/               # shared UI (action sheets, state cards, chips, key bar)
     screens/
