@@ -28,6 +28,24 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 /** A JSON object whose keys the Rust core keeps free-form. */
 export type JsonObject = { [key: string]: Json };
 
+/** The worktree tray on top of a new chat's message box (gx-chat-core `menus/draft_worktree.rs`). */
+export type WorktreeTray = {
+  mode: 'folder' | 'newWorktree' | 'existingWorktree';
+  segments: { mode: 'folder' | 'newWorktree' | 'existingWorktree'; label: string }[];
+  currentBranch: string | null;
+  baseBranch: string | null;
+  branches: { name: string; current?: boolean; remote?: boolean }[];
+  worktrees: { name: string; branch: string; worktreeKey: string }[];
+  worktreeKey: string | null;
+  worktreeLabel: string | null;
+  /** The first message is moving the chat into a worktree. */
+  busy: boolean;
+  status:
+    | null
+    | { state: 'creating' | 'opened'; label: string }
+    | { state: 'failed'; message: string };
+};
+
 /** The Run on row above a new thread's composer (gx-chat-core `menus/run_location.rs`). */
 export type RunLocationRow = {
   label: string;
@@ -385,6 +403,7 @@ export type ChatDocument = {
   switchableAgents: Json;
   /** A draft's Run on row, absent when hidden. Desktop: `run_location.rs`. */
   runLocation?: RunLocationRow;
+  worktreeTray?: WorktreeTray;
   /** The session's own launch agent id. Desktop: `launch.rs`. */
   sessionAgentId: string | null;
   /** The transcript-level failure copy, or null. */

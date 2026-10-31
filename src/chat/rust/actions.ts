@@ -202,6 +202,8 @@ export type ActionFields = {
   switchDraftAgent: { agentId: string };
   /** The Run on row: move a draft to this computer (`local`) or a box (`agentbox:<provider>`). */
   switchDraftRunLocation: { runLocation: string };
+  /** The worktree tray: where a new chat runs, a new worktree's base branch, or an existing worktree. */
+  setDraftWorktree: { mode?: string; baseBranch?: string; worktreeKey?: string };
   selectForkBranch: { [field: string]: unknown };
 
   // ---- context ------------------------------------------------------------------------------

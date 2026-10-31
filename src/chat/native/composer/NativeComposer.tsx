@@ -46,6 +46,7 @@ import { CatchUpCard } from '../cards/CatchUpCard';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
 import { OptionPills, type PillKind } from './OptionPills';
 import { RunLocationRow } from './RunLocationRow';
+import { WorktreeTray } from './WorktreeTray';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
 import { createDraftReferenceParser } from './references';
@@ -571,6 +572,14 @@ export function NativeComposer({
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
           />
+          {document?.worktreeTray ? (
+            <WorktreeTray
+              tray={document.worktreeTray}
+              dispatch={dispatch}
+              openRows={(title, rows) => setMenu({ kind: 'rows', title, rows })}
+              retry={() => input?.submit('send')}
+            />
+          ) : null}
           <View
             style={[styles.card, focused ? styles.cardFocused : null]}
             onLayout={(event: LayoutChangeEvent) => measureFrame('cardTop', event.nativeEvent.layout.y)}
