@@ -731,6 +731,11 @@ export const EditMachineCopy = {
     pairedAs: (user: string) => `Paired as ${user}`,
     connectedNow: 'connected now',
     notConnected: 'not connected',
+    /** The tunnel's path (`easyConnectPath.ts`): straight to the computer, or through a relay. */
+    direct: 'direct',
+    directSameNetwork: 'direct, same network',
+    viaRelay: (relay: string) => `via relay ${relay}`,
+    viaPublicRelay: "via Tailscale's public relay",
     rePair: 'Re-pair',
   },
   showInSessions: 'Show in Sessions',

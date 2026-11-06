@@ -204,6 +204,14 @@ class GhostexNativeModule : Module() {
       }
     }
 
+    // How the machine's Easy Connect tunnel reaches it, as the bridge's JSON
+    // ("" until the bridge has checked); CDXC:RemotePairing 2026-11-06 in bridge.go.
+    AsyncFunction("tailcatPath") { machineId: String, promise: Promise ->
+      backgroundExecutor.execute {
+        promise.resolve(Tailcatbridge.forwardPath(machineId))
+      }
+    }
+
     // Easy Connect pairing reaches the computer's gxserver API port through the tunnel
     // before any SSH machine exists, so it needs the forward on its own. The rendezvous
     // blocks for seconds on a cold start; it runs on the background executor.

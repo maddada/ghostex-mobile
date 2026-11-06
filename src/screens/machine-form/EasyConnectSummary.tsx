@@ -1,14 +1,16 @@
 /**
  * The Connection block of an Easy Connect machine on Edit machine
  * (`.connection-easy-connect` in mobile-08-edit-machine.html): nothing to type,
- * just "Paired as <user> · <date> · connected now" and a Re-pair button that
- * opens the scanner with `rePairMachineId`.
+ * just "Paired as <user> · <date> · connected now", then "direct" or "via relay …" once the
+ * app build can tell (`easyConnectPath.ts`), and a Re-pair button that opens the scanner with
+ * `rePairMachineId`.
  */
 
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SetupButton, StatusDot } from '../../components/onboarding/SetupPrimitives';
 import { EditMachineCopy } from '../../copy';
+import { isPublicRelayName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import type { MachineRecord } from '../../machines/store';
 import { SetupPalette } from '../../theme/palette';
 import { formatShortDate } from './dates';
@@ -27,6 +29,11 @@ export default function EasyConnectSummary({
   const parts = [copy.pairedAs(machine.username)];
   if (machine.pairedAt !== undefined) parts.push(formatShortDate(machine.pairedAt));
   parts.push(connectedNow ? copy.connectedNow : copy.notConnected);
+  const path = useEasyConnectPath(machine.id, connectedNow);
+  if (path !== null) {
+    if (path.path === 'direct') parts.push(path.route === 'lan' ? copy.directSameNetwork : copy.direct);
+    else parts.push(isPublicRelayName(path.relay) ? copy.viaPublicRelay : copy.viaRelay(path.relay));
+  }
   return (
     <View style={[formStyles.row, formStyles.rowFirst]}>
       <View style={formStyles.rowMain}>

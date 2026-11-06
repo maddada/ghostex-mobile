@@ -55,6 +55,14 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    */
   tailcatClientPublicKey(): Promise<string>;
 
+  /**
+   * How the machine's Easy Connect tunnel reaches it, as JSON (`{"path":"direct"|"relay",
+   * "route":"lan"|"internet","relay":"<host>","latencyMs":N}`), or "" before the bridge checked.
+   * Only in app builds made after 2026-11-06; an older build has no such function, so callers
+   * check for it (`easyConnectPath.ts`).
+   */
+  tailcatPath?(machineId: string): Promise<string>;
+
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
   /** `exec` with `input` written to the command's stdin, then EOF (Windows scripts; both platforms). */
