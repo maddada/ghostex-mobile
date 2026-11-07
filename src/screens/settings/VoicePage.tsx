@@ -62,6 +62,8 @@ import {
   useSettingsStyles,
 } from './SettingsControls';
 import { computerName, useVoiceComputer } from './voiceComputer';
+import { isDemoMachine } from '../../demo/identity';
+import { DemoCopy } from '../../demo/copy';
 
 export default function VoicePage() {
   const { machine, machines } = useVoiceComputer();
@@ -71,7 +73,7 @@ export default function VoicePage() {
   // Read fresh each time the page opens or another computer is picked (not when the record's
   // other fields change, such as its last connection time).
   useEffect(() => {
-    if (machine === null) return;
+    if (machine === null || isDemoMachine(machine)) return;
     chooseVoiceComputer(machine.id);
     void loadDictate(machine);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,6 +85,14 @@ export default function VoicePage() {
       <SettingsScreenLayout>
         <Caption>Connect a computer first: Dictate and the voice agent run on your computer.</Caption>
         <PhoneSection />
+      </SettingsScreenLayout>
+    );
+  }
+  if (isDemoMachine(machine)) {
+    return (
+      <SettingsScreenLayout>
+        {machines.length > 1 ? <ComputerPicker machine={machine} machines={machines} /> : null}
+        <Caption>{DemoCopy.voiceNote}</Caption>
       </SettingsScreenLayout>
     );
   }

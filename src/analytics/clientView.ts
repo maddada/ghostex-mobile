@@ -1,4 +1,5 @@
 import { execRemoteCommand } from '../remote/commands';
+import { isDemoMachineId } from '../demo/identity';
 import { lastHelloMachineId } from './clientHello';
 import { clientViewCommand, machineIdForRoute, mobileViewForRoute, type MobileView } from './mobileViews';
 
@@ -33,7 +34,7 @@ export function reportMobileView(route: { name: string; params?: unknown } | und
   const view = mobileViewForRoute(route?.name);
   if (view === null) return;
   const machineId = machineIdForRoute(route?.params) ?? lastHelloMachineId();
-  if (machineId === null) return;
+  if (machineId === null || isDemoMachineId(machineId)) return;
   if (!shouldReport(machineId, view, Date.now())) return;
   void execRemoteCommand(machineId, clientViewCommand(view), VIEW_EXEC_TIMEOUT_MS).catch(() => undefined);
 }

@@ -17,6 +17,7 @@
 import { create } from 'zustand';
 
 import { chatMachineLink, UNREACHABLE_MESSAGE } from '../chat/rust/machine-link';
+import { isDemoMachine } from '../demo/identity';
 import type { MachineConnectionTarget } from './credentials';
 import {
   answerError,
@@ -118,6 +119,7 @@ export async function refreshMachineTools(
   machine: MachineConnectionTarget,
   options: { ifOlderThanMs?: number } = {},
 ): Promise<void> {
+  if (isDemoMachine(machine)) return;
   const before = current(machine.id);
   if (before.reading) return;
   if (

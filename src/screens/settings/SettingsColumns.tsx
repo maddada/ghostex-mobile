@@ -38,6 +38,8 @@ import type { RootStackParamList } from '../../navigation/types';
 import { GhostexStrokeWidth } from '../../theme/palette';
 import { useAppearance } from '../../theme/useAppearance';
 import { useUpdateNotice } from '../../updates/updateNotice';
+import { isDemoMachine } from '../../demo/identity';
+import { useMachinesStore } from '../../machines/store';
 import { SETTINGS_PAGE_ORDER, SETTINGS_PAGES, type SettingsPageId } from './pages';
 import { LinkRow, SettingsPageEdgesContext, useSettingsStyles } from './SettingsControls';
 import { settingsColumnsFor, type ColumnRoute } from './columnRules';
@@ -67,9 +69,11 @@ export function SettingsPageList({
   // Rows report a selection only beside an open page; the one-column list has none.
   const rowSelected = (page: SettingsPageId): boolean | undefined =>
     selected === undefined ? undefined : page === selected;
+  const demoOn = useMachinesStore((state) => state.machines.some((machine) => isDemoMachine(machine)));
+  const pages = demoOn ? ([...SETTINGS_PAGE_ORDER, 'demo'] as const) : SETTINGS_PAGE_ORDER;
   return (
     <>
-      {SETTINGS_PAGE_ORDER.map((page) => {
+      {pages.map((page) => {
         const open = () => onOpen(page);
         if (page === 'updates') {
           // A throwing summary falls back to the plain row, so the list and the Updates page stay reachable.
@@ -109,6 +113,7 @@ function isSettingsPageId(value: unknown): value is SettingsPageId {
 }
 
 function isListedPage(page: SettingsPageId): boolean {
+  if (page === 'demo') return useMachinesStore.getState().machines.some((machine) => isDemoMachine(machine));
   return SETTINGS_PAGE_ORDER.includes(page);
 }
 

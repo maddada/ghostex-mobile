@@ -18,6 +18,7 @@ import { Platform } from 'react-native';
 import { clientHelloCommand, type ClientHelloPlatform } from '../commands/ghostexCli';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { runningAppVersion } from '../updates/overTheAir';
+import { isDemoMachine } from '../demo/identity';
 
 /** The daemon dedupes to one attach per client kind per hour; match it. */
 const HELLO_INTERVAL_MS = 60 * 60 * 1000;
@@ -55,6 +56,7 @@ function currentPlatform(): ClientHelloPlatform | null {
  * because this runs right after a successful inventory fetch.
  */
 export function reportClientHello(machine: MachineConnectionTarget): void {
+  if (isDemoMachine(machine)) return;
   const platform = currentPlatform();
   if (platform === null) return;
   lastMachineId = machine.id;

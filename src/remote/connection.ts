@@ -2,6 +2,7 @@ import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src'
 import { resolveSshConfig, type MachineConnectionTarget } from '../machines/credentials';
 import { forgetRemoteEnvironment } from './commands';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
+import { isDemoMachine } from '../demo/identity';
 import {
   easyConnectDialCandidates,
   noteEasyConnectDial,
@@ -28,7 +29,8 @@ export function ensureConnected(
   options: { verify?: boolean; reset?: boolean } = {},
 ): Promise<void> {
   // A Cloud Box has no SSH: its chat link reaches it through `cloudBoxes/boxLink.ts`.
-  if (isCloudBoxMachineId(machine.id)) return Promise.resolve();
+  // The demo computer has no SSH either: its inventory is bundled on the phone.
+  if (isCloudBoxMachineId(machine.id) || isDemoMachine(machine)) return Promise.resolve();
   const existing = attempts.get(machine.id);
   if (existing && (!options.reset || existing.reset)) {
     return options.verify && !existing.verify && !existing.reset

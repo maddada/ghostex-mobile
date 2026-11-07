@@ -39,6 +39,8 @@ import { CheckIcon } from '../components/terminal/icons';
 import { EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
+import DemoMachineForm from '../demo/DemoMachineForm';
+import { isDemoMachine } from '../demo/identity';
 import { refreshMachineTools } from '../machines/machineTools';
 import {
   getPassphrase,
@@ -346,6 +348,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const reachable =
     existing !== null && isMachineEnabled(existing) && inventory?.lastError === null && inventory.summary !== null;
   useEffect(() => {
+    if (existing !== null && isDemoMachine(existing)) return;
     if (reachable && existing !== null) refreshAppUpdate(existing, { ifOlderThanMs: APP_UPDATE_FRESH_MS });
     // Its agent CLIs, skills and tools, for the sections below the Ghostex row.
     if (reachable && existing !== null) void refreshMachineTools(existing, { ifOlderThanMs: APP_UPDATE_FRESH_MS });
@@ -494,6 +497,16 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   if (removed !== 'no') {
     // The record is gone; never re-render its values as an add form while leaving.
     return <SafeAreaView style={formStyles.page} edges={['bottom']} />;
+  }
+
+  if (existing !== null && isDemoMachine(existing)) {
+    return (
+      <DemoMachineForm
+        onRemoved={() =>
+          setRemoved(useMachinesStore.getState().machines.length === 0 ? 'noneRemain' : 'someRemain')
+        }
+      />
+    );
   }
 
   return (

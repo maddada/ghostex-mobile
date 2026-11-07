@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 
 import { chatMachineLink } from '../chat/rust/machine-link';
+import { isDemoMachine } from '../demo/identity';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import {
   isUnknownRoute,
@@ -24,6 +25,9 @@ const POLL_MS = 500;
 type Answer<T> = { ok: true; value: T } | { ok: false; message: string; outdated: boolean };
 
 async function call<T>(machine: MachineConnectionTarget, method: string, params: unknown): Promise<Answer<T>> {
+  if (isDemoMachine(machine)) {
+    return { ok: false, message: 'Voice needs a real computer. The demo stays on this phone.', outdated: false };
+  }
   try {
     const answer = await chatMachineLink(machine).rpc(method, params, READ_TIMEOUT_MS);
     if (answer.error !== null)

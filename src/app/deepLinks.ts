@@ -100,7 +100,7 @@ const appDeps: DeepLinkDeps = {
       host: machine.host,
       username: machine.username,
       port: machine.port,
-      transport: machine.transport,
+      transport: machine.transport === 'demo' ? undefined : machine.transport,
     };
   },
   session: (machineId, sessionId) => {

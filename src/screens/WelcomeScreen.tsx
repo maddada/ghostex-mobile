@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FoldersGlyph, SparklesGlyph, TerminalGlyph } from '../components/onboarding/SetupIcons';
 import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
 import { WelcomeCopy } from '../copy';
+import { DemoCopy } from '../demo/copy';
+import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { GhostexStrokeWidth } from '../theme/palette';
 
@@ -65,6 +67,12 @@ export default function WelcomeScreen({ navigation }: Props) {
           large
           label={WelcomeCopy.connectButton}
           onPress={() => navigation.navigate('ConnectChoose')}
+        />
+        <SetupButton
+          variant="secondary"
+          large
+          label={DemoCopy.welcomeButton}
+          onPress={() => useMachinesStore.getState().addDemoComputer()}
         />
         <Text style={[setupText.small, setupText.center]}>{WelcomeCopy.footnote}</Text>
       </View>

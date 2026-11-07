@@ -17,6 +17,7 @@
 import { create } from 'zustand';
 
 import { chatMachineLink, UNREACHABLE_MESSAGE } from '../chat/rust/machine-link';
+import { isDemoMachine } from '../demo/identity';
 import type { MachineConnectionTarget } from './credentials';
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -220,6 +221,7 @@ const METHOD_FOR_OP: Record<AppUpdateOp, string> = {
 
 /** Reads the computer's version and update, unless a request or a follow is already running or the answer is fresh. */
 export function refreshAppUpdate(machine: MachineConnectionTarget, options: { ifOlderThanMs?: number } = {}): void {
+  if (isDemoMachine(machine)) return;
   const update = current(machine.id);
   if (update.busy || update.following) return;
   if (
@@ -234,12 +236,13 @@ export function refreshAppUpdate(machine: MachineConnectionTarget, options: { if
 
 /** The row's action: read again, check for an update, or install it. */
 export function runAppUpdateOp(machine: MachineConnectionTarget, op: AppUpdateOp): void {
-  if (current(machine.id).busy) return;
+  if (isDemoMachine(machine) || current(machine.id).busy) return;
   void run(machine, op);
 }
 
 /** The "Keep this machine up to date" switch, stored on that computer. */
 export function setAppAutoUpdate(machine: MachineConnectionTarget, enabled: boolean): void {
+  if (isDemoMachine(machine)) return;
   const update = current(machine.id);
   if (update.busy) return;
   // The switch moves at once; the answer settles it.

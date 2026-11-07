@@ -73,6 +73,8 @@ import {
   RefreshIcon,
 } from '../components/terminal/icons';
 import { DuoChromeCopy, WebPreviewCopy } from '../copy';
+import { isDemoMachineId } from '../demo/identity';
+import { demoPreviewHtml } from '../demo/previewHtml';
 import { ensureConnected } from '../inventory/client';
 import { hasPassword } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
@@ -128,7 +130,7 @@ type PreviewAddress = ({ kind: 'remote' } & RemoteTarget) | { kind: 'external'; 
  * because React drops an identical `source.uri` and RNCWebView would never see
  * the request.
  */
-type PreviewSource = { uri: string; nonce: number };
+type PreviewSource = { uri: string; nonce: number } | { html: string; nonce: number };
 
 function addressText(address: PreviewAddress): string {
   return address.kind === 'remote'
@@ -422,7 +424,7 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
         return;
       }
       setSource((previous) => {
-        if (previous === null) return { uri, nonce: 0 };
+        if (previous === null || !('uri' in previous)) return { uri, nonce: previous === null ? 0 : previous.nonce + 1 };
         // A new user agent needs a new WebView, so a mode change always takes a fresh nonce.
         return previous.uri === uri || modeChanged
           ? { uri, nonce: previous.nonce + 1 }
@@ -433,6 +435,13 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
   );
 
   /** Forward `remotePort`, then load it. Native is idempotent per (machine, port). */
+  const showDemoPage = useCallback((): void => {
+    setAddress({ kind: 'remote', scheme: 'http', remotePort: 5173, path: '/', host: 'localhost' });
+    setConnecting(false);
+    setFailure(null);
+    setSource((previous) => ({ html: demoPreviewHtml(), nonce: previous === null ? 0 : previous.nonce + 1 }));
+  }, []);
+
   const openRemotePort = useCallback(
     async (scheme: 'http' | 'https', remotePort: number, path: string, linkHost: string): Promise<void> => {
       const seq = seqRef.current + 1;
@@ -441,6 +450,10 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
       const host = hostByPortRef.current.get(remotePort) ?? linkHost;
       intendedRef.current = { scheme, remotePort, path, host };
 
+      if (isDemoMachineId(machineId)) {
+        showDemoPage();
+        return;
+      }
       const target = machineRef.current;
       if (target === undefined) {
         if (isCurrent()) {
@@ -491,11 +504,15 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
         if (isCurrent()) setConnecting(false);
       }
     },
-    [loadUri, setLastPort],
+    [loadUri, machineId, setLastPort, showDemoPage],
   );
 
   const openAddress = useCallback(
     (url: string): void => {
+      if (isDemoMachineId(machineId)) {
+        showDemoPage();
+        return;
+      }
       const parsed = parseHttpUrl(url);
       if (parsed === null) return;
       if (isLoopbackHost(parsed.host)) {
@@ -509,7 +526,7 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
       setConnecting(false);
       loadUri(url);
     },
-    [loadUri, openRemotePort],
+    [loadUri, machineId, openRemotePort, showDemoPage],
   );
 
   const submitAddress = useCallback((): void => {
@@ -559,12 +576,16 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
 
   // Opening the preview, and opening another page in it (a followed link).
   useEffect(() => {
+    if (isDemoMachineId(machineId)) {
+      showDemoPage();
+      return;
+    }
     if (page.url !== undefined) {
       openAddress(page.url);
       return;
     }
     void openRemotePort(page.scheme ?? 'http', page.remotePort ?? 80, page.path ?? '/', page.host ?? 'localhost');
-  }, [openAddress, openRemotePort, page.url, page.path, page.remotePort, page.scheme, page.host]);
+  }, [machineId, openAddress, openRemotePort, page.url, page.path, page.remotePort, page.scheme, page.host, showDemoPage]);
 
   /** Whether the page on screen is one the computer's gxserver serves (a `ghostex show` page). */
   const onGxserverPage = useCallback((): boolean => {
@@ -1083,8 +1104,8 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
             <WebView<object>
               ref={webviewRef}
               key={`${source.nonce}:${desktopMode ? 'desktop' : 'phone'}`}
-              source={{ uri: source.uri }}
-              originWhitelist={['http://*', 'https://*']}
+              source={'html' in source ? { html: source.html, baseUrl: 'about:blank' } : { uri: source.uri }}
+              originWhitelist={['http://*', 'https://*', 'about:blank']}
               style={styles.webview}
               onNavigationStateChange={handleNavigationStateChange}
               onShouldStartLoadWithRequest={handleShouldStartLoad}
