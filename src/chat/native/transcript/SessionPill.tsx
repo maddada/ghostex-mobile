@@ -7,15 +7,19 @@
  * the line's own type and colour (`textStyle`), a fill only while pressed (CDXC:SessionChat
  * 2026-10-29 DECISION on desktop `session_pill` in inter_agent_message.rs). A tap switches to that session; a session that is gone
  * draws muted and does nothing.
+ *
+ * A board card's mention (`[title](board:B4)`, gx-chat-core `board_reference`) is the same pill in
+ * the board's own tint (`reference.board`, desktop `board_mention_link`) with the Board pill's icon
+ * and the card's title now; a card the board no longer has draws muted with the link's own text.
  */
 
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { CoordinatorGlyph } from '../../../components/sessions/icons';
-import { SidebarPalette } from '../../../theme/palette';
+import { colorWithOpacity, SidebarPalette } from '../../../theme/palette';
 import { AgentMark } from '../cards/agentMark';
 import { Glyph } from '../cards/icons';
-import { useTranscriptEnv } from './context';
+import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { obj, str, type JsonRecord } from './json';
 
 /** How far a card name's pressed fill reaches past the name (desktop `CARD_PILL_PAD`). */
@@ -40,7 +44,13 @@ export function SessionPill({
   textStyle?: StyleProp<TextStyle>;
 }) {
   const { theme, dispatch } = useTranscriptEnv();
-  const missing = pill.missing === true;
+  const { boardItemTitles } = useTranscriptFlags();
+  const board = pill.kind === 'board';
+  const boardTitle = board ? boardItemTitles?.[str(pill, 'item')] : undefined;
+  const missing = board ? boardItemTitles !== null && !boardTitle : pill.missing === true;
+  const label = boardTitle !== undefined && boardTitle.length > 0 ? boardTitle : str(pill, 'label');
+  const title = board && missing ? str(pill, 'goneTitle') : str(pill, 'title');
+  const tint = board && !missing ? theme.reference.board : undefined;
   const showsLogo = pill.logo !== false;
   const session = obj(pill.session);
   const open =
@@ -60,20 +70,22 @@ export function SessionPill({
       onPress={open}
       {...(onLongPress !== undefined ? { onLongPress } : {})}
       accessibilityRole="link"
-      accessibilityLabel={`${str(pill, 'label')}: ${str(pill, 'title')}`}
+      accessibilityLabel={`${label}: ${title}`}
       hitSlop={4}
       style={({ pressed }) => [
         styles.pill,
-        showsLogo
-          ? { borderColor: theme.ink(0.14), backgroundColor: pressed && !missing ? theme.ink(0.08) : theme.ink(0.03) }
-          : [styles.cardPill, pressed && !missing ? { backgroundColor: theme.ink(0.08) } : null],
+        !showsLogo
+          ? [styles.cardPill, pressed && !missing ? { backgroundColor: theme.ink(0.08) } : null]
+          : tint !== undefined
+            ? { borderColor: colorWithOpacity(tint, 42), backgroundColor: colorWithOpacity(tint, pressed ? 18 : 10) }
+            : { borderColor: theme.ink(0.14), backgroundColor: pressed && !missing ? theme.ink(0.08) : theme.ink(0.03) },
       ]}
     >
       {showsLogo ? (
         <View style={missing ? styles.faded : null}>
-          {pill.kind === 'board' ? (
+          {board ? (
             // A board item's pill (gx-chat-core `board_reference`) takes the Board pill's icon.
-            <Glyph name="layout-board-split" size={12} color={theme.foreground} />
+            <Glyph name="layout-board-split" size={12} color={tint ?? theme.foreground} />
           ) : pill.coordinator === true ? (
             <CoordinatorGlyph size={12} color={theme.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
           ) : (
@@ -89,7 +101,7 @@ export function SessionPill({
         }
         numberOfLines={1}
       >
-        {str(pill, 'label')}
+        {label}
       </Text>
     </Pressable>
   );

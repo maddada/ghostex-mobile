@@ -208,6 +208,12 @@ export type TranscriptFlags = {
   readAloudSpeakingId: string | null;
   /** A coordinator's relayed thread approval cards, by the report row each is drawn under (`anchorId`). */
   relayedApprovals: { [messageId: string]: JsonRecord };
+  /**
+   * Every card on the chat's board by ref (`B4`) with its title now (`coordinatorBoard.itemTitles`,
+   * gx-chat-core `board_reference`): a board mention reads its label from it and draws dimmed when
+   * its ref is not in it. Null on a chat without a board, or a gxserver that sends no index.
+   */
+  boardItemTitles: { [ref: string]: string } | null;
 };
 
 const EMPTY_FLAGS: TranscriptFlags = {
@@ -234,6 +240,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   readAloudAvailable: false,
   readAloudSpeakingId: null,
   relayedApprovals: {},
+  boardItemTitles: null,
 };
 
 const FlagsContext = createContext<TranscriptFlags>(EMPTY_FLAGS);
@@ -281,7 +288,16 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     readAloudAvailable: document.readAloud?.available === true,
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),
+    boardItemTitles: boardItemTitles(document),
   };
+}
+
+function boardItemTitles(document: ChatDocument): { [ref: string]: string } | null {
+  const titles = obj(obj(document.coordinatorBoard)?.itemTitles);
+  if (titles === null) return null;
+  return Object.fromEntries(
+    Object.entries(titles).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 /** Row details by row key; changes only when the core ships new ones. */

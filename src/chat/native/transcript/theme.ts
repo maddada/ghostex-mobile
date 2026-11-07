@@ -229,7 +229,8 @@ const DARK: ChatRoles = {
     sideChat: '#bdb2f5',
     comment: '#b4c3ef',
     session: '#e4e4e7',
-    board: '#e4e4e7',
+    // A board mention's own tint (`board` in reference-visual.json's `transcript`, desktop `board_mention_link`).
+    board: '#5ccfc4',
   },
   meterTrack: 'rgba(158,158,158,0.24)',
   meterFill: '#b9b9b9',
@@ -292,7 +293,7 @@ const LIGHT: ChatRoles = {
     sideChat: '#5a4ab0',
     comment: '#4b5c99',
     session: '#27272a',
-    board: '#27272a',
+    board: '#0f766e',
   },
   meterTrack: 'rgba(85,85,92,0.24)',
   meterFill: '#8b8b8b',
