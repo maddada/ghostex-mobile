@@ -25,6 +25,8 @@ import {
   type MachineTransport,
 } from './credentials';
 import { migrateMachineData } from './machineDataMigration';
+import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
+import { resetDemoWorld } from '../demo/world';
 
 export type { MachineTransport };
 
@@ -47,6 +49,7 @@ export const EASY_CONNECT_LABEL = 'Easy Connect';
 
 /** How a machine is reached, in the words the app uses for it. */
 export function machineTransportLabel(machine: Pick<MachineRecord, 'transport'>): string {
+  if (machine.transport === 'demo') return 'Demo';
   return machine.transport === 'tailcat' ? EASY_CONNECT_LABEL : 'Tailscale';
 }
 
@@ -124,6 +127,7 @@ export type MachineSaveResult = { ok: true; machine: MachineRecord } | { ok: fal
  * back to the username and is always tagged with the transport.
  */
 export function machineDisplayLabel(machine: MachineRecord): string {
+  if (machine.transport === 'demo') return machine.name.length > 0 ? machine.name : 'Demo computer';
   if (machine.transport === 'tailcat') {
     const base = machine.name.length > 0 ? machine.name : machine.username;
     return `${base} · ${EASY_CONNECT_LABEL}`;
@@ -292,6 +296,8 @@ type MachinesState = {
   addMachine: (input: MachineInput) => Promise<MachineSaveResult>;
   updateMachine: (id: string, input: MachineInput) => Promise<MachineSaveResult>;
   removeMachine: (id: string) => Promise<void>;
+  /** Saves the bundled sample computer, or selects it again when it is already saved. */
+  addDemoComputer: () => MachineRecord;
   /** Show/hide a machine on the Sessions screen; reselects when needed. */
   setMachineDisabled: (id: string, disabled: boolean) => void;
   /** Moves a machine one place left or right in the Sessions tab strip (see `moveMachine`). */
@@ -325,7 +331,10 @@ function isMachineRecord(value: unknown): value is MachineRecord {
     typeof record.username === 'string' &&
     typeof record.port === 'number' &&
     typeof record.savePassword === 'boolean' &&
-    (record.transport === undefined || record.transport === 'ssh' || record.transport === 'tailcat') &&
+    (record.transport === undefined ||
+      record.transport === 'ssh' ||
+      record.transport === 'tailcat' ||
+      record.transport === 'demo') &&
     (record.disabled === undefined || typeof record.disabled === 'boolean') &&
     (record.lastConnectedAt === null || typeof record.lastConnectedAt === 'string') &&
     (record.deviceId === undefined || typeof record.deviceId === 'string') &&
@@ -465,7 +474,30 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     return { ok: true, machine };
   },
 
+  addDemoComputer: () => {
+    const current = get().machines;
+    const existing = current.find((machine) => isDemoMachine(machine));
+    if (existing !== undefined) {
+      const machines = existing.disabled === true
+        ? current.map((machine) => (machine.id === existing.id ? { ...machine, disabled: false } : machine))
+        : current;
+      set({ machines, selectedMachineId: existing.id });
+      persistMachines(machines);
+      persistSelectedMachineId(existing.id);
+      return { ...existing, disabled: false };
+    }
+    const machine = demoMachineRecord();
+    const machines = [...current, machine];
+    set({ machines, selectedMachineId: machine.id });
+    persistMachines(machines);
+    persistSelectedMachineId(machine.id);
+    return machine;
+  },
+
   removeMachine: async (id) => {
+    if (id === DEMO_MACHINE_ID || isDemoMachine(get().machines.find((machine) => machine.id === id))) {
+      resetDemoWorld();
+    }
     await deleteAllCredentials(id);
     const nextMachines = get().machines.filter((machine) => machine.id !== id);
     const selectedMachineId = resolveSelectedMachineId(

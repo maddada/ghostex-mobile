@@ -78,6 +78,8 @@ import WorkLinkPicker from './sessions-screen/work-link-picker';
 import DrawerBlockView, { type DrawerBlockActions } from './sessions-screen/DrawerBlockView';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { CloseIcon, WarningTriangleIcon } from '../components/terminal/icons';
+import { DemoCopy } from '../demo/copy';
+import { isDemoMachine } from '../demo/identity';
 import {
   cancelDelayedSendCommand,
   closeAfterDoneCommand,
@@ -1027,6 +1029,21 @@ export default function SessionsScreen({ navigation }: Props) {
           }}
           onAdd={() => navigation.navigate('ConnectChoose')}
         />
+      ) : null}
+      {machine !== null && isDemoMachine(machine) ? (
+        <View
+          accessibilityRole="text"
+          style={{
+            marginTop: 8,
+            marginHorizontal: 16,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: sidebarAppearance.card,
+          }}
+        >
+          <Text style={{ color: sidebarAppearance.muted, fontSize: 13, lineHeight: 18 }}>{DemoCopy.banner}</Text>
+        </View>
       ) : null}
       {tailscaleApplies && tailscaleReminder && tailscaleConnected === false && !computerReachable ? (
         <View style={styles.tailscaleWarning}>

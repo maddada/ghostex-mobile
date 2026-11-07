@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 
 import { GhostexTerminalView } from '../../modules/ghostex-native/src';
+import DemoTerminalView from '../demo/DemoTerminalView';
+import { isDemoMachineId } from '../demo/identity';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import { terminalSlideOffset } from '../components/terminal/terminalKeyboardSlide';
 import { summarizeFailure } from '../inventory/client';
@@ -44,6 +46,14 @@ export default function SessionPane({ sessionKey, view, covered, active }: Sessi
   }, [detached, sessionKey]);
 
   if (tab === null) return null;
+  if (isDemoMachineId(tab.machineId)) {
+    return (
+      <DemoTerminalView
+        sessionId={tab.ghostexSessionId ?? sessionKey}
+        style={[styles.terminal, { width: view.width, height: view.height }]}
+      />
+    );
+  }
   const offset = terminalSlideOffset(caretTop, view.height, covered);
   return (
     <>

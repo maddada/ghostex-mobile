@@ -13,9 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
-import { CameraGlyph, QrcodeGlyph, ShieldGlyph } from '../components/onboarding/SetupIcons';
+import { CameraGlyph, QrcodeGlyph, ShieldGlyph, SparklesGlyph } from '../components/onboarding/SetupIcons';
 import { useSetupText } from '../components/onboarding/SetupPrimitives';
 import { ConnectChooseCopy } from '../copy';
+import { DemoCopy } from '../demo/copy';
+import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 
 
@@ -26,6 +28,11 @@ export default function ConnectChooseScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const setupText = useSetupText();
   const openScanner = (): void => navigation.navigate('ScanCode');
+  const openDemo = (): void => {
+    const hadMachines = useMachinesStore.getState().machines.length > 0;
+    useMachinesStore.getState().addDemoComputer();
+    if (hadMachines) navigation.navigate('Sessions');
+  };
   // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   return (
@@ -38,6 +45,13 @@ export default function ConnectChooseScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.cards}>
+          <PathCard
+            icon={<SparklesGlyph size={20} color={appearance.accent} />}
+            title={DemoCopy.entryTitle}
+            subtitle={DemoCopy.entrySubtitle}
+            footNote="On this phone"
+            button={{ label: DemoCopy.entryButton, onPress: openDemo }}
+          />
           <PathCard
             recommended
             icon={<QrcodeGlyph size={20} color={appearance.accent} />}

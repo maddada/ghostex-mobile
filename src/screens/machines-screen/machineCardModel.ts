@@ -5,6 +5,8 @@
  */
 
 import { MachinesCopy } from '../../copy';
+import { DemoCopy } from '../../demo/copy';
+import { isDemoMachine } from '../../demo/identity';
 import type { MachineInventory } from '../../inventory/store';
 import { isMachineEnabled, machineDisplayLabel, machineTransportLabel, type MachineRecord } from '../../machines/store';
 import { SetupPalette } from '../../theme/palette';
@@ -66,7 +68,9 @@ export function machineCardDetail(
   now: Date,
 ): string {
   const parts: string[] = [machineTransportLabel(machine)];
-  if (machine.transport === 'tailcat') {
+  if (isDemoMachine(machine)) {
+    parts.push(DemoCopy.cardDetail);
+  } else if (machine.transport === 'tailcat') {
     parts.push(machine.username);
     if (machine.pairedAt !== undefined) {
       parts.push(MachinesCopy.detail.paired(formatPairedDate(machine.pairedAt, now)));

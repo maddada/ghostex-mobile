@@ -20,7 +20,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Ghostex uses the camera to scan the tailcat pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
+          "cameraPermission": "Ghostex uses the camera to scan the pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
           "recordAudioAndroid": false
         }
       ],
@@ -59,7 +59,7 @@
         "LSApplicationQueriesSchemes": ["tailscale"],
         "UIAppFonts": ["JetBrainsMonoNerdFont-Regular.ttf"],
         "NSPhotoLibraryUsageDescription": "Ghostex uses your photo library so you can attach images to your sessions.",
-        "NSCameraUsageDescription": "Ghostex uses the camera to scan the tailcat pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
+        "NSCameraUsageDescription": "Ghostex uses the camera to scan the pairing QR code shown on your computer, and when you capture a photo to attach to a session.",
         "NSMicrophoneUsageDescription": "Ghostex uses the microphone when you talk with the voice agent, dictate a message in the chat or record a video to attach to a session.",
         "NSSpeechRecognitionUsageDescription": "Ghostex turns what you dictate in the chat into text.",
         "UIBackgroundModes": ["audio", "voip"],

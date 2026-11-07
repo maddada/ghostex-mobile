@@ -98,7 +98,9 @@ import { terminalObstruction, terminalSlideOffset } from '../components/terminal
 import { useCommandPad } from '../components/terminal/useCommandPad';
 import { useKeyboardMetrics } from '../components/terminal/useKeyboardMetrics';
 import { isSessionChatSupportedAgent } from '../chat/session-chat-helpers';
-import NativeChatScreen from '../chat/native/NativeChatScreen';
+import SessionChatSurface from '../demo/SessionChatSurface';
+import DemoTerminalView from '../demo/DemoTerminalView';
+import { isDemoMachineId } from '../demo/identity';
 import SessionLinksSheet from '../chat/native/SessionLinksSheet';
 import { useSessionLinksRefresh } from '../chat/native/useSessionLinksRefresh';
 import { useTranscriptTheme } from '../chat/native/transcript/theme';
@@ -1278,7 +1280,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       : {
           sessionKey: paneChatKey,
           view: (
-            <NativeChatScreen
+            <SessionChatSurface
               key={paneChatKey}
               machine={paneChatTarget}
               projectId={chatProjectId}
@@ -1372,17 +1374,24 @@ export default function TerminalScreen({ navigation, route }: Props) {
         onLayout={onTerminalAreaLayout}
       >
         {activeTab !== null && !chatModeActive && twoPanes === null ? (
-          // Only the selected tab's terminal is mounted; the native registry
-          // keeps other entries warm across view detach.
-          <GhostexTerminalView
-            sessionKey={activeTab.sessionKey}
-            style={slidesWithKeyboard ? [styles.terminal, { top: -terminalOffset }] : styles.terminal}
-            onCaretChange={slidesWithKeyboard ? ({ nativeEvent }) => setCaretTop(nativeEvent.top) : undefined}
-            onSingleTap={() => setTapKeyboardHint(true)}
-            onOpenUrl={({ nativeEvent }) =>
-              openMachineLink(activeTab.machineId, nativeEvent.url, { projectId: activeProjectId })
-            }
-          />
+          isDemoMachineId(activeTab.machineId) ? (
+            <DemoTerminalView
+              sessionId={activeTab.ghostexSessionId ?? activeTab.sessionKey}
+              style={styles.terminal}
+            />
+          ) : (
+            // Only the selected tab's terminal is mounted; the native registry
+            // keeps other entries warm across view detach.
+            <GhostexTerminalView
+              sessionKey={activeTab.sessionKey}
+              style={slidesWithKeyboard ? [styles.terminal, { top: -terminalOffset }] : styles.terminal}
+              onCaretChange={slidesWithKeyboard ? ({ nativeEvent }) => setCaretTop(nativeEvent.top) : undefined}
+              onSingleTap={() => setTapKeyboardHint(true)}
+              onOpenUrl={({ nativeEvent }) =>
+                openMachineLink(activeTab.machineId, nativeEvent.url, { projectId: activeProjectId })
+              }
+            />
+          )
         ) : null}
         {twoPanes !== null && paneLayout !== null && activeTab !== null ? (
           // Two panes: each terminal in its own pane, the selected one in the active pane.
@@ -1430,7 +1439,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
            * CDXC:SessionChat 2026-09-25 DECISION:
            * User (2026-09-25): delete the phone's "Web (previous)" chat fallback so the phone runs only the native Rust chat. NativeChatScreen is the only chat view; the WebView chat, the Settings > Chat view choice and its bundled page are gone, and a stored `sessionChatView: 'web'` is ignored. Supersedes the earlier 2026-09-25 decision that kept the WebView as a fallback.
            */
-          <NativeChatScreen
+          <SessionChatSurface
             key={activeTab.sessionKey}
             machine={chatMachineTarget}
             projectId={activeProjectId}

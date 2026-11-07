@@ -1,4 +1,6 @@
 import { GhostexNative, type ExecResult } from '../../modules/ghostex-native/src';
+import { isDemoMachineId } from '../demo/identity';
+import { execDemoCommand } from '../demo/world';
 import { loginShellCommand, shellQuote } from '../commands/ghostexCli';
 import {
   cliArguments,
@@ -107,6 +109,7 @@ function readableResult(result: ExecResult): ExecResult {
 }
 
 export async function execRemoteCommand(machineId: string, command: string, timeoutMs: number): Promise<ExecResult> {
+  if (isDemoMachineId(machineId)) return execDemoCommand(command);
   const target = await remoteEnvironment(machineId);
   if (target.kind === 'posix') return GhostexNative.exec(machineId, loginShellCommand(command), timeoutMs);
   return execScript(
@@ -121,6 +124,7 @@ export async function execRemoteScript(
   script: RemoteScript,
   timeoutMs: number,
 ): Promise<ExecResult> {
+  if (isDemoMachineId(machineId)) return execDemoCommand(script.posix);
   const target = await remoteEnvironment(machineId);
   if (target.kind === 'posix') return GhostexNative.exec(machineId, loginShellCommand(script.posix), timeoutMs);
   return execScript(
