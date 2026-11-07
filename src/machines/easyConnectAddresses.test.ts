@@ -4,6 +4,9 @@ import { describe, test } from 'node:test';
 import {
   addressesNeedRefresh,
   decodeSavedAddresses,
+  dialErrorText,
+  failedDialParams,
+  FAILED_DIAL_REPORT_MAX_AGE_MS,
   easyConnectDialOrder,
   encodeSavedAddresses,
   readEasyConnectAddresses,
@@ -114,4 +117,37 @@ test('the list is asked for again after the refresh interval', () => {
   assert.equal(addressesNeedRefresh(null, 0), true);
   assert.equal(addressesNeedRefresh(saved, saved.fetchedAt + 1), false);
   assert.equal(addressesNeedRefresh(saved, saved.fetchedAt + ADDRESS_REFRESH_INTERVAL_MS), true);
+});
+
+describe('failed dial reports', () => {
+  const report = {
+    relay: 'relay-eu.ghostex.dev',
+    kind: 'ghostex' as const,
+    elapsedMs: 10_042.4,
+    error: 'tailcat could not reach the paired machine. (context deadline exceeded)',
+    failedAt: 5_000,
+  };
+
+  test('carry the lane, the time it took and the reason', () => {
+    assert.deepEqual(failedDialParams(report, 8_000), {
+      failedDial: {
+        relay: 'relay-eu.ghostex.dev',
+        kind: 'ghostex',
+        elapsedMs: 10_042,
+        secondsAgo: 3,
+        error: 'tailcat could not reach the paired machine. (context deadline exceeded)',
+      },
+    });
+  });
+
+  test('are dropped once too old to place next to the computer log', () => {
+    assert.equal(failedDialParams(report, 5_000 + FAILED_DIAL_REPORT_MAX_AGE_MS + 1), null);
+    assert.equal(failedDialParams(report, 4_000), null);
+  });
+
+  test('never carry an address', () => {
+    const text = dialErrorText(new Error('dial tcpGFwWCCYxcM1Q0ZlBz4EnDMF-Vu30bAbIUHXRZ failed'));
+    assert.equal(text, 'dial [address] failed');
+    assert.equal(dialErrorText('x'.repeat(1000)).length, 400);
+  });
 });

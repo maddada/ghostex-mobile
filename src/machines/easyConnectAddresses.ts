@@ -111,3 +111,49 @@ export const ADDRESS_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export function addressesNeedRefresh(saved: SavedEasyConnectAddresses | null, now: number): boolean {
   return saved === null || now - saved.fetchedAt >= ADDRESS_REFRESH_INTERVAL_MS;
 }
+
+/** The longest error text a dial report carries. */
+const DIAL_ERROR_MAX_CHARS = 400;
+
+/** What the phone tells the computer about an address it gave up on (`failedDial`). */
+export type FailedDialReport = {
+  relay: string;
+  kind: DialCandidate['kind'];
+  elapsedMs: number;
+  error: string;
+  /** When the dial failed, by the phone's clock. */
+  failedAt: number;
+};
+
+/** The text of a dial's failure, with anything that looks like an address replaced. */
+export function dialErrorText(error: unknown): string {
+  const text = error instanceof Error ? error.message : typeof error === 'string' ? error : String(error);
+  return text.replace(/\btc[A-Za-z0-9_-]{22,}/gu, '[address]').slice(0, DIAL_ERROR_MAX_CHARS);
+}
+
+/**
+ * The `failedDial` params of the address-list request, or `null` when the report is too old to
+ * be worth sending (the computer would not be able to place it next to its own link log).
+ *
+ * CDXC:RemotePairing 2026-11-08 WHY:
+ * On 2026-11-07 the computer's link log showed this phone's hello arrive on the relay lane and the
+ * phone on the public lane half a second later, twice, and the reason was only in the phone's own
+ * device log. The phone now sends it to the computer it reached the other way, which logs it as
+ * `easyConnect.dialFailed` (server/src/remote_access/easy_connect_addresses.rs).
+ */
+export function failedDialParams(report: FailedDialReport, now: number): Record<string, unknown> | null {
+  const ageMs = now - report.failedAt;
+  if (ageMs < 0 || ageMs > FAILED_DIAL_REPORT_MAX_AGE_MS) return null;
+  return {
+    failedDial: {
+      relay: report.relay,
+      kind: report.kind,
+      elapsedMs: Math.max(0, Math.round(report.elapsedMs)),
+      secondsAgo: Math.round(ageMs / 1000),
+      error: report.error,
+    },
+  };
+}
+
+/** A failure older than this is dropped instead of reported. */
+export const FAILED_DIAL_REPORT_MAX_AGE_MS = 10 * 60 * 1000;

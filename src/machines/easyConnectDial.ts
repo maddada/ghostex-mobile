@@ -17,10 +17,13 @@ import {
 import {
   addressesNeedRefresh,
   decodeSavedAddresses,
+  dialErrorText,
   easyConnectDialOrder,
   encodeSavedAddresses,
+  failedDialParams,
   readEasyConnectAddresses,
   type DialCandidate,
+  type FailedDialReport,
 } from './easyConnectAddresses';
 
 /** An address that failed waits behind the others this long. */
@@ -38,6 +41,8 @@ const failedAt = new Map<string, number>();
 const relayChecks = new Map<string, { at: number; up: boolean }>();
 const refreshing = new Set<string>();
 const lastRefreshAttempt = new Map<string, number>();
+/** The last address each machine gave up on, until the machine has been told. */
+const unreportedFailures = new Map<string, FailedDialReport>();
 
 /** Whether the relay answers derper's empty `/generate_204`, cached for a minute. */
 async function relayAnswers(relay: string): Promise<boolean> {
@@ -87,7 +92,9 @@ export async function easyConnectDialCandidates(machineId: string): Promise<Dial
 export function noteEasyConnectDial(
   machineId: string,
   candidate: DialCandidate,
-  outcome: { ok: true; elapsedMs: number } | { ok: false; elapsedMs: number; next: DialCandidate | null },
+  outcome:
+    | { ok: true; elapsedMs: number }
+    | { ok: false; elapsedMs: number; next: DialCandidate | null; error?: unknown },
 ): void {
   if (outcome.ok) {
     failedAt.delete(candidate.address);
@@ -96,9 +103,18 @@ export function noteEasyConnectDial(
     );
     return;
   }
-  failedAt.set(candidate.address, Date.now());
+  const now = Date.now();
+  failedAt.set(candidate.address, now);
+  const error = dialErrorText(outcome.error ?? 'unknown');
+  unreportedFailures.set(machineId, {
+    relay: candidate.relay,
+    kind: candidate.kind,
+    elapsedMs: outcome.elapsedMs,
+    error,
+    failedAt: now,
+  });
   console.warn(
-    `[easy-connect] ${machineId} could not connect via ${candidate.relay} (${candidate.kind}) after ${outcome.elapsedMs}ms` +
+    `[easy-connect] ${machineId} could not connect via ${candidate.relay} (${candidate.kind}) after ${outcome.elapsedMs}ms: ${error}` +
       (outcome.next === null ? '' : `; trying ${outcome.next.relay} (${outcome.next.kind})`),
   );
 }
@@ -119,23 +135,32 @@ export async function saveEasyConnectAddresses(machineId: string, value: unknown
 /**
  * After a connect, asks the computer for its addresses (`/api/easyConnectAddresses`, with the
  * phone's device token over the chat link) when the saved list is missing or older than the
- * refresh interval. Fire and forget: a computer that cannot answer (an older Ghostex) is asked
+ * refresh interval, or at once when this connect followed an address the phone gave up on: the
+ * request then carries why (`failedDial`), for the computer's log. Fire and forget: a computer that cannot answer (an older Ghostex) is asked
  * again an hour later, and the phone keeps dialing what it has.
  */
 export function refreshEasyConnectAddressesSoon(machine: MachineConnectionTarget): void {
   if (machine.transport !== 'tailcat' || refreshing.has(machine.id)) return;
+  // A dial that gave up on another address is reported now, whatever the list's age.
+  const failure = unreportedFailures.get(machine.id);
   const lastAttempt = lastRefreshAttempt.get(machine.id) ?? 0;
-  if (Date.now() - lastAttempt < REFRESH_RETRY_MS) return;
+  if (failure === undefined && Date.now() - lastAttempt < REFRESH_RETRY_MS) return;
   refreshing.add(machine.id);
   setTimeout(() => {
     void (async () => {
       try {
         const saved = decodeSavedAddresses(await getEasyConnectAddresses(machine.id));
-        if (!addressesNeedRefresh(saved, Date.now())) return;
+        const report = failure === undefined ? null : failedDialParams(failure, Date.now());
+        if (report === null && failure !== undefined) unreportedFailures.delete(machine.id);
+        if (report === null && !addressesNeedRefresh(saved, Date.now())) return;
         lastRefreshAttempt.set(machine.id, Date.now());
         const link = chatMachineLink(machine);
         if ((await link.route()) !== 'socket') return;
-        const answer = await link.rpc('easyConnectAddresses', {}, REFRESH_TIMEOUT_MS);
+        const answer = await link.rpc('easyConnectAddresses', report ?? {}, REFRESH_TIMEOUT_MS);
+        // Sent once: a newer failure replaced it only if it is a different report.
+        if (failure !== undefined && unreportedFailures.get(machine.id) === failure) {
+          unreportedFailures.delete(machine.id);
+        }
         if (answer.error !== null) {
           console.info(
             `[easy-connect] ${machine.id} gave no address list: ${answer.error.code ?? answer.error.message}`,

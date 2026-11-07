@@ -124,7 +124,7 @@ async function connectEasyConnect(
       noteEasyConnectDial(machine.id, candidate, { ok: true, elapsedMs: Date.now() - startedAt });
       return;
     } catch (error) {
-      noteEasyConnectDial(machine.id, candidate, { ok: false, elapsedMs: Date.now() - startedAt, next });
+      noteEasyConnectDial(machine.id, candidate, { ok: false, elapsedMs: Date.now() - startedAt, next, error });
       if (next === null) throw error;
       assertCurrent();
       // A half-built connection must not be what the next address's connect finds.
