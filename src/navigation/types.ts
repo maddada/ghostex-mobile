@@ -103,7 +103,7 @@ export type RootStackParamList = {
    * list this screen draws starts there.
    */
   SettingsPage: { page: SettingsPageId; listOffset?: number };
-  /** Notifications: the attention list, the computers' notification feeds (the bell on the Sessions screen). */
+  /** Notifications: the attention list, what needs the user on every computer (the bell on the Sessions screen). */
   AttentionList: undefined;
   /**
    * Usage: the usage meters of a computer's Claude and Codex accounts, full screen (a usage pane's content when the

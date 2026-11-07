@@ -1,7 +1,7 @@
 /**
- * Line glyphs of the attention list and the bell (the notifications design: bell, the four event glyphs,
- * blocked and offline), drawn like the sessions drawer's glyphs (`components/sessions/icons.tsx`):
- * 24-unit view box, 2-unit strokes, tinted through `color`.
+ * Line glyphs of the attention list and the bell (the notifications design: bell, the state glyphs, blocked and
+ * offline), drawn like the sessions drawer's glyphs (`components/sessions/icons.tsx`): 24-unit view box, 2-unit
+ * strokes, tinted through `color`.
  */
 
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -105,8 +105,31 @@ function AlertGlyph({ size, color }: GlyphProps) {
   );
 }
 
-/** The glyph beside a row's event word; word and glyph both carry the meaning, never the colour alone. */
-export function KindGlyph({ kind, size, color }: GlyphProps & { kind: ListKind }) {
+function LockGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M 6 11 h 12 v 9 H 6 Z M 8.5 11 V 8 a 3.5 3.5 0 0 1 7 0 v 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function StopGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+      <Path d="M 9.5 9.5 h 5 v 5 h -5 Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** The glyph beside a row's state word; word and glyph both carry the meaning, never the colour alone. */
+export function KindGlyph({ kind, size, color }: GlyphProps & { kind: ListKind | 'ended' }) {
   switch (kind) {
     case 'finished':
       return <CheckCircleGlyph size={size} color={color} />;
@@ -114,9 +137,10 @@ export function KindGlyph({ kind, size, color }: GlyphProps & { kind: ListKind }
       return <ClockGlyph size={size} color={color} />;
     case 'question':
       return <QuestionGlyph size={size} color={color} />;
-    case 'bell':
-    case 'custom':
-      return <BellGlyph size={size} color={color} />;
+    case 'approval':
+      return <LockGlyph size={size} color={color} />;
+    case 'ended':
+      return <StopGlyph size={size} color={color} />;
     default:
       return <AlertGlyph size={size} color={color} />;
   }

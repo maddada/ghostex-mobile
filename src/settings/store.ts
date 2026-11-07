@@ -8,6 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logAppEvent } from '../app/appLog';
 import type { AttentionAlertsFor } from '../notifications/attentionAlerts';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
@@ -204,6 +205,11 @@ export type GhostexSettings = ThemeColourSettings & {
   keepAliveIntervalSec: number;
   /** Agent notifications: master, finished, waiting, error and when the one-time ask was answered. */
   notifications: NotificationSettings;
+  /**
+   * Ended sessions the user removed from this phone's attention list, as `machineId\nsessionId`: kept on this phone
+   * only, never sent to a computer.
+   */
+  attentionRemovedSessions: string[];
 };
 
 export const TERMINAL_FONT_SIZE_MIN = 4;
@@ -312,6 +318,7 @@ export function defaultSettings(): GhostexSettings {
     keepAliveEnabled: true,
     keepAliveIntervalSec: 30,
     notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
+    attentionRemovedSessions: [],
   };
 }
 
@@ -561,6 +568,9 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     keepAliveEnabled: bool('keepAliveEnabled', defaults.keepAliveEnabled),
     keepAliveIntervalSec,
     notifications: sanitizeNotificationSettings(record.notifications),
+    attentionRemovedSessions: Array.isArray(record.attentionRemovedSessions)
+      ? record.attentionRemovedSessions.filter((key): key is string => typeof key === 'string' && key.includes('\n'))
+      : defaults.attentionRemovedSessions,
   };
 }
 
@@ -596,6 +606,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   patchSettings: (patch) => {
     const settings = { ...get().settings, ...patch };
     set({ settings });
-    void AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    void (async () => {
+      try {
+        await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      } catch {
+        // The change holds for this run only; the log says so instead of losing it silently.
+        logAppEvent('Settings: a change was not saved; it holds until Ghostex closes');
+      }
+    })();
   },
 }));

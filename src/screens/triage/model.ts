@@ -96,8 +96,11 @@ export function foldedOuterDisplay(
 /** A waiting session with the computer it is on, read by that computer's capabilities. */
 export type TriageWait<M> = { machine: M; session: GhostexSession; capabilities: GhostexSummaryCapabilities };
 
-/** The waiting ones of `candidates`, the one waiting longest first; a wait without a known start after them. */
-function longestWaitFirst<T extends { session: GhostexSession; capabilities: GhostexSummaryCapabilities }>(
+/**
+ * The waiting ones of `candidates`, the one waiting longest first; a wait without a known start after them. The
+ * attention list's Needs you section orders by it as well.
+ */
+export function longestWaitFirst<T extends { session: GhostexSession; capabilities: GhostexSummaryCapabilities }>(
   candidates: readonly T[],
 ): T[] {
   return candidates

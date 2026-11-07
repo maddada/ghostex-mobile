@@ -4,7 +4,7 @@
  * fold in lists; the laptop pose only, `components/common/foldGap.tsx`), measured as `foldGap.rntl.tsx` measures the
  * Settings, Sessions and work-link lists: the list's frame comes from the jest preset's `measureInWindow`, the whole
  * 669 x 951 window of the iPhone Duo in the laptop pose, whose fold's band is 455.5-495.5. Expected: the list's scroll
- * view ends 8 pt above the fold's top (447.5), before and after a scroll, with rows, group titles, a computer's notice
+ * view ends 8 pt above the fold's top (447.5), before and after a scroll, with rows, section titles, a computer's notice
  * or the empty state, and none of them carries a gap of its own; flat (inactive division) and in the book pose the
  * list keeps its whole frame and nothing is measured. An open row menu stays at its row while the device folds into
  * the laptop pose, because the gap moves no row. The real list, row model and stores under the real
@@ -25,6 +25,7 @@ import VerticalBarArea from '../components/common/verticalBar/VerticalBarArea';
 import { NotificationsCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
+import { useSettingsStore } from '../settings/store';
 import AttentionList from './AttentionList';
 import type { FeedRow } from './feedContract';
 import { useAttentionFeedStore } from './feedStore';
@@ -84,23 +85,26 @@ const MACHINE: MachineRecord = {
 };
 const OFFLINE: MachineRecord = { ...MACHINE, id: 'm2', name: 'MacBook', host: 'macbook.local' };
 
-/** Four unread rows, then six read ones, newest first. */
+/**
+ * Ten unread finished rows of ten sessions, newest first: ten rows under Done, below Needs you's "Nothing needs you".
+ * Each session's id is its row's, so a row's test id names both.
+ */
 const FEED: FeedRow[] = Array.from({ length: 10 }, (_, index) => ({
   id: `n${index}`,
   projectId: 'p1',
-  sessionId: `s${index}`,
+  sessionId: `n${index}`,
   kind: 'finished',
   title: '',
   subtitle: 'ghostex',
   agentName: 'claude',
   createdAt: new Date(Date.now() - (index + 1) * 60_000).toISOString(),
-  read: index >= 4,
+  read: false,
 }));
 const IDS = FEED.map((row) => row.id);
 
 /** The window frame `measureInWindow` answers for the list: the whole window unless a test moves it. */
 let listFrame = { top: 0, height: PORTRAIT.height };
-/** A row's window frame by notification id (what a long press measures), 44 pt tall, 8 pt apart from 120. */
+/** A row's window frame by its id (what a long press measures), 44 pt tall, 8 pt apart from 120. */
 const rowTop = (id: string) => 120 + IDS.indexOf(id) * 52;
 
 function barLayout(division: FoldDivision, window: { width: number; height: number }): BarLayout {
@@ -211,8 +215,8 @@ function liftedTop(id: string): unknown {
 
 const rowsAndTitles = () => [
   ...IDS.map(row),
-  title(NotificationsCopy.unread),
-  title(NotificationsCopy.read),
+  title(NotificationsCopy.section.needsYou),
+  title(NotificationsCopy.section.done),
 ];
 
 beforeEach(async () => {
@@ -229,6 +233,9 @@ beforeEach(async () => {
   await AsyncStorage.clear();
   useBarGeometryStore.setState({ hydrated: false, keyboardHeights: {}, layouts: {} });
   await useBarGeometryStore.getState().hydrate();
+  // The stored settings (none here) are loaded, as the app does before Done and Failed rows show.
+  useSettingsStore.setState({ hydrated: false });
+  await useSettingsStore.getState().hydrate();
   useMachinesStore.setState({ machines: [MACHINE] });
   useInventoryStore.setState({ inventoriesByMachineId: {} });
   useAttentionFeedStore.setState({ feeds: { m1: { status: 'ready', rows: FEED } }, permission: 'granted' });
@@ -240,7 +247,7 @@ afterEach(() => {
 });
 
 describe('the attention list', () => {
-  test('laptop pose: the list ends above the fold, also scrolled, and no row or group title carries a gap', async () => {
+  test('laptop pose: the list ends above the fold, also scrolled, and no row or section title carries a gap', async () => {
     await renderList();
     await expectEndsAboveFold(rowsAndTitles);
   });

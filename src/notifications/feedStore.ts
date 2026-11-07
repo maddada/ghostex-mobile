@@ -1,7 +1,7 @@
 /**
  * Agent notifications and the attention list, wired to the app: one `FeedEventSource` for the app's
  * lifetime reads every enabled computer's notification feed over the warm link on every screen, keeps the
- * rows for the attention list and the bell, turns new rows into local notifications (`processHostEvents`),
+ * rows for the attention list, turns new rows into local notifications (`processHostEvents`),
  * runs the one-time ask and opens the session a notification names when it is tapped.
  *
  * Pushes go through the same gate. A push that comes while the app is in front, or inactive, is one iOS asks the
@@ -45,10 +45,20 @@ import { hasQuestion } from '../contract/mobileSummary';
 import { useInventoryStore } from '../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
+import { fetchClosedSessions, restoreClosedSession } from '../sessions/closedSessions';
+import type { ClosedSession } from '../sessions/sessionSearch';
 import { sessionOnScreen } from '../terminal/zmxDisplay';
+import {
+  endedCandidates,
+  listsCurrently,
+  machineFeed,
+  sessionKey,
+  unreadRowIds,
+  type AttentionRow,
+} from './attentionRows';
 import { HOST_EVENT_KINDS, hostEventFromFeedRow, sessionFacts, type HostEvent } from './events';
 import { FeedEventSource, FeedUnavailableError, type FeedReadFailure } from './eventSource';
-import { FeedRequestError, readFeed, updateFeed, type FeedRpc, type FeedUpdate } from './feedClient';
+import { FeedRequestError, markRowsRead, readFeed, updateFeed, type FeedRpc, type FeedUpdate } from './feedClient';
 import { isAccountRow, type FeedRow, type FeedSnapshot } from './feedContract';
 import { NOTIFICATION_STREAM_CAPABILITY, openFeedStream } from './feedStream';
 import { runFirstAsk, type PermissionState } from './firstAsk';
@@ -82,12 +92,22 @@ type AttentionFeedState = {
    * closed.
    */
   pushComputers: readonly string[] | null;
+  /**
+   * Per computer: the sessions it lists as closed, read for the attention list when it shows sessions its session
+   * list does not hold (`endedCandidates`), the last good read kept through a failed one (`readClosedSessions`); a
+   * Done or Failed session reads "Ended" only when it is here.
+   */
+  closed: Record<string, readonly ClosedSession[]>;
+  /** Restores of ended sessions under way or failed, by `sessionKey`; a success leaves no entry. */
+  restores: Record<string, 'running' | 'failed'>;
 };
 
 export const useAttentionFeedStore = create<AttentionFeedState>()(() => ({
   feeds: {},
   permission: null,
   pushComputers: null,
+  closed: {},
+  restores: {},
 }));
 
 /** The computers the source reads: enabled ones whose sign-in the inventory has not seen fail. */
@@ -456,16 +476,72 @@ function closeStreams(): void {
  * Reads every computer's feed now (the attention list came into view or was pulled, the app came back). A
  * waiting row's "has a question" follows its session's question fields (an open question card, a counted
  * pending question), which can change while the row stays as it is: so this also reads the session list of a
- * computer whose feed has a needsInput row, one read per computer and refresh, not on every poll.
+ * computer whose feed has a needsInput row, one read per computer and refresh, not on every poll. A computer whose
+ * Done or Failed sessions its session list does not hold has its closed-session list read once (`readClosedSessions`),
+ * after the session list this refresh reads (`refreshSessionList`), so a session that list no longer holds is checked.
+ * The refresh is done once the feeds are read: it does not wait for that session list, which can take long, and the
+ * closed-session check follows the list when it comes.
  */
 export function refreshAttentionFeeds(): Promise<void> {
   return Promise.all(
     feedMachines().map(async (machine) => {
       await source.refresh(machine.id);
-      const rows = useAttentionFeedStore.getState().feeds[machine.id]?.rows ?? [];
-      if (rows.some((row) => row.kind === 'needsInput' && !isAccountRow(row))) void readSessionList(machine.id);
+      const sessions = refreshSessionList(machine.id);
+      // Neither read rejects: each leaves its failure in the app log.
+      if (sessions === null) await readClosedSessions(machine);
+      else void sessions.then(() => readClosedSessions(machine));
     }),
   ).then(() => undefined);
+}
+
+/**
+ * The session-list read a refresh makes before its closed-session check, or null when it makes none: for a computer
+ * whose feed answered, the read its new rows started (`hasRowsToJoin`), the one a needsInput row asks for, or the first
+ * one while the list was not read yet. A computer whose feed did not answer only gets the needsInput row's read; its
+ * closed list is not read, so nothing waits for that read.
+ */
+function refreshSessionList(machineId: string): Promise<void> | null {
+  const feed = useAttentionFeedStore.getState().feeds[machineId];
+  const asks = (feed?.rows ?? []).some((row) => row.kind === 'needsInput' && !isAccountRow(row));
+  if (feed?.status !== 'ready') {
+    if (asks) void readSessionList(machineId);
+    return null;
+  }
+  const unread = (useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null) === null;
+  return asks || unread || sessionListReads.has(machineId) ? readSessionList(machineId) : null;
+}
+
+function setClosed(machineId: string, sessions: readonly ClosedSession[] | null): void {
+  useAttentionFeedStore.setState((state) => {
+    const closed = { ...state.closed };
+    if (sessions === null) delete closed[machineId];
+    else closed[machineId] = sessions;
+    return { closed };
+  });
+}
+
+/**
+ * The computer's closed-session list (the Sessions search's, `fetchClosedSessions`), read only while the list shows
+ * sessions its session list does not hold (`endedCandidates`): only that list proves a session ended, since the session
+ * list also leaves out live sessions of inactive projects. The last list read stays through a failed read, as the
+ * feed keeps its rows, so an Ended row never turns back into one whose tap attaches a dead session; it also stays
+ * while the computer cannot be reached or its session list is not read, which cannot tell whether candidates are left.
+ * It goes once the computer has no candidates any more, or when the computer leaves the enabled ones. A failed read
+ * leaves a log line with a fixed word; the refresh goes on.
+ */
+async function readClosedSessions(machine: MachineRecord): Promise<void> {
+  try {
+    const feed = machineFeed(
+      { id: machine.id, label: machineDisplayLabel(machine) },
+      useAttentionFeedStore.getState().feeds[machine.id],
+      useInventoryStore.getState().inventoriesByMachineId[machine.id],
+      [],
+    );
+    if (!listsCurrently(feed)) return;
+    setClosed(machine.id, endedCandidates(feed).length === 0 ? null : await fetchClosedSessions(machine, '', Date.now()));
+  } catch (error) {
+    logAppEvent(`${machineDisplayLabel(machine)}: closed sessions for notifications not read (${failureCategory(error)})`);
+  }
 }
 
 /** Sends one change to a computer's feed; false (and a log line) when it did not take it. */
@@ -481,11 +557,110 @@ export async function updateAttentionFeed(machineId: string, update: FeedUpdate)
   }
 }
 
-/** Mark All Read or Clear All on every computer whose list is shown; false when one did not take it. */
-export async function updateAllAttentionFeeds(action: 'markAllRead' | 'clearAll'): Promise<boolean> {
-  const ready = Object.entries(useAttentionFeedStore.getState().feeds).filter(([, feed]) => feed.status === 'ready');
-  const results = await Promise.all(ready.map(([machineId]) => updateAttentionFeed(machineId, { action })));
-  return results.every(Boolean);
+/** Marks rows of a computer's feed read, one `markRead` each; false (and a log line) when it did not take them all. */
+export async function markAttentionRowsRead(machineId: string, notificationIds: readonly string[]): Promise<boolean> {
+  if (notificationIds.length === 0) return true;
+  const machine = machineById(machineId);
+  if (machine === undefined) return false;
+  try {
+    const snapshot = await markRowsRead(await feedRpc(machine), notificationIds);
+    if (snapshot !== null) applySnapshot(machineId, snapshot);
+    return true;
+  } catch (error) {
+    logAppEvent(`${machineDisplayLabel(machine)}: notification markRead failed (${failureCategory(error)})`);
+    return false;
+  }
+}
+
+/**
+ * Clear Done: the `finished` rows that hold the Done sessions, marked read on each computer whose list is shown, and
+ * nothing else; false when a computer did not take it, also when Done holds rows of a computer whose feed cannot be
+ * read now (they are sent nowhere, and the rows of the computers that answer are still marked read).
+ */
+export async function clearDone(done: readonly AttentionRow[]): Promise<boolean> {
+  const feeds = useAttentionFeedStore.getState().feeds;
+  const byMachine = new Map<string, string[]>();
+  let unsent = false;
+  for (const row of done) {
+    if (feeds[row.machineId]?.status !== 'ready') {
+      unsent = true;
+      continue;
+    }
+    byMachine.set(row.machineId, [...(byMachine.get(row.machineId) ?? []), ...row.stateIds]);
+  }
+  const results = await Promise.all(
+    [...byMachine].map(([machineId, ids]) => markAttentionRowsRead(machineId, ids)),
+  );
+  return !unsent && results.every(Boolean);
+}
+
+function setRestore(key: string, state: 'running' | 'failed' | null): void {
+  useAttentionFeedStore.setState((current) => {
+    const restores = { ...current.restores };
+    if (state === null) delete restores[key];
+    else restores[key] = state;
+    return { restores };
+  });
+}
+
+/** Restores under way, by `sessionKey`: a second Restore of the same session joins the first. */
+const restoring = new Map<string, Promise<boolean>>();
+
+/**
+ * Restore of an ended session's row: the computer's closed-session restore (`restoreClosedSession`, with the closed
+ * session its list gave), then the ended session's row leaves this phone's list as Remove takes it off
+ * (`removeEndedRow`), its rows that opening marks read are marked read (`readOnOpen`: its failure rows stay unread on
+ * the computer) and the new session opens. The phone cannot stop a restore the computer started, so it runs on
+ * whatever the sheet does, and its result applies; true when it succeeded. A failure stays in `restores` for the sheet
+ * and goes to the app log.
+ */
+export function restoreEndedSession(machineId: string, ended: ClosedSession): Promise<boolean> {
+  const key = sessionKey(machineId, ended.sessionId);
+  const running = restoring.get(key);
+  if (running !== undefined) return running;
+  const machine = machineById(machineId);
+  if (machine === undefined) return Promise.resolve(false);
+  setRestore(key, 'running');
+  const restore = restoreClosedSession(machine, ended)
+    .then(async (restored) => {
+      setRestore(key, null);
+      removeEndedRow(machineId, ended.sessionId);
+      const rows = useAttentionFeedStore.getState().feeds[machineId]?.rows ?? [];
+      if (!(await markAttentionRowsRead(machineId, unreadRowIds(rows, ended.sessionId)))) {
+        logAppEvent(`${machineDisplayLabel(machine)}: a restored session's notifications not marked read`);
+      }
+      openDeepLink(sessionDeepLink({ machineId, sessionId: restored.sessionId }));
+      return true;
+    })
+    .catch((error: unknown) => {
+      setRestore(key, 'failed');
+      logAppEvent(`${machineDisplayLabel(machine)}: an ended session not restored (${failureCategory(error)})`);
+      return false;
+    })
+    .finally(() => restoring.delete(key));
+  restoring.set(key, restore);
+  return restore;
+}
+
+/**
+ * Remove: an ended session's row leaves this phone's list, kept across launches in Settings
+ * (`attentionRemovedSessions`); nothing is sent to the computer. The mark holds whatever the closed list later says,
+ * since the session was proven ended when it was made. A mark whose session the computer's feed no longer holds
+ * unread is dropped, so the record stays as small as the feeds.
+ */
+export function removeEndedRow(machineId: string, sessionId: string): void {
+  const { feeds } = useAttentionFeedStore.getState();
+  const settings = useSettingsStore.getState();
+  const kept = settings.settings.attentionRemovedSessions.filter((key) => {
+    const [machine = '', session = ''] = key.split('\n');
+    const feed = feeds[machine];
+    return (
+      feed === undefined ||
+      feed.status !== 'ready' ||
+      feed.rows.some((row) => !row.read && row.sessionId === session)
+    );
+  });
+  settings.setSetting('attentionRemovedSessions', [...kept, sessionKey(machineId, sessionId)]);
 }
 
 export async function refreshNotificationPermission(): Promise<void> {
@@ -656,9 +831,10 @@ export function initAttentionNotifications(): void {
         feedSnapshots.delete(id);
         readFronts.delete(id);
       }
-      useAttentionFeedStore.setState({
+      useAttentionFeedStore.setState((state) => ({
         feeds: Object.fromEntries(Object.entries(feeds).filter(([id]) => ids.has(id))),
-      });
+        closed: Object.fromEntries(Object.entries(state.closed).filter(([id]) => ids.has(id))),
+      }));
     }
     // A hidden or removed computer's feed is read no more.
     for (const [id, close] of [...streams]) if (!ids.has(id)) close();

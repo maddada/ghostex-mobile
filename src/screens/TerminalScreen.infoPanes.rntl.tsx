@@ -53,7 +53,12 @@ import { emptyMachineInventory, useInventoryStore, type MachineInventory } from 
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import type { FeedRow } from '../notifications/feedContract';
-import { refreshAttentionFeeds, updateAttentionFeed, useAttentionFeedStore } from '../notifications/feedStore';
+import {
+  markAttentionRowsRead,
+  refreshAttentionFeeds,
+  updateAttentionFeed,
+  useAttentionFeedStore,
+} from '../notifications/feedStore';
 import { PANE_TITLE_HEIGHT } from '../panes/geometry';
 import { SINGLE_PANE_DOCUMENT, type PaneLayout, type PaneLayoutDocument } from '../panes/layout';
 import type { PaneEntry } from '../panes/resolve';
@@ -156,7 +161,7 @@ jest.mock('../chat/rust/wasm-core/bridge', () => ({
 jest.mock('../notifications/feedStore', () => ({
   ...jest.requireActual('../notifications/feedStore'),
   updateAttentionFeed: jest.fn(() => Promise.resolve(true)),
-  updateAllAttentionFeeds: jest.fn(() => Promise.resolve(true)),
+  markAttentionRowsRead: jest.fn(() => Promise.resolve(true)),
   refreshAttentionFeeds: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-notifications', () => ({}));
@@ -615,6 +620,7 @@ beforeEach(async () => {
   areaView = null;
   Object.values(navigation).forEach((mock) => mock.mockClear());
   jest.mocked(updateAttentionFeed).mockClear();
+  jest.mocked(markAttentionRowsRead).mockClear();
   jest.mocked(refreshAttentionFeeds).mockClear();
   useSettingsStore.setState({
     hydrated: true,
@@ -792,12 +798,14 @@ describe('attention: the Notifications screen’s list beside the session', () =
     await renderScreen({ stored: layout(session(A), ATTENTION) });
     expect(refreshAttentionFeeds).toHaveBeenCalled();
     const list = within(pane('attention'));
-    expect(list.getByTestId('attention-row-n1')).toBeTruthy();
-    expect(list.getByTestId('attention-row-n3')).toBeTruthy();
+    // One row per session that needs the user (c has a question, d waits); b's read row shows nothing.
+    expect(list.getByTestId('attention-row-c')).toBeTruthy();
+    expect(list.getByTestId('attention-row-d')).toBeTruthy();
+    expect(list.queryByTestId('attention-row-b')).toBeNull();
 
-    await fireEvent.press(list.getByTestId('attention-row-n2'));
+    await fireEvent.press(list.getByTestId('attention-row-d'));
     await settle();
-    expect(updateAttentionFeed).toHaveBeenCalledWith('m1', { action: 'markRead', notificationId: 'n2' });
+    expect(markAttentionRowsRead).toHaveBeenCalledWith('m1', ['n2']);
     expect(useTerminalStore.getState().selectedSessionKey).toBe(D);
     expect(shownSessions()).toEqual([D]);
     expect(storedStacked()).toEqual({ first: session(D), second: ATTENTION, dividerRatio: 0.5 });
@@ -805,7 +813,7 @@ describe('attention: the Notifications screen’s list beside the session', () =
 
   test('a question opens the chat view full screen at once; back in the terminal view the panes are as before', async () => {
     await renderScreen({ stored: layout(session(A), ATTENTION, 0.4) });
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     // At once: the session is in the computer's list, so no question card can come late.
     expect(useTerminalStore.getState().selectedSessionKey).toBe(C);
     expect(useTerminalStore.getState().sessionViewModeBySessionKey[C]).toBe('chat');
@@ -827,7 +835,7 @@ describe('attention: the Notifications screen’s list beside the session', () =
 
   test('Back in a question’s chat view opened here goes back to the panes as they were, not to Sessions', async () => {
     await renderScreen({ stored: layout(session(A), ATTENTION, 0.37) });
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     await settle();
     expect(useTerminalStore.getState().selectedSessionKey).toBe(C);
     expect(screen.queryByTestId('pane:attention')).toBeNull();
@@ -861,7 +869,7 @@ describe('attention: the Notifications screen’s list beside the session', () =
       feeds: { ...state.feeds, m1: { status: 'ready', rows: [feedRow('n6', 'a', 'needsInput')] } },
     }));
     await renderScreen({ stored: layout(session(A), ATTENTION, 0.37) });
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n6'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-a'));
     await settle();
     expect(useTerminalStore.getState().sessionViewModeBySessionKey[A]).toBe('chat');
     expect(screen.queryByTestId('pane:attention')).toBeNull();
@@ -876,7 +884,7 @@ describe('attention: the Notifications screen’s list beside the session', () =
 
   test('a chat left another way, or a question opened from a notification, keeps Back to Sessions', async () => {
     await renderScreen({ stored: layout(session(A), ATTENTION, 0.37) });
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     await settle();
     // Another session chosen from the chat: the panes are back with it; Back is the terminal screen's own.
     await act(() => useTerminalStore.getState().selectTab(B, { scrollToBottom: false }));
@@ -976,7 +984,7 @@ describe('the stack’s swipe back from a chat view (the real navigation contain
   test('a question opened from the attention pane offers no swipe back; Back brings the panes and the swipe', async () => {
     const nav = await renderInStack(layout(session(A), ATTENTION, 0.37));
     expect(terminalScene().gestureEnabled).not.toBe(false);
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     await settle();
     expect(useTerminalStore.getState().selectedSessionKey).toBe(C);
     expect(screen.queryByTestId('pane:attention')).toBeNull();
@@ -998,7 +1006,7 @@ describe('the stack’s swipe back from a chat view (the real navigation contain
 
   test('that chat view left by its terminal view: the panes and the swipe are back', async () => {
     await renderInStack(layout(session(A), ATTENTION, 0.37));
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     await settle();
     expect(terminalScene().gestureEnabled).toBe(false);
     await press(TerminalHeaderCopy.terminalView);
@@ -1012,7 +1020,7 @@ describe('the stack’s swipe back from a chat view (the real navigation contain
     expect(terminalScene().gestureEnabled).toBe(false);
     // Another finger opens the question: the chat view stands full screen, and the pad, still lifted, goes with the
     // terminal, which lets it go.
-    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-n1'));
+    await fireEvent.press(within(pane('attention')).getByTestId('attention-row-c'));
     await settle();
     expect(useTerminalStore.getState().selectedSessionKey).toBe(C);
     expect(screen.queryByLabelText(TOGGLE)).toBeNull();
@@ -1378,7 +1386,7 @@ describe('half folded like a book: the rows of the agents, attention and usage b
   test('attention at 70 %: its rows stand before the fold', async () => {
     await renderScreen({ stored: layout(ATTENTION, session(A)) });
     await bookPose(ATTENTION, A, 0.7);
-    expectOffTheFold('row', spanOf('attention', within(pane('attention')).getByTestId('attention-row-n1')));
+    expectOffTheFold('row', spanOf('attention', within(pane('attention')).getByTestId('attention-row-c')));
   });
 
   test('usage at 30 %: its head with Refresh and its accounts stand past the fold', async () => {
