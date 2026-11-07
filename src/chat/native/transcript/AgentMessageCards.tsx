@@ -239,8 +239,12 @@ export const InterAgentCard = memo(function InterAgentCard({ message }: { messag
       references={message.markdownReferences}
     />
   );
-  // A thread's "waiting for an answer" report carries its relayed approval card under it.
+  // A thread's "waiting for an answer" report carries its relayed approval card under it. Once the
+  // card ended the report goes with it: answered here, the card's one line stands in for both;
+  // ended anywhere else, neither shows (gx-chat-core `report_look`, which holds the decision).
   if (relayed === undefined) return agentCard;
+  if (relayed.report === 'hidden') return null;
+  if (relayed.report === 'line') return <RelayedApprovalCard card={relayed} dispatch={dispatch} />;
   return (
     <View style={styles.relayed}>
       {agentCard}

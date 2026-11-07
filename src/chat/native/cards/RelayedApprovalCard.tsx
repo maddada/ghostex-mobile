@@ -71,8 +71,13 @@ export function RelayedApprovalCard({ card, dispatch }: { card: JsonRecord; disp
               shell={str(card, 'codeLabel') === 'Command'}
             />
             {more.length > 0 ? (
-              <Text accessibilityRole="button" style={styles.more} onPress={() => setCodeOpen((was) => !was)}>
-                {codeOpen ? 'Show less' : `Show ${more}`}
+              <Text
+                accessibilityRole="button"
+                accessibilityLabel={codeOpen ? 'Show less of the command' : `Show all of the command, ${more}`}
+                style={styles.more}
+                onPress={() => setCodeOpen((was) => !was)}
+              >
+                {codeOpen ? 'Show less' : 'Show all'}
               </Text>
             ) : null}
           </View>
