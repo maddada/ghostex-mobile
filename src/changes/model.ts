@@ -55,6 +55,13 @@ export type ChangesData = {
   truncated: boolean;
   additions: number;
   deletions: number;
+  /**
+   * The files gxserver names as tests (`testPaths`, gx-core's `is_test_file`), or null from a
+   * computer too old to send them, which leaves the Hide test files button off the toolbar.
+   */
+  testPaths: ReadonlySet<string> | null;
+  /** How many test files `withoutTestFiles` left out. */
+  hiddenTests: number;
 };
 
 /** What `changesDiff` answered: a repository's changes, or the project is not a Git repository. */
@@ -92,7 +99,27 @@ export function changesAnswerFrom(answer: unknown): ChangesAnswer {
       truncated: record.truncated === true,
       additions: files.reduce((sum, file) => sum + file.additions, 0),
       deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+      testPaths: Array.isArray(record.testPaths) ? new Set(stringList(record.testPaths)) : null,
+      hiddenTests: 0,
     },
+  };
+}
+
+/**
+ * The diff without its test files, with the counts of what is left (the desktop's Hide test files,
+ * apps/desktop/src/app/native_changes/test_files.rs).
+ */
+export function withoutTestFiles(data: ChangesData): ChangesData {
+  const tests = data.testPaths;
+  if (tests === null || tests.size === 0) return data;
+  const files = data.files.filter((file) => !tests.has(file.path));
+  if (files.length === data.files.length) return data;
+  return {
+    ...data,
+    files,
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    hiddenTests: data.files.length - files.length,
   };
 }
 

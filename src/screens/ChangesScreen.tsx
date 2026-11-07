@@ -35,6 +35,7 @@ import {
   ROW_HEIGHTS,
   rowOffsets,
   sliceSegments,
+  withoutTestFiles,
   type ChangedFile,
   type ChangesAnswer,
   type ChangesData,
@@ -52,6 +53,7 @@ import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBa
 import { RefreshIcon } from '../components/terminal/icons';
 import { ChangesCopy } from '../copy';
 import { FILE_LIST_DETAIL_SIZE, FILE_LIST_NAME_SIZE, FILE_VIEWER_CODE_SIZE } from '../docs/textSizes';
+import { useInventoryStore } from '../inventory/store';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import type { PaneBarInset } from '../panes/geometry';
@@ -203,6 +205,73 @@ const DiffLine = memo(function DiffLine({
   );
 });
 
+/** A lab flask, crossed out while test files are hidden (the desktop toolbar's flask.svg and flask-off.svg). */
+function FlaskGlyph({ off, size, color }: { off: boolean; size: number; color: string }) {
+  const stroke = {
+    stroke: color,
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    fill: 'none',
+  };
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M9 3h6" {...stroke} />
+      {off ? (
+        <>
+          <Path d="M10 3v5.3" {...stroke} />
+          <Path d="M14 3v6l2.4 6.6" {...stroke} />
+          <Path d="M17.3 18.1l.7 1.9a.7 .7 0 0 1 -.5 1h-11a.7 .7 0 0 1 -.5 -1l3.27 -9" {...stroke} />
+          <Path d="M3.5 3.5l17 17" {...stroke} />
+        </>
+      ) : (
+        <>
+          <Path d="M10 9h4" {...stroke} />
+          <Path d="M10 3v6l-4 11a.7 .7 0 0 0 .5 1h11a.7 .7 0 0 0 .5 -1l-4 -11v-6" {...stroke} />
+        </>
+      )}
+    </Svg>
+  );
+}
+
+/**
+ * The toolbar's Hide test files toggle.
+ *
+ * CDXC:Changes 2026-11-07 SEE-ALSO: the desktop toolbar's Hide test files
+ * (apps/desktop/src/app/native_changes/render.rs). The phone starts from the computer's
+ * `changesHideTestFiles` and its switch lasts while the screen is open; which files are tests comes
+ * from gxserver (`testPaths`), so the phone and the computer hide the same files.
+ */
+function TestFilesButton({ hidden, onPress }: { hidden: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  const theme = useTranscriptTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={hidden ? ChangesCopy.showTestFiles : ChangesCopy.hideTestFiles}
+      accessibilityState={{ selected: hidden }}
+      hitSlop={4}
+      onPress={onPress}
+      style={({ pressed }) => [styles.iconButton, (hidden || pressed) && { backgroundColor: theme.selectedFill }]}
+    >
+      <FlaskGlyph off={hidden} size={18} color={hidden ? theme.foreground : theme.muted} />
+    </Pressable>
+  );
+}
+
+/** "3 test files hidden · Show": a tap shows them. */
+function HiddenTestsLine({ count, onShow }: { count: number; onShow: () => void }) {
+  const styles = useStyles();
+  const theme = useTranscriptTheme();
+  return (
+    <Pressable accessibilityRole="button" onPress={onShow} style={styles.hiddenTests}>
+      <FlaskGlyph off size={14} color={theme.muted} />
+      <Text style={styles.hiddenTestsText}>{ChangesCopy.testFilesHidden(count)}</Text>
+      <Text style={styles.hiddenTestsShow}>{ChangesCopy.showTests}</Text>
+    </Pressable>
+  );
+}
+
 const SCOPES: ChangesScope[] = ['main', 'uncommitted'];
 const scopeLabel = (scope: ChangesScope) => (scope === 'main' ? ChangesCopy.scopeMain : ChangesCopy.scopeUncommitted);
 
@@ -328,6 +397,12 @@ export function ChangesView({ machineId, projectId, projectName, navigation, con
   const machineRef = useRef(machine);
   machineRef.current = machine;
   const [scope, setScope] = useState<ChangesScope>('main');
+  const savedHideTests = useInventoryStore(
+    (state) => state.inventoriesByMachineId[machineId]?.summary?.changesHideTestFiles === true,
+  );
+  const [hideTests, setHideTests] = useState(savedHideTests);
+  // A change on the computer (its Settings or its Changes toolbar) reaches the screen.
+  useEffect(() => setHideTests(savedHideTests), [savedHideTests]);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [toolbarBottom, setToolbarBottom] = useState(50);
   const cacheKey = `${machineId}\u0000${projectId}\u0000${scope}`;
@@ -400,7 +475,11 @@ export function ChangesView({ machineId, projectId, projectName, navigation, con
     [machineId, projectId, scope],
   );
 
-  const data: ChangesData | null = answer?.kind === 'repo' ? answer.data : null;
+  const allData: ChangesData | null = answer?.kind === 'repo' ? answer.data : null;
+  const data = useMemo(
+    () => (allData === null || !hideTests ? allData : withoutTestFiles(allData)),
+    [allData, hideTests],
+  );
   const columns = listWidth > 0 ? Math.floor((listWidth - CODE_INSET) / charWidth) : 0;
   const rows = useMemo(
     () => (data === null || columns === 0 ? [] : buildRows(data, listOpen, folded, columns)),
@@ -581,6 +660,14 @@ export function ChangesView({ machineId, projectId, projectName, navigation, con
         </View>
       );
     }
+    if (data !== null && data.files.length === 0 && data.hiddenTests > 0) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.emptyTitle}>{ChangesCopy.onlyTestFiles}</Text>
+          <HiddenTestsLine count={data.hiddenTests} onShow={() => setHideTests(false)} />
+        </View>
+      );
+    }
     if (answer.data.files.length === 0) {
       return (
         <View style={styles.centered}>
@@ -613,6 +700,9 @@ export function ChangesView({ machineId, projectId, projectName, navigation, con
         ]}
         onLayout={(event) => setToolbarBottom(event.nativeEvent.layout.y + event.nativeEvent.layout.height)}
       >
+        {allData?.testPaths != null ? (
+          <TestFilesButton hidden={hideTests} onPress={() => setHideTests((hidden) => !hidden)} />
+        ) : null}
         <ScopeButton scope={scope} open={scopeOpen} onPress={() => setScopeOpen((open) => !open)} />
       </View>
       {error !== null ? (
@@ -633,6 +723,9 @@ export function ChangesView({ machineId, projectId, projectName, navigation, con
             <Text style={styles.retryText}>{ChangesCopy.retry}</Text>
           </Pressable>
         </View>
+      ) : null}
+      {data !== null && data.hiddenTests > 0 && data.files.length > 0 ? (
+        <HiddenTestsLine count={data.hiddenTests} onShow={() => setHideTests(false)} />
       ) : null}
       {data?.truncated === true ? (
         <Text style={[styles.truncated, { color: colors.warning }]}>{ChangesCopy.truncated}</Text>
@@ -734,7 +827,19 @@ const useStyles = themedStyles((t) => ({
   screen: { flex: 1, backgroundColor: t.background },
   headerButton: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6 },
-  toolbar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  iconButton: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  hiddenTests: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 6 },
+  hiddenTestsText: { color: t.muted, fontSize: 13 },
+  hiddenTestsShow: { color: t.accent, fontSize: 13, fontWeight: '500' },
   scopeButton: {
     flexDirection: 'row',
     alignItems: 'center',

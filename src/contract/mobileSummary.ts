@@ -772,6 +772,11 @@ export type GhostexMobileSummary = {
   /** The computer's Advanced > Dim sleeping sessions: a sleeping row fades to half strength. Off when absent. */
   dimSleepingSessions?: boolean;
   /**
+   * The computer's Hide test files in Changes (`changesHideTestFiles`): the Changes screen starts
+   * with test files hidden. Off when absent.
+   */
+  changesHideTestFiles?: boolean;
+  /**
    * The computer's Settings > Agents > Remember the agent you pick (`space` or `everywhere`); absent
    * means per project, the default (src/components/sessions/agentChoice.ts).
    */
@@ -1885,6 +1890,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     sessionLinkOpenTarget: root.sessionLinkOpenTarget === 'external' ? 'external' : 'embedded',
     sidebarSessionLinks: typeof root.sidebarSessionLinks === 'string' ? root.sidebarSessionLinks : 'badge',
     dimSleepingSessions: root.dimSleepingSessions === true,
+    changesHideTestFiles: root.changesHideTestFiles === true,
     newSessionAgentScope:
       root.newSessionAgentScope === 'space' || root.newSessionAgentScope === 'everywhere'
         ? root.newSessionAgentScope

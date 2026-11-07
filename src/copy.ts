@@ -984,6 +984,11 @@ export const ChangesCopy = {
   lineCopied: 'Line copied',
   foldFile: 'Fold file',
   unfoldFile: 'Unfold file',
+  hideTestFiles: 'Hide test files',
+  showTestFiles: 'Show test files',
+  testFilesHidden: (count: number) => (count === 1 ? '1 test file hidden' : `${count} test files hidden`),
+  showTests: 'Show',
+  onlyTestFiles: 'Only test files changed.',
 };
 
 /**
