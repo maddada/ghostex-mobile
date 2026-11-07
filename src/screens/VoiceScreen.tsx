@@ -59,6 +59,7 @@ import { HeadsetGlyph, MicrophoneGlyph } from '../voice/VoiceButton';
 import { VoiceHoldButton } from '../voice/VoiceHoldButton';
 import { VoiceStopPill } from '../voice/VoiceStopPill';
 import { VoiceMemoryCard } from '../voice/VoiceMemoryCard';
+import { voiceSheetScrollY } from '../voice/voiceList';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Voice'>;
 
@@ -188,8 +189,9 @@ function VoicePickerSheet({ visible, onClose }: { visible: boolean; onClose: () 
   const current = useVoiceStore((state) => state.voice);
   const next = useVoiceStore((state) => state.nextVoice);
   const options = useVoiceStore((state) => state.voiceOptions);
+  const scroll = useRef<ScrollViewInstance>(null);
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
+    <BottomSheet visible={visible} onClose={onClose} scrollRef={scroll}>
       <Text style={styles.sheetTitle}>{`${voiceProviderName(provider)} voice`}</Text>
       {options.map((voice) => {
         const checked = voice === current;
@@ -198,6 +200,15 @@ function VoicePickerSheet({ visible, onClose }: { visible: boolean; onClose: () 
             key={voice}
             accessibilityRole="radio"
             accessibilityState={{ checked }}
+            // The sheet opens on the current voice (`voiceList.ts`); the row lays out once per opening.
+            onLayout={
+              checked
+                ? (event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    scroll.current?.scrollTo({ y: voiceSheetScrollY(y, height), animated: false });
+                  }
+                : undefined
+            }
             style={({ pressed }) => [styles.sheetRow, pressed && styles.controlPressed]}
             onPress={() => {
               onClose();

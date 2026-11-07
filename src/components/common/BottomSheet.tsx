@@ -6,10 +6,10 @@
  * keyboard up, above it: the keyboard-avoiding layer).
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, type ReactNode, type Ref } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
-import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
@@ -24,9 +24,11 @@ export type BottomSheetProps = {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** The sheet's scroll view, for a sheet that opens scrolled to a row (the voice list). */
+  scrollRef?: Ref<ScrollViewInstance>;
 };
 
-export default function BottomSheet({ visible, onClose, children }: BottomSheetProps) {
+export default function BottomSheet({ visible, onClose, children, scrollRef }: BottomSheetProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const insets = useSafeAreaInsets();
@@ -51,7 +53,7 @@ export default function BottomSheet({ visible, onClose, children }: BottomSheetP
           <View testID="sheet-grabber" style={styles.grabberArea} {...drag.grabber}>
             <View style={styles.grabber} />
           </View>
-          <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.content}>
+          <KeyboardAwareScrollView ref={scrollRef} bounces={false} contentContainerStyle={styles.content}>
             {children}
           </KeyboardAwareScrollView>
         </Animated.View>
