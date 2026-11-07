@@ -30,7 +30,14 @@ jest.mock('../../modules/ghostex-native/src', () => ({
 jest.mock('../analytics/clientHello', () => ({ reportClientHello: jest.fn() }));
 jest.mock('../cloudBoxes/sync', () => ({ refreshCloudBoxes: async () => undefined }));
 jest.mock('./appLog', () => ({ logAppEvent: jest.fn() }));
-jest.mock('../chat/rust/machine-link', () => ({ chatLinkKeptInBackground: () => false }));
+const mockCutOff: { listener: ((machineId: string) => void) | null } = { listener: null };
+jest.mock('../chat/rust/machine-link', () => ({
+  chatLinkKeptInBackground: () => false,
+  onChatLinkCutOff: (listener: (machineId: string) => void) => {
+    mockCutOff.listener = listener;
+    return () => undefined;
+  },
+}));
 jest.mock('../machines/credentials', () => ({ hasPassword: async () => false }));
 jest.mock('../terminal/sessions', () => ({
   restoreAttachTabs: async () => undefined,
@@ -174,4 +181,20 @@ test('a list read that started before the connection check does not bring the Gl
   expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(current()?.summary?.globalQuickActionsSupported).toBe(true);
   expect(current()?.summary?.globalQuickActions.map((action) => action.commandId)).toEqual(['g2']);
+});
+
+test('a chat that went silent checks and replaces the connection at once', async () => {
+  ensureConnectedMock.mockReset();
+  ensureConnectedMock.mockResolvedValue(undefined);
+  fetchMock.mockImplementation(async () => ({ summary: parseMobileSummary(WIRE)!, fingerprint: WIRE }));
+  mockCutOff.listener?.('m1');
+  expect(ensureConnectedMock).toHaveBeenCalledTimes(1);
+  expect(ensureConnectedMock.mock.calls[0]?.[1]).toEqual({ verify: true });
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+});
+
+test('a silent chat of a computer that is not set up here starts nothing', () => {
+  ensureConnectedMock.mockReset();
+  mockCutOff.listener?.('elsewhere');
+  expect(ensureConnectedMock).not.toHaveBeenCalled();
 });

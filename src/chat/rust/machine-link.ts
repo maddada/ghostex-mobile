@@ -181,6 +181,22 @@ function mayReconnect(machineId: string): boolean {
   return foreground() || chatLinkKeptInBackground(machineId);
 }
 
+const cutOffListeners = new Set<(machineId: string) => void>();
+
+/**
+ * Hears a computer whose open chat just went silent: its socket heard nothing and gxserver did not
+ * answer `GET /api/health` either (`watchSilence`). Once per silence, not on every failed check.
+ *
+ * CDXC:RemoteMachines 2026-11-07 WHY: until then a tunnel that stalled mid-chat (a Wi-Fi to cellular
+ * handover on iOS, which reports no network change, or a relay path that died) was replaced only
+ * when the Sessions poll's own command timed out, 20 s later, and the chat said "Reconnecting…" all
+ * that time (#490). The silent chat is the earliest sign, about 10 s in, so it starts the reconnect.
+ */
+export function onChatLinkCutOff(listener: (machineId: string) => void): () => void {
+  cutOffListeners.add(listener);
+  return () => cutOffListeners.delete(listener);
+}
+
 class ChatMachineLink {
   private state: LinkState = { kind: 'unknown' };
   /** The route the last handshake settled on, so listeners hear only real changes. */
@@ -369,7 +385,9 @@ class ChatMachineLink {
         this.socketOpen &&
         this.followers.size > 0
       ) {
+        const wasHeard = this.silence === null;
         this.setSilence(this.silence ?? this.lastHeardAt);
+        if (wasHeard) for (const listener of cutOffListeners) listener(this.machine.id);
       }
     });
   }

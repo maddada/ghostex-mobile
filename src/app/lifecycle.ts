@@ -20,6 +20,7 @@ import { INVENTORY_POLL_INTERVAL_MS, useInventoryStore } from '../inventory/stor
 import { startSummaryRefresh } from '../inventory/summaryRefresh';
 import { selectedMachine, useMachinesStore } from '../machines/store';
 import { recoverConnections } from './autoReconnect';
+import { networkChangesHeard } from './networkChanges';
 
 let installed = false;
 
@@ -36,7 +37,7 @@ export function initAppLifecycle(): void {
     last = next;
     if (next === 'active' && cameFromBackground) handleAppBecameActive();
   });
-  if (Platform.OS === 'android') {
+  if (networkChangesHeard(Platform.OS, GhostexNative)) {
     GhostexNative.addListener('onNetworkChanged', () => recoverConnections());
   }
   // Runs for the app's lifetime, like the listeners above. The handle type is whatever the platform's timer

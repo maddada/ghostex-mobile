@@ -63,6 +63,12 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    */
   tailcatPath?(machineId: string): Promise<string>;
 
+  /**
+   * True when this build sends `onNetworkChanged` on iOS (Android always has). Only in iOS builds made
+   * after 2026-11-07; an older build has no such function, so `app/lifecycle.ts` checks for it.
+   */
+  emitsNetworkChanges?(): boolean;
+
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
   /** `exec` with `input` written to the command's stdin, then EOF (Windows scripts; both platforms). */

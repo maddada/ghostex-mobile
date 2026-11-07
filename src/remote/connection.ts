@@ -47,8 +47,21 @@ export function ensureConnected(
     if (!replaceExisting && (await GhostexNative.isConnected(machine.id))) {
       assertCurrent();
       if (!options.verify) return;
-      if (await probeConnection(machine.id)) return;
+      const probe = await probeConnection(machine.id);
+      if (probe === 'answered') return;
       assertCurrent();
+      if (probe === 'stalled' && machine.transport === 'tailcat') {
+        /**
+         * CDXC:RemotePairing 2026-11-07 WHY:
+         * A probe that got no answer at all means the Easy Connect tunnel under SSH stalled (iOS
+         * suspended the app, the network changed). Kept, the bridge would spend its own reuse check
+         * (a disco ping of up to 4 s) finding the same thing before it builds a new tunnel, so the
+         * phone waited about 9 s before it even began to reconnect (#490). A probe that failed at
+         * once (the SSH socket closed) leaves the tunnel for the bridge to reuse.
+         */
+        await GhostexNative.stopTailcatForward(machine.id).catch(() => undefined);
+        assertCurrent();
+      }
       /**
        * CDXC:RemoteMachines 2026-09-22 WHY:
        * A connection that fails the probe is dead and must be torn down before the
@@ -120,16 +133,21 @@ async function connectEasyConnect(
   }
 }
 
-/** True when the shared connection still answers a trivial command. */
-async function probeConnection(machineId: string): Promise<boolean> {
+/**
+ * Whether the shared connection still answers a trivial command: `answered`, `stalled` (no answer
+ * within the probe's time) or `failed` (an error or a wrong answer).
+ */
+async function probeConnection(machineId: string): Promise<'answered' | 'stalled' | 'failed'> {
   try {
     // echo is understood by POSIX shells, Windows cmd and PowerShell.
-    const probe = await GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', 5_000);
-    return probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
-  } catch {
-    return false;
+    const probe = await GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', PROBE_TIMEOUT_MS);
+    return probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__') ? 'answered' : 'failed';
+  } catch (error) {
+    return (error as { code?: unknown } | null)?.code === 'E_TIMEOUT' ? 'stalled' : 'failed';
   }
 }
+
+const PROBE_TIMEOUT_MS = 5_000;
 
 export function reconnectMachine(machine: MachineConnectionTarget): Promise<void> {
   return ensureConnected(machine, { reset: true });

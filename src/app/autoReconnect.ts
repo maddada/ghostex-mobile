@@ -16,7 +16,7 @@ import { AppState } from 'react-native';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { FailureReasonCode } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
-import { chatLinkKeptInBackground } from '../chat/rust/machine-link';
+import { chatLinkKeptInBackground, onChatLinkCutOff } from '../chat/rust/machine-link';
 import { enabledMachines, useMachinesStore } from '../machines/store';
 import { cancelConnectionAttempt, ensureConnected } from '../remote/connection';
 import { useSettingsStore } from '../settings/store';
@@ -171,6 +171,11 @@ export function initAutoReconnect(): void {
       if (!CONNECTION_FAILURES.has(code)) continue;
       if (canRecover(machineId)) void recoverMachine(machineId, true);
     }
+  });
+  // An open chat that went silent is the earliest sign of a stalled tunnel (CDXC:RemoteMachines 2026-11-07 in
+  // chat/rust/machine-link.ts): check and replace the connection now, as the Sessions poll's failure would later.
+  onChatLinkCutOff((machineId) => {
+    if (canRecover(machineId)) void recoverMachine(machineId, true);
   });
 }
 
