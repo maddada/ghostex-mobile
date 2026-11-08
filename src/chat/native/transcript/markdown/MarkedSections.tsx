@@ -28,15 +28,22 @@ import type { SectionMeta } from './parse';
  */
 const IN_PROGRESS = { dark: '#c68a06', light: '#c68a06' };
 
+/**
+ * CDXC:MarkedHandovers 2026-11-08 DECISION:
+ * User: "please make Needs you pinkish color in the handover section headings, and make blocked red". "Needs you" takes the sidebar's pink question dot (#f472b6) and "Blocked" its red dot (#ef4444) on the dark chat; the light chat keeps a darker shade of each so the text stays readable on white. Same values as the desktop (apps/desktop/src/app/native_chat/marked_look.rs).
+ */
+const NEED = { dark: '#f472b6', light: '#be185d' };
+const BLOCKED = { dark: '#ef4444', light: '#dc2626' };
+
 const PALETTE: { [kind: string]: { dark: string; light: string } } = {
-  need: { dark: '#fb923c', light: '#c2410c' },
+  need: NEED,
   done: { dark: '#4ade80', light: '#15803d' },
   read: { dark: '#fbbf24', light: '#b45309' },
   kicked: { dark: '#f472b6', light: '#be185d' },
   progress: IN_PROGRESS,
   untested: { dark: '#2dd4bf', light: '#0f766e' },
   shipped: { dark: '#818cf8', light: '#4f46e5' },
-  blocked: { dark: '#f87171', light: '#dc2626' },
+  blocked: BLOCKED,
   comms: { dark: '#a3e635', light: '#4d7c0f' },
   parked: { dark: '#94a3b8', light: '#475569' },
   held: { dark: '#d6a77a', light: '#92400e' },
