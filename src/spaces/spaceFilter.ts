@@ -104,8 +104,11 @@ export function filterSummaryForSpace(summary: GhostexMobileSummary, selectedSpa
    * left that can show it — the same call the desktop row predicate makes for
    * an unresolvable project id.
    */
+  // Chief of Staff's row is pinned in Main Hub wherever its session lives (contract/grouping.ts), so
+  // it shows where Main Hub does.
+  const homeKept = projects.some((project) => project.isHome === true);
   const sessions = summary.sessions.filter((session) =>
-    session.isChief
+    session.isChief && homeKept
       ? true
       : knownProjectIds.has(session.projectId)
         ? keptProjectIds.has(session.projectId)
@@ -143,10 +146,7 @@ export function spaceSessionCounts(
   const counts: Record<string, SessionCounts> = {};
   if (summary === null) return counts;
   for (const spaceId of [...spaceIds, OTHER_SIDEBAR_SPACE_ID]) {
-    counts[spaceId] = countSessions(
-      filterSummaryForSpace(summary, spaceId).sessions.filter((session) => !session.isChief),
-      summary.capabilities,
-    );
+    counts[spaceId] = countSessions(filterSummaryForSpace(summary, spaceId).sessions, summary.capabilities);
   }
   return counts;
 }

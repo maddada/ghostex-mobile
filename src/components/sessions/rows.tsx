@@ -18,13 +18,12 @@ import { SvgXml } from 'react-native-svg';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
-import { CHIEF_LABEL, chiefCounts, chiefHasDot } from '../../contract/chief';
+import { HOME_LABEL } from '../../contract/chief';
 import {
   agentIconTint,
   resolveAgentArtId,
   type GhostexAgentLauncher,
   type GhostexProjectIcon,
-  type GhostexSession,
 } from '../../contract/mobileSummary';
 import type { SectionStatusCounts } from '../../contract/grouping';
 import { decodeBase64Utf8 } from '../../docs/remoteFiles';
@@ -632,13 +631,6 @@ function AgentSplitButton({
   );
 }
 
-/** "Pick an agent" on the home header before Chief's first open (the desktop's chief_row_view.rs hint). */
-const homeHintStyles = StyleSheet.create({
-  hint: {
-    fontSize: ds(12),
-  },
-});
-
 const buttonStyles = StyleSheet.create({
   touch: {
     height: TOUCH_ROW_HEIGHT,
@@ -1031,7 +1023,6 @@ function SidebarHeaderBox({
   collapsed,
   containsActive,
   onToggle,
-  onChevron,
   onMenu,
   children,
 }: {
@@ -1040,8 +1031,6 @@ function SidebarHeaderBox({
   collapsed: boolean;
   containsActive: boolean;
   onToggle: () => void;
-  /** The chevron is its own button (Chief's home header, whose row opens Chief's chat); else a tap on it is the row's. */
-  onChevron?: () => void;
   onMenu: (anchor: MenuAnchor) => void;
   /** What sits after the name: closed, the counts; open, the buttons. */
   children: ReactNode;
@@ -1064,22 +1053,9 @@ function SidebarHeaderBox({
       onLongPress={() => measurePress(rowRef, onMenu)}
     >
       {containsActive ? <SelectedCardOutline /> : null}
-      {onChevron !== undefined ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={collapsed ? `Show ${title}'s sessions` : `Fold ${title}'s sessions`}
-          accessibilityState={{ expanded: !collapsed }}
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 4 }}
-          onPress={onChevron}
-          style={headerBoxStyles.chevron}
-        >
-          <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={!collapsed} />
-        </Pressable>
-      ) : (
-        <View pointerEvents="none" style={headerBoxStyles.chevron}>
-          <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={!collapsed} />
-        </View>
-      )}
+      <View pointerEvents="none" style={headerBoxStyles.chevron}>
+        <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={!collapsed} />
+      </View>
       <View style={headerBoxStyles.icon}>{leading}</View>
       <Text style={headerBoxStyles.title} numberOfLines={1}>
         {title}
@@ -1184,33 +1160,25 @@ export function ProjectHeaderRow({
   onOpenAgentMenu: (anchor: MenuAnchor) => void;
   onMenu: (anchor: MenuAnchor) => void;
   /**
-   * The home project's header is Main Hub's row (CDXC:Chief 2026-11-08 in contract/chief.ts): the flower and
-   * Chief's name, a tap opens Chief's chat (or asks which agent runs it), the chevron folds, a long press opens Chief's
-   * menu, and closed it shows Chief's own dot. The ⋯ button keeps the project's menu (Move to Space).
+   * The home project's header is Main Hub (CDXC:Chief 2026-11-08 in contract/chief.ts): the flower and "Main Hub"; a tap
+   * folds it like any project, and a long press opens Main Hub's menu (what it is, then the project's options). Chief of
+   * Staff is a row pinned first under it.
    */
-  home?: { chief: GhostexSession | null; onOpen: () => void; onChiefMenu: () => void };
+  home?: { onMenu: () => void };
 }) {
   const ink = useSidebarInk();
-  const chiefDots = home?.chief != null ? chiefCounts(home.chief) : null;
   return (
     <SidebarHeaderBox
-      title={home !== undefined ? CHIEF_LABEL : title}
+      title={home !== undefined ? HOME_LABEL : title}
       leading={
         home !== undefined ? <FlowerGlyph size={ds(16)} color={ink.muted} /> : <ProjectIcon icon={icon} title={title} />
       }
       collapsed={collapsed}
       containsActive={containsActive}
-      onToggle={home !== undefined ? home.onOpen : onToggle}
-      onChevron={home !== undefined ? onToggle : undefined}
-      onMenu={home !== undefined ? () => home.onChiefMenu() : onMenu}
+      onToggle={onToggle}
+      onMenu={home !== undefined ? () => home.onMenu() : onMenu}
     >
-      {home !== undefined && collapsed ? (
-        home.chief === null ? (
-          <Text style={[homeHintStyles.hint, { color: ink.muted }]}>Pick an agent</Text>
-        ) : chiefDots !== null && chiefHasDot(chiefDots) ? (
-          <ProjectStatusCounts {...chiefDots} awakeCount={0} />
-        ) : null
-      ) : collapsed ? (
+      {collapsed ? (
         <ProjectStatusCounts
           workingCount={workingCount}
           attentionCount={attentionCount}

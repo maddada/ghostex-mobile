@@ -182,3 +182,27 @@ const chiefStyles = inkStyleSheets((ink) =>
     },
   }),
 );
+
+/**
+ * Main Hub's first row before Chief of Staff's first open: the flower, "Chief of Staff" and "Pick an agent"; a tap asks
+ * which agent runs it, then its real row (pinned first) takes this place. The desktop draws the same row
+ * (apps/desktop/src/app/native_sidebar/chief.rs `render_native_sidebar_chief_placeholder`).
+ */
+export function ChiefPlaceholderRow({ onPress }: { onPress: () => void }) {
+  const ink = useSidebarInk();
+  const styles = chiefStyles(ink);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${CHIEF_LABEL}: pick the agent it runs on`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.other, pressed ? styles.pressed : null]}
+    >
+      <FlowerGlyph size={ds(14)} color={ink.muted} />
+      <Text numberOfLines={1} style={styles.otherTitle}>
+        {CHIEF_LABEL}
+      </Text>
+      <Text style={styles.hint}>Pick an agent</Text>
+    </Pressable>
+  );
+}

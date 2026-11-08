@@ -1513,7 +1513,8 @@ export function parseSession(value: unknown): GhostexSession | null {
     sidebarOrder: typeof rawSidebarOrder === 'number' && Number.isFinite(rawSidebarOrder) ? rawSidebarOrder : null,
     isFocused: boolValue(value, 'isFocused', false),
     isFavorite: boolValue(value, 'isFavorite', false),
-    isPinned: boolValue(value, 'isPinned', false),
+    // Chief of Staff is always pinned (gx-core `SessionRow::is_pinned`).
+    isPinned: boolValue(value, 'isPinned', false) || value.isChief === true,
     isParked: boolValue(value, 'isParked', false),
     gitBranch: isObject(value.gitStatus) ? trimmedValue(value.gitStatus, 'branch') : '',
     work: parseSessionWork(value.work) ?? undefined,
@@ -2079,11 +2080,9 @@ function parseCloudBox(value: unknown): GhostexSession['cloudBox'] {
 
 /**
  * The sessions the lists show: every one but side chats, which their main chat's Side chats pill
- * lists instead, and Chief, which has its own row (gx-protocol
- * `PresentationSession::listed_in_sidebar`, the desktop's same rule).
+ * lists instead (gx-protocol `PresentationSession::listed_in_sidebar`, the desktop's same rule).
+ * Chief of Staff is a row too, pinned first in Main Hub (contract/grouping.ts).
  */
-export function visibleSessions<T extends { sideChatParentSessionId?: string; isChief?: boolean }>(
-  sessions: readonly T[],
-): T[] {
-  return sessions.filter((session) => !session.sideChatParentSessionId && session.isChief !== true);
+export function visibleSessions<T extends { sideChatParentSessionId?: string }>(sessions: readonly T[]): T[] {
+  return sessions.filter((session) => !session.sideChatParentSessionId);
 }

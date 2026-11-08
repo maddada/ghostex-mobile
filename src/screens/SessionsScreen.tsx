@@ -67,8 +67,10 @@ import SpaceTabs from '../components/sessions/SpaceTabs';
 import ChiefRow, { CHIEF_LABEL } from '../components/sessions/ChiefRow';
 import { runGhostexCli } from '../components/sessions/cli';
 import {
+  chiefOnIn,
   chiefRows,
   hasHomeProject,
+  HOME_LABEL,
   MAIN_HUB_EXPLANATION,
   parseChiefAgents,
   type ChiefRowModel,
@@ -197,9 +199,11 @@ function closeDialogCopy(ctx: SessionContext): { title: string; body: string } {
 
 /** What Main Hub is, at the top of its menus (the desktop's hover card). */
 const MAIN_HUB_NOTES: ContextMenuItem[] = [
-  ...MAIN_HUB_EXPLANATION.map(
-    (line, index): ContextMenuItem => ({ kind: 'note', key: `main-hub-note-${index}`, label: line }),
-  ),
+  ...MAIN_HUB_EXPLANATION.map((line, index): ContextMenuItem => ({
+    kind: 'note',
+    key: `main-hub-note-${index}`,
+    label: line,
+  })),
   { kind: 'separator', key: 'main-hub-note-end' },
 ];
 
@@ -256,7 +260,10 @@ export default function SessionsScreen({ navigation }: Props) {
     [listInk.muted, sidebarAppearance.foreground, sidebarAppearance.background],
   );
   const tailscaleConnectedInk = useMemo(
-    () => readableSecondaryText(GhostexPalette.STATUS_CONNECTED, sidebarAppearance.foreground, [sidebarAppearance.background]),
+    () =>
+      readableSecondaryText(GhostexPalette.STATUS_CONNECTED, sidebarAppearance.foreground, [
+        sidebarAppearance.background,
+      ]),
     [sidebarAppearance],
   );
 
@@ -431,7 +438,8 @@ export default function SessionsScreen({ navigation }: Props) {
    */
   const agentChoiceContext = useCallback(
     (machineId: string, projectId: string): AgentChoiceContext => {
-      const summary = machineId === machine?.id ? selectedSummary : (inventoriesByMachineId[machineId]?.summary ?? null);
+      const summary =
+        machineId === machine?.id ? selectedSummary : (inventoriesByMachineId[machineId]?.summary ?? null);
       const spaces = machineId === machine?.id ? machineSpaces : (summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES);
       const spaceId =
         spaces.order.length === 0
@@ -694,7 +702,11 @@ export default function SessionsScreen({ navigation }: Props) {
   }, [machine, machines, unified.on, refreshMachineFresh]);
   const notices = machines.flatMap((entry) => {
     const tab = machineTabs.find((item): item is MachineTabItem => !('kind' in item) && item.id === entry.id);
-    const notice = machineNotice(machineDisplayLabel(entry), inventoriesByMachineId[entry.id], tab?.connectionState ?? 'disconnected');
+    const notice = machineNotice(
+      machineDisplayLabel(entry),
+      inventoriesByMachineId[entry.id],
+      tab?.connectionState ?? 'disconnected',
+    );
     return notice === null ? [] : [{ machineId: entry.id, notice }];
   });
   const noticeId = noticeMachineId(
@@ -883,17 +895,19 @@ export default function SessionsScreen({ navigation }: Props) {
 
   /** The agents Chief can run on, as menu rows that run `command(agentId)`. */
   const chiefAgentItems = useCallback(
-    async (target: MachineRecord, command: (agentId: string) => string, current: string): Promise<ContextMenuItem[]> => {
+    async (
+      target: MachineRecord,
+      command: (agentId: string) => string,
+      current: string,
+    ): Promise<ContextMenuItem[]> => {
       const status = await runGhostexCli(target, chiefStatusCommand());
-      return parseChiefAgents(status.json).map(
-        (agent): ContextMenuItem => ({
-          kind: 'item',
-          key: `chief-agent-${agent.agentId}`,
-          label: agent.name,
-          selected: agent.agentId === current,
-          onPress: () => void runChief(target, command(agent.agentId)),
-        }),
-      );
+      return parseChiefAgents(status.json).map((agent): ContextMenuItem => ({
+        kind: 'item',
+        key: `chief-agent-${agent.agentId}`,
+        label: agent.name,
+        selected: agent.agentId === current,
+        onPress: () => void runChief(target, command(agent.agentId)),
+      }));
     },
     [runChief],
   );
@@ -917,9 +931,13 @@ export default function SessionsScreen({ navigation }: Props) {
     [chiefAgentItems, setTransientStatus],
   );
 
-  /** Long press: New Chat, then Change Agent's agents. */
+  /** Chief of Staff's long press: New Chat, Change Agent's agents, then (`more`) the row's own session options. */
   const openChiefMenu = useCallback(
-    async (target: MachineRecord, row: ChiefRowModel & { session: GhostexSession }): Promise<void> => {
+    async (
+      target: MachineRecord,
+      row: ChiefRowModel & { session: GhostexSession },
+      more?: () => void,
+    ): Promise<void> => {
       let agents: ContextMenuItem[] = [];
       try {
         agents = (await chiefAgentItems(target, chiefSetAgentCommand, row.session.agent)).map((item) =>
@@ -938,7 +956,6 @@ export default function SessionsScreen({ navigation }: Props) {
       setChiefMenu({
         title: row.machineId === machine?.id ? CHIEF_LABEL : `${CHIEF_LABEL} · ${row.machineLabel}`,
         items: [
-          ...MAIN_HUB_NOTES,
           {
             kind: 'item',
             key: 'chief-new-chat',
@@ -946,6 +963,20 @@ export default function SessionsScreen({ navigation }: Props) {
             onPress: () => runChiefAsking(target, chiefNewChatCommand(), false),
           },
           ...(agents.length > 0 ? [heading, ...agents] : []),
+          ...(more !== undefined
+            ? [
+                { kind: 'separator', key: 'chief-more-separator' } as ContextMenuItem,
+                {
+                  kind: 'item',
+                  key: 'chief-more',
+                  label: 'Session options…',
+                  onPress: () => {
+                    setChiefMenu(null);
+                    more();
+                  },
+                } as ContextMenuItem,
+              ]
+            : []),
         ],
       });
     },
@@ -970,7 +1001,25 @@ export default function SessionsScreen({ navigation }: Props) {
     sessionMenu: (machineId, item) =>
       withMachine(
         machineId,
-        (target) => setOverlay({ kind: 'sessionMenu', ctx: { machine: target, item }, menuPath: [] }),
+        (target) => {
+          const sessionOptions = () =>
+            setOverlay({ kind: 'sessionMenu', ctx: { machine: target, item }, menuPath: [] });
+          // Chief of Staff's row starts with its own New Chat and Change Agent (CDXC:Chief 2026-11-08 in contract/chief.ts).
+          if (item.session.isChief) {
+            const label = machines.find((entry) => entry.id === machineId);
+            void openChiefMenu(
+              target,
+              {
+                machineId,
+                machineLabel: label === undefined ? machineId : machineDisplayLabel(label),
+                session: item.session,
+              },
+              sessionOptions,
+            );
+            return;
+          }
+          sessionOptions();
+        },
         true,
       ),
     projectMenu: (machineId, header) =>
@@ -999,28 +1048,36 @@ export default function SessionsScreen({ navigation }: Props) {
       }),
     agentMenu: (machineId, header) =>
       withMachine(machineId, (target) => setOverlay({ kind: 'agentMenu', ctx: { machine: target, header } })),
-    openHomeChief: (machineId, header) =>
-      withMachine(machineId, (target) => {
-        const chief = header.chief ?? null;
-        if (chief === null) void openChiefPicker(target);
-        else void attach(target, chief);
-      }),
-    homeChiefMenu: (machineId, header) =>
+    openHomeChief: (machineId) => withMachine(machineId, (target) => void openChiefPicker(target)),
+    homeMenu: (machineId, header) =>
       withMachine(
         machineId,
-        (target) => {
-          const chief = header.chief ?? null;
-          if (chief === null) {
-            void openChiefPicker(target);
-            return;
-          }
-          const label = machines.find((entry) => entry.id === machineId);
-          void openChiefMenu(target, {
-            machineId,
-            machineLabel: label === undefined ? machineId : machineDisplayLabel(label),
-            session: chief,
-          });
-        },
+        (target) =>
+          setChiefMenu({
+            title: HOME_LABEL,
+            items: [
+              ...MAIN_HUB_NOTES,
+              ...((header.chief ?? null) === null && chiefOnIn(inventoriesByMachineId[machineId]?.summary)
+                ? [
+                    {
+                      kind: 'item',
+                      key: 'main-hub-start-chief',
+                      label: `Start ${CHIEF_LABEL}`,
+                      onPress: () => void openChiefPicker(target),
+                    } as ContextMenuItem,
+                  ]
+                : []),
+              {
+                kind: 'item',
+                key: 'main-hub-project-options',
+                label: 'Project options…',
+                onPress: () => {
+                  setChiefMenu(null);
+                  setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, menuPath: [] });
+                },
+              },
+            ],
+          }),
         true,
       ),
     stateCard: (machineId) => setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
@@ -1284,9 +1341,7 @@ export default function SessionsScreen({ navigation }: Props) {
             style={styles.tailscaleIndicator}
             onPress={() => void openTailscaleOrDownload()}
           >
-            <Text style={[styles.tailscaleIndicatorLabel, { color: tailscaleConnectedInk }]}>
-              • Tailscale
-            </Text>
+            <Text style={[styles.tailscaleIndicatorLabel, { color: tailscaleConnectedInk }]}>• Tailscale</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1337,7 +1392,9 @@ export default function SessionsScreen({ navigation }: Props) {
       {chiefConfirm !== null ? (
         <ConfirmDialog
           visible
-          title={chiefConfirm.changeAgent ? `Move ${CHIEF_LABEL} to another agent?` : `Start a new chat with ${CHIEF_LABEL}?`}
+          title={
+            chiefConfirm.changeAgent ? `Move ${CHIEF_LABEL} to another agent?` : `Start a new chat with ${CHIEF_LABEL}?`
+          }
           body={
             chiefConfirm.changeAgent
               ? `A new chat starts on that agent. This chat stays under ${CHIEF_LABEL} as an earlier chat, and its goal, memory and threads carry over.`
@@ -1348,7 +1405,9 @@ export default function SessionsScreen({ navigation }: Props) {
             label: "Don't ask again",
             checked: chiefConfirm.dontAskAgain,
             onToggle: () =>
-              setChiefConfirm((current) => (current === null ? null : { ...current, dontAskAgain: !current.dontAskAgain })),
+              setChiefConfirm((current) =>
+                current === null ? null : { ...current, dontAskAgain: !current.dontAskAgain },
+              ),
           }}
           onConfirm={() => answerChiefConfirm(true)}
           onCancel={() => answerChiefConfirm(false)}
@@ -1411,10 +1470,14 @@ export default function SessionsScreen({ navigation }: Props) {
         />
         {noticeTarget !== null && selectedNotice !== null ? (
           <MachineNotice
-            notice={unified.on && selectedNotice.kind === 'failure'
-              ? { ...selectedNotice, title: `${machineDisplayLabel(noticeTarget)}: ${selectedNotice.title}` }
-              : selectedNotice}
-            collapsed={selectedNotice.kind === 'failure' && shrunkNotices[noticeTarget.id] === selectedNotice.failureKey}
+            notice={
+              unified.on && selectedNotice.kind === 'failure'
+                ? { ...selectedNotice, title: `${machineDisplayLabel(noticeTarget)}: ${selectedNotice.title}` }
+                : selectedNotice
+            }
+            collapsed={
+              selectedNotice.kind === 'failure' && shrunkNotices[noticeTarget.id] === selectedNotice.failureKey
+            }
             appearance={sidebarAppearance}
             onShrink={() => {
               if (selectedNotice.kind !== 'failure') return;
@@ -1711,15 +1774,19 @@ export default function SessionsScreen({ navigation }: Props) {
           visible
           title="Ghostex"
           subtitle={machine === null ? undefined : machineDisplayLabel(machine)}
-          items={unified.on ? [
-            {
-              kind: 'item' as const,
-              key: 'computers',
-              label: 'Computers',
-              onPress: () => setOverlay({ kind: 'machinePicker', purpose: 'select' }),
-            },
-            ...appMenuItems(machine),
-          ] : appMenuItems(machine)}
+          items={
+            unified.on
+              ? [
+                  {
+                    kind: 'item' as const,
+                    key: 'computers',
+                    label: 'Computers',
+                    onPress: () => setOverlay({ kind: 'machinePicker', purpose: 'select' }),
+                  },
+                  ...appMenuItems(machine),
+                ]
+              : appMenuItems(machine)
+          }
           onClose={() => setOverlay(NONE)}
           anchor={appMenuAnchor}
         />
@@ -1743,15 +1810,20 @@ export default function SessionsScreen({ navigation }: Props) {
                 else selectMachine(entry.id);
               },
             })),
-            ...(overlay.purpose === 'select' ? [{ kind: 'separator' as const, key: 'computer-actions' }, {
-              kind: 'item' as const,
-              key: 'add-computer',
-              label: 'Add a computer',
-              onPress: () => {
-                setOverlay(NONE);
-                navigation.navigate('ConnectChoose');
-              },
-            }] : []),
+            ...(overlay.purpose === 'select'
+              ? [
+                  { kind: 'separator' as const, key: 'computer-actions' },
+                  {
+                    kind: 'item' as const,
+                    key: 'add-computer',
+                    label: 'Add a computer',
+                    onPress: () => {
+                      setOverlay(NONE);
+                      navigation.navigate('ConnectChoose');
+                    },
+                  },
+                ]
+              : []),
             {
               kind: 'item' as const,
               key: 'manage-computers',
@@ -1850,17 +1922,22 @@ export default function SessionsScreen({ navigation }: Props) {
           overlay.kind === 'agentMenu'
             ? [
                 ...placeItems(overlay.ctx),
-                ...cloudWhereItems(overlay.ctx.machine.id, overlay.ctx.header.projectId, setTransientStatus, (agent) => {
-                  const ctx = overlay.ctx;
-                  closeAgentMenuThen(() =>
-                    setPhoneBoxStart({
-                      machine: ctx.machine,
-                      projectId: ctx.header.projectId,
-                      projectTitle: ctx.header.title,
-                      agent,
-                    }),
-                  );
-                }),
+                ...cloudWhereItems(
+                  overlay.ctx.machine.id,
+                  overlay.ctx.header.projectId,
+                  setTransientStatus,
+                  (agent) => {
+                    const ctx = overlay.ctx;
+                    closeAgentMenuThen(() =>
+                      setPhoneBoxStart({
+                        machine: ctx.machine,
+                        projectId: ctx.header.projectId,
+                        projectTitle: ctx.header.title,
+                        agent,
+                      }),
+                    );
+                  },
+                ),
                 ...agentMenuItems(overlay.ctx),
               ]
             : []

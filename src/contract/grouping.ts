@@ -401,6 +401,10 @@ export function compareForSidebarOrder(
   // CDXC:Sidebar 2026-11-07 SEE-ALSO: packages/gx-core/src/sidebar_view/ordering.rs `sort_pinned`. Manual follows
   // the dragged order (`sidebarOrder`), which also places a worktree's folded sessions among their parent's; a row
   // with none keeps its wire place after the numbered ones. Most recently updated puts the one that came back last first.
+  // CDXC:Chief 2026-11-08 SEE-ALSO: the DECISION in packages/gx-core/src/sidebar_view/ordering.rs `sort_pinned`:
+  // Chief of Staff leads the pinned rows.
+  const chiefDelta = Number(right.isChief) - Number(left.isChief);
+  if (left.isPinned && right.isPinned && chiefDelta !== 0) return chiefDelta;
   if (left.isPinned && right.isPinned) {
     if (pinnedOrder === 'recent') {
       return pinnedCameBackMs(right) - pinnedCameBackMs(left) || left.sessionId.localeCompare(right.sessionId);
@@ -615,8 +619,7 @@ export function countSectionSessions(
     if (session.awaitingApproval) counts.approvalCount++;
     else if (hasQuestion(session.pendingQuestionCount, capabilities.awaitingAnswer && session.awaitingAnswer)) {
       counts.questionCount++;
-    }
-    else if (session.activity === 'attention') counts.attentionCount++;
+    } else if (session.activity === 'attention') counts.attentionCount++;
   }
   return counts;
 }
@@ -742,10 +745,13 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const projectById = new Map<string, GhostexProject>();
   for (const project of summary.projects) projectById.set(project.projectId, project);
 
-  // Bucket sessions by project key. Insertion order preserves the wire session order.
+  // Bucket sessions by project key. Insertion order preserves the wire session order. Chief of Staff
+  // is listed in Main Hub even while its session still lives in the Ghostex config folder's project.
+  const homeProject = summary.projects.find((project) => project.isHome === true);
   const sessionsByProjectKey = new Map<string, GhostexSession[]>();
   for (const session of visibleSessions(summary.sessions)) {
-    const key = projectKeyForSession(session);
+    const key =
+      session.isChief && homeProject !== undefined ? `id:${homeProject.projectId}` : projectKeyForSession(session);
     const bucket = sessionsByProjectKey.get(key);
     if (bucket === undefined) sessionsByProjectKey.set(key, [session]);
     else bucket.push(session);

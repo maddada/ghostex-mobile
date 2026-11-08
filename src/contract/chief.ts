@@ -12,10 +12,19 @@
 import type { GhostexSession, GhostexMobileSummary } from './mobileSummary';
 
 /**
- * Chief's name on its row, its home header and its menus: "Main Hub" (Q1931). The one place the phone spells
- * it, as server/src/chief/mod.rs `CHIEF_TITLE` is gxserver's (the user may rename it, Q1930).
+ * Chief's name on its row and its menus: "Chief of Staff". The one place the phone spells it, as
+ * server/src/chief/mod.rs `CHIEF_TITLE` is gxserver's (CDXC:Chief 2026-11-08 there).
  */
-export const CHIEF_LABEL = 'Main Hub';
+export const CHIEF_LABEL = 'Chief of Staff';
+
+/**
+ * The home project's name on its header and menu: "Main Hub".
+ *
+ * CDXC:Chief 2026-11-08 SEE-ALSO: the DECISION on `native_sidebar_home_menu` in apps/desktop/src/app/native_sidebar/
+ * chief.rs. Main Hub is only the home project's header (a tap folds it); Chief of Staff is a session row pinned first
+ * under it, whose long press has New Chat and Change Agent.
+ */
+export const HOME_LABEL = 'Main Hub';
 
 /**
  * What Main Hub is, said where the desktop shows its hover card (apps/desktop/src/app/native_sidebar/chief_row_view.rs
@@ -25,7 +34,7 @@ export const CHIEF_LABEL = 'Main Hub';
  */
 export const MAIN_HUB_EXPLANATION = [
   "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
-  'Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.',
+  'Chief of Staff, pinned at the top, is the agent that sees and steers every Ghostex agent on this computer, and talks to the Chiefs of Staff on your other computers.',
 ] as const;
 
 /** The one dot a Chief's row draws, in the session card's order. */
