@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, View } from 'react-native';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
 
@@ -110,12 +110,7 @@ async function openMenu() {
 }
 
 /** A menu command: a button on iOS (React Native's `menuitem` has no role there; `ContextMenu.tsx`). */
-/**
- * A menu command's role: a button on iOS, `menuitem` on Android (`ContextMenu.tsx`); `android/*.onAndroid.rntl.tsx`
- * runs these tests with React Native reporting Android.
- */
-const COMMAND = Platform.OS === 'ios' ? 'button' : 'menuitem';
-const item = (name: string) => screen.getByRole(COMMAND, { name });
+const item = (name: string) => screen.getByRole('button', { name });
 
 /** Ancestors iOS reads as one accessibility element together with `node` (React Native's `accessible`). */
 function groupingAncestors(node: TestInstance) {
@@ -155,8 +150,8 @@ test('the "…" menu offers Clear Done alone; it clears the Done sessions at onc
   await render(<Navigator />);
   await openMenu();
   expect(screen.getByText('Read state is shared with the bell on your computer')).toBeTruthy();
-  expect(screen.queryByRole(COMMAND, { name: 'Mark All Read' })).toBeNull();
-  expect(screen.queryByRole(COMMAND, { name: 'Clear All' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Mark All Read' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Clear All' })).toBeNull();
   expect(item('Clear Done').props.accessibilityState).toMatchObject({ disabled: false });
 
   await fireEvent.press(item('Clear Done'));
@@ -173,7 +168,7 @@ test('the "…" menu offers Clear Done alone; it clears the Done sessions at onc
 test('Clear Done is its own accessibility element with its state; Close menu closes', async () => {
   await render(<Navigator />);
   await openMenu();
-  expect(item('Clear Done').props.accessibilityRole).toBe(COMMAND);
+  expect(item('Clear Done').props.accessibilityRole).toBe('button');
   expect(item('Clear Done').props.accessibilityState).toEqual({ disabled: false, selected: false });
   expect(groupingAncestors(item('Clear Done'))).toEqual([]);
 

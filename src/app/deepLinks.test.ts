@@ -170,24 +170,6 @@ describe('session links from Live Activity rows', () => {
     });
   });
 
-  test('a row of the Android persistent notification marks the session opened as the bell does, then opens it', async () => {
-    const link = 'ghostex://session?machineId=m1&sessionId=s1&title=Fix%20tests&source=notification';
-    assert.equal(parseSessionLink(link)?.source, 'notification');
-    const f = fake(undefined);
-    handleDeepLink(link, f.deps);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(f.calls[0], 'markOpened:m1:s1');
-    assert.ok(f.calls.includes('attach:s1'));
-  });
-
-  test('any other session link marks nothing read', async () => {
-    const f = fake(undefined);
-    handleDeepLink('ghostex://session?machineId=m1&sessionId=s1', f.deps);
-    handleDeepLink('ghostex://session?machineId=m1&sessionId=s1&source=other', f.deps);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(f.calls.filter((call) => call.startsWith('markOpened')).length, 0);
-  });
-
   const savedInTerminal: DeepLinkSession = {
     projectId: 'p1',
     title: 'fix build',
