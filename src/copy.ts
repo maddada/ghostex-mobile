@@ -833,7 +833,7 @@ export const EditMachineCopy = {
     title: 'Devices paired with this computer',
     waiting: (name: string) => `${name} is waiting for approval`,
     waitingDetail:
-      'Approve its request only if that phone shows the same three words. Deny it if nobody is pairing a phone right now.',
+      'Approve its request only if that phone or computer shows the same three words. Deny it if nobody is pairing one right now.',
     deny: 'Deny',
     remove: 'Remove',
     cancel: 'Cancel',
