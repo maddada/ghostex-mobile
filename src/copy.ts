@@ -96,29 +96,29 @@ export const ScanCopy = {
   },
   outdated: {
     title: 'This code needs a newer Ghostex app',
-    detail: 'Update Ghostex on this phone, or click Copy as text on the computer and paste the code here.',
+    detail: 'Update Ghostex on this phone, or click Copy Easy Connect code on the computer and paste the code here.',
   },
   expired: {
     title: 'This code has expired',
-    detail: 'Click New code on the computer and scan again.',
+    detail: 'Open Show QR on the computer again and scan the new Easy Connect code.',
   },
   pairingFailed: {
     title: "Couldn't pair with the computer",
   },
   noSecret: {
     title: 'This code cannot pair by itself',
-    detail: 'Update Ghostex on the computer, then scan a new code.',
+    detail: 'On the computer, open Settings → Remote → Easy Connect → Show QR, and scan or copy the Easy Connect code there.',
   },
   cameraDenied: 'Camera access is off for Ghostex, so paste the code instead.',
   cameraDeniedSettingsLink: 'Allow the camera in Settings',
   paste: {
-    title: 'Paste a pairing code',
-    ledePrefix: 'On the computer, open Settings → Remote, click ',
-    ledeStrong: 'Copy as text',
-    ledeSuffix: ' under the QR, and send the text to this phone.',
+    title: 'Paste an Easy Connect code',
+    ledePrefix: 'On the computer, open Settings → Remote → Easy Connect, click Show QR, then ',
+    ledeStrong: 'Copy Easy Connect code',
+    ledeSuffix: ', and send the text to this phone.',
     placeholder: 'ghostex-ec1:…',
     validEasyConnect: (user: string, computer: string) =>
-      `Looks like a Ghostex pairing code for ${user} on ${computer}`,
+      `Looks like an Easy Connect code for ${user} on ${computer}`,
     validTailscale: (user: string, computer: string) =>
       `Looks like a Ghostex Tailscale code for ${user} on ${computer}`,
     validLegacy: 'Looks like a pairing address. You will be asked for the computer name and user next.',
@@ -138,8 +138,8 @@ export const ScanCopy = {
         detail: 'Or open Settings → Remote.',
       },
       {
-        title: 'Click Connect under Easy Connect',
-        detail: 'Easy Connect turns on by itself and the code appears.',
+        title: 'Click the QR under Easy Connect',
+        detail: 'Show QR opens the Easy Connect code. It works once, for 5 minutes.',
       },
     ],
     notInstalledPrefix: "Ghostex isn't installed on the computer yet? ",
@@ -446,7 +446,7 @@ export const MachineCopy = {
   /** "Scan" affordance next to the Easy Connect address field; opens the Scan code screen. */
   scanner: {
     buttonLabel: 'Scan',
-    buttonAccessibilityLabel: 'Scan the pairing code shown on the computer',
+    buttonAccessibilityLabel: 'Scan the Easy Connect code shown on the computer',
   },
   validation: {
     port: 'Use a port from 1 to 65535.',
