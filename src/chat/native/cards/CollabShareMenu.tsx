@@ -6,20 +6,23 @@
  * `/api/collab` (server/src/server/collab_http.rs). Port of desktop `window/collab_share.rs`.
  *
  * CDXC:Collab 2026-11-07 DECISION: User (Q1616): the phone is "full (share, approve messages, Stop sharing, see viewers)", starting a share included.
+ *
+ * CDXC:Collab 2026-11-08 DECISION: User (#495): turning Collab on, sharing, Send mode and sending a
+ * guest's message need the owner's signed approval (`collabCall` waits for it). No read returns a
+ * link or a code: they come with an approved Create link (or Show), kept for this run of the app.
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Share, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
-import { chatMachineLink } from '../../rust/machine-link';
+import { collabCall, revealedShares, spacedCode } from './collabCall';
 import type { RustChat } from '../../rust/useRustChat';
 import { obj, str } from './json';
 import { ToneButton } from './ToneCard';
 import { themedStyles } from '../transcript/theme';
 
-const CALL_TIMEOUT_MS = 15_000;
 const MODES = [
   { value: 'send', label: 'Send' },
   { value: 'approve', label: 'Ask me' },
@@ -30,25 +33,22 @@ type Share_ = {
   shareId: string;
   projectId: string;
   sessionId: string;
-  link: string;
-  code: string;
   mode: string;
   expiresAtMs: number | null;
   viewers: { id: string; name: string }[];
 };
 
 type View_ = {
-  config: { enabled: boolean; mode: string; requireCode: boolean };
+  config: { enabled: boolean; mode: string };
   relayConnected: boolean;
+  guestPage?: { message?: string | null };
   shares: Share_[];
 };
 
 function endsLabel(at: number | null): string {
-  if (at === null) return 'The link works until you stop sharing';
-  const minutes = Math.max(0, Math.round((at - Date.now()) / 60_000));
+  const minutes = Math.max(0, Math.round(((at ?? 0) - Date.now()) / 60_000));
   if (minutes < 60) return `The link ends in ${minutes} min`;
-  if (minutes < 2880) return `The link ends in ${Math.round(minutes / 60)} h`;
-  return `The link ends in ${Math.round(minutes / 1440)} days`;
+  return `The link ends in ${Math.round(minutes / 60)} h`;
 }
 
 export function CollabShareMenu({ chat, document }: { chat: RustChat; document: ChatDocument }) {
@@ -62,30 +62,37 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
+  const [waiting, setWaiting] = useState<string | null>(null);
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
+
   const send = useCallback(
     async (params: Record<string, unknown>) => {
       if (machine === null) return;
       const write = params.op !== 'read';
       if (write) setBusy(true);
       try {
-        const answer = await chatMachineLink(machine).rpc('collab', params, CALL_TIMEOUT_MS);
+        const answer = await collabCall(machine, params, write ? setWaiting : undefined, () => alive.current);
         if (answer.error !== null) {
-          setError(
-            /unknown|no gxserver endpoint/i.test(answer.error.message)
-              ? 'Update Ghostex on this computer to share chats from your phone.'
-              : answer.error.message,
-          );
+          setError(answer.error);
           return;
         }
         setError(null);
-        const result = answer.result as Record<string, unknown>;
-        if (result.share !== undefined) {
+        const result = answer.result;
+        const share = result.share as { shareId?: string; link?: string; code?: string } | undefined;
+        if (share !== undefined) {
+          if (share.shareId && share.link && share.code) {
+            revealedShares.set(share.shareId, { link: share.link, code: share.code });
+          }
           void send({ op: 'read' });
           return;
         }
         setView(result as unknown as View_);
-      } catch (failure) {
-        setError(failure instanceof Error ? failure.message : "Couldn't reach Ghostex on your computer.");
       } finally {
         if (write) setBusy(false);
       }
@@ -109,6 +116,14 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
     return <Text style={styles.note}>{error ?? 'Reading Ghostex Collab…'}</Text>;
   }
   const share = view.shares.find((entry) => entry.projectId === projectId && entry.sessionId === sessionId);
+  const notes = (
+    <>
+      {waiting !== null ? (
+        <Text style={styles.waiting}>{`Approve on your computer or this phone: ${waiting}.`}</Text>
+      ) : null}
+      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+    </>
+  );
   if (!view.config.enabled) {
     return (
       <View style={styles.menu}>
@@ -124,7 +139,8 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
             onPress={() => void send({ op: 'set', patch: { enabled: true } })}
           />
         </View>
-        {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+        {view.guestPage?.message ? <Text style={styles.error}>{view.guestPage.message}</Text> : null}
+        {notes}
       </View>
     );
   }
@@ -134,12 +150,8 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
       <View style={styles.menu}>
         <Text style={styles.note}>
           {`Anyone you send the link to can follow this chat live in their browser. ${
-            mode === 'send'
-              ? 'Their messages go straight to the agent.'
-              : mode === 'view'
-                ? 'They can watch, but not write.'
-                : 'You approve each message they send.'
-          }${view.config.requireCode ? ' They also type a six-digit code you give them.' : ''}`}
+            mode === 'view' ? 'They can watch, but not write.' : 'You approve each message they send.'
+          } They also type the eight-digit code that comes with it.`}
         </Text>
         <View style={styles.actions}>
           <ToneButton
@@ -149,49 +161,56 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
             onPress={() => void send({ op: 'share', projectId, sessionId })}
           />
         </View>
-        {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+        {view.guestPage?.message ? <Text style={styles.error}>{view.guestPage.message}</Text> : null}
+        {notes}
       </View>
     );
   }
-  const code = share.code.length === 6 ? `${share.code.slice(0, 3)} ${share.code.slice(3)}` : share.code;
+  const revealed = revealedShares.get(share.shareId);
   return (
     <View style={styles.menu}>
       <Text style={styles.status}>{view.relayConnected ? 'Live' : 'Connecting to the share relay…'}</Text>
       <Text style={styles.label}>Link</Text>
-      <Text selectable numberOfLines={2} style={styles.link}>
-        {share.link}
-      </Text>
-      <View style={styles.actions}>
-        <ToneButton
-          kind="secondary"
-          label={copied === 'link' ? 'Copied' : 'Copy link'}
-          onPress={() => copy('link', share.link)}
-        />
-        <ToneButton
-          kind="secondary"
-          label="Share"
-          onPress={() =>
-            void Share.share({
-              message: share.code.length > 0 ? `${share.link}\nCode: ${share.code}` : share.link,
-            })
-          }
-        />
-      </View>
-      {share.code.length > 0 ? (
+      {revealed === undefined ? (
+        <View style={styles.row}>
+          <Text style={[styles.note, styles.hidden]}>Hidden: showing it again needs your approval.</Text>
+          <ToneButton
+            kind="secondary"
+            label="Show"
+            disabled={busy}
+            onPress={() => void send({ op: 'share', projectId, sessionId })}
+          />
+        </View>
+      ) : (
         <>
+          <Text selectable numberOfLines={2} style={styles.link}>
+            {revealed.link}
+          </Text>
+          <View style={styles.actions}>
+            <ToneButton
+              kind="secondary"
+              label={copied === 'link' ? 'Copied' : 'Copy link'}
+              onPress={() => copy('link', revealed.link)}
+            />
+            <ToneButton
+              kind="secondary"
+              label="Share"
+              onPress={() => void Share.share({ message: `${revealed.link}\nCode: ${revealed.code}` })}
+            />
+          </View>
           <Text style={styles.label}>Code</Text>
           <View style={styles.row}>
             <Text selectable style={styles.code}>
-              {code}
+              {spacedCode(revealed.code)}
             </Text>
             <ToneButton
               kind="secondary"
               label={copied === 'code' ? 'Copied' : 'Copy'}
-              onPress={() => copy('code', share.code)}
+              onPress={() => copy('code', revealed.code)}
             />
           </View>
         </>
-      ) : null}
+      )}
       <Text style={styles.label}>Guest messages</Text>
       <View accessibilityRole="radiogroup" style={styles.segments}>
         {MODES.map((option) => {
@@ -233,7 +252,7 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
           onPress={() => void send({ op: 'stop', shareId: share.shareId })}
         />
       </View>
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      {notes}
     </View>
   );
 }
@@ -264,4 +283,6 @@ const useStyles = themedStyles((P) => ({
   footer: { marginTop: 8, justifyContent: 'space-between' },
   ends: { flex: 1, color: P.muted, fontSize: 12 },
   error: { color: '#ef9999', fontSize: 12.5 },
+  waiting: { color: '#d5ae6b', fontSize: 12.5 },
+  hidden: { flex: 1, paddingHorizontal: 0 },
 }));

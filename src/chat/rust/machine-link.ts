@@ -670,8 +670,14 @@ class ChatMachineLink {
         const error = {
           code: typeof envelope.error === 'string' ? envelope.error : null,
           message:
-            typeof envelope.message === 'string' ? envelope.message : "Ghostex on the computer couldn't do that. Try again.",
+            typeof envelope.message === 'string'
+              ? envelope.message
+              : "Ghostex on the computer couldn't do that. Try again.",
           endpoint,
+          approval:
+            typeof envelope.approval === 'object' && envelope.approval !== null
+              ? (envelope.approval as { id?: string; summary?: string; status?: string })
+              : null,
         };
         const startingRetryAfterMs =
           response.status === 503 && envelope.product === 'gxserver' && envelope.error === 'serverStarting'

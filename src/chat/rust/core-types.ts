@@ -27,7 +27,13 @@
 export type ChatStorageKey = { store: string; suffix: string };
 
 /** How a request the core asked for (`sendRpc`) ended. */
-export type ChatRpcError = { code?: string | null; message: string; endpoint?: string | null };
+export type ChatRpcError = {
+  code?: string | null;
+  message: string;
+  endpoint?: string | null;
+  /** The approval request of an `approvalRequired` refusal (GitHub #495): the call waits for the owner's signed approval. */
+  approval?: { id?: string; summary?: string; status?: string } | null;
+};
 
 /** Everything that can reach the core. `type` picks the variant. */
 export type ChatCoreEvent =

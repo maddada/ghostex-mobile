@@ -5,12 +5,16 @@
  * The desktop's page is `settings_modal/tabs/collab.rs`.
  *
  * CDXC:Collab 2026-11-07 DECISION: User (Q1610, Q1616): "a page in settings called "Collab"", and the phone is "full (share, approve messages, Stop sharing, see viewers)".
+ *
+ * CDXC:Collab 2026-11-08 DECISION: User (#495): turning Collab on needs the owner's signed approval
+ * (`collabCall` waits for it), a link lasts an hour by default and a day at most, a code is always
+ * asked, and Send is never a default: it is turned on per chat, in its Share sheet, with approval.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 
-import { chatMachineLink } from '../../chat/rust/machine-link';
+import { collabCall } from '../../chat/native/cards/collabCall';
 import { isMachineEnabled, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
 import { SettingsSection } from './SectionBoundary';
@@ -25,13 +29,10 @@ import {
   useSettingsStyles,
 } from './SettingsControls';
 
-const CALL_TIMEOUT_MS = 15_000;
-
 type Config = {
   enabled: boolean;
-  expiry: 'hour' | 'day' | 'week' | 'never';
-  requireCode: boolean;
-  mode: 'send' | 'approve' | 'view';
+  expiry: 'hour' | 'fourHours' | 'day';
+  mode: 'approve' | 'view';
   ownerName: string;
   ownerDisplayName: string;
 };
@@ -43,7 +44,7 @@ type Share_ = {
   viewers: { id: string; name: string }[];
 };
 
-type View_ = { config: Config; shares: Share_[] };
+type View_ = { config: Config; shares: Share_[]; guestPage?: { message?: string | null } };
 
 type LogEntry = {
   atMs: number;
@@ -55,22 +56,12 @@ type LogEntry = {
   outcome?: string;
 };
 
-async function call(machine: MachineRecord, params: Record<string, unknown>) {
-  try {
-    const answer = await chatMachineLink(machine).rpc('collab', params, CALL_TIMEOUT_MS);
-    if (answer.error !== null) {
-      const unknown = /unknown|not a gxserver|no gxserver endpoint/i.test(answer.error.message);
-      return {
-        result: null,
-        error: unknown
-          ? 'Update Ghostex on this computer to use Ghostex Collab from your phone.'
-          : answer.error.message,
-      };
-    }
-    return { result: answer.result as Record<string, unknown>, error: null };
-  } catch (error) {
-    return { result: null, error: error instanceof Error ? error.message : "Couldn't reach Ghostex on your computer." };
-  }
+async function call(
+  machine: MachineRecord,
+  params: Record<string, unknown>,
+  onWaiting?: (summary: string | null) => void,
+): Promise<{ result: Record<string, unknown> | null; error: string | null }> {
+  return collabCall(machine, params, onWaiting);
 }
 
 function ago(atMs: number): string {
@@ -82,11 +73,9 @@ function ago(atMs: number): string {
 }
 
 function ends(at: number | null): string {
-  if (at === null) return 'never ends';
-  const minutes = Math.max(0, Math.round((at - Date.now()) / 60_000));
+  const minutes = Math.max(0, Math.round(((at ?? 0) - Date.now()) / 60_000));
   if (minutes < 60) return `ends in ${minutes} min`;
-  if (minutes < 2880) return `ends in ${Math.round(minutes / 60)} h`;
-  return `ends in ${Math.round(minutes / 1440)} days`;
+  return `ends in ${Math.round(minutes / 60)} h`;
 }
 
 const OUTCOMES: Record<string, string> = {
@@ -111,11 +100,12 @@ export default function CollabPage() {
   const [view, setView] = useState<View_ | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState<string | null>(null);
 
   const send = useCallback(
     async (params: Record<string, unknown>) => {
       if (machine === null) return;
-      const answer = await call(machine, params);
+      const answer = await call(machine, params, params.op === 'read' ? undefined : setWaiting);
       if (answer.result !== null) {
         setView(answer.result as unknown as View_);
         setError(null);
@@ -169,7 +159,9 @@ export default function CollabPage() {
           ))}
         </SettingsSection>
       ) : null}
+      {waiting !== null ? <Caption>{`Approve on your computer or this phone: ${waiting}.`}</Caption> : null}
       {error !== null ? <Caption>{error}</Caption> : null}
+      {view?.guestPage?.message ? <Caption>{view.guestPage.message}</Caption> : null}
       {view === null ? (
         error === null ? (
           <Caption>Reading Ghostex Collab…</Caption>
@@ -203,8 +195,8 @@ function CollabBody({
           label="Ghostex Collab"
           detail={
             config.enabled
-              ? 'On. Turning it off ends every share at once.'
-              : 'Off: nothing can be shared and every link stops working.'
+              ? 'On. Each share needs your approval. Turning it off ends every share at once.'
+              : 'Off: nothing can be shared and every link stops working. Turning it on needs your approval.'
           }
           value={config.enabled}
           onValueChange={(enabled) => set({ enabled })}
@@ -220,7 +212,6 @@ function CollabBody({
         <SegmentedRow
           label="Guest messages"
           options={[
-            { value: 'send', label: 'Send' },
             { value: 'approve', label: 'Ask me' },
             { value: 'view', label: 'View only' },
           ]}
@@ -231,19 +222,16 @@ function CollabBody({
           label="Link ends after"
           options={[
             { value: 'hour', label: '1 hour' },
+            { value: 'fourHours', label: '4 hours' },
             { value: 'day', label: '24 hours' },
-            { value: 'week', label: '7 days' },
-            { value: 'never', label: 'Never' },
           ]}
           value={config.expiry}
           onChange={(expiry) => set({ expiry })}
         />
-        <ToggleRow
-          label="Ask for a code"
-          detail="Guests also type the six-digit code from the Share sheet."
-          value={config.requireCode}
-          onValueChange={(requireCode) => set({ requireCode })}
-        />
+        <Caption>
+          A day at most. Guests always type the eight-digit code that comes with the link, and you get a notification
+          when one joins. Send straight to the agent is turned on per chat, in its Share sheet.
+        </Caption>
       </SettingsSection>
       {config.enabled ? (
         <SettingsSection name="settings:collab:shared">
