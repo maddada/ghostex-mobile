@@ -1,10 +1,12 @@
 /**
- * The `@` files, `$` skills, `+` sessions and `/` commands popup above the composer
- * (`suggestions/render.rs`).
+ * The `@` files, `/` (or `$`) skills, `+` sessions and `/` commands popup above the composer
+ * (`suggestions/render.rs`). A row's `section` is the heading of a new section that starts at it
+ * (the `/` list's skills, custom commands and the agent's built-in commands).
  * Trigger detection, filtering, the rows and their order all come from the core's `suggestions`;
  * this draws them and reports a pick (`suggestionPick`) or a retry (`suggestionRetry`).
  */
 
+import { Fragment } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
@@ -51,31 +53,37 @@ export function Suggestions({ data, dispatch }: { data: unknown; dispatch: (acti
           </View>
         ) : null}
         {rows.map((row, index) => (
-          <Pressable
-            key={`${index}:${str(row, 'label')}`}
-            accessibilityRole="menuitem"
-            accessibilityState={{ selected: index === selected }}
-            onPress={() => dispatch({ type: 'suggestionPick', index })}
-            style={({ pressed }) => [styles.row, index === selected || pressed ? styles.rowSelected : null]}
-          >
-            {files ? <Glyph name="file" size={16} color={P.muted} strokeWidth={1.6} /> : null}
-            {sessions ? (
-              isTrue(row, 'coordinator') ? (
-                <CoordinatorGlyph size={16} color={P.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
-              ) : (
-                <AgentMark icon={str(row, 'agentIcon') || null} size={16} />
-              )
+          <Fragment key={`${index}:${str(row, 'label')}`}>
+            {str(row, 'section').length > 0 ? (
+              <Text style={styles.heading} accessibilityRole="header">
+                {str(row, 'section').toUpperCase()}
+              </Text>
             ) : null}
-            <Text style={[styles.label, sessions ? styles.sessionLabel : null]} numberOfLines={1}>
-              {str(row, 'label')}
-            </Text>
-            <Text
-              style={[styles.detail, sessions && isTrue(row, 'working') ? { color: WORKING_COLOR } : null]}
-              numberOfLines={1}
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityState={{ selected: index === selected }}
+              onPress={() => dispatch({ type: 'suggestionPick', index })}
+              style={({ pressed }) => [styles.row, index === selected || pressed ? styles.rowSelected : null]}
             >
-              {str(row, 'detail')}
-            </Text>
-          </Pressable>
+              {files ? <Glyph name="file" size={16} color={P.muted} strokeWidth={1.6} /> : null}
+              {sessions ? (
+                isTrue(row, 'coordinator') ? (
+                  <CoordinatorGlyph size={16} color={P.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
+                ) : (
+                  <AgentMark icon={str(row, 'agentIcon') || null} size={16} />
+                )
+              ) : null}
+              <Text style={[styles.label, sessions ? styles.sessionLabel : null]} numberOfLines={1}>
+                {str(row, 'label')}
+              </Text>
+              <Text
+                style={[styles.detail, sessions && isTrue(row, 'working') ? { color: WORKING_COLOR } : null]}
+                numberOfLines={1}
+              >
+                {str(row, 'detail')}
+              </Text>
+            </Pressable>
+          </Fragment>
         ))}
       </ScrollView>
     </View>

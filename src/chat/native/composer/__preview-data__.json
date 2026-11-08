@@ -14,7 +14,7 @@
       "prompts": []
     },
     "draft": { "clientId": "gx-291hfhb3k0xmufvovkz", "canSync": true, "synced": null },
-    "composerPlaceholder": "Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills.",
+    "composerPlaceholder": "Press Enter to send a message and Tab to Queue.\nUse / for skills and commands, @ to mention a file and + for agents.",
     "sendBlockedReason": null,
     "composerCollapseEligible": true,
     "composerCollapsed": false,
