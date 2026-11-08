@@ -55,7 +55,7 @@ import SessionLinksSheet from '../chat/native/SessionLinksSheet';
 import { buildDrawerList, hideProjectsWithoutSessions, type DrawerBlock } from '../components/sessions/drawerModel';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
-import { bellLabel, BellWithCount, useAttentionUnreadCount } from '../notifications/NotificationsBell';
+import { bellLabel, BellWithCount, useNeedsYouCount } from '../notifications/NotificationsBell';
 import { VoiceButton } from '../voice/VoiceButton';
 import { useVoiceStore, voiceActive } from '../voice/conversation';
 import MachineTabs, {
@@ -194,7 +194,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const refreshMachineFresh = useInventoryStore((state) => state.refreshMachineFresh);
   const retryMachine = useInventoryStore((state) => state.retryMachine);
   const refreshAll = useInventoryStore((state) => state.refreshAll);
-  const unreadNotifications = useAttentionUnreadCount();
+  const needsYou = useNeedsYouCount();
   const selectedSpaceIdByMachine = useSpacesStore((state) => state.selectedSpaceIdByMachine);
   const selectSpace = useSpacesStore((state) => state.selectSpace);
   const selectedWorkspaceIdByMachine = useWorkspacesStore((state) => state.selectedWorkspaceIdByMachine);
@@ -905,15 +905,15 @@ export default function SessionsScreen({ navigation }: Props) {
   // Machines stand in the bottom bar, CDXC:Sessions 2026-10-27). On the iPhone Duo the status band holds the
   // same row. In the side bar (a system that stands one) the bell and the menu stand there as its entries. On the
   // iPhone Duo's inner display the list/tiles switch stands before the bell, in the side bar as two switch entries.
-  // The bell opens the attention list with its unread count.
+  // The bell opens the attention list with the number of sessions that need the user.
   const bellButton = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={bellLabel(unreadNotifications)}
+      accessibilityLabel={bellLabel(needsYou)}
       style={styles.headerButton}
       onPress={() => navigation.navigate('AttentionList')}
     >
-      <BellWithCount size={22} color={sidebarAppearance.foreground} unread={unreadNotifications} />
+      <BellWithCount size={22} color={sidebarAppearance.foreground} count={needsYou} />
     </Pressable>
   );
   const moreButton = (
@@ -957,8 +957,8 @@ export default function SessionsScreen({ navigation }: Props) {
         : []),
       {
         key: 'notifications',
-        label: bellLabel(unreadNotifications),
-        icon: (size) => <BellWithCount size={size} color={color} unread={unreadNotifications} />,
+        label: bellLabel(needsYou),
+        icon: (size) => <BellWithCount size={size} color={color} count={needsYou} />,
         onPress: () => navigation.navigate('AttentionList'),
       },
       {
@@ -970,7 +970,7 @@ export default function SessionsScreen({ navigation }: Props) {
     ];
     // The session search sheet and the rename and note dialogs take the keyboard.
     return { entries, pinned: 0, moreMenu: 'always', reserveKeyboard: true };
-  }, [sidebarAppearance.foreground, unreadNotifications, navigation, wallOffered, sessionListView, chooseListView]);
+  }, [sidebarAppearance.foreground, needsYou, navigation, wallOffered, sessionListView, chooseListView]);
   useRailButtons(railButtons, sidebarAppearance.background, inRail && isFocused);
 
   return (

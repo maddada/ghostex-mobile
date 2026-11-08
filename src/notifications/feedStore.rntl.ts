@@ -55,7 +55,6 @@ import type * as TerminalSessionsModule from '../terminal/sessions';
 import type { TerminalTab } from '../terminal/sessions';
 import type * as ZmxDisplayModule from '../terminal/zmxDisplay';
 import type * as AttentionRowsModule from './attentionRows';
-import type * as EventsModule from './events';
 import type * as FeedStoreModule from './feedStore';
 import type { NotificationSettings } from './settings';
 
@@ -236,8 +235,7 @@ function startApp(
   const { useInventoryStore } = jest.requireActual<typeof InventoryStoreModule>('../inventory/store');
   const { logAppEvent } = jest.requireMock<typeof AppLogModule>('../app/appLog');
   const notifications = jest.requireMock<typeof NotificationsModule>('expo-notifications');
-  const { buildAttentionList } = jest.requireActual<typeof AttentionRowsModule>('./attentionRows');
-  const { sessionFacts } = jest.requireActual<typeof EventsModule>('./events');
+  const { buildAttentionList, machineFeed } = jest.requireActual<typeof AttentionRowsModule>('./attentionRows');
   const { initAlerts } = jest.requireActual<typeof AlertsModule>('../app/alerts');
   const { GhostexNative } = jest.requireMock<typeof NativeModule>('../../modules/ghostex-native/src');
   const posted = jest.mocked(notifications.scheduleNotificationAsync);
@@ -308,17 +306,23 @@ function startApp(
     setSessionsOnRequest: (next: Record<string, SessionState>) => {
       answerWith = next;
     },
-    /** The attention list's rows as `AttentionList` builds them from the stores: "row id:label". */
-    listLabels: () =>
-      buildAttentionList(
-        Object.entries(feedStore.useAttentionFeedStore.getState().feeds).map(([machineId, feed]) => ({
-          machineId,
-          machineLabel: MACHINE.name,
-          rows: feed.rows,
-        })),
-        (machineId, sessionId) =>
-          sessionFacts(useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary, sessionId),
-      ).map((row) => `${row.notificationId}:${row.label}`),
+    /** The attention list's rows as `AttentionList` builds them from the stores, section by section: "id:label". */
+    listLabels: () => {
+      const inbox = buildAttentionList(
+        Object.entries(feedStore.useAttentionFeedStore.getState().feeds).map(([machineId, feed]) =>
+          machineFeed(
+            { id: machineId, label: MACHINE.name },
+            feed,
+            useInventoryStore.getState().inventoriesByMachineId[machineId],
+            [],
+          ),
+        ),
+        new Set(),
+      );
+      return [...inbox.needsYou, ...inbox.done, ...inbox.failed, ...inbox.accounts].map(
+        (row) => `${row.id}:${row.label}`,
+      );
+    },
     /**
      * The Terminal screen in front with this session's terminal or Chat View, as the screen reports it
      * (`setMountedSessionKeys`); null: another screen is in front.
@@ -395,7 +399,7 @@ test('with notifications off, a new question row still gets its session list rea
   app.feedStore.initAttentionNotifications();
   await settle();
   expect(app.sessionListRequests).toEqual(['m1']);
-  expect(app.listLabels()).toEqual(['q1:has a question']);
+  expect(app.listLabels()).toEqual(['s1:has a question']);
   expect(app.posted).not.toHaveBeenCalled();
 
   // Only read state changes (the desktop read it), seen by the next poll: nothing to join anew. (An explicit
@@ -404,7 +408,7 @@ test('with notifications off, a new question row still gets its session list rea
   jest.advanceTimersByTime(5_000);
   await settle();
   expect(app.feedStore.useAttentionFeedStore.getState().feeds.m1?.rows.map((row) => row.read)).toEqual([true]);
-  expect(app.listLabels()).toEqual(['q1:has a question']);
+  expect(app.listLabels()).toEqual(['s1:has a question']);
   expect(app.sessionListRequests).toEqual(['m1']);
 });
 
@@ -595,7 +599,8 @@ test("s1's Chat View on screen: its event posts nothing and does not sound, its 
   await app.feedStore.refreshAttentionFeeds();
   await settle();
   expect(app.posted.mock.calls.map(([request]) => request.content.data?.sessionId)).toEqual(['s2']);
-  expect(app.listLabels()).toEqual(['n1:waiting', 'n2:finished']);
+  // Both sessions wait (an attention whose kind the computer does not send); s1's stays in the list.
+  expect(app.listLabels()).toEqual(['s1:waiting', 's2:waiting']);
   // One sound, s2's (the Sessions list announced it first; its notification stays silent).
   expect(app.sounds()).toEqual(['sessions list']);
 });
@@ -809,12 +814,12 @@ test('a waiting row that stays as it is follows the question count on a list ref
   const app = startApp({ settings: { ...ALL_ON, enabled: false }, sessions: { s1: { activity: 'attention' } } });
   app.feedStore.initAttentionNotifications();
   await settle();
-  expect(app.listLabels()).toEqual(['same-wait:waiting']);
+  expect(app.listLabels()).toEqual(['s1:waiting']);
   // The session list now counts a pending question; the row keeps its id and kind.
   app.setSessionsOnRequest({ s1: { activity: 'attention', pendingQuestionCount: 1 } });
   await app.feedStore.refreshAttentionFeeds();
   await settle();
-  expect(app.listLabels()).toEqual(['same-wait:has a question']);
+  expect(app.listLabels()).toEqual(['s1:has a question']);
 });
 
 test('a session row arriving during an older session-list read is mapped with a newer one, not dropped', async () => {

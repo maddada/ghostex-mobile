@@ -17,8 +17,7 @@ export type FeedRpcAnswer = { result: unknown; error: null } | { result?: undefi
 /** One request to gxserver. */
 export type FeedRpc = (method: string, params: Record<string, unknown>) => Promise<FeedRpcAnswer>;
 
-export type FeedUpdate =
-  { action: 'markRead' | 'markUnread' | 'dismiss'; notificationId: string } | { action: 'markAllRead' | 'clearAll' };
+export type FeedUpdate = { action: 'markRead' | 'markUnread' | 'dismiss'; notificationId: string };
 
 /** Why a request gave no feed: the computer answered with an error, or with something the phone cannot read. */
 export type FeedRequestFailure = 'refused' | 'unreadable';
@@ -47,4 +46,16 @@ export async function readFeed(rpc: FeedRpc): Promise<FeedSnapshot> {
 /** Sends one change; the computer answers with the whole feed after it. */
 export async function updateFeed(rpc: FeedRpc, update: FeedUpdate): Promise<FeedSnapshot> {
   return snapshotOf(await rpc(UPDATE_FEED_METHOD, { ...update }));
+}
+
+/**
+ * Marks each of `notificationIds` read, one `markRead` per row (the computer's update takes one row), in order; the
+ * feed after the last, or null when there was none to mark. The first refusal stops the rest and throws.
+ */
+export async function markRowsRead(rpc: FeedRpc, notificationIds: readonly string[]): Promise<FeedSnapshot | null> {
+  let snapshot: FeedSnapshot | null = null;
+  for (const notificationId of notificationIds) {
+    snapshot = await updateFeed(rpc, { action: 'markRead', notificationId });
+  }
+  return snapshot;
 }

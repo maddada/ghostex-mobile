@@ -1,8 +1,8 @@
 /**
- * Notifications: the attention list as a screen, opened from the bell on the Sessions
- * screen. The header's "…" holds Mark All Read and Clear All, as the head of the desktop
- * bell's list; Clear All asks first, because the rows also leave the bell on the computer. A row opens
- * its session as a notification does (`ghostex://session`, a "has a question" row at its question card).
+ * Notifications: the attention list as a screen, opened from the bell on the Sessions screen. The header's "…"
+ * holds Clear Done: it marks read on the computer the finished rows that keep sessions under Done, and nothing else,
+ * so it asks nothing first (the rows stay on the computer, read). A row opens its session as a notification does
+ * (`ghostex://session`, a "has a question" row at its question card).
  *
  * The "…" menu stands at its button wherever the header is (the notifications design, state
  * list-menu): with the header on top (every iPhone but the Duo) under the button at the
@@ -15,12 +15,11 @@ import { type Appearance } from '../theme/useAppearance';
 
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { Pressable, StyleSheet, Text, type ViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { sessionDeepLink } from '../app/deepLinkHandler';
 import { openDeepLink } from '../app/deepLinks';
-import BottomSheet from '../components/common/BottomSheet';
 import { measureInWindow } from '../components/common/measureInWindow';
 import { useStackScreenRail } from '../components/common/verticalBar/stackRail';
 import { useHeaderPlacement } from '../components/common/verticalBar/VerticalBarArea';
@@ -28,9 +27,8 @@ import ContextMenu, { type MenuAnchor } from '../components/sessions/ContextMenu
 import { MoreGlyph } from '../components/sessions/icons';
 import { NotificationsCopy } from '../copy';
 import type { RootStackParamList } from '../navigation/types';
-import AttentionList, { type OpenSessionTarget } from '../notifications/AttentionList';
-import { refreshAttentionFeeds, updateAllAttentionFeeds, useAttentionFeedStore } from '../notifications/feedStore';
-import { neutralButtonFills } from '../theme/palette';
+import AttentionList, { useAttentionInbox, type OpenSessionTarget } from '../notifications/AttentionList';
+import { clearDone, refreshAttentionFeeds } from '../notifications/feedStore';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AttentionList'>;
@@ -44,12 +42,8 @@ export default function AttentionListScreen({ navigation }: Props) {
   const moreRef = useRef<ViewInstance | null>(null);
   const headerOnTop = useHeaderPlacement().kind === 'top';
   const [menu, setMenu] = useState<MenuState>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [failed, setFailed] = useState(false);
-  const feeds = useAttentionFeedStore((state) => state.feeds);
-  const shown = Object.values(feeds).filter((feed) => feed.status === 'ready');
-  const anyRows = shown.some((feed) => feed.rows.length > 0);
-  const anyUnread = shown.some((feed) => feed.rows.some((row) => !row.read));
+  const done = useAttentionInbox().inbox.done;
 
   // The list is read again whenever it comes into view, so it is current on arrival.
   useFocusEffect(
@@ -66,10 +60,6 @@ export default function AttentionListScreen({ navigation }: Props) {
         ...(target.question ? { view: 'question' as const } : {}),
       }),
     );
-  }, []);
-
-  const runAll = useCallback((action: 'markAllRead' | 'clearAll') => {
-    void updateAllAttentionFeeds(action).then((done) => setFailed(!done));
   }, []);
 
   useLayoutEffect(() => {
@@ -109,9 +99,6 @@ export default function AttentionListScreen({ navigation }: Props) {
     ),
   );
 
-  const danger = { rest: appearance.dangerFill, pressed: appearance.dangerFillPressed };
-  const neutral = neutralButtonFills(appearance.light);
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: appearance.background }]} edges={['bottom']}>
       {failed ? (
@@ -130,52 +117,16 @@ export default function AttentionListScreen({ navigation }: Props) {
         items={[
           {
             kind: 'item',
-            key: 'markAllRead',
-            label: NotificationsCopy.markAllRead,
-            disabled: !anyUnread,
+            key: 'clearDone',
+            label: NotificationsCopy.clearDone,
+            disabled: done.length === 0,
             onPress: () => {
               setMenu(null);
-              runAll('markAllRead');
-            },
-          },
-          {
-            kind: 'item',
-            key: 'clearAll',
-            label: NotificationsCopy.clearAll,
-            destructive: true,
-            disabled: !anyRows,
-            onPress: () => {
-              setMenu(null);
-              setConfirmClear(true);
+              void clearDone(done).then((ok) => setFailed(!ok));
             },
           },
         ]}
       />
-      <BottomSheet visible={confirmClear} onClose={() => setConfirmClear(false)}>
-        <View style={styles.sheet}>
-          <Text accessibilityRole="header" style={[styles.sheetTitle, { color: appearance.foreground }]}>
-            {NotificationsCopy.clearAllTitle}
-          </Text>
-          <Text style={[styles.sheetText, { color: appearance.muted }]}>{NotificationsCopy.clearAllBody}</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              setConfirmClear(false);
-              runAll('clearAll');
-            }}
-            style={({ pressed }) => [styles.sheetButton, { backgroundColor: pressed ? danger.pressed : danger.rest }]}
-          >
-            <Text style={[styles.sheetButtonText, { color: appearance.danger }]}>{NotificationsCopy.clearAll}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setConfirmClear(false)}
-            style={({ pressed }) => [styles.sheetButton, { backgroundColor: pressed ? neutral.pressed : neutral.rest }]}
-          >
-            <Text style={[styles.sheetButtonText, { color: appearance.foreground }]}>{NotificationsCopy.cancel}</Text>
-          </Pressable>
-        </View>
-      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -185,9 +136,4 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   headerButton: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6 },
   failed: { color: appearance.danger, fontSize: 13, paddingHorizontal: 16, paddingTop: 8 },
-  sheet: { gap: 10, paddingHorizontal: 4 },
-  sheetTitle: { fontSize: 17, fontWeight: '600', textAlign: 'center' },
-  sheetText: { fontSize: 14, textAlign: 'center', marginBottom: 6 },
-  sheetButton: { minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  sheetButtonText: { fontSize: 16, fontWeight: '600' },
 });

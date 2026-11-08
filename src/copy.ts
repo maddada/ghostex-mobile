@@ -1385,7 +1385,7 @@ export const CommandPadCopy = {
 } as const;
 
 /**
- * Agent notifications and the attention list (the notifications design): the
+ * Agent notifications and the attention list (the notifications design and the state inbox): the
  * four event wordings, the list, the bell and Settings > Notifications. Text level: event and session
  * only, never anything the agent wrote.
  */
@@ -1397,56 +1397,81 @@ export const NotificationsCopy = {
     question: 'Has a question',
     failed: 'Ended with an error',
   },
-  /** The kind line of an attention list row. */
+  /** The state line of an attention list row. */
   rowKind: {
-    finished: 'finished',
-    waiting: 'waiting',
+    approval: 'Waiting for approval',
     question: 'has a question',
+    waiting: 'waiting',
+    finished: 'finished · not opened',
     failed: 'ended with an error',
-    bell: 'bell',
-    custom: 'notification',
     sendFailed: 'not sent',
+    ended: 'Ended',
     resetExpiring: 'reset expiring',
     resetRedeemed: 'reset used',
+  },
+  /** The attention list's sections, in their order. */
+  section: {
+    needsYou: 'Needs you',
+    /** Needs you while one of its waits comes from a computer that cannot be reached now. */
+    needsYouLastKnown: 'Needs you · last known',
+    done: 'Done',
+    failed: 'Failed',
+    accounts: 'Accounts',
   },
   /** Who a row names when the computer did not say which agent it was. */
   unknownAgent: 'Agent',
   title: 'Notifications',
-  unread: 'Unread',
-  read: 'Read',
-  emptyTitle: 'No notifications yet',
-  emptyText: 'Agents that finish or need you will show up here.',
+  /** Under Needs you while nothing waits; Done, Failed and Accounts stay below it. */
+  emptyTitle: 'Nothing needs you',
+  emptyText: 'No open approvals, questions or replies waiting for you.',
   loading: 'Loading notifications…',
-  offline: (machine: string) => `${machine} is offline. Its notifications show again when it reconnects.`,
+  offline: (machine: string) => `${machine} is offline. Its rows show what was last known until it reconnects.`,
+  /** Beside a row of a computer that cannot be reached now. */
+  lastKnown: 'last known',
   cantLoadTitle: 'Can’t load notifications',
   cantLoadText: (machine: string) => `The list loads again as soon as the phone reaches ${machine}.`,
   tooOld: (machine: string) =>
     `${machine} runs a Ghostex that can’t share its notifications with the phone. Update Ghostex on that computer.`,
   bell: 'Notifications',
-  bellUnread: (count: number) => `Notifications, ${count} unread`,
+  bellNeedsYou: (count: number) => `Notifications, ${count} need you`,
+  /** The bell while one of the waits it counts comes from a computer that cannot be reached now. */
+  bellLastKnown: (count: number) => `Notifications, last known count ${count}`,
   rowUnread: 'Unread.',
   menuTitle: 'Notifications',
-  menuSubtitle: 'Shared with the bell on your computer',
-  markAllRead: 'Mark All Read',
-  clearAll: 'Clear All',
+  menuSubtitle: 'Read state is shared with the bell on your computer',
+  clearDone: 'Clear Done',
   openSession: 'Open Session',
+  markDone: 'Mark as Done',
   markRead: 'Mark as Read',
   markUnread: 'Mark as Unread',
   clear: 'Clear',
-  clearAllTitle: 'Clear all notifications?',
-  clearAllBody: 'They also disappear from the bell on your computer. Your sessions stay as they are.',
   cancel: 'Cancel',
+  close: 'Close',
   actionFailed: 'The computer didn’t take that change. Try again in a moment.',
+  /** The sheet an ended session's row opens. */
+  ended: {
+    title: 'Session ended',
+    text: 'This session is no longer running.',
+    restore: 'Restore',
+    remove: 'Remove',
+    restoringTitle: 'Restoring session…',
+    restoringText: 'Waiting for the computer…',
+    failedTitle: 'Couldn’t restore session',
+    failedText: 'The computer did not return a restored session. Your ended session is kept.',
+    tryAgain: 'Try Again',
+    removeTitle: 'Remove from this list?',
+    removeText: 'The session and the bell on your computer stay as they are.',
+  },
   /** Settings > Notifications; the page was "Sounds". */
   settings: {
     pageDescription: 'Agent alerts and the attention sound.',
     sectionAgents: 'Agent notifications',
     master: 'Notifications',
     limit:
-      'Ghostex can notify you only while it is running: open, or briefly in the background. Once iOS pauses it, for example a while after you lock the phone, nothing arrives until you open Ghostex again. The bell on the Sessions screen then lists what happened.',
+      'Ghostex can notify you only while it is running: open, or briefly in the background. Once iOS pauses it, for example a while after you lock the phone, nothing arrives until you open Ghostex again. The bell on the Sessions screen then shows what needs you, what finished and what failed.',
     /** Instead of `limit` while an enabled computer accepted this phone's push registration, or that is not read yet. */
     limitWithPush:
-      'Ghostex notifies you while it is running. A computer that accepted this iPhone for push can also notify you while Ghostex is closed or paused: iOS decides when a push arrives, and one can come late or not at all. Finished, Waiting for you and Ended with an error also apply to pushes. A computer that Ghostex cannot reach when you change one keeps the earlier choice until it next accepts this iPhone, for example when you open Ghostex again. The bell on the Sessions screen lists what happened.',
+      'Ghostex notifies you while it is running. A computer that accepted this iPhone for push can also notify you while Ghostex is closed or paused: iOS decides when a push arrives, and one can come late or not at all. Finished, Waiting for you and Ended with an error also apply to pushes. A computer that Ghostex cannot reach when you change one keeps the earlier choice until it next accepts this iPhone, for example when you open Ghostex again. The bell on the Sessions screen shows what needs you, what finished and what failed.',
     finished: 'Finished',
     finishedDetail: 'An agent finished its turn.',
     waiting: 'Waiting for you',
