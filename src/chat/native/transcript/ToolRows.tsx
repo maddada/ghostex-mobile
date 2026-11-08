@@ -5,11 +5,17 @@
  */
 
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
 import { subagentOpenAction } from '../cards';
-import { useNativeChatUi, useRowDetail, useTranscriptEnv, useTranscriptFlags } from './context';
+import {
+  quietStyle,
+  useNativeChatUi,
+  useRowDetail,
+  useTranscriptEnv,
+  useTranscriptFlags,
+} from './context';
 import { DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { ToolBody } from './ToolBody';
@@ -19,6 +25,16 @@ import { FOLDED_CALLS_INSET, ReadImageStrip, ReadImages } from './Images';
 import { highlightLabel, useRowFind } from './searchHighlight';
 import { useDisclosure } from './state';
 import { openTranscriptMenu } from './transcriptMenuStore';
+import {
+  finishedMark,
+  QUIET_LINE_HEIGHT,
+  QUIET_TEXT_SIZE,
+  quietDim,
+  QuietStatusMark,
+  quietStepText,
+  QuietWorkLine,
+  successTone,
+} from './quietWork';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE } from './theme';
 
 /** Each row carries its own padding (the 2026-10-11 work look), so the gap between rows is small. */
@@ -50,11 +66,32 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   return <ToolRunRows message={message} />;
 }
 
+/** Whether `ToolRows` draws anything for a message's calls (the same filter as its run's `visible`). */
+export function hasVisibleTools(
+  message: ProjectedMessage,
+  inWorkFold: boolean,
+  workflowCards: { [callId: string]: unknown },
+): boolean {
+  if (obj(message.toolCard) !== null) return true;
+  const cardsAsRows = message.toolsShowAllRows === true || inWorkFold;
+  return arr(message.tools).some((entry) => {
+    const tool = obj(entry);
+    return (
+      tool !== null &&
+      (cardsAsRows ||
+        (tool.exchange !== true && tool.sentMessage !== true && obj(workflowCards[str(tool, 'workflow')]) === null))
+    );
+  });
+}
+
 function ToolRunRows({ message }: { message: ProjectedMessage }) {
-  const { theme, simple } = useTranscriptEnv();
-  const { workflowCards } = useTranscriptFlags();
+  const { theme, simple, workOpen } = useTranscriptEnv();
+  const { workflowCards, chatLook } = useTranscriptFlags();
   const { disclosures } = useNativeChatUi();
-  const { inWorkFold } = useFoldPlace();
+  const { inWorkFold, quietSteps } = useFoldPlace();
+  // Agent work Reduced or Quiet: the run is one live quiet line in every view, open in
+  // Detailed (`quietWork.tsx`, desktop `tool_run.rs`).
+  const quiet = quietStyle(chatLook);
   const tools = arr(message.tools)
     .map((tool) => obj(tool))
     .filter((tool): tool is JsonRecord => tool !== null);
@@ -63,7 +100,7 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   // Simple mode's run heading opens on demand only; verbose mode never opens it. A call waiting on
   // an approval opens it (gx-chat-core `approval_wait.rs`).
   const awaiting = tools.some((tool) => tool.awaitingApproval === true);
-  const [simpleOpen, toggleSimple] = useDisclosure(disclosures, `tools:${message.id}`, awaiting);
+  const [simpleOpen, toggleSimple] = useDisclosure(disclosures, `tools:${message.id}`, awaiting || (quiet && workOpen));
   if (tools.length === 0) return null;
   // Under a heading that already folds the run, every row shows (React's `showAllRows`).
   const showAll = message.toolsShowAllRows === true;
@@ -85,6 +122,38 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   const hidden = typeof fold?.hiddenCount === 'number' ? fold.hiddenCount : 0;
   const rows = (indices: number[]) =>
     indices.map((index) => <ToolRow key={index} messageId={message.id} index={index} tool={tools[index]!} />);
+  // An opened quiet line lists each call as one of its steps.
+  if (quietSteps === true) {
+    return (
+      <View style={styles.quietSteps}>
+        {visible.map((index) => (
+          <QuietStepRow key={index} messageId={message.id} index={index} tool={tools[index]!} />
+        ))}
+      </View>
+    );
+  }
+  if (quiet && !showAll) {
+    const running = tools.some((tool) => tool.status === 'running');
+    const label = str(message, 'simpleToolLabel');
+    return (
+      <View style={styles.column}>
+        <QuietWorkLine
+          segments={[{ text: running ? `Working \u00b7 ${label}\u2026` : label }]}
+          mark={running ? 'running' : finishedMark([message])}
+          open={simpleOpen}
+          expandable
+          onPress={toggleSimple}
+        />
+        {simpleOpen ? (
+          <DisclosureBody onCollapse={toggleSimple} label="Collapse tool calls" gap={ROW_GAP}>
+            {rows(visible)}
+          </DisclosureBody>
+        ) : (
+          <ReadImageStrip images={message.readImages} inset={0} />
+        )}
+      </View>
+    );
+  }
   if (simple && !showAll) {
     return (
       <View style={styles.column}>
@@ -237,7 +306,6 @@ const ToolRow = memo(function ToolRow({
   const [open, toggle] = useDisclosure(disclosures, key, tool.awaitingApproval === true);
   const hasDetail = tool.hasDetail === true;
   const expanded = open && hasDetail;
-  const detail = obj(useRowDetail(key, 'tool', messageId, index, expanded));
   const failed = tool.failed === true;
   // A call the agent described is named by that description in every mode, without its command
   // preview (gx-chat-core `tool_description`); opening the row shows the command.
@@ -312,6 +380,70 @@ const ToolRow = memo(function ToolRow({
       {status === 'stopped' ? <Glyph name="x" size={13} color={theme.muted} /> : null}
     </Pressable>
   );
+  return (
+    <View style={styles.row}>
+      {subagent.length === 0 ? (
+        trigger
+      ) : (
+        <View style={styles.subagentLine}>
+          {trigger}
+          {openSubagent !== null ? (
+            <Pressable
+              onPress={() => dispatch(openSubagent)}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${subagent}'s transcript`}
+              style={styles.subagentLink}
+            >
+              <Text numberOfLines={1} style={[styles.subagentText, { color: theme.controlPrimary }]}>
+                {subagent}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text numberOfLines={1} style={[styles.subagentText, { color: theme.controlPrimary }]}>
+              {subagent}
+            </Text>
+          )}
+        </View>
+      )}
+      {/* The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`). */}
+      <ReadImages images={tool.images} inset={ROW_PAD_X + TILE + 8} />
+      <ToolDetail
+        messageId={messageId}
+        index={index}
+        tool={tool}
+        expanded={expanded}
+        onCollapse={toggle}
+        name={name}
+        inset={styles.detailInset}
+      />
+    </View>
+  );
+});
+
+/**
+ * An open call's arguments and result, which the core ships only while the row is open, on the rail
+ * that folds it back (desktop `tool_detail_body`).
+ */
+function ToolDetail({
+  messageId,
+  index,
+  tool,
+  expanded,
+  onCollapse,
+  name,
+  inset,
+}: {
+  messageId: string;
+  index: number;
+  tool: JsonRecord;
+  expanded: boolean;
+  onCollapse(): void;
+  name: string;
+  inset: StyleProp<ViewStyle>;
+}) {
+  const key = `tool:${messageId}:${index}`;
+  const detail = obj(useRowDetail(key, 'tool', messageId, index, expanded));
+  const failed = tool.failed === true;
   let body = null;
   if (expanded && detail !== null) {
     const input = str(detail, 'input');
@@ -346,50 +478,97 @@ const ToolRow = memo(function ToolRow({
       // The rail hangs from the middle of the glyph tile, which the row's padding moved right of the
       // marker column the rail is measured from.
       body = (
-        <View style={styles.detailInset}>
-          <DisclosureBody onCollapse={toggle} label={`Collapse ${name}`} rail="tool">
+        <View style={inset}>
+          <DisclosureBody onCollapse={onCollapse} label={`Collapse ${name}`} rail="tool">
             {parts}
           </DisclosureBody>
         </View>
       );
     }
   }
+  return body;
+}
+
+/**
+ * One call among an opened quiet line's steps (desktop `quiet_step_row` in `quiet_work.rs`): its
+ * check (a cross when it failed, the loader while it runs, dashes when it was stopped), the tool's
+ * name in the muted colour, then its argument in mono, both from the core's `quiet_step_text` so
+ * Find searches what is drawn. Pressing it opens today's detail for the call, under the key its tool
+ * row uses; holding one that names a file opens that file's menu.
+ */
+const QuietStepRow = memo(function QuietStepRow({
+  messageId,
+  index,
+  tool,
+}: {
+  messageId: string;
+  index: number;
+  tool: JsonRecord;
+}) {
+  const { theme } = useTranscriptEnv();
+  const { disclosures } = useNativeChatUi();
+  const key = `tool:${messageId}:${index}`;
+  const [open, toggle] = useDisclosure(disclosures, key, tool.awaitingApproval === true);
+  const hasDetail = tool.hasDetail === true;
+  const expanded = open && hasDetail;
+  const status = str(tool, 'status');
+  const [name, preview] = quietStepText(tool);
+  const filePath = str(tool, 'filePath');
+  const find = useRowFind();
   return (
-    <View style={styles.row}>
-      {subagent.length === 0 ? (
-        trigger
-      ) : (
-        <View style={styles.subagentLine}>
-          {trigger}
-          {openSubagent !== null ? (
-            <Pressable
-              onPress={() => dispatch(openSubagent)}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${subagent}'s transcript`}
-              style={styles.subagentLink}
-            >
-              <Text numberOfLines={1} style={[styles.subagentText, { color: theme.controlPrimary }]}>
-                {subagent}
+    <View style={styles.quietStep}>
+      <Pressable
+        disabled={!hasDetail && filePath.length === 0}
+        onPress={hasDetail ? toggle : undefined}
+        {...(filePath.length > 0 ? { onLongPress: () => openTranscriptMenu({ href: filePath }) } : {})}
+        accessibilityRole="button"
+        accessibilityLabel={`Tool ${name}: ${preview}`}
+        accessibilityState={{ expanded }}
+        style={styles.quietStepTrigger}
+      >
+        {({ pressed }) => (
+          <>
+            <QuietStatusMark
+              mark={
+                status === 'failed'
+                  ? 'failed'
+                  : status === 'stopped'
+                    ? 'stopped'
+                    : status === 'running'
+                      ? 'running'
+                      : 'done'
+              }
+            />
+            <Text numberOfLines={1} style={[styles.quietStepLine, { color: pressed ? theme.muted : quietDim(theme) }]}>
+              <Text style={[styles.quietStepName, { color: status === 'failed' ? theme.error : theme.muted }]}>
+                {highlightLabel(name, find, key)}
               </Text>
-            </Pressable>
-          ) : (
-            <Text numberOfLines={1} style={[styles.subagentText, { color: theme.controlPrimary }]}>
-              {subagent}
+              {preview.length > 0 ? '  ' : ''}
+              <Text style={styles.quietStepPreview}>
+                {highlightLabel(preview, find, `tool-preview:${messageId}:${index}`)}
+              </Text>
             </Text>
-          )}
-        </View>
-      )}
-      {/* The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`). */}
-      <ReadImages images={tool.images} inset={ROW_PAD_X + TILE + 8} />
-      {body}
+            {/* The picture the call opened from disk, at the step's right (gx-chat-core `read_images.rs`). */}
+            {arr(tool.images).length > 0 ? (
+              <View style={styles.quietStepPictures}>
+                <ReadImages images={tool.images} inset={0} />
+              </View>
+            ) : null}
+          </>
+        )}
+      </Pressable>
+      <ToolDetail
+        messageId={messageId}
+        index={index}
+        tool={tool}
+        expanded={expanded}
+        onCollapse={toggle}
+        name={name}
+        inset={styles.quietStepDetail}
+      />
     </View>
   );
 });
-
-/** A finished call's check (desktop `ChatAppearance::success`). */
-function successTone(light: boolean): string {
-  return light ? '#059669' : '#34d399';
-}
 
 /** A failed row's tint: the error tone at 6%. */
 function errorWash(error: string): string {
@@ -398,6 +577,15 @@ function errorWash(error: string): string {
 
 const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
+  quietSteps: { minWidth: 0 },
+  quietStep: { minWidth: 0 },
+  quietStepTrigger: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+  quietStepLine: { flex: 1, minWidth: 0, fontSize: QUIET_TEXT_SIZE, lineHeight: QUIET_LINE_HEIGHT },
+  quietStepName: { fontWeight: '500' },
+  quietStepPreview: { fontFamily: MONO_FONT, fontSize: 12 },
+  quietStepPictures: { flexShrink: 0 },
+  // The detail's rail hangs from the middle of the step's 12pt mark (the rail's own centre sits 10pt in).
+  quietStepDetail: { marginLeft: -4, paddingVertical: 4 },
   shellColumn: { alignItems: 'flex-end', gap: 6 },
   shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, borderRadius: 16 },
   shellHeaderBubble: { paddingHorizontal: 12, paddingVertical: 8 },

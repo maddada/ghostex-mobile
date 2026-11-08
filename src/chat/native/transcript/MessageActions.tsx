@@ -18,18 +18,27 @@ import { Glyph } from './icons';
 import { arr, obj, str } from './json';
 import { messageCommands } from './markdown/runCommands';
 import { rememberSaveMarkdown } from './saveMarkdownStore';
+import { WorkButton, type HiddenWork } from './hiddenWorkButton';
+import { compactSpacing, FOOTER_DIM, FOOTER_HEIGHT } from './messageSpacing';
 import { PROSE_COLUMN } from './theme';
 import type { MessageMenuAction } from './transcriptMenuStore';
 
 /** One action of a message: a row of its menu. */
 type ActionItem = MessageMenuAction;
 
-function MessageTime({ message }: { message: ProjectedMessage }) {
+/** The work button's height in a reply's time row at Default spacing (Agent work Quiet), the desktop's 20px button in its 24px action row. */
+const WORK_ROW_HEIGHT = 20;
+
+/** The time a message arrived; in a Compact footer (`footer`) as dim as the desktop footer's. */
+function MessageTime({ message, footer = false }: { message: ProjectedMessage; footer?: boolean }) {
   const { theme } = useTranscriptEnv();
   const label = str(message.time, 'label');
   if (label.length === 0) return null;
   return (
-    <Text style={[styles.time, { color: theme.muted }]} accessibilityLabel={str(message.time, 'title') || label}>
+    <Text
+      style={[styles.time, footer ? { color: theme.mutedInk(FOOTER_DIM), fontSize: 11.5 } : { color: theme.muted }]}
+      accessibilityLabel={str(message.time, 'title') || label}
+    >
       {label}
     </Text>
   );
@@ -51,19 +60,36 @@ export function hasReplyActions(message: ProjectedMessage, finalIds: ReadonlySet
 /**
  * Desktop's reply row: Copy, Reply by Annotating, Save to md, then the time. Reply by Annotating
  * opens the reply in the desktop Docs review surface, which the phone does not have, so it is left
- * out rather than drawn as a control that does nothing.
+ * out rather than drawn as a control that does nothing. Under Agent work Quiet the reply that
+ * carries its turn's work (`work`, `hiddenWorkButton.tsx`) leads the row with the work button.
+ * At Message spacing Compact the row is the reply's footer (`messageSpacing.ts`): its space is
+ * always kept, the work button on its left and the time on its right.
  */
 export const ReplyActions = memo(function ReplyActions({
   message,
   flush,
+  work = null,
 }: {
   message: ProjectedMessage;
   flush: boolean;
+  work?: HiddenWork | null;
 }) {
+  const compact = compactSpacing(useTranscriptFlags().chatLook);
+  if (compact) {
+    return (
+      <View style={[styles.footer, { paddingLeft: flush ? 0 : PROSE_COLUMN }]}>
+        {work !== null ? <WorkButton work={work} height={FOOTER_HEIGHT} /> : null}
+        <View style={styles.footerEnd}>
+          <MessageTime message={message} footer />
+        </View>
+      </View>
+    );
+  }
   // Only the time shows; Save to md is in the message's menu (see the file doc).
-  if (str(message.time, 'label').length === 0) return null;
+  if (str(message.time, 'label').length === 0 && work === null) return null;
   return (
     <View style={[styles.row, { paddingLeft: flush ? 0 : PROSE_COLUMN }]}>
+      {work !== null ? <WorkButton work={work} height={WORK_ROW_HEIGHT} /> : null}
       <MessageTime message={message} />
     </View>
   );
@@ -134,7 +160,7 @@ export function useReplyMenuActions(message: ProjectedMessage): MessageMenuActio
  * the queued prompt now; Back to composer, left of it where the agent can give the message back,
  * takes it out of the agent's queue into the composer and spins while it does.
  */
-export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
+export function DeliveryIndicator({ message, inline = false }: { message: ProjectedMessage; inline?: boolean }) {
   const { dispatch, main, theme } = useTranscriptEnv();
   const flags = useTranscriptFlags();
   const delivery = message.startupDelivery;
@@ -154,7 +180,7 @@ export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
   if (waiting) {
     return (
       <View
-        style={[styles.button, styles.indicator]}
+        style={[styles.button, inline ? styles.inlineIndicator : styles.indicator]}
         accessibilityRole="progressbar"
         accessibilityLabel="Waiting for agent"
       >
@@ -168,7 +194,7 @@ export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
   // The icons keep their 26pt look; the hit slop makes each a finger-sized target without moving
   // the bubble, and stops short of the neighbour's.
   return (
-    <View style={[styles.indicatorRow, styles.indicator]}>
+    <View style={[styles.indicatorRow, inline ? styles.inlineIndicator : styles.indicator]}>
       {takingBack ? (
         <View style={styles.button} accessibilityRole="progressbar" accessibilityLabel="Taking the message back">
           <ActivityIndicator size={13} color={theme.muted} />
@@ -197,13 +223,31 @@ export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
   );
 }
 
-export const UserActions = memo(function UserActions({ message }: { message: ProjectedMessage }) {
+export const UserActions = memo(function UserActions({
+  message,
+  start = false,
+}: {
+  message: ProjectedMessage;
+  /** Under a left-aligned message the time starts at its left edge (desktop `user_actions`). */
+  start?: boolean;
+}) {
   const prompt = typeof message.copyText === 'string' ? message.copyText : '';
+  const compact = compactSpacing(useTranscriptFlags().chatLook);
   // A message the agent itself queued comes back to the composer (CDXC:SessionChat 2026-10-11 in
   // packages/gx-chat-core/src/composer/queue_take_back.rs); `DeliveryIndicator` spins while it does.
-  if (prompt.length === 0 || str(message.time, 'label').length === 0) return null;
+  if (prompt.length === 0) return null;
+  // Message spacing Compact: the message's footer, its space always kept, the time on the
+  // message's side (`messageSpacing.ts`).
+  if (compact) {
+    return (
+      <View style={[styles.footer, start ? styles.userRowStart : styles.userRow]}>
+        <MessageTime message={message} footer />
+      </View>
+    );
+  }
+  if (str(message.time, 'label').length === 0) return null;
   return (
-    <View style={[styles.row, styles.userRow]}>
+    <View style={[styles.row, start ? styles.userRowStart : styles.userRow]}>
       <MessageTime message={message} />
     </View>
   );
@@ -283,8 +327,13 @@ export function useUserMenuActions(message: ProjectedMessage): MessageMenuAction
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  footer: { alignSelf: 'stretch', height: FOOTER_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  footerEnd: { marginLeft: 'auto', flexShrink: 0 },
   userRow: { justifyContent: 'flex-end', paddingRight: 4 },
+  userRowStart: { justifyContent: 'flex-start' },
   indicator: { marginBottom: 10 },
+  // At a Band message's right end, level with its last line, without making its line taller.
+  inlineIndicator: { marginVertical: -2 },
   indicatorRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   button: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   time: { fontSize: 12 },

@@ -27,7 +27,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { NO_BAR_INSETS } from '../../../components/common/verticalBar/layout';
 import { useScrollToBarEdges } from '../../../components/common/verticalBar/VerticalBarArea';
 import { useSettingsStore } from '../../../settings/store';
-import { transcriptItemKey, type TranscriptItem } from '../../rust/document';
+import { transcriptItemKey, type ChatDocument, type TranscriptItem } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { EmptyTranscript } from '../cards';
 import { holdForAnswer, holdsTranscript, releaseAnswerHold, useAnswerHold } from './answerHold';
@@ -59,6 +59,9 @@ import { useTranscriptBottomStore } from './bottomStore';
 import { TranscriptFieldRevealContext, useTranscriptFieldReveal } from './fieldReveal';
 import { ROW_GAP } from './cardSpacing';
 import { REPLY_FADE_MS, useReplyArrival } from './replyArrival';
+import { chatLookOf } from './context';
+import { rowGapOf } from './messageSpacing';
+import { StatusTail, statusTailShown } from '../cards/WorkingCard';
 
 /**
  * `scroll-bottom.json`: the pill's look and how far from the bottom it appears.
@@ -171,6 +174,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
           document.readAloud?.available,
           document.readAloud?.speakingId,
           obj(document.coordinatorBoard)?.itemTitles,
+          document.chatLook,
         ]);
   const flags = useMemo(() => transcriptFlags(document), [flagsSignature]); // eslint-disable-line react-hooks/exhaustive-deps
   // Only the forms read this, and it changes with every pick, so it rides apart from the flags.
@@ -222,6 +226,9 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
   // a transcript inside a card (a subagent's) keeps to the card.
   const listEdges = useScrollToBarEdges(undefined, main ? null : NO_BAR_INSETS);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
+  const look = chatLookOf(document);
+  // Message spacing: the space every row ends with (`messageSpacing.ts`).
+  const rowGap = rowGapOf(look);
   const data = useMemo(() => {
     const reversed: Row[] = [];
     for (let index = rows.length - 1; index >= 0; index -= 1) reversed.push({ item: rows[index]!, index });
@@ -432,6 +439,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
         findActiveLabel={activeItem === row.index && activeLabelKey.length > 0 ? activeLabelKey : null}
         findActiveLabelOccurrence={activeLabelOccurrence ?? 0}
         widthPercent={rowWidth}
+        rowGap={rowGap}
       />
     ),
     [
@@ -444,6 +452,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
       newestKey,
       newestRowRef,
       onNewestLayout,
+      rowGap,
       rowWidth,
       searchItems,
       searchNeedle,
@@ -539,6 +548,13 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={11}
+        // Status line in the chat: the working line is the list's last row while the agent works
+        // (`StatusTail` in `cards/WorkingCard.tsx`); an inverted list draws its header at the bottom.
+        ListHeaderComponent={
+          main && document !== null && statusTailShown(document, rows.length) ? (
+            <StatusTailFrame document={document} widthPercent={rowWidth} rowGap={rowGap} />
+          ) : undefined
+        }
         ListFooterComponent={
           loadingEarlier ? (
             <View style={styles.pageSpinner}>
@@ -638,6 +654,7 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   findActiveLabel,
   findActiveLabelOccurrence,
   widthPercent,
+  rowGap,
 }: {
   item: TranscriptItem;
   /** The agent's reply that just arrived: it fades in as it mounts (`replyArrival.ts`). */
@@ -654,6 +671,8 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   findActiveLabelOccurrence: number;
   /** The custom transcript width, as a share of the pane; null keeps the 768pt column. */
   widthPercent: number | null;
+  /** The space the row ends with (Message spacing, `messageSpacing.ts`). */
+  rowGap: number;
 }) {
   const theme = useTranscriptTheme();
   // A fresh counter each time the row renders: its text numbers the occurrences in reading order
@@ -677,7 +696,13 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
       entering={fadeIn ? FadeIn.duration(REPLY_FADE_MS) : undefined}
       style={[styles.rowOuter, first && styles.rowFirst]}
     >
-      <View style={[styles.rowInner, widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' }]}>
+      <View
+        style={[
+          styles.rowInner,
+          rowGap !== ROW_GAP && { paddingBottom: rowGap },
+          widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' },
+        ]}
+      >
         <RowFindContext.Provider value={find}>
           <TranscriptItemView item={item} />
         </RowFindContext.Provider>
@@ -685,6 +710,31 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
     </Animated.View>
   );
 });
+
+/** The status row in the rows' own column, after the last row's gap and ending with its own. */
+function StatusTailFrame({
+  document,
+  widthPercent,
+  rowGap,
+}: {
+  document: ChatDocument;
+  widthPercent: number | null;
+  rowGap: number;
+}) {
+  return (
+    <View style={styles.rowOuter}>
+      <View
+        style={[
+          styles.rowInner,
+          rowGap !== ROW_GAP && { paddingBottom: rowGap },
+          widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' },
+        ]}
+      >
+        <StatusTail document={document} />
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },

@@ -28,6 +28,7 @@ import {
 } from './singleLineCard';
 import { MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { ROW_GAP } from './cardSpacing';
+import { useRowGap } from './messageSpacing';
 
 /** Collapsed, a goal shows this many lines of its objective. */
 const GOAL_PREVIEW_LINES = 3;
@@ -394,8 +395,9 @@ function StatusRows({ id, suppressed }: { id: string; suppressed: JsonRecord }) 
     .filter((status): status is JsonRecord => status !== null);
   const statuses = listed.length > 0 ? listed : [{ label: suppressed.label, tone: suppressed.tone } as JsonRecord];
   const glyph = subjectGlyph(str(suppressed, 'subject'));
+  const rowGap = useRowGap();
   return (
-    <View style={styles.statusColumn}>
+    <View style={[styles.statusColumn, rowGap !== ROW_GAP && { gap: rowGap }]}>
       {statuses.map((status, index) => (
         <StatusRowCard
           key={index}
@@ -519,7 +521,16 @@ function CollapsedSuppressed({ id, suppressed }: { id: string; suppressed: JsonR
  * A send that failed, with Retry and Remove. `waitingLine` also writes "Waiting for agent…" for a
  * card without the delivery indicator (`MessageActions.tsx`) that a user bubble has.
  */
-export function StartupDelivery({ message, waitingLine = true }: { message: ProjectedMessage; waitingLine?: boolean }) {
+export function StartupDelivery({
+  message,
+  waitingLine = true,
+  end = true,
+}: {
+  message: ProjectedMessage;
+  waitingLine?: boolean;
+  /** The note sits at the right end; a left-aligned message keeps it on its own side. */
+  end?: boolean;
+}) {
   const { theme, dispatch } = useTranscriptEnv();
   const { canRemoveQueued, sendFailureCardPromptId } = useTranscriptFlags();
   const delivery = message.startupDelivery;
@@ -531,7 +542,7 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
     const reason = delivery.waitReason ?? '';
     const sending = reason.startsWith('Sending');
     return (
-      <View style={styles.delivery} accessibilityRole="text">
+      <View style={[styles.delivery, !end && styles.deliveryStart]} accessibilityRole="text">
         <Text style={[styles.small, { color: theme.muted }]}>{reason}</Text>
         {sending ? null : (
           <Pressable
@@ -568,7 +579,7 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
         ? reason
         : 'Waiting for agent…';
   return (
-    <View style={styles.delivery} accessibilityRole="text">
+    <View style={[styles.delivery, !end && styles.deliveryStart]} accessibilityRole="text">
       <Text style={[styles.small, { color: theme.muted }]}>{status}</Text>
       {failed ? (
         <>
@@ -717,6 +728,7 @@ const styles = StyleSheet.create({
   collapsed: { gap: 6, paddingBottom: 8 },
   suppressedBody: { maxHeight: 400, padding: 10, borderRadius: 8, borderWidth: 1 },
   delivery: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  deliveryStart: { justifyContent: 'flex-start' },
   deliveryAction: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   toolDot: { width: 7, height: 7, borderRadius: 4 },
   terminalDetail: { maxHeight: 300, padding: 10, borderRadius: 6 },

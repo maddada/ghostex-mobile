@@ -241,7 +241,16 @@ function StripTile({
 }
 
 /** A message's own pictures: right-aligned above a prompt, left-aligned above an agent's prose. */
-export const ImageRow = memo(function ImageRow({ images, user }: { images: unknown; user: boolean }) {
+export const ImageRow = memo(function ImageRow({
+  images,
+  user,
+  end = user,
+}: {
+  images: unknown;
+  user: boolean;
+  /** The pictures sit at the right end: the user's own, unless their messages are left-aligned. */
+  end?: boolean;
+}) {
   const { theme } = useTranscriptEnv();
   const openPicture = useOpenPicture();
   const list = arr(images)
@@ -249,7 +258,7 @@ export const ImageRow = memo(function ImageRow({ images, user }: { images: unkno
     .filter((entry): entry is ChatImageSource => entry !== null);
   if (list.length === 0) return null;
   return (
-    <View style={[styles.row, { gap: user ? VISUAL.userRowGap : VISUAL.assistantRowGap }, user && styles.rowEnd]}>
+    <View style={[styles.row, { gap: user ? VISUAL.userRowGap : VISUAL.assistantRowGap }, end && styles.rowEnd]}>
       {list.map((image, index) => (
         <ImageTile
           key={index}

@@ -62,7 +62,8 @@ export default function ChatPage() {
         <SettingToggle settingKey="chatToolCallCards" label="Tool call cards (preview)" />
         <Caption>
           Show each run of tool calls as one line that says which call is running now; tap it to see every call with its
-          result, time and the reason for any failure.
+          result, time and the reason for any failure. When the computer's Agent work is Reduced or Quiet, that look
+          replaces these cards here too.
         </Caption>
         <Caption>
           Show the session's pull requests, issues and Linear tickets under the chat's header. Turn off to keep the

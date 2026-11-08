@@ -194,7 +194,7 @@ export type RowDetails = { [rowKey: string]: Json };
  * One row group in the transcript (`TranscriptItem` in `document/transcript.rs`), tagged by
  * `kind`. Desktop dispatches on `kind` alone in `transcript.rs`.
  */
-export type TranscriptItem = MessageItem | SummaryItem | CompletedWorkItem | UnknownItem;
+export type TranscriptItem = MessageItem | SummaryItem | CompletedWorkItem | GroupedWorkItem | UnknownItem;
 
 /** A single message card. Desktop: `transcript.rs` then the per-kind row files. */
 export type MessageItem = { kind: 'message'; message: ProjectedMessage };
@@ -280,6 +280,59 @@ export type CompletedWorkItem = {
    * still on the server, drawn under the closed fold (gx-chat-core `read_images.rs`); omitted when
    * there are none. */
   readImages?: Json[];
+};
+
+/** Agent work set to Reduced or Quiet (gx-chat-core `transcript/grouped_work.rs`): the finished turns the
+ * agent ran for one message of the user's, folded into one line. The counts, files and work are the
+ * merged turns' added up; each turn keeps what stays out of the line in `turns`. */
+export type GroupedWorkItem = {
+  kind: 'grouped-work';
+  /** `grouped:` plus the first merged turn's id. */
+  id: string;
+  /** "Worked for 1m 16s": the merged turns' times added up. */
+  label: string;
+  /** The counts beside the label; omitted when there are none. */
+  stats?: WorkStat[];
+  /** File change rows of every merged turn (same row shape as {@link ProjectedMessage.files}). */
+  files: Json[];
+  /** The file change card's header over `files`, merged per path. */
+  filesCard?: Json;
+  /** "N files changed" in verbose mode. */
+  filesLabel: string;
+  /** The same count in simple mode wording. */
+  simpleFilesLabel: string;
+  /** Whether the line can open at all. */
+  expandable: boolean;
+  /** Every merged turn's folded rows, in turn order. */
+  work: ProjectedMessage[];
+  /** Each merged turn's tail, in turn order, drawn after the line. */
+  turns: GroupedTurn[];
+  /** The pictures the merged work opened from disk, each once, drawn under the closed line;
+   * omitted when there are none. */
+  readImages?: Json[];
+  /** What the reply's work button says under Agent work Quiet, which draws no line: "24s · 5
+   * tools · 2 files" (`native/transcript/hiddenWork.tsx`); absent from an older core. */
+  workButton?: string;
+  /** Agent work Quiet: the id of the reply whose time row carries the work button; absent when no
+   * reply has one (the button then stands on its own row after the tails) and under Reduced. */
+  workCarrier?: string;
+};
+
+/** One turn a {@link GroupedWorkItem} merged, shaped like the same-named {@link CompletedWorkItem}
+ * fields. Opening the line dispatches `{type: 'loadWork', id: deferred.startId, work: deferred}`
+ * once per distinct `deferred` section (several wake-up turns can share their prompt's section);
+ * its load state is `document.deferredWork[deferred.startId]`, which every turn it holds reads. */
+export type GroupedTurn = {
+  /** The turn's own id (its `completed-work` id). */
+  id: string;
+  deferred?: Json;
+  questions: Json[];
+  sentMessages?: Json[];
+  gbotCards?: Json[];
+  workflows?: Json[];
+  artifacts: ProjectedMessage[];
+  /** Omitted (not null) when the turn has no reply. */
+  final?: ProjectedMessage;
 };
 
 /** A kind this build does not know, kept verbatim so one new row cannot drop the list. Draw
@@ -638,6 +691,10 @@ export type ChatDocument = {
   /** Text strength, 10 to 100 percent; absent at 0%, today's colour
    * (gx-chat-core `transcript/text_strength.rs` `text_strength`). */
   chatTextStrength?: number;
+  /** The chat look settings (gx-chat-core `transcript/chat_look.rs`); absent while every one is
+   * Default, today's chat. `messageLayout` is already the effective layout: Your messages Band
+   * publishes `left`. */
+  chatLook?: ChatLook;
   /** The switch gxserver reports, or null. */
   accountSwitch: Json;
   /** A model selection waiting on the agent. */
@@ -1101,6 +1158,16 @@ export type ViewChip = {
   ariaLabel: string;
   /** The action that goes back to Normal view. */
   command: UserAction;
+};
+
+/** The chat look the computer's Settings > Chat picks (`ChatLook` in gx-chat-core `transcript/chat_look.rs`). */
+export type ChatLook = {
+  messageLayout: 'default' | 'left';
+  userStyle: 'default' | 'band';
+  agentWork: 'default' | 'reduced' | 'quiet';
+  statusInTranscript: boolean;
+  /** Message spacing; the core leaves it out at Default (`native/transcript/messageSpacing.ts`). */
+  spacing?: 'default' | 'compact';
 };
 
 /** The working card right above the composer (gx-chat-core `extras/working_card.rs`). It never opens. */

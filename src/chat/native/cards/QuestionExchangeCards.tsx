@@ -18,13 +18,21 @@ import { arr, isTrue, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChoiceRow } from './primitives';
 import { ROW_GAP, cardStackMargin } from '../transcript/cardSpacing';
+import { useRowGap } from '../transcript/messageSpacing';
 
 export function QuestionExchangeCards({ exchanges, aboveIsCard = false, columnGap = 0 }: { exchanges: unknown; aboveIsCard?: boolean; columnGap?: number }) {
   const styles = useStyles();
+  const rowGap = useRowGap();
   const list = arr(exchanges);
   if (list.length === 0) return null;
   return (
-    <View style={[styles.column, { marginTop: cardStackMargin(aboveIsCard, columnGap) }]}>
+    <View
+      style={[
+        styles.column,
+        rowGap !== ROW_GAP && { gap: rowGap },
+        { marginTop: cardStackMargin(aboveIsCard, columnGap, rowGap) },
+      ]}
+    >
       {list.map((exchange, index) => (
         <ExchangeCard key={index} exchange={exchange} />
       ))}
