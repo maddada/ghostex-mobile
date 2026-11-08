@@ -10,6 +10,7 @@
 import { execRemoteCommand } from '../../remote/commands';
 import { ensureConnected } from '../../inventory/client';
 import { getDeviceApiToken, type MachineConnectionTarget } from '../../machines/credentials';
+import { freshDeviceToken } from '../../machines/deviceToken';
 
 const ENDPOINT_TIMEOUT_MS = 20_000;
 
@@ -55,11 +56,16 @@ export async function readServerEndpoint(machine: MachineConnectionTarget): Prom
   devices cuts it off. A computer whose Ghostex predates the flag ignores it and still prints its
   token, which this then leaves unused. Machines without a device token keep using the main token.
   */
-  const deviceToken = await getDeviceApiToken(machine.id);
-  const command = deviceToken ? 'ghostex server endpoint --no-token' : 'ghostex server endpoint';
+  const storedDeviceToken = await getDeviceApiToken(machine.id);
+  const command = storedDeviceToken ? 'ghostex server endpoint --no-token' : 'ghostex server endpoint';
   const exec = await execRemoteCommand(machine.id, command, ENDPOINT_TIMEOUT_MS);
   const answer = lastJsonObject(exec.stdout);
   const port = typeof answer?.port === 'number' ? answer.port : null;
+  // A pairing v2 token is renewed with the device key before it lapses (`deviceToken.ts`).
+  const deviceToken =
+    storedDeviceToken && port !== null
+      ? await freshDeviceToken(machine.id, port, GXSERVER_FORWARD_HOST)
+      : storedDeviceToken;
   const authToken = deviceToken ?? (typeof answer?.authToken === 'string' ? answer.authToken : null);
   if (port !== null && authToken !== null) {
     reportedPorts.set(machine.id, port);

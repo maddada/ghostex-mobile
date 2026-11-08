@@ -13,7 +13,7 @@ import type { SshConfig } from '../../modules/ghostex-native/src';
 import { useSettingsStore } from '../settings/store';
 
 type CredentialKind =
-  'password' | 'sshkey' | 'passphrase' | 'publickey' | 'tailcattoken' | 'apitoken' | 'easyconnectaddresses';
+  'password' | 'sshkey' | 'passphrase' | 'publickey' | 'tailcattoken' | 'apitoken' | 'apitokenexpires' | 'easyconnectaddresses';
 
 /**
  * How the phone reaches a machine. `ssh` (or absent) dials host:port directly;
@@ -128,6 +128,18 @@ export function setDeviceApiToken(machineId: string, token: string): Promise<voi
 }
 
 /**
+ * When the device token lapses (milliseconds since the epoch, as text). Pairing v2 tokens are bound
+ * to this phone's device key and renewed with it (`deviceToken.ts`); empty for an older token.
+ */
+export function getDeviceTokenExpiresAt(machineId: string): Promise<string | null> {
+  return getCredential(machineId, 'apitokenexpires');
+}
+
+export function setDeviceTokenExpiresAt(machineId: string, expiresAtMs: string): Promise<void> {
+  return setCredential(machineId, 'apitokenexpires', expiresAtMs);
+}
+
+/**
  * Every Easy Connect address the computer gave this phone (`easyConnectAddresses.ts`), as JSON. The
  * address saved at pairing (`tailcattoken`) is kept apart and never rewritten from this list.
  */
@@ -149,6 +161,7 @@ export async function deleteAllCredentials(machineId: string): Promise<void> {
     deleteCredential(machineId, 'publickey'),
     deleteCredential(machineId, 'tailcattoken'),
     deleteCredential(machineId, 'apitoken'),
+    deleteCredential(machineId, 'apitokenexpires'),
     deleteCredential(machineId, 'easyconnectaddresses'),
   ]);
 }

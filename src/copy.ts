@@ -74,6 +74,15 @@ export const ScanCopy = {
   cantFindLink: 'Show me where it is',
   found: (computer: string) => `Found ${computer}`,
   pairingAs: (user: string) => `Pairing as ${user}…`,
+  /** Pairing v2 (GitHub #495): the phone waits as Pending until the owner approves. */
+  waitingTitle: (computer: string) => `Approve this phone on ${computer}`,
+  waitingDetail: 'Check the computer shows the same three words, then approve there.',
+  wordsLabel: 'Words',
+  cancelWaiting: 'Cancel',
+  denied: {
+    title: 'The computer said no',
+    detail: 'This phone was denied. Show a new code on the computer and scan again.',
+  },
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
   summary: {
     computer: 'Computer',
@@ -819,6 +828,23 @@ export const EditMachineCopy = {
   cancel: 'Cancel',
   connectionLabel: 'Connection',
   connectionTailscaleLabel: 'Connection · Tailscale',
+  /** Pairing v2 (GitHub #495): what this computer has paired, with one-tap Remove. */
+  pairedDevices: {
+    title: 'Devices paired with this computer',
+    waiting: (name: string) => `${name} is waiting for approval`,
+    waitingDetail:
+      'Approve its request only if that phone shows the same three words. Deny it if nobody is pairing a phone right now.',
+    deny: 'Deny',
+    remove: 'Remove',
+    cancel: 'Cancel',
+    thisPhone: (name: string) => `${name} (this phone)`,
+    legacy: 'Paired before Ghostex 11.0.1, so it no longer connects. Pair it again, or remove it.',
+    removeTitle: (name: string) => `Remove ${name}?`,
+    removeDetail: 'It loses its access to this computer at once: its sign-in key and its Ghostex token are removed.',
+    removeSelfDetail:
+      'This phone loses its access to this computer at once. To use it again, show a code on the computer and pair again.',
+    removeFailed: "Couldn't remove the device",
+  },
   easyConnect: {
     title: 'Easy Connect',
     /** "Paired as madda · Sep 3 · connected now" */

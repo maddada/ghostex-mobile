@@ -70,6 +70,7 @@ import AppUpdateSection from './machine-form/AppUpdateSection';
 import MachineToolsSection from './machine-form/MachineToolsSection';
 import { FormSection } from './machine-form/SectionBoundary';
 import EasyConnectSummary from './machine-form/EasyConnectSummary';
+import PairedDevicesSection from './machine-form/PairedDevicesSection';
 import { SwitchRow } from '../components/common/SwitchRow';
 import PrecheckList from './machine-form/PrecheckList';
 import { useFormStyles } from './machine-form/styles';
@@ -545,6 +546,11 @@ export default function MachineFormScreen({ navigation, route }: Props) {
               <FormSection name="machine-form:app-update">
                 <AppUpdateSection machine={existing} />
               </FormSection>
+              {easyConnect ? (
+                <FormSection name="machine-form:paired-devices">
+                  <PairedDevicesSection machine={existing} reachable={reachable} />
+                </FormSection>
+              ) : null}
               <FormSection name="machine-form:tools">
                 <MachineToolsSection machine={existing} reachable={reachable} />
               </FormSection>

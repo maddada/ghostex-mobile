@@ -549,6 +549,27 @@ class GhostexNativeModule : Module() {
       }
     }
 
+    // Pairing v2 (GitHub #495): the phone's own P-256 device key (GhostexDeviceKey.kt).
+    AsyncFunction("deviceKeyPublic") { promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexDeviceKey.publicKey(requireAndroidContext()))
+        } catch (error: Throwable) {
+          promise.reject(CodedException("E_DEVICE_KEY_FAILED", error.message ?: "The device key could not be made.", error))
+        }
+      }
+    }
+
+    AsyncFunction("deviceKeySign") { payload: String, promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexDeviceKey.sign(requireAndroidContext(), payload))
+        } catch (error: Throwable) {
+          promise.reject(CodedException("E_DEVICE_KEY_FAILED", error.message ?: "The device key could not sign.", error))
+        }
+      }
+    }
+
     AsyncFunction("resetHostKey") { host: String, port: Int ->
       GhostexHostKeyStore(requireAndroidContext()).reset(host, port)
     }

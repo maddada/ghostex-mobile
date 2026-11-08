@@ -945,6 +945,23 @@ public class GhostexNativeModule: Module {
             }
         }
 
+        // Pairing v2 (GitHub #495): the phone's own P-256 device key (GhostexDeviceKey.swift).
+        AsyncFunction("deviceKeyPublic") { () throws -> String in
+            do {
+                return try GhostexDeviceKey.publicKey()
+            } catch {
+                throw GhostexException(code: .channelFailed, reason: error.localizedDescription)
+            }
+        }
+
+        AsyncFunction("deviceKeySign") { (payload: String) throws -> String in
+            do {
+                return try GhostexDeviceKey.sign(payload)
+            } catch {
+                throw GhostexException(code: .channelFailed, reason: error.localizedDescription)
+            }
+        }
+
         AsyncFunction("resetHostKey") { (host: String, port: Int) in
             KnownHostsManager.shared.remove(host: host, port: port)
         }
