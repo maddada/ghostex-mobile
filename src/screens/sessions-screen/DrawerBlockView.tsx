@@ -49,7 +49,12 @@ import type {
   StateCardItem,
 } from '../../contract/grouping';
 import { chiefOnIn } from '../../contract/chief';
-import { openedByChief, type GbotRowModel, type GbotsSectionModel } from '../../contract/gbots';
+import {
+  openedByChief,
+  type GbotRowModel,
+  type GbotsDepartmentModel,
+  type GbotsSectionModel,
+} from '../../contract/gbots';
 import type { GhostexAgentLauncher, GhostexMobileSummary } from '../../contract/mobileSummary';
 import { colorWithOpacity } from '../../theme/palette';
 import type { SidebarAppearance } from '../../theme/sidebarAppearance';
@@ -86,6 +91,8 @@ export type DrawerBlockActions = {
   toggleGbot: (machineId: string, bot: GbotRowModel) => void;
   /** Long press on the GBots heading: New GBot. */
   gbotsHeadingMenu: (machineId: string) => void;
+  /** Long press on a department's sub-heading (use-gbots.tsx). */
+  gbotsDepartmentMenu: (machineId: string, department: GbotsDepartmentModel) => void;
   /** Long press on a bot: New Chat, GBot Settings, Remove GBot. */
   gbotMenu: (machineId: string, bot: GbotRowModel, anchor: MenuAnchor) => void;
   /** The empty row of a bot with no open chat. */
@@ -251,6 +258,11 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
       onToggleBot={(bot) => actions.toggleGbot(machineId, bot)}
       onBotMenu={(bot, anchor) => actions.gbotMenu(machineId, bot, anchor)}
       onNewChat={(bot) => actions.gbotNewChat(machineId, bot)}
+      onToggleDepartment={(department) => actions.toggleGbotsHeading(machineId, department.headingKey)}
+      departmentActive={(department) =>
+        department.headingStatus.sessionIds.some((id) => sessionKey(machineId, id) === selectedSessionKey)
+      }
+      onDepartmentMenu={(department) => actions.gbotsDepartmentMenu(machineId, department)}
     />
   );
 

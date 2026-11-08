@@ -1,7 +1,8 @@
 /**
  * What the Sessions screen does for Main Hub's GBots (contract/gbots.ts): the bot's long-press menu (New Chat, GBot
- * Settings, Remove GBot), the heading's (New GBot), the remove confirm, GBot Settings and the New GBot form, each run
- * as a `ghostex gbots` command on the bot's computer. Kept out of SessionsScreen.tsx, which only wires it in.
+ * Settings, Department, Remove GBot), the heading's (New GBot), a department's (Department Settings, Remove
+ * Department), the remove confirms, GBot Settings and the New GBot form, each run as a `ghostex gbots` command on the
+ * bot's computer. Kept out of SessionsScreen.tsx, which only wires it in.
  *
  * CDXC:GBots 2026-11-09 SEE-ALSO: the DECISION in contract/gbots.ts (the menus' rows); Pause Routines joins the bot's
  * menu with routines in a later milestone.
@@ -12,9 +13,10 @@ import { useCallback, useState, type ReactElement } from 'react';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../components/sessions/ContextMenu';
 import { runGhostexCli } from '../../components/sessions/cli';
-import { PlusGlyph, SettingsGlyph, TrashGlyph } from '../../components/sessions/icons';
+import { CrewGlyph, PlusGlyph, SettingsGlyph, TrashGlyph } from '../../components/sessions/icons';
 import {
   gbotsCreateCommand,
+  gbotsDepartmentRemoveCommand,
   gbotsNewChatCommand,
   gbotsRemoveCommand,
 } from '../../commands/ghostexCli';
@@ -22,11 +24,13 @@ import {
   gbotsOnIn,
   parseGbotNewChat,
   type GbotRowModel,
+  type GbotsDepartmentModel,
 } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import type { MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
 import GbotSettingsHost from './GbotSettingsHost';
+import type { GbotSettingsTab } from './GbotSettingsSheet';
 import NewGbotSheet from './NewGbotSheet';
 
 /** A GBot's add waits for the user's approval on the computer or phone (the CLI waits for it). */
@@ -48,7 +52,13 @@ export function useGbots(deps: GbotsScreenDeps) {
   const appearance = useAppearance();
   const [menu, setMenu] = useState<{ title: string; items: ContextMenuItem[]; anchor?: MenuAnchor } | null>(null);
   const [removing, setRemoving] = useState<{ target: MachineRecord; bot: GbotRef } | null>(null);
-  const [settings, setSettings] = useState<{ target: MachineRecord; bot: GbotRef } | null>(null);
+  const [settings, setSettings] = useState<{ target: MachineRecord; bot: GbotRef; tab?: GbotSettingsTab } | null>(
+    null,
+  );
+  const [removingDepartment, setRemovingDepartment] = useState<{
+    target: MachineRecord;
+    department: GbotsDepartmentModel;
+  } | null>(null);
   const [adding, setAdding] = useState<MachineRecord | null>(null);
 
   const failed = useCallback(
@@ -91,6 +101,22 @@ export function useGbots(deps: GbotsScreenDeps) {
     [failed, refreshMachine, setProgress, setTransientStatus],
   );
 
+  const removeDepartment = useCallback(
+    async (target: MachineRecord, department: GbotsDepartmentModel): Promise<void> => {
+      setProgress(`Removing ${department.name}…`);
+      try {
+        await runGhostexCli(target, gbotsDepartmentRemoveCommand(department.departmentId));
+        setProgress(null);
+        setTransientStatus('Its GBots stay, in no department.', { title: `${department.name} removed` });
+        void refreshMachine(target);
+      } catch (error) {
+        setProgress(null);
+        failed('Department not removed', error);
+      }
+    },
+    [failed, refreshMachine, setProgress, setTransientStatus],
+  );
+
   const refOf = (row: GbotRowModel): GbotRef => ({ botId: row.bot.id, name: row.bot.name });
   const iconColor = appearance.foreground;
 
@@ -119,6 +145,16 @@ export function useGbots(deps: GbotsScreenDeps) {
             onPress: () => {
               setMenu(null);
               setSettings({ target, bot });
+            },
+          },
+          {
+            kind: 'item',
+            key: 'gbot-department',
+            label: 'Department',
+            icon: <CrewGlyph size={14} color={iconColor} />,
+            onPress: () => {
+              setMenu(null);
+              setSettings({ target, bot, tab: 'department' });
             },
           },
           { kind: 'separator', key: 'gbot-remove-separator' },
@@ -164,6 +200,44 @@ export function useGbots(deps: GbotsScreenDeps) {
     [machineById, newGbotItem],
   );
 
+  /** Long press on a department's sub-heading: its settings open in its lead's (or first GBot's) GBot Settings. */
+  const openDepartmentMenu = useCallback(
+    (machineId: string, department: GbotsDepartmentModel): void => {
+      const target = machineById(machineId);
+      if (target === null) return;
+      const first = department.bots[0];
+      const items: ContextMenuItem[] = [];
+      if (first !== undefined) {
+        items.push(
+          {
+            kind: 'item',
+            key: 'gbots-department-settings',
+            label: 'Department Settings',
+            icon: <CrewGlyph size={14} color={iconColor} />,
+            onPress: () => {
+              setMenu(null);
+              setSettings({ target, bot: refOf(first), tab: 'department' });
+            },
+          },
+          { kind: 'separator', key: 'gbots-department-separator' },
+        );
+      }
+      items.push({
+        kind: 'item',
+        key: 'gbots-department-remove',
+        label: 'Remove Department',
+        destructive: true,
+        icon: <TrashGlyph size={14} color={appearance.danger} />,
+        onPress: () => {
+          setMenu(null);
+          setRemovingDepartment({ target, department });
+        },
+      });
+      setMenu({ title: department.name, items });
+    },
+    [appearance.danger, iconColor, machineById],
+  );
+
   /** Main Hub's menu offers New GBot while GBots are on, so the first GBot can be added before the heading exists. */
   const homeMenuItems = useCallback(
     (target: MachineRecord, summary: GhostexMobileSummary | null | undefined, close: () => void): ContextMenuItem[] =>
@@ -205,11 +279,28 @@ export function useGbots(deps: GbotsScreenDeps) {
           onCancel={() => setRemoving(null)}
         />
       ) : null}
+      {removingDepartment !== null ? (
+        <ConfirmDialog
+          visible
+          title={`Remove the department ${removingDepartment.department.name}?`}
+          body="Its GBots stay, in no department, with their chats and memory."
+          confirmLabel="Remove Department"
+          destructive
+          onConfirm={() => {
+            const pending = removingDepartment;
+            setRemovingDepartment(null);
+            void removeDepartment(pending.target, pending.department);
+          }}
+          onCancel={() => setRemovingDepartment(null)}
+        />
+      ) : null}
       {settings !== null ? (
         <GbotSettingsHost
           target={settings.target}
           botId={settings.bot.botId}
           name={settings.bot.name}
+          initialTab={settings.tab}
+          onChanged={() => void refreshMachine(settings.target)}
           onClose={() => setSettings(null)}
           onSaved={(name) => {
             setTransientStatus('Chats opened from now on start with the changes.', { title: `${name} saved` });
@@ -234,5 +325,5 @@ export function useGbots(deps: GbotsScreenDeps) {
     </>
   );
 
-  return { openBotMenu, openHeadingMenu, homeMenuItems, newChatFor: toggleBotChatOnEmpty, overlays };
+  return { openBotMenu, openHeadingMenu, openDepartmentMenu, homeMenuItems, newChatFor: toggleBotChatOnEmpty, overlays };
 }

@@ -257,6 +257,10 @@ export type GhostexGbotsBot = {
   colorHex: string;
   agentId: string;
   departmentId?: string;
+  /** Its department's name, icon and place, for Main Hub's department sub-headings (server/src/gbots/presentation.rs). */
+  departmentName?: string;
+  departmentIcon?: string;
+  departmentOrder?: number;
   isLead?: boolean;
   paused?: boolean;
 };
@@ -1667,6 +1671,10 @@ function parseGbotsBot(value: unknown): GhostexGbotsBot | undefined {
     colorHex: normalizedHexColor(trimmedValue(value, 'colorHex')),
     agentId: trimmedValue(value, 'agentId'),
     departmentId: departmentId.length > 0 ? departmentId : undefined,
+    departmentName: departmentId.length > 0 ? trimmedValue(value, 'departmentName') || undefined : undefined,
+    departmentIcon: departmentId.length > 0 ? trimmedValue(value, 'departmentIcon') || undefined : undefined,
+    departmentOrder:
+      departmentId.length > 0 && typeof value.departmentOrder === 'number' ? value.departmentOrder : undefined,
     isLead: value.isLead === true ? true : undefined,
     paused: value.paused === true ? true : undefined,
   };

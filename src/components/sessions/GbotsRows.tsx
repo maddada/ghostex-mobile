@@ -3,7 +3,9 @@
  * headings (a tap folds it, a long press offers New GBot), then one row per GBot: its chevron, its icon in its colour,
  * its name and one status dot while any of its chats works or waits. A tap folds the bot's chats under it (newest
  * first, each the ordinary session row, so a tap opens the chat and a long press gives its usual menu); a long press
- * opens the bot's menu. Drawn in Main Hub's card right after Chief of Staff's row (DrawerBlockView.tsx).
+ * opens the bot's menu. The GBots of a department sit under its sub-heading (a tap folds them, a long press opens the
+ * department's menu), its lead first with a small crown. Drawn in Main Hub's card right after Chief of Staff's row
+ * (DrawerBlockView.tsx).
  *
  * CDXC:GBots 2026-11-09 SEE-ALSO: the DECISION in contract/gbots.ts; the desktop draws the same rows
  * (apps/desktop/src/app/native_sidebar/gbots_rows.rs).
@@ -17,14 +19,16 @@ import {
   gbotColorHex,
   type GbotChatItem,
   type GbotRowModel,
+  type GbotsDepartmentModel,
   type GbotsSectionModel,
 } from '../../contract/gbots';
 import { measureInWindow } from '../common/measureInWindow';
 import type { MenuAnchor } from './ContextMenu';
 import { GbotIcon } from './gbotIcons';
-import { ChevronRightGlyph } from './icons';
+import { ChevronRightGlyph, CoordinatorGlyph } from './icons';
 import {
   ProjectEmptyRow,
+  SectionStatusDots,
   SessionKindLabelRow,
   TOUCH_ROW_HEIGHT,
   ds,
@@ -50,10 +54,34 @@ export type GbotsRowsProps = {
   onBotMenu: (bot: GbotRowModel, anchor: MenuAnchor) => void;
   /** The empty row of a bot with no open chat. */
   onNewChat: (bot: GbotRowModel) => void;
+  onToggleDepartment: (department: GbotsDepartmentModel) => void;
+  /** The open chat is one of this department's bots' (rings the folded sub-heading). */
+  departmentActive: (department: GbotsDepartmentModel) => boolean;
+  /** Long press on a department: Department Settings, Remove Department. */
+  onDepartmentMenu: (department: GbotsDepartmentModel) => void;
 };
 
 export default function GbotsRows(props: GbotsRowsProps): ReactElement {
   const { section } = props;
+  const botBlock = (bot: GbotRowModel): ReactElement => (
+    <View key={bot.projectKey}>
+      <GbotRow
+        bot={bot}
+        ringColor={props.ringColor}
+        onToggle={() => props.onToggleBot(bot)}
+        onMenu={(anchor) => props.onBotMenu(bot, anchor)}
+      />
+      {bot.collapsed ? null : (
+        <View style={styles.chats}>
+          {bot.chats.length === 0 ? (
+            <ProjectEmptyRow text="New Chat" onPress={() => props.onNewChat(bot)} />
+          ) : (
+            bot.chats.map((chat) => props.renderChat(chat))
+          )}
+        </View>
+      )}
+    </View>
+  );
   return (
     <View style={styles.section}>
       <SessionKindLabelRow
@@ -64,28 +92,60 @@ export default function GbotsRows(props: GbotsRowsProps): ReactElement {
         onPress={props.onToggleHeading}
         onMenu={props.onHeadingMenu}
       />
-      {section.collapsed
-        ? null
-        : section.bots.map((bot) => (
-            <View key={bot.projectKey}>
-              <GbotRow
-                bot={bot}
-                ringColor={props.ringColor}
-                onToggle={() => props.onToggleBot(bot)}
-                onMenu={(anchor) => props.onBotMenu(bot, anchor)}
+      {section.collapsed ? null : (
+        <>
+          {section.looseBots.map(botBlock)}
+          {section.departments.map((department) => (
+            <View key={department.headingKey}>
+              <DepartmentRow
+                department={department}
+                active={department.collapsed && props.departmentActive(department)}
+                onPress={() => props.onToggleDepartment(department)}
+                onMenu={() => props.onDepartmentMenu(department)}
               />
-              {bot.collapsed ? null : (
-                <View style={styles.chats}>
-                  {bot.chats.length === 0 ? (
-                    <ProjectEmptyRow text="New Chat" onPress={() => props.onNewChat(bot)} />
-                  ) : (
-                    bot.chats.map((chat) => props.renderChat(chat))
-                  )}
-                </View>
-              )}
+              {department.collapsed ? null : department.bots.map(botBlock)}
             </View>
           ))}
+        </>
+      )}
     </View>
+  );
+}
+
+/** A department's sub-heading: its name in the GBots heading's quiet ink, its dots and count while folded. */
+function DepartmentRow({
+  department,
+  active,
+  onPress,
+  onMenu,
+}: {
+  department: GbotsDepartmentModel;
+  active: boolean;
+  onPress: () => void;
+  onMenu: () => void;
+}): ReactElement {
+  const rowStyles = departmentInkStyles(useSidebarInk());
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded: !department.collapsed }}
+      accessibilityLabel={`${department.name} department`}
+      hitSlop={{ top: ds(4), bottom: ds(4) }}
+      style={({ pressed }) => [rowStyles.row, pressed ? rowStyles.rowPressed : null]}
+      onPress={onPress}
+      onLongPress={onMenu}
+    >
+      <Text style={rowStyles.label} numberOfLines={1}>
+        {department.name}
+      </Text>
+      {department.collapsed ? (
+        <>
+          <SectionStatusDots status={department.headingStatus} active={active} />
+          <View style={rowStyles.spacer} />
+          <Text style={rowStyles.label}>{department.headingStatus.count}</Text>
+        </>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -129,6 +189,12 @@ function GbotRow({
       <Text numberOfLines={1} style={rowStyles.title}>
         {bot.bot.name}
       </Text>
+      {bot.bot.isLead === true ? (
+        <View accessibilityLabel="Leads its department" style={rowStyles.crown}>
+          <CoordinatorGlyph size={ds(11)} color={ink.muted} />
+        </View>
+      ) : null}
+      <View style={rowStyles.spacer} />
       {hasDot ? (
         <StatusDotStack
           workingCount={status.workingCount}
@@ -183,17 +249,51 @@ const gbotInkStyles = inkStyleSheets((ink) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    crown: {
+      marginLeft: ds(-3),
+    },
+    spacer: {
+      flex: 1,
+    },
     /* A paused GBot's icon dims; its row and chats stay. */
     paused: {
       opacity: 0.45,
     },
     title: {
-      flex: 1,
+      flexShrink: 1,
       minWidth: 0,
       color: ink.text,
       fontSize: ds(15.55),
       fontWeight: '300',
       lineHeight: ds(20),
+    },
+  }),
+);
+
+/* A department's sub-heading: the GBots heading's look, a step in and in normal case (rows.tsx SessionKindLabelRow). */
+const departmentInkStyles = inkStyleSheets((ink) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: ds(5),
+      height: ds(22),
+      marginTop: ds(2),
+      paddingLeft: ds(9),
+      paddingRight: ds(6),
+      borderRadius: ds(5),
+    },
+    rowPressed: {
+      backgroundColor: inkWash(ink, 0.06),
+    },
+    spacer: {
+      flex: 1,
+    },
+    label: {
+      color: ink.sectionLabel,
+      fontSize: ds(12.5),
+      fontWeight: '400',
+      lineHeight: ds(16),
     },
   }),
 );

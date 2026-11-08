@@ -10,6 +10,12 @@
  * loose sessions, each bot's chats folding under its row like a project's sessions, newest first, a chat Chief of
  * Staff opened carrying a small "Chief" tag. Long press on a bot: New Chat, GBot Settings, Remove GBot; on the GBots
  * heading: New GBot. Hidden with Main Hub, so a bot never shows twice.
+ *
+ * CDXC:GBots 2026-11-09 DECISION:
+ * User (plan piece 6): departments are small sub-headings under the GBots heading, each folding its bots: the GBots
+ * of no department first, then each department in its order, its lead first (with a small crown), the rest by name.
+ * Long press on a department: Department Settings (its lead's GBot Settings on the Department tab), Remove
+ * Department; its GBots stay.
  * SEE-ALSO: packages/gx-core/src/sidebar_view/gbots.rs, server/src/gbots/presentation.rs, contract/gbotsFilter.ts (the
  * projects list's half), components/sessions/GbotsRows.tsx (the rows).
  */
@@ -77,6 +83,11 @@ export function gbotsHeadingKey(homeProjectKey: string): string {
   return `gbots:${homeProjectKey}`;
 }
 
+/** The fold key of a department's sub-heading (gx-core `gbots_department_storage_id`). */
+export function gbotsDepartmentKey(homeProjectKey: string, departmentId: string): string {
+  return `gbots-department:${homeProjectKey}:${departmentId}`;
+}
+
 /** One chat under a bot: the session row as the projects list would build it, and who opened it. */
 export type GbotChatItem = SessionItem & { openedBy: string };
 
@@ -94,11 +105,27 @@ export type GbotRowModel = {
   containsActive: boolean;
 };
 
+/** One department's sub-heading and its bots (the lead first). */
+export type GbotsDepartmentModel = {
+  departmentId: string;
+  name: string;
+  /** Its fold key (`gbotsDepartmentKey`), collapsed while it is in the collapsed session kinds. */
+  headingKey: string;
+  collapsed: boolean;
+  bots: GbotRowModel[];
+  /** What the folded sub-heading draws: its dots and the number of GBots. */
+  headingStatus: SectionStatusCounts;
+};
+
 export type GbotsSectionModel = {
   /** The heading's fold key (`gbotsHeadingKey`), collapsed while it is in the collapsed session kinds. */
   headingKey: string;
   collapsed: boolean;
+  /** Every GBot, in drawing order. */
   bots: GbotRowModel[];
+  /** The GBots of no department, right under the heading. */
+  looseBots: GbotRowModel[];
+  departments: GbotsDepartmentModel[];
   /** What the folded heading draws: its dots and the number of GBots. */
   headingStatus: SectionStatusCounts;
 };
@@ -136,11 +163,7 @@ export function gbotsSection(input: {
   const nowMs = input.nowMs ?? Date.now();
   const botProjects = summary.projects
     .filter((project): project is GhostexProject & { gbotsBot: GhostexGbotsBot } => project.gbotsBot !== undefined)
-    .sort(
-      (left, right) =>
-        left.gbotsBot.name.toLowerCase().localeCompare(right.gbotsBot.name.toLowerCase()) ||
-        left.projectId.localeCompare(right.projectId),
-    );
+    .sort((left, right) => compareGbots(left.gbotsBot, right.gbotsBot) || left.projectId.localeCompare(right.projectId));
   if (botProjects.length === 0) return null;
   const sessions = visibleSessions(summary.sessions);
   const badges = coordinatorBadges(summary.sessions, nowMs);
@@ -186,12 +209,49 @@ export function gbotsSection(input: {
         own.some((session) => session.sessionId === input.activeSessionId),
     };
   });
-  const headingKey = gbotsHeadingKey(`id:${input.homeProjectId}`);
+  const homeKey = `id:${input.homeProjectId}`;
+  const headingKey = gbotsHeadingKey(homeKey);
+  const statusOf = (rows: readonly GbotRowModel[]): SectionStatusCounts => {
+    const chats = rows.flatMap((row) => row.chats.map((chat) => chat.session));
+    const counts = headerStatusCounts(countSessions(chats, summary.capabilities));
+    return {
+      count: rows.length,
+      workingCount: counts.workingCount,
+      attentionCount: counts.attentionCount,
+      backgroundWorkCount: 0,
+      questionCount: counts.questionCount,
+      approvalCount: counts.approvalCount,
+      sessionIds: chats.map((session) => session.sessionId),
+    };
+  };
+  const looseBots = bots.filter((row) => row.bot.departmentId === undefined);
+  const departments: GbotsDepartmentModel[] = [];
+  for (const row of bots) {
+    const departmentId = row.bot.departmentId;
+    if (departmentId === undefined) continue;
+    const existing = departments.find((department) => department.departmentId === departmentId);
+    if (existing !== undefined) {
+      existing.bots.push(row);
+      continue;
+    }
+    const key = gbotsDepartmentKey(homeKey, departmentId);
+    departments.push({
+      departmentId,
+      name: row.bot.departmentName ?? 'Department',
+      headingKey: key,
+      collapsed: fold.collapsedSessionKindKeys.has(key),
+      bots: [row],
+      headingStatus: statusOf([]),
+    });
+  }
+  for (const department of departments) department.headingStatus = statusOf(department.bots);
   const all = headerStatusCounts(countSessions(allChats, summary.capabilities));
   return {
     headingKey,
     collapsed: fold.collapsedSessionKindKeys.has(headingKey),
     bots,
+    looseBots,
+    departments,
     headingStatus: {
       count: bots.length,
       workingCount: all.workingCount,
@@ -202,6 +262,22 @@ export function gbotsSection(input: {
       sessionIds: allChats.map((session) => session.sessionId),
     },
   };
+}
+
+/**
+ * Drawing order (gx-core `order_gbot_projects`): the GBots of no department by name, then each department (its
+ * order, then its name) with its lead first, the rest by name.
+ */
+function compareGbots(left: GhostexGbotsBot, right: GhostexGbotsBot): number {
+  const inDepartment = (bot: GhostexGbotsBot): number => (bot.departmentId === undefined ? 0 : 1);
+  return (
+    inDepartment(left) - inDepartment(right) ||
+    (left.departmentOrder ?? 0) - (right.departmentOrder ?? 0) ||
+    (left.departmentName ?? '').toLowerCase().localeCompare((right.departmentName ?? '').toLowerCase()) ||
+    (left.departmentId ?? '').localeCompare(right.departmentId ?? '') ||
+    (left.isLead === true ? 0 : 1) - (right.isLead === true ? 0 : 1) ||
+    left.name.toLowerCase().localeCompare(right.name.toLowerCase())
+  );
 }
 
 /** Whether a chat was opened by Chief of Staff (its row's small "Chief" tag). */
@@ -225,6 +301,9 @@ export type GbotDetails = {
   model: string;
   approval: GbotApproval;
   departmentId: string;
+  /** Its department's name ("" with none), and whether it leads it. */
+  departmentName: string;
+  isLead: boolean;
   soul: string;
   /** Set when SOUL.md was changed outside Ghostex: the computer's own sentence. */
   soulDriftMessage: string;
@@ -255,6 +334,8 @@ export function parseGbotDetails(json: unknown): GbotDetails | null {
     model: text(bot, 'model'),
     approval: GBOT_APPROVALS.some((entry) => entry.value === approval) ? (approval as GbotApproval) : 'ask',
     departmentId: text(bot, 'departmentId'),
+    departmentName: text(bot, 'departmentName'),
+    isLead: bot.isLead === true,
     soul: text(bot, 'soul'),
     soulDriftMessage: text(bot, 'soulDriftMessage'),
   };

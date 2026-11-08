@@ -469,7 +469,7 @@ function CollectionStatusCounts({
 }
 
 /** apps/desktop/src/app/native_sidebar/sections.rs: a collapsed section heading's dots. */
-function SectionStatusDots({ status, active }: { status: SectionStatusCounts; active: boolean }) {
+export function SectionStatusDots({ status, active }: { status: SectionStatusCounts; active: boolean }) {
   const ink = statusInkStyles(useSidebarInk());
   const dots: { key: string; color: string }[] = [];
   if (status.workingCount > 0) dots.push({ key: 'working', color: SidebarPalette.ROW_WORKING });

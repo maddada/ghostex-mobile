@@ -1077,6 +1077,7 @@ export default function SessionsScreen({ navigation }: Props) {
     toggleGbotsHeading: (machineId, headingKey) => collapse.toggleSessionKind(machineId, headingKey),
     toggleGbot: (machineId, bot) => collapse.toggleProject(machineId, bot.projectKey),
     gbotsHeadingMenu: (machineId) => gbots.openHeadingMenu(machineId),
+    gbotsDepartmentMenu: (machineId, department) => gbots.openDepartmentMenu(machineId, department),
     gbotMenu: (machineId, bot, anchor) => gbots.openBotMenu(machineId, bot, anchor),
     gbotNewChat: (machineId, bot) => gbots.newChatFor(machineId, bot),
   };

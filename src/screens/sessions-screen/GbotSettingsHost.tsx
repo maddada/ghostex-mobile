@@ -13,18 +13,25 @@ import type { ReactElement } from 'react';
 import { runGhostexCli } from '../../components/sessions/cli';
 import {
   chiefStatusCommand,
+  gbotsDepartmentCreateCommand,
+  gbotsDepartmentEditCommand,
+  gbotsDepartmentListCommand,
+  gbotsDepartmentRemoveCommand,
   gbotsEditCommand,
   gbotsMemoryShowCommand,
   gbotsMemoryUndoCommand,
   gbotsRoutineActCommand,
   gbotsRoutineListCommand,
+  gbotsPlaceCommand,
   gbotsShowCommand,
 } from '../../commands/ghostexCli';
+import { parseGbotDepartments } from '../../contract/gbotDepartments';
 import { parseGbotRoutines, type GbotRoutine } from '../../contract/gbotRoutines';
 import { parseChiefAgents } from '../../contract/chief';
 import { parseGbotMemory, type GbotMemory } from '../../contract/gbotMemory';
 import { parseGbotDetails, type GbotFields } from '../../contract/gbots';
 import type { MachineConnectionTarget } from '../../machines/credentials';
+import type { GbotDepartmentAction, GbotDepartmentState } from './GbotDepartmentView';
 import GbotSettingsSheet, { type GbotSettingsTab } from './GbotSettingsSheet';
 
 export type GbotSettingsHostProps = {
@@ -37,6 +44,8 @@ export type GbotSettingsHostProps = {
   onSaved: (name: string) => void;
   /** The tab it opens on; Profile by default. */
   initialTab?: GbotSettingsTab;
+  /** After a change that applied at once (the Department tab), so the list redraws. */
+  onChanged?: () => void;
 };
 
 export default function GbotSettingsHost({
@@ -46,7 +55,41 @@ export default function GbotSettingsHost({
   onClose,
   onSaved,
   initialTab,
+  onChanged,
 }: GbotSettingsHostProps): ReactElement {
+  const readDepartments = async (): Promise<GbotDepartmentState> => {
+    const departments = parseGbotDepartments((await runGhostexCli(target, gbotsDepartmentListCommand())).json);
+    const details = parseGbotDetails((await runGhostexCli(target, gbotsShowCommand(botId))).json);
+    if (departments === null || details === null) {
+      throw new Error(`${name}'s department could not be read. Try again in a moment.`);
+    }
+    return { departments, departmentId: details.departmentId, isLead: details.isLead };
+  };
+  const actDepartment = async (action: GbotDepartmentAction): Promise<GbotDepartmentState> => {
+    switch (action.kind) {
+      case 'move':
+        await runGhostexCli(target, gbotsPlaceCommand(botId, action.departmentId));
+        break;
+      case 'lead':
+        await runGhostexCli(target, gbotsPlaceCommand(botId, null, action.lead));
+        break;
+      case 'edit':
+        await runGhostexCli(
+          target,
+          gbotsDepartmentEditCommand(action.departmentId, { name: action.name, instructions: action.instructions }),
+        );
+        break;
+      case 'remove':
+        await runGhostexCli(target, gbotsDepartmentRemoveCommand(action.departmentId));
+        break;
+      case 'create':
+        await runGhostexCli(target, gbotsDepartmentCreateCommand(action.name));
+        await runGhostexCli(target, gbotsPlaceCommand(botId, action.name));
+        break;
+    }
+    onChanged?.();
+    return readDepartments();
+  };
   const readRoutines = async (): Promise<GbotRoutine[]> => {
     const routines = parseGbotRoutines((await runGhostexCli(target, gbotsRoutineListCommand(botId))).json);
     if (routines === null) throw new Error(`${name}'s routines could not be read. Try again in a moment.`);
@@ -83,6 +126,8 @@ export default function GbotSettingsHost({
         await runGhostexCli(target, gbotsRoutineActCommand(verb, id));
         return readRoutines();
       }}
+      loadDepartments={readDepartments}
+      actDepartment={actDepartment}
       initialTab={initialTab}
     />
   );

@@ -320,6 +320,38 @@ export function gbotsEditCommand(botId: string, fields: Record<string, string | 
   return `ghostex gbots edit ${shellQuote(requirePositional(botId, 'GBot id'))}${gbotFieldFlags(fields)} --json`;
 }
 
+/** GBots' departments, their leads and members, and the GBots in none (server/src/gbots/departments.rs). */
+export function gbotsDepartmentListCommand(): string {
+  return 'ghostex gbots department list --json';
+}
+
+/** Moves a GBot to a department (`""` for none) and, with `lead`, makes it lead it or stop leading it. */
+export function gbotsPlaceCommand(botId: string, department: string | null, lead?: boolean): string {
+  const place = department === null ? '' : ` --department=${shellQuote(department.length > 0 ? department : 'none')}`;
+  const leads = lead === undefined ? '' : ` --lead=${lead ? 'true' : 'false'}`;
+  return `ghostex gbots edit ${shellQuote(requirePositional(botId, 'GBot id'))}${place}${leads} --json`;
+}
+
+/** Adds a department by name. */
+export function gbotsDepartmentCreateCommand(name: string): string {
+  return `ghostex gbots department create --name=${shellQuote(requireId(name, 'department name'))} --json`;
+}
+
+/** Renames a department or changes its shared instructions (only the fields given). */
+export function gbotsDepartmentEditCommand(
+  departmentId: string,
+  fields: { name?: string; instructions?: string },
+): string {
+  const name = fields.name === undefined ? '' : ` --name=${shellQuote(fields.name)}`;
+  const instructions = fields.instructions === undefined ? '' : ` --instructions=${shellQuote(fields.instructions)}`;
+  return `ghostex gbots department edit ${shellQuote(requirePositional(departmentId, 'department id'))}${name}${instructions} --json`;
+}
+
+/** Removes a department; its GBots stay, in no department. */
+export function gbotsDepartmentRemoveCommand(departmentId: string): string {
+  return `ghostex gbots department remove ${shellQuote(requirePositional(departmentId, 'department id'))} --json`;
+}
+
 /** Adds a GBot. From the phone gxserver asks for the user's approval first, and the command waits for it. */
 export function gbotsCreateCommand(fields: Record<string, string | undefined>): string {
   requireId(fields.name ?? '', 'GBot name');

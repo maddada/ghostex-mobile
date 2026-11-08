@@ -1,7 +1,7 @@
 /**
  * GBot Settings on the phone, from a bot's long press: Profile (name, title, description, icon, colour, agent, model,
- * approval level, and the department read-only), Instructions (the GBot's standing instructions, with the computer's
- * notice when SOUL.md was changed by hand), Memory (GbotMemoryView.tsx: read-only, with Undo) and Routines
+ * approval level, and its department, which opens the Department tab), Instructions (the GBot's standing instructions, with the computer's
+ * notice when SOUL.md was changed by hand), Department (GbotDepartmentView.tsx), Memory (GbotMemoryView.tsx: read-only, with Undo) and Routines
  * (GbotRoutinesView.tsx). It edits a local copy read with
  * `ghostex gbots show` and saves the changed fields in one `ghostex gbots edit`, so Cancel leaves everything as it
  * was; a refusal (a taken name, say) shows the computer's own sentence.
@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState, type ReactElement } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { GbotIcon } from '../../components/sessions/gbotIcons';
 import {
@@ -33,6 +33,7 @@ import {
 } from '../../contract/gbots';
 import type { GbotMemory } from '../../contract/gbotMemory';
 import { SegmentedRow } from '../settings/SettingsControls';
+import GbotDepartmentView, { type GbotDepartmentAction, type GbotDepartmentState } from './GbotDepartmentView';
 import GbotMemoryView from './GbotMemoryView';
 import GbotRoutinesView, { type GbotRoutineVerb } from './GbotRoutinesView';
 import type { GbotRoutine } from '../../contract/gbotRoutines';
@@ -46,7 +47,7 @@ import {
   useGbotFormStyles,
 } from './GbotFormParts';
 
-export type GbotSettingsTab = 'profile' | 'instructions' | 'memory' | 'routines';
+export type GbotSettingsTab = 'profile' | 'instructions' | 'department' | 'memory' | 'routines';
 type Tab = GbotSettingsTab;
 
 /** Why the phone can't raise a GBot's approval level, and where to do it. */
@@ -61,6 +62,7 @@ function isApprovalRefusal(message: string): boolean {
 const TABS: readonly { value: Tab; label: string }[] = [
   { value: 'profile', label: 'Profile' },
   { value: 'instructions', label: 'Instructions' },
+  { value: 'department', label: 'Department' },
   { value: 'memory', label: 'Memory' },
   { value: 'routines', label: 'Routines' },
 ];
@@ -80,6 +82,9 @@ export type GbotSettingsSheetProps = {
   /** The Routines tab (GbotRoutinesView.tsx): list the GBot's routines, and pause, resume, run or remove one. */
   loadRoutines: () => Promise<GbotRoutine[]>;
   actRoutine: (verb: GbotRoutineVerb, id: string) => Promise<GbotRoutine[]>;
+  /** The Department tab (GbotDepartmentView.tsx): read the departments, and run a change. */
+  loadDepartments: () => Promise<GbotDepartmentState>;
+  actDepartment: (action: GbotDepartmentAction) => Promise<GbotDepartmentState>;
   /** The tab it opens on (a "Routine set" card's Edit opens Routines). */
   initialTab?: GbotSettingsTab;
 };
@@ -245,12 +250,16 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
             </Text>
             <Text style={styles.hint}>{GBOT_CODEX_APPROVAL_NOTE}</Text>
           </View>
-          {saved.departmentId.length > 0 ? (
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Department</Text>
-              <Text style={styles.value}>{saved.departmentId}</Text>
-            </View>
-          ) : null}
+          <Pressable accessibilityRole="button" style={styles.field} onPress={() => setTab('department')}>
+            <Text style={styles.fieldLabel}>Department</Text>
+            <Text style={styles.value}>
+              {saved.departmentName.length === 0
+                ? 'None'
+                : saved.isLead
+                  ? `${saved.departmentName} (its lead)`
+                  : saved.departmentName}
+            </Text>
+          </Pressable>
         </>
       ) : null}
       {draft !== null && saved !== null && tab === 'instructions' ? (
@@ -271,6 +280,9 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
             hint="Chats opened from now on start with these. Open chats pick them up when they next read their brief."
           />
         </>
+      ) : null}
+      {tab === 'department' ? (
+        <GbotDepartmentView name={name} load={props.loadDepartments} act={props.actDepartment} />
       ) : null}
       {tab === 'memory' ? <GbotMemoryView load={props.loadMemory} undo={props.undoMemory} /> : null}
       {tab === 'routines' ? (
