@@ -64,7 +64,7 @@ import MachineTabs, {
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
 import SpaceTabs from '../components/sessions/SpaceTabs';
-import ChiefRow from '../components/sessions/ChiefRow';
+import ChiefRow, { CHIEF_LABEL } from '../components/sessions/ChiefRow';
 import { runGhostexCli } from '../components/sessions/cli';
 import { chiefRows, parseChiefAgents, type ChiefRowModel } from '../contract/chief';
 import { chiefNewChatCommand, chiefOpenCommand, chiefSetAgentCommand, chiefStatusCommand } from '../commands/ghostexCli';
@@ -810,7 +810,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const runChief = useCallback(
     async (target: MachineRecord, command: string): Promise<void> => {
       setChiefMenu(null);
-      setProgress('Starting Chief…');
+      setProgress(`Starting ${CHIEF_LABEL}…`);
       try {
         const result = await runGhostexCli(target, command);
         setProgress(null);
@@ -848,10 +848,12 @@ export default function SessionsScreen({ navigation }: Props) {
       try {
         const items = await chiefAgentItems(target, chiefOpenCommand, '');
         if (items.length === 0) {
-          setTransientStatus('No agent can run Chief yet. Set up Claude, Codex or another coordinator agent first.');
+          setTransientStatus(
+            `No agent can run ${CHIEF_LABEL} yet. Set up Claude, Codex or another coordinator agent first.`,
+          );
           return;
         }
-        setChiefMenu({ title: 'Which agent runs Chief?', items });
+        setChiefMenu({ title: `Which agent runs ${CHIEF_LABEL}?`, items });
       } catch (error) {
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }
@@ -870,7 +872,7 @@ export default function SessionsScreen({ navigation }: Props) {
       }
       const heading: ContextMenuItem = { kind: 'heading', key: 'chief-agent-heading', label: 'Change Agent' };
       setChiefMenu({
-        title: row.machineId === machine?.id ? 'Chief' : `Chief · ${row.machineLabel}`,
+        title: row.machineId === machine?.id ? CHIEF_LABEL : `${CHIEF_LABEL} · ${row.machineLabel}`,
         items: [
           {
             kind: 'item',

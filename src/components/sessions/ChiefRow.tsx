@@ -18,8 +18,8 @@ import { ChevronRightGlyph, FlowerGlyph } from './icons';
 import { HEADER_CHEVRON_INSET, TOUCH_ROW_HEIGHT, ds, inkStyleSheets, inkWash, useSidebarInk } from './rows';
 import StatusDotStack from './StatusDotStack';
 
-/** Chief's name on its row (Q1746). */
-export const CHIEF_LABEL = 'Chief';
+/** Chief's name on its row and its menus: "Chief of Staff" (Q1896; server/src/chief/mod.rs `CHIEF_TITLE`). */
+export const CHIEF_LABEL = 'Chief of Staff';
 
 /** The one dot a Chief's row draws, in the session card's order. */
 function chiefCounts(session: GhostexSession) {
@@ -77,7 +77,9 @@ export default function ChiefRow({
         {folds ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={unfolded ? "Fold the other computers' Chiefs" : "Show the other computers' Chiefs"}
+            accessibilityLabel={
+              unfolded ? `Fold ${CHIEF_LABEL} on the other computers` : `Show ${CHIEF_LABEL} on the other computers`
+            }
             accessibilityState={{ expanded: unfolded }}
             hitSlop={{ top: 12, bottom: 12, left: 8, right: 4 }}
             onPress={() => setExpanded((value) => !value)}
