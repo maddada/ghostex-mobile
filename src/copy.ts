@@ -841,7 +841,7 @@ export const EditMachineCopy = {
     remove: 'Remove',
     cancel: 'Cancel',
     thisPhone: (name: string) => `${name} (this phone)`,
-    legacy: 'Paired before Ghostex 11.0.1, so it no longer connects. Pair it again, or remove it.',
+    legacy: 'Paired before Ghostex 11.1.0, so it no longer connects. Pair it again, or remove it.',
     removeTitle: (name: string) => `Remove ${name}?`,
     removeDetail: 'It loses its access to this computer at once: its sign-in key and its Ghostex token are removed.',
     removeSelfDetail:
