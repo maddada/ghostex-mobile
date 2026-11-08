@@ -7,7 +7,7 @@
  */
 
 import { isValidElement, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -404,3 +404,45 @@ const useStyles = themedStyles((P) => ({
     color: P.muted,
   },
 }));
+
+/**
+ * CDXC:SessionChat 2026-11-08 DECISION: an answered approval card stays drawn, dimmed, with its buttons held and a spinner beside
+ * "Sending…", until its prompt is gone (the chat core's questions/pending_approval.rs; desktop `pending_answer_note` in tone_card.rs).
+ */
+export function PendingAnswerNote({ words }: { words: string }) {
+  const P = useTranscriptTheme();
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel={words}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+    >
+      <ActivityIndicator size="small" color={P.muted} />
+      <Text style={{ color: P.muted, fontSize: 13 }}>{words}</Text>
+    </View>
+  );
+}
+
+/** The card's body, dimmed while its answer is on its way. */
+export function dimPending(body: ReactNode[], pending: boolean): ReactNode[] {
+  if (!pending) return body;
+  return body.map((part, index) => (
+    <View key={`pending:${index}`} style={{ opacity: 0.5 }}>
+      {part}
+    </View>
+  ));
+}
+
+/** When Claude Code blocks an unattended prompt by itself (`autoBlockAt`), as one still line with the clock time. */
+export function AutoBlockLine({ at }: { at: string }) {
+  const P = useTranscriptTheme();
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) return null;
+  const time = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Glyph name="clock" size={13} color={P.muted} />
+      <Text style={{ color: P.muted, fontSize: 12.5 }}>{`Claude Code blocks this at ${time} if nobody answers`}</Text>
+    </View>
+  );
+}

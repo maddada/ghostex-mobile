@@ -12,14 +12,16 @@ import type { RustChat } from '../../rust/useRustChat';
 import { APPROVAL_ASK_FALLBACK, APPROVAL_TITLE_FALLBACK, RECONNECTING_NOTE, approvalAnswer } from './answers';
 import { str } from './json';
 import { useCardText } from './primitives';
-import { CommandBox, ToneButton, ToneCard, ToneDismiss, isShellTool } from './ToneCard';
+import { CommandBox, PendingAnswerNote, ToneButton, ToneCard, ToneDismiss, dimPending, isShellTool } from './ToneCard';
 
 export function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const cardText = useCardText();
   const { dispatch } = chat;
   const prompt = document.prompt;
   const card = document.questionCard;
-  const busy = card.busy;
+  // An answered approval waits here, dimmed and held, until its prompt is gone (the chat core's questions/pending_approval.rs).
+  const pending = document.approvalPending?.card === 'prompt';
+  const busy = card.busy || pending;
   const summary = str(prompt, 'summary');
   const tool = str(prompt, 'tool');
   const body =
@@ -42,20 +44,22 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
       tone="approval"
       title={card.approvalTitle || APPROVAL_TITLE_FALLBACK}
       detail={card.approvalDetail}
-      trailing={<ToneDismiss onPress={() => dispatch({ type: 'questionCancel' })} />}
-      body={body}
+      trailing={pending ? undefined : <ToneDismiss onPress={() => dispatch({ type: 'questionCancel' })} />}
+      body={dimPending(body, pending)}
       footerStart={
-        summary.length > 0
-          ? [
-              <ToneButton
-                key="copy"
-                kind="secondary"
-                icon="copy"
-                label="Copy"
-                onPress={() => void Clipboard.setStringAsync(summary)}
-              />,
-            ]
-          : []
+        pending
+          ? [<PendingAnswerNote key="pending" words={document.approvalPending?.sending ?? 'Sending…'} />]
+          : summary.length > 0
+            ? [
+                <ToneButton
+                  key="copy"
+                  kind="secondary"
+                  icon="copy"
+                  label="Copy"
+                  onPress={() => void Clipboard.setStringAsync(summary)}
+                />,
+              ]
+            : []
       }
       footerEnd={[
         <ToneButton

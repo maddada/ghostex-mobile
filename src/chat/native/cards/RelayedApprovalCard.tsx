@@ -20,7 +20,7 @@ import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { relayedCards } from './relayedApprovals';
 import { CARD_TEXT_SIZE } from './primitives';
-import { CommandBox, ToneButton, ToneCard } from './ToneCard';
+import { AutoBlockLine, CommandBox, PendingAnswerNote, ToneButton, ToneCard, dimPending } from './ToneCard';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 type Dispatch = RustChat['dispatch'];
@@ -55,7 +55,9 @@ export function RelayedApprovalCard({ card, dispatch }: { card: JsonRecord; disp
   const detail = [str(card, 'header'), str(card, 'threadTitle'), str(card, 'source')]
     .filter((part) => part.length > 0)
     .join(' · ');
-  const choices = arr(card.choices).map(obj).filter((choice): choice is JsonRecord => choice !== null);
+  const choices = arr(card.choices)
+    .map(obj)
+    .filter((choice): choice is JsonRecord => choice !== null);
   const lasting = choices.map((choice) => str(choice, 'tooltip')).filter((tip) => tip.length > 0);
   return (
     <ToneCard
@@ -63,61 +65,69 @@ export function RelayedApprovalCard({ card, dispatch }: { card: JsonRecord; disp
       icon="shield-check"
       title={str(card, 'title')}
       detail={detail}
-      body={[
-        code.length > 0 ? (
-          <View key="code" style={styles.code}>
-            <CommandBox
-              command={codeOpen || preview.length === 0 ? code : preview}
-              shell={str(card, 'codeLabel') === 'Command'}
-            />
-            {more.length > 0 ? (
-              <Text
-                accessibilityRole="button"
-                accessibilityLabel={codeOpen ? 'Show less of the command' : `Show all of the command, ${more}`}
-                style={styles.more}
-                onPress={() => setCodeOpen((was) => !was)}
+      body={dimPending(
+        [
+          code.length > 0 ? (
+            <View key="code" style={styles.code}>
+              <CommandBox
+                command={codeOpen || preview.length === 0 ? code : preview}
+                shell={str(card, 'codeLabel') === 'Command'}
+              />
+              {more.length > 0 ? (
+                <Text
+                  accessibilityRole="button"
+                  accessibilityLabel={codeOpen ? 'Show less of the command' : `Show all of the command, ${more}`}
+                  style={styles.more}
+                  onPress={() => setCodeOpen((was) => !was)}
+                >
+                  {codeOpen ? 'Show less' : 'Show all'}
+                </Text>
+              ) : null}
+            </View>
+          ) : null,
+          reason.length > 0 ? (
+            <Text key="reason" style={styles.reason}>
+              {reason}
+            </Text>
+          ) : null,
+          // The phone has no hover, so what a lasting choice changes is said under the card.
+          ...lasting.map((tip, index) => (
+            <Text key={`tip:${index}`} style={styles.tip}>
+              {tip}
+            </Text>
+          )),
+          str(card, 'autoBlockAt').length > 0 ? <AutoBlockLine key="auto-block" at={str(card, 'autoBlockAt')} /> : null,
+          error.length > 0 ? (
+            <Text key="error" style={styles.error}>
+              {error}
+            </Text>
+          ) : null,
+        ].filter(Boolean),
+        busy,
+      )}
+      footerStart={
+        busy
+          ? [<PendingAnswerNote key="pending" words="Sending…" />]
+          : [
+              <Pressable
+                key="open"
+                accessibilityRole="link"
+                accessibilityLabel="Open the thread"
+                hitSlop={6}
+                onPress={() =>
+                  dispatch({
+                    type: 'openCoordinatorThread',
+                    projectId: str(card, 'projectId'),
+                    sessionId: str(card, 'sessionId'),
+                  })
+                }
+                style={styles.note}
               >
-                {codeOpen ? 'Show less' : 'Show all'}
-              </Text>
-            ) : null}
-          </View>
-        ) : null,
-        reason.length > 0 ? (
-          <Text key="reason" style={styles.reason}>
-            {reason}
-          </Text>
-        ) : null,
-        // The phone has no hover, so what a lasting choice changes is said under the card.
-        ...lasting.map((tip, index) => (
-          <Text key={`tip:${index}`} style={styles.tip}>
-            {tip}
-          </Text>
-        )),
-        error.length > 0 ? (
-          <Text key="error" style={styles.error}>
-            {error}
-          </Text>
-        ) : null,
-      ]}
-      footerStart={[
-        <Pressable
-          key="open"
-          accessibilityRole="link"
-          accessibilityLabel="Open the thread"
-          hitSlop={6}
-          onPress={() =>
-            dispatch({
-              type: 'openCoordinatorThread',
-              projectId: str(card, 'projectId'),
-              sessionId: str(card, 'sessionId'),
-            })
-          }
-          style={styles.note}
-        >
-          <Glyph name="shield-check" size={13} color={P.muted} />
-          <Text style={styles.noteText}>{str(card, 'note')}</Text>
-        </Pressable>,
-      ]}
+                <Glyph name="shield-check" size={13} color={P.muted} />
+                <Text style={styles.noteText}>{str(card, 'note')}</Text>
+              </Pressable>,
+            ]
+      }
       footerEnd={choices.map((choice, index) => (
         <ToneButton
           key={`choice:${index}`}
@@ -196,7 +206,9 @@ export function BoardRelayButtons({ card, dispatch }: { card: JsonRecord; dispat
   const styles = useStyles();
   const key = str(card, 'key');
   const busy = isTrue(card, 'busy');
-  const choices = arr(card.choices).map(obj).filter((choice): choice is JsonRecord => choice !== null);
+  const choices = arr(card.choices)
+    .map(obj)
+    .filter((choice): choice is JsonRecord => choice !== null);
   return (
     <View style={styles.segmented}>
       {choices.map((choice, index) => (

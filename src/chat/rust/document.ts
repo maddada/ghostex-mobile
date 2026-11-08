@@ -570,6 +570,11 @@ export type ChatDocument = {
   /** The failed queue row the visible card stands for, whose own line then gives way to the card. */
   sendFailureCardPromptId?: string | null;
   noticeError?: string | null;
+  /**
+   * The approval answer the drawn notice or approval card waits on (`card` is `notice` or `prompt`): the card stays dimmed and held
+   * with a spinner and `sending` until its prompt is gone. Core: `questions/pending_approval.rs`.
+   */
+  approvalPending?: { label: string; card: 'notice' | 'prompt'; sending: string } | null;
   /** The last refused operation's message. Desktop: `composer_not_ready.rs`, `composer.rs`. */
   operationError?: string | null;
   /** The refusal's code, so the composer can draw its not-ready card instead of an error line. */

@@ -32,7 +32,7 @@ import {
 } from './primitives';
 import { Glyph } from './icons';
 import { DetailsToggle } from './DetailsToggle';
-import { ToneButton, ToneCard } from './ToneCard';
+import { AutoBlockLine, PendingAnswerNote, ToneButton, ToneCard, dimPending } from './ToneCard';
 import { PanelBlocks } from './PanelBlocks';
 import { PermissionDetails } from './PermissionDetails';
 import { SideAnswer, SideQuestionCard } from './SideQuestionCard';
@@ -61,7 +61,9 @@ export function NoticeCard({
   const dialogInput = useDialogInput(obj(notice?.dialog));
   if (notice === null || document.noticeVisible !== true) return null;
 
-  const busy = document.questionCard?.busy === true;
+  // An answered approval waits here, dimmed and held, until its prompt is gone (the chat core's questions/pending_approval.rs).
+  const pending = document.approvalPending?.card === 'notice';
+  const busy = document.questionCard?.busy === true || pending;
   const choices = arr(notice.choices);
   const answerable = choices.length > 0;
   const dialog = obj(notice.dialog);
@@ -155,6 +157,8 @@ export function NoticeCard({
         onExpand={() => setExpandedKey(key)}
       />,
     );
+    const autoBlockAt = str(notice, 'autoBlockAt');
+    if (autoBlockAt.length > 0) body.push(<AutoBlockLine key="auto-block" at={autoBlockAt} />);
   }
   // The plan "Ready to code?" asks to approve, whole: Claude's pane shows only a screenful of it (`plan` in the chat core's
   // questions/document.rs; desktop notice.rs).
@@ -226,7 +230,7 @@ export function NoticeCard({
      * that field (an over-the-air update on an older build) still sends `collapsedChoiceCount`, the first rows.
      * SEE-ALSO: packages/gx-chat-core/src/questions/notice_choices.rs (collapsed_choice_positions)
      */
-    const shownChoices = collapsed ? foldedChoices ?? [] : choices;
+    const shownChoices = collapsed ? (foldedChoices ?? []) : choices;
     const labels = shownChoices.map((choice) => str(choice, collapsed ? 'collapsedLabel' : 'label'));
     /*
      * CDXC:SessionChat 2026-09-27 DECISION: User: when a notice card's choices do not fit side by side, "make buttons appear full
@@ -375,15 +379,17 @@ export function NoticeCard({
           <Glyph name={collapsed ? 'chevron-right' : 'chevron-down'} size={14} color={look.P.muted} />
         ) : undefined
       }
-      body={body}
+      body={dimPending(body, pending)}
       footerStart={
-        numbered
-          ? [
-              <Text key="number-hint" style={styles.numberHint}>
-                Tap a row to pick it
-              </Text>,
-            ]
-          : undefined
+        pending
+          ? [<PendingAnswerNote key="pending" words={document.approvalPending?.sending ?? 'Sending…'} />]
+          : numbered
+            ? [
+                <Text key="number-hint" style={styles.numberHint}>
+                  Tap a row to pick it
+                </Text>,
+              ]
+            : undefined
       }
       footerEnd={[...actions, ...footerEnd]}
       accessibilityLabel={collapsed ? 'Show all options' : 'Show less'}
