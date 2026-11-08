@@ -21,7 +21,14 @@ export type RootStackParamList = {
    * `incomingCode` is a pairing link the system camera opened the app with
    * (src/app/deepLinks.ts); `at` tells two openings of the same link apart.
    */
-  ScanCode: { rePairMachineId?: string; incomingCode?: { payload: string; at: number } } | undefined;
+  ScanCode:
+    | {
+        rePairMachineId?: string;
+        incomingCode?: { payload: string; at: number };
+        /** Opened by the 11.0.1 security notice: the computers to pair again, first one re-paired (src/app/securityNotice.ts). */
+        securityNotice?: { computers: string[] };
+      }
+    | undefined;
   /** The Tailscale (plain SSH over the tailnet) form: the manual "type the details" path. */
   TailscaleForm: MachineFormParams;
   /** End of setup: names the computer, the user and the live session count. */

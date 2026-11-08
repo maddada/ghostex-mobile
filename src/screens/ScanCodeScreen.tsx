@@ -27,6 +27,7 @@ import { HelpCircleGlyph, PasteGlyph } from '../components/onboarding/SetupIcons
 import { SetupButton, SetupRow, SetupRows, useSetupText } from '../components/onboarding/SetupPrimitives';
 import TailscalePasswordSheet from '../components/onboarding/TailscalePasswordSheet';
 import WhereIsCodeSheet from '../components/onboarding/WhereIsCodeSheet';
+import { remindSecurityNoticeLater, securityNoticeText } from '../app/securityNotice';
 import { ScanCopy } from '../copy';
 import { tailscaleCodeAddress } from '../machines/pairingCodes';
 import type { RootStackParamList } from '../navigation/types';
@@ -43,6 +44,7 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
   const setupText = useSetupText();
   const rePairMachineId = route.params?.rePairMachineId ?? null;
   const incomingCode = route.params?.incomingCode;
+  const securityNotice = securityNoticeText(route.params?.securityNotice?.computers ?? []);
   const [permission, requestPermission] = useCameraPermissions();
   const askedRef = useRef(false);
   const [cameraDenied, setCameraDenied] = useState(false);
@@ -161,6 +163,12 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {securityNotice !== null && phase.kind === 'scanning' ? (
+        <View style={styles.notice}>
+          <Text style={setupText.title}>{securityNotice.title}</Text>
+          <Text style={setupText.lede}>{securityNotice.message}</Text>
+        </View>
+      ) : null}
       <View style={styles.viewfinder}>
         {granted && !systemScanner.active ? (
           <CameraView
@@ -201,12 +209,26 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
               onPress={() => setSheet('paste')}
               disabled={phase.kind !== 'scanning'}
             />
-            <Text style={[setupText.small, setupText.dim, setupText.center]}>
-              {ScanCopy.cantFindPrefix}
-              <Text style={setupText.accent} onPress={() => setSheet('where')}>
-                {ScanCopy.cantFindLink}
+            {securityNotice !== null ? (
+              <>
+                {securityNotice.others !== null ? (
+                  <Text style={[setupText.small, setupText.center]}>{securityNotice.others}</Text>
+                ) : null}
+                <SetupButton
+                  label="Remind me later"
+                  onPress={() => {
+                    void remindSecurityNoticeLater().finally(() => navigation.goBack());
+                  }}
+                />
+              </>
+            ) : (
+              <Text style={[setupText.small, setupText.dim, setupText.center]}>
+                {ScanCopy.cantFindPrefix}
+                <Text style={setupText.accent} onPress={() => setSheet('where')}>
+                  {ScanCopy.cantFindLink}
+                </Text>
               </Text>
-            </Text>
+            )}
           </>
         )}
       </View>
@@ -232,6 +254,13 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
 const createStyles = (appearance: Appearance) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: appearance.background,
+  },
+  notice: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 6,
     backgroundColor: appearance.background,
   },
   viewfinder: {

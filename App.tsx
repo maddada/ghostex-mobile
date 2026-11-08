@@ -25,7 +25,7 @@ import { initSettingsSync } from './src/settingsSync/settingsSync';
 import { initLiveActivity } from './src/notifications/liveActivity';
 import { initWidgets } from './src/notifications/widgets';
 import { initPersistentNotification } from './src/app/persistentNotification';
-import { showSecurityNoticeOnce } from './src/app/securityNotice';
+import { securityNoticeTarget } from './src/app/securityNotice';
 import { useMachinesStore } from './src/machines/store';
 import { initAttentionNotifications } from './src/notifications/feedStore';
 import { initPaneLayouts } from './src/panes/store';
@@ -172,7 +172,6 @@ export default function App() {
       .finally(() => {
         void useTerminalStore.getState().hydrate();
         void useWebPreviewStore.getState().hydrate();
-        void showSecurityNoticeOnce(useMachinesStore.getState().machines);
       });
     void useExtraKeysStore.getState().hydrate();
     void useAgentHotkeysStore.getState().hydrate();
@@ -201,6 +200,14 @@ export default function App() {
             onReady={() => {
               flushPendingDeepLink();
               noteCrashRoute(navigationRef.getCurrentRoute()?.name);
+              // The 11.0.1 notice opens straight into the scanner when a computer needs this phone paired again.
+              void securityNoticeTarget(useMachinesStore.getState().machines).then((target) => {
+                if (target === null || !navigationRef.isReady()) return;
+                navigationRef.navigate('ScanCode', {
+                  rePairMachineId: target.rePairMachineId,
+                  securityNotice: { computers: target.computers },
+                });
+              });
             }}
             onStateChange={() => {
               noteCrashRoute(navigationRef.getCurrentRoute()?.name);
