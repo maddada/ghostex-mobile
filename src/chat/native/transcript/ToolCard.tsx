@@ -31,6 +31,7 @@ import { ReadImages } from './Images';
 import { arr, num, obj, str, type JsonRecord } from './json';
 import { useDisclosure } from './state';
 import type { TranscriptTheme } from './theme';
+import { SINGLE_LINE_HEADER_HEIGHT } from './singleLineCard';
 import { ToolBody } from './ToolBody';
 
 /** How long a row takes to grow in and the header's words to settle (desktop `ENTER`). */
@@ -406,8 +407,17 @@ function CardToolDetail({
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 12, borderWidth: 1, overflow: 'hidden', minWidth: 0 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, minHeight: 40, minWidth: 0 },
+  // The one-line cards' border and header height ("Message to …", "Worked for 12s"), so a folded
+  // tool card beside one of them is the same 44pt (desktop `tool_card.rs`, CDXC:SessionChat 2026-11-08).
+  card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', minWidth: 0 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    height: SINGLE_LINE_HEADER_HEIGHT,
+    minWidth: 0,
+  },
   stack: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
   stackTile: {
     width: STACK_ICON,
