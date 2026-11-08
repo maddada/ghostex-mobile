@@ -634,7 +634,7 @@ export function PillMenuSheet({
       ) : open === 'approvals' ? (
         <RelayedApprovalsMenu chat={chat} document={document} />
       ) : open === 'collab' ? (
-        <CollabShareMenu chat={chat} document={document} />
+        <CollabShareMenu chat={chat} document={document} onDone={close} />
       ) : open === 'autopilot' ? (
         <View>
           {(shown?.menu ?? []).map((row, index) => (

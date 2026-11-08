@@ -1,14 +1,22 @@
 /**
- * Settings › Collab (Ghostex Collab), for one computer: the switch, your name, what a new share
- * starts with, the chats shared now with Stop sharing, and the guest messages log. Read and saved
- * through that computer's `/api/collab` (server/src/server/collab_http.rs); a change shows at once.
- * The desktop's page is `settings_modal/tabs/collab.rs`.
+ * Settings › Collab (Ghostex Collab), for one computer. Collab is an extension since 11.0.1
+ * (#495): until it is installed on that computer the page offers only Install (the computer
+ * downloads the Collab component once the owner approves); once installed, your name, what a new
+ * share starts with, the chats shared now with Stop sharing, the guest messages log, and
+ * Uninstall. Read and saved through that computer's `/api/collab` (forwarded to the Collab
+ * component, server/collab/src/owner.rs) and `/api/extensionComponents`; a change shows at once.
+ * The desktop's pages are `settings_modal/tabs/collab.rs` and the Collab card of Extensions.
  *
  * CDXC:Collab 2026-11-07 DECISION: User (Q1610, Q1616): "a page in settings called "Collab"", and the phone is "full (share, approve messages, Stop sharing, see viewers)".
  *
- * CDXC:Collab 2026-11-08 DECISION: User (#495): turning Collab on needs the owner's signed approval
- * (`collabCall` waits for it), a link lasts an hour by default and a day at most, a code is always
- * asked, and Send is never a default: it is turned on per chat, in its Share sheet, with approval.
+ * CDXC:Collab 2026-11-08 DECISION: User (#495): a link lasts an hour by default and a day at most,
+ * a code is always asked, and Send is never a default: it is turned on per chat, in its Share
+ * sheet, with approval.
+ *
+ * CDXC:Collab 2026-11-08 DECISION: User (#495, Q1730): installing Collab needs the owner's signed
+ * approval (`collabCall` waits for it); there is no on/off switch any more, and uninstalling never
+ * asks. The phone's Settings list several computers, so this page stays listed and says when
+ * Collab isn't installed on the one picked.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,13 +33,11 @@ import {
   SectionHeader,
   SegmentedRow,
   SettingsScreenLayout,
-  ToggleRow,
   useSettingsStyles,
 } from './SettingsControls';
 
 type Config = {
-  enabled: boolean;
-  expiry: 'hour' | 'fourHours' | 'day';
+  expiry: 'hour' | 'fourHours' | 'day' | 'untilStopped';
   mode: 'approve' | 'view';
   ownerName: string;
   ownerDisplayName: string;
@@ -44,7 +50,25 @@ type Share_ = {
   viewers: { id: string; name: string }[];
 };
 
-type View_ = { config: Config; shares: Share_[]; guestPage?: { message?: string | null } };
+type Component = {
+  installed: boolean;
+  version?: string | null;
+  canInstall?: boolean;
+  phase?: 'idle' | 'downloading' | 'installing' | 'removing' | 'failed';
+  doneBytes?: number | null;
+  totalBytes?: number | null;
+  error?: string | null;
+};
+
+/** Installed: `config`, `shares`, …; not installed (or stopped): `installed: false` and `component`. */
+type View_ = {
+  installed?: boolean;
+  component?: Component;
+  config?: Config;
+  shares?: Share_[];
+  guestPage?: { message?: string | null };
+  version?: string;
+};
 
 type LogEntry = {
   atMs: number;
@@ -60,8 +84,32 @@ async function call(
   machine: MachineRecord,
   params: Record<string, unknown>,
   onWaiting?: (summary: string | null) => void,
+  endpoint: 'collab' | 'extensionComponents' = 'collab',
 ): Promise<{ result: Record<string, unknown> | null; error: string | null }> {
-  return collabCall(machine, params, onWaiting);
+  return collabCall(machine, params, onWaiting, undefined, endpoint);
+}
+
+function installStatus(component: Component | undefined): string {
+  if (component === undefined) return "Collab isn't installed on this computer.";
+  switch (component.phase) {
+    case 'downloading': {
+      const done = component.doneBytes ?? 0;
+      const total = component.totalBytes ?? 0;
+      return total > 0
+        ? `Downloading Collab… ${Math.floor((done / total) * 100)}% of ${Math.round(total / 1_000_000)} MB`
+        : 'Downloading Collab…';
+    }
+    case 'installing':
+      return 'Installing Collab…';
+    case 'removing':
+      return 'Uninstalling Collab…';
+    case 'failed':
+      return `Couldn't install Collab. ${component.error ?? ''}`;
+    default:
+      if (component.installed) return 'Collab is installed and starting…';
+      if (component.canInstall === false) return "This computer's Ghostex has no Collab component to install.";
+      return "Collab isn't installed on this computer. Installing it downloads the Collab component and asks for your approval.";
+  }
 }
 
 function ago(atMs: number): string {
@@ -140,8 +188,14 @@ export default function CollabPage() {
     );
 
   const set = (patch: Partial<Config>) => {
-    if (view !== null) setView({ ...view, config: { ...view.config, ...patch } });
+    if (view?.config) setView({ ...view, config: { ...view.config, ...patch } });
     void send({ op: 'set', patch });
+  };
+  const component = async (op: 'install' | 'uninstall') => {
+    const answer = await call(machine, { op, name: 'collab' }, setWaiting, 'extensionComponents');
+    if (answer.result === null) setError(answer.error);
+    else setError(null);
+    void send({ op: 'read' });
   };
 
   return (
@@ -168,8 +222,23 @@ export default function CollabPage() {
         ) : (
           <LinkRow title="Try again" onPress={() => void send({ op: 'read' })} />
         )
+      ) : view.installed === false || view.config === undefined ? (
+        <SettingsSection name="settings:collab:install">
+          <SectionHeader title="Collab (extension)" />
+          <Caption>{installStatus(view.component)}</Caption>
+          {view.component?.installed !== true && view.component?.canInstall !== false && waiting === null ? (
+            <LinkRow title="Install Collab" onPress={() => void component('install')} />
+          ) : null}
+        </SettingsSection>
       ) : (
-        <CollabBody view={view} log={log} set={set} send={send} />
+        <CollabBody
+          view={view}
+          config={view.config}
+          log={log}
+          set={set}
+          send={send}
+          uninstall={() => void component('uninstall')}
+        />
       )}
     </SettingsScreenLayout>
   );
@@ -177,29 +246,28 @@ export default function CollabPage() {
 
 function CollabBody({
   view,
+  config,
   log,
   set,
   send,
+  uninstall,
 }: {
   view: View_;
+  config: Config;
   log: LogEntry[];
   set: (patch: Partial<Config>) => void;
   send: (params: Record<string, unknown>) => Promise<void>;
+  uninstall: () => void;
 }) {
-  const { config } = view;
+  const shares = view.shares ?? [];
   return (
     <>
       <SettingsSection name="settings:collab:switch">
         <SectionHeader title="Ghostex Collab" />
-        <ToggleRow
-          label="Ghostex Collab"
-          detail={
-            config.enabled
-              ? 'On. Each share needs your approval. Turning it off ends every share at once.'
-              : 'Off: nothing can be shared and every link stops working. Turning it on needs your approval.'
-          }
-          value={config.enabled}
-          onValueChange={(enabled) => set({ enabled })}
+        <LinkRow
+          title="Uninstall Collab"
+          description={`Installed${view.version ? ` (${view.version})` : ''}. Each share needs your approval. Uninstalling ends every share at once and removes Collab from this computer.`}
+          onPress={uninstall}
         />
         <NameRow
           value={config.ownerName}
@@ -224,20 +292,22 @@ function CollabBody({
             { value: 'hour', label: '1 hour' },
             { value: 'fourHours', label: '4 hours' },
             { value: 'day', label: '24 hours' },
+            { value: 'untilStopped', label: 'Until I stop it' },
           ]}
           value={config.expiry}
           onChange={(expiry) => set({ expiry })}
         />
         <Caption>
-          A day at most. Guests always type the eight-digit code that comes with the link, and you get a notification
-          when one joins. Send straight to the agent is turned on per chat, in its Share sheet.
+          Until I stop it keeps a link live until you stop sharing or delete the chat. Guests always type the
+          eight-digit code that comes with the link, and you get a notification when one joins. Send straight to the
+          agent is turned on per chat, in its Share sheet.
         </Caption>
       </SettingsSection>
-      {config.enabled ? (
+      {
         <SettingsSection name="settings:collab:shared">
           <SectionHeader title="Shared now" />
-          {view.shares.length === 0 ? <Caption>No chat is shared right now.</Caption> : null}
-          {view.shares.map((share) => (
+          {shares.length === 0 ? <Caption>No chat is shared right now.</Caption> : null}
+          {shares.map((share) => (
             <LinkRow
               key={share.shareId}
               title={share.title}
@@ -245,9 +315,9 @@ function CollabBody({
               onPress={() => void send({ op: 'stop', shareId: share.shareId })}
             />
           ))}
-          {view.shares.length > 1 ? <LinkRow title="Stop all" onPress={() => void send({ op: 'stopAll' })} /> : null}
+          {shares.length > 1 ? <LinkRow title="Stop all" onPress={() => void send({ op: 'stopAll' })} /> : null}
         </SettingsSection>
-      ) : null}
+      }
       <SettingsSection name="settings:collab:log">
         <SectionHeader title="Guest messages log" />
         {log.length === 0 ? (

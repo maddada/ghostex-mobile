@@ -1,8 +1,9 @@
 /**
- * One call to a computer's `/api/collab` from the phone, waiting out the owner's approval.
+ * One call to a computer's `/api/collab` (or `/api/extensionComponents`, which installs Collab)
+ * from the phone, waiting out the owner's approval.
  *
  * CDXC:Collab 2026-11-08 DECISION:
- * User (#495): turning Collab on, sharing a chat (and showing its link again), Send mode and sending
+ * User (#495): installing Collab (it is an extension since 11.0.1, Q1730), sharing a chat (and showing its link again), Send mode and sending
  * a guest's message need the owner's signed approval. The computer answers `approvalRequired` with
  * the request; it shows on the computer and the phone, and the computer makes the change itself once
  * it is approved. The phone says where to approve and repeats the call with `approvalId` every few
@@ -25,12 +26,13 @@ export async function collabCall(
   params: Record<string, unknown>,
   onWaiting?: (summary: string | null) => void,
   alive: () => boolean = () => true,
+  endpoint: 'collab' | 'extensionComponents' = 'collab',
 ): Promise<CollabAnswer> {
   const deadline = Date.now() + GIVE_UP_MS;
   let current = params;
   try {
     for (;;) {
-      const answer = await chatMachineLink(machine).rpc('collab', current, CALL_TIMEOUT_MS);
+      const answer = await chatMachineLink(machine).rpc(endpoint, current, CALL_TIMEOUT_MS);
       if (answer.error === null) {
         onWaiting?.(null);
         return { result: (answer.result ?? {}) as Record<string, unknown>, error: null };
