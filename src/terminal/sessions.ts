@@ -23,6 +23,7 @@ import { useMachinesStore } from '../machines/store';
 import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
 import { warmPoolOverBudget } from './warmBudget';
 import { forgetAttach, noteAttachOpened } from './zmxDisplay';
+import { isDemoMachineId } from '../demo/identity';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 /** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
@@ -300,6 +301,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         await ensureConnected(machine);
         connected = true;
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
+        if (isDemoMachineId(machine.id)) {
+          patchTab(tab.sessionKey, { state: 'open', error: undefined });
+          return tab.sessionKey;
+        }
         const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
           fontSize: initialFontSize(tab.sessionKey),
           zmxBacked: tab.kind === 'attach',
@@ -488,7 +493,11 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       touchWarm(sessionKey);
       // Auto scroll: land at the live bottom when returning to a warm tab. A pane that was on screen all along is
       // not returned to: it keeps the place its reader scrolled it to.
-      if (useSettingsStore.getState().settings.autoScroll && options?.scrollToBottom !== false) {
+      if (
+        useSettingsStore.getState().settings.autoScroll &&
+        options?.scrollToBottom !== false &&
+        !isDemoMachineId(sessionKey.split(':')[0] ?? '')
+      ) {
         void GhostexNative.scrollToBottom(sessionKey).catch(() => undefined);
       }
     },
@@ -506,7 +515,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       // Chat mode is intentionally NOT cleared here: the persisted last-used
       // view survives tab close so a later reopen restores it.
       try {
-        await GhostexNative.closeTerminal(sessionKey);
+        const machineId = sessionKey.split(':')[0] ?? '';
+        if (!isDemoMachineId(machineId)) await GhostexNative.closeTerminal(sessionKey);
       } catch {
         // Entry may already be gone natively.
       }
@@ -554,6 +564,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         if (!get().tabs.some((entry) => entry.sessionKey === sessionKey)) return;
         let connected = false;
         try {
+          if (isDemoMachineId(tab.machineId)) {
+            patchTab(sessionKey, { state: 'open', error: undefined });
+            return;
+          }
           /*
            * Reconnect means "throw the dead terminal away and start over", so the
            * native entry goes first. Without this, openTerminal finds a warm entry

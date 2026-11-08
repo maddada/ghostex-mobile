@@ -19,6 +19,7 @@ import { useInventoryStore } from '../inventory/store';
 import { chatLinkKeptInBackground, onChatLinkCutOff } from '../chat/rust/machine-link';
 import { enabledMachines, useMachinesStore } from '../machines/store';
 import { cancelConnectionAttempt, ensureConnected } from '../remote/connection';
+import { isDemoMachineId } from '../demo/identity';
 import { useSettingsStore } from '../settings/store';
 import { restoreAttachTabs, useTerminalStore } from '../terminal/sessions';
 
@@ -57,6 +58,7 @@ function machineTarget(machineId: string) {
  * list wait for the foreground.
  */
 function canRecover(machineId: string): boolean {
+  if (isDemoMachineId(machineId)) return false;
   return (
     (foreground() || chatLinkKeptInBackground(machineId)) &&
     useSettingsStore.getState().settings.autoReconnect &&

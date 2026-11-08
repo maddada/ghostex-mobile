@@ -20,7 +20,7 @@ type CredentialKind =
  * `tailcat` tunnels to the pairing token's peer and dials the machine's SSH
  * port on it, with host:port kept as the stable host-key identity.
  */
-export type MachineTransport = 'ssh' | 'tailcat';
+export type MachineTransport = 'ssh' | 'tailcat' | 'demo';
 
 function credentialKey(machineId: string, kind: CredentialKind): string {
   return `machine.${machineId}.${kind}`;

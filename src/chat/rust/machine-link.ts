@@ -33,6 +33,7 @@ import type { MachineConnectionTarget } from '../../machines/credentials';
 import { GXSERVER_FORWARD_HOST, readServerEndpoint } from './serverEndpoint';
 import { boxForward, boxHandshake, closeBoxForward, type BoxEndpoint } from '../../cloudBoxes/boxLink';
 import { isCloudBoxMachineId } from '../../cloudBoxes/types';
+import { isDemoMachine } from '../../demo/identity';
 import type { RpcAnswer } from './transport';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
@@ -261,6 +262,12 @@ class ChatMachineLink {
 
   /** The route for the next request, running the handshake when nothing current is known. */
   route(): Promise<ChatRoute> {
+    // The demo computer has no gxserver. Stay off the socket so a handshake cannot dial.
+    if (isDemoMachine(this.machine)) {
+      this.state = { kind: 'unavailable', until: Date.now() + UNAVAILABLE_RECHECK_MS };
+      this.lastRoute = 'unavailable';
+      return Promise.resolve('unavailable');
+    }
     const known = this.current();
     if (known !== null) return Promise.resolve(known);
     if (this.state.kind === 'probing') return this.state.done;

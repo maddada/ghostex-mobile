@@ -26,6 +26,7 @@ export type SettingsPageId =
   | 'autopilot'
   | 'collab'
   | 'advanced'
+  | 'demo'
   | 'readAloudVoice'
   | 'dictateLanguage'
   | 'dictateDictionary'
@@ -49,6 +50,7 @@ export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; de
   autopilot: { title: 'Autopilot', description: 'Keep sessions going while you are away, and what it did.' },
   collab: { title: 'Collab', description: 'Share a chat through a link that opens it in a browser.' },
   advanced: { title: 'Advanced', description: 'Older settings most people never change.' },
+  demo: { title: 'Demo computer', description: 'The sample computer on this phone, and how to remove it.' },
   licences: { title: LicencesCopy.pageTitle, description: LicencesCopy.pageDescription },
   // Opened from Settings › Chat's Read aloud rows, not listed on the Settings home.
   readAloudVoice: { title: 'Read aloud voice', description: "Which of this phone's voices reads replies aloud." },

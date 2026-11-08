@@ -21,9 +21,10 @@ import { markManualDisconnect } from '../app/autoReconnect';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
-import { CameraGlyph, QrcodeGlyph, ShieldGlyph } from '../components/onboarding/SetupIcons';
+import { CameraGlyph, QrcodeGlyph, ShieldGlyph, SparklesGlyph } from '../components/onboarding/SetupIcons';
 import { useSetupText } from '../components/onboarding/SetupPrimitives';
 import { MachinesCopy } from '../copy';
+import { DemoCopy } from '../demo/copy';
 import { useInventoryStore } from '../inventory/store';
 import {
   APP_UPDATE_FRESH_MS,
@@ -159,6 +160,18 @@ export default function MachinesScreen({ navigation }: Props) {
             button={{
               label: MachinesCopy.add.tailscale.button,
               onPress: () => navigation.navigate('TailscaleForm'),
+            }}
+          />
+          <PathCard
+            icon={<SparklesGlyph size={20} color={appearance.foreground} />}
+            title={DemoCopy.entryTitle}
+            subtitle={DemoCopy.entrySubtitle}
+            button={{
+              label: DemoCopy.entryButton,
+              onPress: () => {
+                useMachinesStore.getState().addDemoComputer();
+                navigation.navigate('Sessions');
+              },
             }}
           />
         </View>

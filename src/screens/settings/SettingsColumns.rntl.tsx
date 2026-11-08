@@ -46,6 +46,14 @@ jest.mock('./SettingsControls', () => ({
   useSettingsStyles: () => ({ list: {} }),
   SettingsPageEdgesContext: jest.requireActual('react').createContext(null),
 }));
+jest.mock('../../machines/store', () => {
+  const state = { machines: [] as { id: string; transport?: string }[] };
+  const useMachinesStore = Object.assign(
+    (selector?: (value: typeof state) => unknown) => (typeof selector === 'function' ? selector(state) : state),
+    { getState: () => state },
+  );
+  return { useMachinesStore };
+});
 jest.mock('./pages', () => ({
   SETTINGS_PAGES: { chat: { title: 'Chat' }, theme: { title: 'Interface' } },
   SETTINGS_PAGE_ORDER: ['theme', 'chat'],

@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 
 import { chatMachineLink } from '../chat/rust/machine-link';
+import { isDemoMachine } from '../demo/identity';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { isUnknownRoute, type DictateEngine, type DictateOverview, type DictateSettings } from './dictateModel';
 
@@ -15,6 +16,9 @@ const READ_TIMEOUT_MS = 15_000;
 type Answer<T> = { ok: true; value: T } | { ok: false; message: string; outdated: boolean };
 
 async function call<T>(machine: MachineConnectionTarget, method: string, params: unknown): Promise<Answer<T>> {
+  if (isDemoMachine(machine)) {
+    return { ok: false, message: 'Voice needs a real computer. The demo stays on this phone.', outdated: false };
+  }
   try {
     const answer = await chatMachineLink(machine).rpc(method, params, READ_TIMEOUT_MS);
     if (answer.error !== null)
