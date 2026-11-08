@@ -33,6 +33,7 @@ function fake(session: DeepLinkSession | undefined) {
     },
     navigate: (route) => routes.push(route),
     later: (retry) => retry(),
+    markOpened: (machineId, sessionId) => calls.push(`markOpened:${machineId}:${sessionId}`),
   };
   return { deps, calls, routes };
 }
@@ -145,13 +146,13 @@ describe('session links from Live Activity rows', () => {
   test('of two same-named sessions, each link opens its own session', () => {
     const first = parseSessionLink('ghostex://session?machineId=m1&sessionId=sess%261');
     const second = parseSessionLink('ghostex://session?machineId=m1&sessionId=sess%262');
-    assert.deepEqual(first, { machineId: 'm1', sessionId: 'sess&1', title: '', view: null });
-    assert.deepEqual(second, { machineId: 'm1', sessionId: 'sess&2', title: '', view: null });
+    assert.deepEqual(first, { machineId: 'm1', sessionId: 'sess&1', title: '', view: null, source: null });
+    assert.deepEqual(second, { machineId: 'm1', sessionId: 'sess&2', title: '', view: null, source: null });
   });
 
   test('reserved characters inside an id stay part of that id', () => {
     const link = parseSessionLink('ghostex://session?machineId=a%23b%3Dc&sessionId=x%2By%25z%3Fw%2F');
-    assert.deepEqual(link, { machineId: 'a#b=c', sessionId: 'x+y%z?w/', title: '', view: null });
+    assert.deepEqual(link, { machineId: 'a#b=c', sessionId: 'x+y%z?w/', title: '', view: null, source: null });
   });
 
   test('a link without both ids opens nothing', () => {
@@ -165,7 +166,26 @@ describe('session links from Live Activity rows', () => {
       sessionId: 's1',
       title: 'Fix tests',
       view: null,
+      source: null,
     });
+  });
+
+  test('a row of the Android persistent notification marks the session opened as the bell does, then opens it', async () => {
+    const link = 'ghostex://session?machineId=m1&sessionId=s1&title=Fix%20tests&source=notification';
+    assert.equal(parseSessionLink(link)?.source, 'notification');
+    const f = fake(undefined);
+    handleDeepLink(link, f.deps);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(f.calls[0], 'markOpened:m1:s1');
+    assert.ok(f.calls.includes('attach:s1'));
+  });
+
+  test('any other session link marks nothing read', async () => {
+    const f = fake(undefined);
+    handleDeepLink('ghostex://session?machineId=m1&sessionId=s1', f.deps);
+    handleDeepLink('ghostex://session?machineId=m1&sessionId=s1&source=other', f.deps);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(f.calls.filter((call) => call.startsWith('markOpened')).length, 0);
   });
 
   const savedInTerminal: DeepLinkSession = {

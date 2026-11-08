@@ -388,7 +388,7 @@ export type GeneratedSshKey = {
 /** One row of the Android persistent-notification session inventory. */
 export type NotificationSessionRow = {
   title: string;
-  /** working | attention | done | sleep | idle — drives the status dot. */
+  /** working | attention (the bell's Needs you) | done | failed (the bell's Done, Failed) | sleep | idle: drives the status dot. */
   status: string;
   project: string;
   /** Row-tap deep link target: ghostex://session?machineId=…&sessionId=…. */

@@ -39,7 +39,7 @@ import { create } from 'zustand';
 
 import { logAppEvent } from '../app/appLog';
 import { sessionDeepLink } from '../app/deepLinkHandler';
-import { openDeepLink, personNavigations, tapOpens } from '../app/deepLinks';
+import { openDeepLink, personNavigations, setSessionOpenedMarker, tapOpens } from '../app/deepLinks';
 import { chatMachineLink } from '../chat/rust/machine-link';
 import { hasQuestion } from '../contract/mobileSummary';
 import { useInventoryStore } from '../inventory/store';
@@ -572,6 +572,36 @@ export async function markAttentionRowsRead(machineId: string, notificationIds: 
   }
 }
 
+/** How long a tapped notification row waits for its computer's feed before it marks nothing. */
+const OPENED_FEED_WAIT_MS = 30_000;
+
+/**
+ * A session opened from outside the bell's list as a tap in it opens one (an Android persistent notification row):
+ * its rows that `readOnOpen` names are marked read on the computer, once the saved computers are loaded and its feed
+ * is read (a cold start from the notification reads it first). A feed that cannot be read marks nothing.
+ */
+export function markSessionOpened(machineId: string, sessionId: string): void {
+  let settled = false;
+  const tryMark = (): boolean => {
+    if (settled) return true;
+    const feed = useAttentionFeedStore.getState().feeds[machineId];
+    if (feed === undefined || feed.status === 'loading') return false;
+    settled = true;
+    if (feed.status === 'ready') void markAttentionRowsRead(machineId, unreadRowIds(feed.rows, sessionId));
+    return true;
+  };
+  whenComputersLoaded(() => {
+    if (tryMark()) return;
+    const unsubscribe = useAttentionFeedStore.subscribe(() => {
+      if (tryMark()) unsubscribe();
+    });
+    setTimeout(() => {
+      settled = true;
+      unsubscribe();
+    }, OPENED_FEED_WAIT_MS);
+  });
+}
+
 /**
  * Clear Done: the `finished` rows that hold the Done sessions, marked read on each computer whose list is shown, and
  * nothing else; false when a computer did not take it, also when Done holds rows of a computer whose feed cannot be
@@ -795,6 +825,8 @@ export function initAttentionNotifications(): void {
   if (installed) return;
   installed = true;
   installNotificationCentre(openTapped, takeForegroundPush);
+  // A tapped Android persistent notification row opens its session as the bell's row does.
+  setSessionOpenedMarker(markSessionOpened);
   // What was announced before this launch, so a late copy of it stays silent (`eventIdentity.ts`, rule 4).
   // Every notification and attention sound waits until it is read (invariant I1), then goes out in order. The
   // record names the computers by their id, so it is read once the saved computers are loaded: that load can merge

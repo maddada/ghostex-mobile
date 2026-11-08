@@ -184,10 +184,14 @@ class GhostexForegroundService : Service() {
     return PendingIntent.getService(this, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
   }
 
-  /** Status dot tint, matching the old fork's notification row colors. */
+  /**
+   * Status dot tint, matching the old fork's notification row colors; a Failed session (the bell's Failed section,
+   * persistentNotificationRows.ts) is red.
+   */
   private fun dotColor(status: String): Int = when (status) {
     "working" -> 0xFFF59E0B.toInt()
     "attention", "done" -> 0xFF95D7F6.toInt()
+    "failed" -> 0xFFEF4444.toInt()
     "sleep", "sleeping" -> 0xFF6E7684.toInt()
     else -> 0xFF9CA3AF.toInt()
   }
@@ -201,6 +205,8 @@ class GhostexForegroundService : Service() {
       .appendQueryParameter("machineId", row.machineId)
       .appendQueryParameter("sessionId", row.sessionId)
       .appendQueryParameter("title", row.title)
+      // The tap opens the session as the bell's row does: its rows are marked read (deepLinkHandler.ts).
+      .appendQueryParameter("source", "notification")
       .build()
     val intent = Intent(Intent.ACTION_VIEW, uri)
       .setPackage(packageName)
@@ -234,12 +240,17 @@ class GhostexForegroundService : Service() {
     }
   }
 
+  /**
+   * CDXC:Notifications 2026-11-08 DECISION: User, on merging the iPhone bell (ghostex-mobile#29): "make android match
+   * please, i dont want android and ios experience to diverge in terms of behavior". The line counts what the bell
+   * counts: the sessions that wait for the user ("attention" rows, the bell's Needs you), not finished or failed ones.
+   */
   private fun summaryText(rows: List<SessionRow>): String {
     if (rows.isEmpty()) return "Ready to connect to Ghostex sessions"
     val working = rows.count { it.status == "working" }
-    val attention = rows.count { it.status == "attention" || it.status == "done" }
+    val needsYou = rows.count { it.status == "attention" }
     val parts = mutableListOf<String>()
-    if (attention > 0) parts.add(if (attention == 1) "1 needs attention" else "$attention need attention")
+    if (needsYou > 0) parts.add("$needsYou need you")
     if (working > 0) parts.add("$working working")
     if (parts.isEmpty()) {
       parts.add(if (rows.size == 1) "1 remote terminal" else "${rows.size} remote terminals")

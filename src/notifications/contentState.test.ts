@@ -166,6 +166,7 @@ describe('row content', () => {
       sessionId: second.target.sessionId,
       title: '',
       view: null,
+      source: null,
     });
     assert.notEqual(parseSessionLink(url)?.sessionId, rows[0]?.target.sessionId);
   });

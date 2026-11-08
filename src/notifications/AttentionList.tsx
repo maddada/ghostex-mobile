@@ -59,14 +59,12 @@ import {
 import { readableSecondaryText } from '../theme/sidebarAppearance';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import {
-  buildAttentionList,
-  machineFeed,
   type AttentionInbox,
   type AttentionRow,
   type InboxSection,
   type ListKind,
-  type MachineFeed,
 } from './attentionRows';
+import { attentionInboxOf, type Notice } from './attentionInbox';
 import {
   markAttentionRowsRead,
   refreshAttentionFeeds,
@@ -130,8 +128,6 @@ function emphasized(row: AttentionRow): boolean {
   return row.section === 'needsYou' || (row.account && !row.read);
 }
 
-type Notice = { key: string; text: string };
-
 /**
  * The inbox of every enabled computer, a notice for each one whose feed cannot be read, and whether the list still
  * loads or no computer can be read at all.
@@ -149,25 +145,27 @@ export function useAttentionInbox(): {
   const settingsLoaded = useSettingsStore((state) => state.hydrated);
   const removedKeys = useSettingsStore((state) => state.settings.attentionRemovedSessions);
   return useMemo(() => {
+    const { inbox, loadingIds, legacyIds, unreachableIds } = attentionInboxOf({
+      feeds,
+      closed,
+      machines,
+      inventories,
+      settingsLoaded,
+      removedKeys,
+    });
     const enabled = enabledMachines({ machines });
-    const shown: MachineFeed[] = [];
     const notices: Notice[] = [];
-    let loading = false;
     for (const machine of enabled) {
-      const feed = feeds[machine.id];
       const label = machineDisplayLabel(machine);
-      if (feed === undefined || feed.status === 'loading') loading = true;
-      else if (feed.status === 'legacy') notices.push({ key: machine.id, text: NotificationsCopy.tooOld(label) });
-      else if (feed.status === 'unreachable') notices.push({ key: machine.id, text: NotificationsCopy.offline(label) });
-      shown.push(machineFeed({ id: machine.id, label }, feed, inventories[machine.id], closed[machine.id] ?? []));
+      if (legacyIds.includes(machine.id)) notices.push({ key: machine.id, text: NotificationsCopy.tooOld(label) });
+      else if (unreachableIds.includes(machine.id)) {
+        notices.push({ key: machine.id, text: NotificationsCopy.offline(label) });
+      }
     }
-    // Until the removed sessions are loaded no Done or Failed row shows, whether its computer answers or not, so a
-    // removed one never flashes up there.
-    const inbox = buildAttentionList(shown, settingsLoaded ? new Set(removedKeys) : null);
-    const failing = enabled.find((machine) => feeds[machine.id]?.status === 'unreachable');
+    const failing = enabled.find((machine) => unreachableIds.includes(machine.id));
     const unreachable =
       failing !== undefined && notices.length === enabled.length ? machineDisplayLabel(failing) : null;
-    return { inbox, notices, loading, unreachable };
+    return { inbox, notices, loading: loadingIds.length > 0, unreachable };
   }, [feeds, closed, machines, inventories, settingsLoaded, removedKeys]);
 }
 

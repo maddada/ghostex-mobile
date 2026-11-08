@@ -7,6 +7,8 @@
  * - `ghostex://session?machineId=…&sessionId=…[&title=…][&view=question]` opens the session as a tap in
  *   the Sessions list does: in its Chat View when it opens there, else its terminal (attached first).
  *   The Android persistent notification's rows, the agent notifications and the Live Activity's rows send it.
+ *   A row of the Android persistent notification adds `source=notification`: its tap also marks the session's rows
+ *   read, as opening it from the bell's list does (`markOpened`), so a Done session leaves the list on both.
  *   `view=question` (a "has a question" notification or Live Activity row) opens the Chat View, where the
  *   question card stands in place of the composer; a session without a Chat View opens its terminal.
  *   At a cold start the link waits until the stores that decide or overwrite the session's view are
@@ -24,7 +26,14 @@ const SESSION_LINK = 'ghostex://session';
 
 export type SessionLinkView = 'question';
 
-export type SessionLink = { machineId: string; sessionId: string; title: string; view: SessionLinkView | null };
+export type SessionLink = {
+  machineId: string;
+  sessionId: string;
+  title: string;
+  view: SessionLinkView | null;
+  /** `notification`: a row of the Android persistent notification, which opens the session as the bell's row does. */
+  source: 'notification' | null;
+};
 
 /** The link that opens a session (and, for `view: 'question'`, its question card). */
 export function sessionDeepLink(link: {
@@ -63,6 +72,7 @@ export function parseSessionLink(url: string): SessionLink | null {
     sessionId,
     title: queryParam(url, 'title') ?? '',
     view: queryParam(url, 'view') === 'question' ? 'question' : null,
+    source: queryParam(url, 'source') === 'notification' ? 'notification' : null,
   };
 }
 
@@ -125,6 +135,11 @@ export type DeepLinkDeps = {
   ): void;
   /** Runs `retry` again shortly (stores hydrate within moments of launch). */
   later(retry: () => void): void;
+  /**
+   * Marks read on the computer the session's rows that opening it from the bell's list marks read (`readOnOpen`),
+   * once its feed is read: the tap of an Android persistent notification row.
+   */
+  markOpened(machineId: string, sessionId: string): void;
 };
 
 /**
@@ -193,5 +208,7 @@ export function handleDeepLink(url: string | null, deps: DeepLinkDeps, current?:
     return;
   }
   const link = parseSessionLink(url);
-  if (link !== null) openSession(link, deps, current);
+  if (link === null) return;
+  if (link.source === 'notification') deps.markOpened(link.machineId, link.sessionId);
+  openSession(link, deps, current);
 }

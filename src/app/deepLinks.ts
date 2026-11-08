@@ -24,6 +24,16 @@ import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
 import { revealSessionWorkspace } from '../workspaces/store';
 import { handleDeepLink, type DeepLinkDeps } from './deepLinkHandler';
 
+/**
+ * What a tapped Android persistent notification row marks read (`DeepLinkDeps.markOpened`), set by the attention feed
+ * when it installs (`feedStore.ts` imports this module, so it registers rather than being imported here).
+ */
+let markOpenedHandler: (machineId: string, sessionId: string) => void = () => undefined;
+
+export function setSessionOpenedMarker(handler: (machineId: string, sessionId: string) => void): void {
+  markOpenedHandler = handler;
+}
+
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 let installed = false;
@@ -142,6 +152,7 @@ const appDeps: DeepLinkDeps = {
         });
     }),
   later: (retry) => setTimeout(retry, 250),
+  markOpened: (machineId, sessionId) => markOpenedHandler(machineId, sessionId),
 };
 
 /**

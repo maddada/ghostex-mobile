@@ -135,6 +135,7 @@ const mockNavigation = { changes: 0 };
 jest.mock('../app/deepLinks', () => ({
   openDeepLink: jest.fn(),
   personNavigations: jest.fn(() => mockNavigation.changes),
+  setSessionOpenedMarker: jest.fn(),
   tapOpens: jest.fn(),
 }));
 
@@ -1312,6 +1313,7 @@ describe('a tapped push of a waiting event', () => {
       attachSession: () => Promise.resolve('m1:s1'),
       navigate: () => undefined,
       later: () => undefined,
+      markOpened: () => undefined,
     });
     expect(showChatView).toHaveBeenCalledWith('m1:s1');
   });
@@ -1515,6 +1517,7 @@ describe('a tapped waiting push whose session list comes late', () => {
               if (route.name === 'Terminal') navigatedTo.push(route.params.sessionKey);
             },
             later: () => undefined,
+            markOpened: () => undefined,
           },
           current,
         ),
