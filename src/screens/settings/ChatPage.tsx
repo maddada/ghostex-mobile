@@ -57,7 +57,7 @@ export default function ChatPage() {
         <Caption>Show the first seven code lines instead of only the path and change counts.</Caption>
         <SettingToggle settingKey="sessionChatMutedThinking" label="Grey thinking" />
         <Caption>
-          Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart.
+          Show the agent's thinking in grey, so it reads apart from the agent's replies.
         </Caption>
         <SettingToggle settingKey="chatToolCallCards" label="Tool call cards (preview)" />
         <Caption>

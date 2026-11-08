@@ -55,7 +55,7 @@ function thinkingTone(theme: TranscriptTheme, mutedThinking: boolean): string {
 }
 
 export const MessageRow = memo(function MessageRow({ message }: { message: ProjectedMessage }) {
-  const { theme, mutedThinking } = useTranscriptEnv();
+  const { theme } = useTranscriptEnv();
   if (message.pending === true) return <PendingRow user={message.role === 'user'} />;
   if (message.role === 'user' && obj(message.interAgentMessage) !== null) return <InterAgentCard message={message} />;
   if (message.role === 'user' && obj(message.pageAnswers) !== null) {
@@ -74,8 +74,9 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Proje
   if (obj(message.suppressed) !== null) return <SuppressedRow message={message} />;
   if (obj(message.apiError) !== null) return <ApiErrorRow message={message} />;
   if (obj(message.systemCard) !== null) return <SystemCard message={message} />;
-  // Grey thinking draws a reply in the full foreground so it reads apart from the muted thinking.
-  return <AgentMessage message={message} proseColor={mutedThinking ? theme.foreground : theme.prose} />;
+  // A reply always starts from the standard prose colour: Text strength alone raises it, and Grey thinking
+  // only greys the thinking (CDXC:SessionChat 2026-11-09, desktop `ChatTextColors::reply_base`).
+  return <AgentMessage message={message} proseColor={theme.prose} />;
 });
 
 /** A failed API call: the open card when the core names this row, otherwise one quiet line. */
@@ -246,13 +247,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
               text={body}
               references={message.markdownReferences}
               color={strengthened(proseColor)}
-              headingColor={
-                mutedThinking
-                  ? strengthened(theme.foreground)
-                  : flags.chatTextStrength > 0
-                    ? strengthened(theme.primary)
-                    : undefined
-              }
+              headingColor={flags.chatTextStrength > 0 ? strengthened(theme.primary) : undefined}
               codeColor={strengthened(theme.primary)}
               selectable={openMenu === undefined || MESSAGE_TEXT_SELECTABLE}
             />
