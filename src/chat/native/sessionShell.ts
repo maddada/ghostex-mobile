@@ -35,6 +35,7 @@ import { powershellQuote } from '../../remote/powershell';
 import { machineRecordFor } from '../../screens/terminal-screen/session-lookups';
 import { useSettingsStore } from '../../settings/store';
 import { useTerminalStore } from '../../terminal/sessions';
+import { chatMachineLink } from '../rust/machine-link';
 import { sessionChatRpc } from '../rust/transport';
 import { isSessionChatSupportedAgent, uploadSessionChatLocalFile } from '../session-chat-helpers';
 
@@ -105,10 +106,124 @@ export async function runCommandInTerminal(
   command: string,
   paste: boolean,
 ): Promise<void> {
-  const result = await runGhostexCli(machine, runInTerminalCommand(projectId, sessionId, command, paste));
-  const created = typeof result.json?.sessionId === 'string' ? result.json.sessionId.trim() : '';
+  let created: string;
+  if ((await chatMachineLink(machine).route()) === 'socket') {
+    created = await runInTerminalOverLink(machine, projectId, sessionId, command, paste);
+  } else {
+    const result = await runGhostexCli(machine, runInTerminalCommand(projectId, sessionId, command, paste));
+    created = typeof result.json?.sessionId === 'string' ? result.json.sessionId.trim() : '';
+  }
   if (created.length === 0) throw new Error('gxserver did not return the terminal.');
   await openSessionTab(machine, created, projectId);
+}
+
+/*
+CDXC:SessionChat 2026-11-08 DECISION:
+User (GitHub #495 follow-up): "fix 'Run in terminal' from the phone so it uses the phone's own
+credential instead of the token file, for every paired phone". `ghostex run-in-terminal` runs on
+the computer with its token file, which the security core treats like an agent, so typing into the
+Commands panel terminal (and Paste) waited for the owner's approval even from a paired phone. When
+the phone has its chat link to the computer it takes the CLI's same steps itself over that link,
+with its own device token (a paired phone types without asking; one still on the token file gets
+the pairing card where it waits, `machines/sshPairing.ts`). A computer the link can't reach keeps
+the CLI. Keep the steps in step with server/src/ghostex_cli/run_in_terminal.rs.
+*/
+const RUN_IN_TERMINAL_TIMEOUT_MS = 20_000;
+
+async function linkCall(
+  machine: MachineConnectionTarget,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const answer = await sessionChatRpc(machine, method, params, RUN_IN_TERMINAL_TIMEOUT_MS);
+  if (answer.error !== null) throw new Error(answer.error.message);
+  const result = answer.result;
+  return typeof result === 'object' && result !== null && !Array.isArray(result) ? (result as Record<string, unknown>) : {};
+}
+
+function field(record: unknown, key: string): string {
+  if (typeof record !== 'object' || record === null) return '';
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : '';
+}
+
+/** A terminal's title: the command's first line, cut to what a sidebar row shows. */
+function terminalTitle(command: string): string {
+  const title = Array.from((command.split('\n')[0] ?? '').trim()).slice(0, 60).join('');
+  return title.length > 0 ? title : 'Terminal';
+}
+
+/** `ghostex run-in-terminal`'s steps over the link; answers the terminal's session id. */
+async function runInTerminalOverLink(
+  machine: MachineConnectionTarget,
+  projectId: string,
+  sessionId: string,
+  command: string,
+  paste: boolean,
+): Promise<string> {
+  // Paste types one line and leaves Enter to the user; a control character would act at once.
+  // eslint-disable-next-line no-control-regex
+  if (paste && /[\u0000-\u001f\u007f]/u.test(command)) {
+    throw new Error('Paste types one line; this command holds a line break or another control character.');
+  }
+  // The project's Commands panel terminal that is running, a plain one (not an Action's) and not
+  // busy, the most recently used first.
+  const listed = await linkCall(machine, 'listSessions', { includeStopped: false });
+  const sessions = Array.isArray(listed.sessions) ? listed.sessions : [];
+  const idle = sessions
+    .filter(
+      (session) =>
+        field(session, 'projectId') === projectId &&
+        field(session, 'surface') === 'commands' &&
+        field(session, 'kind') === 'terminal' &&
+        field(session, 'commandId') === '' &&
+        field(session, 'lifecycleState') === 'running' &&
+        field(
+          ((session as Record<string, unknown>).runtimeSettings as Record<string, unknown> | undefined)?.agentActivity,
+          'activity',
+        ) !== 'working',
+    )
+    .sort((a, b) => field(b, 'updatedAt').localeCompare(field(a, 'updatedAt')))[0];
+  const idleId = field(idle, 'sessionId');
+  if (idleId.length > 0) {
+    // Ctrl-U first: the prompt may hold half-typed text the command would be appended to.
+    await linkCall(machine, 'sendSessionText', { projectId, sessionId: idleId, text: `\u0015${command}` });
+    if (!paste) await linkCall(machine, 'sendSessionEnter', { projectId, sessionId: idleId });
+    return idleId;
+  }
+  // No idle panel terminal: a new plain terminal in the chat session's own folder.
+  const snapshot = await linkCall(machine, 'readPresentationSnapshot', {}).catch(() => ({}) as Record<string, unknown>);
+  const shown = (snapshot.snapshot as Record<string, unknown> | undefined)?.sessions;
+  const chat = Array.isArray(shown)
+    ? shown.find((session) => field(session, 'projectId') === projectId && field(session, 'sessionId') === sessionId)
+    : undefined;
+  const cwd = field(chat, 'cwd').trim();
+  const params: Record<string, unknown> = {
+    kind: 'terminal',
+    lifecycleState: 'running',
+    projectId,
+    surface: 'workspace',
+    title: terminalTitle(command),
+  };
+  if (cwd.length > 0) params.cwd = cwd;
+  if (!paste) params.launchSettings = { startupText: command, runtimeRelevant: { queueProviderStartupText: true } };
+  const made = await linkCall(machine, 'createSession', params);
+  const createdId = field(made.session, 'sessionId');
+  if (createdId.length === 0) throw new Error('gxserver returned no terminal.');
+  // Started now, so the command runs before any client attaches.
+  await linkCall(machine, 'startSessionProvider', { projectId, sessionId: createdId });
+  if (paste) {
+    // Typed once the shell shows its prompt, or it is echoed twice.
+    for (let attempt = 0; attempt < 33; attempt += 1) {
+      const read = await linkCall(machine, 'readSessionText', { projectId, sessionId: createdId }).catch(
+        () => ({}) as Record<string, unknown>,
+      );
+      if (field(read, 'text').trim().length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    await linkCall(machine, 'sendSessionText', { projectId, sessionId: createdId, text: command });
+  }
+  return createdId;
 }
 
 /** `modelPickerProvider`: the model family an agent's logo belongs to. */
