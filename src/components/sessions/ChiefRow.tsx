@@ -1,7 +1,10 @@
 /**
- * Chief's row under the Spaces tabs: the flower, "Chief", its status dot, "Pick an agent" before
- * its first open, and "+N" that unfolds the other computers' Chiefs (contract/chief.ts). The
- * desktop draws the same row (apps/desktop/src/app/native_sidebar/chief_row_view.rs).
+ * Chief's row under the Spaces tabs, drawn like a project header (rows.tsx `SidebarHeaderBox`): no
+ * border, the header's box, insets and light title. The gutter where a project draws its chevron
+ * holds the flower while only this computer has a Chief, and the project's fold chevron once other
+ * computers have one; their Chiefs fold under it like a project's sessions (contract/chief.ts). A
+ * tap on the row opens the chat; a tap on the chevron folds. The desktop draws the same row
+ * (apps/desktop/src/app/native_sidebar/chief_row_view.rs, CDXC:Chief 2026-11-08 there).
  */
 
 import { useState } from 'react';
@@ -9,9 +12,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ChiefRowModel } from '../../contract/chief';
 import type { GhostexSession } from '../../contract/mobileSummary';
-import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
-import { FlowerGlyph } from './icons';
-import { inkStyleSheets, useSidebarInk } from './rows';
+import { ChevronRightGlyph, FlowerGlyph } from './icons';
+import { HEADER_CHEVRON_INSET, TOUCH_ROW_HEIGHT, ds, inkStyleSheets, inkWash, useSidebarInk } from './rows';
 import StatusDotStack from './StatusDotStack';
 
 /** Chief's name on its row (Q1746). */
@@ -59,7 +61,8 @@ export default function ChiefRow({
   if (main === undefined) return null;
   const mainSession = main.session;
   const counts = mainSession === null ? null : chiefCounts(mainSession);
-  const unfolded = expanded && others.length > 0;
+  const folds = others.some((row) => row.session !== null);
+  const unfolded = expanded && folds;
   return (
     <View style={styles.block}>
       <Pressable
@@ -67,24 +70,28 @@ export default function ChiefRow({
         accessibilityLabel={CHIEF_LABEL}
         onPress={() => (mainSession === null ? onPickAgent(main.machineId) : onOpen({ ...main, session: mainSession }))}
         onLongPress={mainSession === null ? undefined : () => onMenu({ ...main, session: mainSession })}
-        style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [styles.header, pressed ? styles.pressed : null]}
       >
-        <FlowerGlyph size={16} color={ink.muted} />
-        <Text numberOfLines={1} style={styles.label}>
-          {CHIEF_LABEL}
-        </Text>
-        {mainSession === null ? <Text style={styles.hint}>Pick an agent</Text> : null}
-        {others.length > 0 ? (
+        {folds ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={unfolded ? "Fold the other computers' Chiefs" : "Show the other computers' Chiefs"}
-            hitSlop={8}
+            accessibilityState={{ expanded: unfolded }}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 4 }}
             onPress={() => setExpanded((value) => !value)}
-            style={[styles.chip, unfolded ? styles.chipOpen : null]}
+            style={styles.gutter}
           >
-            <Text style={styles.chipText}>{`+${others.length}`}</Text>
+            <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={unfolded} />
           </Pressable>
-        ) : null}
+        ) : (
+          <View pointerEvents="none" style={styles.gutter}>
+            <FlowerGlyph size={ds(16)} color={ink.muted} />
+          </View>
+        )}
+        <Text numberOfLines={1} style={styles.title}>
+          {CHIEF_LABEL}
+        </Text>
+        {mainSession === null ? <Text style={styles.hint}>Pick an agent</Text> : null}
         {counts !== null && hasDot(counts) ? <StatusDotStack {...counts} ringColor={ink.chipCard} /> : null}
       </Pressable>
       {unfolded
@@ -101,8 +108,8 @@ export default function ChiefRow({
                 onLongPress={() => onMenu({ ...row, session })}
                 style={({ pressed }) => [styles.other, pressed ? styles.pressed : null]}
               >
-                <FlowerGlyph size={13} color={ink.muted} />
-                <Text numberOfLines={1} style={styles.otherLabel}>
+                <FlowerGlyph size={ds(14)} color={ink.muted} />
+                <Text numberOfLines={1} style={styles.otherTitle}>
                   {row.machineLabel}
                 </Text>
                 {hasDot(otherCounts) ? <StatusDotStack {...otherCounts} ringColor={ink.chipCard} /> : null}
@@ -116,61 +123,64 @@ export default function ChiefRow({
 
 const chiefStyles = inkStyleSheets((ink) =>
   StyleSheet.create({
+    /** A top-level project block's padding (DrawerBlockView.tsx `projectTopLevel`). */
     block: {
-      marginTop: 8,
-      gap: 2,
+      marginTop: ds(8),
+      paddingLeft: ds(18),
+      marginRight: ds(5),
+      marginBottom: ds(10),
     },
-    row: {
+    /** rows.tsx `SidebarHeaderBox`'s row. */
+    header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      height: 36,
-      paddingHorizontal: 10,
-      borderRadius: GhostexRadii.pill,
-      borderWidth: GhostexStrokeWidth,
-      borderColor: ink.chipBorder,
+      height: TOUCH_ROW_HEIGHT,
+      marginLeft: -HEADER_CHEVRON_INSET,
+      marginRight: ds(3),
+      paddingLeft: ds(5 + 18),
+      paddingRight: ds(6),
+      gap: ds(10),
+      borderRadius: ds(5),
     },
     pressed: {
-      backgroundColor: ink.selected,
+      backgroundColor: inkWash(ink, 0.06),
     },
-    label: {
+    /** Where a project header draws its chevron. */
+    gutter: {
+      position: 'absolute',
+      left: 0,
+      top: (TOUCH_ROW_HEIGHT - ds(16)) / 2,
+    },
+    title: {
       flex: 1,
       minWidth: 0,
       color: ink.text,
-      fontSize: 14,
-      fontWeight: '600',
+      fontSize: ds(15.55),
+      fontWeight: '300',
+      lineHeight: ds(20),
     },
     hint: {
       color: ink.muted,
-      fontSize: 12,
+      fontSize: ds(12),
     },
-    chip: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 6,
-    },
-    chipOpen: {
-      backgroundColor: ink.selected,
-    },
-    chipText: {
-      color: ink.muted,
-      fontSize: 12,
-      fontWeight: '600',
-    },
+    /** Like a session card under its project. */
     other: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 7,
-      height: 32,
-      paddingLeft: 26,
-      paddingRight: 10,
-      borderRadius: 8,
+      height: TOUCH_ROW_HEIGHT,
+      marginRight: ds(3),
+      paddingLeft: ds(8),
+      paddingRight: ds(6),
+      gap: ds(8),
+      borderRadius: ds(5),
     },
-    otherLabel: {
+    otherTitle: {
       flex: 1,
       minWidth: 0,
-      color: ink.muted,
-      fontSize: 13,
+      color: ink.text,
+      fontSize: ds(15.55),
+      fontWeight: '300',
+      lineHeight: ds(20),
     },
   }),
 );
