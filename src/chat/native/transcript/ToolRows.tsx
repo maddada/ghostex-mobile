@@ -102,9 +102,12 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   }
   if (showAll || hidden === 0) return <View style={styles.column}>{rows(visible)}</View>;
   const keptFlags = arr(fold?.visible);
-  // The toggle sits right before the last call, open or closed, so what it reveals lands above it
-  // (gx-chat-core `tool_run_fold`, `toggleBefore`).
-  const before = typeof fold?.toggleBefore === 'number' ? fold.toggleBefore : Number.MAX_SAFE_INTEGER;
+  // Closed, the toggle sits right before the last call; open, it moves to the top of the group and
+  // every call follows below it in order, so it is never between the calls it reveals (gx-chat-core
+  // `tool_run_fold`, `toggleBefore` and `toggleBeforeOpen`; CDXC:SessionChat 2026-11-08).
+  const closedBefore = typeof fold?.toggleBefore === 'number' ? fold.toggleBefore : Number.MAX_SAFE_INTEGER;
+  const openBefore = typeof fold?.toggleBeforeOpen === 'number' ? fold.toggleBeforeOpen : 0;
+  const before = runOpen ? openBefore : closedBefore;
   const label = str(fold, runOpen ? 'expandedLabel' : 'collapsedLabel');
   const toggle = (
     <Pressable
