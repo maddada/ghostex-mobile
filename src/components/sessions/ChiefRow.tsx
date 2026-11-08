@@ -12,34 +12,13 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { ChiefRowModel } from '../../contract/chief';
+import { CHIEF_LABEL, chiefCounts, chiefHasDot as hasDot, type ChiefRowModel } from '../../contract/chief';
 import type { GhostexSession } from '../../contract/mobileSummary';
 import { ChevronRightGlyph, FlowerGlyph } from './icons';
 import { HEADER_CHEVRON_INSET, TOUCH_ROW_HEIGHT, ds, inkStyleSheets, inkWash, useSidebarInk } from './rows';
 import StatusDotStack from './StatusDotStack';
 
-/** Chief's name on its row and its menus: "Chief of Staff" (Q1896; server/src/chief/mod.rs `CHIEF_TITLE`). */
-export const CHIEF_LABEL = 'Chief of Staff';
-
-/** The one dot a Chief's row draws, in the session card's order. */
-function chiefCounts(session: GhostexSession) {
-  const approval = session.awaitingApproval;
-  const question = !approval && (session.pendingQuestionCount > 0 || session.awaitingAnswer);
-  const working = !approval && !question && session.activity === 'working';
-  const attention = !approval && !question && session.activity === 'attention';
-  const background = !approval && !question && !working && !attention && session.backgroundWorkDetectedAt.length > 0;
-  return {
-    approvalCount: approval ? 1 : 0,
-    questionCount: question ? 1 : 0,
-    workingCount: working ? 1 : 0,
-    attentionCount: attention ? 1 : 0,
-    backgroundWorkCount: background ? 1 : 0,
-  };
-}
-
-function hasDot(counts: ReturnType<typeof chiefCounts>): boolean {
-  return Object.values(counts).some((count) => count > 0);
-}
+export { CHIEF_LABEL } from '../../contract/chief';
 
 export default function ChiefRow({
   rows,

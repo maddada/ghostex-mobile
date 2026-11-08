@@ -88,8 +88,14 @@ export function filterSummaryForSpace(summary: GhostexMobileSummary, selectedSpa
   };
 
   const knownProjectIds = new Set(summary.projects.map((project) => project.projectId));
-  const projects = summary.projects.filter((project) =>
-    keepProject(project.projectId, project.worktreeParentProjectId),
+  /*
+   * CDXC:Chief 2026-11-08 SEE-ALSO: the DECISION in packages/gx-core/src/sidebar_view/assemble.rs. The home
+   * project (Main Hub's) is a Space member like any project; with Show on all Spaces it is in every one.
+   */
+  const projects = summary.projects.filter(
+    (project) =>
+      (project.isHome === true && summary.chiefShowOnAllSpaces === true) ||
+      keepProject(project.projectId, project.worktreeParentProjectId),
   );
   const keptProjectIds = new Set(projects.map((project) => project.projectId));
   /*
@@ -99,7 +105,11 @@ export function filterSummaryForSpace(summary: GhostexMobileSummary, selectedSpa
    * an unresolvable project id.
    */
   const sessions = summary.sessions.filter((session) =>
-    knownProjectIds.has(session.projectId) ? keptProjectIds.has(session.projectId) : selectedSpace === null,
+    session.isChief
+      ? true
+      : knownProjectIds.has(session.projectId)
+        ? keptProjectIds.has(session.projectId)
+        : selectedSpace === null,
   );
 
   if (projects.length === summary.projects.length && sessions.length === summary.sessions.length) {
@@ -133,7 +143,10 @@ export function spaceSessionCounts(
   const counts: Record<string, SessionCounts> = {};
   if (summary === null) return counts;
   for (const spaceId of [...spaceIds, OTHER_SIDEBAR_SPACE_ID]) {
-    counts[spaceId] = countSessions(filterSummaryForSpace(summary, spaceId).sessions, summary.capabilities);
+    counts[spaceId] = countSessions(
+      filterSummaryForSpace(summary, spaceId).sessions.filter((session) => !session.isChief),
+      summary.capabilities,
+    );
   }
   return counts;
 }

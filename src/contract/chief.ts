@@ -11,6 +11,55 @@
 
 import type { GhostexSession, GhostexMobileSummary } from './mobileSummary';
 
+/**
+ * Chief's name on its row, its home header and its menus: "Main Hub" (Q1931). The one place the phone spells
+ * it, as server/src/chief/mod.rs `CHIEF_TITLE` is gxserver's (the user may rename it, Q1930).
+ */
+export const CHIEF_LABEL = 'Main Hub';
+
+/**
+ * What Main Hub is, said where the desktop shows its hover card (apps/desktop/src/app/native_sidebar/chief_row_view.rs
+ * `main_hub_tooltip_lines`): at the top of its long-press menu and its first-open picker, since a phone has no hover.
+ *
+ * CDXC:Chief 2026-11-08 SEE-ALSO: the Q1931 DECISION on `main_hub_tooltip_content` in that file.
+ */
+export const MAIN_HUB_EXPLANATION = [
+  "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
+  'Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.',
+] as const;
+
+/** The one dot a Chief's row draws, in the session card's order. */
+export function chiefCounts(session: GhostexSession) {
+  const approval = session.awaitingApproval;
+  const question = !approval && (session.pendingQuestionCount > 0 || session.awaitingAnswer);
+  const working = !approval && !question && session.activity === 'working';
+  const attention = !approval && !question && session.activity === 'attention';
+  const background = !approval && !question && !working && !attention && session.backgroundWorkDetectedAt.length > 0;
+  return {
+    approvalCount: approval ? 1 : 0,
+    questionCount: question ? 1 : 0,
+    workingCount: working ? 1 : 0,
+    attentionCount: attention ? 1 : 0,
+    backgroundWorkCount: background ? 1 : 0,
+  };
+}
+
+export function chiefHasDot(counts: ReturnType<typeof chiefCounts>): boolean {
+  return Object.values(counts).some((count) => count > 0);
+}
+
+/**
+ * Whether the computer has a home project (server/src/chief/home.rs): then its Chief is that project's header in the
+ * list, not the row under the Spaces tabs.
+ *
+ * CDXC:Chief 2026-11-08 SEE-ALSO: the DECISIONs in packages/gx-core/src/sidebar_view/chief.rs (Chief is the home's
+ * header) and apps/desktop/src/app/native_sidebar/chief.rs. The phone shows one computer per tab, like the desktop's
+ * Separate by machine, so each tab's home carries that computer's Chief.
+ */
+export function hasHomeProject(summary: Pick<GhostexMobileSummary, 'projects'> | null | undefined): boolean {
+  return summary?.projects.some((project) => project.isHome === true) === true;
+}
+
 /** Chief's built-in feature id, as the computer lists it. */
 export const CHIEF_FEATURE = 'chief';
 

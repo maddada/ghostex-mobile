@@ -114,6 +114,10 @@ export type ProjectHeaderItem = {
   machineId: string;
   projectKey: string;
   projectId: string;
+  /** The home project: its header is Main Hub's row (components/sessions/ChiefRow.tsx). */
+  isHome?: boolean;
+  /** The computer's Chief, on the home project's header; `null` before its first open. */
+  chief?: GhostexSession | null;
   /** Legacy per-session groupId carried for sparse payloads. */
   legacyGroupId: string;
   title: string;
@@ -848,6 +852,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       machineId,
       projectKey,
       projectId,
+      isHome: project?.isHome === true,
+      chief: project?.isHome === true ? (summary.sessions.find((session) => session.isChief) ?? null) : undefined,
       legacyGroupId,
       title: projectTitle,
       projectPath,
@@ -1084,6 +1090,17 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     backgroundWorkCount: projectCounts.backgroundWorkCount,
     awakeCount: projectCounts.awakeCount,
   });
+
+  /*
+   * CDXC:Chief 2026-11-08 SEE-ALSO: the DECISIONs in packages/gx-core/src/sidebar_view/chief.rs and assemble.rs. The
+   * home project leads the list, outside any collection, with Main Hub's row as its header.
+   */
+  for (const project of summary.projects) {
+    const key = `id:${project.projectId}`;
+    if (project.isHome !== true || !sessionsByProjectKey.has(key)) continue;
+    emittedProjectKeys.add(key);
+    emitProject(key);
+  }
 
   for (const collection of summary.projectCollections) {
     const memberKeys = collection.projectIds

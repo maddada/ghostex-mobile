@@ -66,8 +66,20 @@ import MachineTabs, {
 import SpaceTabs from '../components/sessions/SpaceTabs';
 import ChiefRow, { CHIEF_LABEL } from '../components/sessions/ChiefRow';
 import { runGhostexCli } from '../components/sessions/cli';
-import { chiefRows, parseChiefAgents, type ChiefRowModel } from '../contract/chief';
-import { chiefNewChatCommand, chiefOpenCommand, chiefSetAgentCommand, chiefStatusCommand } from '../commands/ghostexCli';
+import {
+  chiefRows,
+  hasHomeProject,
+  MAIN_HUB_EXPLANATION,
+  parseChiefAgents,
+  type ChiefRowModel,
+} from '../contract/chief';
+import {
+  chiefNewChatCommand,
+  chiefOpenCommand,
+  chiefSetAgentCommand,
+  chiefStatusCommand,
+  chiefStopAskingCommand,
+} from '../commands/ghostexCli';
 import WorkspaceTile, { workspaceMenuItems } from '../components/sessions/WorkspaceTile';
 import { agentChoicePlace, parseAgentChoiceScope, type AgentChoiceContext } from '../components/sessions/agentChoice';
 import { useLauncherStore } from '../components/sessions/launcherStore';
@@ -182,6 +194,14 @@ function closeDialogCopy(ctx: SessionContext): { title: string; body: string } {
     }
   );
 }
+
+/** What Main Hub is, at the top of its menus (the desktop's hover card). */
+const MAIN_HUB_NOTES: ContextMenuItem[] = [
+  ...MAIN_HUB_EXPLANATION.map(
+    (line, index): ContextMenuItem => ({ kind: 'note', key: `main-hub-note-${index}`, label: line }),
+  ),
+  { kind: 'separator', key: 'main-hub-note-end' },
+];
 
 export default function SessionsScreen({ navigation }: Props) {
   const headerPlacement = useHeaderPlacement();
@@ -825,6 +845,42 @@ export default function SessionsScreen({ navigation }: Props) {
     [attachCreated, refreshMachine, setTransientStatus],
   );
 
+  /**
+   * New Chat and Change Agent ask first while the computer's "Ask before New Chat" is on (CDXC:Chief 2026-11-08 in
+   * server/src/chief/session.rs, Q1910); the dialog's Don't ask again turns it off on that computer.
+   */
+  const [chiefConfirm, setChiefConfirm] = useState<{
+    target: MachineRecord;
+    command: string;
+    changeAgent: boolean;
+    dontAskAgain: boolean;
+  } | null>(null);
+  const runChiefAsking = useCallback(
+    (target: MachineRecord, command: string, changeAgent: boolean): void => {
+      setChiefMenu(null);
+      if (inventoriesByMachineId[target.id]?.summary?.chiefConfirmNewChat === false) {
+        void runChief(target, command);
+        return;
+      }
+      setChiefConfirm({ target, command, changeAgent, dontAskAgain: false });
+    },
+    [inventoriesByMachineId, runChief],
+  );
+  const answerChiefConfirm = useCallback(
+    (start: boolean): void => {
+      const pending = chiefConfirm;
+      setChiefConfirm(null);
+      if (pending === null || !start) return;
+      if (pending.dontAskAgain) {
+        void runGhostexCli(pending.target, chiefStopAskingCommand())
+          .then(() => refreshMachine(pending.target))
+          .catch(() => {});
+      }
+      void runChief(pending.target, pending.command);
+    },
+    [chiefConfirm, refreshMachine, runChief],
+  );
+
   /** The agents Chief can run on, as menu rows that run `command(agentId)`. */
   const chiefAgentItems = useCallback(
     async (target: MachineRecord, command: (agentId: string) => string, current: string): Promise<ContextMenuItem[]> => {
@@ -853,7 +909,7 @@ export default function SessionsScreen({ navigation }: Props) {
           );
           return;
         }
-        setChiefMenu({ title: `Which agent runs ${CHIEF_LABEL}?`, items });
+        setChiefMenu({ title: `Which agent runs ${CHIEF_LABEL}?`, items: [...MAIN_HUB_NOTES, ...items] });
       } catch (error) {
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }
@@ -866,7 +922,15 @@ export default function SessionsScreen({ navigation }: Props) {
     async (target: MachineRecord, row: ChiefRowModel & { session: GhostexSession }): Promise<void> => {
       let agents: ContextMenuItem[] = [];
       try {
-        agents = await chiefAgentItems(target, chiefSetAgentCommand, row.session.agent);
+        agents = (await chiefAgentItems(target, chiefSetAgentCommand, row.session.agent)).map((item) =>
+          item.kind === 'item' && item.key.startsWith('chief-agent-')
+            ? {
+                ...item,
+                onPress: () =>
+                  runChiefAsking(target, chiefSetAgentCommand(item.key.slice('chief-agent-'.length)), true),
+              }
+            : item,
+        );
       } catch {
         // New Chat still works without the agent list.
       }
@@ -874,17 +938,18 @@ export default function SessionsScreen({ navigation }: Props) {
       setChiefMenu({
         title: row.machineId === machine?.id ? CHIEF_LABEL : `${CHIEF_LABEL} · ${row.machineLabel}`,
         items: [
+          ...MAIN_HUB_NOTES,
           {
             kind: 'item',
             key: 'chief-new-chat',
             label: 'New Chat',
-            onPress: () => void runChief(target, chiefNewChatCommand()),
+            onPress: () => runChiefAsking(target, chiefNewChatCommand(), false),
           },
           ...(agents.length > 0 ? [heading, ...agents] : []),
         ],
       });
     },
-    [chiefAgentItems, machine?.id, runChief],
+    [chiefAgentItems, machine?.id, runChiefAsking],
   );
 
   /** The session a voice call on the phone is about, as an attachSessionKey (the row's green headset). */
@@ -934,6 +999,30 @@ export default function SessionsScreen({ navigation }: Props) {
       }),
     agentMenu: (machineId, header) =>
       withMachine(machineId, (target) => setOverlay({ kind: 'agentMenu', ctx: { machine: target, header } })),
+    openHomeChief: (machineId, header) =>
+      withMachine(machineId, (target) => {
+        const chief = header.chief ?? null;
+        if (chief === null) void openChiefPicker(target);
+        else void attach(target, chief);
+      }),
+    homeChiefMenu: (machineId, header) =>
+      withMachine(
+        machineId,
+        (target) => {
+          const chief = header.chief ?? null;
+          if (chief === null) {
+            void openChiefPicker(target);
+            return;
+          }
+          const label = machines.find((entry) => entry.id === machineId);
+          void openChiefMenu(target, {
+            machineId,
+            machineLabel: label === undefined ? machineId : machineDisplayLabel(label),
+            session: chief,
+          });
+        },
+        true,
+      ),
     stateCard: (machineId) => setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
     workChipActions: (machineId, item) => workChipActions(machineById(machineId), item.session),
   };
@@ -1234,7 +1323,7 @@ export default function SessionsScreen({ navigation }: Props) {
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
         />
       ) : null}
-      {machine !== null ? (
+      {machine !== null && !hasHomeProject(inventoriesByMachineId[machine.id]?.summary) ? (
         <ChiefRow
           rows={chiefRowModels}
           onOpen={(row) => withMachine(row.machineId, (target) => void attach(target, row.session))}
@@ -1244,6 +1333,26 @@ export default function SessionsScreen({ navigation }: Props) {
       ) : null}
       {chiefMenu !== null ? (
         <ContextMenu visible title={chiefMenu.title} items={chiefMenu.items} onClose={() => setChiefMenu(null)} />
+      ) : null}
+      {chiefConfirm !== null ? (
+        <ConfirmDialog
+          visible
+          title={chiefConfirm.changeAgent ? `Move ${CHIEF_LABEL} to another agent?` : `Start a new chat with ${CHIEF_LABEL}?`}
+          body={
+            chiefConfirm.changeAgent
+              ? `A new chat starts on that agent. This chat stays under ${CHIEF_LABEL} as an earlier chat, and its goal, memory and threads carry over.`
+              : `This chat stays under ${CHIEF_LABEL} as an earlier chat. Its goal, memory and threads carry over to the new one.`
+          }
+          confirmLabel={chiefConfirm.changeAgent ? 'Change Agent' : 'New Chat'}
+          checkbox={{
+            label: "Don't ask again",
+            checked: chiefConfirm.dontAskAgain,
+            onToggle: () =>
+              setChiefConfirm((current) => (current === null ? null : { ...current, dontAskAgain: !current.dontAskAgain })),
+          }}
+          onConfirm={() => answerChiefConfirm(true)}
+          onCancel={() => answerChiefConfirm(false)}
+        />
       ) : null}
       {machine !== null && workspaceMenuOpen && machineWorkspaces !== null && selectedWorkspaceId !== null ? (
         <ContextMenu

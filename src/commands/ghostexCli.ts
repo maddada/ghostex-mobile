@@ -251,6 +251,11 @@ export function chiefNewChatCommand(): string {
   return 'ghostex chief new-chat --json';
 }
 
+/** Turns the computer's "Ask before New Chat" off (the confirm's Don't ask again). */
+export function chiefStopAskingCommand(): string {
+  return 'ghostex settings set chiefConfirmNewChat false --json';
+}
+
 /** Chief's Change Agent. */
 export function chiefSetAgentCommand(agentId: string): string {
   return `ghostex chief set-agent ${shellQuote(requireId(agentId, 'agent id'))} --json`;

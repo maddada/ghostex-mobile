@@ -30,6 +30,8 @@ export type ConfirmDialogProps = {
   destructive?: boolean;
   /** Render the body as selectable monospace text (copy-by-hand fallback). */
   selectableBody?: boolean;
+  /** A box under the body, such as "Don't ask again"; the whole line toggles it. */
+  checkbox?: { label: string; checked: boolean; onToggle: () => void };
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -43,6 +45,7 @@ export default function ConfirmDialog({
   cancelLabel = 'Cancel',
   destructive = false,
   selectableBody = false,
+  checkbox,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -71,6 +74,21 @@ export default function ConfirmDialog({
               </Text>
             ) : null}
           </ScrollView>
+          {checkbox !== undefined ? (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: checkbox.checked }}
+              accessibilityLabel={checkbox.label}
+              hitSlop={8}
+              onPress={checkbox.onToggle}
+              style={styles.checkboxRow}
+            >
+              <View style={[styles.checkbox, checkbox.checked ? styles.checkboxChecked : null]}>
+                {checkbox.checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
+              </View>
+              <Text style={styles.checkboxLabel}>{checkbox.label}</Text>
+            </Pressable>
+          ) : null}
           <View style={styles.buttonRow}>
             {cancelLabel !== null ? (
               <Pressable
@@ -138,6 +156,36 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     fontSize: 13,
     fontWeight: 'bold',
     marginTop: 8,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: GhostexStrokeWidth,
+    borderColor: appearance.border,
+    backgroundColor: appearance.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: appearance.accent,
+    borderColor: appearance.accent,
+  },
+  checkboxTick: {
+    color: appearance.accentForeground,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  checkboxLabel: {
+    color: appearance.foreground,
+    fontSize: 13,
   },
   buttonRow: {
     flexDirection: 'row',

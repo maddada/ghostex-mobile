@@ -71,6 +71,10 @@ export type DrawerBlockActions = {
   createProjectTerminal: (machineId: string, header: ProjectHeaderItem) => void;
   createGroupTerminal: (machineId: string, item: GroupHeaderItem) => void;
   agentMenu: (machineId: string, header: ProjectHeaderItem) => void;
+  /** The home header's tap: opens the computer's Chief (or asks which agent runs it). */
+  openHomeChief: (machineId: string, header: ProjectHeaderItem) => void;
+  /** The home header's long press: Chief's New Chat and Change Agent. */
+  homeChiefMenu: (machineId: string, header: ProjectHeaderItem) => void;
   stateCard: (machineId: string, item: StateCardItem) => void;
   workChipActions: (machineId: string, item: SessionItem) => WorkChipActions | undefined;
 };
@@ -284,6 +288,15 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
           }}
           onCreateTerminal={() => actions.createProjectTerminal(machineId, header)}
           onOpenAgentMenu={() => actions.agentMenu(machineId, header)}
+          home={
+            header.isHome === true
+              ? {
+                  chief: header.chief ?? null,
+                  onOpen: () => actions.openHomeChief(machineId, header),
+                  onChiefMenu: () => actions.homeChiefMenu(machineId, header),
+                }
+              : undefined
+          }
         />
         {!header.collapsed && card.children.length > 0 ? projectFold(card) : null}
       </View>

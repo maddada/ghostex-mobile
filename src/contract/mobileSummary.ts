@@ -185,6 +185,8 @@ export type GhostexProject = {
   projectId: string;
   name?: string;
   path?: string;
+  /** The project at the computer's home folder, whose header is Main Hub's row (server/src/chief/home.rs). */
+  isHome?: boolean;
   icon: GhostexProjectIcon;
   /** Workspace theme color ("#rrggbb"), or "" — tints the project rail. */
   themeColor: string;
@@ -816,6 +818,10 @@ export type GhostexMobileSummary = {
   unifiedSessionCardHoverButtons?: unknown;
   /** The Project sidebar leaves projects with no sessions out, behind a Show all projects row. */
   sidebarHideProjectsWithoutSessions?: boolean;
+  /** The home project (Main Hub's) shows at the top of every Space, not only its own. */
+  chiefShowOnAllSpaces?: boolean;
+  /** New Chat and Change Agent ask first; on unless the computer sends `false`. */
+  chiefConfirmNewChat?: boolean;
   /** The computer's Enable session parking; on unless the computer sends `false`. */
   enableSessionParking?: boolean;
   /**
@@ -1590,6 +1596,7 @@ function parseProjects(value: unknown): GhostexProject[] {
       projectId,
       name: trimmedValue(entry, 'name'),
       path,
+      isHome: entry.isHome === true,
       icon: parseProjectIcon(entry),
       themeColor: normalizedHexColor(trimmedValue(entry, 'themeColor')),
       worktreeParentProjectId: isObject(entry.worktree) ? trimmedValue(entry.worktree, 'parentProjectId') : '',
@@ -1990,6 +1997,8 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
       ? root.unifiedSessionCardHoverButtons
       : undefined,
     sidebarHideProjectsWithoutSessions: root.sidebarHideProjectsWithoutSessions === true,
+    chiefShowOnAllSpaces: root.chiefShowOnAllSpaces === true,
+    chiefConfirmNewChat: root.chiefConfirmNewChat !== false,
     enableSessionParking: root.enableSessionParking !== false,
     worktreeSessionsInProject: root.worktreeSessionsInProject !== false,
     pinnedSessionOrder: root.pinnedSessionOrder === 'recent' ? 'recent' : 'manual',
