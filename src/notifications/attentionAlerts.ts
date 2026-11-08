@@ -25,14 +25,14 @@ export function attentionAlerts(
   session: {
     attentionKind: GhostexAttentionKind;
     attentionHandoverNeedsYou: boolean;
-    coordinatorSessionId: string;
+    coordinatorSessionId?: string | null;
     isCoordinator?: boolean;
     attentionAlerts?: boolean | null;
   },
 ): boolean {
   if (session.attentionAlerts === false) return false;
   if (session.attentionKind !== 'finished') return true;
-  const thread = session.coordinatorSessionId.trim().length > 0;
+  const thread = (session.coordinatorSessionId?.trim() ?? '').length > 0;
   if (thread) return false;
   if (session.attentionAlerts !== true && session.isCoordinator === true) return session.attentionHandoverNeedsYou;
   return alertsFor === 'all' || session.attentionHandoverNeedsYou;

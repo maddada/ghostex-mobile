@@ -32,6 +32,16 @@ import TerminalScreen from './TerminalScreen';
 // Isolate the actual list state from native-only card/row renderers, not from its scroll or lifecycle handlers.
 jest.mock('../chat/native/cards', () => ({ EmptyTranscript: () => null }));
 jest.mock('../chat/native/transcript/TranscriptItemRow', () => ({ TranscriptItemView: () => null }));
+// The transcript's reply fade-in (commit d78439e) imports Reanimated, which is native and does not load under Jest.
+jest.mock('react-native-reanimated', () => {
+  const { View: MockView } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: { View: MockView },
+    FadeIn: { duration: () => ({}) },
+    useReducedMotion: () => true,
+  };
+});
 
 const mockNative = {
   focusTerminal: jest.fn((_sessionKey: string): Promise<boolean> => Promise.resolve(true)),
