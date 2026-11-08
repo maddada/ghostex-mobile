@@ -1534,7 +1534,7 @@ export const NotificationsCopy = {
     alertsForAll: 'All',
     alertsForNeedsYou: 'Needs you only',
     alertsForDetail:
-      'Needs you only keeps the sound and Finished notifications for questions, approvals and replies that end with Blocked or Needs you. A coordinator’s threads stay quiet when they finish.',
+      'A coordinator’s threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the sound and shows a notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you.',
     sound: 'Attention notification sound',
     soundDetail: 'Plays a sound when a session on your computer finishes or needs your attention.',
     blockedTitle: 'Blocked in iOS Settings',
