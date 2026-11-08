@@ -524,6 +524,31 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
   const { canRemoveQueued, sendFailureCardPromptId } = useTranscriptFlags();
   const delivery = message.startupDelivery;
   if (delivery === undefined || delivery === null) return null;
+  // A message held on another computer while the session's computer is offline (gx-chat-core
+  // `session/computer.rs`; desktop: startup_delivery.rs): "Will send when Windows PC is back" and
+  // Cancel, which puts it back in the chat box. Its delivery shows "Sending to …" with no Cancel.
+  if (delivery.state === 'held') {
+    const reason = delivery.waitReason ?? '';
+    const sending = reason.startsWith('Sending');
+    return (
+      <View style={styles.delivery} accessibilityRole="text">
+        <Text style={[styles.small, { color: theme.muted }]}>{reason}</Text>
+        {sending ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+            style={({ pressed }) => [
+              styles.deliveryAction,
+              { backgroundColor: pressed ? theme.neutralFillPressed : theme.neutralFill },
+            ]}
+            onPress={() => dispatch({ type: 'removeQueue', promptId: delivery.promptId })}
+          >
+            <Text style={[styles.small, { color: theme.primary }]}>Cancel</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
   const failed = delivery.state === 'failed';
   // The card that stands for this row has the reason and Retry (desktop: startup_delivery.rs).
   const onCard = failed && delivery.promptId === sendFailureCardPromptId;
@@ -536,12 +561,12 @@ export function StartupDelivery({ message, waitingLine = true }: { message: Proj
   const status = onCard
     ? 'Not sent'
     : failed
-    ? delivery.errorMessage?.length
-      ? delivery.errorMessage
-      : 'Message could not be delivered.'
-    : reason.length > 0
-      ? reason
-      : 'Waiting for agent…';
+      ? delivery.errorMessage?.length
+        ? delivery.errorMessage
+        : 'Message could not be delivered.'
+      : reason.length > 0
+        ? reason
+        : 'Waiting for agent…';
   return (
     <View style={styles.delivery} accessibilityRole="text">
       <Text style={[styles.small, { color: theme.muted }]}>{status}</Text>

@@ -300,6 +300,8 @@ export type ActionFields = {
   /** More actions > View: the chat's one level (gx-chat-core `transcript/view_level.rs`). */
   setDetailLevel: { level: 'summary' | 'normal' | 'detailed' };
   retry: {};
+  /** Retry on the card of a session whose computer is offline (gx-chat-core `session/computer.rs`). */
+  computerRetry: {};
   refresh: {};
   loadEarlier: {};
   /** Read a completed turn's off-screen work: `work` is the item's `deferred` value. */

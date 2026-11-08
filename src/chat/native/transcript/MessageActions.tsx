@@ -142,6 +142,15 @@ export function DeliveryIndicator({ message }: { message: ProjectedMessage }) {
   const waiting =
     delivery !== undefined && delivery !== null && delivery.state !== 'failed' && delivery.state !== 'unconfirmed';
   const queued = message.queued === true && (delivery === undefined || delivery === null);
+  // A held message waits for its computer, not for the agent: a clock, not a spinner (desktop:
+  // startup_delivery.rs).
+  if (waiting && delivery.state === 'held') {
+    return (
+      <View style={[styles.button, styles.indicator]} accessibilityLabel="Waiting for the computer">
+        <Glyph name="clock" size={13} color={theme.muted} />
+      </View>
+    );
+  }
   if (waiting) {
     return (
       <View
