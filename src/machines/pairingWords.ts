@@ -5,7 +5,7 @@
  * is pairing with.
  *
  * Port of `packages/gx-protocol/src/pairing.rs`: the same bytes, the same 256 words in the same
- * order (pinned by `pairingWords.test.ts` and the Rust `words_match_the_shared_vector`).
+ * order; change both together.
  */
 
 import { sha256 } from './sha256';
