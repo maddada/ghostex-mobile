@@ -1,8 +1,9 @@
 /**
  * Chief's row under the Spaces tabs, drawn like a project header (rows.tsx `SidebarHeaderBox`): no
- * border, the header's box, insets and light title. The gutter where a project draws its chevron
- * holds the flower while only this computer has a Chief, and the project's fold chevron once other
- * computers have one; their Chiefs fold under it like a project's sessions (contract/chief.ts). A
+ * border, the header's box, insets and light title. The flower sits in the project-icon column and
+ * "Chief" where project names start (Q1882); the chevron gutter holds the project's fold chevron
+ * only once other computers have a Chief, and their Chiefs fold under it like a project's sessions
+ * (contract/chief.ts). A
  * tap on the row opens the chat; a tap on the chevron folds. The desktop draws the same row
  * (apps/desktop/src/app/native_sidebar/chief_row_view.rs, CDXC:Chief 2026-11-08 there).
  */
@@ -83,11 +84,10 @@ export default function ChiefRow({
           >
             <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={unfolded} />
           </Pressable>
-        ) : (
-          <View pointerEvents="none" style={styles.gutter}>
-            <FlowerGlyph size={ds(16)} color={ink.muted} />
-          </View>
-        )}
+        ) : null}
+        <View style={styles.icon}>
+          <FlowerGlyph size={ds(16)} color={ink.muted} />
+        </View>
         <Text numberOfLines={1} style={styles.title}>
           {CHIEF_LABEL}
         </Text>
@@ -150,6 +150,13 @@ const chiefStyles = inkStyleSheets((ink) =>
       position: 'absolute',
       left: 0,
       top: (TOUCH_ROW_HEIGHT - ds(16)) / 2,
+    },
+    /** rows.tsx `SidebarHeaderBox`'s project-icon column. */
+    icon: {
+      width: ds(16),
+      height: ds(16),
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     title: {
       flex: 1,
