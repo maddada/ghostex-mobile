@@ -31,6 +31,7 @@ import type * as DeepLinksModule from '../../app/deepLinks';
 import { sessionDeepLink } from '../../app/deepLinkHandler';
 import type { Notice } from '../../components/common/NoticeToast';
 import { runGhostexCli } from '../../components/sessions/cli';
+import { sessionChatRpc } from '../../chat/rust/transport';
 import { ChevronRightGlyph, CircleCheckGlyph } from '../../components/sessions/icons';
 import { STATUS_DOT_SIZE, useSidebarInk } from '../../components/sessions/rows';
 import { elapsedLabel } from '../../components/sessions/sessionStatus';
@@ -154,6 +155,15 @@ export default function TriageSection({ waiting, appearance, onOpen, onNotice }:
       try {
         await sendShortReply({ machine, session, chatView: sessionOpensInChatView(key, session) }, text, {
           run: runGhostexCli,
+          sendToTerminal: async (target, terminalSession, reply) => {
+            const answer = await sessionChatRpc(target, 'sendSessionMessage', {
+              projectId: terminalSession.projectId,
+              sessionId: terminalSession.sessionId,
+              text: reply,
+              submit: true,
+            });
+            if (answer.error !== null) throw new Error(answer.error.message);
+          },
           acknowledge: acknowledgeSessionAttention,
         });
         sentTo(key, signature, session, TriageCopy.sent(text));

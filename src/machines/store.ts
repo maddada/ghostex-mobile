@@ -304,6 +304,8 @@ type MachinesState = {
   moveMachine: (id: string, direction: 'left' | 'right') => void;
   selectMachine: (id: string | null) => void;
   markConnected: (id: string) => void;
+  /** This phone's paired-device id on an SSH machine, from pairing over SSH (`sshPairing.ts`); `undefined` clears it. */
+  setMachineDeviceId: (id: string, deviceId: string | undefined) => void;
 };
 
 /** The pairing fields present on an input, so an edit never clears them by omission. */
@@ -550,6 +552,16 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     const nextMachines = get().machines.map((machine) =>
       machine.id === id ? { ...machine, lastConnectedAt: new Date().toISOString() } : machine,
     );
+    set({ machines: nextMachines });
+    persistMachines(nextMachines);
+  },
+
+  setMachineDeviceId: (id, deviceId) => {
+    const nextMachines = get().machines.map((machine) => {
+      if (machine.id !== id) return machine;
+      const { deviceId: _old, ...rest } = machine;
+      return deviceId === undefined ? rest : { ...rest, deviceId, pairedAt: new Date().toISOString() };
+    });
     set({ machines: nextMachines });
     persistMachines(nextMachines);
   },

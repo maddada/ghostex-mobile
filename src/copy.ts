@@ -1587,6 +1587,32 @@ export const LicencesCopy = {
  * Approvals (GitHub #495): what an agent asked a computer to do that only its owner may allow,
  * approved here with Face ID, the fingerprint or the screen lock.
  */
+/**
+ * GitHub #495, 11.1.0: pairing this phone with a computer it signs in to over SSH (Tailscale, the
+ * local network), with three matching words (`machines/sshPairing.ts`).
+ */
+export const SshPairingCopy = {
+  theComputer: 'the computer',
+  askingTitle: (computer: string) => `Asking ${computer} to pair this phone`,
+  pendingTitle: (computer: string) => `Pair this phone with ${computer}`,
+  pendingBody: (computer: string) =>
+    `This phone signs in to ${computer} over SSH. Approve it there, or on a phone already paired, when it shows these words:`,
+  pendingWhy:
+    'Until then, answering the agent, Stop and typing from this phone wait for approval on the computer. Each phone pairs once, with its own key.',
+  pairedTitle: (computer: string) => `Paired with ${computer}`,
+  pairedBody: 'Answers, Stop and typing from this phone go through now.',
+  deniedTitle: (computer: string) => `${computer} didn't pair this phone`,
+  deniedBody: 'Answering the agent, Stop and typing from this phone still wait for approval there.',
+  expiredTitle: 'Nobody approved this phone in time',
+  failedTitle: "Couldn't ask to pair this phone",
+  askAgain: 'Ask again',
+  hide: 'Hide',
+  mismatch: 'The computer named different words from this phone, so pairing stopped. Try again.',
+  actionDenied: (computer: string) => `You denied this on ${computer}.`,
+  actionLapsed: (computer: string) =>
+    `This wasn't approved on ${computer} in time. Pair this phone with ${computer} so it doesn't have to be.`,
+} as const;
+
 export const ApprovalsCopy = {
   title: (computer: string) => `Approvals on ${computer}`,
   open: 'Approvals',

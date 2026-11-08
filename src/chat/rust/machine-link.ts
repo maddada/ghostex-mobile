@@ -198,6 +198,27 @@ export function onChatLinkCutOff(listener: (machineId: string) => void): () => v
   return () => cutOffListeners.delete(listener);
 }
 
+
+/**
+ * Hooks for pairing over SSH (`machines/sshPairing.ts`, GitHub #495), which registers them when the
+ * app loads it, so this module stays free of it: a finished handshake (with the computer's
+ * capabilities), and a bearer token the computer refused (HTTP 401).
+ */
+type HandshakeListener = (machine: MachineConnectionTarget, capabilities: readonly string[]) => void;
+type RefusedTokenListener = (machine: MachineConnectionTarget, token: string) => void;
+const handshakeListeners = new Set<HandshakeListener>();
+const refusedTokenListeners = new Set<RefusedTokenListener>();
+
+export function onChatLinkHandshake(listener: HandshakeListener): () => void {
+  handshakeListeners.add(listener);
+  return () => handshakeListeners.delete(listener);
+}
+
+export function onChatLinkTokenRefused(listener: RefusedTokenListener): () => void {
+  refusedTokenListeners.add(listener);
+  return () => refusedTokenListeners.delete(listener);
+}
+
 class ChatMachineLink {
   private state: LinkState = { kind: 'unknown' };
   /** The route the last handshake settled on, so listeners hear only real changes. */
@@ -459,6 +480,9 @@ class ChatMachineLink {
       if (answer.protocolVersion !== PROTOCOL_VERSION) return { route: 'legacy' };
       await GhostexNative.startPortForward(this.machine.id, answer.port, GXSERVER_FORWARD_HOST);
       const sendLedger = answer.capabilities.includes('sendRequestLedger');
+      const machine = this.machine;
+      // After this handshake settles, so a listener's own requests don't wait on it.
+      setTimeout(() => handshakeListeners.forEach((listener) => listener(machine, answer.capabilities)), 0);
       return {
         route: 'socket',
         endpoint: { port: answer.port, authToken: answer.authToken, sendLedger, capabilities: answer.capabilities },
@@ -507,6 +531,11 @@ class ChatMachineLink {
   /** Forgets the endpoint so the next request or reconnect asks the computer again. */
   private recheck(): void {
     if (this.state.kind === 'socket') this.state = { kind: 'unknown' };
+  }
+
+  /** The next request shakes hands again: this phone just got (or lost) a token of its own here. */
+  forgetEndpoint(): void {
+    this.recheck();
   }
 
   /**
@@ -661,7 +690,11 @@ class ChatMachineLink {
       const text = await response.text();
       this.heard();
       // A refused token means gxserver issued a new one; the next request asks for it.
-      if (response.status === 401) this.recheck();
+      if (response.status === 401) {
+        const machine = this.machine;
+        refusedTokenListeners.forEach((listener) => listener(machine, endpointInfo.authToken));
+        this.recheck();
+      }
       let envelope: Record<string, unknown> | null = null;
       try {
         const parsed = JSON.parse(text) as unknown;

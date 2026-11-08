@@ -567,7 +567,10 @@ export default function MachineFormScreen({ navigation, route }: Props) {
               <FormSection name="machine-form:tools">
                 <MachineToolsSection machine={existing} reachable={reachable} />
               </FormSection>
-              {/* GitHub #495: requests on this computer that only its owner may allow. */}
+              {/* GitHub #495: requests on this computer that only its owner may allow. Approving needs a
+                  device token of this phone's own: Easy Connect pairing gives one, and so does pairing over
+                  SSH (`deviceId` set); a phone still on the computer's token file may not approve. */}
+              {(existing.transport === 'tailcat' || existing.deviceId !== undefined) && (
               <View style={formStyles.rowsCard}>
                 <View style={[formStyles.row, formStyles.rowFirst]}>
                   <View style={formStyles.rowMain}>
@@ -581,6 +584,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
                   />
                 </View>
               </View>
+              )}
               {advanced}
               {test}
               {errorBanner}
