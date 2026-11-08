@@ -18,6 +18,7 @@ import { arr, obj } from './json';
 import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
 import { WorkflowCards } from './WorkflowCard';
+import { GbotCards } from './GbotCard';
 import { useDisclosure } from './state';
 import {
   SINGLE_LINE_CARD,
@@ -160,6 +161,7 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
           aboveIsCard={foldAbove || hasQuestions}
           columnGap={COMPLETED_PART_GAP}
         />
+        <GbotCards cards={item.gbotCards} />
         <WorkflowCards ids={item.workflows} />
         {item.final !== undefined && item.final !== null ? <MessageRow message={item.final} /> : null}
       </FoldPlaceProvider>

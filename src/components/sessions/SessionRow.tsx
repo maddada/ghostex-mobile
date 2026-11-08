@@ -416,6 +416,8 @@ export type SessionRowProps = {
   voiceCall?: boolean;
   /** The worktree's branch, on a worktree session its parent project lists (grouping.ts). */
   worktree?: string;
+  /** A small muted word after the title: "Chief" on a GBot chat Chief of Staff opened (contract/gbots.ts). */
+  openerTag?: string;
 };
 
 /**
@@ -441,6 +443,7 @@ export default function SessionRow({
   dimSleeping = false,
   voiceCall = false,
   worktree,
+  openerTag,
 }: SessionRowProps) {
   const rowRef = useRef<ViewInstance | null>(null);
   const ink = useSidebarInk();
@@ -723,6 +726,11 @@ export default function SessionRow({
               {shownCoordinatorBadge !== undefined ? <CoordinatorBadgeView badge={shownCoordinatorBadge} /> : null}
               {voiceCall ? <VoiceCallBadge /> : null}
               {worktree !== undefined && worktree.length > 0 ? <WorktreeBadge label={worktree} /> : null}
+              {openerTag !== undefined && openerTag.length > 0 ? (
+                <Text style={[styles.agentboxLabel, inkStyle.agentboxLabel]} numberOfLines={1}>
+                  {openerTag}
+                </Text>
+              ) : null}
               {session.agentbox !== undefined ? <AgentboxBadge agentbox={session.agentbox} /> : null}
               {session.cloudBox !== undefined ? <CloudBoxBadge cloudBox={session.cloudBox} /> : null}
               {question ? (

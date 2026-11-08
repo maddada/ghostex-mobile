@@ -8,6 +8,7 @@
  */
 
 import type { GhostexMobileSummary, GhostexSidebarSpace, GhostexSidebarSpaces } from '../contract/mobileSummary';
+import { withoutGbots } from '../contract/gbotsFilter';
 import { countSessions, type SessionCounts } from '../contract/grouping';
 import { isSidebarSpaceProject, isUnassignedSidebarSpaceProject, OTHER_SIDEBAR_SPACE_ID } from './otherSpace';
 
@@ -69,7 +70,9 @@ export function collectionIdByProjectId(summary: GhostexMobileSummary): Map<stri
  * Returns the input unchanged when the machine has no Spaces at all — Other
  * alone would then be every project, and the row is hidden.
  */
-export function filterSummaryForSpace(summary: GhostexMobileSummary, selectedSpaceId: string): GhostexMobileSummary {
+export function filterSummaryForSpace(whole: GhostexMobileSummary, selectedSpaceId: string): GhostexMobileSummary {
+  // A Space only shows and counts the user's projects: GBots follow Main Hub instead (contract/gbots.ts).
+  const summary = withoutGbots(whole);
   const spaces = orderedSpaces(summary.sidebarSpaces);
   if (spaces.length === 0) return summary;
   const selectedSpace =

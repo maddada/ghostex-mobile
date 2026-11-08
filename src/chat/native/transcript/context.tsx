@@ -202,6 +202,8 @@ export type TranscriptFlags = {
   chatTextStrength: number;
   /** Claude Code workflow runs drawn as cards, by Workflow call id (`workflowCards`). */
   workflowCards: { [callId: string]: Json };
+  /** What can change on each "GBot added" card, by change id (`gbotCardStates`). */
+  gbotCardStates: { [changeId: string]: Json };
   /** Read aloud's reply row shows (`readAloud.available`). */
   readAloudAvailable: boolean;
   /** The reply being read, whose row reads Stop reading (`readAloud.speakingId`). */
@@ -237,6 +239,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   markedHeadingStrength: 0.6,
   chatTextStrength: 0,
   workflowCards: {},
+  gbotCardStates: {},
   readAloudAvailable: false,
   readAloudSpeakingId: null,
   relayedApprovals: {},
@@ -285,6 +288,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
         : 0.6,
     chatTextStrength: typeof document.chatTextStrength === 'number' ? document.chatTextStrength : 0,
     workflowCards: obj(document.workflowCards) === null ? {} : (document.workflowCards ?? {}),
+    gbotCardStates: obj(document.gbotCardStates) === null ? {} : (document.gbotCardStates ?? {}),
     readAloudAvailable: document.readAloud?.available === true,
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),

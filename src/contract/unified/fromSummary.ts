@@ -10,6 +10,7 @@ import {
   type GhostexSession,
   type GhostexSummaryCapabilities,
 } from '../mobileSummary';
+import { withoutGbots } from '../gbotsFilter';
 import { collectionIdByProjectId, orderedSpaces } from '../../spaces/spaceFilter';
 import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 import {
@@ -83,10 +84,12 @@ export function unifiedSessionInput(
  * desktop's own computer, its cards then carry no computer name.
  */
 export function unifiedMachineInput(computer: UnifiedComputer, alone: boolean): UnifiedMachineInput<GhostexSession> {
-  const summary =
+  // No GBot's folder or chat: the Unified list and every project picker list only the user's projects (contract/gbotsFilter.ts).
+  const summary = withoutGbots(
     computer.workspaceId === null
       ? computer.summary
-      : filterSummaryForWorkspace(computer.summary, computer.workspaceId);
+      : filterSummaryForWorkspace(computer.summary, computer.workspaceId),
+  );
   const collections = collectionIdByProjectId(summary);
   const pathById = new Map(summary.projects.map((project) => [project.projectId, project.path ?? '']));
   const spaces = orderedSpaces(summary.sidebarSpaces);

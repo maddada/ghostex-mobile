@@ -13,6 +13,7 @@ import {
   type CoordinatorBadge,
   type RowNesting,
 } from './coordinatorTree';
+import { withoutGbots } from './gbotsFilter';
 import { isNewSidebarSession, isSidebarDraftSectionSession } from './sessionDrafts';
 import {
   displayStatus,
@@ -768,7 +769,6 @@ function mergeRepositoryCopyBuckets(
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const {
     machineId,
-    summary,
     expandedProjectKeys,
     expandedCollectionIds,
     expandedGroupKeys,
@@ -780,6 +780,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     nowMs = Date.now(),
     activeSessionId = null,
   } = input;
+  // A GBot's folder and chats are drawn under Main Hub (contract/gbots.ts), never as a project (contract/gbotsFilter.ts).
+  const summary = withoutGbots(input.summary);
   const isActive = (session: GhostexSession): boolean => session.sessionId === activeSessionId;
   const badges = coordinatorBadges(summary.sessions, nowMs);
 

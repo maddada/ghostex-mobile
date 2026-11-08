@@ -92,6 +92,8 @@ import NewCoordinatorSheet from './sessions-screen/NewCoordinatorSheet';
 import CoordinatorDetailsSheet from './sessions-screen/CoordinatorDetailsSheet';
 import WorkLinkPicker from './sessions-screen/work-link-picker';
 import DrawerBlockView, { type DrawerBlockActions } from './sessions-screen/DrawerBlockView';
+import { useGbots } from './sessions-screen/use-gbots';
+import { recentProjectsWithoutGbots } from '../contract/gbotsFilter';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import { CloseIcon, WarningTriangleIcon } from '../components/terminal/icons';
 import { DemoCopy } from '../demo/copy';
@@ -604,7 +606,7 @@ export default function SessionsScreen({ navigation }: Props) {
       return kept.length === Object.keys(current).length ? current : Object.fromEntries(kept);
     });
   }, [inventoriesByMachineId]);
-  const recentProjects = selectedInventory?.summary?.recentProjects ?? [];
+  const recentProjects = recentProjectsWithoutGbots(selectedInventory?.summary);
 
   // -------------------------------------------------------------------------
   // Actions.
@@ -969,6 +971,9 @@ export default function SessionsScreen({ navigation }: Props) {
     [chiefAgentItems, machine?.id, runChiefAsking],
   );
 
+  /** Main Hub's GBots: their menus, the remove confirm, GBot Settings and New GBot (use-gbots.tsx). */
+  const gbots = useGbots({ machineById, attachCreated, refreshMachine, setProgress, setTransientStatus });
+
   /** The session a voice call on the phone is about, as an attachSessionKey (the row's green headset). */
   const voiceCallSessionKey = useVoiceStore((state) =>
     voiceActive(state.phase) && state.machineId !== null && (state.focus ?? state.requestedFocus) !== null
@@ -1053,6 +1058,7 @@ export default function SessionsScreen({ navigation }: Props) {
                     } as ContextMenuItem,
                   ]
                 : []),
+              ...gbots.homeMenuItems(target, inventoriesByMachineId[machineId]?.summary, () => setChiefMenu(null)),
               {
                 kind: 'item',
                 key: 'main-hub-project-options',
@@ -1068,6 +1074,11 @@ export default function SessionsScreen({ navigation }: Props) {
       ),
     stateCard: (machineId) => setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
     workChipActions: (machineId, item) => workChipActions(machineById(machineId), item.session),
+    toggleGbotsHeading: (machineId, headingKey) => collapse.toggleSessionKind(machineId, headingKey),
+    toggleGbot: (machineId, bot) => collapse.toggleProject(machineId, bot.projectKey),
+    gbotsHeadingMenu: (machineId) => gbots.openHeadingMenu(machineId),
+    gbotMenu: (machineId, bot, anchor) => gbots.openBotMenu(machineId, bot, anchor),
+    gbotNewChat: (machineId, bot) => gbots.newChatFor(machineId, bot),
   };
 
   const listRefreshControl = (
@@ -1375,6 +1386,7 @@ export default function SessionsScreen({ navigation }: Props) {
       {chiefMenu !== null ? (
         <ContextMenu visible title={chiefMenu.title} items={chiefMenu.items} onClose={() => setChiefMenu(null)} />
       ) : null}
+      {gbots.overlays}
       {chiefConfirm !== null ? (
         <ConfirmDialog
           visible

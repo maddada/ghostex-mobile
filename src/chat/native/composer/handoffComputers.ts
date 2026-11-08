@@ -9,6 +9,7 @@ import {
   type HandoffComputer,
   type HandoffMachineInput,
 } from '../../../contract/handoff/handoff';
+import { isGbotProject } from '../../../contract/gbotsFilter';
 import { useInventoryStore } from '../../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../../machines/store';
 
@@ -24,13 +25,16 @@ export function handoffComputersFor(machineId: string, projectId: string): Hando
       // The button says this, so a plain name: not Easy Connect's transport tag.
       label: machine.name.length > 0 ? machine.name : machineDisplayLabel(machine),
       connected: (inventory?.lastError ?? null) === null,
-      projects: summary.projects.map((project) => ({
-        projectId: project.projectId,
-        title: project.name ?? project.projectId,
-        path: project.path ?? null,
-        originUrl: project.gitRemoteOriginUrl ?? null,
-        isWorktree: project.worktree !== undefined,
-      })),
+      // A GBot's folder is no place to hand work to; only the chat's own stays, so it can be ranked as the source.
+      projects: summary.projects
+        .filter((project) => !isGbotProject(project) || (machine.id === machineId && project.projectId === projectId))
+        .map((project) => ({
+          projectId: project.projectId,
+          title: project.name ?? project.projectId,
+          path: project.path ?? null,
+          originUrl: project.gitRemoteOriginUrl ?? null,
+          isWorktree: project.worktree !== undefined,
+        })),
     });
   }
   return handoffComputers(inputs, { machineId, projectId });

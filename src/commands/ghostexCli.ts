@@ -261,6 +261,51 @@ export function chiefSetAgentCommand(agentId: string): string {
   return `ghostex chief set-agent ${shellQuote(requireId(agentId, 'agent id'))} --json`;
 }
 
+/** A GBot's settings: its record and instructions (`soul`), and `soulDriftMessage` when SOUL.md was changed by hand. */
+export function gbotsShowCommand(botId: string): string {
+  return `ghostex gbots show ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** Opens another chat with a GBot; the answer's `chat` names it. */
+export function gbotsNewChatCommand(botId: string): string {
+  return `ghostex gbots new-chat ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** Closes a GBot's chats, removes it and moves its folder to the Trash. */
+export function gbotsRemoveCommand(botId: string): string {
+  return `ghostex gbots remove ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** The persona flags of `ghostex gbots create|edit`, each `--flag=value` so a value starting with `-` stays a value. */
+function gbotFieldFlags(fields: Record<string, string | undefined>): string {
+  const flags: [string, string | undefined][] = [
+    ['name', fields.name],
+    ['title', fields.title],
+    ['description', fields.description],
+    ['soul', fields.soul],
+    ['icon', fields.icon],
+    ['color', fields.color],
+    ['agent', fields.agentId],
+    ['model', fields.model],
+    ['approval', fields.approval],
+  ];
+  return flags
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([flag, value]) => ` --${flag}=${shellQuote(value)}`)
+    .join('');
+}
+
+/** Changes a GBot: only the fields given (the GBot Settings sheet sends the changed ones). */
+export function gbotsEditCommand(botId: string, fields: Record<string, string | undefined>): string {
+  return `ghostex gbots edit ${shellQuote(requirePositional(botId, 'GBot id'))}${gbotFieldFlags(fields)} --json`;
+}
+
+/** Adds a GBot. From the phone gxserver asks for the user's approval first, and the command waits for it. */
+export function gbotsCreateCommand(fields: Record<string, string | undefined>): string {
+  requireId(fields.name ?? '', 'GBot name');
+  return `ghostex gbots create${gbotFieldFlags(fields)} --json`;
+}
+
 /** The New Coordinator form's choices: agents, their model lineups and the defaults `create` applies. */
 export function coordinatorOptionsCommand(): string {
   return 'ghostex coordinator options --json';

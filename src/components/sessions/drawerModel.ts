@@ -18,6 +18,7 @@ import {
   type DrawerItem,
   type ProjectHeaderItem,
 } from '../../contract/grouping';
+import { gbotsSection, type GbotsSectionModel } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
@@ -28,6 +29,8 @@ import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 export type ProjectCardBlock = {
   header: ProjectHeaderItem;
   children: DrawerItem[];
+  /** Main Hub's GBots section (contract/gbots.ts), on the home project's card only. */
+  gbots?: GbotsSectionModel | null;
 };
 
 export type DrawerBlock =
@@ -209,7 +212,45 @@ function machineBlocks(
       ),
     ];
   }
-  return blocksFromItems(machine.id, items);
+  return withGbotsSection(
+    blocksFromItems(machine.id, items),
+    machine.id,
+    inventory.summary,
+    collapse,
+    nowMs,
+    selectedSessionKey,
+  );
+}
+
+/**
+ * The drawn home project's card carries Main Hub's GBots section, read from the computer's whole summary: a GBot
+ * belongs to no Space or workspace and shows wherever Main Hub does (gx-core sidebar_view/gbots.rs).
+ */
+function withGbotsSection(
+  blocks: DrawerBlock[],
+  machineId: string,
+  summary: GhostexMobileSummary,
+  collapse: DrawerCollapseInput,
+  nowMs: number,
+  selectedSessionKey: string | null,
+): DrawerBlock[] {
+  return blocks.map((block) => {
+    if (block.kind !== 'project' || block.card.header.isHome !== true) return block;
+    const gbots = gbotsSection({
+      machineId,
+      summary,
+      homeProjectId: block.card.header.projectId,
+      fold: {
+        expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machineId] ?? []),
+        collapsedSessionKindKeys: new Set(collapse.collapsedSessionKindsByMachine[machineId] ?? []),
+      },
+      activeSessionId: selectedSessionKey?.startsWith(`${machineId}:`)
+        ? selectedSessionKey.slice(machineId.length + 1)
+        : null,
+      nowMs,
+    });
+    return gbots === null ? block : { ...block, card: { ...block.card, gbots } };
+  });
 }
 
 export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {

@@ -184,6 +184,13 @@ export type GhostexProject = {
   path?: string;
   /** The project at the computer's home folder, whose header is Main Hub's row (server/src/chief/home.rs). */
   isHome?: boolean;
+  /**
+   * A GBot's folder (`gbotsProject`, server/src/gbots/presentation.rs), sent whether GBots are on or off: never one of
+   * the user's projects, so no projects list, Space, picker or Unified list shows it (contract/gbots.ts).
+   */
+  gbotsProject?: boolean;
+  /** The GBot this project is the folder of (`gbotsBot`), only while GBots are on: drawn as its row under Main Hub. */
+  gbotsBot?: GhostexGbotsBot;
   icon: GhostexProjectIcon;
   /** Workspace theme color ("#rrggbb"), or "" — tints the project rail. */
   themeColor: string;
@@ -237,6 +244,25 @@ export type GhostexProject = {
    */
   gitRepositoryRootPath?: string;
 };
+
+/** A GBot's look and place, as the computer publishes it on its project (`gbotsBot`). */
+export type GhostexGbotsBot = {
+  id: string;
+  name: string;
+  title: string;
+  /** A desktop titlebar icon name (apps/desktop/assets/titlebar/<icon>.svg), `robot` by default. */
+  icon: string;
+  color: string;
+  /** "#rrggbb" for `color`; "" when the computer sent none. */
+  colorHex: string;
+  agentId: string;
+  departmentId?: string;
+  isLead?: boolean;
+  paused?: boolean;
+};
+
+/** A GBot chat's bot and who opened it (`gbotsChat`): `user`, `chief`, later others. */
+export type GhostexGbotsChat = { botId: string; openedBy: string };
 
 export type GhostexRecentProject = {
   projectId: string;
@@ -594,6 +620,8 @@ export type GhostexSession = {
   isCoordinator: boolean;
   /** The computer's Chief: drawn as the Chief row under the Spaces tabs (contract/chief.ts). */
   isChief: boolean;
+  /** A GBot's chat (`gbotsChat`), while GBots are on: drawn under its bot's row (contract/gbots.ts). */
+  gbotsChat?: GhostexGbotsChat;
   /**
    * On a thread: the coordinator it belongs to ('' on every other session, and on a daemon that
    * predates the fields). The drawer nests the thread under that coordinator (coordinatorTree.ts).
@@ -1539,6 +1567,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     sessionNote: trimmedValue(value, 'sessionNote'),
     isCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator',
     isChief: value.isChief === true,
+    gbotsChat: parseGbotsChat(value.gbotsChat),
     coordinatorProjectId: trimmedValue(value, 'coordinatorProjectId'),
     coordinatorSessionId: trimmedValue(value, 'coordinatorSessionId'),
     coordinatorThreadState: trimmedValue(value, 'coordinatorThreadState'),
@@ -1602,6 +1631,8 @@ function parseProjects(value: unknown): GhostexProject[] {
       name: trimmedValue(entry, 'name'),
       path,
       isHome: entry.isHome === true,
+      gbotsProject: entry.gbotsProject === true || isObject(entry.gbotsBot) ? true : undefined,
+      gbotsBot: parseGbotsBot(entry.gbotsBot),
       icon: parseProjectIcon(entry),
       themeColor: normalizedHexColor(trimmedValue(entry, 'themeColor')),
       worktreeParentProjectId: isObject(entry.worktree) ? trimmedValue(entry.worktree, 'parentProjectId') : '',
@@ -1620,6 +1651,32 @@ function parseProjects(value: unknown): GhostexProject[] {
     });
   }
   return projects;
+}
+
+function parseGbotsBot(value: unknown): GhostexGbotsBot | undefined {
+  if (!isObject(value)) return undefined;
+  const id = trimmedValue(value, 'id');
+  if (id.length === 0) return undefined;
+  const departmentId = trimmedValue(value, 'departmentId');
+  return {
+    id,
+    name: trimmedValue(value, 'name') || id,
+    title: trimmedValue(value, 'title'),
+    icon: trimmedValue(value, 'icon'),
+    color: trimmedValue(value, 'color'),
+    colorHex: normalizedHexColor(trimmedValue(value, 'colorHex')),
+    agentId: trimmedValue(value, 'agentId'),
+    departmentId: departmentId.length > 0 ? departmentId : undefined,
+    isLead: value.isLead === true ? true : undefined,
+    paused: value.paused === true ? true : undefined,
+  };
+}
+
+function parseGbotsChat(value: unknown): GhostexGbotsChat | undefined {
+  if (!isObject(value)) return undefined;
+  const botId = trimmedValue(value, 'botId');
+  if (botId.length === 0) return undefined;
+  return { botId, openedBy: trimmedValue(value, 'openedBy') || 'user' };
 }
 
 /**

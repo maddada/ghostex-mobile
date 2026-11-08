@@ -35,6 +35,7 @@ import {
   useSidebarInk,
 } from '../../components/sessions/rows';
 import { ChiefPlaceholderRow } from '../../components/sessions/ChiefRow';
+import GbotsRows from '../../components/sessions/GbotsRows';
 import SessionRow from '../../components/sessions/SessionRow';
 import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { sessionLinksDisplay } from '../../chat/native/sessionLinks';
@@ -48,6 +49,7 @@ import type {
   StateCardItem,
 } from '../../contract/grouping';
 import { chiefOnIn } from '../../contract/chief';
+import { openedByChief, type GbotRowModel, type GbotsSectionModel } from '../../contract/gbots';
 import type { GhostexAgentLauncher, GhostexMobileSummary } from '../../contract/mobileSummary';
 import { colorWithOpacity } from '../../theme/palette';
 import type { SidebarAppearance } from '../../theme/sidebarAppearance';
@@ -79,6 +81,15 @@ export type DrawerBlockActions = {
   homeMenu: (machineId: string, header: ProjectHeaderItem) => void;
   stateCard: (machineId: string, item: StateCardItem) => void;
   workChipActions: (machineId: string, item: SessionItem) => WorkChipActions | undefined;
+  /** Main Hub's GBots section (GbotsRows.tsx): fold its heading (`headingKey`) or a bot (its `projectKey`). */
+  toggleGbotsHeading: (machineId: string, headingKey: string) => void;
+  toggleGbot: (machineId: string, bot: GbotRowModel) => void;
+  /** Long press on the GBots heading: New GBot. */
+  gbotsHeadingMenu: (machineId: string) => void;
+  /** Long press on a bot: New Chat, GBot Settings, Remove GBot. */
+  gbotMenu: (machineId: string, bot: GbotRowModel, anchor: MenuAnchor) => void;
+  /** The empty row of a bot with no open chat. */
+  gbotNewChat: (machineId: string, bot: GbotRowModel) => void;
 };
 
 export type DrawerBlockViewProps = {
@@ -103,6 +114,9 @@ export type DrawerBlockViewProps = {
 
 const sessionKey = (machineId: string, sessionId: string): string => `${machineId}:${sessionId}`;
 
+/** The small tag on a GBot chat Chief of Staff opened (CDXC:GBots 2026-11-09 in contract/gbots.ts). */
+const CHIEF_TAG = 'Chief';
+
 /** The tree line's x inside a project's fold: under the project header's chevron (session_group_tree.rs `LINE_X`). */
 const FOLD_REACH = ds(12);
 const TREE_LINE_X = FOLD_REACH - ds(7.5);
@@ -119,7 +133,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
 
   const tileColumns = props.tileColumns ?? null;
 
-  const sessionRow = (item: SessionItem): ReactElement => {
+  const sessionRow = (item: SessionItem, tag?: string): ReactElement => {
     const key = sessionKey(machineId, item.session.sessionId);
     return (
       <SessionRow
@@ -140,6 +154,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
         sessionLinksDisplay={linksDisplay}
         dimSleeping={dimSleeping}
         voiceCall={props.voiceCallSessionKey === key}
+        openerTag={tag}
         onPress={() => actions.openSession(machineId, item)}
         onMenu={(anchor) => actions.sessionMenu(machineId, item, anchor)}
       />
@@ -218,9 +233,42 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
    * the project's chevron to each group's header (desktop session_group_tree.rs `project_tree`).
    * A group's rows are the GROUP_HEADER's following rows of the same group (`projectFoldSections`).
    */
+  /**
+   * Main Hub's GBots section, right after Chief of Staff's row (before its first open, or with it off, at the top of the
+   * fold, under the "Pick an agent" row): contract/gbots.ts.
+   */
+  const gbotsRows = (gbots: GbotsSectionModel): ReactElement => (
+    <GbotsRows
+      key="gbots"
+      section={gbots}
+      containsActive={
+        gbots.collapsed && gbots.headingStatus.sessionIds.some((id) => sessionKey(machineId, id) === selectedSessionKey)
+      }
+      ringColor={props.rowSurface}
+      renderChat={(chat) => sessionRow(chat, openedByChief(chat) ? CHIEF_TAG : undefined)}
+      onToggleHeading={() => actions.toggleGbotsHeading(machineId, gbots.headingKey)}
+      onHeadingMenu={() => actions.gbotsHeadingMenu(machineId)}
+      onToggleBot={(bot) => actions.toggleGbot(machineId, bot)}
+      onBotMenu={(bot, anchor) => actions.gbotMenu(machineId, bot, anchor)}
+      onNewChat={(bot) => actions.gbotNewChat(machineId, bot)}
+    />
+  );
+
+  /** A fold's own rows, with Main Hub's GBots section after Chief of Staff's row. */
+  const ownUnits = (card: ProjectCardBlock, items: readonly DrawerItem[]): ReactElement[] => {
+    if (card.gbots === undefined || card.gbots === null) return foldUnits(items, card.header);
+    const chief = items.findIndex((item) => item.type === 'SESSION' && item.session.isChief);
+    const cut = chief + 1;
+    return [
+      ...foldUnits(items.slice(0, cut), card.header),
+      gbotsRows(card.gbots),
+      ...foldUnits(items.slice(cut), card.header),
+    ];
+  };
+
   const projectFold = (card: ProjectCardBlock): ReactElement => {
     const sections = projectFoldSections(card.children);
-    const own = foldUnits(sections.own, card.header);
+    const own = ownUnits(card, sections.own);
     const groups = sections.groups.map((group) => ({ header: group.header, rows: foldUnits(group.rows, card.header) }));
     if (groups.length === 0) return <View style={styles.rows}>{own}</View>;
     return (
@@ -296,7 +344,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
         {header.isHome === true && !header.collapsed && header.chief === null && chiefOnIn(summary) ? (
           <ChiefPlaceholderRow onPress={() => actions.openHomeChief(machineId, header)} />
         ) : null}
-        {!header.collapsed && card.children.length > 0 ? projectFold(card) : null}
+        {!header.collapsed && (card.children.length > 0 || card.gbots != null) ? projectFold(card) : null}
       </View>
     );
   };

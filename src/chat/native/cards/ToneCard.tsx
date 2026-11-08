@@ -70,10 +70,16 @@ export function ToneCard({
   footerEnd,
   onPressHeader,
   accessibilityLabel,
+  hue,
+  tileGlyph,
 }: {
   tone: string;
   /** Replaces the tone's own glyph (an API error card draws its failure's). */
   icon?: GlyphName;
+  /** Replaces the tone's colour (`#rrggbb`; a GBot card wears its bot's). */
+  hue?: string;
+  /** Drawn in the tile in place of the glyph, given the size and colour it should take (a GBot's own icon). */
+  tileGlyph?: (size: number, color: string) => ReactNode;
   title: string;
   detail?: string;
   trailing?: ReactNode;
@@ -92,7 +98,8 @@ export function ToneCard({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const toneOnly = toneLook(tone, P.light);
-  const look = icon === undefined ? toneOnly : { ...toneOnly, icon };
+  const withIcon = icon === undefined ? toneOnly : { ...toneOnly, icon };
+  const look = hue !== undefined && /^#[0-9a-fA-F]{6}$/.test(hue) ? { ...withIcon, hue } : withIcon;
   const bodyItems = (body ?? []).filter((item) => item !== null && item !== undefined && item !== false);
   const start = (footerStart ?? []).filter(Boolean);
   const end = (footerEnd ?? []).filter(Boolean);
@@ -127,7 +134,11 @@ export function ToneCard({
               },
         ]}
       >
-        <Glyph name={look.icon} size={SHELL.tileIcon} color={look.hue ?? P.muted} />
+        {tileGlyph !== undefined ? (
+          tileGlyph(SHELL.tileIcon, look.hue ?? P.muted)
+        ) : (
+          <Glyph name={look.icon} size={SHELL.tileIcon} color={look.hue ?? P.muted} />
+        )}
       </View>
       <View style={styles.titleColumn}>
         <Text style={styles.title}>{title}</Text>

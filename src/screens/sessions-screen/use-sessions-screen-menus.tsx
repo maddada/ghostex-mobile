@@ -93,6 +93,7 @@ import {
   type QuickActionEntry,
   type QuickActionRef,
 } from '../../actions/quickActions';
+import { recentProjectsWithoutGbots } from '../../contract/gbotsFilter';
 import { projectHeaderOf, type ProjectHeaderItem } from '../../contract/grouping';
 import {
   agentIconTint,
@@ -1440,7 +1441,7 @@ export function useSessionsScreenMenus({
         },
       },
     ];
-    if (target !== null && (summaryFor(target.id)?.recentProjects.length ?? 0) > 0) {
+    if (target !== null && recentProjectsWithoutGbots(summaryFor(target.id)).length > 0) {
       items.push({
         kind: 'item',
         key: 'recent-projects',

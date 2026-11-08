@@ -34,6 +34,7 @@ import { highlightLabel, useRowFind } from './searchHighlight';
 import { useDisclosure } from './state';
 import { InterAgentCard, SentAgentMessageCards } from './AgentMessageCards';
 import { WorkflowCards } from './WorkflowCard';
+import { GbotCards } from './GbotCard';
 import { estimatedLines, StartupDelivery, SuppressedRow, SystemCard } from './SystemRows';
 import { MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
@@ -302,6 +303,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const callsCard = filesCard || (!toolsRendered && toolCard);
   const questionCards = !inWorkFold && arr(message.questions).length > 0;
   const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;
+  const gbotCards = !inWorkFold && arr(message.gbotCards).length > 0;
   return (
     <View style={styles.message} accessibilityLabel={`${message.role} message: ${body.slice(0, 2000)}`}>
       <ImageRow images={message.images} user={false} />
@@ -320,8 +322,17 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
           columnGap={MESSAGE_PART_GAP}
         />
       ) : null}
-      {!inWorkFold && arr(message.workflows).length > 0 ? (
+      {gbotCards ? (
         <View style={{ marginTop: cardStackMargin(callsCard || questionCards || sentCards, MESSAGE_PART_GAP) }}>
+          <GbotCards cards={message.gbotCards} />
+        </View>
+      ) : null}
+      {!inWorkFold && arr(message.workflows).length > 0 ? (
+        <View
+          style={{
+            marginTop: cardStackMargin(callsCard || questionCards || sentCards || gbotCards, MESSAGE_PART_GAP),
+          }}
+        >
           <WorkflowCards ids={message.workflows} />
         </View>
       ) : null}
