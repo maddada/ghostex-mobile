@@ -38,11 +38,13 @@ type Share_ = {
   viewers: { id: string; name: string }[];
 };
 
+/** Installed: `config`, `shares`, …; not installed (or stopped): `installed: false`. */
 type View_ = {
-  config: { enabled: boolean; mode: string };
-  relayConnected: boolean;
+  installed?: boolean;
+  config?: { enabled: boolean; mode: string };
+  relayConnected?: boolean;
   guestPage?: { message?: string | null };
-  shares: Share_[];
+  shares?: Share_[];
 };
 
 function endsLabel(at: number | null): string {
@@ -115,7 +117,7 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
   if (view === null) {
     return <Text style={styles.note}>{error ?? 'Reading Ghostex Collab…'}</Text>;
   }
-  const share = view.shares.find((entry) => entry.projectId === projectId && entry.sessionId === sessionId);
+  const share = (view.shares ?? []).find((entry) => entry.projectId === projectId && entry.sessionId === sessionId);
   const notes = (
     <>
       {waiting !== null ? (
@@ -124,22 +126,13 @@ export function CollabShareMenu({ chat, document }: { chat: RustChat; document: 
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
     </>
   );
-  if (!view.config.enabled) {
+  if (view.installed === false || view.config === undefined) {
+    // Collab was uninstalled (or stopped) while the sheet was open: the chat's Share pill goes too.
     return (
       <View style={styles.menu}>
         <Text style={styles.note}>
-          Ghostex Collab is off on this computer. Turn it on to share a chat through a link that opens it in any
-          browser, with no app or account.
+          Collab isn't installed on this computer. Install it in Settings › Collab to share a chat through a link.
         </Text>
-        <View style={styles.actions}>
-          <ToneButton
-            kind="primary"
-            label="Turn on Ghostex Collab"
-            disabled={busy}
-            onPress={() => void send({ op: 'set', patch: { enabled: true } })}
-          />
-        </View>
-        {view.guestPage?.message ? <Text style={styles.error}>{view.guestPage.message}</Text> : null}
         {notes}
       </View>
     );
