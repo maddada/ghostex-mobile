@@ -12,7 +12,7 @@ import { QuestionExchangeCards } from '../cards';
 import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
-import { CompletedFilesFold, hasCompletedFiles } from './FileChanges';
+import { CompletedFilesFold } from './FileChanges';
 import { arr, obj } from './json';
 import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
@@ -108,15 +108,24 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
   // Two one-line cards in a row are a row gap apart (`cardSpacing.ts`): the answered-question and
   // sent-message stacks sit that far under the "Worked for" fold, or under each other, when nothing
   // else comes between.
-  const foldAbove =
-    !open &&
-    (item.readImages ?? []).length === 0 &&
-    !hasCompletedFiles(item.files, item.deferred) &&
-    item.artifacts.length === 0;
+  const foldAbove = !open && (item.readImages ?? []).length === 0 && item.artifacts.length === 0;
   const hasQuestions = arr(item.questions).length > 0;
   return (
     <View style={styles.completedColumn}>
       <WorkSummary item={item} open={open} onToggle={toggle} />
+      {/* The turn's files fold shows only while its card is open, collapsed, right under the card
+          (gx-chat-core `turn_files_fold`, where the user's decision is; desktop `completed_work_row.rs`).
+          A closed card leaves the files to its "N files" pill. */}
+      {open ? (
+        <CompletedFilesFold
+          itemId={item.id}
+          files={item.files}
+          card={item.filesCard}
+          label={simple ? item.simpleFilesLabel : item.filesLabel}
+          deferred={item.deferred}
+          notice={deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
+        />
+      ) : null}
       {open ? (
         <FoldPlaceProvider value={IN_WORK_FOLD}>
           <DisclosureBody onCollapse={toggle} label="Collapse completed work" rail="work">
@@ -127,14 +136,6 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
           </DisclosureBody>
         </FoldPlaceProvider>
       ) : null}
-      <CompletedFilesFold
-        itemId={item.id}
-        files={item.files}
-        card={item.filesCard}
-        label={simple ? item.simpleFilesLabel : item.filesLabel}
-        deferred={item.deferred}
-        notice={deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
-      />
       <FoldPlaceProvider value={HIDE_FILES}>
         {item.artifacts.map((message) => (
           <MessageRow key={message.id} message={message} />

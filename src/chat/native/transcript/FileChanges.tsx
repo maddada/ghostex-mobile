@@ -109,12 +109,12 @@ export function FileChangeStack({ stackId, files, card }: { stackId: string; fil
   );
 }
 
-/** A finished turn's writes, folded behind "N files changed". */
-/** Whether a finished turn shows its "N files changed" fold: files it changed, or the paths its unread work changed. */
+/** Whether an open finished turn shows its "N files changed" fold: files it changed, or the paths its unread work changed (gx-chat-core `turn_files_fold`). */
 export function hasCompletedFiles(files: unknown, deferred?: unknown): boolean {
   return fileRows(files).length > 0 || arr(obj(deferred)?.filePaths).length > 0;
 }
 
+/** A finished turn's writes, folded behind "N files changed", drawn under the turn's card while it is open. */
 export function CompletedFilesFold({
   itemId,
   files,
