@@ -1,8 +1,9 @@
 /**
  * Chief's row under the Spaces tabs, drawn like a project header (rows.tsx `SidebarHeaderBox`): no
  * border, the header's box, insets and light title. The flower sits in the project-icon column and
- * "Chief" where project names start (Q1882); the chevron gutter holds the project's fold chevron
- * only once other computers have a Chief, and their Chiefs fold under it like a project's sessions
+ * "Chief" where project names start (Q1882); the chevron gutter holds the project's chevron, dimmed
+ * and doing nothing while only this computer has a Chief, and the normal fold chevron once other
+ * computers have one, whose Chiefs fold under it like a project's sessions
  * (contract/chief.ts). A
  * tap on the row opens the chat; a tap on the chevron folds. The desktop draws the same row
  * (apps/desktop/src/app/native_sidebar/chief_row_view.rs, CDXC:Chief 2026-11-08 there).
@@ -84,7 +85,12 @@ export default function ChiefRow({
           >
             <ChevronRightGlyph size={ds(16)} color={ink.muted} rotated={unfolded} />
           </Pressable>
-        ) : null}
+        ) : (
+          // One Chief: the project's chevron dimmed, doing nothing, so the gutter is not empty.
+          <View pointerEvents="none" style={[styles.gutter, styles.dimmed]}>
+            <ChevronRightGlyph size={ds(16)} color={ink.muted} />
+          </View>
+        )}
         <View style={styles.icon}>
           <FlowerGlyph size={ds(16)} color={ink.muted} />
         </View>
@@ -144,6 +150,10 @@ const chiefStyles = inkStyleSheets((ink) =>
     },
     pressed: {
       backgroundColor: inkWash(ink, 0.06),
+    },
+    /** The chevron while nothing can unfold under it (desktop chief_row_view.rs `DIMMED_CHEVRON`). */
+    dimmed: {
+      opacity: 0.35,
     },
     /** Where a project header draws its chevron. */
     gutter: {
