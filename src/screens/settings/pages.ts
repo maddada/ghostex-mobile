@@ -38,7 +38,7 @@ export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; de
   theme: { title: 'Interface', description: 'Theme presets, colours, and the chat and terminal appearance.' },
   sessionsList: { title: 'Sessions list', description: 'Unified or Project layout, and how Unified groups.' },
   chat: { title: 'Chat', description: 'Default agent view and chat detail.' },
-  voice: { title: 'Voice', description: "Dictate's engine and models, and the voice agent, per computer." },
+  voice: { title: 'Voice', description: 'Dictation with Hex or your key, and the voice agent, on each computer.' },
   terminal: { title: 'Terminal', description: 'Font size, background, screen and tab behavior.' },
   keyboard: { title: 'Keyboard', description: 'Command pad, its keys and agent hotkeys.' },
   shortReplies: { title: ShortRepliesCopy.pageTitle, description: ShortRepliesCopy.pageDescription },

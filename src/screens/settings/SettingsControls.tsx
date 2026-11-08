@@ -278,9 +278,19 @@ export function SettingsPageScrollView({
 }
 
 /** A scrolling Settings screen whose page and header follow the appearance. */
+/**
+ * The open Settings page's one-line intro (`SETTINGS_PAGES[page].description`), drawn under its title
+ * by `SettingsScreenLayout` unless the page passes its own.
+ *
+ * CDXC:Settings 2026-11-08 DECISION: User (Q1712 "Page title and line"): every Settings page shows its title with a one-line intro under it, on the desktop and on the phone's pages; the phone's lines are the ones its Settings list already shows (`pages.ts`).
+ */
+export const SettingsPageIntro = createContext<string | undefined>(undefined);
+
 export function SettingsScreenLayout({ intro, children }: { intro?: string; children: ReactNode }) {
   useAppearanceHeader();
   const styles = useSettingsStyles();
+  const pageIntro = useContext(SettingsPageIntro);
+  const shownIntro = intro ?? pageIntro;
   // The iPhone Duo's chrome (status band, side bar) gives the pages wide windows (unfolded, landscape):
   // they keep a readable column there, as on any wide screen. Narrower windows are unaffected.
   const readable = useHeaderPlacement().kind !== 'top';
@@ -291,7 +301,7 @@ export function SettingsScreenLayout({ intro, children }: { intro?: string; chil
         contentContainerStyle={[styles.list, readable ? READABLE_COLUMN : null]}
         keyboardShouldPersistTaps="handled"
       >
-        {intro !== undefined ? <Text style={styles.intro}>{intro}</Text> : null}
+        {shownIntro !== undefined ? <Text style={styles.intro}>{shownIntro}</Text> : null}
         {children}
       </SettingsPageScrollView>
     </SafeAreaView>

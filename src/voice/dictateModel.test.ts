@@ -8,95 +8,42 @@ import {
   dictateEngines,
   dictionaryProblem,
   dictionarySummary,
-  downloadPercent,
   engineCaption,
   engineStatusLine,
   formatBytes,
   hexCaption,
   isUnknownRoute,
-  modelDetail,
-  modelsBusy,
-  modelSpeaks,
   parseAliases,
+  phoneDictationNote,
   type DictateEngine,
   type DictateOverview,
   type HexView,
-  type SpeechModel,
 } from './dictateModel';
-
-const parakeet: SpeechModel = {
-  id: 'parakeet-tdt-0.6b-v3',
-  title: 'Parakeet TDT 0.6B v3',
-  shortTitle: 'Parakeet v3',
-  languagesLabel: 'English + 24 European languages',
-  languages: ['en', 'de', 'fr'],
-  speedLabel: 'Fastest',
-  downloadBytes: 715_135_416,
-  diskBytes: 723_000_000,
-  state: 'notDownloaded',
-  inUse: true,
-};
 
 const overview = (patch: Partial<DictateOverview> = {}): DictateOverview => ({
   settings: {
-    engine: 'local',
-    localModel: parakeet.id,
+    engine: 'hex',
     language: 'auto',
     dictionary: [],
     addProjectNames: true,
     removeFillers: true,
     polish: { enabled: true, model: 'claude-sonnet-5-5', prompt: null },
   },
-  engine: { engine: 'local', label: 'Local, Parakeet v3', modelId: parakeet.id, ready: false, problem: null, polish: true },
+  engine: { engine: 'hex', label: 'Hex', ready: false, problem: null, polish: true },
   keys: { xai: { configured: false, unreadable: false }, openai: { configured: false, unreadable: false } },
-  models: [parakeet],
-  localAvailable: true,
-  modelsDiskBytes: 0,
   projectWords: [],
   polishAvailable: true,
   languages: [{ code: 'auto', label: 'Auto-detect' }],
   ...patch,
 });
 
-describe('model sizes and downloads', () => {
+describe('the old models size', () => {
   test('sizes read in GB, small ones in MB', () => {
     assert.equal(formatBytes(715_135_416), '0.72 GB');
     assert.equal(formatBytes(1_620_000_000), '1.62 GB');
     assert.equal(formatBytes(147_000_000), '0.15 GB');
     assert.equal(formatBytes(42_000_000), '42 MB');
     assert.equal(formatBytes(0), '0 MB');
-  });
-
-  test('a download counts up to 100, and preparing shows as done', () => {
-    assert.equal(downloadPercent(parakeet), null);
-    const half = { state: 'downloading' as const, download: { receivedBytes: 50, totalBytes: 200, error: null } };
-    assert.equal(downloadPercent(half), 25);
-    assert.equal(downloadPercent({ state: 'downloading', download: null }), 0);
-    assert.equal(downloadPercent({ state: 'preparing', download: null }), 100);
-  });
-
-  test('polling goes on while any model downloads or prepares', () => {
-    assert.equal(modelsBusy([{ state: 'ready' }, { state: 'notDownloaded' }]), false);
-    assert.equal(modelsBusy([{ state: 'ready' }, { state: 'preparing' }]), true);
-    assert.equal(modelsBusy([{ state: 'downloading' }]), true);
-  });
-
-  test('a model row says its state, size, languages and speed', () => {
-    assert.equal(modelDetail(parakeet), '0.72 GB · English + 24 European languages · Fastest');
-    assert.equal(
-      modelDetail({ ...parakeet, state: 'ready' }),
-      'In use · 0.72 GB · English + 24 European languages · Fastest',
-    );
-    assert.match(
-      modelDetail({ ...parakeet, state: 'downloading', download: { receivedBytes: 1, totalBytes: 2, error: null } }),
-      /^Downloading 50% · /,
-    );
-  });
-
-  test('auto is every language; otherwise the model must list it', () => {
-    assert.equal(modelSpeaks(parakeet, 'auto'), true);
-    assert.equal(modelSpeaks(parakeet, 'de'), true);
-    assert.equal(modelSpeaks(parakeet, 'ja'), false);
   });
 });
 
@@ -128,13 +75,14 @@ describe('the dictionary', () => {
 });
 
 describe('what the phone says about the engine', () => {
-  test('a local model not downloaded yet says so in the phone’s words, with its size', () => {
-    assert.equal(
-      engineCaption(overview(), 'MacBook Pro'),
-      "Parakeet v3 isn't downloaded yet. Download it below (0.72 GB).",
-    );
-    const ready = overview({ engine: { ...overview().engine, ready: true } });
-    assert.match(engineCaption(ready, 'MacBook Pro'), /on its own CPU/);
+  test('a computer whose Ghostex still has its own engine is told to update', () => {
+    const old = overview({ engine: { ...overview().engine, engine: 'local', label: 'Local, Parakeet v3' } });
+    assert.match(engineCaption(old, 'MacBook Pro'), /Update Ghostex on MacBook Pro/);
+  });
+
+  test('the phone says its dictation goes through the computer, so Hex there', () => {
+    assert.match(phoneDictationNote('MacBook Pro'), /MacBook Pro transcribes it/);
+    assert.match(phoneDictationNote('MacBook Pro'), /Hex on MacBook Pro/);
   });
 
   test('a cloud engine names the computer whose key it uses, or the missing key', () => {
@@ -149,11 +97,10 @@ describe('what the phone says about the engine', () => {
 
   test('the Dictate menu never says Click', () => {
     const engine: DictateEngine = {
-      engine: 'local',
-      label: 'Local, Parakeet v3',
-      modelId: parakeet.id,
+      engine: 'hex',
+      label: 'Hex',
       ready: false,
-      problem: { code: 'modelMissing', message: 'Not downloaded yet. Click to download (0.72 GB)' },
+      problem: { code: 'hexNotRunning', message: "Hex isn't running on this computer. Click Open." },
       polish: false,
     };
     assert.doesNotMatch(engineStatusLine(engine, 'MacBook Pro'), /Click/);
@@ -184,24 +131,22 @@ describe('Hex', () => {
   });
 
   test('the picker offers Hex only where the computer says Hex 3 ships', () => {
-    assert.deepEqual(dictateEngines({ hex: undefined }).map((engine) => engine.value), ['local', 'openai', 'xai']);
-    assert.deepEqual(
-      dictateEngines({ hex: hex('unsupported') }).map((engine) => engine.value),
-      ['local', 'openai', 'xai'],
-    );
+    assert.deepEqual(dictateEngines({ hex: undefined }).map((engine) => engine.value), ['openai', 'xai']);
+    assert.deepEqual(dictateEngines({ hex: hex('unsupported') }).map((engine) => engine.value), ['openai', 'xai']);
     assert.deepEqual(
       dictateEngines({ hex: hex('notRunning') }).map((engine) => engine.value),
-      ['local', 'openai', 'xai', 'hex'],
+      ['hex', 'openai', 'xai'],
+      'Hex first, as the recommended engine',
     );
   });
 
   test('the caption says where the user stands, in the phone\'s words', () => {
-    assert.equal(hexCaption(hex('notInstalled'), 'Mac'), "Hex 3 isn't installed on Mac. Install it there to transcribe with Hex.");
+    assert.match(hexCaption(hex('notInstalled'), 'Mac'), /^Hex 3 isn't installed on Mac\. Install Hex, then open it on Mac, allow the microphone/);
     assert.equal(
       hexCaption(hex('notInstalled', { olderVersion: '0.6.2' }), 'Mac'),
       "Mac has Hex 0.6.2, which can't transcribe for Ghostex. Install Hex 3 there.",
     );
-    assert.equal(hexCaption(hex('notRunning'), 'Mac'), "Hex isn't running on Mac. Open Hex there, then check again.");
+    assert.match(hexCaption(hex('notRunning'), 'Mac'), /^Hex isn't running on Mac\. Open Hex there, then check again\. .*Open at login/);
     assert.equal(
       hexCaption(hex('ready', { version: '3.3.0', ready: true, model: 'a', models: [{ id: 'a', name: 'Parakeet v3', languages: ['en'], supportsLanguageDetection: false }] }), 'Mac'),
       'Hex 3.3.0 on Mac transcribes with Parakeet v3. Recordings stay on Mac.',
@@ -217,7 +162,6 @@ describe('Hex', () => {
     const engine = (code: string): DictateEngine => ({
       engine: 'hex',
       label: 'Hex',
-      modelId: null,
       ready: false,
       problem: { code, message: 'gxserver words.' },
       polish: false,

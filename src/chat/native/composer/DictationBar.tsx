@@ -2,8 +2,8 @@
  * Dictate's row above the chat box (`useDictation.ts`; desktop: `render_dictation_row` in
  * `native_chat/dictation.rs`): "Recording 0:07" while the microphone records, "Transcribing…"
  * after Stop, "Polishing…" with Skip while AI polish runs, or why the transcription failed with
- * Transcribe again (and Download when the computer's local model is missing). Each line names what
- * transcribes ("Local, Parakeet v3"). The ✕ cancels; the recording is kept either way.
+ * Transcribe again (and Set up Hex when Hex on the computer isn't ready). Each line names what
+ * transcribes ("Hex, Parakeet v3"). The ✕ cancels; the recording is kept either way.
  */
 
 import { Pressable, Text, View } from 'react-native';
@@ -12,13 +12,8 @@ import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { dictationClock, type DictationFix, type DictationPhase } from './useDictation';
 
-/** The row's first line for `phase`, naming the engine (`engine`, "Local, Parakeet v3") when known. */
-export function dictationLabel(
-  phase: DictationPhase,
-  elapsedMs: number,
-  engine: string | null,
-  download: { title: string; percent: number } | null,
-): string {
+/** The row's first line for `phase`, naming the engine (`engine`, "Hex, Parakeet v3") when known. */
+export function dictationLabel(phase: DictationPhase, elapsedMs: number, engine: string | null): string {
   switch (phase) {
     case 'starting':
       return 'Starting the microphone…';
@@ -28,8 +23,6 @@ export function dictationLabel(
       return engine !== null ? `Transcribing with ${engine}…` : 'Transcribing…';
     case 'polishing':
       return 'Polishing with AI…';
-    case 'downloading':
-      return download !== null ? `Downloading ${download.title} · ${download.percent}%` : 'Downloading the model…';
     case 'failed':
       return 'Transcription failed.';
     case 'idle':
@@ -42,7 +35,6 @@ export function DictationBar({
   elapsedMs,
   failure,
   engine,
-  download,
   fix,
   onCancel,
   onRetry,
@@ -53,7 +45,6 @@ export function DictationBar({
   elapsedMs: number;
   failure: string | null;
   engine: string | null;
-  download: { title: string; percent: number } | null;
   fix: DictationFix | null;
   onCancel: () => void;
   onRetry: () => void;
@@ -64,7 +55,7 @@ export function DictationBar({
   const P = useTranscriptTheme();
   if (phase === 'idle') return null;
   const failed = phase === 'failed';
-  const label = dictationLabel(phase, elapsedMs, engine, download);
+  const label = dictationLabel(phase, elapsedMs, engine);
   const button = (text: string, onPress: () => void) => (
     <Pressable
       accessibilityRole="button"
@@ -80,9 +71,6 @@ export function DictationBar({
       <View style={styles.texts}>
         <Text style={[styles.text, failed ? styles.failed : null]}>{label}</Text>
         {failed && failure ? <Text style={styles.detail}>{`${failure} Your recording is kept.`}</Text> : null}
-        {phase === 'downloading' ? (
-          <Text style={styles.detail}>Your recording is kept and transcribes as soon as the model is ready.</Text>
-        ) : null}
       </View>
       {phase === 'polishing' ? button('Skip', onSkip) : null}
       {failed && fix !== null ? button(fix.label, onFix) : null}
@@ -90,11 +78,7 @@ export function DictationBar({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          failed
-            ? 'Dismiss (the recording is kept)'
-            : phase === 'downloading'
-              ? 'Hide (the download goes on and the recording is kept)'
-              : 'Cancel (the recording is kept)'
+          failed ? 'Dismiss (the recording is kept)' : 'Cancel (the recording is kept)'
         }
         hitSlop={8}
         onPress={onCancel}

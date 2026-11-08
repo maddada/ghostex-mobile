@@ -15,6 +15,7 @@ import LicencesPage from './LicencesPage';
 import { SETTINGS_PAGES, type SettingsPageId } from './pages';
 import ReadAloudVoicePage from './ReadAloudVoicePage';
 import { SettingsColumnsFrame } from './SettingsColumns';
+import { SettingsPageIntro } from './SettingsControls';
 import SessionsListPage from './SessionsListPage';
 import ShortRepliesPage from './ShortRepliesPage';
 import SyncPage from './SyncPage';
@@ -39,7 +40,9 @@ export default function SettingsPageScreen({ route }: NativeStackScreenProps<Roo
 export function SettingsPageContent({ page }: { page: SettingsPageId }) {
   return (
     <SettingsPageBoundary key={page} name={`settings:${page}`}>
-      <SettingsPageBody page={page} />
+      <SettingsPageIntro.Provider value={SETTINGS_PAGES[page].description}>
+        <SettingsPageBody page={page} />
+      </SettingsPageIntro.Provider>
     </SettingsPageBoundary>
   );
 }

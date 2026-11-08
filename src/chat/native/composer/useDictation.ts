@@ -35,13 +35,8 @@ import {
   type Kept,
   type Transcription,
 } from '../../../voice/dictation';
-import { downloadPercent, formatBytes, type DictateEngine, type SpeechModel } from '../../../voice/dictateModel';
-import {
-  downloadSpeechModel,
-  listSpeechModels,
-  readDictateEngine,
-  skipDictationPolish,
-} from '../../../voice/dictateSettings';
+import type { DictateEngine } from '../../../voice/dictateModel';
+import { readDictateEngine, skipDictationPolish } from '../../../voice/dictateSettings';
 import { chatMachineLink } from '../../rust/machine-link';
 import { setReadAloudDictating } from '../../../voice/readAloud';
 
@@ -68,17 +63,18 @@ const DICTATION_ENABLED = true;
 
 /**
  * `polishing`: the words are in and AI polish runs on them (Skip hands over the unpolished text).
- * `downloading`: the computer fetches the local model a failed transcription needed; the kept
- * recording is transcribed as soon as the model is ready.
  */
-export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'polishing' | 'downloading' | 'failed';
+export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'polishing' | 'failed';
 
-/** The failure codes a model download fixes (gxserver's `transcribe.rs`). */
-const MODEL_CODES: ReadonlySet<string> = new Set(['modelMissing', 'modelDownloading']);
-const MODEL_POLL_MS = 500;
+/**
+ * Hex on the chat's computer isn't ready: the row's button opens Voice settings, where Install Hex
+ * and the steps are.
+ *
+ * CDXC:Dictate 2026-11-08 DECISION: User (Q1709): our local engine is gone and Hex is the recommended engine, used for the phone's dictation too (the computer transcribes). Supersedes the Download (0.72 GB) button that fetched the local model.
+ */
+const HEX_CODES: ReadonlySet<string> = new Set(['hexNotInstalled', 'hexNotRunning', 'hexNoModels', 'hexModelNotReady', 'hexVersion']);
 
-/** What a failure row offers besides Transcribe again: fetching the local model it needs. */
-export type DictationFix = { kind: 'download' | 'wait'; label: string };
+export type DictationFix = { kind: 'settings'; label: string };
 
 /** `m:ss` for a recording's length. */
 export function dictationClock(ms: number): string {
@@ -102,8 +98,6 @@ export function useDictation(
   const [failure, setFailure] = useState<{ kept: Kept; message: string; code: string | null } | null>(null);
   /** What will transcribe on the chat's computer (`/api/readDictateEngine`); null on older computers. */
   const [engine, setEngine] = useState<DictateEngine | null>(null);
-  /** The local model a failed transcription needs, with its download's progress. */
-  const [neededModel, setNeededModel] = useState<SpeechModel | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [now, setNow] = useState(0);
   const phaseRef = useRef<DictationPhase>('idle');
@@ -114,8 +108,6 @@ export function useDictation(
   callbacks.current = { draft, replace, onError };
   /** Stops following the computer's recording status (polishing). */
   const unwatch = useRef<(() => void) | null>(null);
-  /** Bumped to stop following a model download. */
-  const downloadRun = useRef(0);
 
   /** Asks the computer what will transcribe now; answers it too. */
   const refreshEngine = useCallback(async (): Promise<DictateEngine | null> => {
@@ -164,7 +156,6 @@ export function useDictation(
       if (phaseRef.current === 'recording' || phaseRef.current === 'starting') void stopRecording(true);
       run.current.cancelled = true;
       unwatch.current?.();
-      downloadRun.current += 1;
     },
     [],
   );
@@ -194,13 +185,8 @@ export function useDictation(
       } else {
         setFailure({ kept: result.kept, message: result.message, code: result.code });
         setPhase('failed');
-        // The engine line follows (a model removed, a key missing); a missing model is looked up for Download.
-        void refreshEngine().then(async (now) => {
-          if (machine === null || result.code === null || !MODEL_CODES.has(result.code)) return;
-          const id = now?.modelId;
-          const models = id ? await listSpeechModels(machine) : null;
-          setNeededModel(models?.find((model) => model.id === id) ?? null);
-        });
+        // The engine line follows (Hex closed, a key missing).
+        void refreshEngine();
       }
     },
     [insert, machine, refreshEngine],
@@ -212,7 +198,6 @@ export function useDictation(
       const current = { cancelled: false, serverId: kept?.kind === 'server' ? kept.id : null };
       run.current = current;
       setFailure(null);
-      setNeededModel(null);
       setPhase('transcribing');
       // While the computer works on it, its status says when AI polish starts (Skip shows then).
       const watch = (id: string) => {
@@ -256,8 +241,6 @@ export function useDictation(
     const current = { cancelled: false, serverId: null };
     run.current = current;
     setFailure(null);
-    setNeededModel(null);
-    downloadRun.current += 1;
     setPhase('starting');
     // What transcribes may have changed on the computer since the chat opened.
     void refreshEngine();
@@ -302,11 +285,8 @@ export function useDictation(
     current.cancelled = true;
     unwatch.current?.();
     unwatch.current = null;
-    // A model download keeps going on the computer; the row just stops following it.
-    downloadRun.current += 1;
     setPhase('idle');
     setFailure(null);
-    setNeededModel(null);
     if (machine === null) return;
     if (was === 'recording') {
       const recording = await stopRecording(true);
@@ -340,65 +320,11 @@ export function useDictation(
     await skipDictationPolish(machine, id);
   }, [machine]);
 
-  /**
-   * Download on a failure that needs the local model: the computer fetches it (or keeps fetching
-   * it) and the kept recording is transcribed the moment it is ready.
-   */
-  const downloadNeeded = useCallback(async () => {
-    const kept = failure?.kept;
-    const model = neededModel;
-    if (machine === null || kept === undefined || model === null) return;
-    downloadRun.current += 1;
-    const runId = downloadRun.current;
-    setPhase('downloading');
-    if (model.state !== 'downloading' && model.state !== 'preparing') {
-      const error = await downloadSpeechModel(machine, model.id);
-      if (error !== null) {
-        setFailure({ kept, message: `Couldn't start the download: ${error}`, code: 'modelMissing' });
-        setPhase('failed');
-        return;
-      }
-    }
-    for (;;) {
-      await new Promise((resolve) => setTimeout(resolve, MODEL_POLL_MS));
-      if (runId !== downloadRun.current) return;
-      const models = await listSpeechModels(machine);
-      if (runId !== downloadRun.current) return;
-      const now = models?.find((entry) => entry.id === model.id);
-      if (now === undefined) continue;
-      setNeededModel(now);
-      if (now.state === 'ready') {
-        void refreshEngine();
-        await transcribeKept(kept);
-        return;
-      }
-      if (now.state === 'failed' || now.state === 'notDownloaded') {
-        setFailure({
-          kept,
-          message: now.download?.error ?? `${model.shortTitle}'s download stopped on your computer.`,
-          code: 'modelMissing',
-        });
-        setPhase('failed');
-        return;
-      }
-    }
-  }, [failure, machine, neededModel, refreshEngine, transcribeKept]);
-
   const fix: DictationFix | null =
-    failure !== null && failure.code !== null && MODEL_CODES.has(failure.code) && neededModel !== null
-      ? neededModel.state === 'downloading' || neededModel.state === 'preparing'
-        ? { kind: 'wait', label: 'Transcribe when ready' }
-        : { kind: 'download', label: `Download (${formatBytes(neededModel.downloadBytes)})` }
+    failure !== null && failure.code !== null && HEX_CODES.has(failure.code)
+      ? { kind: 'settings', label: 'Set up Hex' }
       : null;
-
-  // gxserver's sentence for a missing model says to download it in Settings; the row's own button
-  // does that, so the phone says it in its words (a failed download keeps the computer's reason).
-  const failureText =
-    fix !== null && neededModel !== null && neededModel.state !== 'failed'
-      ? fix.kind === 'wait'
-        ? `${neededModel.shortTitle} is still downloading on your computer.`
-        : `${neededModel.shortTitle} isn't downloaded on your computer yet.`
-      : (failure?.message ?? null);
+  const failureText = failure?.message ?? null;
 
   /** What Transcribe previous would take, asked fresh (for the long-press menu). */
   const previous = useCallback(async () => (machine === null ? null : latestUntranscribed(machine)), [machine]);
@@ -409,20 +335,15 @@ export function useDictation(
     listening: phase === 'recording' || phase === 'starting',
     failure: failureText,
     elapsedMs: phase === 'recording' ? Math.max(0, now - startedAt) : 0,
-    /** What will transcribe ("Local, Parakeet v3"), or null when the computer doesn't say. */
+    /** What will transcribe ("Hex, Parakeet v3"), or null when the computer doesn't say. */
     engine,
     fix,
-    /** The model being fetched while `phase` is `downloading`: its short name and percentage. */
-    download: phase === 'downloading' && neededModel !== null
-      ? { title: neededModel.shortTitle, percent: downloadPercent(neededModel) ?? 0 }
-      : null,
     toggle,
     cancel,
     retry,
     transcribePrevious,
     previous,
     skipPolish,
-    downloadNeeded,
   };
 }
 

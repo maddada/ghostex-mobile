@@ -1,13 +1,15 @@
 /// <reference types="jest" />
 /**
  * Run with `bun run test:jest`. Settings › Voice against two fake computers: the page reads Dictate
- * from the picked computer's gxserver, downloads a local model with progress, saves the engine
- * there, and the picker at the top switches to the other computer, whose settings are its own.
+ * from the picked computer's gxserver, shows the one-time notice that its local engine was retired
+ * for Hex with the old models to delete, saves the engine there, and the picker at the top switches
+ * to the other computer, whose settings are its own.
  * Mocked are the boundaries only: each computer's gxserver (`chatMachineLink`), navigation, the
  * native module, storage and the safe area; the page, its stores and its controls are the real ones.
  */
 
 import type { ReactNode } from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { useMachinesStore, type MachineRecord } from '../../machines/store';
@@ -16,9 +18,9 @@ import VoicePage from './VoicePage';
 
 type Fake = {
   settings: Record<string, unknown>;
-  modelState: string;
-  received: number;
   calls: string[];
+  localRetired?: { message: string } | null;
+  oldModels?: { folder: string; bytes: number } | null;
   /** The computer's `hex` block; absent on an older Ghostex. */
   hex?: Record<string, unknown>;
   hexInstalls?: number;
@@ -26,25 +28,22 @@ type Fake = {
 const mockComputers: Record<string, Fake> = {};
 
 function mockOverview(fake: Fake) {
-  const settings = fake.settings as { engine: string; localModel: string };
-  const ready = fake.modelState === 'ready';
+  const settings = fake.settings as { engine: string };
   return {
     settings,
     engine: {
       engine: settings.engine,
-      label: settings.engine === 'local' ? 'Local, Parakeet v3' : 'xAI speech to text',
-      modelId: settings.engine === 'local' ? settings.localModel : null,
-      ready: settings.engine === 'local' && ready,
+      label: settings.engine === 'hex' ? 'Hex' : 'xAI speech to text',
+      ready: false,
       problem: null,
       polish: true,
     },
     keys: { xai: { configured: false, unreadable: false }, openai: { configured: false, unreadable: false } },
-    models: [mockModel(fake)],
-    localAvailable: true,
-    modelsDiskBytes: ready ? 723_000_000 : 0,
     projectWords: ['Ghostex'],
     polishAvailable: true,
     languages: [{ code: 'auto', label: 'Auto-detect' }],
+    localRetired: fake.localRetired ?? null,
+    oldModels: fake.oldModels ?? null,
     ...(fake.hex ? { hex: fake.hex } : {}),
   };
 }
@@ -62,23 +61,6 @@ const hexView = (state: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-function mockModel(fake: Fake) {
-  return {
-    id: 'parakeet-tdt-0.6b-v3',
-    title: 'Parakeet TDT 0.6B v3',
-    shortTitle: 'Parakeet v3',
-    languagesLabel: 'English + 24 European languages',
-    languages: ['en'],
-    speedLabel: 'Fastest',
-    downloadBytes: 700_000_000,
-    diskBytes: 723_000_000,
-    state: fake.modelState,
-    download: fake.modelState === 'downloading' ? { receivedBytes: fake.received, totalBytes: 700_000_000, error: null } : null,
-    inUse: true,
-    attribution: 'Parakeet TDT 0.6B v3 by NVIDIA, CC BY 4.0',
-  };
-}
-
 jest.mock('../../chat/rust/machine-link', () => ({
   UNREACHABLE_MESSAGE: "Couldn't reach it.",
   chatMachineLink: (machine: { id: string }) => ({
@@ -89,20 +71,15 @@ jest.mock('../../chat/rust/machine-link', () => ({
       switch (method) {
         case 'readDictateSettings':
           return { result: mockOverview(fake), error: null };
-        case 'setDictateSettings':
-          fake.settings = { ...fake.settings, ...params.patch };
+        case 'setDictateSettings': {
+          const { localRetiredNotice, ...patch } = params.patch ?? {};
+          if (localRetiredNotice === false) fake.localRetired = null;
+          fake.settings = { ...fake.settings, ...patch };
           return { result: mockOverview(fake), error: null };
-        case 'downloadSpeechModel':
-          fake.modelState = 'downloading';
-          fake.received = 0;
-          return { result: { model: mockModel(fake) }, error: null };
-        case 'listSpeechModels':
-          // Each poll moves the download on by half; the third finds it ready.
-          if (fake.modelState === 'downloading') {
-            fake.received += 350_000_000;
-            if (fake.received > 700_000_000) fake.modelState = 'ready';
-          }
-          return { result: { models: [mockModel(fake)] }, error: null };
+        }
+        case 'deleteOldSpeechModels':
+          fake.oldModels = null;
+          return { result: mockOverview(fake), error: null };
         case 'readDictateEngine':
           return { result: mockOverview(fake).engine, error: null };
         case 'readVoiceAgent':
@@ -160,16 +137,13 @@ const machine = (id: string, name: string): MachineRecord => ({
 
 const fresh = (): Fake => ({
   settings: {
-    engine: 'local',
-    localModel: 'parakeet-tdt-0.6b-v3',
+    engine: 'hex',
     language: 'auto',
     dictionary: [],
     addProjectNames: true,
     removeFillers: true,
     polish: { enabled: true, model: 'claude-sonnet-5-5', prompt: null },
   },
-  modelState: 'notDownloaded',
-  received: 0,
   calls: [],
 });
 
@@ -183,19 +157,30 @@ beforeEach(() => {
   useDictateStore.setState({ machineId: null, loadedFor: null, overview: null, status: 'loading', problem: null });
 });
 
-test('the selected computer’s Dictate settings show, and its model downloads with progress', async () => {
+test('a computer that used the retired local engine says so once, and its old models can go', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+    buttons?.find((button) => button.text === 'Delete')?.onPress?.();
+  });
+  mockComputers.mac!.localRetired = { message: 'Ghostex no longer has its own speech model.' };
+  mockComputers.mac!.oldModels = { folder: '/data/speech-models', bytes: 723_000_000 };
+  mockComputers.mac!.hex = hexView('notInstalled');
   await render(<VoicePage />);
   expect(await screen.findByText('Dictate on MacBook Pro')).toBeTruthy();
-  expect(screen.getByText("Parakeet v3 isn't downloaded yet. Download it below (0.70 GB).")).toBeTruthy();
+  expect(screen.getByText('Ghostex no longer has its own speech model.')).toBeTruthy();
+  expect(screen.getByText(/MacBook Pro transcribes it with its engine, so with Hex the words come from Hex on MacBook Pro/)).toBeTruthy();
   expect(screen.getByText('Voice agent on MacBook Pro')).toBeTruthy();
   expect(screen.getByText('This phone')).toBeTruthy();
 
-  await fireEvent.press(screen.getByLabelText('Download Parakeet v3'));
-  expect(await screen.findByText(/^Downloading 50% · /, undefined, { timeout: 3000 })).toBeTruthy();
-  expect(await screen.findByText(/^In use · /, undefined, { timeout: 4000 })).toBeTruthy();
-  await waitFor(() => expect(screen.getByText(/transcribes on its own CPU/)).toBeTruthy(), { timeout: 3000 });
-  expect(mockComputers.mac!.calls).toContain('downloadSpeechModel');
+  await fireEvent.press(screen.getByText('Got it'));
+  await waitFor(() => expect(screen.queryByText('Ghostex no longer has its own speech model.')).toBeNull());
+  expect(mockComputers.mac!.localRetired).toBeNull();
+  expect(mockComputers.mac!.settings).not.toHaveProperty('localRetiredNotice');
+
+  await fireEvent.press(screen.getByText('Delete old speech models'));
+  await waitFor(() => expect(screen.queryByText('Delete old speech models')).toBeNull());
+  expect(mockComputers.mac!.calls).toContain('deleteOldSpeechModels');
   expect(mockComputers.linux!.calls).toHaveLength(0);
+  alert.mockRestore();
 });
 
 test('the engine is saved on the computer, and the picker switches to another one', async () => {
@@ -204,7 +189,7 @@ test('the engine is saved on the computer, and the picker switches to another on
 
   await fireEvent.press(screen.getByLabelText('xAI'));
   expect(mockComputers.mac!.settings.engine).toBe('xai');
-  expect(screen.getByText('MacBook Pro has no xAI key yet. Add it in Ghostex Settings › Voice there.')).toBeTruthy();
+  expect(screen.getByText('MacBook Pro has no xAI key yet. Add it in Ghostex Settings › Dictation there.')).toBeTruthy();
 
   await fireEvent.press(screen.getByLabelText('Voice settings for MacBook Pro'));
   expect(await screen.findAllByText('Dictate: xAI speech to text')).toHaveLength(2);
@@ -217,17 +202,18 @@ test('the engine is saved on the computer, and the picker switches to another on
 });
 
 test('Hex is offered where the computer says Hex 3 ships, and Install Hex installs it there', async () => {
+  mockComputers.mac!.settings = { ...mockComputers.mac!.settings, engine: 'xai' };
   mockComputers.mac!.hex = hexView('notInstalled');
   mockComputers.linux!.hex = { ...hexView('unsupported'), available: false };
   await render(<VoicePage />);
   expect(await screen.findByText('Dictate on MacBook Pro')).toBeTruthy();
   await fireEvent.press(screen.getByLabelText('Hex'));
   expect(mockComputers.mac!.settings.engine).toBe('hex');
-  expect(await screen.findByText("Hex 3 isn't installed on MacBook Pro. Install it there to transcribe with Hex.")).toBeTruthy();
+  expect(await screen.findByText(/^Hex 3 isn't installed on MacBook Pro\. Install Hex/)).toBeTruthy();
 
   await fireEvent.press(screen.getByText('Install Hex'));
   await waitFor(() => expect(mockComputers.mac!.hexInstalls).toBe(1));
-  expect(await screen.findByText("Hex isn't running on MacBook Pro. Open Hex there, then check again.", undefined, { timeout: 4000 })).toBeTruthy();
+  expect(await screen.findByText(/^Hex isn't running on MacBook Pro\. Open Hex there, then check again\./, undefined, { timeout: 4000 })).toBeTruthy();
   expect(screen.getByText('Check again')).toBeTruthy();
 });
 
@@ -248,6 +234,7 @@ test('a running Hex offers the models it has ready, and the pick is saved on the
 });
 
 test('a computer where Hex 3 has no build, or an older Ghostex, has no Hex option', async () => {
+  mockComputers.mac!.settings = { ...mockComputers.mac!.settings, engine: 'xai' };
   mockComputers.mac!.hex = { ...hexView('unsupported'), available: false };
   await render(<VoicePage />);
   expect(await screen.findByText('Dictate on MacBook Pro')).toBeTruthy();

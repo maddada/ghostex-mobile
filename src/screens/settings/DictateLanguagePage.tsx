@@ -6,7 +6,6 @@
 
 import { useNavigation } from '@react-navigation/native';
 
-import { modelSpeaks } from '../../voice/dictateModel';
 import { changeDictate, useDictateStore } from '../../voice/dictateSettings';
 import { SettingsSection } from './SectionBoundary';
 import { Caption, ChoiceRow, SectionHeader, SettingsScreenLayout } from './SettingsControls';
@@ -26,8 +25,6 @@ export default function DictateLanguagePage() {
     );
   }
   const { settings } = overview;
-  const model =
-    settings.engine === 'local' ? overview.models.find((entry) => entry.id === settings.localModel) : undefined;
   const choose = (language: string) => {
     if (language === settings.language) return;
     void changeDictate(machine, { language }).then(() => {
@@ -39,16 +36,11 @@ export default function DictateLanguagePage() {
     <SettingsScreenLayout>
       <SettingsSection name="settings:dictateLanguage:list">
         <SectionHeader title={`Dictate on ${computerName(machine)}`} />
-        {model !== undefined ? <Caption>{`${model.shortTitle} knows ${model.languagesLabel}.`}</Caption> : null}
         {problem !== null ? <Caption>{problem}</Caption> : null}
         {overview.languages.map((language) => (
           <ChoiceRow
             key={language.code}
-            label={
-              model !== undefined && !modelSpeaks(model, language.code)
-                ? `${language.label} (not with ${model.shortTitle})`
-                : language.label
-            }
+            label={language.label}
             selected={settings.language === language.code}
             onPress={() => choose(language.code)}
           />
