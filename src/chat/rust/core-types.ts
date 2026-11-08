@@ -83,7 +83,10 @@ export type ChatCoreEvent =
   /** Whether anything shows the chat: while it is not, its clocks and accounts poll wait, and
    * showing it again catches them up. A core older than this event refuses it (`badEvent`) and
    * keeps every timer running, as before. */
-  | { type: 'visibility'; shown: boolean };
+  | { type: 'visibility'; shown: boolean }
+  /** The computer the session runs on (`computer.ts`): the offline card and held messages. A core
+   * older than this event refuses it (`badEvent`) and keeps its old wording. */
+  | { type: 'computerChanged'; computer: import('./computer').ChatSessionComputer | null };
 
 /** One Read aloud input (`ReadAloudEvent` in `packages/gx-chat-core/src/read_aloud/events.rs`). */
 export type ChatReadAloudEvent =

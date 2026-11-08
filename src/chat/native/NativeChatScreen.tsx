@@ -50,6 +50,7 @@ import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, question
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
+import { ComputerCard } from './cards/ComputerCard';
 import type { BoardFocus } from './cards/CoordinatorBoard';
 import { num, obj, str } from './cards/json';
 import { remoteWorkerNotice, remoteWorkerOfAction } from './cards/remoteWorker';
@@ -245,8 +246,7 @@ export default function NativeChatScreen({
         // The Dictate menu's Voice settings: Settings › Voice, already on this chat's computer.
         chooseVoiceComputer(machine.id);
         voiceNavigation.navigate('SettingsPage', { page: 'voice' });
-      }
-      else if (action === 'voiceCall') {
+      } else if (action === 'voiceCall') {
         callVoiceAbout(machine, { projectId, sessionId, title: title.length > 0 ? title : 'this chat' }, () =>
           voiceNavigation.navigate('Voice'),
         );
@@ -377,7 +377,6 @@ export default function NativeChatScreen({
           onImages={receiveImages}
           onDropActive={(event) => setDropActive(event.nativeEvent.active)}
         >
-
           <View
             style={[styles.root, { backgroundColor: theme.background }]}
             pointerEvents={visible ? 'auto' : 'none'}
@@ -402,7 +401,12 @@ export default function NativeChatScreen({
               {/* Scroll-to-bottom alone while no card carries it. */}
               {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
             </View>
-            <ConnectionLostNotice machine={machine} active={visible} document={document} />
+            {/* The offline computer's card tops the stack, above the working card; it names the
+                computer itself, so "Reconnecting to …" steps aside while it shows. */}
+            <ComputerCard document={document} onRetry={() => chat.dispatch({ type: 'computerRetry' })} />
+            {document?.computerNotice != null ? null : (
+              <ConnectionLostNotice machine={machine} active={visible} document={document} />
+            )}
             {/* The working card in its own row above the cards and the composer: the transcript ends above it. */}
             {document === null ? null : <WorkingCard document={document} />}
             <NativeChatCards chat={chat} onHostAction={hostAction} />
@@ -632,8 +636,9 @@ function useChatViewRequests(
               const draftTitle =
                 useInventoryStore
                   .getState()
-                  .inventoriesByMachineId[machineId]?.summary?.sessions.find((session) => session.sessionId === sessionId)
-                  ?.title ?? 'Cloud Box';
+                  .inventoriesByMachineId[machineId]?.summary?.sessions.find(
+                    (session) => session.sessionId === sessionId,
+                  )?.title ?? 'Cloud Box';
               void openStartedBoxChat(
                 machineId,
                 opened.machineId,
@@ -642,7 +647,8 @@ function useChatViewRequests(
                 draftTitle,
                 (params) => navigation.navigate('Terminal', params),
               ).then((done) => {
-                if (!done) show('The chat now runs on its cloud box. Open it from the sessions list.', false, 'Cloud box ready');
+                if (!done)
+                  show('The chat now runs on its cloud box. Open it from the sessions list.', false, 'Cloud box ready');
               });
             } else if (request.action === 'openSettingsPage') {
               // Connecting a provider and managing snapshots stay on the computer (D7).
@@ -654,10 +660,16 @@ function useChatViewRequests(
               const fields = (request.params ?? {}) as { serverId?: unknown; projectId?: unknown; sessionId?: unknown };
               let target = machine;
               if (typeof fields.serverId === 'string' && fields.serverId.length > 0) {
-                const otherId = machineIdOfGlobalRef(`${fields.serverId}:${String(fields.projectId)}:${String(fields.sessionId)}`);
+                const otherId = machineIdOfGlobalRef(
+                  `${fields.serverId}:${String(fields.projectId)}:${String(fields.sessionId)}`,
+                );
                 const other = otherId !== null ? machineTargetFor(otherId) : null;
                 if (other === null) {
-                  show('That session runs on a computer this phone is not connected to.', false, 'Could not open that session');
+                  show(
+                    'That session runs on a computer this phone is not connected to.',
+                    false,
+                    'Could not open that session',
+                  );
                   return;
                 }
                 target = other;

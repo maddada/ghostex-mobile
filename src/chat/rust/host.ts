@@ -56,6 +56,7 @@ import {
 import { currentSessionDirectory, subscribeSessionDirectory } from './sessionDirectory';
 import { readRecord, readRetainedSnapshot, writeRecord, writeRetainedSnapshot } from './storage';
 import { chatMachineLink } from './machine-link';
+import { checkComputer, HELD_SEND_METHODS, heldSendRpc, sessionComputer, subscribeSessionComputer } from './computer';
 import { coreUnavailableMessage } from './wasm-core/pageLoad';
 import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
 import { markSessionOpen } from '../../terminal/openTiming';
@@ -188,6 +189,7 @@ export class RustChatHost {
   private draftRetryBusy = false;
   private appStateSubscription: NativeEventSubscription | null = null;
   private unsubscribeSessionDirectory: (() => void) | null = null;
+  private unsubscribeComputer: (() => void) | null = null;
   private unsubscribeModelCatalog: (() => void) | null = null;
   private unsubscribeToolCards: (() => void) | null = null;
   private unregisterReadAloud: (() => void) | null = null;
@@ -251,6 +253,18 @@ export class RustChatHost {
         ...(initialPresentation !== undefined ? { initialPresentation } : {}),
       },
     });
+    // The computer the session runs on: the offline card and the held messages (`computer.ts`).
+    const { id: machineId } = this.target.machine;
+    this.enqueue({
+      type: 'computerChanged',
+      computer: sessionComputer(machineId, this.target.projectId, this.target.sessionId),
+    });
+    this.unsubscribeComputer = subscribeSessionComputer(
+      machineId,
+      this.target.projectId,
+      this.target.sessionId,
+      (computer) => this.enqueue({ type: 'computerChanged', computer }),
+    );
     // The other session on a message between agents is named from the inventory's session list.
     this.enqueue({ type: 'sessionDirectoryChanged', sessions: currentSessionDirectory() });
     this.unsubscribeSessionDirectory = subscribeSessionDirectory((sessions) =>
@@ -323,6 +337,8 @@ export class RustChatHost {
     this.appStateSubscription = null;
     this.unsubscribeSessionDirectory?.();
     this.unsubscribeSessionDirectory = null;
+    this.unsubscribeComputer?.();
+    this.unsubscribeComputer = null;
     this.unsubscribeModelCatalog?.();
     this.unsubscribeModelCatalog = null;
     this.unsubscribeToolCards?.();
@@ -749,6 +765,14 @@ export class RustChatHost {
       // Deliberately nothing: desktop's view already sends instead (`SWALLOWED_HOST_ACTIONS`).
       case 'suggestionSend':
         return;
+      // The offline-computer card: a message got no answer for 10 s, or its Retry (`computer.ts`).
+      case 'checkComputer':
+        void checkComputer(this.target.machine);
+        return;
+      case 'reconnectComputer':
+        this.poll.restart();
+        void checkComputer(this.target.machine);
+        return;
       case 'attachmentReferences':
         this.composer.insertAttachments(fields.paths);
         return;
@@ -832,6 +856,13 @@ export class RustChatHost {
       if (typeof fields.limit === 'number') this.poll.widen(fields.limit);
     }
     if (method === 'setSessionChatDraft') void this.noteDraftSave(requestId, fields);
+    // A message held while the computer is offline waits on another computer (`computer.ts`).
+    if (HELD_SEND_METHODS.has(method)) {
+      void heldSendRpc(this.target.machine.id, this.retainedKey, method, fields).then((answer) =>
+        this.settle(requestId, answer),
+      );
+      return;
+    }
     const liveRead = method === 'readSessionChat' && fields.beforeOffset === undefined && fields.subagent === undefined;
     const pending = sessionChatRpc(this.target.machine, method, fields);
     // An exec long poll starts from this read's fingerprint instead of reading it all again.

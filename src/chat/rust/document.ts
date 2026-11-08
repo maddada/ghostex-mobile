@@ -574,6 +574,10 @@ export type ChatDocument = {
   operationError?: string | null;
   /** The refusal's code, so the composer can draw its not-ready card instead of an error line. */
   operationErrorCode: string | null;
+  /** The card above the chat box while the session's computer is offline (gx-chat-core
+   * `session/computer.rs`): "Windows PC is offline · last seen 2h ago" and Retry, or
+   * "… isn't answering · checking…" with a spinner. */
+  computerNotice?: { title: string; detail?: string; checking?: boolean };
   /** With an `unreachable` refusal of a send: the mode (`send`, `queue`, `compact`) Retry submits the box with,
    * under the failed call's own `sendRequestId`. Desktop: `composer.rs` `unreachable_retry`. */
   operationErrorResend?: string | null;
