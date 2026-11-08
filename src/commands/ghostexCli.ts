@@ -236,6 +236,26 @@ export function createAgentCommand(
   );
 }
 
+/** Chief (server/src/chief/): whether it is on, its session, and the agents it can run on. */
+export function chiefStatusCommand(): string {
+  return 'ghostex chief status --json';
+}
+
+/** Chief's first open, on the agent the user picked. */
+export function chiefOpenCommand(agentId: string): string {
+  return `ghostex chief open --agent ${shellQuote(requireId(agentId, 'agent id'))} --json`;
+}
+
+/** Chief's New Chat: a fresh chat that keeps its memory and threads. */
+export function chiefNewChatCommand(): string {
+  return 'ghostex chief new-chat --json';
+}
+
+/** Chief's Change Agent. */
+export function chiefSetAgentCommand(agentId: string): string {
+  return `ghostex chief set-agent ${shellQuote(requireId(agentId, 'agent id'))} --json`;
+}
+
 /** The New Coordinator form's choices: agents, their model lineups and the defaults `create` applies. */
 export function coordinatorOptionsCommand(): string {
   return 'ghostex coordinator options --json';

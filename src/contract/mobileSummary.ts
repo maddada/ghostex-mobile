@@ -61,6 +61,8 @@ export type MobileSummaryWireSession = {
   sessionNote?: string;
   /** 'coordinator' on a coordinator session, 'thread' on one it started; absent otherwise. */
   coordinatorRole?: string;
+  /** This computer's Chief (server/src/chief/): drawn as its own row, never in its project. */
+  isChief?: boolean;
   /** On a thread: its coordinator's ids and the thread's state (server/src/coordinators/presentation.rs). */
   coordinatorProjectId?: string;
   coordinatorSessionId?: string;
@@ -583,6 +585,8 @@ export type GhostexSession = {
   sessionNote: string;
   /** The session is a coordinator: its row draws the crown instead of its agent logo. */
   isCoordinator: boolean;
+  /** The computer's Chief: drawn as the Chief row under the Spaces tabs (contract/chief.ts). */
+  isChief: boolean;
   /**
    * On a thread: the coordinator it belongs to ('' on every other session, and on a daemon that
    * predates the fields). The drawer nests the thread under that coordinator (coordinatorTree.ts).
@@ -1448,6 +1452,7 @@ export function parseSession(value: unknown): GhostexSession | null {
         : 0,
     sessionNote: trimmedValue(value, 'sessionNote'),
     isCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator',
+    isChief: value.isChief === true,
     coordinatorProjectId: trimmedValue(value, 'coordinatorProjectId'),
     coordinatorSessionId: trimmedValue(value, 'coordinatorSessionId'),
     coordinatorThreadState: trimmedValue(value, 'coordinatorThreadState'),
@@ -1985,8 +1990,11 @@ function parseCloudBox(value: unknown): GhostexSession['cloudBox'] {
 
 /**
  * The sessions the lists show: every one but side chats, which their main chat's Side chats pill
- * lists instead (gx-protocol `PresentationSession::listed_in_sidebar`, the desktop's same rule).
+ * lists instead, and Chief, which has its own row (gx-protocol
+ * `PresentationSession::listed_in_sidebar`, the desktop's same rule).
  */
-export function visibleSessions<T extends { sideChatParentSessionId?: string }>(sessions: readonly T[]): T[] {
-  return sessions.filter((session) => !session.sideChatParentSessionId);
+export function visibleSessions<T extends { sideChatParentSessionId?: string; isChief?: boolean }>(
+  sessions: readonly T[],
+): T[] {
+  return sessions.filter((session) => !session.sideChatParentSessionId && session.isChief !== true);
 }
