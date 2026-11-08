@@ -7,7 +7,7 @@
  * re-renders only the rows that moved.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -21,6 +21,8 @@ import {
   type NativeSyntheticEvent,
   type ViewInstance,
 } from 'react-native';
+
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { NO_BAR_INSETS } from '../../../components/common/verticalBar/layout';
 import { useScrollToBarEdges } from '../../../components/common/verticalBar/VerticalBarArea';
@@ -56,6 +58,7 @@ import {
 import { useTranscriptBottomStore } from './bottomStore';
 import { TranscriptFieldRevealContext, useTranscriptFieldReveal } from './fieldReveal';
 import { ROW_GAP } from './cardSpacing';
+import { REPLY_FADE_MS, useReplyArrival } from './replyArrival';
 
 /**
  * `scroll-bottom.json`: the pill's look and how far from the bottom it appears.
@@ -374,11 +377,25 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
   );
 
   const answerHeld = useAnswerHold((hold) => hold.held);
-  const jumpToBottom = useCallback(() => {
+  const { fadeKey, newestKey, newestRowRef, onNewestLayout, releaseReplyHold } = useReplyArrival({
+    rows,
+    enabled: main,
+    listRef,
+    listOffset,
+    rootRef,
+    edge: SCROLL_BOTTOM.edgeThreshold,
+    margin: QUESTION_PILL.jumpMargin,
+    held: answerHeld,
+  });
+  const releaseHolds = useCallback(() => {
     releaseAnswerHold();
+    releaseReplyHold();
+  }, [releaseReplyHold]);
+  const jumpToBottom = useCallback(() => {
+    releaseHolds();
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
     dispatch({ type: 'composerExpand' });
-  }, [dispatch]);
+  }, [dispatch, releaseHolds]);
 
   // The scroll-to-bottom pill lives on the working card (`cards/WorkingCard.tsx`), outside this list.
   const showJump = main && awayFromBottom && rows.length > 0;
@@ -407,6 +424,8 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
     ({ item: row }: ListRenderItemInfo<Row>) => (
       <TranscriptRowFrame
         item={row.item}
+        fadeIn={fadeKey !== null && transcriptItemKey(row.item) === fadeKey}
+        newest={main && transcriptItemKey(row.item) === newestKey ? { ref: newestRowRef, onLayout: onNewestLayout } : null}
         first={row.index === 0}
         findNeedle={searchItems.has(row.index) ? searchNeedle : ''}
         findActive={activeItem === row.index ? activeInRow : null}
@@ -415,7 +434,20 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
         widthPercent={rowWidth}
       />
     ),
-    [activeInRow, activeItem, activeLabelKey, activeLabelOccurrence, rowWidth, searchItems, searchNeedle],
+    [
+      activeInRow,
+      activeItem,
+      activeLabelKey,
+      activeLabelOccurrence,
+      fadeKey,
+      main,
+      newestKey,
+      newestRowRef,
+      onNewestLayout,
+      rowWidth,
+      searchItems,
+      searchNeedle,
+    ],
   );
 
   const keyExtractor = useCallback((row: Row) => transcriptItemKey(row.item), []);
@@ -498,7 +530,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
             ? { minIndexForVisible: 0 }
             : { minIndexForVisible: 0, autoscrollToTopThreshold: SCROLL_BOTTOM.edgeThreshold }
         }
-        onScrollBeginDrag={releaseAnswerHold}
+        onScrollBeginDrag={releaseHolds}
         keyboardDismissMode="interactive"
         // Android's scroll-into-view for a focused field is mirrored in an inverted list; the
         // question form's fields reveal themselves instead (`fieldReveal.ts`).
@@ -598,6 +630,8 @@ function SearchFoldsReport({ dispatch }: { dispatch: RustChat['dispatch'] }) {
 
 const TranscriptRowFrame = memo(function TranscriptRowFrame({
   item,
+  fadeIn,
+  newest,
   first,
   findNeedle,
   findActive,
@@ -606,6 +640,10 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   widthPercent,
 }: {
   item: TranscriptItem;
+  /** The agent's reply that just arrived: it fades in as it mounts (`replyArrival.ts`). */
+  fadeIn: boolean;
+  /** The transcript's newest row, measured while a reply that arrived is held (`replyArrival.ts`). */
+  newest: { ref: RefObject<ViewInstance | null>; onLayout: () => void } | null;
   first: boolean;
   /** Transcript search's query, lowercase, when this row holds a match; empty otherwise. */
   findNeedle: string;
@@ -633,13 +671,18 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
           counter: { next: 0 },
         };
   return (
-    <View style={[styles.rowOuter, first && styles.rowFirst]}>
+    <Animated.View
+      ref={newest?.ref}
+      onLayout={newest?.onLayout}
+      entering={fadeIn ? FadeIn.duration(REPLY_FADE_MS) : undefined}
+      style={[styles.rowOuter, first && styles.rowFirst]}
+    >
       <View style={[styles.rowInner, widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' }]}>
         <RowFindContext.Provider value={find}>
           <TranscriptItemView item={item} />
         </RowFindContext.Provider>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
