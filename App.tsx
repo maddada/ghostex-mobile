@@ -81,6 +81,7 @@ import DocViewerScreen from './src/screens/DocViewerScreen';
 import SshAccessHelpScreen from './src/screens/SshAccessHelpScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import ApprovalsScreen from './src/screens/ApprovalsScreen';
+import SshPairingNotices from './src/components/security/SshPairingNotices';
 import { useWebPreviewStore } from './src/webPreview/store';
 import {
   AddProjectCopy,
@@ -353,6 +354,8 @@ export default function App() {
           {/* Under the screens, not over them: the once-per-crash offer to send its report. */}
           <CrashReportPrompt />
         </VerticalBarArea>
+        {/* Pairing this phone with a computer it signs in to over SSH (GitHub #495). */}
+        <SshPairingNotices />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

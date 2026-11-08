@@ -109,6 +109,24 @@ function lastJsonLine(stdout: string): Record<string, unknown> | null {
 }
 
 /**
+ * What a chat request answered `approvalRequired` becomes (GitHub #495): pairing over SSH
+ * (`machines/sshPairing.ts`) registers it, so this module stays free of it. `send` sends the same
+ * request again (with other params when given).
+ */
+export type HeldAnswerHandler = (
+  machine: MachineConnectionTarget,
+  method: string,
+  params: unknown,
+  answer: RpcAnswer,
+  send: (params: unknown) => Promise<RpcAnswer>,
+) => Promise<RpcAnswer>;
+let heldAnswerHandler: HeldAnswerHandler | null = null;
+
+export function setHeldAnswerHandler(handler: HeldAnswerHandler | null): void {
+  heldAnswerHandler = handler;
+}
+
+/**
  * Performs one gxserver chat request and answers in the core's terms: over the computer's warm
  * chat link when it has one (`machine-link.ts`), else as one SSH exec. Never throws: a transport
  * failure is a refusal too, because a request the core never hears back about keeps its lane in
@@ -124,12 +142,17 @@ export async function sessionChatRpc(
     return { error: { code: null, message: `Invalid chat request method: ${method}`, endpoint: `/api/${method}` } };
   }
   if (isCloudBoxMachineId(machine.id)) return cloudBoxChatRpc(machine, method, params, timeoutMs);
-  const link = chatMachineLink(machine);
-  if ((await link.route()) === 'socket') {
-    const sent = await link.request(method, params, timeoutMs);
-    if (sent.kind === 'answered') return sent.answer;
-  }
-  return sessionChatRpcOverSsh(machine, method, params, timeoutMs);
+  const send = async (sent: unknown): Promise<RpcAnswer> => {
+    const link = chatMachineLink(machine);
+    if ((await link.route()) === 'socket') {
+      const answer = await link.request(method, sent, timeoutMs);
+      if (answer.kind === 'answered') return answer.answer;
+    }
+    return sessionChatRpcOverSsh(machine, method, sent, timeoutMs);
+  };
+  const answer = await send(params);
+  if (answer.error?.code !== 'approvalRequired' || heldAnswerHandler === null) return answer;
+  return heldAnswerHandler(machine, method, params, answer, send);
 }
 
 /**
