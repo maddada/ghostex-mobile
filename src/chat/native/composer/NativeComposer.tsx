@@ -779,6 +779,7 @@ export function NativeComposer({
                     draft={text}
                     active={activeImage}
                     dispatch={dispatch}
+                    waiting={model?.heldSend != null}
                   />
                 ) : null}
                 {document !== null ? <QueueList document={document} dispatch={dispatch} /> : null}

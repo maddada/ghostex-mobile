@@ -39,6 +39,11 @@ export type ComposerModelState = {
   ready: boolean;
   /** A send left the composer and has not settled. Send does not wait for it: the core holds later sends behind it. */
   pendingSend: boolean;
+  /**
+   * A send pressed while an attachment was still uploading: its mode, sent with the pills once the
+   * last upload lands, dropped (text kept) when one fails. Desktop: `composer_attach.rs`.
+   */
+  heldSend: SubmitMode | null;
 };
 
 export type ComposerHooks = {
@@ -62,7 +67,14 @@ export class ComposerModel {
     revision: 0,
     ready: false,
     pendingSend: false,
+    heldSend: null,
   };
+
+  /**
+   * Uploads still on their way into the field: being uploaded, or uploaded with their pills not in
+   * the text yet. Counted here, not from the document, which answers a turn later.
+   */
+  private readonly uploads = { saving: 0, inserting: 0 };
 
   private selectionSent: { text: string; caret: number } | null = null;
 
@@ -127,7 +139,13 @@ export class ComposerModel {
     const interrupt = requested === 'interrupt';
     const mode = interrupt ? 'send' : requested;
     const document = this.hooks.document();
-    if (!this.state.ready || this.state.text.trim().length === 0) return false;
+    if (!this.state.ready) return false;
+    // An attachment still uploading: the message waits for its pill instead of leaving without it.
+    if (this.uploads.saving + this.uploads.inserting > 0) {
+      this.set({ heldSend: requested });
+      return false;
+    }
+    if (this.state.text.trim().length === 0) return false;
     if (mode !== 'send' && mode !== 'handoff' && document?.queue.capabilities.canQueue !== true) return false;
     const blocked = document?.sendBlockedReason ?? null;
     if (blocked !== null) {
@@ -192,6 +210,32 @@ export class ComposerModel {
     this.hooks.dispatch({ type: 'refreshComposerChrome', sessionId });
   }
 
+  /** An upload into the field began (`RustChatHost.attachFiles`). */
+  uploadStarted(): void {
+    this.uploads.saving += 1;
+  }
+
+  /**
+   * An upload ended; with `references` its pills are on their way (`attachmentReferences`). One
+   * that failed drops a held send and leaves its text in the field, beside the core's error.
+   */
+  uploadFinished(references: boolean): void {
+    this.uploads.saving = Math.max(0, this.uploads.saving - 1);
+    if (references) {
+      this.uploads.inserting += 1;
+      return;
+    }
+    if (this.state.heldSend !== null) this.set({ heldSend: null });
+  }
+
+  /** The held send goes once nothing is on its way any more. */
+  private releaseHeldSend(): void {
+    const held = this.state.heldSend;
+    if (held === null || this.uploads.saving + this.uploads.inserting > 0) return;
+    this.set({ heldSend: null });
+    this.submit(held);
+  }
+
   /** `setComposerText` (desktop's `replace_draft`). */
   replace(content: string, caret: number | null, fromHistory: boolean, preserveError = false): void {
     this.set({
@@ -216,6 +260,11 @@ export class ComposerModel {
     const at = this.state.caret ?? content.length;
     this.selected({ start: at, end: at });
     this.save(preserveError);
+    // The core wrote an upload's pills into the field.
+    if (this.uploads.inserting > 0) {
+      this.uploads.inserting -= 1;
+      this.releaseHeldSend();
+    }
   }
 
   /** `composerClearExpected`: clear only if the field still holds exactly this text. */

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Image, Pressable, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatImageState } from '../../rust/host';
@@ -22,9 +22,12 @@ export function AttachmentPreviews({
   draft,
   active,
   dispatch,
+  waiting = false,
 }: {
   references: readonly ComposerReference[];
   pending: number;
+  /** Send was pressed while an upload was still on its way (`ComposerModelState.heldSend`). */
+  waiting?: boolean;
   images: { [path: string]: ChatImageState };
   draft: string;
   active: string | null;
@@ -90,6 +93,7 @@ export function AttachmentPreviews({
           <ActivityIndicator size="small" color={P.muted} />
         </View>
       ))}
+      {waiting && pending > 0 ? <Text style={styles.waiting}>Sends once the image is attached</Text> : null}
     </View>
   );
 }
@@ -110,6 +114,7 @@ const useStyles = themedStyles((P) => ({
   },
   tileActive: { borderColor: P.foreground, borderWidth: 2 },
   image: { width: '100%', height: '100%' },
+  waiting: { color: P.muted, fontSize: 12 },
   remove: {
     position: 'absolute',
     top: -6,
