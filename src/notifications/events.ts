@@ -113,9 +113,14 @@ export function sessionFacts(
   };
 }
 
-/** A feed row as a host event; account rows are no agent events and give none. */
+/**
+ * A feed row as a host event; account rows are no agent events and give none, and neither does a row that arrives
+ * already read: the computer writes a row read when its alert rule keeps it quiet (a coordinator's thread finishing,
+ * CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs), and a row read before it reached the phone
+ * was seen already.
+ */
 export function hostEventFromFeedRow(machineId: string, row: FeedRow): HostEvent | null {
-  if (isAccountRow(row)) return null;
+  if (isAccountRow(row) || row.read) return null;
   return {
     machineId,
     sessionId: row.sessionId,
