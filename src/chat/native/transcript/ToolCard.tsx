@@ -4,8 +4,9 @@
  * tools' icons as overlapping round tiles with "Using N tools" / "Used N tools", the failures and
  * the burst's time, and a row per call in the call's own tense with its result and time, a shimmer
  * on the running row and a spinner, check or mark beside it. What every row says, which rows the
- * card holds and when it folds are decided in gx-chat-core `transcript/tool_card.rs` (the user's
- * decision is there); this file only lays the card out and moves it.
+ * card holds, what its folded header says while calls run and when it opens are decided in
+ * gx-chat-core `transcript/tool_card.rs` (the user's decisions are there); this file only lays the
+ * card out and moves it.
  */
 
 import { memo, useEffect, useState } from 'react';
@@ -107,20 +108,18 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
   const card = obj(message.toolCard);
   const running = card?.running === true;
   const live = message.toolCardLive === true;
-  // Open while its calls run and until the agent writes again, folded after (the core's
-  // `live_card_id`); a call waiting on an approval keeps it open (`toolsOpen`).
-  const [open, toggle] = useDisclosure(
-    disclosures,
-    `tool-card:${message.id}`,
-    running || live || message.toolsOpen === true,
-  );
+  // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
+  // While calls run the header carries the newest one's words (the core's `liveLabel`).
+  const [open, toggle] = useDisclosure(disclosures, `tool-card:${message.id}`, card?.waiting === true);
   if (card === null) return null;
   const animate = running || live;
   const colors = cardColors(theme);
   const entries = arr(card.entries)
     .map((entry) => obj(entry))
     .filter((entry): entry is JsonRecord => entry !== null);
-  const title = str(card, 'title');
+  const liveLabel = str(card, 'liveLabel');
+  const liveMore = str(card, 'liveMore');
+  const title = liveLabel.length > 0 ? liveLabel : str(card, 'title');
   const failed = str(card, 'failedLabel');
   const time = str(card, 'time');
   const more = num(card, 'moreIcons') ?? 0;
@@ -135,7 +134,7 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
       <Pressable
         onPress={toggle}
         accessibilityRole="button"
-        accessibilityLabel={[title, failed, time].filter((part) => part.length > 0).join(', ')}
+        accessibilityLabel={[title, liveMore, failed, time].filter((part) => part.length > 0).join(', ')}
         accessibilityState={{ expanded: open }}
         style={({ pressed }) => [styles.header, pressed && { backgroundColor: theme.pressed }]}
       >
@@ -151,19 +150,30 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
             </StackTile>
           ) : null}
         </View>
-        {/* The header's words settle into their next value while the card is live. */}
-        <Animated.Text
-          key={animate ? title : 'title'}
-          entering={animate ? FadeIn.duration(ENTER_MS) : undefined}
-          numberOfLines={1}
-          style={[styles.title, { color: theme.muted }]}
-        >
-          {title}
-        </Animated.Text>
+        {/* The header's words settle into their next value while the card is live; the running
+            call's words take the row's shimmer. */}
+        <View style={styles.titleBox}>
+          <Animated.Text
+            key={animate ? title : 'title'}
+            entering={animate ? FadeIn.duration(ENTER_MS) : undefined}
+            numberOfLines={1}
+            style={[styles.title, { color: theme.muted }]}
+          >
+            {title}
+          </Animated.Text>
+          {liveLabel.length > 0 && animate ? <Shimmer color={theme.light ? '#000000' : '#ffffff'} /> : null}
+        </View>
         <View style={styles.spacer} />
         {failed.length > 0 ? <Text style={[styles.meta, { color: theme.error }]}>{failed}</Text> : null}
         {failed.length > 0 && time.length > 0 ? <Text style={[styles.meta, { color: theme.muted }]}>·</Text> : null}
         {time.length > 0 ? <Text style={[styles.meta, { color: theme.muted }]}>{time}</Text> : null}
+        {/* The card's other calls beside the live line ("+2 more"), and the running call's spinner. */}
+        {liveMore.length > 0 ? <Text style={[styles.meta, { color: theme.muted }]}>{liveMore}</Text> : null}
+        {liveLabel.length > 0 ? (
+          <View style={styles.status}>
+            <ActivityIndicator size="small" color={theme.muted} style={styles.spinner} />
+          </View>
+        ) : null}
         <Glyph name={open ? 'chevron-up' : 'chevron-down'} size={12} color={theme.muted} />
       </Pressable>
       {open ? (
@@ -430,6 +440,7 @@ const styles = StyleSheet.create({
   },
   tile: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   more: { fontSize: 9.5, fontWeight: '500' },
+  titleBox: { flexShrink: 1, minWidth: 0, overflow: 'hidden' },
   title: { fontSize: 13.5, flexShrink: 1, minWidth: 0 },
   spacer: { flexGrow: 1 },
   meta: { fontSize: 12, flexShrink: 0, fontVariant: ['tabular-nums'] },
