@@ -232,6 +232,33 @@ class GhostexNativeModule : Module() {
       }
     }
 
+    // GitHub #495: the approver key (GhostexApproverKey.kt).
+    AsyncFunction("approverKeyPublic") { promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexApproverKey.publicKey())
+        } catch (error: Exception) {
+          promise.reject(CodedException("Could not make the approver key: ${error.message}", error))
+        }
+      }
+    }
+
+    AsyncFunction("approverKeySign") { payload: String, reason: String, promise: Promise ->
+      val activity = appContext.currentActivity as? androidx.fragment.app.FragmentActivity
+      if (activity == null) {
+        promise.reject(CodedException("Open Ghostex to approve.", null))
+        return@AsyncFunction
+      }
+      activity.runOnUiThread {
+        GhostexApproverKey.sign(activity, payload, reason) { result ->
+          result.fold(
+            { signature -> promise.resolve(signature) },
+            { error -> promise.reject(CodedException(error.message ?: "Not approved.", error)) },
+          )
+        }
+      }
+    }
+
     AsyncFunction("tailcatClientPublicKey") { promise: Promise ->
       backgroundExecutor.execute {
         try {
@@ -545,6 +572,27 @@ class GhostexNativeModule : Module() {
           )
         } catch (error: Throwable) {
           promise.reject(CodedException("E_KEYGEN_FAILED", error.message ?: "SSH key generation failed.", error))
+        }
+      }
+    }
+
+    // Pairing v2 (GitHub #495): the phone's own P-256 device key (GhostexDeviceKey.kt).
+    AsyncFunction("deviceKeyPublic") { promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexDeviceKey.publicKey(requireAndroidContext()))
+        } catch (error: Throwable) {
+          promise.reject(CodedException("E_DEVICE_KEY_FAILED", error.message ?: "The device key could not be made.", error))
+        }
+      }
+    }
+
+    AsyncFunction("deviceKeySign") { payload: String, promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexDeviceKey.sign(requireAndroidContext(), payload))
+        } catch (error: Throwable) {
+          promise.reject(CodedException("E_DEVICE_KEY_FAILED", error.message ?: "The device key could not sign.", error))
         }
       }
     }

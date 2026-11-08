@@ -51,6 +51,8 @@ dependencies {
 
   // NotificationCompat/ContextCompat for the persistent foreground-service notification.
   implementation "androidx.core:core-ktx:1.15.0"
+  // GitHub #495: the approver key signs only after BiometricPrompt (GhostexApproverKey.kt).
+  implementation "androidx.biometric:biometric:1.1.0"
 
   // The voice agent's `/api/voice` socket (GhostexVoice.kt). React Native already ships OkHttp;
   // this only puts it on the module's compile path, and Gradle keeps the app's newer version.

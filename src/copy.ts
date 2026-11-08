@@ -74,6 +74,15 @@ export const ScanCopy = {
   cantFindLink: 'Show me where it is',
   found: (computer: string) => `Found ${computer}`,
   pairingAs: (user: string) => `Pairing as ${user}…`,
+  /** Pairing v2 (GitHub #495): the phone waits as Pending until the owner approves. */
+  waitingTitle: (computer: string) => `Approve this phone on ${computer}`,
+  waitingDetail: 'Check the computer shows the same three words, then approve there.',
+  wordsLabel: 'Words',
+  cancelWaiting: 'Cancel',
+  denied: {
+    title: 'The computer said no',
+    detail: 'This phone was denied. Show a new code on the computer and scan again.',
+  },
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
   summary: {
     computer: 'Computer',
@@ -819,6 +828,26 @@ export const EditMachineCopy = {
   cancel: 'Cancel',
   connectionLabel: 'Connection',
   connectionTailscaleLabel: 'Connection · Tailscale',
+  /** Pairing v2 (GitHub #495): what this computer has paired, with one-tap Remove. */
+  pairedDevices: {
+    title: 'Devices paired with this computer',
+    waiting: (name: string) => `${name} is waiting for approval`,
+    waitingDetail:
+      'Approve its request only if that phone or computer shows the same three words. Deny it if nobody is pairing one right now.',
+    deny: 'Deny',
+    approve: 'Approve',
+    approveFailed: 'Not approved',
+    noLongerWaiting: 'This request is no longer waiting.',
+    remove: 'Remove',
+    cancel: 'Cancel',
+    thisPhone: (name: string) => `${name} (this phone)`,
+    legacy: 'Paired before Ghostex 11.0.1, so it no longer connects. Pair it again, or remove it.',
+    removeTitle: (name: string) => `Remove ${name}?`,
+    removeDetail: 'It loses its access to this computer at once: its sign-in key and its Ghostex token are removed.',
+    removeSelfDetail:
+      'This phone loses its access to this computer at once. To use it again, show a code on the computer and pair again.',
+    removeFailed: "Couldn't remove the device",
+  },
   easyConnect: {
     title: 'Easy Connect',
     /** "Paired as madda · Sep 3 · connected now" */
@@ -1552,4 +1581,23 @@ export const LicencesCopy = {
   missingEntry: 'This component is not in the licence notices of this version.',
   entryLine: (version: string, licence: string | undefined) =>
     licence === undefined ? version : `${version} · ${licence}`,
+} as const;
+
+/**
+ * Approvals (GitHub #495): what an agent asked a computer to do that only its owner may allow,
+ * approved here with Face ID, the fingerprint or the screen lock.
+ */
+export const ApprovalsCopy = {
+  title: (computer: string) => `Approvals on ${computer}`,
+  open: 'Approvals',
+  openDetail: 'Requests that need your Face ID, fingerprint or screen lock',
+  empty: 'Nothing is waiting for your approval.',
+  askedBy: (label: string) => `Asked by ${label}`,
+  approve: 'Approve',
+  deny: 'Deny',
+  waitingForComputer: 'Approve adding this phone on your computer first. Ghostex shows it there.',
+  loadFailed: 'Could not read the requests',
+  notApproved: 'Not approved',
+  couldNotDeny: 'Could not deny it',
+  updateApp: 'This version of Ghostex can’t approve. Update the app.',
 } as const;

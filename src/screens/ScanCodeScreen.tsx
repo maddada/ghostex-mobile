@@ -59,6 +59,7 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
     tailscaleError,
     saveTailscale,
     dismissTailscale,
+    cancelPairing,
   } = useScanController(navigation, rePairMachineId);
 
   const granted = permission?.granted === true;
@@ -148,11 +149,17 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
 
   const status =
     phase.kind === 'pairing'
-      ? {
-          icon: 'spinner' as const,
-          title: ScanCopy.found(phase.code.name),
-          detail: ScanCopy.pairingAs(phase.code.user),
-        }
+      ? phase.words
+        ? {
+            icon: 'spinner' as const,
+            title: ScanCopy.waitingTitle(phase.code.name),
+            detail: ScanCopy.waitingDetail,
+          }
+        : {
+            icon: 'spinner' as const,
+            title: ScanCopy.found(phase.code.name),
+            detail: ScanCopy.pairingAs(phase.code.user),
+          }
       : phase.kind === 'tailscale'
         ? {
             icon: 'check' as const,
@@ -187,7 +194,18 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.footer}>
-        {phase.kind === 'pairing' ? (
+        {phase.kind === 'pairing' && phase.words ? (
+          <>
+            <Text style={[styles.words, { color: appearance.foreground }]} accessibilityRole="header">
+              {phase.words.join(' · ')}
+            </Text>
+            <SetupRows panel>
+              <SetupRow first label={ScanCopy.summary.computer} value={phase.code.name} />
+              <SetupRow mono label={ScanCopy.summary.user} value={phase.code.user} />
+            </SetupRows>
+            <SetupButton label={ScanCopy.cancelWaiting} onPress={cancelPairing} />
+          </>
+        ) : phase.kind === 'pairing' ? (
           <SetupRows panel>
             <SetupRow first label={ScanCopy.summary.computer} value={phase.code.name} />
             <SetupRow mono label={ScanCopy.summary.user} value={phase.code.user} />
@@ -267,6 +285,14 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     flex: 1,
     backgroundColor: '#050505',
     overflow: 'hidden',
+  },
+  // Pairing v2: the three words to compare with the computer's, large enough to read at arm's length.
+  words: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
   footer: {
     paddingHorizontal: 16,

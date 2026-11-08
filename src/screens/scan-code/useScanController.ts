@@ -28,7 +28,10 @@ import type { RootStackParamList } from '../../navigation/types';
 import { readScan } from './readScan';
 
 export type ScanPhase =
-  { kind: 'scanning' } | { kind: 'pairing'; code: EasyConnectCode } | { kind: 'tailscale'; code: TailscaleCode };
+  | { kind: 'scanning' }
+  /** `words`: the phone is Pending and these three words must match the computer's (pairing v2). */
+  | { kind: 'pairing'; code: EasyConnectCode; words?: string[] }
+  | { kind: 'tailscale'; code: TailscaleCode };
 
 export type ScanToast = { tone: 'error' | 'ok'; title: string; detail?: string };
 
@@ -50,12 +53,15 @@ export function useScanController(navigation: ScanNavigation, rePairMachineId: s
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRejected = useRef<{ payload: string; at: number } | null>(null);
   const mounted = useRef(true);
+  const pairingAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (toastTimer.current !== null) clearTimeout(toastTimer.current);
+      // Leaving the screen stops a Pending phone from waiting on.
+      pairingAbort.current?.abort();
     };
   }, []);
 
@@ -90,8 +96,16 @@ export function useScanController(navigation: ScanNavigation, rePairMachineId: s
       movePhase({ kind: 'pairing', code });
       haptic(Haptics.NotificationFeedbackType.Success);
       let result: EasyConnectPairingResult;
+      const abort = new AbortController();
+      pairingAbort.current = abort;
       try {
-        result = await pairEasyConnect(code, { rePairMachineId: rePairMachineId ?? undefined });
+        result = await pairEasyConnect(code, {
+          rePairMachineId: rePairMachineId ?? undefined,
+          signal: abort.signal,
+          onPending: ({ words }) => {
+            if (mounted.current && !abort.signal.aborted) movePhase({ kind: 'pairing', code, words });
+          },
+        });
       } catch (error) {
         // pairEasyConnect maps its own failures, but `finish`/store writes outside
         // it can still throw; the scanner must never stay frozen on "Pairing…".
@@ -101,14 +115,19 @@ export function useScanController(navigation: ScanNavigation, rePairMachineId: s
           message: error instanceof Error ? error.message : String(error),
         };
       }
+      if (pairingAbort.current === abort) pairingAbort.current = null;
       if (!mounted.current) return;
       if (result.ok) {
         finish(result.machine.id);
         return;
       }
-      haptic(Haptics.NotificationFeedbackType.Error);
       movePhase({ kind: 'scanning' });
+      if (result.reason === 'cancelled') return;
+      haptic(Haptics.NotificationFeedbackType.Error);
       if (result.reason === 'expired') showToast({ tone: 'error', ...ScanCopy.expired });
+      else if (result.reason === 'denied') showToast({ tone: 'error', ...ScanCopy.denied });
+      else if (result.reason === 'needsUpdate')
+        showToast({ tone: 'error', title: ScanCopy.outdated.title, detail: result.message });
       else if (result.reason === 'noSecret') showToast({ tone: 'error', ...ScanCopy.noSecret });
       else showToast({ tone: 'error', title: ScanCopy.pairingFailed.title, detail: result.message });
     },
@@ -198,6 +217,11 @@ export function useScanController(navigation: ScanNavigation, rePairMachineId: s
     [finish, tailscaleBusy],
   );
 
+  /** Stop waiting as Pending; the computer's request lapses by itself. */
+  const cancelPairing = useCallback((): void => {
+    pairingAbort.current?.abort();
+  }, []);
+
   const dismissTailscale = useCallback((): void => {
     if (tailscaleBusy) return;
     setTailscaleError(null);
@@ -215,5 +239,6 @@ export function useScanController(navigation: ScanNavigation, rePairMachineId: s
     tailscaleError,
     saveTailscale,
     dismissTailscale,
+    cancelPairing,
   };
 }

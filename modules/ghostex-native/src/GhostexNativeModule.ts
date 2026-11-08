@@ -56,6 +56,30 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   tailcatClientPublicKey(): Promise<string>;
 
   /**
+   * Pairing v2 (GitHub #495): this phone's own P-256 device key (Secure Enclave on iOS, Android
+   * Keystore / StrongBox), created on first use and never exported: the public half as the 65-byte
+   * uncompressed point, base64. Only in app builds made after 2026-11-08; an older build has no such
+   * function, so pairing checks for it (`deviceKey.ts`).
+   */
+  deviceKeyPublic?(): Promise<string>;
+
+  /** Signs `payload` (UTF-8) with the device key: base64 of the ASN.1 DER ECDSA P-256 SHA-256 signature. */
+  deviceKeySign?(payload: string): Promise<string>;
+
+  /**
+   * GitHub #495: this phone's approver key (Secure Enclave / Android Keystore), made on first use.
+   * Its public half as the 65-byte uncompressed P-256 point, base64. Absent in app builds from
+   * before 2026-11-08.
+   */
+  approverKeyPublic?(): Promise<string>;
+
+  /**
+   * Signs `payload` (UTF-8) with the approver key after the system's Face ID / fingerprint /
+   * passcode prompt shows `reason`; base64 ASN.1 DER. Rejects when the user doesn't approve.
+   */
+  approverKeySign?(payload: string, reason: string): Promise<string>;
+
+  /**
    * How the machine's Easy Connect tunnel reaches it, as JSON (`{"path":"direct"|"relay",
    * "route":"lan"|"internet","relay":"<host>","latencyMs":N}`), or "" before the bridge checked.
    * Only in app builds made after 2026-11-06; an older build has no such function, so callers

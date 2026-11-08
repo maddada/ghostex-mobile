@@ -288,6 +288,15 @@ public class GhostexNativeModule: Module {
             try GhostexNativeModule.useTailcatClientKey()
         }
 
+        // GitHub #495: the approver key (GhostexApproverKey.swift).
+        AsyncFunction("approverKeyPublic") { () throws -> String in
+            try GhostexApproverKey.publicKey()
+        }
+
+        AsyncFunction("approverKeySign") { (payload: String, reason: String) throws -> String in
+            try GhostexApproverKey.sign(payload, reason: reason)
+        }
+
         AsyncFunction("isTailscaleConnected") { () -> Bool in
             self.hasTailscaleNetworkAddress()
         }
@@ -942,6 +951,23 @@ public class GhostexNativeModule: Module {
                     code: .channelFailed,
                     reason: (error as? LocalizedError)?.errorDescription ?? "Key generation failed"
                 )
+            }
+        }
+
+        // Pairing v2 (GitHub #495): the phone's own P-256 device key (GhostexDeviceKey.swift).
+        AsyncFunction("deviceKeyPublic") { () throws -> String in
+            do {
+                return try GhostexDeviceKey.publicKey()
+            } catch {
+                throw GhostexException(code: .channelFailed, reason: error.localizedDescription)
+            }
+        }
+
+        AsyncFunction("deviceKeySign") { (payload: String) throws -> String in
+            do {
+                return try GhostexDeviceKey.sign(payload)
+            } catch {
+                throw GhostexException(code: .channelFailed, reason: error.localizedDescription)
             }
         }
 
