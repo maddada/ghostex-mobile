@@ -681,6 +681,11 @@ export type GhostexSession = {
    */
   attentionHandoverNeedsYou: boolean;
   /**
+   * The computer's verdict on whether this attention alerts (`attention.alerts`, CDXC:Notifications 2026-11-08 in
+   * packages/gx-core/src/alert_rule.rs); null outside attention and from a computer that does not send it.
+   */
+  attentionAlerts: boolean | null;
+  /**
    * When the stint that ended began, sent while the session is in attention (`attention.workingStartedAt`; '' outside
    * attention, from a computer that sends no start times, and when the attention came from idle or its start is
    * unknown).
@@ -1487,6 +1492,7 @@ export function parseSession(value: unknown): GhostexSession | null {
     attentionNotificationId: attention === null ? '' : trimmedValue(attention, 'notificationId'),
     attentionKind: attention === null ? '' : attentionKindOf(attention),
     attentionHandoverNeedsYou: attention === null ? false : boolValue(attention, 'handoverNeedsYou', false),
+    attentionAlerts: attention === null || typeof attention.alerts !== 'boolean' ? null : attention.alerts,
     attentionWorkingStartedAt: attention === null ? '' : trimmedValue(attention, 'workingStartedAt'),
     actions: parseActions(value.actions),
   };

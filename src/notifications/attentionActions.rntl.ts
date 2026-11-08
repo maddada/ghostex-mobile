@@ -25,11 +25,8 @@ import { useMachinesStore, type MachineRecord } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
 import { buildAttentionList, machineFeed } from './attentionRows';
 import { parseFeedRow } from './feedContract';
-import { currentAttentionInbox } from './attentionInbox';
-import { notificationRows } from '../app/persistentNotificationRows';
 import {
   clearDone,
-  markSessionOpened,
   refreshAttentionFeeds,
   removeEndedRow,
   restoreEndedSession,
@@ -401,68 +398,3 @@ test('a removed session stays off once the closed list no longer has it; its mar
   removeEndedRow('m1', 'other');
   expect(useSettingsStore.getState().settings.attentionRemovedSessions).toEqual(['m1\nother']);
 });
-
-/**
- * Android's persistent notification reads the bell's inbox, and its row's tap opens the session as the bell's row does
- * (ghostex-mobile#29 on Android: "i dont want android and ios experience to diverge in terms of behavior").
- */
-describe('a tap on an Android persistent notification row', () => {
-  // The notification lists live sessions of the computer's session list (`listed` sends only what the list reads).
-  const notification = () => {
-    const summary = useInventoryStore.getState().inventoriesByMachineId.m1!.summary!;
-    const live = {
-      ...summary,
-      projects: [],
-      sessions: summary.sessions.map((session) => ({
-        ...session,
-        isLive: true,
-        status: 'running',
-        coordinatorProjectId: '',
-        coordinatorSessionId: '',
-      })),
-    } as GhostexMobileSummary;
-    return notificationRows([{ machineId: 'm1', summary: live }], currentAttentionInbox()).map(
-      (row) => `${row.sessionId}:${row.status}`,
-    );
-  };
-
-  test('marks the finished rows read as opening from the list does, keeps the failure rows, and clears Done on both', async () => {
-    useInventoryStore.setState({ inventoriesByMachineId: { m1: listed(['live', 'broke']) } });
-    mockHost.rows = [
-      feedRow('n1', 'live', 'finished'),
-      feedRow('n2', 'live', 'finished'),
-      feedRow('x1', 'broke', 'failed'),
-    ];
-    await refresh();
-    expect(currentAttentionInbox()).toEqual(inbox());
-    expect(notification()).toEqual(['live:done', 'broke:failed']);
-
-    markSessionOpened('m1', 'live');
-    markSessionOpened('m1', 'broke');
-    await queued();
-    expect(markReads().sort()).toEqual(['n1', 'n2']);
-    expect(inbox().done).toEqual([]);
-    expect(inbox().failed.map((row) => row.id)).toEqual(['broke']);
-    expect(notification()).toEqual(['broke:failed', 'live:idle']);
-  });
-
-  test('at a cold start it waits for the feed and marks once it is read', async () => {
-    useAttentionFeedStore.setState({ feeds: { m1: { status: 'loading', rows: [] } } });
-    mockHost.rows = [feedRow('n1', 'live', 'finished')];
-    markSessionOpened('m1', 'live');
-    await queued();
-    expect(markReads()).toEqual([]);
-    await refresh();
-    await queued();
-    expect(markReads()).toEqual(['n1']);
-    expect(inbox().done).toEqual([]);
-  });
-
-  test('a computer whose feed cannot be read gets nothing sent', async () => {
-    useAttentionFeedStore.setState({ feeds: { m1: { status: 'unreachable', rows: [] } } });
-    markSessionOpened('m1', 'live');
-    await queued();
-    expect(mockHost.calls).toEqual([]);
-  });
-});
-

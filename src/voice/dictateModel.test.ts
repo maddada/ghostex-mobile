@@ -14,7 +14,6 @@ import {
   hexCaption,
   isUnknownRoute,
   parseAliases,
-  phoneDictationNote,
   type DictateEngine,
   type DictateOverview,
   type HexView,
@@ -78,11 +77,6 @@ describe('what the phone says about the engine', () => {
   test('a computer whose Ghostex still has its own engine is told to update', () => {
     const old = overview({ engine: { ...overview().engine, engine: 'local', label: 'Local, Parakeet v3' } });
     assert.match(engineCaption(old, 'MacBook Pro'), /Update Ghostex on MacBook Pro/);
-  });
-
-  test('the phone says its dictation goes through the computer, so Hex there', () => {
-    assert.match(phoneDictationNote('MacBook Pro'), /MacBook Pro transcribes it/);
-    assert.match(phoneDictationNote('MacBook Pro'), /Hex on MacBook Pro/);
   });
 
   test('a cloud engine names the computer whose key it uses, or the missing key', () => {

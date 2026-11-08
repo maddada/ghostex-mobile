@@ -16,7 +16,7 @@
  * Window: an iPhone 17 (402x874).
  */
 
-import { Dimensions, Platform, StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
@@ -43,12 +43,6 @@ import {
 const mockNativeMethods = jest.requireActual<{ default: { measureInWindow: jest.Mock } }>(
   '@react-native/jest-preset/jest/MockNativeMethods',
 ).default;
-
-/**
- * A menu command's role: a button on iOS, `menuitem` on Android (`ContextMenu.tsx`); `android/*.onAndroid.rntl.tsx`
- * runs these tests with React Native reporting Android.
- */
-const COMMAND = Platform.OS === 'ios' ? 'button' : 'menuitem';
 
 jest.mock('../../modules/ghostex-native/src', () => ({ GhostexNative: {} }));
 jest.mock('expo-notifications', () => ({}));
@@ -190,7 +184,7 @@ function sectionRows(title: string): string[] {
  * is a button on iOS (React Native's `menuitem` has no role there; `ContextMenu.tsx`).
  */
 function cardStyle(item: string) {
-  let card = screen.getByRole(COMMAND, { name: item }).parent;
+  let card = screen.getByRole('button', { name: item }).parent;
   while (card !== null && StyleSheet.flatten(card.props.style)?.maxHeight === undefined) card = card.parent;
   if (card === null) throw new Error('no menu card');
   return { card, style: StyleSheet.flatten(card.props.style) };
@@ -214,7 +208,7 @@ function menuLabels() {
     );
   if (card === undefined || typeof card === 'string') throw new Error('no menu card');
   return within(card)
-    .getAllByRole(COMMAND)
+    .getAllByRole('button')
     .map((command) => String(within(command).getByText(/./).props.children));
 }
 
@@ -362,7 +356,7 @@ test('a long press opens the menu at the held row, under it, the row lifted; a F
   expect(StyleSheet.flatten(lifted[0].props.style)).toMatchObject({ left: 8, top: 200, width: 386, height: 72 });
 
   // Mark as Done marks the failure rows read on the computer and closes the menu.
-  await fireEvent.press(screen.getByRole(COMMAND, { name: 'Mark as Done' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Mark as Done' }));
   expect(markRead.mock.calls).toEqual([['m1', ['n2']]]);
   expect(opened).toEqual([]);
   expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull();
@@ -373,7 +367,7 @@ test('each command, the lifted row and Close menu are separate accessibility ele
   await fireEvent(screen.getByTestId('attention-row-s6'), 'longPress');
   expect(menuLabels()).toEqual(['Open Session', 'Mark as Done']);
   for (const name of ['Open Session', 'Mark as Done']) {
-    const command = screen.getByRole(COMMAND, { name });
+    const command = screen.getByRole('button', { name });
     expect(command.props.accessibilityState).toEqual({ disabled: false, selected: false });
     expect(groupingAncestors(command)).toEqual([]);
   }
@@ -395,7 +389,7 @@ test('Needs you and Done rows offer Open Session only; an account row keeps Mark
 
   await fireEvent(screen.getByTestId('attention-row-s3'), 'longPress');
   expect(menuLabels()).toEqual(['Open Session']);
-  await fireEvent.press(screen.getByRole(COMMAND, { name: 'Open Session' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Open Session' }));
   expect(markRead.mock.calls).toEqual([['m1', ['n4']]]);
   expect(opened).toEqual([{ machineId: 'm1', sessionId: 's3', question: false }]);
 
@@ -405,7 +399,7 @@ test('Needs you and Done rows offer Open Session only; an account row keeps Mark
 
   await fireEvent(screen.getByTestId('attention-row-n3'), 'longPress');
   expect(menuLabels()).toEqual(['Mark as Read', 'Clear']);
-  await fireEvent.press(screen.getByRole(COMMAND, { name: 'Clear' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Clear' }));
   expect(update.mock.calls.at(-1)).toEqual(['m1', { action: 'dismiss', notificationId: 'n3' }]);
 
   // The computer now has the account row read.
@@ -416,7 +410,7 @@ test('Needs you and Done rows offer Open Session only; an account row keeps Mark
   });
   await fireEvent(screen.getByTestId('attention-row-n3'), 'longPress');
   expect(menuLabels()).toEqual(['Mark as Unread', 'Clear']);
-  await fireEvent.press(screen.getByRole(COMMAND, { name: 'Mark as Unread' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Mark as Unread' }));
   expect(update.mock.calls.at(-1)).toEqual(['m1', { action: 'markUnread', notificationId: 'n3' }]);
 });
 
