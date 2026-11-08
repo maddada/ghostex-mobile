@@ -35,11 +35,17 @@ const IN_PROGRESS = { dark: '#c68a06', light: '#c68a06' };
 const NEED = { dark: '#f472b6', light: '#be185d' };
 const BLOCKED = { dark: '#ef4444', light: '#dc2626' };
 
+/**
+ * CDXC:MarkedHandovers 2026-11-08 DECISION:
+ * User: "give 'Kicked off' its own hue so it no longer matches Needs you's pink". "Kicked off" is sky blue (#38bdf8 dark, #0369a1 light), the same as the desktop (apps/desktop/src/app/native_chat/marked_look.rs): no other heading is blue now that In progress is amber.
+ */
+const KICKED = { dark: '#38bdf8', light: '#0369a1' };
+
 const PALETTE: { [kind: string]: { dark: string; light: string } } = {
   need: NEED,
   done: { dark: '#4ade80', light: '#15803d' },
   read: { dark: '#fbbf24', light: '#b45309' },
-  kicked: { dark: '#f472b6', light: '#be185d' },
+  kicked: KICKED,
   progress: IN_PROGRESS,
   untested: { dark: '#2dd4bf', light: '#0f766e' },
   shipped: { dark: '#818cf8', light: '#4f46e5' },
