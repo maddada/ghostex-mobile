@@ -118,6 +118,8 @@ public class GhostexNativeModule: Module {
     private let barWindowObserversLock = NSLock()
     /// The share sheets this module instance started (`shareFile`) that are not over yet; ended at OnDestroy.
     private let shareSheets = GhostexShareSheets()
+    /// Sends `onNetworkChanged` while JS listens to it (OnStartObserving / OnStopObserving).
+    private var networkObserver: GhostexNetworkObserver?
 
     /// Starts (`listening`) or ends following the app to another window for the bar observation.
     private func followBarWindows(_ listening: Bool) {
@@ -166,6 +168,7 @@ public class GhostexNativeModule: Module {
             "onKeyModifiersConsumed",
             "onTerminalGridChange",
             "onConnectionState",
+            "onNetworkChanged",
             "onBarLayoutChange",
             "onVoiceEvent",
             "onSpeechEvent"
@@ -259,6 +262,23 @@ public class GhostexNativeModule: Module {
         // rendezvous; only throwaway callers (Test Connection) stop theirs explicitly.
         AsyncFunction("stopTailcatForward") { (machineId: String) in
             TailcatbridgeStopForward(machineId)
+        }
+
+        // This build sends onNetworkChanged (an older iOS build has neither, so JS checks; src/app/networkChanges.ts).
+        Function("emitsNetworkChanges") { () -> Bool in
+            true
+        }
+
+        OnStartObserving("onNetworkChanged") { [weak self] in
+            guard let self, self.networkObserver == nil else { return }
+            self.networkObserver = GhostexNetworkObserver { [weak self] in
+                self?.sendEvent("onNetworkChanged", [:])
+            }
+        }
+
+        OnStopObserving("onNetworkChanged") { [weak self] in
+            self?.networkObserver?.close()
+            self?.networkObserver = nil
         }
 
         // How the machine's Easy Connect tunnel reaches it, as the bridge's JSON
@@ -855,6 +875,8 @@ public class GhostexNativeModule: Module {
             GhostexSpeech.emitter = nil
             guard let self else { return }
             self.followBarWindows(false)
+            self.networkObserver?.close()
+            self.networkObserver = nil
             let shareSheets = self.shareSheets
             Task { @MainActor in shareSheets.endAll() }
             guard let id = self.barObservationID else { return }
