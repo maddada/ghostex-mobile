@@ -61,6 +61,10 @@ export const GBOT_APPROVALS: readonly { value: GbotApproval; label: string }[] =
   { value: 'full', label: 'Full' },
 ];
 
+/** Why a Codex GBot starts at Full (server/src/gbots/session.rs `default_approval`). */
+export const GBOT_CODEX_APPROVAL_NOTE =
+  "Codex GBots start at Full access: below it, Codex's sandbox stops them reaching Ghostex.";
+
 /** Whether GBots are on for a computer: their own switch and Main Hub (server/src/gbots/feature.rs). */
 export function gbotsOnIn(
   summary: Pick<GhostexMobileSummary, 'builtInFeatures' | 'builtInFeaturesOff'> | null | undefined,

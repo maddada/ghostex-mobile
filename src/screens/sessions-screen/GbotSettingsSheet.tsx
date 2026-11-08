@@ -24,6 +24,7 @@ import { GbotIcon } from '../../components/sessions/gbotIcons';
 import {
   changedGbotFields,
   GBOT_APPROVALS,
+  GBOT_CODEX_APPROVAL_NOTE,
   gbotColorHex,
   type GbotApproval,
   type GbotDetails,
@@ -226,6 +227,7 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
                 ? approvalFromComputer(name)
                 : 'Ask: it asks before acting. Edits: it may change files. Auto and Full do more without asking.'}
             </Text>
+            <Text style={styles.hint}>{GBOT_CODEX_APPROVAL_NOTE}</Text>
           </View>
           {saved.departmentId.length > 0 ? (
             <View style={styles.field}>
