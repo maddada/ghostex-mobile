@@ -3,7 +3,7 @@
  * faintly tinted band with a hairline under it and the box's top corners, holding the chat's pills
  * on the right: the armed timers, the ? (a question waits), Resources, Workers, Links, Tasks,
  * Subagents and Background, and the ↓ jump-to-bottom at the left of them while the strip shows.
- * Pills that don't fit scroll sideways and fade at the edge that hides more. With no pill there is
+ * Pills that don't fit scroll sideways, each fading out before an edge that hides more. With no pill there is
  * no strip; it grows in and shrinks away with the chat box's own ease (`composer-animation.json`).
  * Each pill opens its own sheet (`ChatPills.tsx`). Port of desktop `pills_strip.rs`.
  *
@@ -17,7 +17,7 @@
  * The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Pressable, ScrollView, Text, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
@@ -30,7 +30,6 @@ import { Glyph as ComposerGlyph } from '../composer/icons';
 import { sessionLinksChatPill } from '../sessionLinks';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { HorizontalFade } from '../transcript/verticalFade';
 import { IconPill, LinksPill, Pill, QuestionPill } from './ChatPills';
 import { SavedDraftPill, SavedDraftSheet } from './SavedDraftPill';
 import { VISUAL, type ArmedAction } from './WorkingStrip';
@@ -41,7 +40,7 @@ export type PillsStripLinks = { links: GhostexSessionLinks | undefined; onOpen: 
 /** The strip's band: a pill's 22 with 5 above and below; its hairline under it (desktop `STRIP_HEIGHT`). */
 const BAND = 22 + 5 * 2;
 const STRIP = BAND + 1;
-/** The width of the fade at an edge that hides pills (desktop `PILLS_FADE`). */
+/** The width over which a pill fades out before an edge that hides more pills (desktop `PILLS_FADE`). */
 const PILLS_FADE = 24;
 /** The band's tint over the box's fill (desktop `STRIP_TINT`). */
 const STRIP_TINT = 0.035;
@@ -266,25 +265,53 @@ function ViewChipButton({ chip, onPress }: { chip: ViewChip; onPress: () => void
 }
 
 /**
- * The pills' scroll: right-aligned while they fit, scrolling sideways when they don't, with a fade
- * into the band's colour at an edge that hides more of them.
+ * How much of itself each pill keeps inside `view`, fading out toward an edge that hides more pills:
+ * the pill's near edge `fade` away from that edge or more is solid, and it ramps to nothing as that
+ * edge reaches it, so a pill is gone before the edge can cut it (no clipped border or word, and no
+ * colour band over the pills). An edge with nothing more past it fades nothing. Steps of 1/16 keep a
+ * scroll from re-rendering at every pixel. Port of desktop `pill_opacities`.
+ */
+export function pillOpacities(
+  pills: readonly { x: number; width: number }[],
+  view: { x: number; width: number },
+  more: { left: boolean; right: boolean },
+  fade: number,
+): number[] {
+  return pills.map((pill) => {
+    let keep = 1;
+    if (more.left) keep = Math.min(keep, (pill.x - view.x) / fade);
+    if (more.right) keep = Math.min(keep, (view.x + view.width - (pill.x + pill.width)) / fade);
+    return Math.round(Math.min(1, Math.max(0, keep)) * 16) / 16;
+  });
+}
+
+/**
+ * The pills' scroll: right-aligned while they fit, scrolling sideways when they don't, each pill
+ * fading out before an edge that hides more of them (`pillOpacities`).
  *
- * CDXC:SessionChat 2026-10-28 SEE-ALSO:
- * The user's words (no cut background, no inner shadow) are on desktop `pills_strip_scroll` in
- * apps/desktop/src/app/native_chat/pills_strip.rs.
+ * CDXC:SessionChat 2026-11-08 DECISION:
+ * User, of the desktop strip scrolled sideways, a dark band over a clipped stub of a pill at its edge,
+ * then of the hairlines left by a cut pill's border and a right-edge pill's word cut hard: the colour
+ * fade over the pills is gone on the phone too (it matches desktop `pills_strip_scroll` in
+ * apps/desktop/src/app/native_chat/pills_strip.rs). Each pill fades itself over 24px before the edge,
+ * so none is ever cut. Supersedes 2026-10-28's colour fade into the band.
  */
 function PillsScroll({ children }: { children: ReactNode }) {
   const styles = useStyles();
-  const P = useTranscriptTheme();
-  const [edges, setEdges] = useState({ left: false, right: false });
+  const pills = Children.toArray(children);
   const metrics = useRef({ x: 0, width: 0, content: 0 });
+  // Each pill's frame in the row, by position in `pills`.
+  const frames = useRef<{ x: number; width: number }[]>([]);
+  const [opacities, setOpacities] = useState<number[]>([]);
   const update = () => {
     const { x, width, content } = metrics.current;
-    const next = { left: x > 0.5, right: content - width - x > 0.5 };
-    setEdges((was) => (was.left === next.left && was.right === next.right ? was : next));
+    const more = { left: x > 0.5, right: content - width - x > 0.5 };
+    const known = frames.current.slice(0, pills.length).map((frame) => frame ?? { x: 0, width: 0 });
+    const next = pillOpacities(known, { x, width }, more, PILLS_FADE);
+    setOpacities((was) =>
+      was.length === next.length && was.every((value, index) => value === next[index]) ? was : next,
+    );
   };
-  // The band's colour over the box's fill, opaque, which the fades ramp into.
-  const edge = mixHex(P.composerBackground, P.foreground, STRIP_TINT);
   return (
     <View style={styles.scrollArea}>
       <ScrollView
@@ -310,14 +337,23 @@ function PillsScroll({ children }: { children: ReactNode }) {
           update();
         }}
       >
-        <View style={styles.pills}>{children}</View>
+        <View style={styles.pills}>
+          {pills.map((pill, index) => (
+            <View
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              onLayout={(event) => {
+                const { x, width } = event.nativeEvent.layout;
+                frames.current[index] = { x, width };
+                update();
+              }}
+              style={opacities[index] !== undefined && opacities[index] < 1 ? { opacity: opacities[index] } : null}
+            >
+              {pill}
+            </View>
+          ))}
+        </View>
       </ScrollView>
-      {edges.left ? (
-        <HorizontalFade id="strip-fade-left" color={edge} from={1} to={0} style={[styles.fade, styles.fadeLeft]} />
-      ) : null}
-      {edges.right ? (
-        <HorizontalFade id="strip-fade-right" color={edge} from={0} to={1} style={[styles.fade, styles.fadeRight]} />
-      ) : null}
     </View>
   );
 }
@@ -385,14 +421,6 @@ const useStyles = themedStyles((P) => ({
     alignItems: 'center',
     gap: 6,
   },
-  fade: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: PILLS_FADE,
-  },
-  fadeLeft: { left: 0 },
-  fadeRight: { right: 0 },
   armed: {
     flexDirection: 'row',
     alignItems: 'center',
