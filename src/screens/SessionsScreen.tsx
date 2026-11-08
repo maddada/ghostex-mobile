@@ -64,6 +64,10 @@ import MachineTabs, {
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
 import SpaceTabs from '../components/sessions/SpaceTabs';
+import ChiefRow from '../components/sessions/ChiefRow';
+import { runGhostexCli } from '../components/sessions/cli';
+import { chiefRows, parseChiefAgents, type ChiefRowModel } from '../contract/chief';
+import { chiefNewChatCommand, chiefOpenCommand, chiefSetAgentCommand, chiefStatusCommand } from '../commands/ghostexCli';
 import WorkspaceTile, { workspaceMenuItems } from '../components/sessions/WorkspaceTile';
 import { agentChoicePlace, parseAgentChoiceScope, type AgentChoiceContext } from '../components/sessions/agentChoice';
 import { useLauncherStore } from '../components/sessions/launcherStore';
@@ -785,6 +789,100 @@ export default function SessionsScreen({ navigation }: Props) {
     [machineById],
   );
 
+  /** Chief's row (contract/chief.ts): the selected computer's Chief, then the others it folds. */
+  const chiefRowModels = useMemo(
+    () =>
+      machine === null
+        ? []
+        : chiefRows(
+            machines.map((entry) => ({ id: entry.id, label: machineDisplayLabel(entry) })),
+            Object.fromEntries(machines.map((entry) => [entry.id, inventoriesByMachineId[entry.id]?.summary ?? null])),
+            machine.id,
+          ),
+    [machine, machines, inventoriesByMachineId],
+  );
+  /** The menu Chief's row opens: its first-open agent picker, or New Chat and Change Agent. */
+  const [chiefMenu, setChiefMenu] = useState<{ title: string; items: ContextMenuItem[] } | null>(null);
+
+  /** Runs `ghostex chief open|new-chat|set-agent` on `target` and opens the chat it answers with. */
+  const runChief = useCallback(
+    async (target: MachineRecord, command: string): Promise<void> => {
+      setChiefMenu(null);
+      setProgress('Starting Chief…');
+      try {
+        const result = await runGhostexCli(target, command);
+        setProgress(null);
+        const chief = (result.json as { chief?: { sessionId?: unknown } } | null)?.chief;
+        if (typeof chief?.sessionId === 'string') await attachCreated(target, chief.sessionId);
+        void refreshMachine(target);
+      } catch (error) {
+        setProgress(null);
+        setTransientStatus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [attachCreated, refreshMachine, setTransientStatus],
+  );
+
+  /** The agents Chief can run on, as menu rows that run `command(agentId)`. */
+  const chiefAgentItems = useCallback(
+    async (target: MachineRecord, command: (agentId: string) => string, current: string): Promise<ContextMenuItem[]> => {
+      const status = await runGhostexCli(target, chiefStatusCommand());
+      return parseChiefAgents(status.json).map(
+        (agent): ContextMenuItem => ({
+          kind: 'item',
+          key: `chief-agent-${agent.agentId}`,
+          label: agent.name,
+          selected: agent.agentId === current,
+          onPress: () => void runChief(target, command(agent.agentId)),
+        }),
+      );
+    },
+    [runChief],
+  );
+
+  /** First open: which agent runs Chief (Q1740). */
+  const openChiefPicker = useCallback(
+    async (target: MachineRecord): Promise<void> => {
+      try {
+        const items = await chiefAgentItems(target, chiefOpenCommand, '');
+        if (items.length === 0) {
+          setTransientStatus('No agent can run Chief yet. Set up Claude, Codex or another coordinator agent first.');
+          return;
+        }
+        setChiefMenu({ title: 'Which agent runs Chief?', items });
+      } catch (error) {
+        setTransientStatus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [chiefAgentItems, setTransientStatus],
+  );
+
+  /** Long press: New Chat, then Change Agent's agents. */
+  const openChiefMenu = useCallback(
+    async (target: MachineRecord, row: ChiefRowModel & { session: GhostexSession }): Promise<void> => {
+      let agents: ContextMenuItem[] = [];
+      try {
+        agents = await chiefAgentItems(target, chiefSetAgentCommand, row.session.agent);
+      } catch {
+        // New Chat still works without the agent list.
+      }
+      const heading: ContextMenuItem = { kind: 'heading', key: 'chief-agent-heading', label: 'Change Agent' };
+      setChiefMenu({
+        title: row.machineId === machine?.id ? 'Chief' : `Chief · ${row.machineLabel}`,
+        items: [
+          {
+            kind: 'item',
+            key: 'chief-new-chat',
+            label: 'New Chat',
+            onPress: () => void runChief(target, chiefNewChatCommand()),
+          },
+          ...(agents.length > 0 ? [heading, ...agents] : []),
+        ],
+      });
+    },
+    [chiefAgentItems, machine?.id, runChief],
+  );
+
   /** The session a voice call on the phone is about, as an attachSessionKey (the row's green headset). */
   const voiceCallSessionKey = useVoiceStore((state) =>
     voiceActive(state.phase) && state.machineId !== null && (state.focus ?? state.requestedFocus) !== null
@@ -1116,6 +1214,17 @@ export default function SessionsScreen({ navigation }: Props) {
           countsBySpaceId={spaceCounts}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
         />
+      ) : null}
+      {machine !== null ? (
+        <ChiefRow
+          rows={chiefRowModels}
+          onOpen={(row) => withMachine(row.machineId, (target) => void attach(target, row.session))}
+          onPickAgent={(machineId) => withMachine(machineId, (target) => void openChiefPicker(target))}
+          onMenu={(row) => withMachine(row.machineId, (target) => void openChiefMenu(target, row), true)}
+        />
+      ) : null}
+      {chiefMenu !== null ? (
+        <ContextMenu visible title={chiefMenu.title} items={chiefMenu.items} onClose={() => setChiefMenu(null)} />
       ) : null}
       {machine !== null && workspaceMenuOpen && machineWorkspaces !== null && selectedWorkspaceId !== null ? (
         <ContextMenu

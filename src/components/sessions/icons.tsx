@@ -1009,3 +1009,22 @@ export function ShareGlyph({ size, color }: GlyphProps) {
     </Svg>
   );
 }
+
+/** The Ghostex flower in one colour: Chief's icon (desktop titlebar/ghostex-flower.svg). */
+export function FlowerGlyph({ size, color }: GlyphProps) {
+  const petal = 'M12 12C9.1 9.9 9.3 4.5 12 2.6C14.7 4.5 14.9 9.9 12 12Z';
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {[0, 1, 2, 3, 4, 5, 6].map((index) => (
+        <Path
+          key={index}
+          d={petal}
+          transform={`rotate(${(index * 360) / 7} 12 12)`}
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+        />
+      ))}
+    </Svg>
+  );
+}
