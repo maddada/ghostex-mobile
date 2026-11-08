@@ -272,8 +272,6 @@ function transcriptAgent(candidates: readonly string[]): string | null {
       case 'deepseek':
       case 'deepseek harness':
         return 'dsh';
-      case 'gbots':
-        return 'gbots';
       default:
         break;
     }

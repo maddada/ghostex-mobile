@@ -87,8 +87,6 @@ import { agentChoicePlace, parseAgentChoiceScope, type AgentChoiceContext } from
 import { useLauncherStore } from '../components/sessions/launcherStore';
 import { expandedGroupBackground, inkWash, sidebarInk } from '../components/sessions/rows';
 import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
-import GbotsSheet, { RobotGlyph } from '../components/sessions/GbotsSheet';
-import { groupGbots } from '../sessions/gbots';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import NewCoordinatorSheet from './sessions-screen/NewCoordinatorSheet';
 import CoordinatorDetailsSheet from './sessions-screen/CoordinatorDetailsSheet';
@@ -278,7 +276,6 @@ export default function SessionsScreen({ navigation }: Props) {
     overlay.kind === 'agentMenu' ? overlay.ctx.header.projectId : null,
   );
   const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
-  const [gbotsOpen, setGbotsOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   /*
@@ -648,17 +645,6 @@ export default function SessionsScreen({ navigation }: Props) {
   const snoozeSession = useMemo(
     () => makeSnoozeSession({ runBulkSessionActions, refreshMachine, setTransientStatus }),
     [runBulkSessionActions, refreshMachine, setTransientStatus],
-  );
-  // Every computer's GBots, for the Bots button and sheet (src/sessions/gbots.ts).
-  const gbotGroups = useMemo(
-    () =>
-      groupGbots(
-        machines.map((entry) => ({
-          machine: entry,
-          sessions: inventoriesByMachineId[entry.id]?.summary?.sessions ?? [],
-        })),
-      ),
-    [machines, inventoriesByMachineId],
   );
   const [showAllProjects, setShowAllProjects] = useState(false);
   const visibleEntries = useMemo(
@@ -1521,17 +1507,6 @@ export default function SessionsScreen({ navigation }: Props) {
           <SearchGlyph size={20} color={sidebarAppearance.foreground} />
           <Text style={[styles.bottomLabel, { color: sidebarAppearance.foreground }]}>Search</Text>
         </Pressable>
-        {gbotGroups.length > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Bots"
-            style={({ pressed }) => [styles.bottomItem, pressed ? styles.bottomItemPressed : null]}
-            onPress={() => setGbotsOpen(true)}
-          >
-            <RobotGlyph size={20} color={styles.bottomIconColor.color} />
-            <Text style={styles.bottomLabel}>Bots</Text>
-          </Pressable>
-        ) : null}
         {/*
           Web Preview forwards a port from the selected machine, so it is
           offered whenever a machine is chosen. It is also in the machine menu,
@@ -1561,18 +1536,6 @@ export default function SessionsScreen({ navigation }: Props) {
       </SessionsBottomBar>
       <ProgressOverlay visible={progress !== null} message={progress ?? ''} />
 
-      <GbotsSheet
-        visible={gbotsOpen}
-        groups={gbotGroups}
-        showComputer={machines.length > 1}
-        onClose={() => setGbotsOpen(false)}
-        onOpen={(target, session) => {
-          setGbotsOpen(false);
-          if (machine?.id !== target.id) selectMachine(target.id);
-          revealSessionWorkspace(target.id, session.sessionId);
-          void attach(target, session);
-        }}
-      />
       <SessionSearchSheet
         visible={sessionSearchOpen}
         machines={machines}

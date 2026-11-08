@@ -5,7 +5,6 @@
  */
 
 import { type GhostexClaudeCloud, parseClaudeCloud } from './claudeCloud';
-import { type GhostexGbot, parseGbot } from '../sessions/gbots';
 import { programStatusFailed, programStatusLine } from './programStatus';
 import { sessionNotesOnIn } from '../sessions/sessionNotesSwitch';
 
@@ -116,8 +115,6 @@ export type MobileSummaryWireSession = {
   work?: unknown;
   /** A Claude cloud session's record (`PresentationClaudeCloud`); absent for every other session. */
   claudeCloud?: unknown;
-  /** A GBots conversation's bot (server/src/presentation/session_projection.rs `gbot`). */
-  gbot?: unknown;
   /** Every PR, issue and Linear link of the session (`GxserverPresentationSessionLinks`). */
   links?: unknown;
   /** When an armed Close After Done closes the session, while it counts down. */
@@ -551,8 +548,6 @@ export type GhostexSession = {
   work?: GhostexSessionWork;
   /** Present only for a Claude cloud session (claudeCloud.ts). */
   claudeCloud?: GhostexClaudeCloud;
-  /** Present only for a GBots conversation: its bot and the bot's status (src/sessions/gbots.ts). */
-  gbot?: GhostexGbot;
   /** Every PR, issue and Linear link of the session; absent when it has none and nothing to suggest. */
   links?: GhostexSessionLinks;
   /**
@@ -1030,7 +1025,6 @@ export type AgentIconId =
   | 'empryo'
   | 'factory-droid'
   | 'freebuff'
-  | 'gbots'
   | 'gemini'
   | 'grok-build'
   | 'hermes-agent'
@@ -1058,8 +1052,6 @@ const AGENT_ICON_TINTS: Record<AgentIconId, string> = {
   empryo: '#1FA31D',
   'factory-droid': '#FF7A1A',
   freebuff: '#FFFFFF',
-  // The desktop's GBots tile colour (workspace_tab_visuals.rs).
-  gbots: '#9FB0FF',
   gemini: '#8B9AFF',
   'grok-build': '#FFFFFF',
   'hermes-agent': '#F3C46B',
@@ -1107,7 +1099,6 @@ export const AGENT_NAME_ALIASES: Readonly<Record<string, AgentIconId>> = {
   agy: 'antigravity-cli',
   amp: 'amp-cli',
   'amp cli': 'amp-cli',
-  gbots: 'gbots',
   hermes: 'hermes-agent',
   'hermes agent': 'hermes-agent',
   codebuddy: 'codebuddy',
@@ -1519,7 +1510,6 @@ export function parseSession(value: unknown): GhostexSession | null {
     gitBranch: isObject(value.gitStatus) ? trimmedValue(value.gitStatus, 'branch') : '',
     work: parseSessionWork(value.work) ?? undefined,
     claudeCloud: parseClaudeCloud(value.claudeCloud),
-    gbot: parseGbot(value.gbot),
     links: parseSessionLinks(value.links),
     sessionTag: trimmedValue(value, 'sessionTag'),
     delayedSendRemainingLabel: trimmedValue(value, 'delayedSendRemainingLabel'),
