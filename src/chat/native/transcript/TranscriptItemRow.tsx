@@ -13,6 +13,7 @@ import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
 import { CompletedFilesFold } from './FileChanges';
+import { gapAbove } from './cardSpacing';
 import { arr, obj } from './json';
 import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
@@ -130,9 +131,22 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
         <FoldPlaceProvider value={IN_WORK_FOLD}>
           <DisclosureBody onCollapse={toggle} label="Collapse completed work" rail="work">
             {deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
-            {item.work.map((message) => (
-              <MessageRow key={message.id} message={message} />
-            ))}
+            {item.work.map((message, index) => {
+              // A row that opens on its tool card right under one that closes on its own is a row
+              // gap away from it, like any two one-line cards (`cardSpacing.ts`); the log's own gap
+              // is 8 (`DisclosureBody`). Desktop `completed_work_row.rs` does the same.
+              const above = index > 0 ? item.work[index - 1] : undefined;
+              const cardFirst =
+                obj(message.toolCard) !== null && (typeof message.text === 'string' ? message.text.trim() : '') === '';
+              const margin = gapAbove(above !== undefined && obj(above.toolCard) !== null, cardFirst, 8) - 8;
+              return margin > 0 ? (
+                <View key={message.id} style={{ marginTop: margin }}>
+                  <MessageRow message={message} />
+                </View>
+              ) : (
+                <MessageRow key={message.id} message={message} />
+              );
+            })}
           </DisclosureBody>
         </FoldPlaceProvider>
       ) : null}

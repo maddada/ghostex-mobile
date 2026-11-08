@@ -9,6 +9,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance 
 
 import type { ProjectedMessage } from '../../rust/document';
 import { ApiErrorCard, ApiErrorNote, QuestionExchangeCards } from '../cards';
+import { cardStackMargin } from './cardSpacing';
 import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { Chevron, DisclosureBody, DisclosureHeading, LaneMarker, useFoldPlace } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
@@ -301,19 +302,34 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
       toolsRendered = hasTools;
     }
   }
+  // Which of the row's parts are one-line cards, for the gap between two of them (`cardSpacing.ts`).
+  const filesCard = !hideFileChanges && !toolCard && arr(message.files).length > 0;
+  const callsCard = filesCard || (!toolsRendered && toolCard);
+  const questionCards = !inWorkFold && arr(message.questions).length > 0;
+  const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;
   return (
     <View style={styles.message} accessibilityLabel={`${message.role} message: ${body.slice(0, 2000)}`}>
       <ImageRow images={message.images} user={false} />
       {lead}
-      {!hideFileChanges && !toolCard && arr(message.files).length > 0 ? <MessageFiles message={message} /> : null}
+      {filesCard ? <MessageFiles message={message} /> : null}
       {!toolsRendered ? <ToolRows message={message} /> : null}
-      {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. */}
-      {!inWorkFold ? <QuestionExchangeCards exchanges={message.questions} /> : null}
+      {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. Two one-line
+          cards in a row (the tool card, a message to another agent…) are a row gap apart (`cardSpacing.ts`). */}
       {!inWorkFold ? (
-        // Right under the answered-question cards it is a row gap away (`cardSpacing.ts`).
-        <SentAgentMessageCards cards={message.sentMessages} aboveIsCard={arr(message.questions).length > 0} columnGap={MESSAGE_PART_GAP} />
+        <QuestionExchangeCards exchanges={message.questions} aboveIsCard={callsCard} columnGap={MESSAGE_PART_GAP} />
       ) : null}
-      {!inWorkFold ? <WorkflowCards ids={message.workflows} /> : null}
+      {!inWorkFold ? (
+        <SentAgentMessageCards
+          cards={message.sentMessages}
+          aboveIsCard={callsCard || questionCards}
+          columnGap={MESSAGE_PART_GAP}
+        />
+      ) : null}
+      {!inWorkFold && arr(message.workflows).length > 0 ? (
+        <View style={{ marginTop: cardStackMargin(callsCard || questionCards || sentCards, MESSAGE_PART_GAP) }}>
+          <WorkflowCards ids={message.workflows} />
+        </View>
+      ) : null}
       {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} flush={flush} /> : null}
     </View>
   );
