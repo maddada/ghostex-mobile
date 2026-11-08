@@ -288,6 +288,15 @@ public class GhostexNativeModule: Module {
             try GhostexNativeModule.useTailcatClientKey()
         }
 
+        // GitHub #495: the approver key (GhostexApproverKey.swift).
+        AsyncFunction("approverKeyPublic") { () throws -> String in
+            try GhostexApproverKey.publicKey()
+        }
+
+        AsyncFunction("approverKeySign") { (payload: String, reason: String) throws -> String in
+            try GhostexApproverKey.sign(payload, reason: reason)
+        }
+
         AsyncFunction("isTailscaleConnected") { () -> Bool in
             self.hasTailscaleNetworkAddress()
         }

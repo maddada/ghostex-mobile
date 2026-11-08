@@ -67,6 +67,19 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   deviceKeySign?(payload: string): Promise<string>;
 
   /**
+   * GitHub #495: this phone's approver key (Secure Enclave / Android Keystore), made on first use.
+   * Its public half as the 65-byte uncompressed P-256 point, base64. Absent in app builds from
+   * before 2026-11-08.
+   */
+  approverKeyPublic?(): Promise<string>;
+
+  /**
+   * Signs `payload` (UTF-8) with the approver key after the system's Face ID / fingerprint /
+   * passcode prompt shows `reason`; base64 ASN.1 DER. Rejects when the user doesn't approve.
+   */
+  approverKeySign?(payload: string, reason: string): Promise<string>;
+
+  /**
    * How the machine's Easy Connect tunnel reaches it, as JSON (`{"path":"direct"|"relay",
    * "route":"lan"|"internet","relay":"<host>","latencyMs":N}`), or "" before the bridge checked.
    * Only in app builds made after 2026-11-06; an older build has no such function, so callers

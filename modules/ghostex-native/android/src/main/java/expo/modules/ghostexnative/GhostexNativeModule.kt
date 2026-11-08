@@ -232,6 +232,33 @@ class GhostexNativeModule : Module() {
       }
     }
 
+    // GitHub #495: the approver key (GhostexApproverKey.kt).
+    AsyncFunction("approverKeyPublic") { promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(GhostexApproverKey.publicKey())
+        } catch (error: Exception) {
+          promise.reject(CodedException("Could not make the approver key: ${error.message}", error))
+        }
+      }
+    }
+
+    AsyncFunction("approverKeySign") { payload: String, reason: String, promise: Promise ->
+      val activity = appContext.currentActivity as? androidx.fragment.app.FragmentActivity
+      if (activity == null) {
+        promise.reject(CodedException("Open Ghostex to approve.", null))
+        return@AsyncFunction
+      }
+      activity.runOnUiThread {
+        GhostexApproverKey.sign(activity, payload, reason) { result ->
+          result.fold(
+            { signature -> promise.resolve(signature) },
+            { error -> promise.reject(CodedException(error.message ?: "Not approved.", error)) },
+          )
+        }
+      }
+    }
+
     AsyncFunction("tailcatClientPublicKey") { promise: Promise ->
       backgroundExecutor.execute {
         try {

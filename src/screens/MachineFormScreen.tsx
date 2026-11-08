@@ -36,7 +36,7 @@ import {
 import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { CheckIcon } from '../components/terminal/icons';
-import { EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
+import { ApprovalsCopy, EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
 import { refreshMachineTools } from '../machines/machineTools';
@@ -554,6 +554,20 @@ export default function MachineFormScreen({ navigation, route }: Props) {
               <FormSection name="machine-form:tools">
                 <MachineToolsSection machine={existing} reachable={reachable} />
               </FormSection>
+              {/* GitHub #495: requests on this computer that only its owner may allow. */}
+              <View style={formStyles.rowsCard}>
+                <View style={[formStyles.row, formStyles.rowFirst]}>
+                  <View style={formStyles.rowMain}>
+                    <Text style={formStyles.rowLabel}>{ApprovalsCopy.open}</Text>
+                    <Text style={formStyles.rowDetail}>{ApprovalsCopy.openDetail}</Text>
+                  </View>
+                  <SetupButton
+                    small
+                    label={ApprovalsCopy.open}
+                    onPress={() => navigation.navigate('Approvals', { machineId: existing.id })}
+                  />
+                </View>
+              </View>
               {advanced}
               {test}
               {errorBanner}

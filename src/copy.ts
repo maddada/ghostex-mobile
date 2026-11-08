@@ -1554,3 +1554,22 @@ export const LicencesCopy = {
   entryLine: (version: string, licence: string | undefined) =>
     licence === undefined ? version : `${version} · ${licence}`,
 } as const;
+
+/**
+ * Approvals (GitHub #495): what an agent asked a computer to do that only its owner may allow,
+ * approved here with Face ID, the fingerprint or the screen lock.
+ */
+export const ApprovalsCopy = {
+  title: (computer: string) => `Approvals on ${computer}`,
+  open: 'Approvals',
+  openDetail: 'Requests that need your Face ID, fingerprint or screen lock',
+  empty: 'Nothing is waiting for your approval.',
+  askedBy: (label: string) => `Asked by ${label}`,
+  approve: 'Approve',
+  deny: 'Deny',
+  waitingForComputer: 'Approve adding this phone on your computer first. Ghostex shows it there.',
+  loadFailed: 'Could not read the requests',
+  notApproved: 'Not approved',
+  couldNotDeny: 'Could not deny it',
+  updateApp: 'This version of Ghostex can’t approve. Update the app.',
+} as const;

@@ -117,6 +117,8 @@ export type RootStackParamList = {
    * Duo folds).
    */
   Usage: { machineId: string };
+  /** Approvals (GitHub #495): the requests waiting on a computer for its owner, approved with Face ID / fingerprint. */
+  Approvals: { machineId: string };
   ExtraKeysEditor: undefined;
   AgentHotkeysEditor: undefined;
   /** Settings > Keyboard > Pad keys: what the Befehlspad's nine positions do. */
