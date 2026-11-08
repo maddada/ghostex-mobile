@@ -277,8 +277,9 @@ export default function SessionLinksSheet({
       </Pressable>
     );
   };
-  // Only links read as open count: one not read yet is neither open nor finished.
-  const openCount = links.items.filter((link) => !link.finished && link.state.length > 0).length;
+  // What Open and Pinned list as not finished, as on the desktop (CDXC:SessionLinks 2026-11-08 in
+  // apps/desktop/src/app/native_sidebar/links_list.rs): one still loading waits under Loading.
+  const openCount = links.items.filter((link) => !link.finished && !link.loading).length;
   const failingCount = links.items.filter((link) => link.checks === 'failing').length;
   const summary = [`${openCount} open`, failingCount > 0 ? `${failingCount} failing checks` : '']
     .filter((part) => part.length > 0)
