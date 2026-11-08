@@ -130,7 +130,7 @@ export function coordinatorRowKey(session: Pick<GhostexSession, 'projectId' | 's
 }
 
 function parentKey(session: GhostexSession): string | null {
-  if (session.coordinatorProjectId.length === 0 || session.coordinatorSessionId.length === 0) return null;
+  if ((session.coordinatorProjectId ?? '').length === 0 || (session.coordinatorSessionId ?? '').length === 0) return null;
   return JSON.stringify([session.coordinatorProjectId, session.coordinatorSessionId]);
 }
 

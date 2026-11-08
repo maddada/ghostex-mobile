@@ -20,7 +20,7 @@ import { sessionKey, type AttentionInbox } from '../notifications/attentionRows'
  * CDXC:Coordinators 2026-11-02 DECISION: The phone's notification leaves out every coordinator thread; the coordinator itself still shows. User: "please in the android app notification we shouldn't show the sub threads of a coordinator listed there." A session is a thread when it carries its coordinator's ids, the same link the drawer nests it by (coordinatorTree.ts), and since the summary line counts these rows, threads drop out of "N working" too.
  */
 function isCoordinatorThread(session: GhostexMobileSummary['sessions'][number]): boolean {
-  return session.coordinatorProjectId.length > 0 && session.coordinatorSessionId.length > 0;
+  return (session.coordinatorProjectId ?? '').length > 0 && (session.coordinatorSessionId ?? '').length > 0;
 }
 
 export function notificationRowsFromSummary(machineId: string, summary: GhostexMobileSummary): NotificationSessionRow[] {

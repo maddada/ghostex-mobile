@@ -334,7 +334,7 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
       hasProject &&
       session.agentbox === undefined &&
       !session.isCoordinator &&
-      session.coordinatorSessionId.length === 0 &&
+      (session.coordinatorSessionId ?? '').length === 0 &&
       isCoordinatorAgent(agentIcon),
     canOpenNote: terminal && hasProject && session.agentSessionId.trim().length > 0,
     canPark: terminal && hasProject,
@@ -669,7 +669,7 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
   if (session.isCoordinator) {
     rows.push(row('Goal & Instructions…', 'checklist', action('goal')));
     rows.push(row('Memory…', 'brain', action('memory')));
-  } else if (session.coordinatorSessionId.length > 0) {
+  } else if ((session.coordinatorSessionId ?? '').length > 0) {
     const state = session.coordinatorThreadState;
     if (state === 'done') {
       rows.push(row('Reopen Thread', 'rotate-clockwise', action('reopen')));
