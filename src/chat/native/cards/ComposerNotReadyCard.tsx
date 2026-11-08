@@ -4,13 +4,14 @@
  * `composer_not_ready.rs`: the headline, the reason, the terminal's current screen on demand
  * (`terminalTail.notice`, re-read on every Show) and the switch to the terminal.
  *
- * Any other refused operation is the plain error line desktop draws in the same place.
+ * Any other refused operation is the one-line error card desktop draws in the same place (`ErrorCard.tsx`).
  */
 
 import { ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
+import { ErrorCard, type ErrorCardValue } from './ErrorCard';
 import { Glyph } from './icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, ChatButton, StatusCard, useCardText } from './primitives';
@@ -36,33 +37,30 @@ export function ComposerNotReadyCard({
   const P = useTranscriptTheme();
   if (!composerNotReady(document)) {
     if (typeof document.operationError !== 'string') return null;
-    const error = (
-      <Text accessibilityRole="alert" style={cardText.error}>
-        {document.operationError}
-      </Text>
-    );
+    const card: ErrorCardValue = document.operationErrorCard ?? {
+      tone: 'error',
+      title: document.operationError,
+      chip: 'Failed',
+      detail: '',
+    };
     // Ghostex didn't answer (a restart, a dropped link): Retry rebuilds the chat's connection, as desktop's does
     // (core `session/reads.rs` `humanize_unreachable`). A failed send is back in the box; sending it again reuses
     // its `sendRequestId`, so gxserver never types it twice.
     if (document.operationErrorCode === 'unreachable') {
       return (
-        <View style={styles.answerInTerminal}>
-          {error}
-          <View style={styles.answerInTerminalActions}>
-            <ChatButton icon="refresh" label="Retry" onPress={() => chat.dispatch({ type: 'retry' })} />
-          </View>
-        </View>
+        <ErrorCard
+          card={card}
+          actions={<ChatButton icon="refresh" label="Retry" onPress={() => chat.dispatch({ type: 'retry' })} />}
+        />
       );
     }
     // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way there, as desktop does.
-    if (document.operationErrorCode !== 'answerInTerminal' || !onHostAction) return error;
+    if (document.operationErrorCode !== 'answerInTerminal' || !onHostAction) return <ErrorCard card={card} />;
     return (
-      <View style={styles.answerInTerminal}>
-        {error}
-        <View style={styles.answerInTerminalActions}>
-          <ChatButton icon="terminal-2" label="Open terminal" onPress={() => onHostAction('terminalView')} />
-        </View>
-      </View>
+      <ErrorCard
+        card={card}
+        actions={<ChatButton icon="terminal-2" label="Open terminal" onPress={() => onHostAction('terminalView')} />}
+      />
     );
   }
   const notice = document.terminalTail?.notice;
@@ -123,13 +121,6 @@ export function ComposerNotReadyCard({
 const useStyles = themedStyles((P) => ({
   fill: {
     width: '100%',
-  },
-  answerInTerminal: {
-    width: '100%',
-    gap: 6,
-  },
-  answerInTerminalActions: {
-    flexDirection: 'row',
   },
   header: {
     flexDirection: 'row',

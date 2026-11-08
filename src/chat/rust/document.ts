@@ -574,6 +574,9 @@ export type ChatDocument = {
   operationError?: string | null;
   /** The refusal's code, so the composer can draw its not-ready card instead of an error line. */
   operationErrorCode: string | null;
+  /** How the refusal is drawn (gx-chat-core `session/error_card.rs`): tone `error` or `wait`, a one-line title, the
+   * status chip, and the whole message for the opened card (empty when the title says it all). Desktop: `error_card.rs`. */
+  operationErrorCard?: { tone: string; title: string; chip: string; detail: string };
   /** The card above the chat box while the session's computer is offline (gx-chat-core
    * `session/computer.rs`): "Windows PC is offline · last seen 2h ago" and Retry, or
    * "… isn't answering · checking…" with a spinner. */
