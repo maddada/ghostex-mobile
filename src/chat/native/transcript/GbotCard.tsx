@@ -11,6 +11,10 @@
  * {botId, machineId}`; the chat screen opens the same GBot Settings sheet a GBot's long press does
  * (NativeChatScreen.tsx, screens/sessions-screen/GbotSettingsHost.tsx), as the desktop opens its
  * window.
+ *
+ * The "Routine set" card (`kind: routineSet`, gx-chat-core `routine_cards.rs`) is drawn here too: the GBot's icon,
+ * "Routine set: Inbox watch", its schedule in words and its next run, then Pause (Resume), Edit and Undo. Edit opens
+ * the GBot's Routines in its settings sheet, since the phone has no Automate view.
  */
 
 import { memo, useEffect } from 'react';
@@ -59,6 +63,11 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
   const note = state === null ? '' : str(state, 'note');
   const error = state === null ? '' : str(state, 'error');
   const undoLabel = state === null ? '' : str(state, 'undoLabel');
+  const routine = str(card, 'kind') === 'routineSet';
+  const routineState = routine && state !== null && isTrue(state, 'routine') ? state : null;
+  const next = routineState === null ? '' : str(routineState, 'next');
+  const checkNote = routineState === null ? '' : str(routineState, 'checkNote');
+  const routineId = str(card, 'routineId');
   return (
     <ToneCard
       tone="info"
@@ -70,6 +79,16 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
         line.length > 0 && !undone ? (
           <Text key="line" selectable style={styles.line}>
             {line}
+          </Text>
+        ) : null,
+        next.length > 0 && !undone ? (
+          <Text key="next" style={styles.line}>
+            {next}
+          </Text>
+        ) : null,
+        checkNote.length > 0 && !undone ? (
+          <Text key="check" style={styles.note}>
+            {checkNote}
           </Text>
         ) : null,
         note.length > 0 ? (
@@ -87,6 +106,38 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
         undone
           ? []
           : [
+              ...(routineState !== null
+                ? [
+                    <ToneButton
+                      key="pause"
+                      kind="secondary"
+                      icon={isTrue(routineState, 'paused') ? 'player-play' : 'player-pause'}
+                      label={str(routineState, 'pauseLabel')}
+                      disabled={!isTrue(routineState, 'pauseEnabled')}
+                      onPress={() =>
+                        dispatch({
+                          type: 'gbotCard',
+                          op: isTrue(routineState, 'paused') ? 'resume' : 'pause',
+                          changeId,
+                          routineId,
+                        })
+                      }
+                    />,
+                    ...(isTrue(routineState, 'editEnabled')
+                      ? [
+                          <ToneButton
+                            key="edit"
+                            kind="secondary"
+                            icon="pencil"
+                            label="Edit"
+                            onPress={() =>
+                              dispatch({ type: 'gbotCard', op: 'edit', changeId, botId: str(card, 'botId'), routineId })
+                            }
+                          />,
+                        ]
+                      : []),
+                  ]
+                : []),
               <ToneButton
                 key="undo"
                 kind="secondary"

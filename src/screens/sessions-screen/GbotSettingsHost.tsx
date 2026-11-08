@@ -11,11 +11,21 @@
 import type { ReactElement } from 'react';
 
 import { runGhostexCli } from '../../components/sessions/cli';
-import { chiefStatusCommand, gbotsEditCommand, gbotsShowCommand } from '../../commands/ghostexCli';
+import {
+  chiefStatusCommand,
+  gbotsEditCommand,
+  gbotsMemoryShowCommand,
+  gbotsMemoryUndoCommand,
+  gbotsRoutineActCommand,
+  gbotsRoutineListCommand,
+  gbotsShowCommand,
+} from '../../commands/ghostexCli';
+import { parseGbotRoutines, type GbotRoutine } from '../../contract/gbotRoutines';
 import { parseChiefAgents } from '../../contract/chief';
+import { parseGbotMemory, type GbotMemory } from '../../contract/gbotMemory';
 import { parseGbotDetails, type GbotFields } from '../../contract/gbots';
 import type { MachineConnectionTarget } from '../../machines/credentials';
-import GbotSettingsSheet from './GbotSettingsSheet';
+import GbotSettingsSheet, { type GbotSettingsTab } from './GbotSettingsSheet';
 
 export type GbotSettingsHostProps = {
   target: MachineConnectionTarget;
@@ -25,9 +35,28 @@ export type GbotSettingsHostProps = {
   onClose: () => void;
   /** After a save the computer took: `name` is the GBot's name as saved. */
   onSaved: (name: string) => void;
+  /** The tab it opens on; Profile by default. */
+  initialTab?: GbotSettingsTab;
 };
 
-export default function GbotSettingsHost({ target, botId, name, onClose, onSaved }: GbotSettingsHostProps): ReactElement {
+export default function GbotSettingsHost({
+  target,
+  botId,
+  name,
+  onClose,
+  onSaved,
+  initialTab,
+}: GbotSettingsHostProps): ReactElement {
+  const readRoutines = async (): Promise<GbotRoutine[]> => {
+    const routines = parseGbotRoutines((await runGhostexCli(target, gbotsRoutineListCommand(botId))).json);
+    if (routines === null) throw new Error(`${name}'s routines could not be read. Try again in a moment.`);
+    return routines;
+  };
+  const readMemory = async (): Promise<GbotMemory> => {
+    const memory = parseGbotMemory((await runGhostexCli(target, gbotsMemoryShowCommand(botId))).json);
+    if (memory === null) throw new Error(`${name}'s memory could not be read. Try again in a moment.`);
+    return memory;
+  };
   return (
     <GbotSettingsSheet
       name={name}
@@ -44,6 +73,17 @@ export default function GbotSettingsHost({ target, botId, name, onClose, onSaved
         onSaved(fields.name ?? name);
       }}
       onCancel={onClose}
+      loadMemory={readMemory}
+      undoMemory={async (change: string) => {
+        await runGhostexCli(target, gbotsMemoryUndoCommand(botId, change));
+        return readMemory();
+      }}
+      loadRoutines={readRoutines}
+      actRoutine={async (verb, id) => {
+        await runGhostexCli(target, gbotsRoutineActCommand(verb, id));
+        return readRoutines();
+      }}
+      initialTab={initialTab}
     />
   );
 }

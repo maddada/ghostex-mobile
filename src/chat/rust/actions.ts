@@ -154,7 +154,13 @@ export type ActionFields = {
   /** A published page's picture for its card; answered as a `pageThumbnail` host action. */
   loadPageThumbnail: { pageId: string };
   /** A "GBot added" card: read its state once (`load`), or Undo the add (core `gbot_cards.rs`). */
-  gbotCard: { op: 'load' | 'undo' | 'openSettings'; changeId: string; botId?: string };
+  /** A "GBot added" or "Routine set" card (gx-chat-core `gbot_cards.rs`, `routine_cards.rs`). */
+  gbotCard: {
+    op: 'load' | 'undo' | 'openSettings' | 'pause' | 'resume' | 'edit';
+    changeId: string;
+    botId?: string;
+    routineId?: string;
+  };
 
   // ---- sending ------------------------------------------------------------------------------
   /** `interrupt`: interrupt and send, which stops the agent's running turn first (the core's `interrupts_turn`). */

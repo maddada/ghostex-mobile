@@ -1,7 +1,8 @@
 /**
  * GBot Settings on the phone, from a bot's long press: Profile (name, title, description, icon, colour, agent, model,
  * approval level, and the department read-only), Instructions (the GBot's standing instructions, with the computer's
- * notice when SOUL.md was changed by hand) and Memory (a later milestone). It edits a local copy read with
+ * notice when SOUL.md was changed by hand), Memory (GbotMemoryView.tsx: read-only, with Undo) and Routines
+ * (GbotRoutinesView.tsx). It edits a local copy read with
  * `ghostex gbots show` and saves the changed fields in one `ghostex gbots edit`, so Cancel leaves everything as it
  * was; a refusal (a taken name, say) shows the computer's own sentence.
  *
@@ -30,7 +31,11 @@ import {
   type GbotDetails,
   type GbotFields,
 } from '../../contract/gbots';
+import type { GbotMemory } from '../../contract/gbotMemory';
 import { SegmentedRow } from '../settings/SettingsControls';
+import GbotMemoryView from './GbotMemoryView';
+import GbotRoutinesView, { type GbotRoutineVerb } from './GbotRoutinesView';
+import type { GbotRoutine } from '../../contract/gbotRoutines';
 import {
   GbotChoiceChips,
   GbotColorPicker,
@@ -41,7 +46,8 @@ import {
   useGbotFormStyles,
 } from './GbotFormParts';
 
-type Tab = 'profile' | 'instructions' | 'memory';
+export type GbotSettingsTab = 'profile' | 'instructions' | 'memory' | 'routines';
+type Tab = GbotSettingsTab;
 
 /** Why the phone can't raise a GBot's approval level, and where to do it. */
 function approvalFromComputer(name: string): string {
@@ -56,6 +62,7 @@ const TABS: readonly { value: Tab; label: string }[] = [
   { value: 'profile', label: 'Profile' },
   { value: 'instructions', label: 'Instructions' },
   { value: 'memory', label: 'Memory' },
+  { value: 'routines', label: 'Routines' },
 ];
 
 export type GbotSettingsSheetProps = {
@@ -67,11 +74,19 @@ export type GbotSettingsSheetProps = {
   /** Saves the changed fields; resolves when the computer answered, a rejection keeps the sheet open with its sentence. */
   onSave: (fields: GbotFields) => Promise<void>;
   onCancel: () => void;
+  /** The Memory tab: read the GBot's memory, and undo its newest change. */
+  loadMemory: () => Promise<GbotMemory>;
+  undoMemory: (change: string) => Promise<GbotMemory>;
+  /** The Routines tab (GbotRoutinesView.tsx): list the GBot's routines, and pause, resume, run or remove one. */
+  loadRoutines: () => Promise<GbotRoutine[]>;
+  actRoutine: (verb: GbotRoutineVerb, id: string) => Promise<GbotRoutine[]>;
+  /** The tab it opens on (a "Routine set" card's Edit opens Routines). */
+  initialTab?: GbotSettingsTab;
 };
 
 export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactElement {
   const { appearance, styles } = useGbotFormStyles();
-  const [tab, setTab] = useState<Tab>('profile');
+  const [tab, setTab] = useState<Tab>(props.initialTab ?? 'profile');
   const [saved, setSaved] = useState<GbotDetails | null>(null);
   const [draft, setDraft] = useState<Required<GbotFields> | null>(null);
   const [agents, setAgents] = useState<{ agentId: string; name: string }[]>([]);
@@ -143,7 +158,8 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
   };
 
   const name = draft !== null && draft.name.trim().length > 0 ? draft.name.trim() : props.name;
-  const raisingApproval = draft !== null && saved !== null && draft.approval !== saved.approval && draft.approval !== 'ask';
+  const raisingApproval =
+    draft !== null && saved !== null && draft.approval !== saved.approval && draft.approval !== 'ask';
   const agentOptions =
     draft === null
       ? []
@@ -256,11 +272,9 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
           />
         </>
       ) : null}
-      {tab === 'memory' ? (
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Memory comes later</Text>
-          <Text style={styles.noticeBody}>Memory arrives in a later update.</Text>
-        </View>
+      {tab === 'memory' ? <GbotMemoryView load={props.loadMemory} undo={props.undoMemory} /> : null}
+      {tab === 'routines' ? (
+        <GbotRoutinesView name={saved?.name ?? props.name} load={props.loadRoutines} act={props.actRoutine} />
       ) : null}
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
     </GbotSheetCard>

@@ -266,6 +266,26 @@ export function gbotsShowCommand(botId: string): string {
   return `ghostex gbots show ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
 }
 
+/** A GBot's memory: MEMORY.md with its gauge, topics, daily log and the journal of changes (server/src/gbots/memory/ops.rs). */
+export function gbotsMemoryShowCommand(botId: string): string {
+  return `ghostex gbots memory show --bot ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** Undoes the newest change to a GBot's memory (`change` is its journal id, so a stale button is refused). */
+export function gbotsMemoryUndoCommand(botId: string, change: string): string {
+  return `ghostex gbots memory undo ${shellQuote(requirePositional(change, 'change id'))} --bot ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** A GBot's routines: schedule in words, next run, check and last run (server/src/gbots/routines.rs). */
+export function gbotsRoutineListCommand(botId: string): string {
+  return `ghostex gbots routine list --bot ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/** Pauses, resumes, runs now or removes one routine, by its id. */
+export function gbotsRoutineActCommand(verb: 'pause' | 'resume' | 'run-now' | 'remove', routineId: string): string {
+  return `ghostex gbots routine ${verb} ${shellQuote(requirePositional(routineId, 'routine id'))} --json`;
+}
+
 /** Opens another chat with a GBot; the answer's `chat` names it. */
 export function gbotsNewChatCommand(botId: string): string {
   return `ghostex gbots new-chat ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;

@@ -46,6 +46,7 @@ import { callVoiceAbout } from '../../voice/callAbout';
 import { useVoiceCapability } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
+import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettingsSheet';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
@@ -140,7 +141,8 @@ export default function NativeChatScreen({
   // The published page a page card (or a link to one) opened, shown in the chat's page sheet.
   const [page, setPage] = useState<ComputerAddress | null>(null);
   // The GBot whose settings the "GBot added" card's Open settings opened (the core's `openGbotSettings`).
-  const [gbotSettings, setGbotSettings] = useState<string | null>(null);
+  // A "Routine set" card's Edit opens the same sheet on its Routines tab (`editGbotRoutine`).
+  const [gbotSettings, setGbotSettings] = useState<{ botId: string; tab?: GbotSettingsTab } | null>(null);
   const { toast, show } = useChatViewRequests(
     chat,
     machine,
@@ -496,8 +498,9 @@ export default function NativeChatScreen({
             {gbotSettings !== null ? (
               <GbotSettingsHost
                 target={machine}
-                botId={gbotSettings}
-                name={gbotNameOn(machine.id, gbotSettings)}
+                botId={gbotSettings.botId}
+                name={gbotNameOn(machine.id, gbotSettings.botId)}
+                initialTab={gbotSettings.tab}
                 onClose={() => setGbotSettings(null)}
                 onSaved={(name) => show('Chats opened from now on start with the changes.', false, `${name} saved`)}
               />
@@ -574,7 +577,7 @@ function useChatViewRequests(
   onSwitchToTerminal: () => void,
   onHandoff: (request: HandoffRequest) => void,
   onOpenPage: (page: ComputerAddress) => void,
-  onOpenGbotSettings: (botId: string) => void,
+  onOpenGbotSettings: (settings: { botId: string; tab?: GbotSettingsTab }) => void,
 ): { toast: Toast; show: (message: string, error: boolean, title?: string) => void } {
   const machineId = machine.id;
   const openMachineLink = useOpenMachineLink();
@@ -633,7 +636,11 @@ function useChatViewRequests(
             // The "GBot added" card's Open settings (gx-chat-core `gbot_cards.rs`): the bot is on this chat's computer.
             else if (request.action === 'openGbotSettings') {
               const botId = (request.params as { botId?: unknown } | null)?.botId;
-              if (typeof botId === 'string' && botId.length > 0) onOpenGbotSettings(botId);
+              if (typeof botId === 'string' && botId.length > 0) onOpenGbotSettings({ botId });
+            } else if (request.action === 'editGbotRoutine') {
+              // The phone has no Automate view: Edit opens the GBot's Routines (gx-chat-core `routine_cards.rs`).
+              const botId = (request.params as { botId?: unknown } | null)?.botId;
+              if (typeof botId === 'string' && botId.length > 0) onOpenGbotSettings({ botId, tab: 'routines' });
             } else if (request.action === 'sendFeedback')
               navigation.navigate('Feedback', { machineId, collectWithAgent: true });
             else if (request.action === 'selectForkBranch') {
