@@ -17,6 +17,7 @@
 import {
   hasQuestion,
   resolveAgentIconId,
+  sessionAgentName,
   type AgentIconId,
   type GhostexMobileSummary,
 } from '../contract/mobileSummary';
@@ -92,13 +93,10 @@ export function sessionFacts(
 ): SessionFacts | undefined {
   const session = summary?.sessions.find((entry) => entry.sessionId === sessionId);
   if (summary === null || summary === undefined || session === undefined) return undefined;
-  const launcher = summary.agents.find((agent) => agent.agentId === session.agent);
-  const agentLabel = [launcher?.name, session.agentName, session.agent].find(
-    (name): name is string => name !== undefined && name.trim().length > 0,
-  );
+  const agentLabel = sessionAgentName(session, summary.agents);
   return {
     projectId: session.projectId,
-    agentLabel: agentLabel?.trim() ?? '',
+    agentLabel,
     agentIconId: resolveAgentIconId(
       session.agentIcon,
       session.agentName.length > 0 ? session.agentName : session.agent,

@@ -1,8 +1,9 @@
 /**
  * The attention list (the notifications design, as a state inbox): what needs the user now, one row per session by
  * its live state, in the sections Needs you, Done and Failed, with account notices last (`attentionRows.ts`). A row
- * names agent · project, the session's title, the time and the state as word and glyph; never anything the agent
- * wrote. A tap opens the session (a question at its question card) and marks the session's unread rows read on the
+ * is the desktop bell's card: the agent's icon in a square tile, the session's title with the time at its right, the
+ * row's message as a two-line body, and "project · state" as its footer in the desktop's words; an unread row has the
+ * accent wash (blue, red for an approval or a failure), a read one is dimmed. A tap opens the session (a question at its question card) and marks the session's unread rows read on the
  * computer, as the read state is shared with its bell, except its failure rows (`readOnOpen`): opening answers no
  * question and fixes no failure, so a Failed session stays under Failed. An account row
  * is only marked read. An ended session's row opens the "Session ended" sheet (Restore, Remove) instead of a dead
@@ -78,6 +79,9 @@ import { CloudOffGlyph, KindGlyph } from './icons';
 /** What opening a row's session asks for. */
 export type OpenSessionTarget = { machineId: string; sessionId: string; question: boolean };
 
+/** The unread card's accent wash, as strong as the list's attention wash (`ATTENTION_ROW_WASH`). */
+const ROW_WASH_OPACITY = 9;
+
 /** How often the rows' "5m ago" moves on while the list is on screen. */
 const CLOCK_TICK_MS = 30_000;
 
@@ -87,15 +91,6 @@ const STATUS_COLORS: StatusColors = {
   question: SidebarPalette.ROW_QUESTION,
   danger: SidebarPalette.MENU_DANGER,
 };
-
-function kindColor(kind: ListKind, neutral: string, status: StatusColors): string {
-  if (kind === 'waiting') return status.waiting;
-  if (kind === 'question') return status.question;
-  if (kind === 'approval' || kind === 'failed' || kind === 'sendFailed' || kind === 'resetExpiring') {
-    return status.danger;
-  }
-  return neutral;
-}
 
 type RowInk = {
   light: boolean;
@@ -119,13 +114,34 @@ function rowInks(appearance: Appearance): { plain: RowInk; emphasis: RowInk } {
   });
   return {
     plain: make([appearance.card, appearance.cardActive]),
-    emphasis: make([colorOver(ATTENTION_ROW_WASH, appearance.background), appearance.cardActive]),
+    emphasis: make([
+      colorOver(ATTENTION_ROW_WASH, appearance.background),
+      colorOver(colorWithOpacity(SidebarPalette.ROW_APPROVAL, ROW_WASH_OPACITY), appearance.background),
+      appearance.cardActive,
+    ]),
   };
 }
 
-/** Drawn with the attention wash: what waits for the user, and an account notice not read yet. */
+/**
+ * Drawn with the accent wash, as the desktop bell draws an unread card: every session row (what waits, and the unread
+ * rows that hold a session under Done or Failed) and an account notice not read yet.
+ */
 function emphasized(row: AttentionRow): boolean {
-  return row.section === 'needsYou' || (row.account && !row.read);
+  return !row.read;
+}
+
+/** The desktop card's accent: red for an approval, a failure, a message not sent and an expiring reset, else blue. */
+function urgent(row: AttentionRow): boolean {
+  return (
+    row.kind === 'approval' ||
+    row.kind === 'failed' ||
+    row.kind === 'sendFailed' ||
+    row.kind === 'resetExpiring'
+  );
+}
+
+function accentOf(row: AttentionRow): string {
+  return urgent(row) ? SidebarPalette.ROW_APPROVAL : SidebarPalette.ROW_ATTENTION;
 }
 
 /**
@@ -175,50 +191,60 @@ function rowTime(row: AttentionRow, now: Date): string | null {
 
 function RowContent({ row, now, ink }: { row: AttentionRow; now: Date; ink: RowInk }) {
   const Icon = AGENT_ICONS[row.agentIconId] ?? AGENT_ICONS.terminal;
-  const strong = emphasized(row);
-  // The status colours and the dimmer ink of a plain row read on the dark rows only: on a light row identity and state
-  // word take the ink's foreground, and the glyph keeps the state's colour.
-  const whoColor = !strong && !ink.light ? SidebarPalette.FOREGROUND : ink.foreground;
-  const neutral = row.ended !== null ? ink.muted : kindColor(row.kind, ink.muted, ink.status);
-  const wordColor = ink.light ? ink.foreground : neutral;
-  const detail = row.machineLabel !== null ? `${row.detail} · ${row.machineLabel}` : row.detail;
+  const unread = emphasized(row);
+  const accent = accentOf(row);
   const time = rowTime(row, now);
-  const word = row.lastKnown ? `${row.label} · ${NotificationsCopy.lastKnown}` : row.label;
+  const footer = rowFooter(row);
+  // The footer takes the card's accent while unread, as on the desktop, moved toward the text colour until it reads.
+  const footerColor = !unread ? ink.muted : urgent(row) ? ink.status.danger : ink.status.waiting;
   return (
     <>
-      <View style={styles.tile}>
-        <Icon size={20} color={agentIconTint(row.agentIconId)} />
+      <View
+        style={[styles.tile, { backgroundColor: unread ? colorWithOpacity(accent, 16) : GhostexPalette.NEUTRAL_FILL }]}
+      >
+        <Icon size={18} color={agentIconTint(row.agentIconId)} />
       </View>
       <View style={styles.text}>
         <View style={styles.firstLine}>
-          <Text style={[styles.who, { color: whoColor }, strong && styles.whoStrong]} numberOfLines={1}>
-            {row.who}
+          <Text testID="attention-card-title" style={[styles.title, { color: ink.foreground }]} numberOfLines={1}>
+            {row.title}
           </Text>
-          {time !== null ? <Text style={[styles.time, { color: ink.muted }]}>{time}</Text> : null}
+          {time !== null ? (
+            <Text testID="attention-card-time" style={[styles.time, { color: ink.muted }]}>
+              {time}
+            </Text>
+          ) : null}
         </View>
-        {detail.length > 0 ? (
-          <Text style={[styles.detail, { color: ink.muted }]} numberOfLines={1}>
-            {detail}
+        {row.body.length > 0 ? (
+          <Text testID="attention-card-body" style={[styles.body, { color: ink.muted }]} numberOfLines={2}>
+            {row.body}
           </Text>
         ) : null}
-        <View style={styles.kind}>
-          <KindGlyph
-            kind={row.ended !== null ? 'ended' : row.kind}
-            size={14}
-            color={row.ended !== null ? ink.mutedGlyph : kindColor(row.kind, ink.mutedGlyph, STATUS_COLORS)}
-          />
-          <Text style={[styles.kindText, { color: wordColor }, strong && styles.kindStrong]}>{word}</Text>
-        </View>
+        <Text testID="attention-card-footer" style={[styles.footer, { color: footerColor }]} numberOfLines={1}>
+          {footer}
+        </Text>
       </View>
     </>
   );
 }
 
+/** A sentence of the spoken label: the text with a full stop, unless it ends in its own punctuation. */
+function sentence(text: string): string {
+  return /[.?!…]$/.test(text) ? text : `${text}.`;
+}
+
+/** The card's footer: "project · state", then the computer's name and "last known" where they apply. */
+function rowFooter(row: AttentionRow): string {
+  return [row.footer, row.machineLabel, row.lastKnown ? NotificationsCopy.lastKnown : null]
+    .filter((part): part is string => part !== null && part.length > 0)
+    .join(' · ');
+}
+
+/** What the card shows, in its order, with the state in words (VoiceOver hears no colour): "title, state. body." */
 function rowLabel(row: AttentionRow, now: Date): string {
-  const parts = [row.account && !row.read ? NotificationsCopy.rowUnread : null, `${row.who}, ${row.label}.`];
-  if (row.detail.length > 0) parts.push(`${row.detail}.`);
-  if (row.machineLabel !== null) parts.push(`${row.machineLabel}.`);
-  if (row.lastKnown) parts.push(`${NotificationsCopy.lastKnown}.`);
+  const parts = [row.account && !row.read ? NotificationsCopy.rowUnread : null, `${row.title}, ${row.label}.`];
+  if (row.body.length > 0) parts.push(sentence(row.body));
+  parts.push(sentence(rowFooter(row)));
   const time = rowTime(row, now);
   if (time !== null) parts.push(`${time}.`);
   return parts.filter((part) => part !== null).join(' ');
@@ -255,8 +281,13 @@ const Row = memo(function Row({
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: appearance.card, borderColor: appearance.border },
-        emphasized(row) && styles.rowEmphasis,
-        (pressed || held) && { backgroundColor: appearance.cardActive },
+        emphasized(row)
+          ? {
+              backgroundColor: colorWithOpacity(accentOf(row), ROW_WASH_OPACITY),
+              borderColor: colorWithOpacity(accentOf(row), 30),
+            }
+          : styles.rowRead,
+        (pressed || held) && { backgroundColor: appearance.cardActive, opacity: 1 },
       ]}
     >
       <RowContent row={row} now={now} ink={ink} />
@@ -705,11 +736,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: GhostexStrokeWidth,
   },
-  rowEmphasis: {
-    // The desktop bell's attention-blue wash and border on what waits for the user.
-    backgroundColor: ATTENTION_ROW_WASH,
-    borderColor: colorWithOpacity(SidebarPalette.ROW_ATTENTION, 38),
-  },
+  // The desktop bell dims a read card.
+  rowRead: { opacity: 0.72 },
   liftedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 12 },
   tile: {
     width: 34,
@@ -719,15 +747,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: GhostexPalette.NEUTRAL_FILL,
   },
-  text: { flex: 1, minWidth: 0, gap: 3 },
+  text: { flex: 1, minWidth: 0, gap: 6 },
   firstLine: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  who: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: '500' },
-  whoStrong: { fontWeight: '700' },
+  title: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   time: { fontSize: 12, fontVariant: ['tabular-nums'] },
-  detail: { fontSize: 13, lineHeight: 18 },
-  kind: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  kindText: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  kindStrong: { fontWeight: '600' },
+  body: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  footer: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
   empty: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 20 },
   emptyFill: { flex: 1, minHeight: 260 },
   emptyTitle: { marginTop: 4, fontSize: 15, fontWeight: '600', textAlign: 'center' },

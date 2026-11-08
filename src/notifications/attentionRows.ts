@@ -21,13 +21,16 @@
  * leaves out live sessions of inactive projects; it only makes the session a candidate (`endedCandidates`) whose
  * closed list is worth reading. A computer that cannot be reached, or whose session list was not read yet, has none.
  *
- * Rows join the session list for agent, project and title; the feed's message text is never part of a row. Kept free
- * of React Native so it is testable under `bun test`.
+ * Rows join the session list for agent, project and title. A row reads as the desktop bell's card (CDXC:Notifications
+ * 2026-11-08 in feedContract.ts): the session's title, the feed row's message as its body (a wait the feed holds no
+ * row for says what it waits on), and "project · state" in the desktop's words as its footer. Kept free of React
+ * Native so it is testable under `bun test`.
  */
 
 import { NotificationsCopy } from '../copy';
 import {
   hasQuestion,
+  isCustomAgentId,
   resolveAgentIconId,
   type AgentIconId,
   type GhostexMobileSummary,
@@ -61,8 +64,14 @@ export type AttentionRow = {
   projectId: string;
   section: InboxSection;
   kind: ListKind;
-  /** The state in words ("Waiting for approval", "finished · not opened", "Ended", ...). */
+  /** The state in words ("Waiting for approval", "finished · not opened", "Ended", ...), for the row's spoken label. */
   label: string;
+  /** The card's title: the session's title ("Session" without one); for an account row the computer's notice. */
+  title: string;
+  /** The card's body: the feed row's message, or what a wait waits on; '' when there is none. */
+  body: string;
+  /** The card's footer: "project · state" in the desktop bell's words ("Ghostex · Needs input"). */
+  footer: string;
   /** "agent · project"; for an account row the account. */
   who: string;
   /** The session's title; for an account row the computer's one-line notice. */
@@ -237,19 +246,34 @@ export function needsYouCount(
   return { count, lastKnown };
 }
 
-function identity(facts: SessionFacts | undefined, row: FeedRow | undefined) {
+function identity(facts: SessionFacts | undefined, row: FeedRow | undefined, state: string) {
   const agent =
     facts !== undefined && facts.agentLabel.length > 0
       ? facts.agentLabel
-      : row !== undefined && row.agentName.length > 0
+      : row !== undefined && row.agentName.length > 0 && !isCustomAgentId(row.agentName)
         ? row.agentName
         : NotificationsCopy.unknownAgent;
   const project = facts !== undefined && facts.projectName.length > 0 ? facts.projectName : (row?.subtitle ?? '');
+  const detail = facts !== undefined && facts.title.length > 0 ? facts.title : (row?.title ?? '');
   return {
     who: project.length > 0 ? `${agent} · ${project}` : agent,
-    detail: facts !== undefined && facts.title.length > 0 ? facts.title : (row?.title ?? ''),
+    detail,
+    title: detail.length > 0 ? detail : NotificationsCopy.untitledSession,
+    footer: project.length > 0 ? `${project} · ${state}` : state,
     agentIconId: facts?.agentIconId ?? resolveAgentIconId(undefined, row?.agentName),
   };
+}
+
+/**
+ * A waiting session's card body: the message of its newest unread `needsInput` row (the computer's own words, "2
+ * questions are waiting for your answers: …", "Waiting for your approval"), else what it waits on.
+ */
+function waitBody(kind: ListKind, session: GhostexSession, unread: readonly FeedRow[]): string {
+  const written = unread.find((row) => row.kind === 'needsInput' && (row.body ?? '').length > 0)?.body;
+  if (written !== undefined) return written;
+  if (kind === 'approval') return NotificationsCopy.waitBody.approval;
+  if (kind === 'question') return NotificationsCopy.waitBody.question(session.pendingQuestionCount);
+  return NotificationsCopy.waitBody.waiting;
 }
 
 const newestFirst = (a: AttentionRow, b: AttentionRow): number => Date.parse(b.at) - Date.parse(a.at);
@@ -290,7 +314,8 @@ export function buildAttentionList(
       section: 'needsYou',
       kind,
       label: NotificationsCopy.rowKind[kind],
-      ...identity(sessionFacts(feed.summary, session.sessionId), unread[0]),
+      ...identity(sessionFacts(feed.summary, session.sessionId), unread[0], NotificationsCopy.rowState.needsInput),
+      body: waitBody(kind, session, unread),
       at: session.attentionEnteredAt,
       read: false,
       account: false,
@@ -325,7 +350,12 @@ export function buildAttentionList(
         section: state.section,
         kind,
         label: ended !== null ? NotificationsCopy.rowKind.ended : NotificationsCopy.rowKind[kind],
-        ...identity(sessionFacts(feed.summary, sessionId), newest),
+        ...identity(
+          sessionFacts(feed.summary, sessionId),
+          newest,
+          ended !== null ? NotificationsCopy.rowState.ended : NotificationsCopy.rowState[kind],
+        ),
+        body: newest.body ?? '',
         at: newest.createdAt,
         read: false,
         account: false,
@@ -350,6 +380,12 @@ export function buildAttentionList(
         label: NotificationsCopy.rowKind[row.kind],
         who: row.subtitle,
         detail: row.title,
+        title: row.title,
+        body: row.body ?? '',
+        footer:
+          row.subtitle.length > 0
+            ? `${row.subtitle} · ${NotificationsCopy.rowState[row.kind]}`
+            : NotificationsCopy.rowState[row.kind],
         agentIconId: resolveAgentIconId(undefined, row.agentName),
         at: row.createdAt,
         read: row.read,

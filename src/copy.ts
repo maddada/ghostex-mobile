@@ -1438,6 +1438,25 @@ export const NotificationsCopy = {
     resetExpiring: 'reset expiring',
     resetRedeemed: 'reset used',
   },
+  /** A row's state in its footer, in the desktop bell's words (`GpuiNotificationFeedKind::label`). */
+  rowState: {
+    needsInput: 'Needs input',
+    finished: 'Finished',
+    failed: 'Failed',
+    sendFailed: 'Not sent',
+    ended: 'Ended',
+    resetExpiring: 'Reset expiring',
+    resetRedeemed: 'Reset used',
+  },
+  /** A waiting row's body when the computer's feed holds no message for the wait (gxserver's own wording). */
+  waitBody: {
+    approval: 'Waiting for your approval',
+    question: (count: number) =>
+      count > 1 ? `${count} questions are waiting for your answers` : 'A question is waiting for your answer',
+    waiting: 'Waiting for your input',
+  },
+  /** A row's title when the session has none (the desktop bell's "Session"). */
+  untitledSession: 'Session',
   /** The attention list's sections, in their order. */
   section: {
     needsYou: 'Needs you',

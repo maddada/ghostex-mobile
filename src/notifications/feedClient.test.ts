@@ -100,16 +100,16 @@ describe('the attention list', () => {
     );
   });
 
-  test('no row carries the feed text (data side)', () => {
-    const snapshot = parseFeedState({ items: [NEEDS_INPUT] });
-    assert.ok(snapshot !== null);
-    assert.ok(!JSON.stringify(snapshot).includes('secret text'));
+  // CDXC:Notifications 2026-11-08 in feedContract.ts: a row shows the feed's text as its card body, as the desktop's
+  // bell does, and in no other field.
+  test('a row carries the feed text only as its card body (data side)', () => {
     const inbox = buildAttentionList(
       [feedOf([NEEDS_INPUT], summary([{ sessionId: 's1', activity: 'attention' }]))],
       new Set(),
     );
     assert.equal(inbox.needsYou.length, 1);
-    assert.ok(!JSON.stringify(inbox).includes('secret text'));
+    assert.equal(inbox.needsYou[0]?.body, 'secret text');
+    assert.ok(!JSON.stringify(inbox.needsYou.map(({ body: _body, ...rest }) => rest)).includes('secret text'));
   });
 
   test('a row of an unknown kind is skipped', () => {
@@ -120,13 +120,14 @@ describe('the attention list', () => {
   // message the computer could not send is a session row labelled "Not sent", read state as the computer keeps it.
   const NOT_SENT = { ...NEEDS_INPUT, id: 'n2', kind: 'sendFailed', body: 'Message not sent. secret reason' };
 
-  test('an unread sendFailed row puts its session under Failed as "not sent", without the feed text', () => {
+  test('an unread sendFailed row puts its session under Failed as "not sent", the feed text only as its body', () => {
     const inbox = buildAttentionList([feedOf([NOT_SENT], summary([{ sessionId: 's1' }]))], new Set());
     assert.deepEqual(
       inbox.failed.map((row) => [row.id, row.kind, row.label, row.who, row.detail, row.stateIds]),
       [['s1', 'sendFailed', 'not sent', 'Claude Code · ghostex-mobile', 'fix build', ['n2']]],
     );
-    assert.ok(!JSON.stringify(inbox).includes('secret'));
+    assert.equal(inbox.failed[0]?.body, 'Message not sent. secret reason');
+    assert.ok(!JSON.stringify(inbox.failed.map(({ body: _body, ...rest }) => rest)).includes('secret'));
     // Read (the send went through, the computer read it) it leaves.
     const read = buildAttentionList([feedOf([{ ...NOT_SENT, read: true }], summary([{ sessionId: 's1' }]))], new Set());
     assert.deepEqual(read.failed, []);

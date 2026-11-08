@@ -5,8 +5,13 @@
  * `packages/shared/notification-feed/notification-feed-contract.ts` in the Ghostex repo.
  *
  * The parser is the phone's trust boundary for this data. It keeps only what the attention list and
- * the event mapper use and never copies the row's message text: that field carries the agent's last
- * message, which no notification, list row or log may show.
+ * the event mapper use. The row's message text (`body`) is kept for the attention list's rows only, which show it as
+ * the desktop's bell does; no notification, Live Activity, persistent notification or log may show it.
+ *
+ * CDXC:Notifications 2026-11-08 DECISION: User, on the phone's bell: "make notification look like the one on desktop
+ * please". The desktop's card shows the row's body ("2 questions are waiting for your answers: …"), so the phone's
+ * list rows do too; this supersedes the 2026-10-30 rule that kept the body off the phone entirely. It stays off
+ * every surface outside the app's own list.
  * A row of a kind the phone does not know is skipped, never shown or notified.
  * Kept free of React Native so it is testable under `bun test`.
  */
@@ -54,6 +59,8 @@ export type FeedRow = {
   title: string;
   /** The project name when the row was written; for an account row the account. */
   subtitle: string;
+  /** The row's message text (the desktop card's body); '' when it has none. Shown only in the attention list. */
+  body?: string;
   /** The agent icon slug the host overlays (claude, codex, ...); '' when unknown. */
   agentName: string;
   /** ISO time the row was written. */
@@ -91,6 +98,7 @@ export function parseFeedRow(value: unknown): FeedRow | null {
     kind,
     title: text(raw, 'title') ?? '',
     subtitle: text(raw, 'subtitle') ?? '',
+    body: text(raw, 'body')?.trim() ?? '',
     agentName: text(raw, 'agentName')?.trim() ?? '',
     createdAt,
     read: raw.read === true,

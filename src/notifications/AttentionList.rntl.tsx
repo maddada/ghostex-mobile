@@ -26,7 +26,7 @@ import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import { useInventoryStore, type MachineInventory } from '../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { ClosedSession } from '../sessions/sessionSearch';
-import { SidebarPalette } from '../theme/palette';
+import { SidebarPalette, colorWithOpacity } from '../theme/palette';
 import { defaultSettings, useSettingsStore } from '../settings/store';
 import { THEME_PRESETS, themePresetPatch } from '../theme/presets';
 import { resolveAppearance } from '../theme/useAppearance';
@@ -162,6 +162,10 @@ const ROW_FRAME = { x: 0, y: 200, width: 402, height: 72 };
 const rowIds = (within: { getAllByTestId: typeof screen.getAllByTestId }) =>
   within.getAllByTestId(/^attention-row-/).map((node) => String(node.props.testID).replace('attention-row-', ''));
 
+/** A part of a row's card as drawn: its title, body, footer or time. */
+const cardText = (id: string, part: 'title' | 'body' | 'footer' | 'time') =>
+  String(within(screen.getByTestId(`attention-row-${id}`)).getByTestId(`attention-card-${part}`).props.children);
+
 /** The rows under a section title, in order: in the drawn tree each row follows its section's title. */
 function sectionRows(title: string): string[] {
   const nodes =
@@ -264,26 +268,30 @@ test('Needs you (longest wait first), Done, Failed, then account notices, each s
   expect(sectionRows('Failed')).toEqual(['s6']);
   expect(sectionRows('Accounts')).toEqual(['n3']);
 
-  expect(within(screen.getByTestId('attention-row-s6')).getByText('ended with an error')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s6')).getByText('Codex · ghostex-mobile')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s3')).getByText('finished · not opened')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s5')).getByText('Waiting for approval')).toBeTruthy();
-  // The account row is named by the account.
-  expect(within(screen.getByTestId('attention-row-n3')).getByText('reset expiring')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-n3')).getByText('Claude · Work')).toBeTruthy();
-  // VoiceOver hears the state as a word, not a colour.
+  // The desktop bell's card: the session's title, the time, the row's message, and "project · state" in its words.
+  expect(cardText('s6', 'title')).toBe('Theme notices');
+  expect(cardText('s6', 'footer')).toBe('ghostex-mobile · Failed');
+  expect(cardText('s6', 'time')).toBe('6m ago');
+  expect(cardText('s3', 'footer')).toBe('ghostex · Finished');
+  expect(cardText('s5', 'footer')).toBe('ghostex · Needs input');
+  expect(cardText('s5', 'body')).toBe('Waiting for your approval');
+  // The account row is titled by the computer's notice, its footer the account.
+  expect(cardText('n3', 'title')).toBe('Claude reset expires in 22 hours');
+  expect(cardText('n3', 'footer')).toBe('Claude · Work · Reset expiring');
+  // VoiceOver hears what the card shows, with the state as a word, not a colour.
   expect(screen.getByTestId('attention-row-s6').props.accessibilityLabel).toMatch(
-    /^Codex · ghostex-mobile, ended with an error\. Theme notices\. 6m ago\.$/,
+    /^Theme notices, ended with an error\. ghostex-mobile · Failed\. 6m ago\.$/,
   );
   expect(screen.getByTestId('attention-row-n3').props.accessibilityLabel).toMatch(/^Unread\. /);
 });
 
-test('a waiting session says "has a question" with a pending question, "waiting" without one', async () => {
+test('a waiting session says what it waits on: the questions with a pending question, input without one', async () => {
   await renderList();
-  expect(within(screen.getByTestId('attention-row-s1')).getByText('has a question')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s9')).getByText('has a question')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s2')).getByText('waiting')).toBeTruthy();
-  expect(within(screen.getByTestId('attention-row-s2')).queryByText('has a question')).toBeNull();
+  expect(cardText('s1', 'body')).toBe('2 questions are waiting for your answers');
+  expect(cardText('s9', 'body')).toBe('A question is waiting for your answer');
+  expect(cardText('s2', 'body')).toBe('Waiting for your input');
+  expect(screen.getByTestId('attention-row-s1').props.accessibilityLabel).toMatch(/^Duo layout spike, has a question\. /);
+  expect(screen.getByTestId('attention-row-s2').props.accessibilityLabel).toMatch(/^Pad tests, waiting\. /);
 });
 
 test("opening a row marks its session's unread rows read and opens it; a question row asks for the question card", async () => {
@@ -302,7 +310,7 @@ test("opening a row marks its session's unread rows read and opens it; a questio
 });
 
 describe('a message the computer could not send (sendFailed)', () => {
-  test('"not sent" with a red glyph under Failed; a tap opens its session and leaves the failure unread', async () => {
+  test('"Not sent" in red under Failed; a tap opens its session and leaves the failure unread', async () => {
     // The desktop's bell draws a sendFailed row "Not sent" in the urgent red (`GpuiNotificationFeedKind::SendFailed`).
     useAttentionFeedStore.setState({
       feeds: { m1: { status: 'ready', rows: [feedRow('n9', 2, { kind: 'sendFailed', sessionId: 's4' }), ...FEED] } },
@@ -310,17 +318,11 @@ describe('a message the computer could not send (sendFailed)', () => {
     await renderList();
     expect(sectionRows('Failed')).toEqual(['s4', 's6']);
     const row = screen.getByTestId('attention-row-s4');
-    expect(row.props.accessibilityLabel).toMatch(/^Codex · ghostex-mobile, not sent\. Key repeat\. 2m ago\.$/);
-    expect(StyleSheet.flatten(within(row).getByText('not sent').props.style).color).toBe(
-      resolveAppearance(useSettingsStore.getState().settings, true).foreground,
-    );
-    const glyph = row.queryAll((node) => node.props.d === 'M 12 4 L 21 19.5 H 3 Z M 12 10 v 4');
-    expect(glyph).toHaveLength(1);
-    const stroke: unknown = glyph[0]?.props.stroke;
-    if (typeof stroke !== 'object' || stroke === null || !('payload' in stroke) || typeof stroke.payload !== 'number') {
-      throw new Error('The state glyph must have a native colour brush.');
-    }
-    expect(stroke.payload & 0xffffff).toBe(Number.parseInt(SidebarPalette.MENU_DANGER.slice(1), 16));
+    expect(row.props.accessibilityLabel).toMatch(/^Key repeat, not sent\. ghostex-mobile · Not sent\. 2m ago\.$/);
+    expect(cardText('s4', 'footer')).toBe('ghostex-mobile · Not sent');
+    // The card's accent is the urgent red: its wash and border.
+    const card = StyleSheet.flatten(row.props.style);
+    expect(String(card.borderColor)).toBe(colorWithOpacity(SidebarPalette.ROW_APPROVAL, 30));
 
     await fireEvent.press(row);
     expect(markRead).not.toHaveBeenCalled();
@@ -350,7 +352,7 @@ test('a long press opens the menu at the held row, under it, the row lifted; a F
   });
   // The list's own row and its lifted copy above the dimmed screen carry the same label; the copy has no testID.
   const lifted = screen
-    .getAllByRole('button', { name: /^Codex · ghostex-mobile, ended with an error\./ })
+    .getAllByRole('button', { name: /^Theme notices, ended with an error\./ })
     .filter((node) => node.props.testID === undefined);
   expect(lifted).toHaveLength(1);
   expect(StyleSheet.flatten(lifted[0].props.style)).toMatchObject({ left: 8, top: 200, width: 386, height: 72 });
@@ -372,7 +374,7 @@ test('each command, the lifted row and Close menu are separate accessibility ele
     expect(groupingAncestors(command)).toEqual([]);
   }
   const lifted = screen
-    .getAllByRole('button', { name: /^Codex · ghostex-mobile, ended with an error\./ })
+    .getAllByRole('button', { name: /^Theme notices, ended with an error\./ })
     .filter((node) => node.props.testID === undefined);
   expect(groupingAncestors(lifted[0])).toEqual([]);
 
@@ -448,7 +450,7 @@ test("a computer that cannot be reached keeps its rows as last known, with today
   await renderList();
   expect(screen.getByText(NotificationsCopy.offline('Mac mini'))).toBeTruthy();
   expect(rowIds(screen)).toEqual(ALL_ROWS);
-  expect(within(screen.getByTestId('attention-row-s1')).getByText('has a question · last known')).toBeTruthy();
+  expect(cardText('s1', 'footer')).toBe('ghostex-mobile · Needs input · last known');
   expect(sectionRows('Needs you · last known')).toEqual(['s1', 's2', 's9', 's5']);
 });
 
@@ -503,7 +505,7 @@ describe('an ended session', () => {
   test('reads Ended; its tap opens the "Session ended" sheet with Restore and Remove, never the session', async () => {
     await renderList();
     expect(sectionRows('Done')).toEqual(['s3', 's7']);
-    expect(within(screen.getByTestId('attention-row-s7')).getByText('Ended')).toBeTruthy();
+    expect(cardText('s7', 'footer')).toBe('Ended');
     await fireEvent.press(screen.getByTestId('attention-row-s7'));
     expect(opened).toEqual([]);
     expect(markRead).not.toHaveBeenCalled();
@@ -562,7 +564,7 @@ describe('an ended session', () => {
   test('a session only missing from the session list is no Ended row: its tap opens it', async () => {
     useAttentionFeedStore.setState({ closed: {} });
     await renderList();
-    expect(within(screen.getByTestId('attention-row-s7')).getByText('finished · not opened')).toBeTruthy();
+    expect(cardText('s7', 'footer')).toBe('Finished');
     await fireEvent.press(screen.getByTestId('attention-row-s7'));
     expect(opened).toEqual([{ machineId: 'm1', sessionId: 's7', question: false }]);
   });
@@ -595,12 +597,13 @@ function contrast(a: string, b: string): number {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
-/** A row's identity and state word, as its accessibility label names them ("Unread. who, word."). */
-function rowTexts(id: string) {
-  const row = screen.getByTestId(`attention-row-${id}`);
-  const [, who, word] = /^(?:Unread\. )?(.+?), (.+?)\./.exec(String(row.props.accessibilityLabel))!;
-  const color = (text: string) => StyleSheet.flatten(within(row).getByText(text).props.style).color as string;
-  return { who: color(who!), word: color(word!) };
+/** The colours of a row's card texts by role; null for a part the row does not draw. */
+function rowColors(row: TestInstance) {
+  const color = (part: string) => {
+    const node = within(row).queryByTestId(`attention-card-${part}`);
+    return node === null ? null : (StyleSheet.flatten(node.props.style).color as string);
+  };
+  return { title: color('title'), body: color('body'), footer: color('footer'), time: color('time') };
 }
 
 describe("the rows in the appearance's colours", () => {
@@ -612,26 +615,27 @@ describe("the rows in the appearance's colours", () => {
   });
 
   test.each(THEME_PRESETS.filter((preset) => preset.mode === 'light').map((preset) => preset.id))(
-    'light preset %s: every identity and state word reads on the light row',
+    'light preset %s: every title and footer reads on the light row',
     async (preset) => {
       useSettingsStore.getState().patchSettings(themePresetPatch(preset, false)!);
       const page = resolveAppearance(useSettingsStore.getState().settings, true);
       await renderList();
       for (const id of ALL_ROWS) {
-        const { who, word } = rowTexts(id);
-        expect(contrast(who, page.card)).toBeGreaterThanOrEqual(4.5);
-        expect(contrast(word, page.card)).toBeGreaterThanOrEqual(4.5);
+        const { title, footer } = rowColors(screen.getByTestId(`attention-row-${id}`));
+        expect(contrast(title!, page.card)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(footer!, page.card)).toBeGreaterThanOrEqual(4.5);
       }
     },
   );
 
-  test('dark: a plain identity keeps its dimmer ink and the state words their status colours', async () => {
+  test("dark: an unread card's footer takes its accent, blue or the urgent red, as on the desktop", async () => {
     useSettingsStore.getState().patchSettings({ sidebarTheme: 'dark-2' });
     await renderList();
-    expect(rowTexts('s3').who).toBe(SidebarPalette.FOREGROUND);
-    expect(rowTexts('s2').word).toBe(SidebarPalette.ROW_ATTENTION);
-    expect(rowTexts('s9').word).toBe(SidebarPalette.ROW_QUESTION);
-    expect(rowTexts('s6').word).toBe(SidebarPalette.MENU_DANGER);
+    const footer = (id: string) => rowColors(screen.getByTestId(`attention-row-${id}`)).footer;
+    expect(footer('s2')).toBe(SidebarPalette.ROW_ATTENTION);
+    expect(footer('s3')).toBe(SidebarPalette.ROW_ATTENTION);
+    expect(footer('s5')).toBe(SidebarPalette.MENU_DANGER);
+    expect(footer('s6')).toBe(SidebarPalette.MENU_DANGER);
   });
 });
 
@@ -645,22 +649,6 @@ function over(fill: string, base: string): string {
     .join('')}`;
 }
 
-/** A row's texts by role, as its accessibility label names them ("Unread. who, word. detail. time."). */
-function rowParts(row: TestInstance) {
-  const parts = String(row.props.accessibilityLabel)
-    .replace(/^Unread\. /, '')
-    .replace(/\.$/, '')
-    .split('. ');
-  const [who, word] = parts[0]!.split(', ');
-  const color = (text: string) => StyleSheet.flatten(within(row).getByText(text).props.style).color as string;
-  return {
-    who: color(who!),
-    word: color(word!),
-    time: color(parts.at(-1)!),
-    detail: parts.length === 3 ? color(parts[1]!) : null,
-  };
-}
-
 describe('secondary text reads on the surface it is drawn on', () => {
   const initialSettings = useSettingsStore.getState().settings;
   afterEach(async () => {
@@ -670,7 +658,7 @@ describe('secondary text reads on the surface it is drawn on', () => {
   });
 
   test.each(THEME_PRESETS.map((preset) => [preset.id, preset.mode] as const))(
-    '%s (%s): every row keeps its time, detail and state word at 4.5:1 on its card or wash, pressed or not',
+    '%s (%s): every row keeps its time, body and footer at 4.5:1 on its card or wash, pressed or not',
     async (preset, mode) => {
       useSettingsStore.getState().patchSettings(themePresetPatch(preset, false)!);
       const page = resolveAppearance(useSettingsStore.getState().settings, mode === 'light');
@@ -680,10 +668,10 @@ describe('secondary text reads on the surface it is drawn on', () => {
         const row = screen.getByTestId(`attention-row-${id}`);
         const rowFill = StyleSheet.flatten(row.props.style).backgroundColor as string;
         const surfaces = [over(rowFill, page.background), page.cardActive];
-        const { time, detail, word } = rowParts(row);
-        // The state word: a status colour (has a question, waiting, approval, an error, reset expiring) or, for a
-        // finished session, the secondary ink on a dark row; the foreground on a light one.
-        const texts = { time, detail, word };
+        const { time, body, footer } = rowColors(row);
+        // The footer: the card's accent (blue, or red for an approval or a failure) on an unread card, the secondary
+        // ink on a read one.
+        const texts = { time, body, footer };
         for (const [name, color] of Object.entries(texts)) {
           if (color === null) continue;
           for (const surface of surfaces) {
@@ -728,7 +716,7 @@ describe('secondary text reads on the surface it is drawn on', () => {
         const label = String(screen.getByTestId(`attention-row-${id}`).props.accessibilityLabel);
         const lifted = screen.getAllByLabelText(label).find((node) => node.props.testID === undefined)!;
         const card = StyleSheet.flatten(lifted.props.style).backgroundColor as string;
-        for (const [name, color] of Object.entries(rowParts(lifted))) {
+        for (const [name, color] of Object.entries(rowColors(lifted))) {
           if (color === null) continue;
           const ratio = contrast(color, card);
           if (ratio < 4.5) failures.push(`${mode} ${id} ${name} ${color} on ${card}: ${ratio.toFixed(2)}`);

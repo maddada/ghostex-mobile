@@ -1137,6 +1137,65 @@ export function resolveAgentIconId(agentIcon?: string, agentName?: string): Agen
   return 'terminal';
 }
 
+/** A custom agent's generated id (`custom-<slug>-<suffix>`), which no row or notification may show as a name. */
+export function isCustomAgentId(value: string): boolean {
+  return value.trim().toLowerCase().startsWith('custom-');
+}
+
+/** The built-in agents' names by icon (gxserver `DEFAULT_SIDEBAR_AGENTS`), for a session whose computer names none. */
+const AGENT_ICON_NAMES: Partial<Record<AgentIconId, string>> = {
+  'amp-cli': 'Amp CLI',
+  'antigravity-cli': 'Antigravity CLI',
+  claude: 'Claude',
+  codebuddy: 'CodeBuddy',
+  'cursor-cli': 'Cursor CLI',
+  codex: 'Codex',
+  copilot: 'Copilot',
+  dsh: 'DeepSeek Harness',
+  empryo: 'Empryo',
+  'factory-droid': 'Factory Droid',
+  freebuff: 'Freebuff',
+  gemini: 'Gemini',
+  'grok-build': 'Grok Build',
+  'hermes-agent': 'Hermes Agent',
+  kiro: 'Kiro CLI',
+  omp: 'OMP',
+  openclaude: 'OpenClaude',
+  opencode: 'OpenCode',
+  pi: 'Pi Agent',
+  qoder: 'Qoder',
+  'rovo-dev': 'Rovo Dev',
+  zcode: 'ZCode',
+};
+
+/**
+ * The name a row or notification shows for a session's agent: its launcher's name (Settings > Agents), else the
+ * session's own agent name or id; '' for a session without an agent (a plain terminal).
+ *
+ * CDXC:AgentProviders 2026-11-08 FIX: User, on the bell's row titled "custom-claude-70-dl0rpxbt39e0-…": "Name of
+ * coordinator here looks wrong please fix". A custom agent removed from Settings > Agents left its sessions with only
+ * its `custom-…` id, and every fallback printed it. A raw custom id is never a name: such a session is named by its
+ * base agent, the one its icon declares ("Claude"), from the launcher list when given, else from the built-in names.
+ * Computers after 11.1.0 send that name themselves (custom_agent_display_name in server/src/presentation/util.rs);
+ * this keeps older ones from showing the id.
+ */
+export function sessionAgentName(
+  session: Pick<GhostexSession, 'agent' | 'agentName' | 'agentIcon'>,
+  agents: readonly GhostexAgentLauncher[] = [],
+): string {
+  const launcher = agents.find((agent) => agent.agentId === session.agent);
+  const named = [launcher?.name, session.agentName, session.agent]
+    .map((name) => (name ?? '').trim())
+    .find((name) => name.length > 0 && !isCustomAgentId(name));
+  if (named !== undefined) return named;
+  if (session.agent.trim().length === 0 && session.agentName.trim().length === 0) return '';
+  const icon = resolveAgentIconId(session.agentIcon, undefined);
+  const base = agents.find(
+    (agent) => !isCustomAgentId(agent.agentId) && resolveAgentIconId(agent.icon, agent.agentId) === icon,
+  );
+  return base?.name?.trim() || AGENT_ICON_NAMES[icon] || 'Agent';
+}
+
 /**
  * The artwork a row, menu or dialog draws for an agent: its icon id, except the Claude (cloud)
  * agent, which resolves to Claude for behaviour but draws an orange cloud.

@@ -48,7 +48,7 @@ function summaryOf(sessions: Record<string, unknown>[]): GhostexMobileSummary {
   return parsed;
 }
 
-/** A feed row as the computer sends it (the body is the agent's text; nothing may show it). */
+/** A feed row as the computer sends it (the body is the agent's text; only a row's card body shows it). */
 function row(id: string, sessionId: string, kind: string, fields: Record<string, unknown> = {}): FeedRow {
   const parsed = parseFeedRow({
     id,
@@ -374,12 +374,14 @@ describe('accounts and other rows', () => {
     assert.equal(inbox.accounts[1]?.who, 'Claude · Work');
   });
 
-  test('no row carries the feed text', () => {
+  test('a row carries the feed text only as its card body', () => {
     const inbox = buildAttentionList(
       [machine([account, row('n1', 's1', 'finished')], summaryOf([session('s1')]))],
       NONE_REMOVED,
     );
-    assert.ok(!JSON.stringify(inbox).includes('secret agent text'));
+    assert.equal(inbox.done[0]?.body, 'secret agent text');
+    const rows = [...inbox.needsYou, ...inbox.done, ...inbox.failed, ...inbox.accounts];
+    assert.ok(!JSON.stringify(rows.map(({ body: _body, ...rest }) => rest)).includes('secret agent text'));
   });
 
   test("an offline computer's rows are its last known state, and its waits still count", () => {

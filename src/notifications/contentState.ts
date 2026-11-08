@@ -23,7 +23,13 @@
  */
 
 import type { GhostexMobileSummary, GhostexSession, GhostexSummaryCapabilities } from '../contract/mobileSummary';
-import { agentIconTint, hasQuestion, resolveAgentArtId, type AgentArtId } from '../contract/mobileSummary';
+import {
+  agentIconTint,
+  hasQuestion,
+  resolveAgentArtId,
+  sessionAgentName,
+  type AgentArtId,
+} from '../contract/mobileSummary';
 
 export type LiveActivityAgentState = 'working' | 'waiting' | 'finished';
 
@@ -116,7 +122,7 @@ function isoTime(time: number): string {
 
 /** A session's agent name ('' for a plain terminal, which is not an agent and never a row). */
 function agentNameOf(session: GhostexSession): string {
-  return truncateName(session.agentName.length > 0 ? session.agentName : session.agent);
+  return truncateName(sessionAgentName(session));
 }
 
 /**
