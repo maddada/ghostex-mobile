@@ -211,7 +211,7 @@ export function readPairingStarted(result: Record<string, unknown>): {
     // A computer whose Ghostex predates pairing v2 answers without a Pending step.
     throw new PairDeviceError(
       'rejected',
-      'Update Ghostex on the computer to 11.0.1 or later, then scan its code again.',
+      'Update Ghostex on the computer to 11.1.0 or later, then scan its code again.',
     );
   }
   return {
