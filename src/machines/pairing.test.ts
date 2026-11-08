@@ -27,6 +27,8 @@ mock.module('../../modules/ghostex-native/src', () => ({
     stopTailcatForward: () => Promise.resolve(),
     resetHostKey: () => Promise.resolve(),
     deviceKeyPublic: () => Promise.resolve(DEVICE_KEY),
+    approverKeyPublic: () => Promise.resolve('BAPPROVER='),
+    approverKeySign: () => Promise.reject(new Error('pairing never signs with the approver key')),
     deviceKeySign: (payload: string) => {
       signed.push(payload);
       return Promise.resolve(`sig:${payload}`);
@@ -155,6 +157,12 @@ describe('pairing v2 on the phone', () => {
     expect(result.ok).toBe(true);
     expect(shown).toEqual([matchWords(SECRET, DEVICE_KEY)]);
     expect(calls[0]!.params.deviceKey).toEqual({ algorithm: 'ecdsaP256Sha256', publicKey: DEVICE_KEY });
+    // The Face ID / fingerprint key rides along, so approving the pairing enrolls it too.
+    expect(calls[0]!.params.approverKey).toEqual({
+      algorithm: 'ecdsaP256Sha256',
+      publicKey: 'BAPPROVER=',
+      presence: 'biometric',
+    });
     // Every ask is signed with the device key, over ever-newer timestamps.
     const asks = calls.filter((call) => call.path === '/api/pairingStatus');
     expect(asks.length).toBe(2);

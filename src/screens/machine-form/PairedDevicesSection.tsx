@@ -5,8 +5,8 @@
  * computer lists what that computer has paired (`/api/pairedDevices` over the chat link, with this
  * phone's device token): phones waiting for approval with their three words and Deny, and paired
  * devices with Remove, which takes away the device's SSH key, token and approver key at once.
- * Approving a Pending phone happens on its approval request with Face ID / fingerprint
- * (GitHub #495 Phase 2), never with a plain button here.
+ * Approve on a Pending row signs its approval request after Face ID / the fingerprint / the screen
+ * lock (`security/approvals.ts`), so it is never a plain button an agent could press.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -15,6 +15,9 @@ import { Alert, Text, View } from 'react-native';
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { EditMachineCopy } from '../../copy';
 import { chatMachineLink } from '../../chat/rust/machine-link';
+import type { ApprovalRequest } from '../../security/approvalPayload';
+import { approveRequest } from '../../security/approvals';
+import { hasApproverKey } from '../../security/approverKey';
 import type { MachineRecord } from '../../machines/store';
 import { useFormStyles } from './styles';
 
@@ -24,7 +27,7 @@ const RPC_TIMEOUT_MS = 15_000;
 const REMOVE_TIMEOUT_MS = 180_000;
 
 type ListedDevice = { id: string; name: string; legacy: boolean };
-type PendingDevice = { id: string; name: string; words: string[] };
+type PendingDevice = { id: string; name: string; words: string[]; approvalId: string };
 export type PairedDevicesList = { devices: ListedDevice[]; pending: PendingDevice[] };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -41,7 +44,7 @@ export function readPairedDevicesList(result: unknown): PairedDevicesList | null
   const pending = (Array.isArray(result.pending) ? result.pending : []).filter(isRecord).flatMap((device) => {
     const words = Array.isArray(device.words) ? device.words.filter((word) => typeof word === 'string') : [];
     return typeof device.id === 'string' && typeof device.name === 'string' && words.length > 0
-      ? [{ id: device.id, name: device.name, words }]
+      ? [{ id: device.id, name: device.name, words, approvalId: typeof device.approvalId === 'string' ? device.approvalId : '' }]
       : [];
   });
   return { devices, pending };
@@ -86,6 +89,28 @@ export default function PairedDevicesSection({ machine, reachable }: { machine: 
     [copy.removeFailed, machine],
   );
 
+  /** Face ID / the fingerprint, then the signed approval (`security/approvals.ts`). */
+  const approve = useCallback(
+    async (device: PendingDevice): Promise<void> => {
+      setBusy(device.id);
+      try {
+        const answer = await chatMachineLink(machine).rpc('readApprovalRequest', { id: device.approvalId }, RPC_TIMEOUT_MS);
+        const request = (answer.result as { request?: ApprovalRequest } | null)?.request;
+        if (answer.error !== null || request === undefined) {
+          Alert.alert(copy.approveFailed, answer.error?.message ?? copy.noLongerWaiting);
+          return;
+        }
+        await approveRequest(machine, request);
+        await refresh();
+      } catch (error) {
+        Alert.alert(copy.approveFailed, error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [copy.approveFailed, copy.noLongerWaiting, machine, refresh],
+  );
+
   const confirmRemove = (device: ListedDevice): void => {
     const self = device.id === machine.deviceId;
     Alert.alert(copy.removeTitle(device.name), self ? copy.removeSelfDetail : copy.removeDetail, [
@@ -106,12 +131,12 @@ export default function PairedDevicesSection({ machine, reachable }: { machine: 
               <Text style={formStyles.rowLabel}>{device.words.join(' · ')}</Text>
               <Text style={formStyles.rowDetail}>{copy.waitingDetail}</Text>
             </View>
-            <SetupButton
-              small
-              label={copy.deny}
-              disabled={busy !== null}
-              onPress={() => void remove(device.id)}
-            />
+            <View style={{ gap: 6 }}>
+              {hasApproverKey() && device.approvalId ? (
+                <SetupButton small label={copy.approve} disabled={busy !== null} onPress={() => void approve(device)} />
+              ) : null}
+              <SetupButton small label={copy.deny} disabled={busy !== null} onPress={() => void remove(device.id)} />
+            </View>
           </View>
         ))}
         {list.devices.map((device, index) => (

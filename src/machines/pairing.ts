@@ -34,6 +34,7 @@ import {
   setPublicKey,
   setSshKey,
 } from './credentials';
+import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
 import { DEVICE_KEY_ALGORITHM, deviceKeyPublic, deviceKeySign, hasDeviceKey } from './deviceKey';
 import { decodeSavedAddresses } from './easyConnectAddresses';
 import { saveEasyConnectAddresses } from './easyConnectDial';
@@ -71,6 +72,11 @@ export type PairDeviceRequest = {
   tailcatClientKey?: string;
   /** Pairing v2: this phone's own device key. */
   deviceKey: { algorithm: typeof DEVICE_KEY_ALGORITHM; publicKey: string };
+  /**
+   * This phone's Face ID / fingerprint approver key: approving the pairing also lets the phone
+   * approve the computer's requests, with no second approval. Absent from an app build without one.
+   */
+  approverKey?: { algorithm: typeof APPROVER_KEY_ALGORITHM; publicKey: string; presence: 'biometric' };
 };
 
 export type PairDeviceResponse = {
@@ -411,6 +417,11 @@ export async function pairEasyConnect(
         tailcatClientKey,
         deviceKey: { algorithm: DEVICE_KEY_ALGORITHM, publicKey: devicePublicKey },
       };
+      // Making the approver key shows no prompt; only signing with it does.
+      const approverPublicKey = hasApproverKey() ? await approverKeyPublic().catch(() => null) : null;
+      if (approverPublicKey !== null) {
+        request.approverKey = { algorithm: APPROVER_KEY_ALGORITHM, publicKey: approverPublicKey, presence: 'biometric' };
+      }
       const started = readPairingStarted(await postPairingRpc(localPort, PAIR_DEVICE_PATH, request));
       /*
       CDXC:RemotePairing 2026-11-08 DECISION:
