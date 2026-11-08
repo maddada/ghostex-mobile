@@ -23,6 +23,7 @@ type RowSession = Pick<
   | 'awaitingApproval'
   | 'backgroundWorkDetectedAt'
   | 'programStatusFailed'
+  | 'blockedSince'
   | 'lastInteractionAt'
   | 'delayedSendDeadlineAt'
   | 'delayedSendRemainingLabel'
@@ -46,6 +47,22 @@ export function isAwaitingApproval(session: RowSession): boolean {
   return session.awaitingApproval;
 }
 
+/**
+ * CDXC:Notifications 2026-11-08 SEE-ALSO: packages/gx-core/src/sidebar_view/rows.rs `failure`. A blocked session (out
+ * of usage on every account, an API or sign-in error Ghostex could not get past) draws the failed red dot, and its
+ * long-press menu says why. A computer that predates `blockedSince` sends none, so its rows draw no blocked dot.
+ */
+export function isBlocked(session: Pick<GhostexSession, 'blockedSince'>): boolean {
+  return (session.blockedSince ?? '').length > 0;
+}
+
+/** The blocked dot's detail, as the desktop row's hover words it; null while the session is not blocked. */
+export function blockedDetail(session: Pick<GhostexSession, 'blockedSince' | 'blockedReason'>): string | null {
+  if (!isBlocked(session)) return null;
+  const reason = session.blockedReason?.trim() ?? '';
+  return reason.length > 0 ? reason : 'Blocked: it needs you to carry on.';
+}
+
 /** packages/gx-core/src/sidebar_view/rows.rs `has_background_work`. */
 export function hasBackgroundWork(session: RowSession): boolean {
   return session.backgroundWorkDetectedAt.length > 0;
@@ -60,6 +77,7 @@ export function rowActivityIndicator(session: RowSession): RowActivityIndicator 
   if (isAwaitingApproval(session)) return 'approval';
   // CDXC:SessionStatus 2026-10-15 DECISION: User (Q118): the phone shows the same red dot as the desktop when a session's program reports an error (OSC 7501, while its reports drive the status); it wins over the other dots and lasts until the user has seen it (the session leaves attention).
   if (session.programStatusFailed && session.activity === 'attention') return 'failed';
+  if (isBlocked(session)) return 'failed';
   if (session.activity === 'working') return 'working';
   if (session.activity === 'attention') return 'attention';
   if (hasBackgroundWork(session)) return 'backgroundWork';
@@ -75,7 +93,8 @@ export function shownFoldedStatus(
   session: RowSession,
   foldedStatus: FoldedStatus | undefined,
 ): FoldedStatus | undefined {
-  const ownRedDot = isAwaitingApproval(session) || (session.programStatusFailed && session.activity === 'attention');
+  const ownRedDot =
+    isAwaitingApproval(session) || (session.programStatusFailed && session.activity === 'attention') || isBlocked(session);
   return ownRedDot ? undefined : foldedStatus;
 }
 
@@ -181,6 +200,8 @@ export function rowTimeLabel(
     isAwaitingApproval(session) ||
     hasQuestion(session.pendingQuestionCount, capabilities.awaitingAnswer && session.awaitingAnswer)
   ) return null;
+  // The desktop row draws no time beside a failed dot (apps/desktop/src/app/native_sidebar/sessions.rs).
+  if (isBlocked(session)) return null;
   const timer = timerTrailingLabel(session, nowMs);
   if (timer !== null) return timer;
   if (session.activity === 'working' || session.activity === 'attention' || hasBackgroundWork(session)) {

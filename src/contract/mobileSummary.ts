@@ -128,6 +128,10 @@ export type MobileSummaryWireSession = {
   modelSelectionFailure?: string;
   /** A chat message that could not be sent or waits on a closed session: the same red dot. */
   sendFailure?: string;
+  /** When the session got blocked (every account out of usage, an error recovery could not get past); absent otherwise. */
+  blockedSince?: string;
+  /** Why it is blocked, in the user's words; absent while it is not blocked. */
+  blockedReason?: string;
   /** When a snoozed session wakes; absent when it is not snoozed. */
   snoozedUntil?: string;
   actions?: Partial<GhostexSessionActions>;
@@ -649,8 +653,15 @@ export type GhostexSession = {
    * that predates the field): the Unified list's "came back" moment and Working timer.
    */
   workingStartedAt: string;
-  /** The last model change failed (the Unified list's Failed status); false from an older computer. */
+  /** The last model change failed, a message could not be sent, or the session is blocked (the Unified list's Failed status); false from an older computer. */
   modelSelectionFailed?: boolean;
+  /**
+   * CDXC:Notifications 2026-11-08 SEE-ALSO: packages/gx-core/src/sidebar_view/rows.rs. When the session got blocked
+   * (out of usage on every account, or an API or sign-in error Ghostex could not get past), and why. Absent while it
+   * is not blocked, and from a computer that predates the fields, so an older computer draws no blocked dot.
+   */
+  blockedSince?: string;
+  blockedReason?: string;
   /** When a snoozed session wakes ('' when it is not snoozed): the Unified list's Snoozed shelf. */
   snoozedUntil?: string;
   /** Normalized so a live session is never marked sleeping (isSleeping && !isLive). */
@@ -1537,7 +1548,11 @@ export function parseSession(value: unknown): GhostexSession | null {
     programStatusFailed: programStatusFailed(value.programStatus),
     workingStartedAt: trimmedValue(value, 'workingStartedAt'),
     modelSelectionFailed:
-      trimmedValue(value, 'modelSelectionFailure').length > 0 || trimmedValue(value, 'sendFailure').length > 0,
+      trimmedValue(value, 'modelSelectionFailure').length > 0 ||
+      trimmedValue(value, 'sendFailure').length > 0 ||
+      trimmedValue(value, 'blockedSince').length > 0,
+    blockedSince: trimmedValue(value, 'blockedSince') || undefined,
+    blockedReason: trimmedValue(value, 'blockedSince') ? trimmedValue(value, 'blockedReason') || undefined : undefined,
     snoozedUntil: trimmedValue(value, 'snoozedUntil'),
     isSleeping: legacySleeping && !isLive,
     isLive,

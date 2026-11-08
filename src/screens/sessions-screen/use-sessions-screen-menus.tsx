@@ -22,6 +22,7 @@ import { isSessionChatSupportedAgent } from '../../chat/session-chat-helpers';
 import { runGhostexCli } from '../../components/sessions/cli';
 import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
+import { blockedDetail } from '../../components/sessions/sessionStatus';
 import { noteNewSessionIn, projectChoicesNow, repoKeyOfProject } from './new-session-place';
 import { type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
@@ -826,13 +827,15 @@ export function useSessionsScreenMenus({
     }, appearance.foreground);
     // CDXC:SessionStatus 2026-10-15 SEE-ALSO: contract/programStatus.ts (the line the program reported, shown on long press only).
     const programLine = ctx.item.session.programStatusLine;
+    // CDXC:Notifications 2026-11-08 SEE-ALSO: components/sessions/sessionStatus.ts `isBlocked` (why the red dot is red, on long press, as the desktop row's hover says it).
+    const blocked = blockedDetail(ctx.item.session);
+    const notes = [
+      ...(blocked !== null ? [{ kind: 'note' as const, key: 'blocked', label: blocked }] : []),
+      ...(programLine.length > 0 ? [{ kind: 'note' as const, key: 'program-status', label: programLine }] : []),
+    ];
     const items =
-      view.openedLabel === null && programLine.length > 0
-        ? [
-            { kind: 'note' as const, key: 'program-status', label: programLine },
-            { kind: 'separator' as const, key: 'program-status-sep' },
-            ...view.items,
-          ]
+      view.openedLabel === null && notes.length > 0
+        ? [...notes, { kind: 'separator' as const, key: 'program-status-sep' }, ...view.items]
         : view.items;
     return { subtitle: view.openedLabel ?? ctx.item.projectTitle, items };
   };
