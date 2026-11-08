@@ -45,6 +45,7 @@ import { machineTargetFor } from '../../screens/terminal-screen/session-lookups'
 import { callVoiceAbout } from '../../voice/callAbout';
 import { useVoiceCapability } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
+import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
@@ -138,6 +139,8 @@ export default function NativeChatScreen({
   }, []);
   // The published page a page card (or a link to one) opened, shown in the chat's page sheet.
   const [page, setPage] = useState<ComputerAddress | null>(null);
+  // The GBot whose settings the "GBot added" card's Open settings opened (the core's `openGbotSettings`).
+  const [gbotSettings, setGbotSettings] = useState<string | null>(null);
   const { toast, show } = useChatViewRequests(
     chat,
     machine,
@@ -146,6 +149,7 @@ export default function NativeChatScreen({
     onSwitchToTerminal,
     openHandoff,
     setPage,
+    setGbotSettings,
   );
   const openMachineLink = useOpenMachineLink();
   /**
@@ -489,6 +493,15 @@ export default function NativeChatScreen({
             />
             <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
             <ResourceSheet chat={chat} document={document} />
+            {gbotSettings !== null ? (
+              <GbotSettingsHost
+                target={machine}
+                botId={gbotSettings}
+                name={gbotNameOn(machine.id, gbotSettings)}
+                onClose={() => setGbotSettings(null)}
+                onSaved={(name) => show('Chats opened from now on start with the changes.', false, `${name} saved`)}
+              />
+            ) : null}
             <ChatToast toast={toast} />
             {dropActive ? (
               <View
@@ -561,6 +574,7 @@ function useChatViewRequests(
   onSwitchToTerminal: () => void,
   onHandoff: (request: HandoffRequest) => void,
   onOpenPage: (page: ComputerAddress) => void,
+  onOpenGbotSettings: (botId: string) => void,
 ): { toast: Toast; show: (message: string, error: boolean, title?: string) => void } {
   const machineId = machine.id;
   const openMachineLink = useOpenMachineLink();
@@ -616,7 +630,11 @@ function useChatViewRequests(
           case 'hostAction': {
             if (request.action === 'switchToTerminal' || request.action === 'terminalView') onSwitchToTerminal();
             // Copy Report's last step (gx-chat-core `extras/report.rs`): Send Bug / Feedback with its agent switch on.
-            else if (request.action === 'sendFeedback')
+            // The "GBot added" card's Open settings (gx-chat-core `gbot_cards.rs`): the bot is on this chat's computer.
+            else if (request.action === 'openGbotSettings') {
+              const botId = (request.params as { botId?: unknown } | null)?.botId;
+              if (typeof botId === 'string' && botId.length > 0) onOpenGbotSettings(botId);
+            } else if (request.action === 'sendFeedback')
               navigation.navigate('Feedback', { machineId, collectWithAgent: true });
             else if (request.action === 'selectForkBranch') {
               void openForkBranch(machine, request.params).catch(() =>
@@ -763,6 +781,7 @@ function useChatViewRequests(
       machineId,
       navigation,
       onHandoff,
+      onOpenGbotSettings,
       onOpenPage,
       onSwitchToTerminal,
       openMachineLink,
@@ -776,6 +795,16 @@ function useChatViewRequests(
 
 /** How long the Handoff sheet waits on iOS for the sheet it was opened from to finish going away. */
 const HANDOFF_OPEN_DELAY_MS = 450;
+
+/** A GBot's name on a computer, from the sessions list it last read; "GBot" until it has one. */
+function gbotNameOn(machineId: string, botId: string): string {
+  return (
+    useInventoryStore
+      .getState()
+      .inventoriesByMachineId[machineId]?.summary?.projects.find((project) => project.gbotsBot?.id === botId)?.gbotsBot
+      ?.name ?? 'GBot'
+  );
+}
 
 /** The project's folder on the machine, which a relative chat file path is under. */
 function projectPathFor(machineId: string, projectId: string): string {

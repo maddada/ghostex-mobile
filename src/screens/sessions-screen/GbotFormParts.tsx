@@ -248,6 +248,13 @@ const createStyles = (appearance: Appearance) =>
       lineHeight: 17,
       marginTop: 4,
     },
+    /** A hint that says something can't be done from here (the approval level above Ask). */
+    warning: {
+      color: appearance.foreground,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
     input: {
       borderRadius: 8,
       borderWidth: GhostexStrokeWidth,

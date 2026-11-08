@@ -14,25 +14,19 @@ import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../compon
 import { runGhostexCli } from '../../components/sessions/cli';
 import { PlusGlyph, SettingsGlyph, TrashGlyph } from '../../components/sessions/icons';
 import {
-  chiefStatusCommand,
   gbotsCreateCommand,
-  gbotsEditCommand,
   gbotsNewChatCommand,
   gbotsRemoveCommand,
-  gbotsShowCommand,
 } from '../../commands/ghostexCli';
-import { parseChiefAgents } from '../../contract/chief';
 import {
   gbotsOnIn,
-  parseGbotDetails,
   parseGbotNewChat,
-  type GbotFields,
   type GbotRowModel,
 } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import type { MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
-import GbotSettingsSheet from './GbotSettingsSheet';
+import GbotSettingsHost from './GbotSettingsHost';
 import NewGbotSheet from './NewGbotSheet';
 
 /** A GBot's add waits for the user's approval on the computer or phone (the CLI waits for it). */
@@ -212,25 +206,15 @@ export function useGbots(deps: GbotsScreenDeps) {
         />
       ) : null}
       {settings !== null ? (
-        <GbotSettingsSheet
+        <GbotSettingsHost
+          target={settings.target}
+          botId={settings.bot.botId}
           name={settings.bot.name}
-          load={async () => {
-            const result = await runGhostexCli(settings.target, gbotsShowCommand(settings.bot.botId));
-            const details = parseGbotDetails(result.json);
-            if (details === null) throw new Error(`${settings.bot.name} could not be read. Try again in a moment.`);
-            return details;
+          onClose={() => setSettings(null)}
+          onSaved={(name) => {
+            setTransientStatus('Chats opened from now on start with the changes.', { title: `${name} saved` });
+            void refreshMachine(settings.target);
           }}
-          loadAgents={async () => parseChiefAgents((await runGhostexCli(settings.target, chiefStatusCommand())).json)}
-          onSave={async (fields: GbotFields) => {
-            const { target, bot } = settings;
-            await runGhostexCli(target, gbotsEditCommand(bot.botId, fields));
-            setSettings(null);
-            setTransientStatus('Chats opened from now on start with the changes.', {
-              title: `${fields.name ?? bot.name} saved`,
-            });
-            void refreshMachine(target);
-          }}
-          onCancel={() => setSettings(null)}
         />
       ) : null}
       {adding !== null ? (

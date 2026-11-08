@@ -3,7 +3,12 @@
  * approval level, and the department read-only), Instructions (the GBot's standing instructions, with the computer's
  * notice when SOUL.md was changed by hand) and Memory (a later milestone). It edits a local copy read with
  * `ghostex gbots show` and saves the changed fields in one `ghostex gbots edit`, so Cancel leaves everything as it
- * was; a refusal (raising the approval level from a terminal, a taken name) shows the computer's own sentence.
+ * was; a refusal (a taken name, say) shows the computer's own sentence.
+ *
+ * CDXC:GBots 2026-11-09 WHY: the phone's commands reach the computer over SSH, which gxserver treats as your own
+ * terminal, and only your computer's app may let a GBot do more than ask first (server/src/gbots/endpoint.rs
+ * `check_approval`). So the phone says that in plain words as soon as a level above Ask is picked, and never sends
+ * it: from here a level can only go back to Ask. A gxserver answer that still refuses it is said the same way.
  *
  * CDXC:GBots 2026-11-09 WHY: the agent choices are the ones gxserver accepts for a GBot, which is Chief of Staff's
  * picker list (server/src/gbots/session.rs `bot_agent_rows`), read with `ghostex chief status --json` as Chief's own
@@ -36,6 +41,16 @@ import {
 } from './GbotFormParts';
 
 type Tab = 'profile' | 'instructions' | 'memory';
+
+/** Why the phone can't raise a GBot's approval level, and where to do it. */
+function approvalFromComputer(name: string): string {
+  return `Only your computer can let a GBot do more than ask first: change it in ${name}'s GBot Settings there. From here you can set it back to Ask.`;
+}
+
+/** gxserver's refusal of a raised approval level (server/src/gbots/endpoint.rs `check_approval`). */
+function isApprovalRefusal(message: string): boolean {
+  return message.includes('do more than ask first');
+}
 const TABS: readonly { value: Tab; label: string }[] = [
   { value: 'profile', label: 'Profile' },
   { value: 'instructions', label: 'Instructions' },
@@ -113,15 +128,21 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
       setError('A GBot needs a name.');
       return;
     }
+    if (changed.approval !== undefined && changed.approval !== 'ask') {
+      setError(approvalFromComputer(name));
+      return;
+    }
     setBusy(true);
     setError(null);
     props.onSave(changed).catch((saveError: unknown) => {
       setBusy(false);
-      setError(saveError instanceof Error ? saveError.message : String(saveError));
+      const message = saveError instanceof Error ? saveError.message : String(saveError);
+      setError(isApprovalRefusal(message) ? approvalFromComputer(name) : message);
     });
   };
 
   const name = draft !== null && draft.name.trim().length > 0 ? draft.name.trim() : props.name;
+  const raisingApproval = draft !== null && saved !== null && draft.approval !== saved.approval && draft.approval !== 'ask';
   const agentOptions =
     draft === null
       ? []
@@ -200,8 +221,10 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
               value={draft.approval}
               onChange={(value) => set('approval', value)}
             />
-            <Text style={styles.hint}>
-              Ask: it asks before acting. Edits: it may change files. Auto and Full do more without asking.
+            <Text style={raisingApproval ? styles.warning : styles.hint}>
+              {raisingApproval
+                ? approvalFromComputer(name)
+                : 'Ask: it asks before acting. Edits: it may change files. Auto and Full do more without asking.'}
             </Text>
           </View>
           {saved.departmentId.length > 0 ? (

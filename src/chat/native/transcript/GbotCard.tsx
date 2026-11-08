@@ -1,15 +1,16 @@
 /**
  * The "GBot added" card (desktop `gbot_card.rs`): Chief of Staff added a GBot on its own. The bot's
- * icon in its colour, "Researcher added", what it is and runs on, then Undo; after Undo, "Researcher
- * removed" and "Undone".
+ * icon in its colour, "Researcher added", what it is and runs on, then Undo and Open settings; after
+ * Undo, "Researcher removed" and "Undone".
  *
  * The words come from the core (`gbotCards` on a message or finished turn, `gbotCardStates` in the
  * document; packages/gx-chat-core/src/transcript/gbot_cards.rs, where the user's decision is); a
  * card with no state yet asks for it once with `{type: 'gbotCard', op: 'load'}`.
  *
- * CDXC:GBots 2026-11-09 WHY: the desktop's Open settings opens the GBot Settings window; the phone's
- * GBot Settings sheet opens only from a GBot's row in the sessions list so far, so the phone card
- * offers Undo alone until a chat can open that sheet.
+ * Open settings asks the core (`op: 'openSettings'`), which hands the screen `openGbotSettings
+ * {botId, machineId}`; the chat screen opens the same GBot Settings sheet a GBot's long press does
+ * (NativeChatScreen.tsx, screens/sessions-screen/GbotSettingsHost.tsx), as the desktop opens its
+ * window.
  */
 
 import { memo, useEffect } from 'react';
@@ -94,6 +95,19 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
                 disabled={state === null || !isTrue(state, 'undoEnabled')}
                 onPress={() => dispatch({ type: 'gbotCard', op: 'undo', changeId })}
               />,
+              ...(state !== null && isTrue(state, 'settingsEnabled')
+                ? [
+                    <ToneButton
+                      key="settings"
+                      kind="secondary"
+                      icon="settings"
+                      label="Open settings"
+                      onPress={() =>
+                        dispatch({ type: 'gbotCard', op: 'openSettings', changeId, botId: str(card, 'botId') })
+                      }
+                    />,
+                  ]
+                : []),
             ]
       }
     />
