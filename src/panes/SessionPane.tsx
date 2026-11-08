@@ -50,7 +50,8 @@ export default function SessionPane({ sessionKey, view, covered, active }: Sessi
     return (
       <DemoTerminalView
         sessionId={tab.ghostexSessionId ?? sessionKey}
-        style={[styles.terminal, { width: view.width, height: view.height }]}
+        // Its typing row stays above the keyboard: it uses the pane's visible height (ghostex-mobile#28 review).
+        style={[styles.terminal, { width: view.width, height: Math.max(0, view.height - covered) }]}
       />
     );
   }

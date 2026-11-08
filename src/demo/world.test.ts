@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { renameCommandCommand, requestSessionRenameCommand, sessionActionCommand } from '../commands/ghostexCli';
 import { parseMobileSummary } from '../contract/mobileSummary';
 import { demoMachineRecord, isDemoMachine } from './identity';
 import {
@@ -74,5 +75,42 @@ describe('the demo computer', () => {
     assert.match(ports.stdout, /5173/);
     assert.equal(execDemoCommand('ghostex something-unknown --json').exitCode, 0);
     assert.match(demoTerminalAnswer('ls'), /README.md/);
+  });
+
+  /** The demo's sessions as the app reads them. */
+  function listed() {
+    const parsed = parseMobileSummary(execDemoCommand('ghostex sessions --json --mobile-summary').stdout);
+    assert.ok(parsed !== null);
+    return parsed.sessions;
+  }
+
+  test('a rename keeps a title with an apostrophe whole, through both rename commands', () => {
+    resetDemoWorld();
+    execDemoCommand(renameCommandCommand('wander-lisbon', "Alice's task", 'wander'));
+    assert.equal(listed().find((session) => session.sessionId === 'wander-lisbon')?.displayTitle, "Alice's task");
+    execDemoCommand(requestSessionRenameCommand('wander-lisbon', 'wander', "It's Bob's now", 'claude'));
+    assert.equal(listed().find((session) => session.sessionId === 'wander-lisbon')?.displayTitle, "It's Bob's now");
+  });
+
+  test('a title that names a verb renames the session and starts nothing', () => {
+    resetDemoWorld();
+    const before = listed().length;
+    for (const title of ['create-agent claude', 'ghostex create-session', 'run-action deploy', 'kill it']) {
+      assert.equal(execDemoCommand(renameCommandCommand('wander-lisbon', title, 'wander')).exitCode, 0);
+      assert.equal(listed().find((session) => session.sessionId === 'wander-lisbon')?.displayTitle, title);
+    }
+    assert.equal(listed().length, before);
+  });
+
+  test('a session put to sleep is listed asleep until it is woken', () => {
+    resetDemoWorld();
+    execDemoCommand(sessionActionCommand('sleep', 'wander-lisbon', 'wander'));
+    let session = listed().find((entry) => entry.sessionId === 'wander-lisbon');
+    assert.equal(session?.isSleeping, true);
+    assert.equal(session?.isLive, false);
+    execDemoCommand(sessionActionCommand('wake', 'wander-lisbon', 'wander'));
+    session = listed().find((entry) => entry.sessionId === 'wander-lisbon');
+    assert.equal(session?.isSleeping, false);
+    assert.equal(session?.isLive, true);
   });
 });

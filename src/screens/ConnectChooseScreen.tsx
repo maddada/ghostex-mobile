@@ -5,7 +5,7 @@
  * details" opens the Tailscale form.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -28,10 +28,16 @@ export default function ConnectChooseScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const setupText = useSetupText();
   const openScanner = (): void => navigation.navigate('ScanCode');
+  // The first computer, demo or not, registers the Sessions route on the next render (App.tsx), so the demo opens
+  // once it is there: resetting before then left the first "Open demo" tap on this screen (ghostex-mobile#28 review).
+  const hasMachines = useMachinesStore((state) => state.machines.length > 0);
+  const [demoAdded, setDemoAdded] = useState(false);
+  useEffect(() => {
+    if (demoAdded && hasMachines) navigation.reset({ index: 0, routes: [{ name: 'Sessions' }] });
+  }, [demoAdded, hasMachines, navigation]);
   const openDemo = (): void => {
-    const hadMachines = useMachinesStore.getState().machines.length > 0;
     useMachinesStore.getState().addDemoComputer();
-    if (hadMachines) navigation.navigate('Sessions');
+    setDemoAdded(true);
   };
   // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);

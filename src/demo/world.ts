@@ -6,6 +6,8 @@
 
 import type { ExecResult } from '../../modules/ghostex-native/src';
 
+import { cliArguments } from '../remote/powershell';
+
 import { DemoCopy } from './copy';
 import { DEMO_PREVIEW_PORT } from './previewHtml';
 
@@ -23,6 +25,8 @@ type DemoSession = {
   workingStartedAt: string;
   attention: boolean;
   pendingQuestion: boolean;
+  /** Put to sleep (`ghostex sleep`) and not woken since: listed asleep, as a computer lists it. */
+  sleeping?: boolean;
   messages: DemoTurn[];
   terminal: string[];
 };
@@ -268,15 +272,31 @@ function addSession(projectId: string, agentId: string, title: string): DemoSess
   return session;
 }
 
-function flag(command: string, name: string): string | null {
-  const match = command.match(new RegExp(`--${name}(?:\\s+|=)'([^']*)'|--${name}(?:\\s+|=)(\\S+)`));
-  const value = match?.[1] ?? match?.[2] ?? null;
-  return value === null ? null : value.trim();
+/**
+ * A `ghostex` command as the CLI builders write it, split into its words (`cliArguments`, which decodes shellQuote's
+ * `'"'"'` for an apostrophe): the verb, then its arguments. Null for anything else (a script), which then matches no
+ * verb, so a title or other value can never be read as a verb or cut short.
+ */
+function parseCommand(command: string): { verb: string; args: string[] } | null {
+  try {
+    const [verb = '', ...args] = cliArguments(command.trim());
+    return { verb, args };
+  } catch {
+    return null;
+  }
 }
 
-function verbArg(command: string, verb: string): string | null {
-  const match = command.match(new RegExp(`${verb}\\s+'([^']+)'|${verb}\\s+(\\S+)`));
-  return match?.[1] ?? match?.[2] ?? null;
+/** A flag's value, written `--name=value` or `--name value`. */
+function flag(args: readonly string[], name: string): string | null {
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index] ?? '';
+    if (word.startsWith(`--${name}=`)) return word.slice(name.length + 3).trim();
+    if (word === `--${name}`) {
+      const value = args[index + 1];
+      return value === undefined || value.startsWith('--') ? null : value.trim();
+    }
+  }
+  return null;
 }
 
 function ok(result: unknown): ExecResult {
@@ -305,8 +325,9 @@ function sessionWire(session: DemoSession): Record<string, unknown> {
     agentIcon: session.agent,
     agentName: session.agentName,
     activity: session.activity,
-    status: 'running',
-    isLive: true,
+    status: session.sleeping === true ? 'sleep' : 'running',
+    isLive: session.sleeping !== true,
+    isSleeping: session.sleeping === true,
     lastActiveAt: NOW,
     updatedAt: NOW,
     workingStartedAt: session.workingStartedAt,
@@ -369,17 +390,22 @@ export function execDemoCommand(command: string): ExecResult {
     });
   }
   if (command.includes('client-hello') || command.includes('client-view')) return ok({ ok: true });
-  if (command.includes('create-agent')) {
-    const agentId = verbArg(command, 'create-agent') ?? 'claude';
-    const projectId = flag(command, 'project-id') ?? 'atlas';
+  // Every other command by its verb, never by a word inside a value (a title that reads "create-agent").
+  const parsed = parseCommand(command);
+  const verb = parsed?.verb ?? '';
+  const args = parsed?.args ?? [];
+  if (verb === 'create-agent') {
+    const positional = args[0];
+    const agentId = positional !== undefined && !positional.startsWith('--') ? positional : 'claude';
+    const projectId = flag(args, 'project-id') ?? 'atlas';
     const agent = agentById(agentId);
     const project = projectOf(projectId);
     const session = addSession(projectId, agent.agentId, `New ${agent.name} session`);
     if (project === undefined) session.projectName = 'Atlas API';
     return ok({ ok: true, session: { sessionId: session.sessionId } });
   }
-  if (command.includes('create-session') || command.includes('run-action')) {
-    const projectId = flag(command, 'project-id') ?? 'atlas';
+  if (verb === 'create-session' || verb === 'run-action') {
+    const projectId = flag(args, 'project-id') ?? 'atlas';
     const session = addSession(projectId, '', 'Terminal');
     session.agent = '';
     session.agentName = '';
@@ -387,22 +413,27 @@ export function execDemoCommand(command: string): ExecResult {
     session.messages = [];
     return ok({ ok: true, session: { sessionId: session.sessionId } });
   }
-  const sessionId = flag(command, 'session-id');
+  const sessionId = flag(args, 'session-id');
   const session = sessionId === null ? undefined : sessionOf(sessionId);
-  if (session !== undefined && (command.includes('rename-command') || command.includes('request-session-rename'))) {
-    const title = flag(command, 'title');
+  if (session === undefined) return ok({ ok: true });
+  if (verb === 'rename-command' || verb === 'request-session-rename') {
+    const title = flag(args, 'title');
     if (title !== null && title.length > 0) session.title = title;
     bump();
-  } else if (session !== undefined && command.includes('acknowledge-session-attention')) {
+  } else if (verb === 'acknowledge-session-attention') {
     session.attention = false;
     session.pendingQuestion = false;
     if (session.activity === 'attention') session.activity = 'idle';
     bump();
-  } else if (session !== undefined && /\bghostex\s+kill\b/u.test(command)) {
+  } else if (verb === 'kill') {
     sessions = sessions.filter((entry) => entry.sessionId !== session.sessionId);
     bump();
-  } else if (session !== undefined && /\bghostex\s+sleep\b/u.test(command)) {
+  } else if (verb === 'sleep') {
     session.activity = 'idle';
+    session.sleeping = true;
+    bump();
+  } else if (verb === 'wake') {
+    session.sleeping = false;
     bump();
   }
   return ok({ ok: true });
