@@ -37,7 +37,7 @@ import {
 } from './SettingsControls';
 
 type Config = {
-  expiry: 'hour' | 'fourHours' | 'day';
+  expiry: 'hour' | 'fourHours' | 'day' | 'untilStopped';
   mode: 'approve' | 'view';
   ownerName: string;
   ownerDisplayName: string;
@@ -292,13 +292,15 @@ function CollabBody({
             { value: 'hour', label: '1 hour' },
             { value: 'fourHours', label: '4 hours' },
             { value: 'day', label: '24 hours' },
+            { value: 'untilStopped', label: 'Until I stop it' },
           ]}
           value={config.expiry}
           onChange={(expiry) => set({ expiry })}
         />
         <Caption>
-          A day at most. Guests always type the eight-digit code that comes with the link, and you get a notification
-          when one joins. Send straight to the agent is turned on per chat, in its Share sheet.
+          Until I stop it keeps a link live until you stop sharing or delete the chat. Guests always type the
+          eight-digit code that comes with the link, and you get a notification when one joins. Send straight to the
+          agent is turned on per chat, in its Share sheet.
         </Caption>
       </SettingsSection>
       {

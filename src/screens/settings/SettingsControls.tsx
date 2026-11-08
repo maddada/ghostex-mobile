@@ -387,7 +387,12 @@ export function SegmentedRow<Value extends string>({
             }}
             style={[styles.segment, index > 0 ? styles.segmentDivider : null, on ? styles.segmentOn : null]}
           >
-            <Text style={[styles.segmentText, on ? styles.segmentTextOn : null]} numberOfLines={1}>
+            <Text
+              style={[styles.segmentText, on ? styles.segmentTextOn : null]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
               {option.label}
             </Text>
           </Pressable>
