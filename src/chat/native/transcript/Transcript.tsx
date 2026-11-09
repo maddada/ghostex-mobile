@@ -118,6 +118,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
   const theme = useTranscriptTheme();
   const filePreviews = useSettingsStore((store) => store.settings.sessionChatFileEditPreviews);
   const mutedThinking = useSettingsStore((store) => store.settings.sessionChatMutedThinking);
+  const toolLines = useSettingsStore((store) => store.settings.chatToolCallLines);
   const state = chat.state;
   const document = state?.document ?? null;
   // A subagent's transcript uses the normal display, whatever the main chat's mode (desktop DECISION).
@@ -125,6 +126,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
   // Normal look and opens the work under each reply; Summary shows the Normal look too.
   const simple = main && document?.viewLevel !== 'detailed';
   const workOpen = main && !simple;
+  const working = document?.working === true;
   // An answer sent from inside the main transcript stops it following the newest row (`answerHold.ts`).
   const chatDispatch = chat.dispatch;
   const dispatch = useCallback<RustChat['dispatch']>(
@@ -143,10 +145,12 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
       filePreviews: main && filePreviews,
       mutedThinking,
       main,
+      working,
+      toolLines,
       uploadFiles: chat.uploadFiles,
       queryAsync: chat.queryAsync,
     }),
-    [dispatch, chat.uploadFiles, chat.queryAsync, filePreviews, main, mutedThinking, simple, theme, workOpen],
+    [dispatch, chat.uploadFiles, chat.queryAsync, filePreviews, main, mutedThinking, simple, theme, workOpen, working, toolLines],
   );
   // The document is parsed afresh per frame, so the flags are keyed by their content.
   const flagsSignature =

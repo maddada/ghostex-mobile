@@ -273,10 +273,13 @@ export class RustChatHost {
     // Settings > Chat > Tool call cards is a phone setting: the boot read carries it in
     // (`boot.ts`), and a change while the chat is open goes in here (gx-chat-core `tool_card.rs`).
     // Default to Detailed view rides along: the level a chat with no level of its own opens in.
-    let toolCards = useSettingsStore.getState().settings.chatToolCallCards;
+    // Tool call lines draws the same card as one quiet line, so the core builds it for either.
+    const wantsCards = (settings: { chatToolCallCards: boolean; chatToolCallLines: boolean }) =>
+      settings.chatToolCallCards || settings.chatToolCallLines;
+    let toolCards = wantsCards(useSettingsStore.getState().settings);
     let detailedDefault = useSettingsStore.getState().settings.sessionChatDetailedView;
     this.unsubscribeToolCards = useSettingsStore.subscribe((store) => {
-      const next = store.settings.chatToolCallCards;
+      const next = wantsCards(store.settings);
       const nextDetailed = store.settings.sessionChatDetailedView;
       if (next === toolCards && nextDetailed === detailedDefault) return;
       toolCards = next;

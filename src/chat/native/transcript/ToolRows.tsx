@@ -4,7 +4,7 @@
  * and each row's arguments and result, which the core ships only while the row is open.
  */
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
@@ -13,7 +13,7 @@ import { useNativeChatUi, useRowDetail, useTranscriptEnv, useTranscriptFlags } f
 import { DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { ToolBody } from './ToolBody';
-import { ToolCard } from './ToolCard';
+import { LINE_OUTPUT_LINES, Shimmer, ShowAllLines, ToolCard } from './ToolCard';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { FOLDED_CALLS_INSET, ReadImageStrip, ReadImages } from './Images';
 import { highlightLabel, useRowFind } from './searchHighlight';
@@ -45,8 +45,11 @@ function dimmed(hex: string, alpha: number): string {
  * behind one "N tool calls" heading (desktop `tool_run.rs`).
  */
 export function ToolRows({ message }: { message: ProjectedMessage }) {
-  // Settings > Chat > Tool call cards: the calls and edits are one card (`ToolCard.tsx`).
-  if (obj(message.toolCard) !== null) return <ToolCard message={message} />;
+  const { toolLines } = useTranscriptEnv();
+  const card = obj(message.toolCard);
+  // Settings > Chat > Tool call cards: the calls and edits are one card (`ToolCard.tsx`). Tool call
+  // lines leave a background task's run as these rows (the core's `background`).
+  if (card !== null && !(toolLines === true && card.background === true)) return <ToolCard message={message} />;
   return <ToolRunRows message={message} />;
 }
 
@@ -229,9 +232,10 @@ const ToolRow = memo(function ToolRow({
   index: number;
   tool: JsonRecord;
 }) {
-  const { theme, dispatch, simple } = useTranscriptEnv();
+  const { theme, dispatch, simple, working, toolLines } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const key = `tool:${messageId}:${index}`;
+  const [showAll, setShowAll] = useState(false);
   // A call waiting on an approval starts open so its command shows beside the card, and folds back
   // once it is answered unless the reader toggled it (gx-chat-core `approval_wait.rs`).
   const [open, toggle] = useDisclosure(disclosures, key, tool.awaitingApproval === true);
@@ -301,6 +305,15 @@ const ToolRow = memo(function ToolRow({
             {highlightLabel(preview, find, `tool-preview:${messageId}:${index}`)}
           </Text>
         </Text>
+      ) : status === 'running' && working === true ? (
+        // A call still running sweeps the Tool call cards' shimmer across its words, in every look
+        // (gx-chat-core `tool_card.rs`, CDXC:SessionChat 2026-11-09).
+        <View style={[styles.shimmerBox, subagent.length === 0 && styles.fill]}>
+          <Text numberOfLines={1} style={[nameStyle, { color: heading }]}>
+            {nameText}
+          </Text>
+          <Shimmer color={theme.light ? '#000000' : '#ffffff'} />
+        </View>
       ) : (
         <Text numberOfLines={1} style={[nameStyle, subagent.length === 0 && styles.fill, { color: heading }]}>
           {nameText}
@@ -315,7 +328,11 @@ const ToolRow = memo(function ToolRow({
   let body = null;
   if (expanded && detail !== null) {
     const input = str(detail, 'input');
-    const output = str(detail, 'output');
+    const fullOutput = str(detail, 'output');
+    // Tool call lines show a long output's first lines and a button for the rest (`ToolCard.tsx`).
+    const outputLines = fullOutput.split('\n');
+    const capped = toolLines === true && !showAll && outputLines.length > LINE_OUTPUT_LINES;
+    const output = capped ? outputLines.slice(0, LINE_OUTPUT_LINES).join('\n') : fullOutput;
     const command = tool.glyph === 'terminal';
     // The first block's label row carries the copy button, which copies the whole call (the core's `copyText`).
     const copyText = str(detail, 'copyText');
@@ -341,6 +358,11 @@ const ToolRow = memo(function ToolRow({
           copyText={parts.length === 0 ? copyText : ''}
         />,
       );
+      if (capped) {
+        parts.push(
+          <ShowAllLines key="show-all" count={outputLines.length} onPress={() => setShowAll(true)} />,
+        );
+      }
     }
     if (parts.length > 0) {
       // The rail hangs from the middle of the glyph tile, which the row's padding moved right of the
@@ -422,6 +444,8 @@ const styles = StyleSheet.create({
   glyphSlot: { width: 16, marginLeft: 2, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   tile: { width: TILE, height: TILE, borderRadius: 6, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   fill: { flex: 1 },
+  // The running call's words with the shimmer over them (`ToolCard.tsx`'s `Shimmer`).
+  shimmerBox: { flexShrink: 1, minWidth: 0, overflow: 'hidden' },
   name: { fontSize: 13.5, lineHeight: 20, fontWeight: '500', flexShrink: 0 },
   described: { fontSize: PROSE_SIZE, fontWeight: '400' },
   preview: { fontFamily: MONO_FONT, fontSize: 12.3, fontWeight: '400', flexShrink: 1, minWidth: 0 },

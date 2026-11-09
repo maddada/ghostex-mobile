@@ -145,6 +145,10 @@ export type TranscriptEnv = {
    * `ChatAppearance::work_open`, CDXC:SessionChat 2026-10-14 DECISION).
    */
   workOpen: boolean;
+  /** The session is working: a call still running sweeps its shimmer (desktop `snapshot["working"]`). */
+  working?: boolean;
+  /** Tool call lines (`chatToolCallLines`): a tool card draws as one quiet line with its calls as rows under it (desktop `ChatAppearance::tool_lines`). */
+  toolLines?: boolean;
   /** File edit previews: file cards show their first lines without a tap. */
   filePreviews: boolean;
   /** Grey thinking (`sessionChatMutedThinking`): thinking muted, replies in the foreground (desktop `ChatAppearance::thinking_lane`). */

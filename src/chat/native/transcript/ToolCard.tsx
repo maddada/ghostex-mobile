@@ -39,6 +39,8 @@ import { ToolBody } from './ToolBody';
 const ENTER_MS = 320;
 /** One sweep of the running row's shimmer (desktop `SHIMMER`). */
 const SHIMMER_MS = 1400;
+/** How many lines of a tool's output Tool call lines show before "Show all N lines". */
+export const LINE_OUTPUT_LINES = 12;
 /** The header's round tiles, how far each overlaps the one before it, and the ring around each. */
 const STACK_ICON = 22;
 const STACK_OVERLAP = 7;
@@ -103,14 +105,22 @@ function ToolIcon({ icon, size, round }: { icon: JsonRecord; size: number; round
 
 /** The card for `message.toolCard`. */
 export function ToolCard({ message }: { message: ProjectedMessage }) {
-  const { theme } = useTranscriptEnv();
+  const { theme, workOpen, toolLines } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const card = obj(message.toolCard);
   const running = card?.running === true;
   const live = message.toolCardLive === true;
+  // Tool call lines (`chatToolCallLines`): the card's header without its box, and its calls as rows
+  // on the rail under it; they open in Detailed view and stay shut in Simple (gx-chat-core
+  // `tool_card.rs`, CDXC:SessionChat 2026-11-09).
+  const line = toolLines === true;
   // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
   // While calls run the header carries the newest one's words (the core's `liveLabel`).
-  const [open, toggle] = useDisclosure(disclosures, `tool-card:${message.id}`, card?.waiting === true);
+  const [open, toggle] = useDisclosure(
+    disclosures,
+    `tool-card:${message.id}`,
+    card?.waiting === true || (line && workOpen),
+  );
   if (card === null) return null;
   const animate = running || live;
   const colors = cardColors(theme);
@@ -119,7 +129,9 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
     .filter((entry): entry is JsonRecord => entry !== null);
   const liveLabel = str(card, 'liveLabel');
   const liveMore = str(card, 'liveMore');
-  const title = liveLabel.length > 0 ? liveLabel : str(card, 'title');
+  const title = liveLabel.length > 0 ? liveLabel : str(card, line ? 'lineTitle' : 'title');
+  // A line has no box: its circles are cut out of the chat's own background.
+  const ring = line ? theme.background : colors.surface;
   const failed = str(card, 'failedLabel');
   const time = str(card, 'time');
   const more = num(card, 'moreIcons') ?? 0;
@@ -129,23 +141,23 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
   return (
     <Animated.View
       layout={LinearTransition.duration(ENTER_MS)}
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={line ? styles.line : [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
       <Pressable
         onPress={toggle}
         accessibilityRole="button"
         accessibilityLabel={[title, liveMore, failed, time].filter((part) => part.length > 0).join(', ')}
         accessibilityState={{ expanded: open }}
-        style={({ pressed }) => [styles.header, pressed && { backgroundColor: theme.pressed }]}
+        style={({ pressed }) => [line ? styles.lineHeader : styles.header, pressed && { backgroundColor: theme.pressed }]}
       >
         <View style={styles.stack}>
           {icons.map((icon, index) => (
-            <StackTile key={index} index={index} animate={animate} ring={colors.surface} disc={colors.disc}>
+            <StackTile key={index} index={index} animate={animate} ring={ring} disc={colors.disc}>
               <ToolIcon icon={icon} size={STACK_ICON - STACK_RING * 2} round />
             </StackTile>
           ))}
           {more > 0 ? (
-            <StackTile index={icons.length} animate={animate} ring={colors.surface} disc={colors.disc}>
+            <StackTile index={icons.length} animate={animate} ring={ring} disc={colors.disc}>
               <Text style={[styles.more, { color: theme.ink(0.75) }]}>{`+${more}`}</Text>
             </StackTile>
           ) : null}
@@ -179,7 +191,7 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
       {open ? (
         <Animated.View
           entering={FadeIn.duration(ENTER_MS)}
-          style={[styles.rows, { borderTopColor: colors.hairline }]}
+          style={line ? [styles.lineRows, { borderLeftColor: colors.border }] : [styles.rows, { borderTopColor: colors.hairline }]}
         >
           {entries.map((entry, position) => (
             <CardRow key={position} message={message} entry={entry} animate={animate} />
@@ -223,7 +235,7 @@ function StackTile({
  * cannot clip a gradient to glyphs without a masked view, so the band passes over the line, faint
  * enough that it reads as light on the muted text.
  */
-function Shimmer({ color }: { color: string }) {
+export function Shimmer({ color }: { color: string }) {
   const [width, setWidth] = useState(0);
   const progress = useSharedValue(0);
   useEffect(() => {
@@ -363,6 +375,21 @@ const CardRow = memo(function CardRow({
   );
 });
 
+/** The button under a long output Tool call lines cut short: "Show all 300 lines". */
+export function ShowAllLines({ count, onPress }: { count: number; onPress(): void }) {
+  const { theme } = useTranscriptEnv();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Show all ${count} lines`}
+      style={({ pressed }) => [styles.showAll, { borderColor: theme.ink(0.14) }, pressed && { backgroundColor: theme.pressed }]}
+    >
+      <Text style={[styles.showAllText, { color: theme.foreground }]}>{`Show all ${count} lines`}</Text>
+    </Pressable>
+  );
+}
+
 /** An open call's command or arguments and its result (desktop `tool_detail_body`). */
 function CardToolDetail({
   rowKey,
@@ -377,10 +404,17 @@ function CardToolDetail({
   tool: JsonRecord;
   onCollapse(): void;
 }) {
+  const { toolLines } = useTranscriptEnv();
+  const [showAll, setShowAll] = useState(false);
   const detail = obj(useRowDetail(rowKey, 'tool', messageId, index, true));
   if (detail === null) return null;
   const input = str(detail, 'input');
-  const output = str(detail, 'output');
+  const fullOutput = str(detail, 'output');
+  // Tool call lines show a long output's first lines and a button for the rest (desktop
+  // `LINE_OUTPUT_LINES`, Q1962 in gx-chat-core `tool_card.rs`).
+  const outputLines = fullOutput.split('\n');
+  const capped = toolLines === true && !showAll && outputLines.length > LINE_OUTPUT_LINES;
+  const output = capped ? outputLines.slice(0, LINE_OUTPUT_LINES).join('\n') : fullOutput;
   const copyText = str(detail, 'copyText');
   const command = tool.glyph === 'terminal';
   const parts = [];
@@ -405,6 +439,9 @@ function CardToolDetail({
         copyText={parts.length === 0 ? copyText : ''}
       />,
     );
+    if (capped) {
+      parts.push(<ShowAllLines key="show-all" count={outputLines.length} onPress={() => setShowAll(true)} />);
+    }
   }
   if (parts.length === 0) return null;
   return (
@@ -420,6 +457,13 @@ const styles = StyleSheet.create({
   // The one-line cards' border and header height ("Message to …", "Worked for 12s"), so a folded
   // tool card beside one of them is the same 44pt (desktop `tool_card.rs`, CDXC:SessionChat 2026-11-08).
   card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', minWidth: 0 },
+  // Tool call lines: a tool row's height with no box, and the rail its rows hang from (desktop
+  // `LINE_HEIGHT`, `LINE_RAIL_INSET`, `LINE_RAIL_GAP`).
+  line: { minWidth: 0 },
+  lineHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, height: 34, borderRadius: 8, minWidth: 0 },
+  lineRows: { marginTop: 2, marginLeft: 18, paddingLeft: 8, borderLeftWidth: StyleSheet.hairlineWidth, gap: 1 },
+  showAll: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  showAllText: { fontSize: 12 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

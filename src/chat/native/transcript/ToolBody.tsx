@@ -27,7 +27,8 @@ export function ToolBody({
   failed: boolean;
   copyText: string;
 }) {
-  const { theme } = useTranscriptEnv();
+  // Tool call lines cut a long output at 12 lines instead of capping its box (`ToolCard.tsx`).
+  const { theme, toolLines } = useTranscriptEnv();
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
     void Clipboard.setStringAsync(copyText);
@@ -56,7 +57,7 @@ export function ToolBody({
       ) : null}
       <ScrollView
         nestedScrollEnabled
-        style={[styles.bodyBox, { backgroundColor: theme.input }]}
+        style={[styles.bodyBox, toolLines === true && styles.bodyBoxUncapped, { backgroundColor: theme.input }]}
         contentContainerStyle={styles.bodyContent}
       >
         <Text selectable style={[styles.bodyText, { color: failed ? theme.error : theme.muted }]}>
@@ -73,6 +74,7 @@ const styles = StyleSheet.create({
   bodyLabel: { fontSize: 12.25, flexShrink: 1 },
   copyAction: { width: 22, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   bodyBox: { maxHeight: 220.75, borderRadius: 6 },
+  bodyBoxUncapped: { maxHeight: undefined },
   bodyContent: { paddingHorizontal: 10, paddingVertical: 8 },
   bodyText: { fontFamily: MONO_FONT, fontSize: CODE_SIZE, lineHeight: CODE_LINE },
 });

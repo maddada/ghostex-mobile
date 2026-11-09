@@ -64,6 +64,11 @@ export default function ChatPage() {
           Show each run of tool calls as one line that says which call is running now; tap it to see every call with its
           result, time and the reason for any failure.
         </Caption>
+        <SettingToggle settingKey="chatToolCallLines" label="Tool call lines (experimental)" />
+        <Caption>
+          Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as
+          rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows.
+        </Caption>
         <Caption>
           Show the session's pull requests, issues and Linear tickets under the chat's header. Turn off to keep the
           header to the title; the session list still shows them.
