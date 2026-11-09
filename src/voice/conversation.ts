@@ -19,8 +19,10 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { GhostexNative, type VoiceEvent } from '../../modules/ghostex-native/src';
+import { logAppEvent } from '../app/appLog';
 import { chatMachineLink } from '../chat/rust/machine-link';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { enabledMachines, useMachinesStore } from '../machines/store';
 import {
   focusChangeNotice,
   focusQuery,
@@ -205,20 +207,28 @@ export function voiceName(voice: string): string {
   return voice.length > 0 ? voice[0].toUpperCase() + voice.slice(1) : voice;
 }
 
-/** One sentence per error code (the contract's section 3), in the phone's words. */
-function problemMessage(code: string, serverMessage: string, provider: string | null): string {
+/**
+ * One sentence per error code (the contract's section 3), in the phone's words, naming the computer
+ * whose key is missing or refused and the Settings page that holds it.
+ *
+ * CDXC:VoiceMode 2026-11-09 WHY: The phone said "Add your xAI API key in Ghostex Settings › Extensions › Voice agent on your computer" after the key moved to Settings › Voice Agent, and never said which computer, so a person with the key on one computer and the phone on another could not tell what was missing where.
+ */
+export function problemMessage(code: string, serverMessage: string, provider: string | null, computer = ''): string {
   const providerName = provider === 'openai' ? 'OpenAI' : 'xAI';
+  const on = computer.length > 0 ? computer : 'your computer';
   switch (code) {
     case 'noKey':
-      return `Add your ${providerName} API key in Ghostex Settings › Extensions › Voice agent on your computer.`;
+      return `Ghostex on ${on} has no ${providerName} API key for the voice agent. Add it in Settings › Voice Agent on ${on}.`;
+    case 'unreadableKey':
+      return `The ${providerName} API key saved on ${on} can't be read anymore. Paste it again in Settings › Voice Agent on ${on}.`;
     case 'badKey':
-      return `${providerName} refused the API key saved on your computer. Check it in Ghostex Settings › Extensions › Voice agent.`;
+      return `${providerName} refused the API key saved on ${on}. Check it in Settings › Voice Agent on ${on}.`;
     case 'providerUnavailable':
-      return `Couldn't reach the voice service from your computer. Check its internet connection and try again.`;
+      return `Couldn't reach the voice service from ${on}. Check its internet connection and try again.`;
     case 'notFound':
       return 'That conversation already ended. Start a new one.';
     case 'turnedOff':
-      return 'The voice agent is turned off on your computer. Turn it on in Ghostex Settings › Extensions there.';
+      return `The voice agent is turned off on ${on}. Turn it on in Ghostex Settings › Extensions there.`;
     default:
       return serverMessage || 'The voice agent ran into a problem.';
   }
@@ -307,6 +317,7 @@ function shownFromFocus(focus: VoiceFocus): VoiceShownSession {
 
 function finish(message: string, problem?: VoiceProblem): void {
   nativeSessionId = null;
+  clearMicRetries();
   set({
     phase: 'ended',
     endedMessage: message,
@@ -449,13 +460,15 @@ function onFrame(json: string): void {
       return;
     case 'error': {
       const code = text('code');
-      const message = problemMessage(code, text('message'), currentProvider);
+      const message = problemMessage(code, text('message'), currentProvider, useVoiceStore.getState().machineName);
+      logAppEvent(`Voice agent: ${code || 'error'}${frame.fatal === true ? ' (call ended)' : ''}: ${message}`);
       if (frame.fatal === true) set({ problem: { code, message } });
       else notice(message);
       return;
     }
     case 'ended': {
       const reason = text('reason');
+      if (reason !== 'user') logAppEvent(`Voice agent: the call ended (${reason || 'no reason'})`);
       const problem = useVoiceStore.getState().problem;
       finish(reason === 'error' && problem !== null ? problem.message : endedMessage(reason, text('message')));
       return;
@@ -477,6 +490,42 @@ async function relink(): Promise<void> {
   } finally {
     relinking = false;
   }
+}
+
+/** When the phone asks the microphone to come back after it stopped, counted from the stop. */
+const MIC_RETRY_MS = [1_000, 3_000, 6_000, 10_000, 20_000, 30_000, 45_000, 60_000];
+let micRetryTimers: ReturnType<typeof setTimeout>[] = [];
+/** "The microphone stopped." was said and nothing the person did since asked for it again. */
+let micStoppedSaid = false;
+
+function clearMicRetries(): void {
+  micRetryTimers.forEach(clearTimeout);
+  micRetryTimers = [];
+}
+
+/**
+ * The native engine gave up on the microphone. Said once until the person tries again (Unmute, Talk),
+ * and the phone brings it back on its own: an unmute that changes nothing makes the native engine build
+ * a fresh microphone when it is down and does nothing when it runs (`recover` in GhostexVoiceAudio.swift),
+ * so asking a few times over the next minute heals a microphone that a route or CallKit change stopped.
+ *
+ * CDXC:VoiceMode 2026-11-09 WHY: The user's iPhone showed "The microphone stopped" over and over in a call and the agent stopped hearing; GitHub #500's fix said it once per failure but left the microphone down until the person pressed Unmute or Talk. Older iPhone builds (before 11.2.1) report every failed rebuild, so the notice is held to one per try here too.
+ */
+function microphoneStopped(message: string): void {
+  logAppEvent(`Voice agent: ${message}`);
+  if (!micStoppedSaid) {
+    micStoppedSaid = true;
+    notice(message);
+  }
+  clearMicRetries();
+  const session = nativeSessionId;
+  micRetryTimers = MIC_RETRY_MS.map((delay) =>
+    setTimeout(() => {
+      const state = useVoiceStore.getState();
+      if (nativeSessionId !== session || session === null || state.phase !== 'live' || state.muted) return;
+      void GhostexNative.voiceSetMuted(false).catch(() => undefined);
+    }, delay),
+  );
 }
 
 function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
@@ -511,15 +560,17 @@ function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
       flashVoiceHint(event.message === 'heard' ? HINT_ALREADY_HEARD : HINT_UNMUTE);
       return;
     case 'micError':
-      notice(event.message ?? 'The microphone stopped.');
+      microphoneStopped(event.message ?? 'The microphone stopped.');
       return;
     case 'failed':
+      logAppEvent(`Voice agent: couldn't open the call on ${useVoiceStore.getState().machineName}${event.message ? ` (${event.message})` : ''}`);
       finish(`Couldn't reach Ghostex on ${useVoiceStore.getState().machineName}.`, {
         code: 'unreachable',
         message: `Couldn't reach Ghostex on ${useVoiceStore.getState().machineName}. Check that it is running and try again.`,
       });
       return;
     case 'lost':
+      logAppEvent(`Voice agent: lost ${useVoiceStore.getState().machineName} for too long; the call ended`);
       finish(endedMessage('lost', ''));
       return;
     case 'closed':
@@ -560,9 +611,91 @@ export function voiceActive(phase: VoicePhase): boolean {
   return phase === 'starting' || phase === 'live' || phase === 'reattaching';
 }
 
+type VoiceAgentInfo = {
+  provider?: string;
+  enabled?: boolean;
+  keys?: Record<string, { configured?: boolean; unreadable?: boolean }>;
+  voices?: Record<string, string>;
+  voiceOptions?: Record<string, string[]>;
+  speed?: number;
+  callMode?: string;
+  focusedCalls?: boolean;
+  gbotCalls?: boolean;
+};
+
+type GxserverForward = { localPort: number; authToken: string };
+
+/** A computer's voice agent ready to call, or why it can't take a call (`code` as in `problemMessage`). */
+type ComputerVoice =
+  | { ok: true; forward: GxserverForward; info: VoiceAgentInfo; provider: 'xai' | 'openai' }
+  | { ok: false; code: string; message: string };
+
+/** Asks `machine`'s gxserver whether its voice agent can take a call now. Never throws. */
+async function readComputerVoice(machine: MachineConnectionTarget, machineName: string): Promise<ComputerVoice> {
+  try {
+    const link = chatMachineLink(machine);
+    const forward = await link.gxserverLink();
+    if (forward === null) {
+      return { ok: false, code: 'unreachable', message: `Couldn't reach Ghostex on ${machineName}. Check that it is running and try again.` };
+    }
+    if (!forward.capabilities.includes('voiceAgent')) {
+      return { ok: false, code: 'unsupported', message: `Ghostex on ${machineName} has no voice agent yet. Update Ghostex on that computer.` };
+    }
+    const answer = await link.rpc('readVoiceAgent', {}, READ_TIMEOUT_MS);
+    if (answer.error !== null) return { ok: false, code: 'unreachable', message: answer.error.message };
+    const info = (answer.result ?? {}) as VoiceAgentInfo;
+    const provider = info.provider === 'openai' ? 'openai' : 'xai';
+    const key = info.keys?.[provider];
+    if (info.enabled === false) return { ok: false, code: 'turnedOff', message: problemMessage('turnedOff', '', provider, machineName) };
+    if (key?.configured !== true) {
+      const code = key?.unreadable === true ? 'unreadableKey' : 'noKey';
+      return { ok: false, code, message: problemMessage(code, '', provider, machineName) };
+    }
+    return { ok: true, forward, info, provider };
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'unreachable',
+      message: `Couldn't reach Ghostex on ${machineName}. ${error instanceof Error ? error.message : ''}`.trim(),
+    };
+  }
+}
+
+/** The name the phone shows for a saved computer (as the Voice button does). */
+function computerName(machine: MachineConnectionTarget & { name?: string }): string {
+  return machine.name && machine.name.length > 0 ? machine.name : machine.username;
+}
+
+/** How long the phone waits for the other computers when the one on screen has no voice key. */
+const OTHER_COMPUTER_TIMEOUT_MS = 8_000;
+
+/**
+ * Another saved computer whose voice agent can take the call, asked all at once; the first in the
+ * Sessions screen's order wins. Null when none answers in time.
+ */
+async function otherComputerWithVoice(
+  skipId: string,
+): Promise<{ machine: MachineConnectionTarget; name: string; voice: Extract<ComputerVoice, { ok: true }> } | null> {
+  const others = enabledMachines(useMachinesStore.getState()).filter(
+    (machine) => machine.id !== skipId && machine.transport !== 'demo',
+  );
+  if (others.length === 0) return null;
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), OTHER_COMPUTER_TIMEOUT_MS));
+  const answers = await Promise.all(
+    others.map((machine) => Promise.race([readComputerVoice(machine, computerName(machine)), timeout])),
+  );
+  for (let index = 0; index < others.length; index += 1) {
+    const voice = answers[index];
+    if (voice?.ok === true) return { machine: others[index], name: computerName(others[index]), voice };
+  }
+  return null;
+}
+
 /**
  * Starts a conversation with the voice agent on `machine`, about all sessions or, with `about`, about
  * one session. Never throws: every failure lands in the store as a problem the voice screen shows.
+ *
+ * CDXC:VoiceMode 2026-11-09 WHY: The user's iPhone failed to start the voice agent while the xAI key was on their other computer ("i have xai api key on pc"). The key stays per computer (the 2026-10-20 DECISION), so a call about all sessions whose computer has no usable key (none, unreadable, or the voice agent off) runs on another saved computer that has one, and the voice screen says which and where the missing key goes; a voice agent sees the sessions of the computers its computer is connected to (`server/src/voice_agent/computers.rs`). A call about one session stays on that session's computer and says plainly what is missing there.
  */
 export async function startVoice(
   machine: MachineConnectionTarget,
@@ -573,39 +706,36 @@ export async function startVoice(
   target = machine;
   currentProvider = null;
   askedForFocus = false;
+  micStoppedSaid = false;
+  clearMicRetries();
   set({ ...INITIAL, phase: 'starting', machineId: machine.id, machineName, requestedFocus: about ?? null });
-  const fail = (code: string, message: string) => finish(message, { code, message });
+  const fail = (code: string, message: string) => {
+    logAppEvent(`Voice agent: couldn't start on ${useVoiceStore.getState().machineName} (${code}): ${message}`);
+    finish(message, { code, message });
+  };
   try {
     if (!(await microphoneAllowed())) {
       fail('microphone', microphoneDeniedMessage('talk with the voice agent'));
       return;
     }
-    const link = chatMachineLink(machine);
-    const forward = await link.gxserverLink();
-    if (forward === null) {
-      fail('unreachable', `Couldn't reach Ghostex on ${machineName}. Check that it is running and try again.`);
+    let voice = await readComputerVoice(machine, machineName);
+    let movedNote: string | null = null;
+    if (!voice.ok && about === undefined && (voice.code === 'noKey' || voice.code === 'unreadableKey' || voice.code === 'turnedOff')) {
+      const other = await otherComputerWithVoice(machine.id);
+      if (other !== null && useVoiceStore.getState().phase === 'starting') {
+        movedNote = `${voice.message} This call uses the voice agent on ${other.name}, which sees ${machineName}'s sessions when the two computers are connected.`;
+        logAppEvent(`Voice agent: ${machineName} can't take the call (${voice.code}); using ${other.name}`);
+        target = other.machine;
+        machineName = other.name;
+        set({ machineId: other.machine.id, machineName });
+        voice = other.voice;
+      }
+    }
+    if (!voice.ok) {
+      fail(voice.code, voice.message);
       return;
     }
-    if (!forward.capabilities.includes('voiceAgent')) {
-      fail('unsupported', `Ghostex on ${machineName} has no voice agent yet. Update Ghostex on that computer.`);
-      return;
-    }
-    const info = await link.rpc('readVoiceAgent', {}, READ_TIMEOUT_MS);
-    if (info.error !== null) {
-      fail('unreachable', info.error.message);
-      return;
-    }
-    const result = (info.result ?? {}) as {
-      provider?: string;
-      keys?: Record<string, { configured?: boolean }>;
-      voices?: Record<string, string>;
-      voiceOptions?: Record<string, string[]>;
-      speed?: number;
-      callMode?: string;
-      focusedCalls?: boolean;
-      gbotCalls?: boolean;
-    };
-    const provider = result.provider === 'openai' ? 'openai' : 'xai';
+    const { forward, info: result, provider } = voice;
     currentProvider = provider;
     const speed = VOICE_SPEEDS.find((offered) => Math.abs(offered - (result.speed ?? 1)) < 0.01) ?? 1;
     set({
@@ -615,10 +745,6 @@ export async function startVoice(
       speed,
       callMode: result.callMode === 'pushToTalk' ? 'pushToTalk' : 'regular',
     });
-    if (result.keys?.[provider]?.configured !== true) {
-      fail('noKey', problemMessage('noKey', '', provider));
-      return;
-    }
     if (about !== undefined && result.focusedCalls !== true) {
       fail('outdated', outdatedFocusMessage(machineName));
       return;
@@ -636,6 +762,7 @@ export async function startVoice(
       title: machineName,
       ...(about !== undefined ? { focus: focusQuery(about) } : {}),
     });
+    if (movedNote !== null) notice(movedNote);
     if (speed !== 1) await GhostexNative.voiceSetSpeed(speed);
   } catch (error) {
     fail(
@@ -664,6 +791,7 @@ export function hangUpVoice(): void {
 }
 
 export function setVoiceMuted(muted: boolean): void {
+  if (!muted) micStoppedSaid = false;
   set({ muted });
   void GhostexNative.voiceSetMuted(muted).catch(() => undefined);
 }
@@ -760,6 +888,7 @@ export function setVoiceTalking(talking: boolean): void {
     if (mode === 'alreadyHeard') return flashVoiceHint(HINT_ALREADY_HEARD);
     if (mode === 'none') return;
   }
+  if (talking) micStoppedSaid = false;
   set({ talking, hint: null });
   void GhostexNative.voiceSetTalking(talking).catch(() => undefined);
 }
