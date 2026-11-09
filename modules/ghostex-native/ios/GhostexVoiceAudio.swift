@@ -212,6 +212,8 @@ final class GhostexVoiceEngine {
     private var player: AVAudioPlayerNode?
     private var timePitch: AVAudioUnitTimePitch?
     private var converter: AVAudioConverter?
+    /// The microphone format the tap and converter were made for.
+    private var tapFormat: AVAudioFormat?
     private var pending = Data()
     private var configObserver: NSObjectProtocol?
     /**
@@ -280,6 +282,11 @@ final class GhostexVoiceEngine {
             if current && !stopped { self.reportedFailure = false }
             self.rebuildLock.unlock()
             guard current, stopped else { return }
+            if attempt < 4, self.restartInPlace(built) {
+                // Watched again, so an engine that keeps stopping still ends in one error.
+                self.watch(attempt + 1, built)
+                return
+            }
             guard attempt < 4 else {
                 self.fail()
                 return
@@ -313,8 +320,41 @@ final class GhostexVoiceEngine {
             GhostexVoiceAudio.log.info("audio configuration changed; the voice engine still runs, so it is kept")
             return
         }
+        if restartInPlace(built) { return }
         // Each attempt counts toward the cap, so a change that stops every new engine at once ends in one error.
         rebuild(quick, after: built)
+    }
+
+    /**
+     * CDXC:VoiceMode 2026-11-10 WHY: On the user's iPhone 15 Pro Max (iOS 27.2) every call said "The microphone stopped" and the agent never heard anything. The phone's own log showed why: each engine started, and about 120 ms later switching voice processing on settled the output layout ("iounit configuration changed > stopping the engine"). Answering that with a brand-new engine switched voice processing on again, which stopped it again, 38 times a minute. The engine that stopped is started again as it is (voice processing stays on, so nothing changes a second time); only when that fails is a new one built.
+     */
+    private func restartInPlace(_ built: Int) -> Bool {
+        rebuildLock.lock()
+        defer { rebuildLock.unlock() }
+        guard running, generation == built, !engine.isRunning else { return engine.isRunning }
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        if format != tapFormat {
+            guard format.sampleRate > 0, format.channelCount > 0,
+                  let converter = AVAudioConverter(from: format, to: GhostexVoiceAudio.wireFormat) else { return false }
+            input.removeTap(onBus: 0)
+            self.converter = converter
+            tapFormat = format
+            pending = Data()
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                self?.captured(buffer)
+            }
+        }
+        do {
+            engine.prepare()
+            try engine.start()
+            player?.play()
+            GhostexVoiceAudio.log.info("the voice engine stopped for an audio configuration change; started it again as it is")
+            return true
+        } catch {
+            GhostexVoiceAudio.log.warning("the voice engine did not start again: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
     }
 
     private func build() throws {
@@ -352,6 +392,7 @@ final class GhostexVoiceEngine {
             throw NSError(domain: "GhostexVoice", code: 1, userInfo: [NSLocalizedDescriptionKey: "Ghostex could not open the microphone."])
         }
         self.converter = converter
+        tapFormat = format
         pending = Data()
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.captured(buffer)
