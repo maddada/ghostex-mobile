@@ -198,3 +198,27 @@ export function mergedRepoIdentities(perComputer: readonly (readonly RepoIdentit
     return identities.map((identity) => resolveRepoIdentity(identity, merged, here));
   });
 }
+
+/**
+ * A project's folder inside its repository, lowercase, when it is a subfolder of it; `null` at the
+ * repository's root or without a known root (gx-core `folder_in_repository`).
+ */
+export function folderInRepository(path: string, repositoryRootPath: string | null | undefined): string | null {
+  if (repositoryRootPath == null) return null;
+  const normalize = (text: string): string => trimEnd(text.trim().replaceAll('\\', '/'), '/');
+  const root = normalize(repositoryRootPath);
+  const own = normalize(path);
+  if (!own.startsWith(root)) return null;
+  const rest = own.slice(root.length);
+  if (!rest.startsWith('/')) return null;
+  const folder = trimBoth(rest.slice(1), '/');
+  return folder === '' ? null : folder.toLowerCase();
+}
+
+/**
+ * The key one project matches its copies by: its repository's key, plus `#` and its folder inside
+ * the repository when it is a subfolder (gx-core `project_repo_key`, #461).
+ */
+export function projectRepoKey(repositoryKey: string, folder: string | null): string {
+  return folder !== null && !repositoryKey.startsWith('dir:') ? `${repositoryKey}#${folder}` : repositoryKey;
+}

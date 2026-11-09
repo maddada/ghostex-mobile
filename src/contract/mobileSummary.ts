@@ -230,6 +230,12 @@ export type GhostexProject = {
    * folder (and for one the probe has not reached yet, the first minutes after gxserver starts).
    */
   gitWorkTree?: boolean;
+  /**
+   * The root of the git repository the project's folder is in, as the computer probed it; the
+   * Project list tells one repository's folders apart by it (contract/grouping.ts). Absent outside
+   * a repository or from an older computer.
+   */
+  gitRepositoryRootPath?: string;
 };
 
 export type GhostexRecentProject = {
@@ -824,6 +830,14 @@ export type GhostexMobileSummary = {
    * worktree's sessions under its parent project (contract/grouping.ts). On unless the computer sends `false`.
    */
   worktreeSessionsInProject?: boolean;
+  /**
+   * The computer's Merge copies of the same repository (CDXC:RemoteMachines 2026-11-09 in
+   * packages/gx-core/src/sidebar_view/merged.rs): the Project list draws two folders that are copies
+   * of one repository as one project. On unless the computer sends `false`.
+   */
+  mergeRepositoryCopies?: boolean;
+  /** The computer's Separate by machine, under which its list never merges copies. Off unless the computer sends `true`. */
+  separateByMachine?: boolean;
   /**
    * The computer's Advanced > Pinned order (CDXC:Sidebar 2026-11-07 in packages/gx-core/src/sidebar_view/inputs.rs):
    * `manual` keeps the order pinned sessions were dragged into, `recent` puts the one that came back last first.
@@ -1602,6 +1616,7 @@ function parseProjects(value: unknown): GhostexProject[] {
       everyWorkspace: entry.everyWorkspace === true ? true : undefined,
       gitRemoteOriginUrl: trimmedValue(entry, 'gitRemoteOriginUrl') || undefined,
       gitWorkTree: 'gitRemoteOriginUrl' in entry,
+      gitRepositoryRootPath: trimmedValue(entry, 'gitRepositoryRootPath') || undefined,
     });
   }
   return projects;
@@ -1992,6 +2007,8 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     chiefConfirmNewChat: root.chiefConfirmNewChat !== false,
     enableSessionParking: root.enableSessionParking !== false,
     worktreeSessionsInProject: root.worktreeSessionsInProject !== false,
+    mergeRepositoryCopies: root.sidebarMergeRepositoryCopies !== false,
+    separateByMachine: root.sidebarSeparateByMachine === true,
     pinnedSessionOrder: root.pinnedSessionOrder === 'recent' ? 'recent' : 'manual',
     capabilities: parseCapabilities(root.capabilities),
   };

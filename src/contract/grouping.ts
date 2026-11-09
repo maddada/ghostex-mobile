@@ -28,6 +28,7 @@ import {
   type GhostexSummaryCapabilities,
   visibleSessions,
 } from './mobileSummary';
+import { folderInRepository, mergeRepoIdentities, projectRepoKey, repoIdentity } from './unified/repo';
 
 // ---------------------------------------------------------------------------
 // Item types.
@@ -724,6 +725,46 @@ function foldWorktreeBuckets(
   return worktreeOf;
 }
 
+/**
+ * CDXC:RemoteMachines 2026-11-09 SEE-ALSO: the DECISIONs in packages/gx-core/src/sidebar_view/merged.rs (Q1352, #461, #518). While the computer's Merge copies of the same repository is on (the default) and Separate by machine is off, the Project list draws two folders of this computer that are copies of one repository (the same origin, opened at the same folder inside it) as one project: the first in the list's order keeps its entry, name and session groups, and the others' sessions are listed with its own. Off, each folder is its own project, as the computer draws it. A worktree and the home project never merge; the Unified list groups by repository itself.
+ */
+function mergeRepositoryCopyBuckets(
+  summary: GhostexMobileSummary,
+  projectById: ReadonlyMap<string, GhostexProject>,
+  sessionsByProjectKey: Map<string, GhostexSession[]>,
+): void {
+  if (summary.mergeRepositoryCopies === false || summary.separateByMachine === true) return;
+  if (summary.sidebarView === 'unified') return;
+  const order: string[] = [];
+  for (const projectId of [
+    ...(summary.workspaceGroups?.projectOrder ?? []),
+    ...summary.projects.map((project) => project.projectId),
+  ]) {
+    if (!order.includes(projectId) && projectById.has(projectId)) order.push(projectId);
+  }
+  const mergeable = order
+    .map((projectId) => projectById.get(projectId)!)
+    .filter((project) => project.isHome !== true && project.worktreeParentProjectId.length === 0);
+  const identityOf = (project: GhostexProject) =>
+    repoIdentity(project.gitRemoteOriginUrl, project.path ?? '', null, projectDisplayName(project));
+  const canonical = mergeRepoIdentities(mergeable.map(identityOf));
+  const entryOfKey = new Map<string, string>();
+  for (const project of mergeable) {
+    const identity = identityOf(project);
+    const fromOrigin = !identity.key.startsWith('dir:');
+    const folder = fromOrigin ? folderInRepository(project.path ?? '', project.gitRepositoryRootPath) : null;
+    const key = projectRepoKey(canonical.get(identity.key)?.key ?? identity.key, folder);
+    const ownKey = `id:${project.projectId}`;
+    const entry = entryOfKey.get(key);
+    if (entry === undefined) {
+      entryOfKey.set(key, ownKey);
+      continue;
+    }
+    sessionsByProjectKey.get(entry)?.push(...(sessionsByProjectKey.get(ownKey) ?? []));
+    sessionsByProjectKey.delete(ownKey);
+  }
+}
+
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   const {
     machineId,
@@ -763,6 +804,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   }
 
   const worktreeOf = foldWorktreeBuckets(summary, projectById, sessionsByProjectKey);
+  mergeRepositoryCopyBuckets(summary, projectById, sessionsByProjectKey);
 
   // Desktop display layout: the wire order (server sortOrder) is the stable
   // manual base; browser-first/pinned-first/draft-first/activity sorting is applied on top
