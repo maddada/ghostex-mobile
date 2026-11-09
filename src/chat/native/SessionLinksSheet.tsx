@@ -79,6 +79,8 @@ import { themedStyles, useTranscriptTheme } from './transcript/theme';
 
 /** How long a × waits for its confirming tap. */
 const REMOVE_ARMED_FOR_MS = 3000;
+/** The `armed` key of the Suggested header's ×, which no link's key can equal. */
+const SUGGESTED_HEADER_KEY = 'group:suggested';
 /**
  * How long a removed link stays out of the list without the computer publishing its removal; past
  * it the sheet shows what the computer says again (the removal failed, and said so).
@@ -208,6 +210,49 @@ export default function SessionLinksSheet({
     if (armTimer.current !== null) clearTimeout(armTimer.current);
     armTimer.current = setTimeout(() => setArmed((current) => (current === key ? null : current)), REMOVE_ARMED_FOR_MS);
   };
+  /**
+   * The Suggested header's ×: tap it, and tap it again within three seconds to remove every
+   * suggestion (the ones under "Show all" too); they go under Removed like one row's ×, and each
+   * keeps its own Restore.
+   *
+   * CDXC:SessionLinks 2026-11-09 DECISION:
+   * User, of the desktop Links list's "Suggested 2" header: "add x button that appears here so
+   * that i can click twice to remove all the suggested ones". The phone has no hover, so its × is
+   * always on the header, and turns red once armed like a row's. The removals go one after the
+   * other (`removeSessionLink` per suggestion), because the computer reads and writes a session's
+   * links whole for each.
+   */
+  const removeAllSuggested = () => {
+    const keys = published.suggested.map((suggestion) => suggestion.key);
+    if (keys.length === 0) return;
+    if (armed === SUGGESTED_HEADER_KEY) {
+      setArmed(null);
+      setRemoving((current) => [...current, ...keys.filter((key) => !current.includes(key))]);
+      removalTimers.current.push(
+        setTimeout(
+          () => setRemoving((current) => current.filter((pending) => !keys.includes(pending))),
+          REMOVAL_PENDING_FOR_MS,
+        ),
+      );
+      void (async () => {
+        for (const key of keys) {
+          const result = await runSessionCommand(
+            machine,
+            removeSessionLinkCommand(session.sessionId, session.projectId, key),
+            { onError: (message: string) => setStatus(message) },
+          );
+          if (result === null) break;
+        }
+      })();
+      return;
+    }
+    setArmed(SUGGESTED_HEADER_KEY);
+    if (armTimer.current !== null) clearTimeout(armTimer.current);
+    armTimer.current = setTimeout(
+      () => setArmed((current) => (current === SUGGESTED_HEADER_KEY ? null : current)),
+      REMOVE_ARMED_FOR_MS,
+    );
+  };
   const restore = (key: string) => {
     setRemoving((current) => current.filter((pending) => pending !== key));
     void runSessionCommand(machine, restoreSessionLinkCommand(session.sessionId, session.projectId, key), {
@@ -295,22 +340,29 @@ export default function SessionLinksSheet({
     if (id === 'suggested') setSuggestedOpen(!fold);
     setSetting('sessionLinksFoldedGroups', fold ? [...folded, id] : folded.filter((section) => section !== id));
   };
-  const sectionHeader = (id: string, title: string, count: number) => {
+  const sectionHeader = (id: string, title: string, count: number, action?: ReactElement) => {
     const open = !isFolded(id);
-    return (
+    const header = (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${title} ${count}`}
         accessibilityState={{ expanded: open }}
         hitSlop={4}
         onPress={() => toggleSection(id)}
-        style={styles.sectionHeader}
+        style={action === undefined ? styles.sectionHeader : styles.sectionHeaderTitle}
       >
         <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={13} color={P.muted} />
         <Text style={styles.section}>
           {title} {count}
         </Text>
       </Pressable>
+    );
+    if (action === undefined) return header;
+    return (
+      <View style={styles.sectionHeader}>
+        {header}
+        {action}
+      </View>
     );
   };
 
@@ -540,7 +592,25 @@ export default function SessionLinksSheet({
         {section('finished', 'Merged / Closed')}
         {links.suggested.length > 0 ? (
           <View>
-            {sectionHeader('suggested', 'Suggested', links.suggested.length)}
+            {sectionHeader(
+              'suggested',
+              'Suggested',
+              links.suggested.length,
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={armed === SUGGESTED_HEADER_KEY ? 'Tap again to remove all suggestions' : 'Remove all suggestions'}
+                hitSlop={ROW_BUTTON_HIT_SLOP}
+                onPress={removeAllSuggested}
+                style={({ pressed }) => [
+                  styles.remove,
+                  armed === SUGGESTED_HEADER_KEY
+                    ? { backgroundColor: P.destructiveFill }
+                    : pressed && { backgroundColor: P.neutralFillPressed },
+                ]}
+              >
+                <Glyph name="x" size={14} color={armed === SUGGESTED_HEADER_KEY ? P.error : P.muted} />
+              </Pressable>,
+            )}
             {(isFolded('suggested') ? [] : suggestionsShown(links.suggested, allSuggested)).map((suggestion) =>
               entryRow(
                 suggestion,
@@ -602,6 +672,8 @@ const useStyles = themedStyles((P) => ({
   heldMenu: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 6, paddingBottom: 8 },
   sheetBody: { paddingHorizontal: 12, paddingBottom: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, marginBottom: 4 },
+  // The title of a header that carries a button (Suggested's ×): fills the row so the button sits at its right end.
+  sectionHeaderTitle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   // Suggested's "Show all N" / "Show fewer": the section header's words, under the rows.
   showAll: { paddingVertical: 6, paddingHorizontal: 6 },
   // A tight line without Android's font padding, so the chevron centres on the letters rather than
