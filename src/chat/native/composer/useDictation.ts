@@ -19,18 +19,24 @@ import type {
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Share } from 'react-native';
+
+import { GhostexNative, type LocalDictation } from '../../../../modules/ghostex-native/src';
 
 import type { MachineConnectionTarget } from '../../../machines/credentials';
 import {
   dictationSupported,
   dismissDictation,
   dismissLocal,
+  forgetRecording,
   latestUntranscribed,
+  localRecording,
   saveAndTranscribe,
   sendUnsent,
   startRecording,
   stopRecording,
   transcribeLatest,
+  waitingRecordings,
   watchDictation,
   type Kept,
   type Transcription,
@@ -63,8 +69,15 @@ const DICTATION_ENABLED = true;
 
 /**
  * `polishing`: the words are in and AI polish runs on them (Skip hands over the unpolished text).
+ * `waiting`: a recording on this phone still waits for its words (offered with Transcribe).
  */
-export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'polishing' | 'failed';
+export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'polishing' | 'failed' | 'waiting';
+
+/** How long a send the computer never answered waits before it goes again, try after try. */
+const AUTO_RETRY_MS = [3_000, 6_000, 12_000, 20_000, 30_000, 60_000];
+
+/** iOS's share sheet takes the audio file; React Native's Android share sends text only. */
+const SHARE_AUDIO = Platform.OS === 'ios';
 
 /**
  * Hex on the chat's computer isn't ready: the row's button opens Voice settings, where Install Hex
@@ -86,6 +99,8 @@ export function dictationClock(ms: number): string {
  * Dictate into the draft. `draft()` reads the composer's text and caret when the text arrives;
  * `replace` writes the draft with the dictated text in place; `onError` gets a short message for a
  * problem no row shows (no microphone permission, nothing waiting for Transcribe previous).
+ *
+ * CDXC:VoiceMode 2026-11-09 WHY: A user lost recordings while the phone kept reconnecting ("not saving my audio is killer"). A recording the computer could not be reached for waits in the row as "Waiting for your computer" and goes again on its own (when the link comes back, and on a timer); leaving the chat keeps a recording (it is offered again, not dismissed); a recording still on the phone without its words is offered in the chat box ("Recording not transcribed") with Transcribe, Share (iPhone) and ✕ until its words are in a draft.
  */
 export function useDictation(
   machine: MachineConnectionTarget | null,
@@ -96,6 +111,8 @@ export function useDictation(
   const [available, setAvailable] = useState(() => DICTATION_ENABLED && dictationSupported(machine));
   const [phase, setPhase] = useState<DictationPhase>('idle');
   const [failure, setFailure] = useState<{ kept: Kept; message: string; code: string | null } | null>(null);
+  /** A recording on this phone still waiting for its words, offered while nothing else runs. */
+  const [waiting, setWaiting] = useState<LocalDictation | null>(null);
   /** What will transcribe on the chat's computer (`/api/readDictateEngine`); null on older computers. */
   const [engine, setEngine] = useState<DictateEngine | null>(null);
   const [startedAt, setStartedAt] = useState(0);
@@ -104,10 +121,16 @@ export function useDictation(
   phaseRef.current = phase;
   /** One per run: a cancel flips it and remembers the computer's id to dismiss. */
   const run = useRef<{ cancelled: boolean; serverId: string | null }>({ cancelled: false, serverId: null });
+  /** False once the chat box is gone: results stop touching it, and nothing is dismissed for that. */
+  const mounted = useRef(true);
+  /** The recording the microphone is writing now. */
+  const recordingId = useRef<string | null>(null);
   const callbacks = useRef({ draft, replace, onError });
   callbacks.current = { draft, replace, onError };
   /** Stops following the computer's recording status (polishing). */
   const unwatch = useRef<(() => void) | null>(null);
+  /** How many times the recording in the row went again on its own, so the waits keep growing across tries. */
+  const autoTries = useRef<{ id: string; count: number }>({ id: '', count: 0 });
 
   /** Asks the computer what will transcribe now; answers it too. */
   const refreshEngine = useCallback(async (): Promise<DictateEngine | null> => {
@@ -115,6 +138,13 @@ export function useDictation(
     const next = await readDictateEngine(machine);
     setEngine(next);
     return next;
+  }, [machine]);
+
+  /** Looks for a recording on this phone still waiting for its words. */
+  const refreshWaiting = useCallback(async () => {
+    if (machine === null) return;
+    const found = (await waitingRecordings())[0] ?? null;
+    if (mounted.current) setWaiting(found);
   }, [machine]);
 
   useEffect(() => {
@@ -134,6 +164,11 @@ export function useDictation(
     return link.onRouteChange(refresh);
   }, [machine]);
 
+  // A recording left from before (the chat closed, the app restarted, a send that never went) is offered while the row is free.
+  useEffect(() => {
+    if (available && phase === 'idle') void refreshWaiting();
+  }, [available, phase, refreshWaiting]);
+
   // Read aloud keeps quiet while the microphone records (the core's `setDictating`), so the
   // recording never takes in the phone's own voice; transcribing no longer listens.
   const recording = phase === 'starting' || phase === 'recording';
@@ -150,15 +185,16 @@ export function useDictation(
     return () => clearInterval(timer);
   }, [phase]);
 
-  // Leaving the chat keeps a recording still running, as dismissed.
-  useEffect(
-    () => () => {
-      if (phaseRef.current === 'recording' || phaseRef.current === 'starting') void stopRecording(true);
-      run.current.cancelled = true;
+  // Leaving the chat keeps a recording still running: it is closed and offered again in the chat box.
+  // A transcription under way carries on; its recording stays on the phone until its words are in a draft.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (phaseRef.current === 'recording' || phaseRef.current === 'starting') void stopRecording(false);
       unwatch.current?.();
-    },
-    [],
-  );
+    };
+  }, []);
 
   const insert = useCallback((dictated: string) => {
     const words = dictated.trim();
@@ -176,9 +212,13 @@ export function useDictation(
       unwatch.current?.();
       unwatch.current = null;
       if (current.cancelled || result === null) return;
+      if (result.kind === 'nothing' && result.id) void forgetRecording(result.id);
+      // Gone: the words wait on the computer and the recording on the phone, offered when the chat opens again.
+      if (!mounted.current) return;
       if (result.kind === 'text') {
         setPhase('idle');
         insert(result.text);
+        void forgetRecording(result.id);
       } else if (result.kind === 'nothing') {
         setPhase('idle');
         if (result.message) callbacks.current.onError(result.message);
@@ -193,14 +233,18 @@ export function useDictation(
   );
 
   const transcribeKept = useCallback(
-    async (kept: Kept | null) => {
+    async (kept: Kept | null, quiet = false) => {
       if (machine === null) return;
       const current = { cancelled: false, serverId: kept?.kind === 'server' ? kept.id : null };
       run.current = current;
-      setFailure(null);
-      setPhase('transcribing');
+      if (!quiet) {
+        setFailure(null);
+        setWaiting(null);
+        setPhase('transcribing');
+      }
       // While the computer works on it, its status says when AI polish starts (Skip shows then).
       const watch = (id: string) => {
+        if (quiet) return;
         unwatch.current?.();
         unwatch.current = watchDictation(machine, id, (status) => {
           if (current.cancelled || run.current !== current) return;
@@ -220,15 +264,61 @@ export function useDictation(
                 watch(id);
               },
             );
+      // A tap (Transcribe again, ✕, a new recording) took over while a quiet retry ran.
+      if (quiet && run.current !== current) return;
       settle(current, result);
     },
     [machine, settle],
   );
 
+  // A send the computer never answered (a dropped link) goes again on its own: when the link comes back and on a timer.
+  const retryable = phase === 'failed' && failure !== null && failure.code === null && failure.kept.kind === 'local';
+  useEffect(() => {
+    if (!retryable || machine === null || failure === null) return undefined;
+    const kept = failure.kept;
+    if (kept.kind !== 'local') return undefined;
+    if (autoTries.current.id !== kept.recording.id) autoTries.current = { id: kept.recording.id, count: 0 };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let busy = false;
+    let live = true;
+    const again = async () => {
+      if (!live || busy || phaseRef.current !== 'failed') return;
+      busy = true;
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      await transcribeKept(kept, true);
+      busy = false;
+      // Still waiting with the same failure: the next try is a little later each time, at most a minute apart.
+      if (live && phaseRef.current === 'failed') schedule();
+    };
+    const schedule = () => {
+      const tries = autoTries.current;
+      const delay = AUTO_RETRY_MS[Math.min(tries.count, AUTO_RETRY_MS.length - 1)];
+      tries.count += 1;
+      timer = setTimeout(() => void again(), delay);
+    };
+    schedule();
+    const link = chatMachineLink(machine);
+    const unsubscribe = link.onRouteChange(() => void again());
+    const connected = GhostexNative.addListener('onConnectionState', (event) => {
+      if (event.machineId === machine.id && event.state === 'connected') void again();
+    });
+    return () => {
+      live = false;
+      if (timer !== null) clearTimeout(timer);
+      unsubscribe();
+      connected.remove();
+    };
+    // The kept recording is the failure's; a new failure object restarts the ladder.
+  }, [retryable, failure, machine, transcribeKept]);
+
   const stop = useCallback(async () => {
     // Shown at once, so a second tap while the file closes does not stop it twice.
     setPhase('transcribing');
-    const recording = await stopRecording(false);
+    let recording = await stopRecording(false);
+    // The recorder had already stopped (a microphone that went away, a reload): its file is still here.
+    if (recording === null && recordingId.current !== null) recording = await localRecording(recordingId.current);
+    recordingId.current = null;
     if (recording === null) {
       setPhase('idle');
       return;
@@ -241,9 +331,12 @@ export function useDictation(
     const current = { cancelled: false, serverId: null };
     run.current = current;
     setFailure(null);
+    setWaiting(null);
     setPhase('starting');
     // What transcribes may have changed on the computer since the chat opened.
     void refreshEngine();
+    // A recording the phone was still writing when this chat box was made (the app reloaded) is closed and kept, not dismissed.
+    await GhostexNative.dictationRecordStop(false).catch(() => null);
     // Recordings an earlier run could not hand over go now, off the path of this one.
     void sendUnsent(machine);
     const started = await startRecording((message) => {
@@ -256,8 +349,10 @@ export function useDictation(
       callbacks.current.onError(started.error);
       return;
     }
+    recordingId.current = started.id;
     if (current.cancelled) {
       const recording = await stopRecording(true);
+      recordingId.current = null;
       if (recording !== null)
         void saveAndTranscribe(
           machine,
@@ -278,35 +373,56 @@ export function useDictation(
     else if (phaseRef.current === 'idle' || phaseRef.current === 'failed') await start();
   }, [start, stop]);
 
-  /** ✕: a recording stops and is kept as dismissed; a transcription is dismissed; a failure row goes away. */
+  /** Sets a phone recording aside as dismissed: the computer keeps it (Dictation history) once it can be sent. */
+  const dismissKeptLocal = useCallback(
+    async (local: LocalDictation) => {
+      if (machine === null) return;
+      const dismissed = await dismissLocal(local);
+      void saveAndTranscribe(
+        machine,
+        { kind: 'local', recording: dismissed },
+        () => true,
+        () => undefined,
+      );
+    },
+    [machine],
+  );
+
+  /** ✕: a recording stops and is kept as dismissed; a transcription is dismissed; a failure or waiting recording is set aside the same way. */
   const cancel = useCallback(async () => {
     const current = run.current;
     const was = phaseRef.current;
+    const failed = failure;
+    const offered = waiting;
     current.cancelled = true;
     unwatch.current?.();
     unwatch.current = null;
     setPhase('idle');
     setFailure(null);
+    setWaiting(null);
     if (machine === null) return;
     if (was === 'recording') {
       const recording = await stopRecording(true);
-      if (recording !== null) {
-        const dismissed = await dismissLocal(recording);
-        void saveAndTranscribe(
-          machine,
-          { kind: 'local', recording: dismissed },
-          () => true,
-          () => undefined,
-        );
-      }
+      recordingId.current = null;
+      if (recording !== null) await dismissKeptLocal(recording);
     } else if ((was === 'transcribing' || was === 'polishing') && current.serverId !== null) {
       void dismissDictation(machine, current.serverId);
+      void forgetRecording(current.serverId);
+    } else if (was === 'failed' && failed !== null) {
+      if (failed.kept.kind === 'local') await dismissKeptLocal(failed.kept.recording);
+      else {
+        void dismissDictation(machine, failed.kept.id);
+        void forgetRecording(failed.kept.id);
+      }
+    } else if (offered !== null) {
+      await dismissKeptLocal(offered);
     }
-  }, [machine]);
+  }, [machine, failure, waiting, dismissKeptLocal]);
 
   const retry = useCallback(async () => {
     if (failure !== null) await transcribeKept(failure.kept);
-  }, [failure, transcribeKept]);
+    else if (waiting !== null) await transcribeKept({ kind: 'local', recording: waiting });
+  }, [failure, waiting, transcribeKept]);
 
   const transcribePrevious = useCallback(async () => {
     if (phaseRef.current !== 'idle' && phaseRef.current !== 'failed') return;
@@ -320,6 +436,20 @@ export function useDictation(
     await skipDictationPolish(machine, id);
   }, [machine]);
 
+  /** The recording the row is about, when this phone has its audio (for Share). */
+  const local: LocalDictation | null =
+    phase === 'failed' && failure?.kept.kind === 'local' ? failure.kept.recording : phase === 'idle' ? waiting : null;
+
+  /** Share: the recording's audio file, to save it or send it somewhere else (iPhone). */
+  const share = useCallback(async () => {
+    if (local === null) return;
+    try {
+      await Share.share({ url: `file://${local.path}`, title: 'Dictation recording' });
+    } catch {
+      callbacks.current.onError("Couldn't share the recording.");
+    }
+  }, [local]);
+
   const fix: DictationFix | null =
     failure !== null && failure.code !== null && HEX_CODES.has(failure.code)
       ? { kind: 'settings', label: 'Set up Hex' }
@@ -329,11 +459,18 @@ export function useDictation(
   /** What Transcribe previous would take, asked fresh (for the long-press menu). */
   const previous = useCallback(async () => (machine === null ? null : latestUntranscribed(machine)), [machine]);
 
+  const shownPhase: DictationPhase = phase === 'idle' && waiting !== null ? 'waiting' : phase;
   return {
     available,
-    phase,
+    phase: shownPhase,
     listening: phase === 'recording' || phase === 'starting',
     failure: failureText,
+    /** The computer could not be reached; the row says it goes again on its own. */
+    retrying: retryable,
+    /** How long the recording offered in the row is. */
+    waitingMs: shownPhase === 'waiting' ? (waiting?.durationMs ?? 0) : 0,
+    /** Share shows for a recording this phone has (iPhone; Android's share sheet takes no files from here). */
+    canShare: SHARE_AUDIO && local !== null,
     elapsedMs: phase === 'recording' ? Math.max(0, now - startedAt) : 0,
     /** What will transcribe ("Hex, Parakeet v3"), or null when the computer doesn't say. */
     engine,
@@ -341,6 +478,7 @@ export function useDictation(
     toggle,
     cancel,
     retry,
+    share,
     transcribePrevious,
     previous,
     skipPolish,

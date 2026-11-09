@@ -3,7 +3,10 @@
  * `native_chat/dictation.rs`): "Recording 0:07" while the microphone records, "Transcribing…"
  * after Stop, "Polishing…" with Skip while AI polish runs, or why the transcription failed with
  * Transcribe again (and Set up Hex when Hex on the computer isn't ready). Each line names what
- * transcribes ("Hex, Parakeet v3"). The ✕ cancels; the recording is kept either way.
+ * transcribes ("Hex, Parakeet v3"). The ✕ cancels; the recording is kept either way. A send the
+ * computer never answered says "Waiting for your computer…" (it goes again on its own), and a
+ * recording still on the phone without its words shows as "Recording not transcribed" with
+ * Transcribe; both offer Share on the iPhone, so the audio can be saved elsewhere.
  */
 
 import { Pressable, Text, View } from 'react-native';
@@ -25,6 +28,8 @@ export function dictationLabel(phase: DictationPhase, elapsedMs: number, engine:
       return 'Polishing with AI…';
     case 'failed':
       return 'Transcription failed.';
+    case 'waiting':
+      return `Recording not transcribed · ${dictationClock(elapsedMs)}`;
     case 'idle':
       return '';
   }
@@ -40,8 +45,11 @@ export function DictationBar({
   onRetry,
   onSkip,
   onFix,
+  retrying = false,
+  onShare,
 }: {
   phase: DictationPhase;
+  /** The recording's clock (recording), or its length (waiting). */
   elapsedMs: number;
   failure: string | null;
   engine: string | null;
@@ -50,12 +58,24 @@ export function DictationBar({
   onRetry: () => void;
   onSkip: () => void;
   onFix: () => void;
+  /** The computer never answered: the recording goes again on its own. */
+  retrying?: boolean;
+  /** Shares the recording's audio; absent when this phone can't. */
+  onShare?: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   if (phase === 'idle') return null;
   const failed = phase === 'failed';
-  const label = dictationLabel(phase, elapsedMs, engine);
+  const waiting = phase === 'waiting';
+  const label = failed && retrying ? 'Waiting for your computer…' : dictationLabel(phase, elapsedMs, engine);
+  const detail = failed && failure
+    ? retrying
+      ? `${failure} The recording is kept on this phone and goes again on its own.`
+      : `${failure} Your recording is kept.`
+    : waiting
+      ? 'It is kept on this phone until its words are in a chat.'
+      : null;
   const button = (text: string, onPress: () => void) => (
     <Pressable
       accessibilityRole="button"
@@ -70,15 +90,17 @@ export function DictationBar({
       {phase === 'recording' ? <View style={styles.dot} /> : null}
       <View style={styles.texts}>
         <Text style={[styles.text, failed ? styles.failed : null]}>{label}</Text>
-        {failed && failure ? <Text style={styles.detail}>{`${failure} Your recording is kept.`}</Text> : null}
+        {detail !== null ? <Text style={styles.detail}>{detail}</Text> : null}
       </View>
       {phase === 'polishing' ? button('Skip', onSkip) : null}
       {failed && fix !== null ? button(fix.label, onFix) : null}
       {failed && fix === null ? button('Transcribe again', onRetry) : null}
+      {waiting ? button('Transcribe', onRetry) : null}
+      {(failed || waiting) && onShare !== undefined ? button('Share', onShare) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          failed ? 'Dismiss (the recording is kept)' : 'Cancel (the recording is kept)'
+          failed || waiting ? 'Dismiss (the recording is kept)' : 'Cancel (the recording is kept)'
         }
         hitSlop={8}
         onPress={onCancel}

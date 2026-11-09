@@ -701,8 +701,10 @@ export function NativeComposer({
           {document?.runLocation ? <RunLocationRow row={document.runLocation} dispatch={dispatch} /> : null}
           <DictationBar
             phase={dictation.phase}
-            elapsedMs={dictation.elapsedMs}
+            elapsedMs={dictation.phase === 'waiting' ? dictation.waitingMs : dictation.elapsedMs}
             failure={dictation.failure}
+            retrying={dictation.retrying}
+            onShare={dictation.canShare ? () => void dictation.share() : undefined}
             engine={dictation.engine?.label ?? null}
             fix={dictation.fix}
             onCancel={() => void dictation.cancel()}

@@ -3,8 +3,11 @@
  * first (`GhostexVoiceRecorder.kt` / `.swift`), and only after Stop is that file handed to the computer's
  * gxserver, which keeps it and transcribes it with xAI using the key kept on the computer
  * (`/api/saveDictationRecording`, `/api/transcribeDictation`). The phone deletes its copy only once
- * the computer has all of it, so a dropped link, a refused key or an empty xAI account never loses
- * what was said: the recording stays and Transcribe again or Transcribe previous sends it again.
+ * its words are in the chat box (or nothing was heard, or the person dismissed it), so a dropped link,
+ * a refused key, Hex being closed or leaving the chat never loses what was said: the recording stays
+ * on the phone, goes again on its own when the computer is back, and the chat box offers it until then.
+ *
+ * CDXC:VoiceMode 2026-11-09 WHY: A user: "most of the time I record, and it fails and my audio does not get saved properly ... not saving my audio is killer". The phone forgot its copy as soon as the computer had the file, a failed send needed a tap on a row that vanished when the chat closed, and leaving the chat while recording marked the recording dismissed. Sending is idempotent by recording id (`save_piece` and `transcribe` in server/src/voice_agent/), so the phone re-sends and re-asks freely.
  *
  * CDXC:VoiceMode 2026-10-20 SEE-ALSO: the user's decision is in the computer's `server/src/voice_agent/recordings.rs` and `apps/desktop/src/app/voice_agent/dictation.rs`; the desktop records with `recorder.rs`.
  */
@@ -38,11 +41,19 @@ export type ServerDictation = {
 /** Where a recording without text is: on the computer, or still only on the phone. */
 export type Kept = { kind: 'server'; id: string } | { kind: 'local'; recording: LocalDictation };
 
-/** What a transcription came to. */
+/**
+ * What a transcription came to. `id` is the recording's (the phone's id is the computer's too).
+ * A failure with `code` null never got an answer from the computer (a dropped link): sending again later can fix it.
+ */
 export type Transcription =
-  | { kind: 'text'; text: string }
-  | { kind: 'nothing'; message: string }
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'nothing'; id: string; message: string }
   | { kind: 'failed'; kept: Kept; message: string; code: string | null };
+
+/** Recordings a transcription is working on now; the chat box doesn't offer them as waiting. */
+const handling = new Set<string>();
+/** Recordings whose words are in or that were dismissed, while the phone's copy is still being put away. */
+const settled = new Set<string>();
 
 /** Whether the computer's gxserver can dictate (it lists the `voiceAgent` capability). */
 export function dictationSupported(machine: MachineConnectionTarget | null): boolean {
@@ -109,45 +120,67 @@ export async function stopRecording(dismissed: boolean): Promise<LocalDictation 
   }
 }
 
-/** Hands a phone recording to the computer in pieces; the phone's copy goes once it has all of it. */
+/**
+ * Hands a phone recording to the computer in pieces and answers what the computer keeps. The first
+ * ask carries no audio: a computer that already has the recording answers with it at once, so sending
+ * again costs nothing. The phone's copy stays (`forgetRecording` removes it).
+ */
 async function upload(
   machine: MachineConnectionTarget,
   recording: LocalDictation,
-): Promise<{ id: string } | { error: string }> {
+): Promise<{ dictation: ServerDictation } | { error: string }> {
+  const finished = {
+    createdAt: recording.createdAt,
+    durationMs: recording.durationMs,
+    client: 'phone',
+    dismissed: recording.dismissed,
+    language: deviceLanguage(),
+  };
+  const probe = await rpc(machine, 'saveDictationRecording', { id: recording.id, offset: 0, chunk: '', done: false, ...finished }, UPLOAD_TIMEOUT_MS);
+  if ('error' in probe) return probe;
+  const known = probe.result.dictation as ServerDictation | undefined;
+  if (known) return { dictation: known };
   let offset = 0;
   for (;;) {
-    const chunk = await GhostexNative.dictationReadPiece(recording.path, offset, PIECE_BYTES);
+    let chunk: string;
+    try {
+      chunk = await GhostexNative.dictationReadPiece(recording.path, offset, PIECE_BYTES);
+    } catch {
+      return { error: "The recording can't be read on this phone anymore" };
+    }
     const end = offset + Math.floor((chunk.length * 3) / 4) - (chunk.endsWith('==') ? 2 : chunk.endsWith('=') ? 1 : 0);
     const done = end >= recording.bytes;
-    const answer = await rpc(
-      machine,
-      'saveDictationRecording',
-      {
-        id: recording.id,
-        offset,
-        chunk,
-        done,
-        createdAt: recording.createdAt,
-        durationMs: recording.durationMs,
-        client: 'phone',
-        dismissed: recording.dismissed,
-        language: deviceLanguage(),
-      },
-      UPLOAD_TIMEOUT_MS,
-    );
+    const answer = await rpc(machine, 'saveDictationRecording', { id: recording.id, offset, chunk, done, ...finished }, UPLOAD_TIMEOUT_MS);
     if ('error' in answer) return answer;
     const dictation = answer.result.dictation as ServerDictation | undefined;
-    if (dictation) {
-      await GhostexNative.dictationForget(recording.path).catch(() => undefined);
-      return { id: dictation.id };
-    }
+    if (dictation) return { dictation };
     const received = typeof answer.result.received === 'number' ? answer.result.received : end;
     if (done && received >= recording.bytes) return { error: "Ghostex on your computer didn't confirm the recording." };
     offset = Math.min(received, recording.bytes);
   }
 }
 
-/** Sends every phone recording the computer never confirmed. */
+/** The phone's own copy of recording `id`, if it still has one. */
+export async function localRecording(id: string): Promise<LocalDictation | null> {
+  try {
+    return (await GhostexNative.dictationUnsent()).find((recording) => recording.id === id) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The words are in the chat box (or nothing was heard): the phone's copy of `id` goes; the computer keeps its own. */
+export async function forgetRecording(id: string): Promise<void> {
+  settled.add(id);
+  const recording = await localRecording(id);
+  if (recording !== null) await GhostexNative.dictationForget(recording.path).catch(() => undefined);
+}
+
+/**
+ * Hands the computer every phone recording it may not have yet. A dismissed one is the computer's to
+ * keep (Dictation history) and leaves the phone once it is there; one still waiting for its words
+ * stays on the phone until they are in a chat box.
+ */
 export async function sendUnsent(machine: MachineConnectionTarget): Promise<void> {
   let pending: LocalDictation[] = [];
   try {
@@ -155,20 +188,40 @@ export async function sendUnsent(machine: MachineConnectionTarget): Promise<void
   } catch {
     return;
   }
-  for (const recording of pending) await upload(machine, recording);
+  for (const recording of pending) {
+    if (handling.has(recording.id)) continue;
+    const sent = await upload(machine, recording);
+    if ('error' in sent || !recording.dismissed) continue;
+    if (sent.dictation.status !== 'dismissed' && sent.dictation.status !== 'transcribed') {
+      await rpc(machine, 'dismissDictation', { id: recording.id }, SHORT_TIMEOUT_MS);
+    }
+    await GhostexNative.dictationForget(recording.path).catch(() => undefined);
+  }
 }
 
-function outcome(answer: { result: Record<string, unknown> } | { error: string }, kept: Kept): Transcription {
+/** Recordings on this phone still waiting for their words (not dismissed, not being worked on), newest first. */
+export async function waitingRecordings(): Promise<LocalDictation[]> {
+  try {
+    const all = await GhostexNative.dictationUnsent();
+    return all
+      .filter((recording) => !recording.dismissed && !handling.has(recording.id) && !settled.has(recording.id))
+      .reverse();
+  } catch {
+    return [];
+  }
+}
+
+function outcome(answer: { result: Record<string, unknown> } | { error: string }, kept: Kept, id: string): Transcription {
   if ('error' in answer) return { kind: 'failed', kept, message: answer.error, code: null };
   const dictation = answer.result.dictation as ServerDictation | undefined;
   if (dictation?.status === 'transcribed') {
     const text = (dictation.text ?? '').trim();
     return text.length > 0
-      ? { kind: 'text', text }
+      ? { kind: 'text', id: dictation.id || id, text }
       : {
           kind: 'nothing',
-          message:
-            'No words were heard in the recording. It is kept on your computer in Settings › Extensions › Voice agent › Dictation history.',
+          id: dictation.id || id,
+          message: 'No words were heard in the recording. It is kept on your computer in Settings › Dictation › Dictation history.',
         };
   }
   return {
@@ -190,33 +243,37 @@ export async function saveAndTranscribe(
   isCancelled: () => boolean,
   onServerId: (id: string) => void,
 ): Promise<Transcription | null> {
-  let id: string;
-  if (kept.kind === 'local') {
-    const recording = isCancelled() ? { ...kept.recording, dismissed: true } : kept.recording;
-    const saved = await upload(machine, recording);
-    if ('error' in saved) {
-      return {
-        kind: 'failed',
-        kept,
-        message: `Ghostex on your computer couldn't take the recording (${saved.error.replace(/\.$/, '')}). It is kept on this phone; tap Transcribe again.`,
-        code: null,
-      };
+  const id = kept.kind === 'local' ? kept.recording.id : kept.id;
+  handling.add(id);
+  try {
+    if (kept.kind === 'local') {
+      const recording = isCancelled() ? { ...kept.recording, dismissed: true } : kept.recording;
+      const saved = await upload(machine, recording);
+      if ('error' in saved) {
+        return {
+          kind: 'failed',
+          kept,
+          message: `Couldn't send the recording to your computer (${saved.error.replace(/\.$/, '')}).`,
+          code: null,
+        };
+      }
     }
-    id = saved.id;
-  } else {
-    id = kept.id;
+    onServerId(id);
+    if (isCancelled()) {
+      const dismissed = await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
+      // The computer keeps it as dismissed (Dictation history); the phone's copy is no longer needed.
+      if (!('error' in dismissed) && kept.kind === 'local') await GhostexNative.dictationForget(kept.recording.path).catch(() => undefined);
+      return null;
+    }
+    const answer = await rpc(machine, 'transcribeDictation', { id }, TRANSCRIBE_TIMEOUT_MS);
+    if (isCancelled()) {
+      await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
+      return null;
+    }
+    return outcome(answer, kept, id);
+  } finally {
+    handling.delete(id);
   }
-  onServerId(id);
-  if (isCancelled()) {
-    await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
-    return null;
-  }
-  const answer = await rpc(machine, 'transcribeDictation', { id }, TRANSCRIBE_TIMEOUT_MS);
-  if (isCancelled()) {
-    await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
-    return null;
-  }
-  return outcome(answer, { kind: 'server', id });
 }
 
 /** Transcribe previous: the newest recording without text, from any device. */
@@ -231,8 +288,8 @@ export async function transcribeLatest(
     if (id) await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
     return null;
   }
-  if ('error' in answer) return { kind: 'nothing', message: answer.error };
-  return outcome(answer, { kind: 'server', id: id ?? '' });
+  if ('error' in answer) return { kind: 'nothing', id: id ?? '', message: answer.error };
+  return outcome(answer, { kind: 'server', id: id ?? '' }, id ?? '');
 }
 
 /** How often the phone looks whether a transcription has reached AI polish. */
@@ -275,6 +332,7 @@ export async function dismissDictation(machine: MachineConnectionTarget, id: str
 
 /** Marks a phone recording dismissed before it reaches the computer. */
 export async function dismissLocal(recording: LocalDictation): Promise<LocalDictation> {
+  settled.add(recording.id);
   await GhostexNative.dictationDismissLocal(recording.path).catch(() => undefined);
   return { ...recording, dismissed: true };
 }
