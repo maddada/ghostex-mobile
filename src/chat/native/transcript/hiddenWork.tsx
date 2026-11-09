@@ -52,20 +52,25 @@ export function HiddenGroupedWorkRow({ item }: { item: GroupedWorkItem }) {
       <DeferredNotice key={owner} id={owner} deferred={work} error={flags.deferredWork[owner]?.error ?? ''} />
     ));
   const hasFiles = arr(item.files).length > 0;
+  // The steps are drawn inside the carrier reply, and the core gives the reply's own calls its id
+  // (`grouped_work::reply_calls`): with the work still in context that row would take the button and
+  // draw these steps again inside themselves, without end. Nothing under the steps carries the work.
   const steps = open ? (
-    <FoldPlaceProvider value={QUIET_STEPS}>
-      <QuietSteps>
-        {notices}
-        {item.work.map((message) => (
-          <MessageRow key={message.id} message={message} />
-        ))}
-        {hasFiles ? (
-          <View style={styles.files}>
-            <FileChangeStack stackId={key} files={item.files} card={item.filesCard} />
-          </View>
-        ) : null}
-      </QuietSteps>
-    </FoldPlaceProvider>
+    <HiddenWorkProvider value={null}>
+      <FoldPlaceProvider value={QUIET_STEPS}>
+        <QuietSteps>
+          {notices}
+          {item.work.map((message) => (
+            <MessageRow key={message.id} message={message} />
+          ))}
+          {hasFiles ? (
+            <View style={styles.files}>
+              <FileChangeStack stackId={key} files={item.files} card={item.filesCard} />
+            </View>
+          ) : null}
+        </QuietSteps>
+      </FoldPlaceProvider>
+    </HiddenWorkProvider>
   ) : null;
   const work: HiddenWork = {
     carrier,
