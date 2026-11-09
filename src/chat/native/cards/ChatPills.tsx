@@ -437,10 +437,49 @@ function QuestionsSection({
   );
 }
 
-/** One panel pill in the Worked row's chip look (`TranscriptItemRow.tsx` `chip`): icon, label, count. A tap opens its sheet. */
-export function Pill({ pill, open, onPress }: { pill: ChatPill; open: boolean; onPress: () => void }) {
+/** The glyph of a panel pill (desktop `chat_pills.rs` `pill_icon`). */
+function pillGlyph(id: string) {
+  return id === 'tasks'
+    ? 'list-check'
+    : id === 'background'
+      ? 'terminal-2'
+      : id === 'resources'
+        ? 'stack'
+        : id === 'stashed'
+          ? 'stack-push'
+          : id === 'sideChats'
+            ? 'messages'
+            : id === 'board'
+              ? 'layout-board-split'
+              : id === BLOCKED_PILL
+                ? 'circle-minus'
+                : id === 'approvals'
+                  ? 'shield-check'
+                  : id === INTRO_PILL
+                    ? 'bulb'
+                    : id === 'autopilot'
+                      ? 'plane'
+                      : 'users';
+}
+
+/**
+ * One panel pill in the Worked row's chip look (`TranscriptItemRow.tsx` `chip`): icon, label, count. A tap opens its sheet.
+ * `collapsed` drops the label when the row has no room for it (`PillsStrip.tsx`): the glyph and the count or dots stay.
+ */
+export function Pill({
+  pill,
+  open,
+  onPress,
+  collapsed = false,
+}: {
+  pill: ChatPill;
+  open: boolean;
+  onPress: () => void;
+  collapsed?: boolean;
+}) {
   const styles = useStyles();
   const P = useTranscriptTheme();
+  const label = collapsed ? '' : pill.label;
   return (
     <Pressable
       accessibilityRole={pill.switch !== undefined ? 'switch' : 'button'}
@@ -448,38 +487,60 @@ export function Pill({ pill, open, onPress }: { pill: ChatPill; open: boolean; o
       accessibilityState={pill.switch !== undefined ? { checked: pill.switch } : { expanded: open }}
       onPress={onPress}
       hitSlop={4}
+      style={({ pressed }) => [
+        styles.pill,
+        label.length === 0 && styles.pillNoLabel,
+        (pressed || open) && styles.pillPressed,
+      ]}
+    >
+      <Glyph name={pillGlyph(pill.id)} size={14} color={P.cardMuted} />
+      {/* Blocked has no word, like the ? pill: its glyph and red dot (gx-chat-core `blocked_pill`). */}
+      {label.length > 0 ? <Text style={styles.label}>{label}</Text> : null}
+      {/* Autopilot on: a green dot after its label (desktop chat_pills.rs `AUTOPILOT_ON_COLOR`). */}
+      {pill.switch === true ? <View style={styles.switchOnDot} /> : null}
+      {(pill.dots ?? []).length > 0 ? (
+        <InlineDots dots={pill.dots ?? []} />
+      ) : pill.count.length > 0 ? (
+        <Text style={styles.count}>{pill.count}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** The "+N" pill (desktop `strip_overflow.rs`): the pills the row has no room for wait in its sheet. */
+export function OverflowPill({ count, open, onPress }: { count: number; open: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${count} more pills`}
+      accessibilityState={{ expanded: open }}
+      onPress={onPress}
+      hitSlop={4}
       style={({ pressed }) => [styles.pill, (pressed || open) && styles.pillPressed]}
     >
-      <Glyph
-        name={
-          pill.id === 'tasks'
-            ? 'list-check'
-            : pill.id === 'background'
-              ? 'terminal-2'
-              : pill.id === 'resources'
-                ? 'stack'
-                : pill.id === 'stashed'
-                  ? 'stack-push'
-                  : pill.id === 'sideChats'
-                    ? 'messages'
-                    : pill.id === 'board'
-                      ? 'layout-board-split'
-                      : pill.id === BLOCKED_PILL
-                        ? 'circle-minus'
-                        : pill.id === 'approvals'
-                          ? 'shield-check'
-                          : pill.id === INTRO_PILL
-                            ? 'bulb'
-                            : pill.id === 'autopilot'
-                              ? 'plane'
-                              : 'users'
-        }
-        size={14}
-        color={P.cardMuted}
-      />
-      {/* Blocked has no word, like the ? pill: its glyph and red dot (gx-chat-core `blocked_pill`). */}
-      {pill.label.length > 0 ? <Text style={styles.label}>{pill.label}</Text> : null}
-      {/* Autopilot on: a green dot after its label (desktop chat_pills.rs `AUTOPILOT_ON_COLOR`). */}
+      <Glyph name="dots" size={14} color={P.cardMuted} />
+      <Text style={styles.count}>{`+${count}`}</Text>
+    </Pressable>
+  );
+}
+
+/** One row of the "+N" sheet: the hidden pill's glyph, name and count or dots; a tap does what the pill would. */
+export function OverflowPillRow({ pill, onPress }: { pill: ChatPill; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={pill.ariaLabel}
+      onPress={onPress}
+      style={({ pressed }) => [styles.overflowRow, pressed && styles.pillPressed]}
+    >
+      <Glyph name={pillGlyph(pill.id)} size={16} color={P.cardMuted} />
+      <Text style={styles.overflowName} numberOfLines={1}>
+        {pill.label.length > 0 ? pill.label : pill.ariaLabel}
+      </Text>
       {pill.switch === true ? <View style={styles.switchOnDot} /> : null}
       {(pill.dots ?? []).length > 0 ? (
         <InlineDots dots={pill.dots ?? []} />
@@ -703,6 +764,24 @@ const useStyles = themedStyles((P) => ({
   },
   pillPressed: {
     backgroundColor: P.ink(0.08),
+  },
+  /** A pill with its label dropped: a pixel less each side, as the desktop's. */
+  pillNoLabel: {
+    paddingHorizontal: PILL_PADDING_X - 1,
+  },
+  overflowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  overflowName: {
+    flex: 1,
+    minWidth: 0,
+    color: P.foreground,
+    fontSize: 15,
   },
   linksPill: {
     gap: 4,

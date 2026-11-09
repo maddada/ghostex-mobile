@@ -8,6 +8,8 @@ import Svg, { Path } from 'react-native-svg';
 type GlyphSpec = { paths: string[]; strokeWidth?: number; filled?: boolean };
 
 const GLYPHS = {
+  /** The "+N" pill and its sheet (desktop `titlebar/dots.svg`). */
+  dots: { paths: ['M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0'] },
   'arrow-down': { paths: ['M12 5l0 14', 'M18 13l-6 6', 'M6 13l6 6'] },
   'question-mark': {
     paths: ['M8.5 8.5a3.5 3.5 0 1 1 4.9 3.2c-.8 .4 -1.4 1.1 -1.4 2v.3', 'M12 18.5v.01'],
