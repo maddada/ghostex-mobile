@@ -35,7 +35,7 @@ import { highlightLabel, useRowFind } from './searchHighlight';
 import { useDisclosure } from './state';
 import { InterAgentCard, SentAgentMessageCards } from './AgentMessageCards';
 import { WorkflowCards } from './WorkflowCard';
-import { GbotCards } from './GbotCard';
+import { GbotCards, shownGbotCards } from './GbotCard';
 import { estimatedLines, StartupDelivery, SuppressedRow, SystemCard } from './SystemRows';
 import { MESSAGE_PART_GAP, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
@@ -320,7 +320,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const callsCard = filesCard || (!toolsRendered && toolCard);
   const questionCards = !inWorkFold && arr(message.questions).length > 0;
   const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;
-  const gbotCards = !inWorkFold && arr(message.gbotCards).length > 0;
+  const gbotCards = !inWorkFold && shownGbotCards(message.gbotCards, flags.gbotCardStates).length > 0;
   // Agent work Reduced or Quiet: the edit line comes right after the work line, with no gap
   // between them (`quietWork.tsx`, desktop `transcript.rs`).
   const quietOrder = quietStyle(flags.chatLook) && !toolsRendered && !toolCard;

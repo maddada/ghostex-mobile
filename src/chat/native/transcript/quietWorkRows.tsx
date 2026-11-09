@@ -31,7 +31,7 @@ import {
   QuietWorkLine,
 } from './quietWork';
 import { useDisclosure } from './state';
-import { GbotCards } from './GbotCard';
+import { GbotCards, shownGbotCards } from './GbotCard';
 import { WorkflowCards } from './WorkflowCard';
 
 /** The space between the parts of a finished turn's tail (desktop `PART_GAP` in completed_work_row.rs). */
@@ -129,7 +129,7 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
  * whatever it is (Agent work Quiet draws no line above it, `hiddenWork.tsx`).
  */
 export function QuietTail({ tails, firstGap }: { tails: readonly WorkTail[]; firstGap?: number }) {
-  const { workflowCards } = useTranscriptFlags();
+  const { workflowCards, gbotCardStates } = useTranscriptFlags();
   const rowGap = useRowGap();
   const parts: { key: string; node: ReactNode; card: boolean }[] = [];
   const row = (message: ProjectedMessage) => ({
@@ -149,7 +149,7 @@ export function QuietTail({ tails, firstGap }: { tails: readonly WorkTail[]; fir
     if (arr(tail.sentMessages).some((sent) => obj(obj(sent)?.card) !== null)) {
       parts.push({ key: `sent:${tail.id}`, node: <SentAgentMessageCards cards={tail.sentMessages} />, card: true });
     }
-    if (arr(tail.gbotCards).length > 0) {
+    if (shownGbotCards(tail.gbotCards, gbotCardStates).length > 0) {
       parts.push({ key: `gbot:${tail.id}`, node: <GbotCards cards={tail.gbotCards} />, card: true });
     }
     if (arr(tail.workflows).some((id) => typeof id === 'string' && obj(workflowCards[id]) !== null)) {

@@ -31,11 +31,23 @@ import { themedStyles } from './theme';
 /** Change ids this app already asked the core about, so a redraw never asks again. */
 const asked = new Set<string>();
 
+/**
+ * The cards of `cards` that are drawn: each with a change id, less those whose state says GBots are off (core
+ * `gbot_cards.rs`, CDXC:GBots 2026-11-09: hidden while GBots are off).
+ */
+export function shownGbotCards(cards: Json | undefined, states: { [changeId: string]: Json }): JsonRecord[] {
+  return arr(cards)
+    .map(obj)
+    .filter(
+      (card): card is JsonRecord =>
+        card !== null && str(card, 'changeId').length > 0 && !isTrue(states[str(card, 'changeId')], 'off'),
+    );
+}
+
 /** The "GBot added" cards of one message or finished turn. */
 export function GbotCards({ cards }: { cards: Json | undefined }) {
-  const rows = arr(cards)
-    .map(obj)
-    .filter((card): card is JsonRecord => card !== null && str(card, 'changeId').length > 0);
+  const { gbotCardStates } = useTranscriptFlags();
+  const rows = shownGbotCards(cards, gbotCardStates);
   if (rows.length === 0) return null;
   return (
     <View style={{ gap: 8 }}>
