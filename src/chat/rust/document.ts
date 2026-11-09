@@ -445,6 +445,8 @@ export type ProjectedMessage = {
   toolFold?: Json;
   /** Whether every tool row shows without a "show more". */
   toolsShowAllRows?: boolean;
+  /** Agent work Quiet: the waiting call's quiet line under kept words, keyed apart from their `tools:<id>` chevron. */
+  toolsLineKey?: string;
   /** Inside a turn fold: the text owns none of its calls, which follow it at the same level. */
   toolsFlat?: boolean;
   /** A message between agents or an answers card folded into its finished turn's row
@@ -1207,6 +1209,8 @@ export type WorkingCard = {
   /** A tool label in runs for the two-row top row, file paths shortened (`dim` folders); empty
    * otherwise (gx-chat-core `extras/working_card_label.rs`). Absent from an older core. */
   labelParts?: { text: string; dim?: boolean }[];
+  /** Status line in the chat draws this line as the transcript's last row (the transcript has rows); absent, the capsule shows. */
+  inTranscript?: boolean;
 };
 
 export type WorkingStrip = {

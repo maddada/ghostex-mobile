@@ -29,6 +29,7 @@ import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosu
 import { cardEdge, ReadImageStrip } from './Images';
 import { CompletedFilesFold } from './FileChanges';
 import { gapAbove } from './cardSpacing';
+import { useInnerGap, useRowGap } from './messageSpacing';
 import { arr, obj } from './json';
 import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
@@ -49,8 +50,10 @@ import { GroupedWorkRow } from './quietWorkRows';
 import { StatPills } from './statPills';
 import { HiddenGroupedWorkRow } from './hiddenWork';
 
-/** The space between the parts of a finished turn (desktop `PART_GAP` in completed_work_row.rs). */
+/** The space between the parts of a finished turn at Message spacing Default (desktop `PART_GAP` in completed_work_row.rs); Compact shrinks it (`innerGapOf`). */
 const COMPLETED_PART_GAP = 10;
+/** The space between a summary turn's parts at Message spacing Default (desktop `transcript.rs`). */
+const SUMMARY_PART_GAP = 8;
 const IN_WORK_FOLD = { inWorkFold: true, hideFileChanges: true };
 const HIDE_FILES = { inWorkFold: false, hideFileChanges: true };
 
@@ -95,8 +98,11 @@ function SummaryRow({ item }: { item: SummaryItem }) {
   const foldRows = (hasFinal ? [...(item.earlierReplies ?? []), item.final!] : item.work).filter(
     (message) => !content.has(message.id),
   );
+  // The gap between the turn's parts shrinks at Message spacing Compact (`messageSpacing.ts`).
+  const partGap = useInnerGap(SUMMARY_PART_GAP);
+  const column = [styles.column, partGap !== SUMMARY_PART_GAP && { gap: partGap }];
   return (
-    <View style={styles.column}>
+    <View style={column}>
       <SummaryTurnProvider value={true}>
         <MessageRow message={item.user} />
       {(item.outcome ?? []).map((message) => (
@@ -111,7 +117,7 @@ function SummaryRow({ item }: { item: SummaryItem }) {
           {/* The closed "Active work" fold keeps the pictures its rows read in view (gx-chat-core `read_images.rs`). */}
           {!open ? <ReadImageStrip images={item.readImages} inset={4} /> : null}
           {open ? (
-            <View style={styles.column}>
+            <View style={column}>
               {foldRows.map((message) => (
                 <MessageRow key={message.id} message={message} />
               ))}
@@ -147,10 +153,13 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
   // else comes between.
   const foldAbove = !open && (item.readImages ?? []).length === 0 && folded.kept.length === 0;
   const hasQuestions = arr(folded.tailQuestions).length > 0;
+  const hasSent = arr(folded.tailSent).some((sent) => obj(obj(sent)?.card) !== null);
+  const rowGap = useRowGap();
+  const partGap = useInnerGap(COMPLETED_PART_GAP);
   return (
-    <View style={styles.completedColumn}>
+    <View style={[styles.completedColumn, partGap !== COMPLETED_PART_GAP && { gap: partGap }]}>
       <WorkSummary item={item} open={open} onToggle={toggle} />
-      {open && foldsCards(folded) ? <FoldedCards split={folded} columnGap={COMPLETED_PART_GAP} /> : null}
+      {open && foldsCards(folded) ? <FoldedCards split={folded} columnGap={partGap} /> : null}
       {/* The turn's files fold shows only while its card is open, collapsed, right under the card
           (gx-chat-core `turn_files_fold`, where the user's decision is; desktop `completed_work_row.rs`).
           A closed card leaves the files to its "N files" pill. */}
@@ -181,7 +190,7 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
               const above = index > 0 ? item.work[index - 1] : undefined;
               const cardFirst =
                 obj(message.toolCard) !== null && (typeof message.text === 'string' ? message.text.trim() : '') === '';
-              const margin = gapAbove(above !== undefined && obj(above.toolCard) !== null, cardFirst, 8) - 8;
+              const margin = gapAbove(above !== undefined && obj(above.toolCard) !== null, cardFirst, 8, rowGap) - 8;
               return margin > 0 ? (
                 <View key={message.id} style={{ marginTop: margin }}>
                   <MessageRow message={message} />
@@ -197,17 +206,10 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
         {folded.kept.map((message) => (
           <MessageRow key={message.id} message={message} />
         ))}
-        <QuestionExchangeCards
-          exchanges={folded.tailQuestions}
-          aboveIsCard={foldAbove}
-          columnGap={COMPLETED_PART_GAP}
-        />
-        <SentAgentMessageCards
-          cards={folded.tailSent}
-          aboveIsCard={foldAbove || hasQuestions}
-          columnGap={COMPLETED_PART_GAP}
-        />
-        <GbotCards cards={item.gbotCards} />
+        <QuestionExchangeCards exchanges={folded.tailQuestions} aboveIsCard={foldAbove} columnGap={partGap} />
+        <SentAgentMessageCards cards={folded.tailSent} aboveIsCard={foldAbove || hasQuestions} columnGap={partGap} />
+        {/* A stack of one-line cards too: a row gap under the card above it (desktop `spaced_tail`). */}
+        <GbotCards cards={item.gbotCards} aboveIsCard={foldAbove || hasQuestions || hasSent} columnGap={partGap} />
         <WorkflowCards ids={item.workflows} />
         {item.final !== undefined && item.final !== null ? <MessageRow message={item.final} /> : null}
       </FoldPlaceProvider>
@@ -252,7 +254,7 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
 }
 
 const styles = StyleSheet.create({
-  column: { gap: 8, minWidth: 0 },
+  column: { gap: SUMMARY_PART_GAP, minWidth: 0 },
   completedColumn: { gap: COMPLETED_PART_GAP, minWidth: 0 },
   // Every one-line card's height and padding (`singleLineCard.ts`).
   summary: {

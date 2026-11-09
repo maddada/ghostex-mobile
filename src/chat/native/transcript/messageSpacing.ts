@@ -2,8 +2,8 @@
  * Message spacing (`chatLook.spacing`, gx-chat-core `transcript/chat_look.rs`): at Compact the
  * rows sit 8pt apart instead of 16pt (and so do two one-line cards in a row, `cardSpacing.ts`), a
  * message keeps a 22pt footer row under it that always shows its tappable parts (the time, and the
- * work button under Agent work Quiet, `MessageActions.tsx`), and a quiet line sits closer to the
- * agent text above it. The message's other actions stay in its long-press menu. At Default nothing
+ * work button under Agent work Quiet, `MessageActions.tsx`), a quiet line sits closer to the
+ * agent text above it, and the gaps inside a row shrink by the same ratio (`innerGapOf`). The message's other actions stay in its long-press menu. At Default nothing
  * here changes a size.
  *
  * CDXC:SessionChat 2026-11-07 SEE-ALSO:
@@ -37,6 +37,20 @@ export function rowGapOf(look: ChatLook): number {
 /** This transcript's row gap (`rowGapOf`). */
 export function useRowGap(): number {
   return rowGapOf(useChatLook());
+}
+
+/**
+ * A gap inside a row (between a finished turn's parts, under a thinking, side question or status
+ * row), shrunk at Compact by the row gap's own ratio (16pt to 8pt): `gap` at Default (desktop
+ * `inner_gap`).
+ */
+export function innerGapOf(look: ChatLook, gap: number): number {
+  return compactSpacing(look) ? (gap * COMPACT_ROW_GAP) / ROW_GAP : gap;
+}
+
+/** This transcript's `innerGapOf(gap)`. */
+export function useInnerGap(gap: number): number {
+  return innerGapOf(useChatLook(), gap);
 }
 
 /** How far a quiet line under the agent's text is pulled up from the message's part gap: nothing at Default. */

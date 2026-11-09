@@ -18,6 +18,7 @@ import { Animated, Easing, Text, View } from 'react-native';
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { AgentMark } from './agentMark';
+import { chatLookOf } from '../transcript/context';
 import { themedStyles } from '../transcript/theme';
 import { ChatButton } from './primitives';
 
@@ -27,7 +28,7 @@ export function EmptyTranscript({ chat, document }: { chat: RustChat; document: 
   const stage =
     document === null ? 'indicator' : (document.loadingStage ?? (document.status == null ? 'indicator' : null));
   if (document === null || stage !== null) {
-    if (document?.transcriptSkeleton === true) return <TranscriptSkeleton />;
+    if (document?.transcriptSkeleton === true) return <TranscriptSkeleton document={document} />;
     const notice = document?.loadingNotice ?? null;
     return (
       <View style={styles.region}>
@@ -93,8 +94,20 @@ const SKELETON = {
   ],
 } as const;
 
-function TranscriptSkeleton() {
+/**
+ * The skeleton follows the chat look the way your messages do (desktop `transcript_skeleton`): Left
+ * aligned puts its bubbles on the left, Band draws them across the column, and Compact halves the
+ * gap between its rows. Before the first read carries `chatLook` it draws at Default.
+ */
+function TranscriptSkeleton({ document }: { document: ChatDocument }) {
   const styles = useStyles();
+  const look = chatLookOf(document);
+  const bubbleLook =
+    look.userStyle === 'band'
+      ? styles.skeletonBand
+      : look.messageLayout === 'left'
+        ? styles.skeletonBubbleLeft
+        : null;
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const half = SKELETON.pulseMs / 2;
@@ -109,10 +122,13 @@ function TranscriptSkeleton() {
     return () => loop.stop();
   }, [pulse]);
   return (
-    <Animated.View accessibilityLabel="Loading chat…" style={[styles.skeleton, { opacity: pulse }]}>
+    <Animated.View
+      accessibilityLabel="Loading chat…"
+      style={[styles.skeleton, look.spacing === 'compact' && styles.skeletonCompact, { opacity: pulse }]}
+    >
       {SKELETON.rows.map((row, index) =>
         row.user ? (
-          <View key={index} style={[styles.skeletonBubble, { width: `${row.widths[0] * 100}%` }]} />
+          <View key={index} style={[styles.skeletonBubble, { width: `${row.widths[0] * 100}%` }, bubbleLook]} />
         ) : (
           <View key={index} style={styles.skeletonLines}>
             {row.widths.map((width, line) => (
@@ -211,6 +227,17 @@ const useStyles = themedStyles((P) => ({
     height: SKELETON.bubbleHeight,
     borderRadius: SKELETON.bubbleRadius,
     backgroundColor: P.ink(SKELETON.tint),
+  },
+  skeletonCompact: {
+    gap: SKELETON.rowGap / 2,
+  },
+  skeletonBubbleLeft: {
+    alignSelf: 'flex-start',
+  },
+  skeletonBand: {
+    alignSelf: 'stretch',
+    width: '100%',
+    borderRadius: 8,
   },
   skeletonLines: {
     gap: SKELETON.barGap,

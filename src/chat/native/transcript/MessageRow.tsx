@@ -10,7 +10,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance 
 import type { ProjectedMessage } from '../../rust/document';
 import { ApiErrorCard, ApiErrorNote, QuestionExchangeCards } from '../cards';
 import { cardStackMargin } from './cardSpacing';
-import { quietStyle, useInSummaryTurn, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { quietStyle, useChatLook, useInSummaryTurn, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { WorkCardStack } from '../cards/WorkCards';
 import { Chevron, DisclosureBody, DisclosureHeading, LaneMarker, useFoldPlace } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
@@ -18,7 +18,7 @@ import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip, WithLoadingPictures } fro
 import { arr, obj, str } from './json';
 import { MessageLongPressContext } from './markdown/blockLongPress';
 import { messageMenuSelection } from './messageCopy';
-import { quietLineLift } from './messageSpacing';
+import { quietLineLift, useInnerGap, useRowGap } from './messageSpacing';
 import { ignoreHold, MESSAGE_TEXT_SELECTABLE, MessageSelection, messageMenuAccessibility } from './messageSelection';
 import { Markdown } from './markdown/Markdown';
 import {
@@ -46,6 +46,9 @@ import { LeftUserMessage, userStyleProse } from './userMessageLook';
 import { Glyph } from './icons';
 import { strengthenedText } from './textStrength';
 import { useHiddenWorkFor } from './hiddenWorkButton';
+
+/** The gap below an agent's thinking at Message spacing Default (desktop `THINKING_GAP`). */
+const THINKING_GAP = 13;
 
 /** React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`). */
 const THINKING_CAP = 288;
@@ -211,6 +214,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const { theme, workOpen, mutedThinking, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
+  const rowGap = useRowGap();
   const strengthened = (color: string) => strengthenedText(color, flags.chatTextStrength, theme.light);
   const { inWorkFold, hideFileChanges, quietSteps } = useFoldPlace();
   const id = message.id;
@@ -389,14 +393,16 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
         />
       ) : null}
       {gbotCards ? (
-        <View style={{ marginTop: cardStackMargin(callsCard || questionCards || sentCards, MESSAGE_PART_GAP) }}>
-          <GbotCards cards={message.gbotCards} />
-        </View>
+        <GbotCards
+          cards={message.gbotCards}
+          aboveIsCard={callsCard || questionCards || sentCards}
+          columnGap={MESSAGE_PART_GAP}
+        />
       ) : null}
       {!inWorkFold && arr(message.workflows).length > 0 ? (
         <View
           style={{
-            marginTop: cardStackMargin(callsCard || questionCards || sentCards || gbotCards, MESSAGE_PART_GAP),
+            marginTop: cardStackMargin(callsCard || questionCards || sentCards || gbotCards, MESSAGE_PART_GAP, rowGap),
           }}
         >
           <WorkflowCards ids={message.workflows} />
@@ -453,8 +459,10 @@ function ThinkingRow({ id, body, references }: { id: string; body: string; refer
   const [open, toggle] = useDisclosure(disclosures, `thinking:${id}`);
   const lane = thinkingTone(theme, mutedThinking);
   const capped = estimatedLines(body) > THINKING_CAP / PROSE_LINE;
+  // Message spacing Compact shrinks the gap under it like the row gap (`messageSpacing.ts`).
+  const gapBelow = useInnerGap(THINKING_GAP);
   return (
-    <View style={styles.thinking}>
+    <View style={[styles.thinking, gapBelow !== THINKING_GAP && { paddingBottom: gapBelow }]}>
       <LaneMarker color={lane} />
       <View style={styles.thinkingColumn}>
         <View style={capped && !open ? styles.capped : null}>
@@ -573,8 +581,12 @@ function ThinkingLine({ id, body, message }: { id: string; body: string; message
 /** A row the core has not projected yet: a skeleton of its role (`transcript-skeleton.json`). */
 function PendingRow({ user }: { user: boolean }) {
   const { theme } = useTranscriptEnv();
+  const look = useChatLook();
   const tint = theme.light ? 'rgba(39,39,42,0.12)' : 'rgba(252,252,252,0.12)';
-  if (user) return <View style={[styles.pendingBubble, { backgroundColor: tint }]} />;
+  // Your message's placeholder sits where the message will land (`userMessageLook.tsx`).
+  const bubbleLook =
+    look.userStyle === 'band' ? styles.pendingBand : look.messageLayout === 'left' ? styles.pendingBubbleLeft : null;
+  if (user) return <View style={[styles.pendingBubble, bubbleLook, { backgroundColor: tint }]} />;
   return (
     <View style={styles.pendingLines}>
       {[0.94, 0.88, 0.62].map((width, index) => (
@@ -594,7 +606,7 @@ const styles = StyleSheet.create({
   heading: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   headingBody: { flex: 1, minWidth: 0 },
   headingPress: { borderRadius: 4, paddingRight: 5 },
-  thinking: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingBottom: 13 },
+  thinking: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingBottom: THINKING_GAP },
   thinkingColumn: { flex: 1, minWidth: 0, gap: 4 },
   capped: { maxHeight: THINKING_CAP, overflow: 'hidden' },
   // The tool row's shape (`ToolRows.tsx`: ROW_PAD_X 8, TILE 22).
@@ -620,6 +632,8 @@ const styles = StyleSheet.create({
   showMore: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   showMoreText: { fontSize: PROSE_SIZE },
   pendingBubble: { alignSelf: 'flex-end', width: '42%', height: 60, borderRadius: 16 },
+  pendingBubbleLeft: { alignSelf: 'flex-start' },
+  pendingBand: { alignSelf: 'stretch', width: '100%', borderRadius: 8 },
   pendingLines: { gap: 12 },
   pendingBar: { height: 10, borderRadius: 5 },
 });

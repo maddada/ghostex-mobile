@@ -20,7 +20,7 @@ import { FileChangeStack } from './FileChanges';
 import { FoldedCards, foldsCards, splitFolded } from './foldedCards';
 import { ReadImageStrip } from './Images';
 import { arr, num, obj, str, type JsonRecord } from './json';
-import { useRowGap } from './messageSpacing';
+import { useInnerGap, useRowGap } from './messageSpacing';
 import { MessageRow } from './MessageRow';
 import {
   countSegments,
@@ -35,7 +35,7 @@ import { useDisclosure } from './state';
 import { GbotCards, shownGbotCards } from './GbotCard';
 import { WorkflowCards } from './WorkflowCard';
 
-/** The space between the parts of a finished turn's tail (desktop `PART_GAP` in completed_work_row.rs). */
+/** The space between the parts of a finished turn's tail at Message spacing Default (desktop `PART_GAP` in completed_work_row.rs); Compact shrinks it (`innerGapOf`). */
 const PART_GAP = 10;
 /** An opened line's rows: plain tool pairs, writes hidden (they belong to the edit line), each call a step. */
 export const QUIET_STEPS = { inWorkFold: true, hideFileChanges: true, quietSteps: true };
@@ -150,6 +150,7 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
 export function QuietTail({ tails, firstGap }: { tails: readonly WorkTail[]; firstGap?: number }) {
   const { workflowCards, gbotCardStates } = useTranscriptFlags();
   const rowGap = useRowGap();
+  const partGap = useInnerGap(PART_GAP);
   const parts: { key: string; node: ReactNode; card: boolean }[] = [];
   const row = (message: ProjectedMessage) => ({
     key: `message:${message.id}`,
@@ -185,7 +186,7 @@ export function QuietTail({ tails, firstGap }: { tails: readonly WorkTail[]; fir
             ? firstGap
             : index === 0 && !card
               ? QUIET_TEXT_GAP
-              : gapAbove(aboveIsCard, card, PART_GAP, rowGap);
+              : gapAbove(aboveIsCard, card, partGap, rowGap);
         aboveIsCard = card;
         return (
           <View key={key} style={{ paddingTop: gap }}>

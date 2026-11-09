@@ -28,7 +28,7 @@ import {
 } from './singleLineCard';
 import { MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { ROW_GAP } from './cardSpacing';
-import { useRowGap } from './messageSpacing';
+import { useInnerGap, useRowGap } from './messageSpacing';
 
 /** Collapsed, a goal shows this many lines of its objective. */
 const GOAL_PREVIEW_LINES = 3;
@@ -477,11 +477,16 @@ function StatusRowCard({
   );
 }
 
+/** The gap under a status row read in place at Message spacing Default (desktop `status_rows.rs`). */
+const LANE_GAP_BELOW = 13;
+
 function InlineSuppressed({ suppressed }: { suppressed: JsonRecord }) {
   const { theme } = useTranscriptEnv();
   const body = str(suppressed, 'text');
+  // Message spacing Compact shrinks the gap under it like the row gap (`messageSpacing.ts`).
+  const gapBelow = useInnerGap(LANE_GAP_BELOW);
   return (
-    <View style={styles.lane}>
+    <View style={[styles.lane, gapBelow !== LANE_GAP_BELOW && { paddingBottom: gapBelow }]}>
       <LaneMarker color={theme.muted} />
       <Text style={[styles.prose, styles.laneText, { color: theme.muted }]}>
         <Text style={styles.semibold}>
@@ -723,7 +728,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusBubbleText: { fontSize: 13, lineHeight: 18 },
-  lane: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingBottom: 13 },
+  lane: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingBottom: LANE_GAP_BELOW },
   laneText: { flex: 1 },
   collapsed: { gap: 6, paddingBottom: 8 },
   suppressedBody: { maxHeight: 400, padding: 10, borderRadius: 8, borderWidth: 1 },

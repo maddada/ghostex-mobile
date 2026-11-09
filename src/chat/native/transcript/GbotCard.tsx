@@ -25,7 +25,9 @@ import { GbotIcon } from '../../../components/sessions/gbotIcons';
 import { ToneButton, ToneCard } from '../cards/ToneCard';
 import { CARD_TEXT_SIZE } from '../cards/primitives';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
+import { cardStackMargin } from './cardSpacing';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
+import { useRowGap } from './messageSpacing';
 import { themedStyles } from './theme';
 
 /** Change ids this app already asked the core about, so a redraw never asks again. */
@@ -45,12 +47,26 @@ export function shownGbotCards(cards: Json | undefined, states: { [changeId: str
 }
 
 /** The "GBot added" cards of one message or finished turn. */
-export function GbotCards({ cards }: { cards: Json | undefined }) {
+/**
+ * The "GBot added" cards, a stack of one-line cards: `aboveIsCard` and `columnGap` place it a row
+ * gap under the card above it in a column whose own gap is `columnGap` (`cardSpacing.ts`, desktop
+ * `spaced_tail`).
+ */
+export function GbotCards({
+  cards,
+  aboveIsCard = false,
+  columnGap = 0,
+}: {
+  cards: Json | undefined;
+  aboveIsCard?: boolean;
+  columnGap?: number;
+}) {
   const { gbotCardStates } = useTranscriptFlags();
+  const rowGap = useRowGap();
   const rows = shownGbotCards(cards, gbotCardStates);
   if (rows.length === 0) return null;
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 8, marginTop: cardStackMargin(aboveIsCard, columnGap, rowGap) }}>
       {rows.map((card) => (
         <GbotCard key={str(card, 'changeId')} card={card} />
       ))}

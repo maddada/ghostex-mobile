@@ -61,7 +61,7 @@ import { TranscriptFieldRevealContext, useTranscriptFieldReveal } from './fieldR
 import { ROW_GAP } from './cardSpacing';
 import { REPLY_FADE_MS, useReplyArrival } from './replyArrival';
 import { chatLookOf } from './context';
-import { rowGapOf } from './messageSpacing';
+import { rowGapOf, useRowGap } from './messageSpacing';
 import { StatusTail, statusTailShown } from '../cards/WorkingCard';
 
 /**
@@ -210,12 +210,20 @@ export function useSubagentRowRenderer(chat: RustChat): (item: TranscriptItem, i
   return useCallback(
     (item: TranscriptItem) => (
       <TranscriptScope chat={chat} main={false}>
-        <View style={styles.subagentRow}>
-          <TranscriptItemView item={item} />
-        </View>
+        <SubagentRow item={item} />
       </TranscriptScope>
     ),
     [chat],
+  );
+}
+
+/** A subagent viewer row, ending with the transcript's row gap (Message spacing's, `messageSpacing.ts`; desktop `transcript_row_column`). */
+function SubagentRow({ item }: { item: TranscriptItem }) {
+  const rowGap = useRowGap();
+  return (
+    <View style={[styles.subagentRow, rowGap !== ROW_GAP && { paddingBottom: rowGap }]}>
+      <TranscriptItemView item={item} />
+    </View>
   );
 }
 
@@ -579,7 +587,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
 
   return (
     <TranscriptScope chat={chat} main={main}>
-      {main && searchOpen ? <SearchFoldsReport dispatch={dispatch} /> : null}
+      {main ? <SearchFoldsReport dispatch={dispatch} /> : null}
       {main ? <QuestionReplyHost /> : null}
       <QuestionFlashProvider value={questionFlash}>
         <QuestionAnchorsProvider value={questionAnchors}>
@@ -632,8 +640,9 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
 }
 
 /**
- * Reports the open and closed folds to the core while the find bar is open, so it searches only
- * what the reader can see (core `transcript_search.rs`; desktop `sync_search_folds` in `search.rs`).
+ * Reports the open and closed folds to the core whenever they change, so it searches only what the
+ * reader can see (core `transcript_search.rs`) and the working card names a running call only while
+ * its words are shut (core `extras/working_card.rs`; desktop `sync_search_folds` in `search.rs`).
  */
 function SearchFoldsReport({ dispatch }: { dispatch: RustChat['dispatch'] }) {
   const { disclosures } = useNativeChatUi();
@@ -753,7 +762,7 @@ const styles = StyleSheet.create({
   rowInner: { width: '100%', maxWidth: ROW_MAX_WIDTH, paddingHorizontal: 16, paddingBottom: ROW_GAP },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
   emptyScroll: { flexGrow: 1 },
-  subagentRow: { paddingHorizontal: 4, paddingBottom: 16 },
+  subagentRow: { paddingHorizontal: 4, paddingBottom: ROW_GAP },
   button: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   buttonText: { fontSize: 14 },
   pageSpinner: { paddingVertical: 12, alignItems: 'center' },
