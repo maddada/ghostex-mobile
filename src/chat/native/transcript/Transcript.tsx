@@ -587,7 +587,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
 
   return (
     <TranscriptScope chat={chat} main={main}>
-      {main && searchOpen ? <SearchFoldsReport dispatch={dispatch} /> : null}
+      {main ? <SearchFoldsReport dispatch={dispatch} /> : null}
       {main ? <QuestionReplyHost /> : null}
       <QuestionFlashProvider value={questionFlash}>
         <QuestionAnchorsProvider value={questionAnchors}>
@@ -640,8 +640,9 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
 }
 
 /**
- * Reports the open and closed folds to the core while the find bar is open, so it searches only
- * what the reader can see (core `transcript_search.rs`; desktop `sync_search_folds` in `search.rs`).
+ * Reports the open and closed folds to the core whenever they change, so it searches only what the
+ * reader can see (core `transcript_search.rs`) and the working card names a running call only while
+ * its words are shut (core `extras/working_card.rs`; desktop `sync_search_folds` in `search.rs`).
  */
 function SearchFoldsReport({ dispatch }: { dispatch: RustChat['dispatch'] }) {
   const { disclosures } = useNativeChatUi();
