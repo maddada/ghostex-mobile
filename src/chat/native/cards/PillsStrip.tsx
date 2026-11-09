@@ -37,8 +37,8 @@ import { VISUAL, type ArmedAction } from './WorkingStrip';
 /** The session's links and the Links pill's tap, from the screen that knows the session (`TerminalScreen`). */
 export type PillsStripLinks = { links: GhostexSessionLinks | undefined; onOpen: () => void };
 
-/** The strip's band: a pill's 22 with 5 above and below; its hairline under it (desktop `STRIP_HEIGHT`). */
-const BAND = 22 + 5 * 2;
+/** The strip's band: a pill's 25 with 5 above and below; its hairline under it (desktop `STRIP_HEIGHT`). */
+const BAND = 25 + 5 * 2;
 const STRIP = BAND + 1;
 /** The width over which a pill fades out before an edge that hides more pills (desktop `PILLS_FADE`). */
 const PILLS_FADE = 24;
@@ -379,15 +379,15 @@ const useStyles = themedStyles((P) => ({
     gap: 6,
     flexShrink: 0,
   },
-  /** A pill's 22 (its 1px border included), quieter: a faint fill and no outline. */
+  /** A pill's 25 (its 1px border included), quieter: a faint fill and no outline. */
   chip: {
-    height: 22,
+    height: 25,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingLeft: 8,
     paddingRight: 6,
-    borderRadius: 11,
+    borderRadius: 13,
     backgroundColor: P.ink(0.04),
   },
   chipPressed: {
@@ -395,8 +395,8 @@ const useStyles = themedStyles((P) => ({
   },
   chipLabel: {
     color: P.cardMuted,
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   /** The hairline under the band, the box's border colour. */
   hairline: {

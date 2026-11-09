@@ -98,12 +98,12 @@ export function IconPill({
       style={({ pressed }) => [styles.pill, styles.iconPill, pressed && styles.pillPressed]}
     >
       {count === undefined ? (
-        <Glyph name={glyph} size={14} color={color} />
+        <Glyph name={glyph} size={16} color={color} />
       ) : (
         <View style={styles.glyphSlot}>
           <Text style={[styles.slotCount, { color, opacity: count.shown ? 1 : 0 }]}>{count.text}</Text>
           <View style={[styles.slotGlyph, { opacity: count.shown ? 0 : 1 }]}>
-            <Glyph name={glyph} size={14} color={color} />
+            <Glyph name={glyph} size={16} color={color} />
           </View>
         </View>
       )}
@@ -137,7 +137,7 @@ export function QuestionPill({
       hitSlop={4}
       style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
     >
-      <Glyph name="question-mark" size={14} color={P.cardMuted} />
+      <Glyph name="question-mark" size={16} color={P.cardMuted} />
       {count > 0 ? <InlineDots dots={[{ tone: 'question', count: String(count) }]} /> : null}
     </Pressable>
   );
@@ -474,7 +474,7 @@ export function Pill({ pill, open, onPress }: { pill: ChatPill; open: boolean; o
                               ? 'plane'
                               : 'users'
         }
-        size={12}
+        size={14}
         color={P.cardMuted}
       />
       {/* Blocked has no word, like the ? pill: its glyph and red dot (gx-chat-core `blocked_pill`). */}
@@ -669,7 +669,7 @@ export function PillMenuSheet({
 }
 
 const useStyles = themedStyles((P) => ({
-  switchOnDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' },
+  switchOnDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#22c55e' },
   /** One of the Board pill's coloured counts: its group's dot and number. */
   boardCount: {
     flexDirection: 'row',
@@ -677,9 +677,9 @@ const useStyles = themedStyles((P) => ({
     gap: 3,
   },
   boardDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   pill: {
     flexDirection: 'row',
@@ -693,13 +693,13 @@ const useStyles = themedStyles((P) => ({
     borderColor: P.ink(0.1),
   },
   /**
-   * Square-ish around its glyph, the label pills' height: their 16pt line plus 2pt above and below,
-   * so the 14pt glyph takes 3pt. The ? pill is neutral like Threads (user, 2026-10-15: "same height as
+   * Square-ish around its glyph, the label pills' height: their 19pt line plus 2pt above and below,
+   * so the 16pt glyph takes 3.5pt. The ? pill is neutral like Threads (user, 2026-10-15: "same height as
    * the threads and scroll to bottom pills (and same color)", desktop `chat_pills.rs`).
    */
   iconPill: {
-    paddingHorizontal: 5,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3.5,
   },
   pillPressed: {
     backgroundColor: P.ink(0.08),
@@ -715,13 +715,13 @@ const useStyles = themedStyles((P) => ({
   },
   label: {
     color: P.cardMuted,
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   count: {
     color: P.foreground,
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     fontVariant: ['tabular-nums'],
   },
   /** A pill's status dots, after its label (`InlineDots`). */
@@ -732,15 +732,15 @@ const useStyles = themedStyles((P) => ({
   },
   /** The ? pill's glyph and count share this slot; the count sets its width once wider than the glyph. */
   glyphSlot: {
-    height: 14,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   slotCount: {
-    minWidth: 14,
+    minWidth: 16,
     textAlign: 'center',
-    fontSize: 11.5,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 16,
     fontVariant: ['tabular-nums'],
   },
   slotGlyph: {
@@ -755,10 +755,10 @@ const useStyles = themedStyles((P) => ({
    * User, of the phone's Chat Resources sheet: "0 unanswered is touching the edge. There's no padding there", and "From the right side, there is no padding, and things are touching": the sheet's lines get the same inset on both sides as its title.
    */
   questionsMenu: { gap: 4, maxHeight: 520, paddingHorizontal: 12 },
-  questionsSummary: { color: P.cardMuted, fontSize: 12.5, paddingHorizontal: 4, paddingBottom: 4 },
+  questionsSummary: { color: P.cardMuted, fontSize: 13, paddingHorizontal: 4, paddingBottom: 4 },
   /** A section header in the Links card's look: chevron, title and count (desktop `question_section_header`). */
   questionsSection: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 4 },
-  questionsSectionLabel: { color: P.cardMuted, fontSize: 12.5 },
+  questionsSectionLabel: { color: P.cardMuted, fontSize: 13 },
   questionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -817,6 +817,6 @@ const useStyles = themedStyles((P) => ({
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingHorizontal: 10 },
   filterCheck: { width: 14, alignItems: 'center' },
   filterLabel: { color: P.foreground, fontSize: 13 },
-  filterCount: { marginLeft: 'auto', color: P.cardMuted, fontSize: 12, fontVariant: ['tabular-nums'] },
-  questionsMeta: { flexShrink: 0, maxWidth: 110, color: P.muted, fontSize: 12, fontVariant: ['tabular-nums'] },
+  filterCount: { marginLeft: 'auto', color: P.cardMuted, fontSize: 13, fontVariant: ['tabular-nums'] },
+  questionsMeta: { flexShrink: 0, maxWidth: 110, color: P.muted, fontSize: 13, fontVariant: ['tabular-nums'] },
 }));
