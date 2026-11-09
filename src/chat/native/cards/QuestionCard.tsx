@@ -166,12 +166,21 @@ function QuestionPromptCard({ chat, document }: { chat: RustChat; document: Chat
                     enabled={!busy}
                     onPress={() => dispatch(questionOptionAnswer(optionIndex))}
                   />
-                  {/* The mockup Claude shows beside the option, under the row that picks it (desktop question.rs). */}
+                  {/* The mockup Claude shows beside the option, under the row that picks it (desktop question.rs):
+                      its lines kept as written, up to ten tall, then its own scroll; long lines scroll sideways
+                      instead of wrapping, so the mockup's columns stay lined up. */}
                   {preview.length > 0 ? (
-                    <ScrollView style={styles.optionPreview} nestedScrollEnabled>
-                      <Text style={styles.commandText} selectable>
-                        {preview}
-                      </Text>
+                    <ScrollView style={styles.optionPreview} nestedScrollEnabled persistentScrollbar>
+                      <ScrollView
+                        horizontal
+                        nestedScrollEnabled
+                        persistentScrollbar
+                        contentContainerStyle={styles.optionPreviewLines}
+                      >
+                        <Text style={styles.commandText} selectable>
+                          {preview.replace(/\n+$/, '')}
+                        </Text>
+                      </ScrollView>
                     </ScrollView>
                   ) : null}
                 </View>
@@ -238,12 +247,16 @@ const useStyles = themedStyles((P) => ({
     gap: 6,
   },
   optionPreview: {
-    maxHeight: 160,
+    // Ten 20px lines and the padding.
+    maxHeight: 216,
+    flexGrow: 0,
     marginLeft: 28,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: P.wellFill,
+  },
+  optionPreviewLines: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   commandText: {
     color: P.cardMuted,
