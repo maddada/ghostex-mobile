@@ -30,8 +30,7 @@ export type ServerDictation = {
   id: string;
   createdAt: number;
   durationMs: number;
-  /** `polishing`: AI polish runs on the text (newer computers; `/api/skipDictationPolish` skips it). */
-  status: 'recorded' | 'transcribing' | 'polishing' | 'transcribed' | 'failed' | 'dismissed';
+  status: 'recorded' | 'transcribing' | 'transcribed' | 'failed' | 'dismissed';
   text: string | null;
   error: { code: string; message: string; provider?: string | null } | null;
   /** What made the text ("Local, Parakeet v3"); absent on computers before the local engine. */
@@ -290,39 +289,6 @@ export async function transcribeLatest(
   }
   if ('error' in answer) return { kind: 'nothing', id: id ?? '', message: answer.error };
   return outcome(answer, { kind: 'server', id: id ?? '' }, id ?? '');
-}
-
-/** How often the phone looks whether a transcription has reached AI polish. */
-const WATCH_MS = 700;
-
-/**
- * Follows recording `id` on the computer while `/api/transcribeDictation` runs, telling `onStatus`
- * its status as it changes (`polishing` while AI polish runs, so the row can offer Skip). Answers
- * the function that stops it. A computer that never reports `polishing` simply never shows it.
- */
-export function watchDictation(
-  machine: MachineConnectionTarget,
-  id: string,
-  onStatus: (status: ServerDictation['status']) => void,
-): () => void {
-  let live = true;
-  let last: ServerDictation['status'] | null = null;
-  void (async () => {
-    while (live) {
-      await new Promise((resolve) => setTimeout(resolve, WATCH_MS));
-      if (!live) return;
-      const answer = await rpc(machine, 'listDictations', { limit: 5 }, SHORT_TIMEOUT_MS);
-      if (!live || 'error' in answer) continue;
-      const list = answer.result.dictations;
-      const found = Array.isArray(list) ? (list as ServerDictation[]).find((entry) => entry.id === id) : undefined;
-      if (found === undefined || found.status === last) continue;
-      last = found.status;
-      onStatus(found.status);
-    }
-  })();
-  return () => {
-    live = false;
-  };
 }
 
 /** The reader cancelled a transcription: the computer keeps the recording as dismissed. */

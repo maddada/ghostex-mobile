@@ -1,9 +1,7 @@
 /**
  * Dictate's settings as each computer's gxserver keeps them (`/api/readDictateSettings`): the
- * engine that transcribes (Hex 3 on that computer, or the OpenAI or xAI key), the language, the
- * dictionary, filler removal and AI polish, and what is left of the retired local engine (its
- * one-time notice and its old models). The phone only reads and
- * writes them; the microphone is the phone's own. Kept free of React Native so its rules are
+ * engine that transcribes (Hex 3 on that computer, or the OpenAI or xAI key) and the language.
+ * The phone only reads and writes them; the microphone is the phone's own. Kept free of React Native so its rules are
  * testable under `bun test`.
  *
  * CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): the phone manages Dictate per computer in Settings › Voice, with a computer picker at the top, because the paired computer's gxserver is what transcribes.
@@ -14,17 +12,11 @@
 /** `local` only from a computer whose Ghostex predates Hex replacing the local engine. */
 export type DictateEngineId = 'local' | 'openai' | 'xai' | 'hex';
 
-export type DictionaryWord = { word: string; aliases: string[] };
-
 export type DictateSettings = {
   engine: DictateEngineId;
   /** The Hex model id; null uses Hex's first ready model. Older computers leave it out. */
   hexModel?: string | null;
   language: string;
-  dictionary: DictionaryWord[];
-  addProjectNames: boolean;
-  removeFillers: boolean;
-  polish: { enabled: boolean; model: string; prompt: string | null };
 };
 
 export type DictateProblemCode = 'noKey' | 'keyUnreadable' | 'hexNotInstalled' | 'hexNotRunning' | 'hexModelNotReady';
@@ -35,7 +27,6 @@ export type DictateEngine = {
   label: string;
   ready: boolean;
   problem: { code: DictateProblemCode | string; message: string } | null;
-  polish: boolean;
 };
 
 /**
@@ -64,15 +55,9 @@ export type DictateOverview = {
   settings: DictateSettings;
   engine: DictateEngine;
   keys: Record<'xai' | 'openai', { configured: boolean; unreadable: boolean }>;
-  projectWords: string[];
-  polishAvailable: boolean;
   languages: { code: string; label: string }[];
   /** Missing on a computer whose Ghostex predates the Hex engine. */
   hex?: HexView;
-  /** The one-time notice for a computer that used the retired local engine, until dismissed. */
-  localRetired?: { message: string } | null;
-  /** The retired engine's models still on the computer, to delete. */
-  oldModels?: { folder: string; bytes: number } | null;
 };
 
 export const DICTATE_ENGINES: readonly { value: DictateEngineId; label: string }[] = [
@@ -123,59 +108,6 @@ export function hexCaption(hex: HexView | undefined, computer: string): string {
   }
 }
 
-/** The dictionary's limits, as gxserver checks them (`speech/settings.rs`). */
-export const DICTIONARY_LIMITS = { words: 200, wordLength: 64, aliasMin: 3, aliasMax: 64, aliases: 8 } as const;
-
-/** "0.72 GB", or "150 MB" under a gigabyte's tenth (the old models' size). */
-export function formatBytes(bytes: number): string {
-  // Nothing on disk is "0 MB", not the 1 MB floor a small file gets.
-  if (bytes <= 0) return '0 MB';
-  if (bytes >= 100_000_000) return `${(bytes / 1e9).toFixed(2)} GB`;
-  return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
-}
-
-/** A comma-separated alias field as aliases: trimmed, empty ones and repeats dropped. */
-export function parseAliases(text: string): string[] {
-  const seen = new Set<string>();
-  const aliases: string[] = [];
-  for (const part of text.split(',')) {
-    const alias = part.trim().replace(/\s+/g, ' ');
-    const key = alias.toLowerCase();
-    if (alias.length === 0 || seen.has(key)) continue;
-    seen.add(key);
-    aliases.push(alias);
-  }
-  return aliases;
-}
-
-/** Why a dictionary word can't be saved as it is, in a sentence, or null when it can. */
-export function dictionaryProblem(
-  entry: DictionaryWord,
-  others: readonly DictionaryWord[],
-): string | null {
-  const word = entry.word.trim();
-  if (word.length === 0) return 'Type the word first.';
-  if (word.length > DICTIONARY_LIMITS.wordLength)
-    return `A word can be at most ${DICTIONARY_LIMITS.wordLength} characters.`;
-  if (others.some((other) => other.word.trim().toLowerCase() === word.toLowerCase()))
-    return `"${word}" is already in the dictionary.`;
-  if (entry.aliases.length > DICTIONARY_LIMITS.aliases)
-    return `A word can have at most ${DICTIONARY_LIMITS.aliases} spellings to replace.`;
-  const short = entry.aliases.find(
-    (alias) => alias.length < DICTIONARY_LIMITS.aliasMin || alias.length > DICTIONARY_LIMITS.aliasMax,
-  );
-  if (short !== undefined)
-    return `"${short}" is too ${short.length < DICTIONARY_LIMITS.aliasMin ? 'short' : 'long'}: a spelling to replace is ${DICTIONARY_LIMITS.aliasMin} to ${DICTIONARY_LIMITS.aliasMax} characters.`;
-  return null;
-}
-
-/** The Dictionary row's summary: "4 words + project names". */
-export function dictionarySummary(settings: Pick<DictateSettings, 'dictionary' | 'addProjectNames'>): string {
-  const count = settings.dictionary.length;
-  const words = count === 0 ? 'No words' : `${count} word${count === 1 ? '' : 's'}`;
-  return settings.addProjectNames ? `${words} + project names` : words;
-}
-
 /** The name the language list gives `code` ("Auto-detect", "English"), or the code itself. */
 export function languageLabel(languages: readonly { code: string; label: string }[], code: string): string {
   return languages.find((entry) => entry.code === code)?.label ?? code;
@@ -195,7 +127,7 @@ export function engineLine(engine: Pick<DictateEngine, 'label'> | null): string 
  * in the phone's words (gxserver's own sentences say "Click" and "in Settings").
  */
 export function engineStatusLine(engine: DictateEngine, computer: string): string {
-  if (engine.ready) return `Transcribes on ${computer}${engine.polish ? ', then AI polish' : ''}.`;
+  if (engine.ready) return `Transcribes on ${computer}.`;
   switch (engine.problem?.code) {
     case 'hexNotInstalled':
       return `Hex 3 isn't installed on ${computer}. Install it in Voice settings.`;

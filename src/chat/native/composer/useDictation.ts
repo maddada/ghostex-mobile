@@ -8,7 +8,7 @@
  * CDXC:SessionChat 2026-10-08 DECISION: User asked for voice input in the chat box, to the left of the Terminal View button, on the desktop and the phone (GPUI Kit's speech input, #3333, on the desktop). Pressing the microphone starts listening and pressing it again stops; recognized text is typed into the draft and never sent by itself.
  * CDXC:SessionChat 2026-10-08 SEE-ALSO: `apps/desktop/src/app/native_chat/dictation.rs` is the desktop's control.
  * CDXC:VoiceMode 2026-10-20 DECISION: User: "use grok bot's api for the dictation mic button" and "the one in the chat box just pastes whatever i say into the chat box". Dictate uses xAI speech-to-text through gxserver with the key kept on the computer, instead of the platform recognizer; the platform recognizer code below is kept but unused (user: "keep but mark the old code as unused").
- * CDXC:VoiceMode 2026-11-05 DECISION: Each computer picks Dictate's engine (Local, OpenAI or xAI; Settings › Voice). The phone names what will transcribe wherever it shows Dictate, shows "Polishing" with Skip while AI polish runs, and on a missing local model offers its download and transcribes the kept recording once it is ready (the recording is never lost).
+ * CDXC:VoiceMode 2026-11-05 DECISION: Each computer picks Dictate's engine (Local, OpenAI or xAI; Settings › Voice). The phone names what will transcribe wherever it shows Dictate, and on a missing local model offers its download and transcribes the kept recording once it is ready (the recording is never lost).
  * CDXC:VoiceMode 2026-10-20 SEE-ALSO: recording first and transcribing second, the Transcribing ✕, keeping cancelled recordings and Transcribe previous are the user's decision in the computer's `apps/desktop/src/app/voice_agent/dictation.rs`; the phone opens Transcribe previous on a long press (CDXC:SessionChat 2026-10-12 DECISION: actions open on a long press on the phone).
  */
 
@@ -37,12 +37,11 @@ import {
   stopRecording,
   transcribeLatest,
   waitingRecordings,
-  watchDictation,
   type Kept,
   type Transcription,
 } from '../../../voice/dictation';
 import type { DictateEngine } from '../../../voice/dictateModel';
-import { readDictateEngine, skipDictationPolish } from '../../../voice/dictateSettings';
+import { readDictateEngine } from '../../../voice/dictateSettings';
 import { chatMachineLink } from '../../rust/machine-link';
 import { setReadAloudDictating } from '../../../voice/readAloud';
 
@@ -68,10 +67,9 @@ const speech = requireOptionalNativeModule<SpeechNative>('ExpoSpeechRecognition'
 const DICTATION_ENABLED = true;
 
 /**
- * `polishing`: the words are in and AI polish runs on them (Skip hands over the unpolished text).
  * `waiting`: a recording on this phone still waits for its words (offered with Transcribe).
  */
-export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'polishing' | 'failed' | 'waiting';
+export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'failed' | 'waiting';
 
 /** How long a send the computer never answered waits before it goes again, try after try. */
 const AUTO_RETRY_MS = [3_000, 6_000, 12_000, 20_000, 30_000, 60_000];
@@ -127,8 +125,6 @@ export function useDictation(
   const recordingId = useRef<string | null>(null);
   const callbacks = useRef({ draft, replace, onError });
   callbacks.current = { draft, replace, onError };
-  /** Stops following the computer's recording status (polishing). */
-  const unwatch = useRef<(() => void) | null>(null);
   /** How many times the recording in the row went again on its own, so the waits keep growing across tries. */
   const autoTries = useRef<{ id: string; count: number }>({ id: '', count: 0 });
 
@@ -192,7 +188,6 @@ export function useDictation(
     return () => {
       mounted.current = false;
       if (phaseRef.current === 'recording' || phaseRef.current === 'starting') void stopRecording(false);
-      unwatch.current?.();
     };
   }, []);
 
@@ -209,8 +204,6 @@ export function useDictation(
 
   const settle = useCallback(
     (current: { cancelled: boolean }, result: Transcription | null) => {
-      unwatch.current?.();
-      unwatch.current = null;
       if (current.cancelled || result === null) return;
       if (result.kind === 'nothing' && result.id) void forgetRecording(result.id);
       // Gone: the words wait on the computer and the recording on the phone, offered when the chat opens again.
@@ -242,16 +235,6 @@ export function useDictation(
         setWaiting(null);
         setPhase('transcribing');
       }
-      // While the computer works on it, its status says when AI polish starts (Skip shows then).
-      const watch = (id: string) => {
-        if (quiet) return;
-        unwatch.current?.();
-        unwatch.current = watchDictation(machine, id, (status) => {
-          if (current.cancelled || run.current !== current) return;
-          if (status === 'polishing' && phaseRef.current === 'transcribing') setPhase('polishing');
-        });
-      };
-      if (current.serverId !== null) watch(current.serverId);
       const result =
         kept === null
           ? await transcribeLatest(machine, () => current.cancelled)
@@ -261,7 +244,6 @@ export function useDictation(
               () => current.cancelled,
               (id) => {
                 current.serverId = id;
-                watch(id);
               },
             );
       // A tap (Transcribe again, ✕, a new recording) took over while a quiet retry ran.
@@ -395,8 +377,6 @@ export function useDictation(
     const failed = failure;
     const offered = waiting;
     current.cancelled = true;
-    unwatch.current?.();
-    unwatch.current = null;
     setPhase('idle');
     setFailure(null);
     setWaiting(null);
@@ -405,7 +385,7 @@ export function useDictation(
       const recording = await stopRecording(true);
       recordingId.current = null;
       if (recording !== null) await dismissKeptLocal(recording);
-    } else if ((was === 'transcribing' || was === 'polishing') && current.serverId !== null) {
+    } else if (was === 'transcribing' && current.serverId !== null) {
       void dismissDictation(machine, current.serverId);
       void forgetRecording(current.serverId);
     } else if (was === 'failed' && failed !== null) {
@@ -430,13 +410,6 @@ export function useDictation(
     if (phaseRef.current !== 'idle' && phaseRef.current !== 'failed') return;
     await transcribeKept(null);
   }, [transcribeKept]);
-
-  /** Skip: the text arrives at once without AI polish (dictionary and filler clean-up still apply). */
-  const skipPolish = useCallback(async () => {
-    const id = run.current.serverId;
-    if (machine === null || id === null || phaseRef.current !== 'polishing') return;
-    await skipDictationPolish(machine, id);
-  }, [machine]);
 
   /** The recording the row is about, when this phone has its audio (for Share). */
   const local: LocalDictation | null =
@@ -483,7 +456,6 @@ export function useDictation(
     share,
     transcribePrevious,
     previous,
-    skipPolish,
   };
 }
 

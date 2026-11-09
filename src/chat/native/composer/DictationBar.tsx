@@ -1,7 +1,7 @@
 /**
  * Dictate's row above the chat box (`useDictation.ts`; desktop: `render_dictation_row` in
  * `native_chat/dictation.rs`): "Recording 0:07" while the microphone records, "Transcribing…"
- * after Stop, "Polishing…" with Skip while AI polish runs, or why the transcription failed with
+ * after Stop, or why the transcription failed with
  * Transcribe again (and Set up Hex when Hex on the computer isn't ready). Each line names what
  * transcribes ("Hex, Parakeet v3"). The ✕ cancels; the recording is kept either way. A send the
  * computer never answered says "Waiting for your computer…" (it goes again on its own), and a
@@ -24,8 +24,6 @@ export function dictationLabel(phase: DictationPhase, elapsedMs: number, engine:
       return `Recording ${dictationClock(elapsedMs)}${engine !== null ? ` · ${engine}` : ''}`;
     case 'transcribing':
       return engine !== null ? `Transcribing with ${engine}…` : 'Transcribing…';
-    case 'polishing':
-      return 'Polishing with AI…';
     case 'failed':
       return 'Transcription failed.';
     case 'waiting':
@@ -43,7 +41,6 @@ export function DictationBar({
   fix,
   onCancel,
   onRetry,
-  onSkip,
   onFix,
   retrying = false,
   onShare,
@@ -56,7 +53,6 @@ export function DictationBar({
   fix: DictationFix | null;
   onCancel: () => void;
   onRetry: () => void;
-  onSkip: () => void;
   onFix: () => void;
   /** The computer never answered: the recording goes again on its own. */
   retrying?: boolean;
@@ -92,7 +88,6 @@ export function DictationBar({
         <Text style={[styles.text, failed ? styles.failed : null]}>{label}</Text>
         {detail !== null ? <Text style={styles.detail}>{detail}</Text> : null}
       </View>
-      {phase === 'polishing' ? button('Skip', onSkip) : null}
       {failed && fix !== null ? button(fix.label, onFix) : null}
       {failed && fix === null ? button('Transcribe again', onRetry) : null}
       {waiting ? button('Transcribe', onRetry) : null}

@@ -74,7 +74,6 @@ jest.mock('./useDictation', () => ({
     retry: () => Promise.resolve(),
     transcribePrevious: () => Promise.resolve(),
     previous: () => Promise.resolve(null),
-    skipPolish: () => Promise.resolve(),
   }),
 }));
 

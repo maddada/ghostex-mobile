@@ -1,5 +1,5 @@
 /**
- * The computer Settings › Voice and its Language and Dictionary pages change: the one picked at the
+ * The computer Settings › Voice and its Language page change: the one picked at the
  * top of Settings › Voice (or by a chat's "Voice settings"), else the selected computer.
  */
 

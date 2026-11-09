@@ -1,7 +1,7 @@
 /**
  * Dictate's settings on a computer, read and written through that computer's gxserver
- * (`dictateModel.ts` has the shapes): the store behind Settings › Voice and its Language and
- * Dictionary pages, which all edit the computer picked at the top of Settings › Voice.
+ * (`dictateModel.ts` has the shapes): the store behind Settings › Voice and its Language page,
+ * which both edit the computer picked at the top of Settings › Voice.
  */
 
 import { create } from 'zustand';
@@ -37,11 +37,6 @@ async function call<T>(machine: MachineConnectionTarget, method: string, params:
 export async function readDictateEngine(machine: MachineConnectionTarget): Promise<DictateEngine | null> {
   const answer = await call<DictateEngine>(machine, 'readDictateEngine', {});
   return answer.ok && typeof answer.value.label === 'string' ? answer.value : null;
-}
-
-/** The reader pressed Skip while the text was being polished. */
-export async function skipDictationPolish(machine: MachineConnectionTarget, id: string): Promise<void> {
-  await call(machine, 'skipDictationPolish', { id });
 }
 
 export type DictateStatus = 'loading' | 'ready' | 'failed' | 'outdated';
@@ -96,18 +91,11 @@ export async function loadDictate(machine: MachineConnectionTarget, quiet = fals
  */
 export async function changeDictate(
   machine: MachineConnectionTarget,
-  patch: Partial<DictateSettings> & { localRetiredNotice?: false },
+  patch: Partial<DictateSettings>,
 ): Promise<void> {
   const before = useDictateStore.getState().overview;
   if (before === null || !current(machine)) return;
-  const { localRetiredNotice: _dismissed, ...changes } = patch;
-  const settings = {
-    ...before.settings,
-    ...changes,
-    polish: { ...before.settings.polish, ...(changes.polish ?? {}) },
-  };
-  const localRetired = patch.localRetiredNotice === false ? null : before.localRetired;
-  useDictateStore.setState({ overview: { ...before, settings, localRetired }, problem: null });
+  useDictateStore.setState({ overview: { ...before, settings: { ...before.settings, ...patch } }, problem: null });
   const answer = await call<DictateOverview>(machine, 'setDictateSettings', { patch });
   if (!current(machine)) return;
   if (!answer.ok) {
@@ -118,20 +106,4 @@ export async function changeDictate(
     return;
   }
   useDictateStore.setState({ overview: answer.value });
-}
-
-/** The notice that the computer's local engine was retired for Hex, read: it isn't shown again. */
-export function dismissLocalRetired(machine: MachineConnectionTarget): Promise<void> {
-  return changeDictate(machine, { localRetiredNotice: false });
-}
-
-/** Deletes the retired local engine's models on the computer. */
-export async function deleteOldModels(machine: MachineConnectionTarget): Promise<void> {
-  const answer = await call<DictateOverview>(machine, 'deleteOldSpeechModels', {});
-  if (!current(machine)) return;
-  if (!answer.ok) {
-    useDictateStore.setState({ problem: `Couldn't delete the old speech models: ${answer.message}` });
-    return;
-  }
-  useDictateStore.setState({ overview: answer.value, problem: null });
 }

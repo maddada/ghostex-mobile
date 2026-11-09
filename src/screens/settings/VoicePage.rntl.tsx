@@ -1,15 +1,13 @@
 /// <reference types="jest" />
 /**
  * Run with `bun run test:jest`. Settings › Voice against two fake computers: the page reads Dictate
- * from the picked computer's gxserver, shows the one-time notice that its local engine was retired
- * for Hex with the old models to delete, saves the engine there, and the picker at the top switches
+ * from the picked computer's gxserver, saves the engine there, and the picker at the top switches
  * to the other computer, whose settings are its own.
  * Mocked are the boundaries only: each computer's gxserver (`chatMachineLink`), navigation, the
  * native module, storage and the safe area; the page, its stores and its controls are the real ones.
  */
 
 import type { ReactNode } from 'react';
-import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { useMachinesStore, type MachineRecord } from '../../machines/store';
@@ -19,8 +17,6 @@ import VoicePage from './VoicePage';
 type Fake = {
   settings: Record<string, unknown>;
   calls: string[];
-  localRetired?: { message: string } | null;
-  oldModels?: { folder: string; bytes: number } | null;
   /** The computer's `hex` block; absent on an older Ghostex. */
   hex?: Record<string, unknown>;
   hexInstalls?: number;
@@ -36,14 +32,9 @@ function mockOverview(fake: Fake) {
       label: settings.engine === 'hex' ? 'Hex' : 'xAI speech to text',
       ready: false,
       problem: null,
-      polish: true,
     },
     keys: { xai: { configured: false, unreadable: false }, openai: { configured: false, unreadable: false } },
-    projectWords: ['Ghostex'],
-    polishAvailable: true,
     languages: [{ code: 'auto', label: 'Auto-detect' }],
-    localRetired: fake.localRetired ?? null,
-    oldModels: fake.oldModels ?? null,
     ...(fake.hex ? { hex: fake.hex } : {}),
   };
 }
@@ -72,14 +63,9 @@ jest.mock('../../chat/rust/machine-link', () => ({
         case 'readDictateSettings':
           return { result: mockOverview(fake), error: null };
         case 'setDictateSettings': {
-          const { localRetiredNotice, ...patch } = params.patch ?? {};
-          if (localRetiredNotice === false) fake.localRetired = null;
-          fake.settings = { ...fake.settings, ...patch };
+          fake.settings = { ...fake.settings, ...(params.patch ?? {}) };
           return { result: mockOverview(fake), error: null };
         }
-        case 'deleteOldSpeechModels':
-          fake.oldModels = null;
-          return { result: mockOverview(fake), error: null };
         case 'readDictateEngine':
           return { result: mockOverview(fake).engine, error: null };
         case 'readVoiceAgent':
@@ -139,10 +125,6 @@ const fresh = (): Fake => ({
   settings: {
     engine: 'hex',
     language: 'auto',
-    dictionary: [],
-    addProjectNames: true,
-    removeFillers: true,
-    polish: { enabled: true, model: 'claude-sonnet-5-5', prompt: null },
   },
   calls: [],
 });
@@ -157,30 +139,15 @@ beforeEach(() => {
   useDictateStore.setState({ machineId: null, loadedFor: null, overview: null, status: 'loading', problem: null });
 });
 
-test('a computer that used the retired local engine says so once, and its old models can go', async () => {
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-    buttons?.find((button) => button.text === 'Delete')?.onPress?.();
-  });
-  mockComputers.mac!.localRetired = { message: 'Ghostex no longer has its own speech model.' };
-  mockComputers.mac!.oldModels = { folder: '/data/speech-models', bytes: 723_000_000 };
+test('the page reads Dictate from the picked computer only', async () => {
   mockComputers.mac!.hex = hexView('notInstalled');
   await render(<VoicePage />);
   expect(await screen.findByText('Dictate on MacBook Pro')).toBeTruthy();
-  expect(screen.getByText('Ghostex no longer has its own speech model.')).toBeTruthy();
   expect(screen.getByText(/MacBook Pro transcribes it with its engine, so with Hex the words come from Hex on MacBook Pro/)).toBeTruthy();
   expect(screen.getByText('Voice agent on MacBook Pro')).toBeTruthy();
   expect(screen.getByText('This phone')).toBeTruthy();
-
-  await fireEvent.press(screen.getByText('Got it'));
-  await waitFor(() => expect(screen.queryByText('Ghostex no longer has its own speech model.')).toBeNull());
-  expect(mockComputers.mac!.localRetired).toBeNull();
-  expect(mockComputers.mac!.settings).not.toHaveProperty('localRetiredNotice');
-
-  await fireEvent.press(screen.getByText('Delete old speech models'));
-  await waitFor(() => expect(screen.queryByText('Delete old speech models')).toBeNull());
-  expect(mockComputers.mac!.calls).toContain('deleteOldSpeechModels');
+  expect(mockComputers.mac!.calls).toContain('readDictateSettings');
   expect(mockComputers.linux!.calls).toHaveLength(0);
-  alert.mockRestore();
 });
 
 test('the engine is saved on the computer, and the picker switches to another one', async () => {

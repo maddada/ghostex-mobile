@@ -6,14 +6,10 @@ import { describe, test } from 'node:test';
 
 import {
   dictateEngines,
-  dictionaryProblem,
-  dictionarySummary,
   engineCaption,
   engineStatusLine,
-  formatBytes,
   hexCaption,
   isUnknownRoute,
-  parseAliases,
   type DictateEngine,
   type DictateOverview,
   type HexView,
@@ -23,54 +19,11 @@ const overview = (patch: Partial<DictateOverview> = {}): DictateOverview => ({
   settings: {
     engine: 'hex',
     language: 'auto',
-    dictionary: [],
-    addProjectNames: true,
-    removeFillers: true,
-    polish: { enabled: true, model: 'claude-sonnet-5-5', prompt: null },
   },
-  engine: { engine: 'hex', label: 'Hex', ready: false, problem: null, polish: true },
+  engine: { engine: 'hex', label: 'Hex', ready: false, problem: null },
   keys: { xai: { configured: false, unreadable: false }, openai: { configured: false, unreadable: false } },
-  projectWords: [],
-  polishAvailable: true,
   languages: [{ code: 'auto', label: 'Auto-detect' }],
   ...patch,
-});
-
-describe('the old models size', () => {
-  test('sizes read in GB, small ones in MB', () => {
-    assert.equal(formatBytes(715_135_416), '0.72 GB');
-    assert.equal(formatBytes(1_620_000_000), '1.62 GB');
-    assert.equal(formatBytes(147_000_000), '0.15 GB');
-    assert.equal(formatBytes(42_000_000), '42 MB');
-    assert.equal(formatBytes(0), '0 MB');
-  });
-});
-
-describe('the dictionary', () => {
-  test('aliases split on commas, trimmed, without repeats', () => {
-    assert.deepEqual(parseAliases(' GX server,  g x   server , gx SERVER,,'), ['GX server', 'g x server']);
-    assert.deepEqual(parseAliases(''), []);
-  });
-
-  test('a word needs text, must be new, and its spellings keep gxserver limits', () => {
-    const others = [{ word: 'Ghostex', aliases: [] }];
-    assert.equal(dictionaryProblem({ word: ' ', aliases: [] }, others), 'Type the word first.');
-    assert.match(dictionaryProblem({ word: 'ghostex', aliases: [] }, others) ?? '', /already/);
-    assert.match(dictionaryProblem({ word: 'gxserver', aliases: ['gx'] }, others) ?? '', /too short/);
-    assert.match(
-      dictionaryProblem({ word: 'gxserver', aliases: Array.from({ length: 9 }, (_, at) => `alias ${at}`) }, others) ?? '',
-      /at most 8/,
-    );
-    assert.equal(dictionaryProblem({ word: 'gxserver', aliases: ['GX server'] }, others), null);
-  });
-
-  test('the summary counts words and says when project names count too', () => {
-    assert.equal(dictionarySummary({ dictionary: [], addProjectNames: false }), 'No words');
-    assert.equal(
-      dictionarySummary({ dictionary: [{ word: 'a', aliases: [] }], addProjectNames: true }),
-      '1 word + project names',
-    );
-  });
 });
 
 describe('what the phone says about the engine', () => {
@@ -95,13 +48,9 @@ describe('what the phone says about the engine', () => {
       label: 'Hex',
       ready: false,
       problem: { code: 'hexNotRunning', message: "Hex isn't running on this computer. Click Open." },
-      polish: false,
     };
     assert.doesNotMatch(engineStatusLine(engine, 'MacBook Pro'), /Click/);
-    assert.equal(
-      engineStatusLine({ ...engine, ready: true, problem: null, polish: true }, 'MacBook Pro'),
-      'Transcribes on MacBook Pro, then AI polish.',
-    );
+    assert.equal(engineStatusLine({ ...engine, ready: true, problem: null }, 'MacBook Pro'), 'Transcribes on MacBook Pro.');
   });
 
   test('a computer without the routes reads as one to update', () => {
@@ -158,7 +107,6 @@ describe('Hex', () => {
       label: 'Hex',
       ready: false,
       problem: { code, message: 'gxserver words.' },
-      polish: false,
     });
     assert.equal(engineStatusLine(engine('hexNotRunning'), 'Mac'), "Hex isn't running on Mac. Open Hex there.");
     assert.equal(engineStatusLine(engine('hexNotInstalled'), 'Mac'), "Hex 3 isn't installed on Mac. Install it in Voice settings.");

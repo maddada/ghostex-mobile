@@ -2,23 +2,15 @@
 /**
  * Run with `bun run test:jest`. Settings > Updates: the over-the-air status line in its accent ("An update is
  * ready.") and error ("The last update check failed") tones keeps 4.5:1 (WCAG AA for normal-size text) on the page in
- * every preset. Settings › Voice › Dictionary: a word's validation text and its Remove label keep 4.5:1 on what
- * they are drawn on (the editor card; the Remove button's fill over it) under Latte and under the dark default. The
- * real pages and stores (settings, computers, Dictate); mocked are the boundaries only: expo-updates (its state as
+ * every preset. The real page and stores; mocked are the boundaries only: expo-updates (its state as
  * `useUpdates()` reports it), navigation, storage, the native module and the safe area.
  */
 
 import { StyleSheet } from 'react-native';
-import type { TestInstance } from 'test-renderer';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 
-import { useMachinesStore } from '../../machines/store';
 import { useSettingsStore } from '../../settings/store';
-import { colorOver } from '../../theme/palette';
 import { THEME_PRESETS, themePresetPatch } from '../../theme/presets';
-import type { DictateOverview } from '../../voice/dictateModel';
-import { useDictateStore } from '../../voice/dictateSettings';
-import DictateDictionaryPage from './DictateDictionaryPage';
 import UpdatesPage from './UpdatesPage';
 
 /** What `useUpdates()` reports; each test sets the state it shows. */
@@ -102,46 +94,4 @@ describe.each(TONES)('the %s status line', (_tone, state, text) => {
       expect(contrast(ink, surface)).toBeGreaterThanOrEqual(4.5);
     },
   );
-});
-
-/** The colour `node` is drawn on: the fills from it up to the first opaque one, laid over each other. */
-function surfaceUnder(node: TestInstance): string {
-  const fills: string[] = [];
-  for (let current: TestInstance | null = node.parent; current !== null; current = current.parent) {
-    const fill = StyleSheet.flatten(current.props.style)?.backgroundColor;
-    if (typeof fill !== 'string') continue;
-    fills.push(fill);
-    if (/^#[0-9a-f]{6}$/iu.test(fill)) break;
-  }
-  const base = fills.pop();
-  if (base === undefined) throw new Error('nothing opaque under the text');
-  return fills.reduceRight((under, fill) => colorOver(fill, under), base);
-}
-
-describe('Settings › Voice › Dictionary: the validation text and the Remove label', () => {
-  const MACHINE = { id: 'mac', name: 'MacBook Pro', host: 'mac.local', username: 'me', port: 22, savePassword: false, lastConnectedAt: null };
-  const overview = {
-    settings: { dictionary: [{ word: 'gxserver', aliases: [] }], addProjectNames: false },
-    projectWords: [],
-  } as unknown as DictateOverview;
-
-  test.each([
-    ['Latte', () => themePresetPatch('latte', false)],
-    ['the dark default', () => ({ sidebarTheme: 'dark-2' as const })],
-  ] as const)('%s: both keep 4.5:1 on what they are drawn on', async (_name, settings) => {
-    const patch = settings();
-    if (patch === undefined) throw new Error('Unknown preset latte');
-    useSettingsStore.getState().patchSettings(patch);
-    useMachinesStore.setState({ machines: [MACHINE], selectedMachineId: 'mac' });
-    useDictateStore.setState({ machineId: 'mac', loadedFor: 'mac', overview, status: 'ready', problem: null });
-    await render(<DictateDictionaryPage />);
-    await act(async () => fireEvent.press(screen.getByText('gxserver')));
-    await act(async () => fireEvent.changeText(screen.getByLabelText('Word'), ''));
-    await act(async () => fireEvent.press(screen.getByText('Save')));
-
-    for (const text of [screen.getByText('Type the word first.'), screen.getByText('Remove')]) {
-      const ink = String(StyleSheet.flatten(text.props.style).color);
-      expect(contrast(ink, surfaceUnder(text))).toBeGreaterThanOrEqual(4.5);
-    }
-  });
 });

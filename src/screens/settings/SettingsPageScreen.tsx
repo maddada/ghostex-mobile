@@ -7,7 +7,6 @@ import AutopilotPage from './AutopilotPage';
 import CollabPage from './CollabPage';
 import ChatPage from './ChatPage';
 import ConnectionPage from './ConnectionPage';
-import DictateDictionaryPage from './DictateDictionaryPage';
 import DictateLanguagePage from './DictateLanguagePage';
 import KeyboardPage from './KeyboardPage';
 import NotificationsPage from './NotificationsPage';
@@ -86,8 +85,6 @@ function SettingsPageBody({ page }: { page: SettingsPageId }) {
       return <ReadAloudVoicePage />;
     case 'dictateLanguage':
       return <DictateLanguagePage />;
-    case 'dictateDictionary':
-      return <DictateDictionaryPage />;
     case 'terminalPaletteDark':
       return <TerminalPalettePage dark />;
     case 'terminalPaletteLight':

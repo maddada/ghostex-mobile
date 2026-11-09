@@ -1,10 +1,8 @@
 /**
  * Settings › Voice: Dictate and the voice agent on one computer, picked at the top, and the
- * phone's own microphone at the bottom. Dictate's engine (Hex 3 on that computer, OpenAI or xAI),
- * language, dictionary, filler removal and AI polish live on that computer and are read and saved
- * through its gxserver (`voice/dictateSettings.ts`); so is the voice agent's call mode. A computer
- * that used Ghostex's retired local engine shows its one-time notice here, with its old models to
- * delete (CDXC:Dictate 2026-11-08 in `voice/dictateModel.ts`).
+ * phone's own microphone at the bottom. Dictate's engine (Hex 3 on that computer, OpenAI or xAI)
+ * and language live on that computer and are read and saved through its gxserver
+ * (`voice/dictateSettings.ts`); so is the voice agent's call mode.
  *
  * CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): "Settings › Voice, with a computer picker at the top". Each paired computer has its own Dictate engine, since its gxserver transcribes; the microphone stays a phone setting. The page replaces Settings › Voice agent, whose call mode is now its Voice agent section.
  */
@@ -12,7 +10,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Linking, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import ActionSheet from '../../components/common/ActionSheet';
 import { useInventoryStore } from '../../inventory/store';
@@ -30,9 +28,7 @@ import {
 } from '../../voice/conversation';
 import {
   dictateEngines,
-  dictionarySummary,
   engineCaption,
-  formatBytes,
   languageLabel,
   phoneDictationNote,
   type DictateEngineId,
@@ -40,8 +36,6 @@ import {
 import {
   changeDictate,
   chooseVoiceComputer,
-  deleteOldModels,
-  dismissLocalRetired,
   loadDictate,
   readDictateEngine,
   useDictateStore,
@@ -55,7 +49,6 @@ import {
   SectionHeader,
   SegmentedRow,
   SettingsScreenLayout,
-  ToggleRow,
   useSettingsStyles,
 } from './SettingsControls';
 import { computerName, useVoiceComputer } from './voiceComputer';
@@ -160,7 +153,7 @@ function ComputerPicker({ machine, machines }: { machine: MachineRecord; machine
   );
 }
 
-/** Dictate on the picked computer: engine, models, language, dictionary and clean-up. */
+/** Dictate on the picked computer: engine, Hex and its models, and language. */
 function DictateSection({ machine }: { machine: MachineRecord }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const overview = useDictateStore((state) => state.overview);
@@ -188,25 +181,10 @@ function DictateSection({ machine }: { machine: MachineRecord }) {
 
   const { settings } = overview;
   const chooseEngine = (engine: DictateEngineId) => void changeDictate(machine, { engine });
-  const deleteOld = (bytes: number) =>
-    Alert.alert(
-      'Delete the old speech models?',
-      `Ghostex no longer uses them. It frees ${formatBytes(bytes)} on ${name}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => void deleteOldModels(machine) },
-      ],
-    );
 
   return (
     <SettingsSection name="settings:voice:dictate">
       <SectionHeader title={`Dictate on ${name}`} />
-      {overview.localRetired ? (
-        <>
-          <Caption>{overview.localRetired.message}</Caption>
-          <LinkRow title="Got it" onPress={() => void dismissLocalRetired(machine)} />
-        </>
-      ) : null}
       <SegmentedRow
         label="Dictate engine"
         options={dictateEngines(overview)}
@@ -216,38 +194,10 @@ function DictateSection({ machine }: { machine: MachineRecord }) {
       <Caption>{engineCaption(overview, name)}</Caption>
       {settings.engine === 'hex' ? <HexBlock machine={machine} /> : null}
       <Caption>{phoneDictationNote(name)}</Caption>
-      {overview.oldModels ? (
-        <LinkRow
-          title="Delete old speech models"
-          description={`${formatBytes(overview.oldModels.bytes)} on ${name}, from before Hex. Ghostex no longer uses them.`}
-          onPress={() => deleteOld(overview.oldModels?.bytes ?? 0)}
-        />
-      ) : null}
       <LinkRow
         title="Language"
         description={languageLabel(overview.languages, settings.language)}
         onPress={() => navigation.navigate('SettingsPage', { page: 'dictateLanguage' })}
-      />
-      <LinkRow
-        title="Dictionary"
-        description={dictionarySummary(settings)}
-        onPress={() => navigation.navigate('SettingsPage', { page: 'dictateDictionary' })}
-      />
-      <ToggleRow
-        label="Remove filler words"
-        detail="Drops um, uh and repeated words."
-        value={settings.removeFillers}
-        onValueChange={(removeFillers) => void changeDictate(machine, { removeFillers })}
-      />
-      <ToggleRow
-        label="AI polish"
-        detail={
-          overview.polishAvailable
-            ? 'Claude Sonnet 5.5 fixes punctuation and obvious slips after the words arrive. Skip it while it runs.'
-            : `Needs Claude Code signed in on ${name}. Until then the text arrives unpolished.`
-        }
-        value={settings.polish.enabled}
-        onValueChange={(enabled) => void changeDictate(machine, { polish: { ...settings.polish, enabled } })}
       />
       {problem !== null ? <Caption>{problem}</Caption> : null}
     </SettingsSection>

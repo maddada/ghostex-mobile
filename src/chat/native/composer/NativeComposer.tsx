@@ -596,7 +596,7 @@ export function NativeComposer({
       }
       rows.push({
         label: 'Voice settings',
-        description: `Dictate's engine and dictionary on ${machineLabel ?? 'this computer'}`,
+        description: `Dictate's engine and language on ${machineLabel ?? 'this computer'}`,
         iconPath: 'titlebar/settings.svg',
         command: { type: 'composerHost', action: 'voiceSettings' },
       });
@@ -709,7 +709,6 @@ export function NativeComposer({
             fix={dictation.fix}
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
-            onSkip={() => void dictation.skipPolish()}
             onFix={() => {
               // Set up Hex: the computer's Voice settings, where Install Hex and its steps are.
               if (chat.machine !== null) host('voiceSettings', { machineId: chat.machine.id });

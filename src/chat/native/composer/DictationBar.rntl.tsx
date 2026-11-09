@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. Dictate's row above the chat box names what transcribes, offers
- * Skip while AI polish runs, and when Hex on the computer isn't ready offers Set up Hex instead of
+ * Run with `bun run test:jest`. Dictate's row above the chat box names what transcribes,
+ * and when Hex on the computer isn't ready offers Set up Hex instead of
  * Transcribe again. The real `DictationBar`; mocked are the native module and storage.
  */
 
@@ -17,7 +17,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
-const handlers = () => ({ onCancel: jest.fn(), onRetry: jest.fn(), onSkip: jest.fn(), onFix: jest.fn() });
+const handlers = () => ({ onCancel: jest.fn(), onRetry: jest.fn(), onFix: jest.fn() });
 
 test('recording and transcribing name the engine', async () => {
   const on = handlers();
@@ -29,14 +29,6 @@ test('recording and transcribing name the engine', async () => {
     <DictationBar phase="transcribing" elapsedMs={0} failure={null} engine="xAI speech to text" fix={null} {...on} />,
   );
   expect(screen.getByText('Transcribing with xAI speech to text…')).toBeTruthy();
-});
-
-test('polishing offers Skip', async () => {
-  const on = handlers();
-  await render(<DictationBar phase="polishing" elapsedMs={0} failure={null} engine={null} fix={null} {...on} />);
-  expect(screen.getByText('Polishing with AI…')).toBeTruthy();
-  await fireEvent.press(screen.getByText('Skip'));
-  expect(on.onSkip).toHaveBeenCalledTimes(1);
 });
 
 test('Hex that is not ready offers Set up Hex instead of Transcribe again', async () => {

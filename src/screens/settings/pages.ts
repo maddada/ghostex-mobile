@@ -29,7 +29,6 @@ export type SettingsPageId =
   | 'demo'
   | 'readAloudVoice'
   | 'dictateLanguage'
-  | 'dictateDictionary'
   | 'terminalPaletteDark'
   | 'terminalPaletteLight'
   | 'licences';
@@ -56,7 +55,6 @@ export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; de
   readAloudVoice: { title: 'Read aloud voice', description: "Which of this phone's voices reads replies aloud." },
   // Opened from Settings › Voice, for the computer picked there; not listed on the Settings home.
   dictateLanguage: { title: 'Language', description: 'The language Dictate listens for.' },
-  dictateDictionary: { title: 'Dictionary', description: 'Words Dictate should spell your way.' },
   // Opened from Settings › Interface's Terminal palettes rows, not listed on the Settings home.
   terminalPaletteDark: { title: 'Terminal palette in dark mode', description: 'The terminal colours in dark mode.' },
   terminalPaletteLight: { title: 'Terminal palette in light mode', description: 'The terminal colours in light mode.' },
