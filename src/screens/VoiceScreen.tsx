@@ -163,7 +163,7 @@ function stateLook(state: ReturnType<typeof useVoiceStore.getState>): { label: s
       return { label: 'Speaking', color: GhostexPalette.STATUS_ATTENTION };
     default:
       return {
-        label: state.talking ? 'Hearing you' : state.muted ? 'Muted' : state.pushToTalk ? 'Hold to talk' : 'Listening',
+        label: state.talking ? 'Hearing you' : state.muted ? 'Muted' : state.pushToTalk || state.clipTalk ? 'Hold to talk' : 'Listening',
         color: state.muted && !state.talking ? GhostexPalette.MUTED : GhostexPalette.ACCENT,
       };
   }

@@ -35,6 +35,15 @@ import {
   type VoiceFocus,
   type VoiceFocusTarget,
 } from './focus';
+import {
+  clipHangUp,
+  clipSend,
+  clipTalkActive,
+  clipTalkEnd,
+  clipTalkStart,
+  startClipTalk,
+  stopClipTalk,
+} from './clipTalk';
 import { saveGbotVoice } from './gbotVoice';
 import { captionParagraphs, toolLineFrame } from './lines';
 import { microphoneAllowed, microphoneDeniedMessage } from './microphone';
@@ -100,6 +109,8 @@ type VoiceState = {
   focus: VoiceFocus | null;
   /** The session a call being started was asked to be about, until gxserver's `ready` names it. */
   requestedFocus: VoiceFocusTarget | null;
+  /** The call microphone kept stopping, so each turn is recorded while Talk is held (`clipTalk.ts`). */
+  clipTalk: boolean;
 };
 
 /** `regular`: hands-free; `pushToTalk`: the agent hears you only while you hold the talk button. */
@@ -150,6 +161,7 @@ const INITIAL: VoiceState = {
   shownSession: null,
   focus: null,
   requestedFocus: null,
+  clipTalk: false,
 };
 
 /** Lines kept on screen; older ones scroll away for good. */
@@ -318,6 +330,7 @@ function shownFromFocus(focus: VoiceFocus): VoiceShownSession {
 function finish(message: string, problem?: VoiceProblem): void {
   nativeSessionId = null;
   clearMicRetries();
+  stopClipTalk();
   set({
     phase: 'ended',
     endedMessage: message,
@@ -349,6 +362,13 @@ function onFrame(json: string): void {
         return;
       }
       askedForFocus = false;
+      if (switchOnReady && target !== null && nativeSessionId !== null) {
+        switchOnReady = false;
+        // Once this frame is drawn the native call has its id; the phone joins it from JavaScript.
+        setTimeout(() => {
+          if (target !== null) void switchToClipTalk(target);
+        }, 0);
+      }
       const scope = readyFocus(frame);
       // A reattach redraws the banner from `ready.focus`; an older gxserver's all-sessions call has none.
       const focus = scope.kind === 'focus' ? scope.focus : null;
@@ -513,6 +533,10 @@ function clearMicRetries(): void {
  */
 function microphoneStopped(message: string): void {
   logAppEvent(`Voice agent: ${message}`);
+  if (clipTurns && target !== null && nativeSessionId !== null && !switchingToClips) {
+    void switchToClipTalk(target);
+    return;
+  }
   if (!micStoppedSaid) {
     micStoppedSaid = true;
     notice(message);
@@ -526,6 +550,47 @@ function microphoneStopped(message: string): void {
       void GhostexNative.voiceSetMuted(false).catch(() => undefined);
     }, delay),
   );
+}
+
+/** The computer takes recorded turns (`readVoiceAgent`'s `clipTurns`). */
+let clipTurns = false;
+let switchingToClips = false;
+/** The microphone stopped before the call's `ready`: recorded turns start when it comes. */
+let switchOnReady = false;
+
+export const CLIP_TALK_NOTICE =
+  "The phone's call microphone keeps stopping, so Ghostex records what you say instead. Hold Talk, speak, and let go to send; replies are read aloud.";
+
+/**
+ * The call's microphone stopped: the phone lets go of its native call (the computer keeps the
+ * conversation) and joins it again from JavaScript with recorded turns (`clipTalk.ts`).
+ */
+async function switchToClipTalk(machine: MachineConnectionTarget): Promise<void> {
+  switchingToClips = true;
+  try {
+    const status = await GhostexNative.voiceStatus().catch(() => null);
+    const conversationId = status?.conversationId;
+    if (nativeSessionId === null || useVoiceStore.getState().phase === 'ended') return;
+    if (!conversationId) {
+      // The call has no id until gxserver's `ready`: the switch happens then.
+      switchOnReady = true;
+      return;
+    }
+    clearMicRetries();
+    nativeSessionId = null;
+    await GhostexNative.voiceCancel('conversation').catch(() => undefined);
+    set({ clipTalk: true, talking: false });
+    notice(CLIP_TALK_NOTICE);
+    startClipTalk(machine, conversationId, useVoiceStore.getState().muted, {
+      onFrame,
+      onRejoining: () => {
+        if (useVoiceStore.getState().phase !== 'ended') set({ phase: 'reattaching' });
+      },
+      onLost: (message) => finish(message),
+    });
+  } finally {
+    switchingToClips = false;
+  }
 }
 
 function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
@@ -621,6 +686,8 @@ type VoiceAgentInfo = {
   callMode?: string;
   focusedCalls?: boolean;
   gbotCalls?: boolean;
+  /** `/api/voiceAgentClip` takes recorded turns (`clipTalk.ts`). */
+  clipTurns?: boolean;
 };
 
 type GxserverForward = { localPort: number; authToken: string };
@@ -708,6 +775,9 @@ export async function startVoice(
   askedForFocus = false;
   micStoppedSaid = false;
   clearMicRetries();
+  stopClipTalk();
+  clipTurns = false;
+  switchOnReady = false;
   set({ ...INITIAL, phase: 'starting', machineId: machine.id, machineName, requestedFocus: about ?? null });
   const fail = (code: string, message: string) => {
     logAppEvent(`Voice agent: couldn't start on ${useVoiceStore.getState().machineName} (${code}): ${message}`);
@@ -737,6 +807,7 @@ export async function startVoice(
     }
     const { forward, info: result, provider } = voice;
     currentProvider = provider;
+    clipTurns = result.clipTurns === true;
     const speed = VOICE_SPEEDS.find((offered) => Math.abs(offered - (result.speed ?? 1)) < 0.01) ?? 1;
     set({
       provider,
@@ -779,6 +850,10 @@ export async function startVoice(
  * CDXC:VoiceMode 2026-10-23 WHY: The banner the user picked has no way to widen, and "Yes, both ways" needs one on the phone, so the banner gets a small All sessions button at its right end (the desktop strip's button, same word).
  */
 export function focusVoiceOn(about: VoiceFocusTarget | null): void {
+  if (clipTalkActive()) {
+    clipSend({ type: 'focus', session: about !== null ? focusRef(about) : null });
+    return;
+  }
   if (nativeSessionId === null || !voiceActive(useVoiceStore.getState().phase)) return;
   void GhostexNative.voiceSetFocus(about !== null ? focusRef(about) : null).catch(() => undefined);
 }
@@ -786,6 +861,14 @@ export function focusVoiceOn(about: VoiceFocusTarget | null): void {
 /** Hangs up (or abandons a conversation still opening). */
 export function hangUpVoice(): void {
   const phase = useVoiceStore.getState().phase;
+  if (clipTalkActive()) {
+    clipHangUp();
+    // The computer answers `ended`; a link that is already gone ends it here.
+    setTimeout(() => {
+      if (useVoiceStore.getState().phase !== 'ended') finish('You hung up.');
+    }, 3_500);
+    return;
+  }
   if (nativeSessionId !== null) void GhostexNative.voiceEnd('conversation').catch(() => undefined);
   if (phase === 'starting' && nativeSessionId === null) finish('You hung up.');
 }
@@ -793,11 +876,16 @@ export function hangUpVoice(): void {
 export function setVoiceMuted(muted: boolean): void {
   if (!muted) micStoppedSaid = false;
   set({ muted });
+  if (clipTalkActive()) {
+    clipSend({ type: 'mute', muted });
+    return;
+  }
   void GhostexNative.voiceSetMuted(muted).catch(() => undefined);
 }
 
 /** "Stop talking": cuts the agent's reply. */
 export function interruptVoice(): void {
+  if (clipTalkActive()) return clipSend({ type: 'interrupt' });
   void GhostexNative.voiceInterrupt().catch(() => undefined);
 }
 
@@ -868,8 +956,15 @@ export async function saveComputerCallMode(
 /** What holding the talk button does now (server/src/voice_agent/talk.rs decides the turn). */
 export type VoiceHoldMode = 'talk' | 'unmute' | 'mutedLock' | 'alreadyHeard' | 'none';
 
-export function voiceHoldMode(state: { phase: VoicePhase; pushToTalk: boolean; muted: boolean }): VoiceHoldMode {
+export function voiceHoldMode(state: {
+  phase: VoicePhase;
+  pushToTalk: boolean;
+  muted: boolean;
+  clipTalk?: boolean;
+}): VoiceHoldMode {
   if (state.phase !== 'live') return 'none';
+  // Recorded turns: every turn is a hold, and Mute still wins.
+  if (state.clipTalk === true) return state.muted ? 'mutedLock' : 'talk';
   if (state.pushToTalk) return state.muted ? 'mutedLock' : 'talk';
   return state.muted ? 'unmute' : 'alreadyHeard';
 }
@@ -890,6 +985,14 @@ export function setVoiceTalking(talking: boolean): void {
   }
   if (talking) micStoppedSaid = false;
   set({ talking, hint: null });
+  if (clipTalkActive()) {
+    void (talking ? clipTalkStart() : clipTalkEnd(false)).then((problem) => {
+      if (problem === null) return;
+      if (talking) set({ talking: false });
+      notice(problem);
+    });
+    return;
+  }
   void GhostexNative.voiceSetTalking(talking).catch(() => undefined);
 }
 
@@ -897,6 +1000,10 @@ export function setVoiceTalking(talking: boolean): void {
 export function cancelVoiceTalking(): void {
   if (!useVoiceStore.getState().talking) return;
   set({ talking: false });
+  if (clipTalkActive()) {
+    void clipTalkEnd(true);
+    return;
+  }
   void GhostexNative.voiceCancelTalking().catch(() => undefined);
 }
 
@@ -904,7 +1011,7 @@ export function cancelVoiceTalking(): void {
 export function setVoiceSpeed(speed: number): void {
   if (speed === useVoiceStore.getState().speed) return;
   set({ speed });
-  void GhostexNative.voiceSetSpeed(speed).catch(() => undefined);
+  if (!clipTalkActive()) void GhostexNative.voiceSetSpeed(speed).catch(() => undefined);
   void saveVoiceSettings({ speed }, 'speed');
 }
 
@@ -922,13 +1029,15 @@ export function pickVoice(voice: string): void {
       if (failure !== null) notice(`Couldn't save ${gbot.name}'s voice (${failure}), so it lasts for this call only.`);
     });
   } else void saveVoiceSettings({ provider: state.provider ?? undefined, voice }, 'voice');
-  if (voiceActive(state.phase)) void GhostexNative.voiceSetVoice(voice).catch(() => undefined);
+  if (clipTalkActive()) clipSend({ type: 'voice', voice });
+  else if (voiceActive(state.phase)) void GhostexNative.voiceSetVoice(voice).catch(() => undefined);
 }
 
 /** Continue: gxserver hands the summary to the agent, which recaps it, and answers `memory`. */
 export function continueVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memoryState: 'continued' });
+  if (clipTalkActive()) return clipSend({ type: 'continueMemory' });
   void GhostexNative.voiceSendControl('continueMemory').catch(() => undefined);
 }
 
@@ -941,6 +1050,7 @@ export function startVoiceFresh(): void {
 export function forgetVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memory: null, memoryState: 'forgotten' });
+  if (clipTalkActive()) return clipSend({ type: 'forgetMemory' });
   void GhostexNative.voiceSendControl('forgetMemory').catch(() => undefined);
 }
 
