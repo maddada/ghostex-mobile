@@ -5,6 +5,10 @@
  * words to compare there, what waits until then, and the outcome (paired, denied, lapsed) with
  * Ask again. Mounting it also registers pairing over SSH with the chat link (the module's import).
  *
+ * Where the computer says the phone already works before pairing (`sshPhoneWorksUnpaired`), the
+ * waiting request is one small line with Hide instead (CDXC:RemotePairing 2026-11-10 in
+ * `machines/sshPairing.ts`).
+ *
  * CDXC:RemotePairing 2026-11-09 WHY: one compact card for every computer waiting, not one tall card
  * each (the user's phone stacked two above SESSIONS); a computer the phone can't reach right now,
  * one still being asked, and one hidden show nothing (CDXC:RemotePairing 2026-11-09 in `copy.ts`).
@@ -49,10 +53,47 @@ export default function SshPairingNotices() {
   const insets = useSafeAreaInsets();
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const shown = Object.values(pairings).filter(
+  const quiet = useSshPairings((state) => state.quiet);
+  const visible = Object.values(pairings).filter(
     (pairing) => pairing.phase !== 'asking' && hidden[pairing.machineId] !== true && unreachable[pairing.machineId] !== true,
   );
-  if (shown.length === 0) return null;
+  // Where the phone already works (`sshPhoneWorksUnpaired`), a waiting request is one quiet line
+  // and the rest (lapsed, denied, failed) stays on the computer's page under Machines.
+  const quietLines = visible.filter(
+    (pairing) => quiet[pairing.machineId] === true && (pairing.phase === 'pending' || pairing.phase === 'paired'),
+  );
+  const shown = visible.filter((pairing) => quiet[pairing.machineId] !== true);
+  if (shown.length === 0 && quietLines.length === 0) return null;
+  if (shown.length === 0) {
+    return (
+      <View pointerEvents="box-none" style={[styles.layer, { top: insets.top + 8 }]}>
+        {quietLines.map((pairing) => (
+          <View key={pairing.machineId} style={styles.line} testID="ssh-pairing-line">
+            <View style={styles.lineText}>
+              <Text style={styles.lineBody}>
+                {pairing.phase === 'paired'
+                  ? SshPairingCopy.quietPaired(pairing.computer)
+                  : SshPairingCopy.quietPending(pairing.computer)}
+              </Text>
+              {pairing.phase === 'pending' && (
+                <Text style={styles.lineWords} testID="ssh-pairing-words">
+                  {pairing.words.join(' · ')}
+                </Text>
+              )}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => hideSshPairing(pairing.machineId)}
+              style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.buttonLabel}>{SshPairingCopy.hide}</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    );
+  }
   const askAgain = (machineId: string) => {
     const machine = machines.find((record) => record.id === machineId);
     if (machine !== undefined) void startSshPairing(machine, { auto: false });
@@ -183,6 +224,21 @@ function createStyles(appearance: Appearance) {
     rowStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
     rowStatusText: { flexShrink: 1, fontSize: 13, color: appearance.muted, textAlign: 'right' },
     why: { fontSize: 12.5, lineHeight: 17, color: appearance.muted },
+    line: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginBottom: 6,
+      backgroundColor: appearance.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: appearance.border,
+    },
+    lineText: { flex: 1, gap: 2 },
+    lineBody: { fontSize: 13, lineHeight: 18, color: appearance.foreground },
+    lineWords: { fontSize: 14, fontWeight: '700', color: appearance.foreground },
     hint: { fontSize: 12, lineHeight: 16, color: appearance.muted },
   });
 }

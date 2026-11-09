@@ -120,6 +120,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const removalAsksComputer = useRemovalAsksComputer();
   const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
   const sshPairing = useSshPairings((state) => (machineId === null ? undefined : state.pairings[machineId]));
+  const sshPairingQuiet = useSshPairings((state) => machineId !== null && state.quiet[machineId] === true);
   const editing = existing !== null;
 
   const [transport, setTransport] = useState<MachineTransport>(
@@ -566,7 +567,11 @@ export default function MachineFormScreen({ navigation, route }: Props) {
                   <View style={[formStyles.row, formStyles.rowFirst]}>
                     <View style={formStyles.rowMain}>
                       <Text style={formStyles.rowLabel}>{SshPairingCopy.rowLabel}</Text>
-                      <Text style={formStyles.rowDetail}>{SshPairingCopy.rowDetail(sshPairing.computer)}</Text>
+                      <Text style={formStyles.rowDetail}>
+                        {sshPairingQuiet
+                          ? SshPairingCopy.quietRowDetail(sshPairing.computer)
+                          : SshPairingCopy.rowDetail(sshPairing.computer)}
+                      </Text>
                     </View>
                     <SetupButton
                       small

@@ -42,6 +42,13 @@ import { machineDisplayLabel, useMachinesStore } from './store';
 
 /** What `ghostex server endpoint` lists when the computer takes `/api/pairOverSsh`. */
 export const PAIR_OVER_SSH_CAPABILITY = 'pairOverSsh';
+
+/*
+CDXC:RemotePairing 2026-11-10 DECISION:
+User (Q2109, Q2110, option C: "what are we protecting against even? i want to reduce the friction connecting"): a phone that signs in over SSH works at once with everything that computer's token file allows (reading, replying, Stop, typing, starting sessions); only its owner powers (approving requests with Face ID, answering secret requests) wait for the one-time "Approve this phone?" with the three words. A gxserver that says `sshPhoneWorksUnpaired` works that way (server/src/security/policy.rs), so the waiting request is one small line the person can hide, never a card in the way; the computer's page under Machines keeps Show. A gxserver that doesn't say it keeps the card and its copy.
+*/
+/** What `ghostex server endpoint` lists when a phone on the token file works there before pairing. */
+export const SSH_PHONE_WORKS_UNPAIRED_CAPABILITY = 'sshPhoneWorksUnpaired';
 const RPC_TIMEOUT_MS = 20_000;
 const POLL_MS = 1_500;
 const WAIT_MAX_MS = 10 * 60 * 1000;
@@ -120,9 +127,19 @@ type State = {
   hidden: Record<string, true>;
   /** Computers whose last ask the link couldn't deliver (asleep, offline): they show no card. */
   unreachable: Record<string, true>;
+  /** Computers where this phone works before pairing (`sshPhoneWorksUnpaired`): one quiet line. */
+  quiet: Record<string, true>;
 };
 
-export const useSshPairings = create<State>(() => ({ pairings: {}, hidden: {}, unreachable: {} }));
+export const useSshPairings = create<State>(() => ({ pairings: {}, hidden: {}, unreachable: {}, quiet: {} }));
+
+function setQuiet(machineId: string, quiet: boolean): void {
+  if ((useSshPairings.getState().quiet[machineId] === true) === quiet) return;
+  useSshPairings.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.quiet;
+    return { quiet: quiet ? { ...rest, [machineId]: true } : rest };
+  });
+}
 
 function put(pairing: SshPairing): void {
   useSshPairings.setState((state) => ({ pairings: { ...state.pairings, [pairing.machineId]: pairing } }));
@@ -434,6 +451,7 @@ setHeldAnswerHandler(withSshPairing);
 onChatLinkHandshake((machine, capabilities) => {
   // A handshake means the computer answers now; its card may show again.
   setReachable(machine.id, true);
+  setQuiet(machine.id, capabilities.includes(SSH_PHONE_WORKS_UNPAIRED_CAPABILITY));
   if (capabilities.includes(PAIR_OVER_SSH_CAPABILITY)) void startSshPairing(machine, { auto: true });
 });
 onChatLinkCutOff((machineId) => setReachable(machineId, false));

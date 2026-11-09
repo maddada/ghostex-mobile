@@ -1655,6 +1655,14 @@ export const SshPairingCopy = {
   rowDetail: (computer: string) =>
     `Not approved on ${computer} yet. Replying, Stop and typing wait for approval there.`,
   rowShow: 'Show',
+  /**
+   * A computer whose gxserver says `sshPhoneWorksUnpaired`: the phone already works there, and only
+   * approving from it waits (CDXC:RemotePairing 2026-11-10 in `machines/sshPairing.ts`).
+   */
+  quietPending: (computer: string) => `To approve requests from this phone, choose Approve this phone in Ghostex on ${computer}:`,
+  quietPaired: (computer: string) => `This phone can approve requests for ${computer} now.`,
+  quietRowDetail: (computer: string) =>
+    `This phone already works with ${computer}. Approve it there once to approve requests from this phone too.`,
 } as const;
 
 export const ApprovalsCopy = {
