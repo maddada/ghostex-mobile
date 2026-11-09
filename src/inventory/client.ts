@@ -195,6 +195,15 @@ export function summarizeFailure(raw: unknown, hasPassword: boolean): string {
   return classifyFailure(raw, hasPassword).message;
 }
 
+/**
+ * The native transport's words when the SSH socket itself failed under a command (SSHConnection.swift:
+ * "Socket error: Exec read failed: -43"): libssh2's socket send (-7), disconnect (-13), timeout (-30)
+ * and receive (-43) errors, a channel that could not be opened because the socket went (reset mid-open,
+ * "Failed to open channel"), or the plain reset / broken pipe of the socket.
+ */
+const SOCKET_DROPPED_TEXT =
+  /\bsocket error:.*\bfailed: -(?:7|13|30|43)\b|\bfailed to open channel\b|\bconnection reset by peer\b|\bbroken pipe\b/iu;
+
 /** "Connection timed out" / "Operation timed out" / "connect timed out"; never `--timeout` from a usage dump. */
 const TIMED_OUT_TEXT = /\b(?:connection|operation|connect|read|dial|handshake)\s+timed out\b/iu;
 
@@ -247,6 +256,13 @@ function classifyFailure(error: unknown, hasPassword: boolean): Pick<FailureSumm
   }
   if (nativeCode === 'timeout' || TIMED_OUT_TEXT.test(text)) {
     return { message: FailureCopy.timedOut, reasonCode: 'timeout' };
+  }
+  // CDXC:RemoteMachines 2026-11-09 WHY: Discord (Jakey, iPhone over Tailscale): "Unrecognised computer
+  // failure: Socket error: Exec read failed: -43" showed as "Ghostex on the computer couldn't do that", which
+  // blamed Ghostex for a connection that had dropped. It reads as a dropped connection and counts as one, so
+  // the automatic reconnect replaces it (autoReconnect.ts `CONNECTION_FAILURES`).
+  if (SOCKET_DROPPED_TEXT.test(text)) {
+    return { message: FailureCopy.connectionDropped, reasonCode: reason('timeout') };
   }
   if (
     nativeCode === 'noRoute' ||
