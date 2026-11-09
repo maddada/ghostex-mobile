@@ -11,6 +11,7 @@ import type { ProjectedMessage } from '../../rust/document';
 import { subagentOpenAction } from '../cards';
 import {
   quietStyle,
+  useChatLook,
   useNativeChatUi,
   useRowDetail,
   useTranscriptEnv,
@@ -36,6 +37,7 @@ import {
   successTone,
 } from './quietWork';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE } from './theme';
+import { userBandFill } from './userMessageLook';
 
 /** Each row carries its own padding (the 2026-10-11 work look), so the gap between rows is small. */
 const ROW_GAP = 2;
@@ -226,10 +228,16 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
  * (desktop `shell_command_card` in `tool_run.rs`): a header with the terminal glyph, the command and
  * its failure status, opening onto the output alone; Copy is in the long-press menu. It shows in Simple mode too, since it is
  * what the user typed. A running card opens on its output by default and folds like every
- * disclosure, from the header or the rail.
+ * disclosure, from the header or the rail. Under the chat look it sits where your other messages do
+ * (`userMessageLook.tsx`): Left aligned keeps the bubble at the left edge, and Band draws the header and
+ * its output across the column on the band's fill.
  */
 export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
+  const look = useChatLook();
+  const band = look.userStyle === 'band';
+  const left = look.messageLayout === 'left';
+  const frame = band ? [styles.shellBand, { backgroundColor: userBandFill(theme) }] : { backgroundColor: theme.input };
   const { disclosures } = useNativeChatUi();
   const card = obj(message.shellCard);
   const hasBody = card?.hasBody === true;
@@ -248,8 +256,8 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
     .map(([part, error]) => ({ part, error, content: str(card, part) }))
     .filter(({ content }) => content.trim().length > 0);
   return (
-    <View style={styles.shellColumn}>
-      <View style={[styles.shellBubble, styles.shellHeaderBubble, { backgroundColor: theme.input }]}>
+    <View style={[styles.shellColumn, left && styles.shellColumnLeft]}>
+      <View style={[styles.shellBubble, styles.shellHeaderBubble, frame]}>
         <View style={styles.shellHeader}>
           <Pressable
             onPress={hasBody ? toggle : undefined}
@@ -282,7 +290,7 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
       {/* The output opens in a bubble of its own below the header, which keeps its collapsed size;
           the header is its toggle, so it carries no rail. */}
       {open && blocks.length > 0 ? (
-        <View style={[styles.shellBubble, styles.shellOutputBubble, { backgroundColor: theme.input }]}>
+        <View style={[styles.shellBubble, styles.shellOutputBubble, frame]}>
           {blocks.map(({ part, error, content }) => (
             <ToolBody key={part} label={null} content={content} failed={error} copyText="" />
           ))}
@@ -610,7 +618,10 @@ const styles = StyleSheet.create({
   // The detail's rail hangs from the middle of the step's 12pt mark (the rail's own centre sits 10pt in).
   quietStepDetail: { marginLeft: -4, paddingVertical: 4 },
   shellColumn: { alignItems: 'flex-end', gap: 6 },
+  shellColumnLeft: { alignItems: 'flex-start' },
   shellBubble: { maxWidth: '80%', flexShrink: 1, minWidth: 0, borderRadius: 16 },
+  // Your messages Band: the full column on the band's fill (desktop `shell_command_card`).
+  shellBand: { alignSelf: 'stretch', maxWidth: '100%', borderRadius: 8 },
   shellHeaderBubble: { paddingHorizontal: 12, paddingVertical: 8 },
   shellOutputBubble: { gap: 4, padding: 2 },
   shellHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },

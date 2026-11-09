@@ -36,7 +36,7 @@ export function userStyleProse(theme: TranscriptTheme, strength: number): string
 }
 
 /** The Band's fill (desktop `ChatAppearance.user_band`). */
-function userBandFill(theme: TranscriptTheme): string {
+export function userBandFill(theme: TranscriptTheme): string {
   return stepTowardHex(theme.background, !theme.light, theme.light ? BAND_STEP_LIGHT : BAND_STEP_DARK);
 }
 

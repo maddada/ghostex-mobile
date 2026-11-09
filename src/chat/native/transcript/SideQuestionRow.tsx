@@ -12,7 +12,11 @@ import { SideBadge, SideAnswer } from '../cards/SideQuestionCard';
 import { useNativeChatUi, useTranscriptEnv } from './context';
 import { Chevron } from './Disclosure';
 import { obj, str } from './json';
+import { useInnerGap } from './messageSpacing';
 import { useDisclosure } from './state';
+
+/** The gap under a side question at Message spacing Default (desktop `side_question.rs`). */
+const GAP_BELOW = 13;
 
 export function SideQuestionRow({ message }: { message: ProjectedMessage }) {
   const { theme, dispatch } = useTranscriptEnv();
@@ -20,8 +24,10 @@ export function SideQuestionRow({ message }: { message: ProjectedMessage }) {
   const card = obj(message.sideQuestion);
   const [open, toggle] = useDisclosure(disclosures, `side-question:${message.id}`);
   const answer = str(card, 'answer');
+  // Message spacing Compact shrinks the gap under it like the row gap (`messageSpacing.ts`).
+  const gapBelow = useInnerGap(GAP_BELOW);
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, gapBelow !== GAP_BELOW && { paddingBottom: gapBelow }]}>
       <View style={[styles.box, { borderColor: theme.border }]}>
         <Pressable
           accessibilityRole="button"
@@ -64,7 +70,7 @@ export function SideQuestionRow({ message }: { message: ProjectedMessage }) {
 }
 
 const styles = StyleSheet.create({
-  row: { paddingBottom: 13 },
+  row: { paddingBottom: GAP_BELOW },
   box: { borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   question: { flex: 1, minWidth: 0, fontSize: 13 },

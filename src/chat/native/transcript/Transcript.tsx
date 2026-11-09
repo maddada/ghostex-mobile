@@ -61,7 +61,7 @@ import { TranscriptFieldRevealContext, useTranscriptFieldReveal } from './fieldR
 import { ROW_GAP } from './cardSpacing';
 import { REPLY_FADE_MS, useReplyArrival } from './replyArrival';
 import { chatLookOf } from './context';
-import { rowGapOf } from './messageSpacing';
+import { rowGapOf, useRowGap } from './messageSpacing';
 import { StatusTail, statusTailShown } from '../cards/WorkingCard';
 
 /**
@@ -210,12 +210,20 @@ export function useSubagentRowRenderer(chat: RustChat): (item: TranscriptItem, i
   return useCallback(
     (item: TranscriptItem) => (
       <TranscriptScope chat={chat} main={false}>
-        <View style={styles.subagentRow}>
-          <TranscriptItemView item={item} />
-        </View>
+        <SubagentRow item={item} />
       </TranscriptScope>
     ),
     [chat],
+  );
+}
+
+/** A subagent viewer row, ending with the transcript's row gap (Message spacing's, `messageSpacing.ts`; desktop `transcript_row_column`). */
+function SubagentRow({ item }: { item: TranscriptItem }) {
+  const rowGap = useRowGap();
+  return (
+    <View style={[styles.subagentRow, rowGap !== ROW_GAP && { paddingBottom: rowGap }]}>
+      <TranscriptItemView item={item} />
+    </View>
   );
 }
 
@@ -753,7 +761,7 @@ const styles = StyleSheet.create({
   rowInner: { width: '100%', maxWidth: ROW_MAX_WIDTH, paddingHorizontal: 16, paddingBottom: ROW_GAP },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
   emptyScroll: { flexGrow: 1 },
-  subagentRow: { paddingHorizontal: 4, paddingBottom: 16 },
+  subagentRow: { paddingHorizontal: 4, paddingBottom: ROW_GAP },
   button: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   buttonText: { fontSize: 14 },
   pageSpinner: { paddingVertical: 12, alignItems: 'center' },
