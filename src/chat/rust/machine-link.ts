@@ -35,6 +35,7 @@ import { boxForward, boxHandshake, closeBoxForward, type BoxEndpoint } from '../
 import { isCloudBoxMachineId } from '../../cloudBoxes/types';
 import { isDemoMachine } from '../../demo/identity';
 import type { RpcAnswer } from './transport';
+import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress } from '../../remote/linkActivity';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
 const PROTOCOL_VERSION = 1;
@@ -63,6 +64,21 @@ const QUIET_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
 /** How often a watched link looks at how long it has been quiet. */
 const QUIET_CHECK_MS = 2_500;
+/**
+ * How long a snapshot the socket asked for may take to arrive before the link counts as idle again.
+ * Until then a quiet socket is loading it, not lost (CDXC:RemoteMachines 2026-11-10 in
+ * src/remote/linkActivity.ts).
+ */
+const SNAPSHOT_TRANSFER_MAX_MS = 25_000;
+/** Reads whose answer can be large (a page of rows, a picture): the link is busy while they run. */
+const HEAVY_READ_METHODS = new Set([
+  'readSessionChat',
+  'readSessionChatImage',
+  'readVisualPageThumbnail',
+  'readVisualPageSource',
+  'readSessionTerminalTail',
+  'readSessionChatReport',
+]);
 /** Requests that only read, so a lost one may simply be asked again. */
 const READ_ONLY_METHODS = new Set([
   'readSessionChat',
@@ -198,7 +214,6 @@ export function onChatLinkCutOff(listener: (machineId: string) => void): () => v
   return () => cutOffListeners.delete(listener);
 }
 
-
 /**
  * Hooks for pairing over SSH (`machines/sshPairing.ts`, GitHub #495), which registers them when the
  * app loads it, so this module stays free of it: a finished handshake (with the computer's
@@ -250,6 +265,8 @@ class ChatMachineLink {
   private readonly silenceListeners = new Set<() => void>();
   private quietTimer: ReturnType<typeof setInterval> | null = null;
   private probing = false;
+  /** Ends the heavy transfer of a snapshot the socket asked for, once its first frame arrives. */
+  private owedSnapshot: ((delivered: boolean) => void) | null = null;
 
   constructor(private machine: MachineConnectionTarget) {
     AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -393,13 +410,40 @@ class ChatMachineLink {
   /** gxserver answered something. Until the socket is open the chat is not live, so it stays silent. */
   private heard(): void {
     this.lastHeardAt = Date.now();
+    noteLinkProgress(this.machine.id);
     if (this.socketOpen) this.setSilence(null);
   }
 
+  /** The socket asked for a snapshot: until its first frame, a quiet link is loading it. */
+  private oweSnapshot(): void {
+    this.owedSnapshot ??= beginLinkTransfer(this.machine.id, SNAPSHOT_TRANSFER_MAX_MS);
+  }
+
+  private settleOwedSnapshot(delivered: boolean): void {
+    const owed = this.owedSnapshot;
+    this.owedSnapshot = null;
+    owed?.(delivered);
+  }
+
+  /** When anything last came back from this computer: on this socket or any other call over its connection. */
+  private lastProgressAt(): number {
+    return Math.max(this.lastHeardAt, linkProgressAt(this.machine.id));
+  }
+
+  /**
+   * CDXC:RemoteMachines 2026-11-10 WHY: the socket's own frames are not the only sign of life. A
+   * big transfer on the same SSH connection (a snapshot, an upload) can hold the socket quiet for
+   * longer than `QUIET_MS` while everything works, and `GET /api/health` would only queue behind
+   * it; then a quiet link is busy, not cut off, and an answer to any other call proves it alive
+   * (src/remote/linkActivity.ts).
+   */
   private checkQuiet(): void {
     const state = this.state;
     if (this.probing || !this.socketOpen || state.kind !== 'socket' || !foreground()) return;
-    if (Date.now() - this.lastHeardAt < QUIET_MS) return;
+    const lastProgress = this.lastProgressAt();
+    if (this.silence !== null && lastProgress > this.silence) this.heard();
+    if (Date.now() - lastProgress < QUIET_MS) return;
+    if (linkTransferring(this.machine.id)) return;
     this.probing = true;
     const askedAt = Date.now();
     const generation = this.socketGeneration;
@@ -409,7 +453,8 @@ class ChatMachineLink {
       // A socket replaced meanwhile, or a frame that came in while the question hung, says nothing about now.
       else if (
         generation === this.socketGeneration &&
-        this.lastHeardAt < askedAt &&
+        this.lastProgressAt() < askedAt &&
+        !linkTransferring(this.machine.id) &&
         this.socketOpen &&
         this.followers.size > 0
       ) {
@@ -676,6 +721,7 @@ class ChatMachineLink {
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const transfer = HEAVY_READ_METHODS.has(method) ? beginLinkTransfer(this.machine.id, timeoutMs) : null;
     try {
       const response = await fetch(`http://127.0.0.1:${localPort}${endpoint}`, {
         method: 'POST',
@@ -688,6 +734,7 @@ class ChatMachineLink {
         signal: controller.signal,
       });
       const text = await response.text();
+      transfer?.(true);
       this.heard();
       // A refused token means gxserver issued a new one; the next request asks for it.
       if (response.status === 401) {
@@ -737,6 +784,7 @@ class ChatMachineLink {
       console.warn(`[chat-link] ${method} lost: ${errorMessage(error)}`);
       return { kind: 'lost', timedOut: controller.signal.aborted };
     } finally {
+      transfer?.(false);
       clearTimeout(timer);
     }
   }
@@ -763,14 +811,18 @@ class ChatMachineLink {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
-    if (this.socketOpen) this.send(this.subscribeMessage(this.followers.get(key)!));
-    else this.ensureSocket();
+    if (this.socketOpen) {
+      this.send(this.subscribeMessage(this.followers.get(key)!));
+      this.oweSnapshot();
+    } else this.ensureSocket();
   }
 
   /** Subscribes a followed conversation again, which makes gxserver send a fresh snapshot. */
   refresh(projectId: string, sessionId: string): void {
     const follower = this.followers.get(followerKey(projectId, sessionId));
-    if (follower !== undefined && this.socketOpen) this.send(this.subscribeMessage(follower));
+    if (follower === undefined || !this.socketOpen) return;
+    this.send(this.subscribeMessage(follower));
+    this.oweSnapshot();
   }
 
   /** Stops following a conversation. The socket closes a while after its last follower leaves. */
@@ -889,6 +941,7 @@ class ChatMachineLink {
       // gxserver has no replay: every open subscribes every follower, and each answers with a
       // fresh snapshot that replaces whatever a dropped socket lost.
       for (const follower of this.followers.values()) this.send(this.subscribeMessage(follower));
+      if (this.followers.size > 0) this.oweSnapshot();
     };
     socket.onmessage = (event: WebSocketMessageEvent) => {
       if (generation !== this.socketGeneration || typeof event.data !== 'string') return;
@@ -906,6 +959,7 @@ class ChatMachineLink {
       if (generation !== this.socketGeneration) return;
       const wasOpen = this.socketOpen;
       this.socket = null;
+      this.settleOwedSnapshot(false);
       this.setSocketOpen(false);
       if (this.followers.size === 0) return;
       if (wasOpen) this.scheduleReconnect();
@@ -942,6 +996,7 @@ class ChatMachineLink {
     this.socketGeneration += 1;
     const socket = this.socket;
     this.socket = null;
+    this.settleOwedSnapshot(false);
     this.setSocketOpen(false);
     if (this.resumeTimer !== null) {
       clearTimeout(this.resumeTimer);
@@ -989,6 +1044,8 @@ class ChatMachineLink {
     ) {
       return;
     }
+    // A chat frame (never the stream's ready header) is what the socket was asked for.
+    this.settleOwedSnapshot(true);
     this.followers.get(followerKey(frame.projectId, frame.sessionId))?.onFrame(frame);
   }
 }

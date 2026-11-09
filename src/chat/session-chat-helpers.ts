@@ -7,7 +7,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { GhostexNative } from '../../modules/ghostex-native/src';
 import { readSessionChatQueueCommand, setSessionChatDraftCommand } from '../commands/ghostexCli';
 import { runGhostexCli } from '../components/sessions/cli';
 import {
@@ -18,7 +17,7 @@ import {
 } from '../components/terminal/uploads';
 import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
-import { execRemoteScript, remoteUploadPath } from '../remote/commands';
+import { execRemoteScript, remoteUploadPath, uploadOverLink } from '../remote/commands';
 import { windowsChatUploadPath } from '../remote/files';
 import { SESSION_CHAT_SUPPORTED_AGENT_IDS } from './session-chat-agents.generated';
 
@@ -64,11 +63,7 @@ async function uploadStagedChatFile(
   if (exec.exitCode !== 0 || remotePath.length === 0) {
     throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
   }
-  await GhostexNative.uploadFile(
-    machine.id,
-    localPathFromUri(localUri),
-    await remoteUploadPath(machine.id, remotePath),
-  );
+  await uploadOverLink(machine.id, localPathFromUri(localUri), await remoteUploadPath(machine.id, remotePath));
   return remotePath;
 }
 

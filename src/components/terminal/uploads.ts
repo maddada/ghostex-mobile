@@ -1,4 +1,4 @@
-import { execRemoteScript, remoteUploadPath } from '../../remote/commands';
+import { execRemoteScript, remoteUploadPath, uploadOverLink } from '../../remote/commands';
 import { windowsAttachmentPath } from '../../remote/files';
 /**
  * File attach & send flow (terminal-screen.md §5):
@@ -169,11 +169,7 @@ async function sendPickedAttachment(
     throw new Error(exec.stderr.trim().length > 0 ? exec.stderr.trim() : 'Remote path creation failed.');
   }
 
-  await GhostexNative.uploadFile(
-    machineId,
-    localPathFromUri(picked.localUri),
-    await remoteUploadPath(machineId, remotePath),
-  );
+  await uploadOverLink(machineId, localPathFromUri(picked.localUri), await remoteUploadPath(machineId, remotePath));
 
   const title = picked.isImage ? `Image #${++imageCounter}` : `File #${++fileCounter}`;
   const reference = `[${title}](${remotePath})`;

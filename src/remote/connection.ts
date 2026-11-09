@@ -8,6 +8,7 @@ import {
   noteEasyConnectDial,
   refreshEasyConnectAddressesSoon,
 } from '../machines/easyConnectDial';
+import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -49,7 +50,7 @@ export function ensureConnected(
     if (!replaceExisting && (await GhostexNative.isConnected(machine.id))) {
       assertCurrent();
       if (!options.verify) return;
-      const probe = await probeConnection(machine.id);
+      const probe = await probeConnection(machine.id, Date.now());
       if (probe === 'answered') return;
       assertCurrent();
       if (probe === 'stalled' && machine.transport === 'tailcat') {
@@ -136,14 +137,20 @@ async function connectEasyConnect(
 }
 
 /**
- * Whether the shared connection still answers a trivial command: `answered`, `stalled` (no answer
- * within the probe's time) or `failed` (an error or a wrong answer).
+ * Whether the shared connection still answers: `answered`, `stalled` (no answer within the probe's
+ * time) or `failed` (an error or a wrong answer). While a heavy transfer is under way the probe
+ * would only queue behind it, so the transfer's own outcome answers first: anything that comes back
+ * after `since` counts as `answered`, and only a link left idle is probed (CDXC:RemoteMachines
+ * 2026-11-10 in src/remote/linkActivity.ts).
  */
-async function probeConnection(machineId: string): Promise<'answered' | 'stalled' | 'failed'> {
+async function probeConnection(machineId: string, since: number): Promise<'answered' | 'stalled' | 'failed'> {
+  if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
   try {
     // echo is understood by POSIX shells, Windows cmd and PowerShell.
     const probe = await GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', PROBE_TIMEOUT_MS);
-    return probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__') ? 'answered' : 'failed';
+    const answered = probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
+    if (answered) noteLinkProgress(machineId);
+    return answered ? 'answered' : 'failed';
   } catch (error) {
     return (error as { code?: unknown } | null)?.code === 'E_TIMEOUT' ? 'stalled' : 'failed';
   }
