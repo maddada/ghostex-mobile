@@ -68,7 +68,8 @@ export default function ChatPage() {
         <SettingToggle settingKey="chatToolCallLines" label="Tool call lines (experimental)" />
         <Caption>
           Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as
-          rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows.
+          rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. When the computer's
+          Agent work is Reduced or Quiet, that look replaces these lines here too.
         </Caption>
         <Caption>
           Show the session's pull requests, issues and Linear tickets under the chat's header. Turn off to keep the
