@@ -13,6 +13,7 @@ import type { RustChat } from '../../rust/useRustChat';
 import type { ChatDocument, ChatLook, Json } from '../../rust/document';
 import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
+import { workCardIndex, type WorkCardIndex } from '../cards/WorkCards';
 import { openChatImageViewer } from '../cards/overlayStore';
 import { DisclosureStore, RowDetailDemand } from './state';
 import type { TranscriptTheme } from './theme';
@@ -216,6 +217,8 @@ export type TranscriptFlags = {
   readAloudSpeakingId: string | null;
   /** A coordinator's relayed thread approval cards, by the report row each is drawn under (`anchorId`). */
   relayedApprovals: { [messageId: string]: JsonRecord };
+  /** A coordinator's work item cards, by the reply each sits under and by summary-mode turn (`workCards`). */
+  workCards: WorkCardIndex;
   /**
    * Every card on the chat's board by ref (`B4`) with its title now (`coordinatorBoard.itemTitles`,
    * gx-chat-core `board_reference`): a board mention reads its label from it and draws dimmed when
@@ -286,11 +289,22 @@ const EMPTY_FLAGS: TranscriptFlags = {
   readAloudAvailable: false,
   readAloudSpeakingId: null,
   relayedApprovals: {},
+  workCards: { byAnchor: {}, byTurn: {} },
   boardItemTitles: null,
   chatLook: DEFAULT_CHAT_LOOK,
 };
 
 const FlagsContext = createContext<TranscriptFlags>(EMPTY_FLAGS);
+
+/**
+ * True inside a summary-mode turn: its work item cards are drawn under the whole turn
+ * (`TranscriptItemRow.tsx`), not under the reply inside its fold (desktop `in_summary_turn`).
+ */
+const SummaryTurnContext = createContext(false);
+export const SummaryTurnProvider = SummaryTurnContext.Provider;
+export function useInSummaryTurn(): boolean {
+  return useContext(SummaryTurnContext);
+}
 export const TranscriptFlagsProvider = FlagsContext.Provider;
 export function useTranscriptFlags(): TranscriptFlags {
   return useContext(FlagsContext);
@@ -353,6 +367,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     readAloudAvailable: document.readAloud?.available === true,
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),
+    workCards: workCardIndex(document),
     boardItemTitles: boardItemTitles(document),
     chatLook: chatLookOf(document),
   };

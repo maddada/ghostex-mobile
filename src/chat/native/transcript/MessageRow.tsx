@@ -10,7 +10,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance 
 import type { ProjectedMessage } from '../../rust/document';
 import { ApiErrorCard, ApiErrorNote, QuestionExchangeCards } from '../cards';
 import { cardStackMargin } from './cardSpacing';
-import { quietStyle, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { quietStyle, useInSummaryTurn, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { WorkCardStack } from '../cards/WorkCards';
 import { Chevron, DisclosureBody, DisclosureHeading, LaneMarker, useFoldPlace } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
 import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip, WithLoadingPictures } from './Images';
@@ -79,8 +80,26 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Proje
   if (obj(message.systemCard) !== null) return <SystemCard message={message} />;
   // A reply always starts from the standard prose colour: Text strength alone raises it, and Grey thinking
   // only greys the thinking (CDXC:SessionChat 2026-11-09, desktop `ChatTextColors::reply_base`).
-  return <AgentMessage message={message} proseColor={theme.prose} />;
+  return <AgentMessageWithWork message={message} proseColor={theme.prose} />;
 });
+
+/**
+ * An agent's message, with the coordinator's work item cards that sit under it (`workCards`,
+ * `cards/WorkCards.tsx`); a summary-mode turn draws them under the whole turn instead.
+ */
+function AgentMessageWithWork({ message, proseColor }: { message: ProjectedMessage; proseColor: string }) {
+  const { dispatch } = useTranscriptEnv();
+  const { workCards } = useTranscriptFlags();
+  const inSummary = useInSummaryTurn();
+  const cards = message.role === 'assistant' && !inSummary ? (workCards.byAnchor[message.id] ?? []) : [];
+  if (cards.length === 0) return <AgentMessage message={message} proseColor={proseColor} />;
+  return (
+    <View>
+      <AgentMessage message={message} proseColor={proseColor} />
+      <WorkCardStack cards={cards} dispatch={dispatch} />
+    </View>
+  );
+}
 
 /** A failed API call: the open card when the core names this row, otherwise one quiet line. */
 function ApiErrorRow({ message }: { message: ProjectedMessage }) {

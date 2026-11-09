@@ -752,6 +752,8 @@ export type ChatDocument = {
   collab?: Json;
   /** A coordinator's threads' relayed approval cards (gx-chat-core `extras/relayed_approvals.rs`), empty when none. Desktop: `relayed_approval.rs`. */
   relayedApprovals?: Json;
+  /** A coordinator's work item cards (gx-chat-core `extras/work_cards.rs`), drawn under their replies. */
+  workCards?: Json;
   /** A thread's "Approved from <coordinator>" lines, empty when none. Desktop: `relayed_approval.rs`. */
   relayedAnswerLines?: Json;
   /** The background tasks the agent left running, or null; the Background pill's sheet. Desktop: `background_tasks.rs`. */

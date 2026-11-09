@@ -15,7 +15,15 @@ import type {
   TranscriptItem,
 } from '../../rust/document';
 import { QuestionExchangeCards } from '../cards';
-import { hiddenWork, useChatLook, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import {
+  hiddenWork,
+  SummaryTurnProvider,
+  useChatLook,
+  useNativeChatUi,
+  useTranscriptEnv,
+  useTranscriptFlags,
+} from './context';
+import { WorkCardStack } from '../cards/WorkCards';
 import { DeferredNotice } from './DeferredNotice';
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
@@ -69,6 +77,8 @@ export const TranscriptItemView = memo(function TranscriptItemView({ item }: { i
 
 function SummaryRow({ item }: { item: SummaryItem }) {
   const { disclosures } = useNativeChatUi();
+  const { dispatch } = useTranscriptEnv();
+  const { workCards } = useTranscriptFlags();
   const hasFinal = obj(item.final) !== null;
   // A running turn's "Active work" fold starts open and has a key of its own, so closing it holds
   // for that turn without closing the reply fold that replaces it (gx-chat-core `summary_mode_turns`).
@@ -87,7 +97,8 @@ function SummaryRow({ item }: { item: SummaryItem }) {
   );
   return (
     <View style={styles.column}>
-      <MessageRow message={item.user} />
+      <SummaryTurnProvider value={true}>
+        <MessageRow message={item.user} />
       {(item.outcome ?? []).map((message) => (
         <MessageRow key={message.id} message={message} />
       ))}
@@ -108,6 +119,9 @@ function SummaryRow({ item }: { item: SummaryItem }) {
           ) : null}
         </>
       ) : null}
+      </SummaryTurnProvider>
+      {/* The turn's work item cards, under the whole turn and outside its folds (`cards/WorkCards.tsx`). */}
+      <WorkCardStack cards={workCards.byTurn[item.id] ?? []} dispatch={dispatch} />
     </View>
   );
 }
