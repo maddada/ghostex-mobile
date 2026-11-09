@@ -56,6 +56,20 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   tailcatClientPublicKey(): Promise<string>;
 
   /**
+   * The Easy Connect client key this phone keeps for one computer (`nodekey:…`), created on first use in
+   * the app's private storage. Absent on builds before per-computer keys (11.2.1 and older): check
+   * before calling (src/machines/easyConnectLinkKey.ts).
+   */
+  tailcatMachineClientKey?(machineId: string): Promise<string>;
+
+  /**
+   * Whether `machineId`'s tunnels dial with its own key (`tailcatMachineClientKey`) or with this phone's
+   * shared one. A changed choice rebuilds that computer's tunnel on its next dial. Absent on builds before
+   * per-computer keys.
+   */
+  useTailcatMachineClientKey?(machineId: string, enabled: boolean): Promise<void>;
+
+  /**
    * Pairing v2 (GitHub #495): this phone's own P-256 device key (Secure Enclave on iOS, Android
    * Keystore / StrongBox), created on first use and never exported: the public half as the 65-byte
    * uncompressed point, base64. Only in app builds made after 2026-11-08; an older build has no such

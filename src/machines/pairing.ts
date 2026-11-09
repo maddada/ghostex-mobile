@@ -41,6 +41,7 @@ import { saveEasyConnectAddresses } from './easyConnectDial';
 import type { EasyConnectCode } from './pairingCodes';
 import { matchWords, pairingStatusPayload, sameWords } from './pairingWords';
 import { tailcatSyntheticHost, useMachinesStore, type MachineRecord } from './store';
+import { forgetEasyConnectLinkKey } from './easyConnectLinkKeyState';
 
 /** Mirrors `GXSERVER_PROTOCOL_VERSION` in the gxserver crate. */
 const GXSERVER_PROTOCOL_VERSION = 1;
@@ -349,6 +350,8 @@ async function saveEasyConnectMachine(
     const detail = Object.values(result.errors).join(' ');
     throw new PairDeviceError('rejected', `The pairing code could not be saved. ${detail}`);
   }
+  // A computer paired again may have new rows for this phone: its own key is registered again on the next connect.
+  if (rePairMachineId !== null) await forgetEasyConnectLinkKey(rePairMachineId);
   if (existing !== null) {
     // The address (and possibly the computer behind it) changed, so the host key
     // pinned under this machine's synthetic identity must not reject the new one.

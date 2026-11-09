@@ -8,6 +8,7 @@ import {
   noteEasyConnectDial,
   refreshEasyConnectAddressesSoon,
 } from '../machines/easyConnectDial';
+import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
 import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
@@ -113,6 +114,9 @@ async function connectEasyConnect(
   assertCurrent: () => void,
 ): Promise<void> {
   const candidates = await easyConnectDialCandidates(machine.id);
+  assertCurrent();
+  // This computer's own key once it accepted one, the phone's shared key otherwise (easyConnectLinkKeyState.ts).
+  await applyEasyConnectLinkKey(machine.id);
   assertCurrent();
   if (candidates.length === 0) {
     await GhostexNative.connect(machine.id, config);

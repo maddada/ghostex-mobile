@@ -25,8 +25,16 @@ type HeaderWebSocket = new (
   options: { headers: Record<string, string> },
 ) => WebSocket;
 
-/** Opens the stream; `onChanged` on each feed change, `onClosed` once when it ends. Returns a close function. */
-export function openFeedStream(link: GxserverLink, onChanged: () => void, onClosed: () => void): () => void {
+/**
+ * Opens the stream; `onChanged` on each feed change, `onClosed` once when it ends, `onStopping` when the
+ * computer's gxserver says it is stopping (a restart or an update). Returns a close function.
+ */
+export function openFeedStream(
+  link: GxserverLink,
+  onChanged: () => void,
+  onClosed: () => void,
+  onStopping?: () => void,
+): () => void {
   const url = `ws://127.0.0.1:${link.localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=notifications`;
   // React Native's WebSocket takes headers, so the token never travels in the URL. The cast holds: React
   // Native's global WebSocket constructor accepts that third options argument, which the DOM typings lack.
@@ -45,6 +53,7 @@ export function openFeedStream(link: GxserverLink, onChanged: () => void, onClos
       const frame = JSON.parse(event.data) as { type?: unknown } | null;
       // A restarted gxserver may have written rows while it came up; read the feed again then too.
       if (frame?.type === 'notificationFeedChanged' || frame?.type === 'serverStarted') onChanged();
+      else if (frame?.type === 'serverStopping') onStopping?.();
     } catch {
       // Not a frame of this stream.
     }

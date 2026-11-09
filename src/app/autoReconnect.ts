@@ -123,6 +123,53 @@ function recoverMachine(machineId: string, verify = false): Promise<void> {
   return request;
 }
 
+/**
+ * When a computer's gxserver said it is stopping, how long each re-dial waits: its Easy Connect helper stops
+ * with it and comes back with the new gxserver a few seconds later. Then the usual ladder takes over.
+ */
+const RESTART_REDIAL_DELAYS_MS = [2_500, 2_000, 2_500, 3_000, 5_000, 8_000];
+
+/**
+ * A computer's gxserver said it is stopping (`serverStopping` on its notification stream).
+ *
+ * CDXC:RemoteMachines 2026-11-10 WHY: gxserver stops its Easy Connect helpers when it stops, so every phone's
+ * tunnel to it dies without closing, and the phone noticed only when its chat went quiet and a probe ran out,
+ * about 15 s after the restart, then waited out the reconnect ladder. The computer says so first: an Easy
+ * Connect phone drops the dead tunnel and dials again on a short ladder until the new helper answers. Over
+ * Tailscale or SSH the connection outlives a gxserver restart, so nothing is done there.
+ */
+export function redialAfterServerStop(machineId: string): void {
+  const target = machineTarget(machineId);
+  if (target === undefined || target.transport !== 'tailcat' || !canRecover(machineId)) return;
+  cancelRetry(machineId);
+  const redial = (attempt: number): void => {
+    const delay = RESTART_REDIAL_DELAYS_MS[attempt];
+    if (delay === undefined) {
+      scheduleReconnect(machineId);
+      return;
+    }
+    retryTimers.set(
+      machineId,
+      setTimeout(() => {
+        retryTimers.delete(machineId);
+        const current = machineTarget(machineId);
+        if (current === undefined || !canRecover(machineId)) return;
+        void (async () => {
+          try {
+            if (attempt === 0) await GhostexNative.stopTailcatForward(machineId).catch(() => undefined);
+            await ensureConnected(current, { reset: true });
+            attemptsByMachineId.delete(machineId);
+            await recoverMachine(machineId);
+          } catch {
+            if (!retryTimers.has(machineId)) redial(attempt + 1);
+          }
+        })();
+      }, delay),
+    );
+  };
+  redial(0);
+}
+
 /** Validate existing sockets after resume or route changes, then resume bounded retries. */
 export function recoverConnections(): void {
   for (const machine of enabledMachines(useMachinesStore.getState())) {

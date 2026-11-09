@@ -61,6 +61,7 @@ import { FeedEventSource, FeedUnavailableError, type FeedReadFailure } from './e
 import { FeedRequestError, markRowsRead, readFeed, updateFeed, type FeedRpc, type FeedUpdate } from './feedClient';
 import { isAccountRow, type FeedRow, type FeedSnapshot } from './feedContract';
 import { NOTIFICATION_STREAM_CAPABILITY, openFeedStream } from './feedStream';
+import { redialAfterServerStop } from '../app/autoReconnect';
 import { runFirstAsk, type PermissionState } from './firstAsk';
 import {
   expoNotificationCentre,
@@ -460,6 +461,7 @@ function ensureStream(machineId: string): void {
           if (streams.get(machineId) === close) streams.delete(machineId);
           source.setStreamed(machineId, false);
         },
+        () => redialAfterServerStop(machineId),
       );
       streams.set(machineId, close);
       source.setStreamed(machineId, true);

@@ -16,7 +16,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './src/navigation/types';
 import { initAlerts } from './src/app/alerts';
-import { initAutoReconnect } from './src/app/autoReconnect';
+import { initAutoReconnect, redialAfterServerStop } from './src/app/autoReconnect';
+import { installEasyConnectLinkKeys } from './src/machines/easyConnectLinkKey';
 import { checkForCrashReport, noteCrashRoute } from './src/app/crashReports';
 import { reportMobileView } from './src/analytics/clientView';
 import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/deepLinks';
@@ -159,6 +160,8 @@ export default function App() {
     initWidgets();
     initPushNotifications();
     initAutoReconnect();
+    // A computer that accepts this phone's own key ends the tunnel on the shared key: dial again on the new one.
+    installEasyConnectLinkKeys(redialAfterServerStop);
     initSettingsSync();
     initTerminalKeepAwake();
     initChatGridClaim();
