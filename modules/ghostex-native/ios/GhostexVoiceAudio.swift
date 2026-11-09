@@ -214,6 +214,16 @@ final class GhostexVoiceEngine {
     private var converter: AVAudioConverter?
     private var pending = Data()
     private var configObserver: NSObjectProtocol?
+    /**
+     * Bumped by every build; a watchdog or a retry scheduled for an older build gives up, so a route change
+     * that lands during a retry never starts a second chain of rebuilds beside the first.
+     */
+    private var generation = 0
+    /// When the current engine was built, and how many builds in a row a configuration change undid within a moment.
+    private var builtAt = Date.distantPast
+    private var quickRebuilds = 0
+    /// "The microphone stopped." was said for this failure; an engine that runs again clears it.
+    private var reportedFailure = false
 
     /// Guards the playback bookkeeping below, touched from the socket's queue and `cut`.
     private let playLock = NSLock()
@@ -234,6 +244,8 @@ final class GhostexVoiceEngine {
     func start() throws {
         guard !running else { return }
         running = true
+        rebuildLock.lock()
+        defer { rebuildLock.unlock() }
         do {
             try build()
         } catch {
@@ -241,7 +253,17 @@ final class GhostexVoiceEngine {
             teardown()
             throw error
         }
-        watch(0)
+        watch(0, generation)
+    }
+
+    /**
+     * Gives up on this failure: says "The microphone stopped." once. More failures before an engine runs again
+     * stay quiet (GitHub #500: one per try piled up on the voice screen); Unmute, Talk or a route change try again.
+     */
+    private func fail() {
+        guard !reportedFailure else { return }
+        reportedFailure = true
+        onError("The microphone stopped.")
     }
 
     /**
@@ -249,28 +271,56 @@ final class GhostexVoiceEngine {
      * a moment later ("iounit stopped unexpectedly", seen when Dictate starts recording) without a
      * configuration change to say so: it is built again.
      */
-    private func watch(_ attempt: Int) {
+    private func watch(_ attempt: Int, _ built: Int) {
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.running, !self.engine.isRunning else { return }
+            guard let self else { return }
+            self.rebuildLock.lock()
+            let current = self.running && self.generation == built
+            let stopped = !self.engine.isRunning
+            if current && !stopped { self.reportedFailure = false }
+            self.rebuildLock.unlock()
+            guard current, stopped else { return }
             guard attempt < 4 else {
-                self.onError("The microphone stopped.")
+                self.fail()
                 return
             }
             GhostexVoiceAudio.log.info("the voice engine stopped right after starting; building it again")
-            self.rebuild(attempt + 1)
+            self.rebuild(attempt + 1, after: built)
         }
+    }
+
+    /**
+     * CDXC:VoiceMode 2026-11-09 WHY: GitHub #500 (Jakey, iPhone SE, no headphones): "The microphone stopped."
+     * repeated on every try and the agent stopped hearing him (not reproducible in the Simulator, which runs without voice processing). The engine watched for configuration changes
+     * before it switched voice processing on, and switching it on can post one (it changes the input format): each build answered its own
+     * notification with a new engine, so the microphone was torn down and built again in a loop, and every
+     * chain that ran out of tries said so again. The observer now starts once the engine runs, a change that
+     * left the engine running needs nothing (a route change stops it), and changes that keep undoing fresh
+     * builds give up instead of looping.
+     */
+    private func configurationChanged(_ changed: AVAudioEngine) {
+        rebuildLock.lock()
+        let current = running && changed === engine
+        let stillRunning = engine.isRunning
+        let built = generation
+        if current && !stillRunning {
+            quickRebuilds = Date().timeIntervalSince(builtAt) < 2 ? quickRebuilds + 1 : 0
+        }
+        let quick = quickRebuilds
+        rebuildLock.unlock()
+        guard current else { return }
+        if stillRunning {
+            GhostexVoiceAudio.log.info("audio configuration changed; the voice engine still runs, so it is kept")
+            return
+        }
+        // Each attempt counts toward the cap, so a change that stops every new engine at once ends in one error.
+        rebuild(quick, after: built)
     }
 
     private func build() throws {
         // A fresh engine binds to the session as it is configured now.
+        generation += 1
         engine = AVAudioEngine()
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: nil
-        ) { [weak self] _ in
-            DispatchQueue.global().async { self?.rebuild(0) }
-        }
         let input = engine.inputNode
         if conversation {
             #if !targetEnvironment(simulator)
@@ -309,6 +359,17 @@ final class GhostexVoiceEngine {
         engine.prepare()
         try engine.start()
         player?.play()
+        builtAt = Date()
+        // Watched only from here: switching voice processing on above can post a configuration change of its own.
+        let built = engine
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: built,
+            queue: nil
+        ) { [weak self, weak built] _ in
+            guard let built else { return }
+            DispatchQueue.global().async { self?.configurationChanged(built) }
+        }
     }
 
     /// Restarts come from the configuration change and the watchdog; one at a time.
@@ -319,10 +380,15 @@ final class GhostexVoiceEngine {
      * the old engine's devices may be gone, so a new engine is built in its place. The audio still
      * queued for the speaker is dropped. Gives up with a microphone error after a few tries.
      */
-    private func rebuild(_ attempt: Int) {
+    private func rebuild(_ attempt: Int, after built: Int? = nil) {
         rebuildLock.lock()
         defer { rebuildLock.unlock() }
-        guard running else { return }
+        // Another rebuild got there first: its own watchdog and retries carry on from here.
+        guard running, built == nil || built == generation else { return }
+        guard attempt <= 4 else {
+            fail()
+            return
+        }
         GhostexVoiceAudio.log.info("audio route changed; rebuilding the voice engine (try \(attempt))")
         teardown()
         playLock.lock()
@@ -331,14 +397,28 @@ final class GhostexVoiceEngine {
         playLock.unlock()
         do {
             try build()
-            watch(attempt)
+            watch(attempt, generation)
         } catch {
+            GhostexVoiceAudio.log.warning("voice engine did not start: \(error.localizedDescription, privacy: .public)")
             guard attempt < 4 else {
-                onError("The microphone stopped.")
+                fail()
                 return
             }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.rebuild(attempt + 1) }
+            let failed = generation
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.rebuild(attempt + 1, after: failed) }
         }
+    }
+
+    /**
+     * Unmute or Talk on a call whose microphone stopped: builds the engine again with a fresh count of tries,
+     * so the person can bring the microphone back without hanging up.
+     */
+    func recover() {
+        rebuildLock.lock()
+        let stopped = running && !engine.isRunning
+        rebuildLock.unlock()
+        guard stopped else { return }
+        DispatchQueue.global().async { [weak self] in self?.rebuild(0) }
     }
 
     /// Takes the engine apart (it is not reused).
@@ -348,6 +428,10 @@ final class GhostexVoiceEngine {
         engine.inputNode.removeTap(onBus: 0)
         player?.stop()
         engine.stop()
+        #if !targetEnvironment(simulator)
+        // The next engine opens its own voice-processing unit; this one lets go of it first.
+        if conversation { try? engine.inputNode.setVoiceProcessingEnabled(false) }
+        #endif
         player = nil
         timePitch = nil
     }
@@ -368,10 +452,8 @@ final class GhostexVoiceEngine {
         defer { rebuildLock.unlock() }
         guard running else { return }
         running = false
+        generation += 1
         teardown()
-        #if !targetEnvironment(simulator)
-        if conversation { try? engine.inputNode.setVoiceProcessingEnabled(false) }
-        #endif
     }
 
     private func captured(_ buffer: AVAudioPCMBuffer) {

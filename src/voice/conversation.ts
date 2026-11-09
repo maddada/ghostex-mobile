@@ -275,7 +275,14 @@ function pushLine(line: VoiceLine): void {
   set({ lines: next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next });
 }
 
+/**
+ * CDXC:VoiceMode 2026-11-09 WHY: GitHub #500 (Jakey, iPhone): every try added another "The microphone
+ * stopped.", 3 to 10 in a row, which buried the captions. A notice the screen already shows as its last line
+ * is not added again; one that comes back after something else happened still shows.
+ */
 function notice(text: string): void {
+  const last = useVoiceStore.getState().lines.at(-1);
+  if (last?.kind === 'notice' && last.text === text) return;
   noticeSeq += 1;
   pushLine({ kind: 'notice', key: `notice-${noticeSeq}`, text });
 }

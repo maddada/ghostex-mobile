@@ -400,6 +400,8 @@ final class GhostexVoice {
                 if fromCall && self.muted == value { return }
                 self.muted = value
                 if self.ready { self.sendJsonLocked(["type": "mute", "muted": value]) }
+                // A microphone that stopped comes back on Unmute (GitHub #500).
+                if !value { self.audio?.recover() }
                 if value && self.pushToTalk && self.talking {
                     self.talking = false
                     self.status("notTalking", nil)
@@ -444,6 +446,7 @@ final class GhostexVoice {
                 return
             }
             talking = value
+            if value { audio?.recover() }
             sendJsonLocked(["type": value ? "talkStart" : "talkEnd"])
             status(value ? "talking" : "notTalking", nil)
             refreshNotice()
