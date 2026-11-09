@@ -27,6 +27,7 @@ import {
   gbotsRoutineListCommand,
   gbotsPlaceCommand,
   gbotsShowCommand,
+  gbotsVoiceSetCommand,
 } from '../../commands/ghostexCli';
 import { parseGbotApi, type GbotApi } from '../../contract/gbotApi';
 import { parseGbotComputer, type GbotComputer } from '../../contract/gbotComputer';
@@ -34,6 +35,7 @@ import { parseGbotDepartments } from '../../contract/gbotDepartments';
 import { parseGbotRoutines, type GbotRoutine } from '../../contract/gbotRoutines';
 import { parseChiefAgents } from '../../contract/chief';
 import { parseGbotMemory, type GbotMemory } from '../../contract/gbotMemory';
+import { parseGbotVoiceAnswer } from '../../contract/gbotVoice';
 import { parseGbotDetails, type GbotFields } from '../../contract/gbots';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import type { GbotDepartmentAction, GbotDepartmentState } from './GbotDepartmentView';
@@ -157,6 +159,11 @@ export default function GbotSettingsHost({
       loadDepartments={readDepartments}
       actDepartment={actDepartment}
       initialTab={initialTab}
+      saveVoice={async (voice) => {
+        const answer = parseGbotVoiceAnswer((await runGhostexCli(target, gbotsVoiceSetCommand(botId, voice))).json);
+        if (answer === null) throw new Error(`${name}'s voice could not be read. Try again in a moment.`);
+        return answer;
+      }}
     />
   );
 }

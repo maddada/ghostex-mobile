@@ -60,6 +60,8 @@ export type MoreActionsInput = {
   draft?: string;
   /** The session's title, for Voice call about this chat's hint (the row shows when `serves('voiceCall')`). */
   voiceCallTitle?: string;
+  /** A GBot's chat: the GBot's name, the row then being "Call <GBot>" (src/voice/gbotCall.ts). */
+  voiceCallGbotName?: string;
   /**
    * The composer draws no toolbar control and no option pill but the model's (a chat in a pane slot, `chatPlacement`):
    * every control it may draw and the option settings are rows here, as when they all overflow.
@@ -186,6 +188,7 @@ export function moreActionsRows({
   interruptAndSend = null,
   draft = '',
   voiceCallTitle = '',
+  voiceCallGbotName = '',
   allFolded = false,
 }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
@@ -239,10 +242,12 @@ export function moreActionsRows({
   rows.push(...readAloudRows(document));
   // Under Auto-read: a voice call about this session (`src/voice/callAbout.ts` has the DECISION).
   if (serves('voiceCall')) {
+    const chatName = voiceCallTitle.length > 0 ? voiceCallTitle : 'this chat';
     rows.push({
-      label: 'Voice call about this chat',
+      label: voiceCallGbotName.length > 0 ? `Call ${voiceCallGbotName}` : 'Voice call about this chat',
       iconPath: 'titlebar/headset.svg',
-      description: `Talk only about ${voiceCallTitle.length > 0 ? voiceCallTitle : 'this chat'}`,
+      description:
+        voiceCallGbotName.length > 0 ? `Talk with ${voiceCallGbotName} about ${chatName}` : `Talk only about ${chatName}`,
       command: { type: 'host', action: 'voiceCall' },
     });
   }

@@ -1,6 +1,6 @@
 /**
- * What the Sessions screen does for Main Hub's GBots (contract/gbots.ts): the bot's long-press menu (New Chat, GBot
- * Settings, Department, Remove GBot), the heading's (New GBot, Import Team, Export Team), a department's (Department Settings, Remove
+ * What the Sessions screen does for Main Hub's GBots (contract/gbots.ts): the bot's long-press menu (New Chat, Call
+ * (voice/gbotCall.ts), GBot Settings, Department, Remove GBot), the heading's (New GBot, Import Team, Export Team), a department's (Department Settings, Remove
  * Department), the remove confirms, GBot Settings and the New GBot form, each run as a `ghostex gbots` command on the
  * bot's computer. Kept out of SessionsScreen.tsx, which only wires it in.
  *
@@ -19,6 +19,7 @@ import {
   CrewGlyph,
   DownloadGlyph,
   FileExportGlyph,
+  HeadsetGlyph,
   PlusGlyph,
   SettingsGlyph,
   TrashGlyph,
@@ -35,8 +36,10 @@ import {
 import { parseGbotPresets, parseTeamPreview, type GbotPreset } from '../../contract/gbotTeam';
 import { gbotsOnIn, parseGbotNewChat, type GbotRowModel, type GbotsDepartmentModel } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
+import { useInventoryStore } from '../../inventory/store';
 import type { MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
+import { callGbot, gbotRowCall } from '../../voice/gbotCall';
 import GbotSettingsHost from './GbotSettingsHost';
 import GbotTeamSheet, { type GbotTeamSheetProps } from './GbotTeamSheet';
 import type { GbotSettingsTab } from './GbotSettingsSheet';
@@ -54,10 +57,12 @@ export type GbotsScreenDeps = {
   refreshMachine: (target: MachineRecord) => Promise<void> | void;
   setProgress: (message: string | null) => void;
   setTransientStatus: (message: string | null, options?: { title?: string; error?: boolean }) => void;
+  /** Opens the voice screen (a GBot's Call). */
+  showVoice: () => void;
 };
 
 export function useGbots(deps: GbotsScreenDeps) {
-  const { machineById, attachCreated, refreshMachine, setProgress, setTransientStatus } = deps;
+  const { machineById, attachCreated, refreshMachine, setProgress, setTransientStatus, showVoice } = deps;
   const appearance = useAppearance();
   const [menu, setMenu] = useState<{ title: string; items: ContextMenuItem[]; anchor?: MenuAnchor } | null>(null);
   const [removing, setRemoving] = useState<{ target: MachineRecord; bot: GbotRef } | null>(null);
@@ -134,6 +139,7 @@ export function useGbots(deps: GbotsScreenDeps) {
       const target = machineById(machineId);
       if (target === null) return;
       const bot = refOf(row);
+      const call = gbotRowCall(target, useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary, row.bot);
       setMenu({
         title: row.bot.title.length > 0 ? `${row.bot.name} · ${row.bot.title}` : row.bot.name,
         anchor,
@@ -145,6 +151,21 @@ export function useGbots(deps: GbotsScreenDeps) {
             icon: <PlusGlyph size={14} color={iconColor} />,
             onPress: () => void newChat(target, bot),
           },
+          ...(call.kind === 'hidden'
+            ? []
+            : [
+                {
+                  kind: 'item' as const,
+                  key: 'gbot-call',
+                  label: 'Call',
+                  icon: <HeadsetGlyph size={14} color={iconColor} />,
+                  ...(call.kind === 'elsewhere' ? { disabled: true, info: call.why } : {}),
+                  onPress: () => {
+                    setMenu(null);
+                    callGbot(target, bot, null, showVoice);
+                  },
+                },
+              ]),
           {
             kind: 'item',
             key: 'gbot-settings',
@@ -180,7 +201,7 @@ export function useGbots(deps: GbotsScreenDeps) {
         ],
       });
     },
-    [appearance.danger, iconColor, machineById, newChat],
+    [appearance.danger, iconColor, machineById, newChat, showVoice],
   );
 
   /** The New GBot row, for the GBots heading's menu and Main Hub's while GBots are on. */

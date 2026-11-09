@@ -20,14 +20,57 @@ export type VoiceFocus = {
   orchestrator: string | null;
   /** The session was closed during the call (the call keeps going). */
   closed: boolean;
+  /** Set in a call with a GBot: the GBot it talks as, the session being one of its chats. */
+  gbot?: VoiceFocusGbot;
 };
 
-/** A session the phone asks a call to be about (a menu row knows these before gxserver answers). */
-export type VoiceFocusTarget = { projectId: string; sessionId: string; title: string };
+/** The GBot of a call with a GBot (`focus.gbot`), what the voice screen's banner draws. */
+export type VoiceFocusGbot = { botId: string; name: string; icon: string; colorHex: string };
+
+/**
+ * A session the phone asks a call to be about (a menu row knows these before gxserver answers). With
+ * `gbot` it is a call with that GBot: about one of its chats, or with empty ids its standing chat
+ * with you (gxserver opens it if needed), `title` then being the GBot's name.
+ */
+export type VoiceFocusTarget = {
+  projectId: string;
+  sessionId: string;
+  title: string;
+  gbot?: { botId: string; name: string };
+};
 
 /** `<projectId>:<sessionId>`, the `focus` query value and the `focus` frame's `session`. */
 export function focusRef(target: { projectId: string; sessionId: string }): string {
   return `${target.projectId}:${target.sessionId}`;
+}
+
+/**
+ * The `focus` value of a call with a GBot: `gbot:<botId>` for your standing chat with it, or
+ * `gbot:<botId>:<projectId>:<sessionId>` for one of its chats (server/src/voice_agent/gbot_call/).
+ */
+export function gbotFocusRef(botId: string, chat: { projectId: string; sessionId: string } | null): string {
+  return chat !== null && chat.projectId.length > 0 && chat.sessionId.length > 0
+    ? `gbot:${botId}:${focusRef(chat)}`
+    : `gbot:${botId}`;
+}
+
+/** The `focus` query value a call about `target` opens with. */
+export function focusQuery(target: VoiceFocusTarget): string {
+  return target.gbot !== undefined ? gbotFocusRef(target.gbot.botId, target) : focusRef(target);
+}
+
+/** The GBot a call is with (the one gxserver named, or the one being called), or null. */
+export function callGbotId(focus: VoiceFocus | null, requested: VoiceFocusTarget | null): string | null {
+  return focus?.gbot?.botId ?? requested?.gbot?.botId ?? null;
+}
+
+function parseFocusGbot(value: unknown): VoiceFocusGbot | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const text = (key: string): string => (typeof record[key] === 'string' ? (record[key] as string) : '');
+  const botId = text('botId');
+  if (botId.length === 0) return null;
+  return { botId, name: text('name') || 'GBot', icon: text('icon'), colorHex: text('colorHex') };
 }
 
 /** A focus object from gxserver, or null for all sessions or anything malformed. */
@@ -39,6 +82,7 @@ export function parseFocus(value: unknown): VoiceFocus | null {
   const sessionId = text('sessionId');
   if (projectId.length === 0 || sessionId.length === 0) return null;
   const orchestrator = text('orchestrator');
+  const gbot = parseFocusGbot(record.gbot);
   return {
     projectId,
     sessionId,
@@ -46,6 +90,7 @@ export function parseFocus(value: unknown): VoiceFocus | null {
     project: text('project'),
     orchestrator: orchestrator.length > 0 ? orchestrator : null,
     closed: record.closed === true,
+    ...(gbot !== null ? { gbot } : {}),
   };
 }
 
@@ -73,6 +118,11 @@ export function outdatedFocusMessage(computer: string): string {
   return `Update Ghostex on ${computer} to have a voice call about one session.`;
 }
 
+/** The line for a computer whose Ghostex can't call a GBot. */
+export function outdatedGbotCallMessage(computer: string): string {
+  return `Update Ghostex on ${computer} to call a GBot.`;
+}
+
 /** The two sessions are the same one. */
 export function sameSession(
   a: { projectId: string; sessionId: string } | null,
@@ -82,20 +132,29 @@ export function sameSession(
 }
 
 /**
- * What "Voice call about this chat" / "Voice Call" does, given the call that is open:
+ * What "Voice call about this chat" / "Voice Call" / "Call <GBot>" does, given the call that is open:
  * - `start`: no call is open; start one about the session.
  * - `refocus`: a call is open on the same computer about something else; move it to this session.
- * - `already`: the open call is already about this session; just show it.
+ * - `already`: the open call is already about this session (or with this GBot); just show it.
  * - `otherComputer`: a call is open on another computer; a call can't move computers.
+ * - `replace`: a call with a GBot is open, or a GBot is called while another call is open, on the
+ *   same computer; a call with a GBot can't be refocused, so it is hang up and call.
  */
-export type VoiceCallAboutAction = 'start' | 'refocus' | 'already' | 'otherComputer';
+export type VoiceCallAboutAction = 'start' | 'refocus' | 'already' | 'otherComputer' | 'replace';
 
 export function voiceCallAboutAction(
-  open: { active: boolean; machineId: string | null; focus: VoiceFocus | null },
-  target: { machineId: string; projectId: string; sessionId: string },
+  /** `gbotId`: the GBot the open call is with (`callGbotId`), null or absent for a Voice agent call. */
+  open: { active: boolean; machineId: string | null; focus: VoiceFocus | null; gbotId?: string | null },
+  target: { machineId: string; projectId: string; sessionId: string; gbotId?: string | null },
 ): VoiceCallAboutAction {
   if (!open.active) return 'start';
   if (open.machineId !== target.machineId) return 'otherComputer';
+  const openGbot = open.gbotId ?? null;
+  const wantedGbot = target.gbotId ?? null;
+  if (openGbot !== null || wantedGbot !== null) {
+    const sameChat = target.sessionId.length === 0 || sameSession(open.focus, target);
+    return openGbot === wantedGbot && sameChat ? 'already' : 'replace';
+  }
   return sameSession(open.focus, target) && open.focus?.closed !== true ? 'already' : 'refocus';
 }
 

@@ -972,7 +972,8 @@ export default function SessionsScreen({ navigation }: Props) {
   );
 
   /** Main Hub's GBots: their menus, the remove confirm, GBot Settings and New GBot (use-gbots.tsx). */
-  const gbots = useGbots({ machineById, attachCreated, refreshMachine, setProgress, setTransientStatus });
+  const showVoice = useCallback(() => navigation.navigate('Voice'), [navigation]);
+  const gbots = useGbots({ machineById, attachCreated, refreshMachine, setProgress, setTransientStatus, showVoice });
 
   /** The session a voice call on the phone is about, as an attachSessionKey (the row's green headset). */
   const voiceCallSessionKey = useVoiceStore((state) =>

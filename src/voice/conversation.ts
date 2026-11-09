@@ -23,14 +23,17 @@ import { chatMachineLink } from '../chat/rust/machine-link';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import {
   focusChangeNotice,
+  focusQuery,
   focusRef,
   outdatedFocusMessage,
+  outdatedGbotCallMessage,
   parseFocus,
   readyFocus,
   readyFromOlderServer,
   type VoiceFocus,
   type VoiceFocusTarget,
 } from './focus';
+import { saveGbotVoice } from './gbotVoice';
 import { captionParagraphs, toolLineFrame } from './lines';
 import { microphoneAllowed, microphoneDeniedMessage } from './microphone';
 
@@ -600,6 +603,7 @@ export async function startVoice(
       speed?: number;
       callMode?: string;
       focusedCalls?: boolean;
+      gbotCalls?: boolean;
     };
     const provider = result.provider === 'openai' ? 'openai' : 'xai';
     currentProvider = provider;
@@ -619,6 +623,10 @@ export async function startVoice(
       fail('outdated', outdatedFocusMessage(machineName));
       return;
     }
+    if (about?.gbot !== undefined && result.gbotCalls !== true) {
+      fail('outdated', outdatedGbotCallMessage(machineName));
+      return;
+    }
     if (useVoiceStore.getState().phase !== 'starting') return;
     askedForFocus = about !== undefined;
     nativeSessionId = await GhostexNative.voiceStart({
@@ -626,7 +634,7 @@ export async function startVoice(
       localPort: forward.localPort,
       authToken: forward.authToken,
       title: machineName,
-      ...(about !== undefined ? { focus: focusRef(about) } : {}),
+      ...(about !== undefined ? { focus: focusQuery(about) } : {}),
     });
     if (speed !== 1) await GhostexNative.voiceSetSpeed(speed);
   } catch (error) {
@@ -771,12 +779,20 @@ export function setVoiceSpeed(speed: number): void {
   void saveVoiceSettings({ speed }, 'speed');
 }
 
-/** The voice picker: saved as the computer's voice for this provider, and switched to when the provider can. */
+/**
+ * The voice picker: saved as the computer's voice for this provider (in a call with a GBot, as that
+ * GBot's voice: `gbotCall.ts` has the DECISION), and switched to when the provider can.
+ */
 export function pickVoice(voice: string): void {
   const state = useVoiceStore.getState();
   if (voice === state.voice && state.nextVoice === null) return;
   if (voice === state.voice) set({ nextVoice: null });
-  void saveVoiceSettings({ provider: state.provider ?? undefined, voice }, 'voice');
+  const gbot = state.focus?.gbot;
+  if (gbot !== undefined && target !== null) {
+    void saveGbotVoice(target, gbot.botId, voice).then((failure) => {
+      if (failure !== null) notice(`Couldn't save ${gbot.name}'s voice (${failure}), so it lasts for this call only.`);
+    });
+  } else void saveVoiceSettings({ provider: state.provider ?? undefined, voice }, 'voice');
   if (voiceActive(state.phase)) void GhostexNative.voiceSetVoice(voice).catch(() => undefined);
 }
 

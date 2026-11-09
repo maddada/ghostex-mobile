@@ -266,6 +266,14 @@ export function gbotsShowCommand(botId: string): string {
   return `ghostex gbots show ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
 }
 
+/** Sets the voice a GBot answers calls in; "" for the Voice agent's own (server/src/ghostex_cli/gbots_voice_cli.rs). */
+export function gbotsVoiceSetCommand(botId: string, voice: string): string {
+  const bot = shellQuote(requirePositional(botId, 'GBot id'));
+  return voice.length === 0
+    ? `ghostex gbots voice ${bot} --default --json`
+    : `ghostex gbots voice ${bot} ${shellQuote(requirePositional(voice, 'voice'))} --json`;
+}
+
 /** A GBot's memory: MEMORY.md with its gauge, topics, daily log and the journal of changes (server/src/gbots/memory/ops.rs). */
 export function gbotsMemoryShowCommand(botId: string): string {
   return `ghostex gbots memory show --bot ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;

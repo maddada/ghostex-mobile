@@ -22,6 +22,7 @@
 
 import { coordinatorBadges, coordinatorRowKey } from './coordinatorTree';
 import { chiefOnIn } from './chief';
+import { parseGbotVoiceFromBot, type GbotVoiceState } from './gbotVoice';
 import { countSessions, headerStatusCounts, type SectionStatusCounts, type SessionItem } from './grouping';
 import {
   visibleSessions,
@@ -307,6 +308,8 @@ export type GbotDetails = {
   soul: string;
   /** Set when SOUL.md was changed outside Ghostex: the computer's own sentence. */
   soulDriftMessage: string;
+  /** The voice it answers calls in and the choices (contract/gbotVoice.ts); null from a Ghostex without them. */
+  voice: GbotVoiceState | null;
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -338,6 +341,7 @@ export function parseGbotDetails(json: unknown): GbotDetails | null {
     isLead: bot.isLead === true,
     soul: text(bot, 'soul'),
     soulDriftMessage: text(bot, 'soulDriftMessage'),
+    voice: parseGbotVoiceFromBot(bot),
   };
 }
 

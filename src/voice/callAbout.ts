@@ -10,7 +10,7 @@ import { Alert } from 'react-native';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { focusVoiceOn, hangUpVoice, startVoice, useVoiceStore, voiceActive } from './conversation';
-import { voiceCallAboutAction, type VoiceFocusTarget } from './focus';
+import { callGbotId, voiceCallAboutAction, type VoiceFocusTarget } from './focus';
 
 /** How long a hang-up may take before the new call starts anyway (gxserver answers `ended` in well under a second). */
 const HANG_UP_WAIT_MS = 8_000;
@@ -53,10 +53,22 @@ function callClosed(): Promise<void> {
 export function callVoiceAbout(machine: MachineConnectionTarget, about: VoiceFocusTarget, show: () => void): void {
   const state = useVoiceStore.getState();
   const action = voiceCallAboutAction(
-    { active: voiceActive(state.phase), machineId: state.machineId, focus: state.focus },
-    { machineId: machine.id, projectId: about.projectId, sessionId: about.sessionId },
+    {
+      active: voiceActive(state.phase),
+      machineId: state.machineId,
+      focus: state.focus,
+      gbotId: callGbotId(state.focus, state.requestedFocus),
+    },
+    { machineId: machine.id, projectId: about.projectId, sessionId: about.sessionId, gbotId: about.gbot?.botId },
   );
   const name = computerName(machine.id);
+  const hangUpAndCall = () => {
+    hangUpVoice();
+    void callClosed().then(() => {
+      void startVoice(machine, name, about);
+      show();
+    });
+  };
   switch (action) {
     case 'start':
       void startVoice(machine, name, about);
@@ -72,19 +84,25 @@ export function callVoiceAbout(machine: MachineConnectionTarget, about: VoiceFoc
     case 'otherComputer':
       Alert.alert(
         `A voice call is open on ${state.machineName}`,
-        `A call stays on the computer it started on. Hang up and start a voice call about ${about.title} on ${name}?`,
+        about.gbot !== undefined
+          ? `A call stays on the computer it started on. Hang up and call ${about.gbot.name} on ${name}?`
+          : `A call stays on the computer it started on. Hang up and start a voice call about ${about.title} on ${name}?`,
         [
           { text: 'Keep the call', style: 'cancel' },
-          {
-            text: 'Hang up and call',
-            onPress: () => {
-              hangUpVoice();
-              void callClosed().then(() => {
-                void startVoice(machine, name, about);
-                show();
-              });
-            },
-          },
+          { text: 'Hang up and call', onPress: hangUpAndCall },
+        ],
+      );
+      return;
+    case 'replace':
+      // A call with a GBot stays with it (gxserver refuses to move it), so this is a new call.
+      Alert.alert(
+        `A voice call is open on ${name}`,
+        about.gbot !== undefined
+          ? `Hang up and call ${about.gbot.name}?`
+          : `A call with a GBot stays with it. Hang up and start a voice call about ${about.title}?`,
+        [
+          { text: 'Keep the call', style: 'cancel' },
+          { text: 'Hang up and call', onPress: hangUpAndCall },
         ],
       );
   }

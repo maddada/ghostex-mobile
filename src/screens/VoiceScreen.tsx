@@ -55,6 +55,7 @@ import {
   VOICE_CALL_MODE_NOTE,
 } from '../voice/conversation';
 import { focusBannerDetail } from '../voice/focus';
+import { GbotCallBanner, useGbotCallOpen } from '../voice/GbotCallBanner';
 import { HeadsetGlyph, MicrophoneGlyph } from '../voice/VoiceButton';
 import { VoiceHoldButton } from '../voice/VoiceHoldButton';
 import { VoiceStopPill } from '../voice/VoiceStopPill';
@@ -189,10 +190,14 @@ function VoicePickerSheet({ visible, onClose }: { visible: boolean; onClose: () 
   const current = useVoiceStore((state) => state.voice);
   const next = useVoiceStore((state) => state.nextVoice);
   const options = useVoiceStore((state) => state.voiceOptions);
+  // In a call with a GBot the pick is saved as that GBot's voice (`pickVoice`).
+  const gbotName = useVoiceStore((state) => state.focus?.gbot?.name ?? null);
   const scroll = useRef<ScrollViewInstance>(null);
   return (
     <BottomSheet visible={visible} onClose={onClose} scrollRef={scroll}>
-      <Text style={styles.sheetTitle}>{`${voiceProviderName(provider)} voice`}</Text>
+      <Text style={styles.sheetTitle}>
+        {gbotName !== null ? `${gbotName}'s voice` : `${voiceProviderName(provider)} voice`}
+      </Text>
       {options.map((voice) => {
         const checked = voice === current;
         return (
@@ -307,7 +312,9 @@ function FocusBanner() {
   const focus = useVoiceStore((state) => state.focus);
   const requested = useVoiceStore((state) => state.requestedFocus);
   const phase = useVoiceStore((state) => state.phase);
+  const gbotCall = useGbotCallOpen();
   if (!voiceActive(phase)) return null;
+  if (gbotCall) return <GbotCallBanner />;
   const title = focus?.title ?? requested?.title ?? null;
   if (title === null) return null;
   const detail = focus !== null ? focusBannerDetail(focus) : '';
@@ -541,7 +548,9 @@ export default function VoiceScreen({ navigation }: Props) {
           {voice.phase === 'live' ? <VoiceMemoryCard /> : null}
           {voice.lines.length === 0 && active ? (
             <Text style={styles.hint}>
-              {voice.focus !== null && !voice.focus.closed
+              {voice.focus?.gbot !== undefined
+                ? `Talk with ${voice.focus.gbot.name} as you would in its chat.`
+                : voice.focus !== null && !voice.focus.closed
                 ? `Ask what ${voice.focus.title} is doing, or tell it what to do next.`
                 : 'Ask what your agents are doing, or tell one what to do next.'}
             </Text>

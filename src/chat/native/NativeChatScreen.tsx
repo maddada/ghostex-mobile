@@ -43,6 +43,7 @@ import { sessionChatRpc } from '../rust/transport';
 import { useRustChat, type RustChat } from '../rust/useRustChat';
 import { machineTargetFor } from '../../screens/terminal-screen/session-lookups';
 import { callVoiceAbout } from '../../voice/callAbout';
+import { useGbotOfChat } from '../../voice/gbotCall';
 import { useVoiceCapability } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
@@ -192,6 +193,8 @@ export default function NativeChatScreen({
   // More actions' "Voice call about this chat", on a computer whose gxserver has the voice agent.
   const voiceNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const voiceCallable = useVoiceCapability(machine) && sessionId.length > 0 && projectId.length > 0;
+  // A GBot's chat offers "Call <GBot>" there instead, a call with the GBot about this chat.
+  const chatGbot = useGbotOfChat(machine.id, projectId, sessionId);
   // More actions' Session note, while the computer has Session notes on (Settings > Extensions).
   const sessionNotesOn = useInventoryStore((store) =>
     sessionNotesOnIn(store.inventoriesByMachineId[machine.id]?.summary),
@@ -253,8 +256,15 @@ export default function NativeChatScreen({
         chooseVoiceComputer(machine.id);
         voiceNavigation.navigate('SettingsPage', { page: 'voice' });
       } else if (action === 'voiceCall') {
-        callVoiceAbout(machine, { projectId, sessionId, title: title.length > 0 ? title : 'this chat' }, () =>
-          voiceNavigation.navigate('Voice'),
+        callVoiceAbout(
+          machine,
+          {
+            projectId,
+            sessionId,
+            title: title.length > 0 ? title : 'this chat',
+            ...(chatGbot !== null ? { gbot: chatGbot } : {}),
+          },
+          () => voiceNavigation.navigate('Voice'),
         );
       } else if (action === 'exportTranscript') {
         exportCount.current += 1;
@@ -266,6 +276,7 @@ export default function NativeChatScreen({
       } else if (hostActions.includes(action)) onHostAction?.(action, params);
     },
     [
+      chatGbot,
       hostActions,
       machine,
       onHostAction,
@@ -433,6 +444,7 @@ export default function NativeChatScreen({
                   openModelRequestId={modelRequestId}
                   focusRequestId={focusRequestId}
                   voiceCallTitle={title}
+                  voiceCallGbotName={chatGbot?.name}
                   {...(composerRoom !== undefined ? { room: composerRoom } : {})}
                   {...(document !== null
                     ? {

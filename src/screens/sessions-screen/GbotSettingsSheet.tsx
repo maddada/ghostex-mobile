@@ -33,12 +33,14 @@ import {
   type GbotFields,
 } from '../../contract/gbots';
 import type { GbotMemory } from '../../contract/gbotMemory';
+import type { GbotVoiceState } from '../../contract/gbotVoice';
 import { SegmentedRow } from '../settings/SettingsControls';
 import GbotDepartmentView, { type GbotDepartmentAction, type GbotDepartmentState } from './GbotDepartmentView';
 import GbotMemoryView from './GbotMemoryView';
 import GbotRoutinesView, { type GbotRoutineVerb } from './GbotRoutinesView';
 import GbotComputerView, { type GbotComputerChange } from './GbotComputerView';
 import GbotApiView, { type GbotApiVerb } from './GbotApiView';
+import GbotVoiceField from './GbotVoiceField';
 import type { GbotApi } from '../../contract/gbotApi';
 import type { GbotComputer } from '../../contract/gbotComputer';
 import type { GbotRoutine } from '../../contract/gbotRoutines';
@@ -101,6 +103,8 @@ export type GbotSettingsSheetProps = {
   actDepartment: (action: GbotDepartmentAction) => Promise<GbotDepartmentState>;
   /** The tab it opens on (a "Routine set" card's Edit opens Routines). */
   initialTab?: GbotSettingsTab;
+  /** Profile's Voice (GbotVoiceField.tsx): saves the voice it answers calls in at once. */
+  saveVoice: (voice: string) => Promise<GbotVoiceState>;
 };
 
 export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactElement {
@@ -230,6 +234,7 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
           />
           <GbotIconPicker value={draft.icon} color={draft.color} onChange={(value) => set('icon', value)} />
           <GbotColorPicker value={draft.color} onChange={(value) => set('color', value)} />
+          {saved.voice !== null ? <GbotVoiceField initial={saved.voice} save={props.saveVoice} /> : null}
           {agentOptions.length > 0 ? (
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Agent</Text>

@@ -103,6 +103,8 @@ export type NativeComposerProps = {
   openModelRequestId?: number;
   /** The session's title, for the More actions row "Voice call about this chat" (shown when `voiceCall` is served). */
   voiceCallTitle?: string;
+  /** A GBot's chat: the GBot's name, that row then being "Call <GBot>". */
+  voiceCallGbotName?: string;
   /**
    * The most height the composer may take, measured by the screen (`NativeChatScreen`). The field
    * gives up lines to stay inside it, so the footer row with Send never ends up under the keyboard;
@@ -164,6 +166,7 @@ export function NativeComposer({
   focusRequestId = 0,
   openModelRequestId = 0,
   voiceCallTitle = '',
+  voiceCallGbotName = '',
   room,
   strip,
 }: NativeComposerProps) {
@@ -620,10 +623,11 @@ export function NativeComposer({
         interruptAndSend,
         draft: model?.text ?? '',
         voiceCallTitle,
+        voiceCallGbotName,
         allFolded: compact,
       }),
     });
-  }, [available, compact, document, model, serves, voiceCallTitle]);
+  }, [available, compact, document, model, serves, voiceCallGbotName, voiceCallTitle]);
 
   /** Send held while the agent works: Interrupt & Send or Queue. */
   const openSendChoices = useCallback(() => {
