@@ -80,6 +80,7 @@ const STORES: readonly CatalogStore[] = [
   { id: 'retiredQuestions', prefix: 'ghostex:async-questions:', collection: true, backend: protectedDisk() },
   { id: 'questionDrafts', prefix: 'ghostex.sessionChat.questionDraft.', collection: true, backend: protectedDisk() },
   { id: 'chatClient', prefix: 'ghostex.sessionChat.clientId', collection: false, backend: LOCAL },
+  { id: 'statusLineDefault', prefix: 'ghostex.chat.statusLineDefault.v1', collection: false, backend: LOCAL },
   { id: 'returnedPrompts', prefix: 'ghostex.sessionChat.returnedPrompts.applied', collection: false, backend: LOCAL },
   { id: 'drafts', prefix: 'ghostex.sessionChat.draft.', collection: true, backend: protectedDisk() },
   { id: 'draftOutbox', prefix: 'ghostex.sessionChat.outbox.', collection: true, backend: protectedDisk() },

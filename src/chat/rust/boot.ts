@@ -56,6 +56,76 @@ function parse(raw: string | null): unknown {
   }
 }
 
+/**
+ * Each agent's status line as it was drawn before 2026-11-09, when an unsaved record meant these
+ * pins (`recommended_preferences` in `packages/gx-chat-core/src/menus/context/preferences.rs`;
+ * keep the two in step): the popover rows that differ from a row's own recommendation, and the pins.
+ */
+const RECOMMENDED_STATUS_LINES: Record<string, { shown: Record<string, boolean>; starred: string[] }> = {
+  claudeContext: {
+    shown: { fiveHourReset: false },
+    starred: ['accountName', 'modelLimit', 'fiveHourLimit', 'sevenDayLimit', 'repo'],
+  },
+  codexContext: {
+    shown: { fiveHourLimit: false, fiveHourReset: false, sevenDayReset: true, accountEmail: true },
+    starred: ['accountEmail', 'sevenDayLimit', 'sevenDayReset', 'accountResets'],
+  },
+  cursorContext: {
+    shown: { thinking: false, contextUsed: true, contextTokens: true, totalOutputTokens: true, pr: true },
+    starred: ['contextUsed', 'branch', 'lines'],
+  },
+  hermesContext: { shown: {}, starred: ['contextUsed', 'costUsd', 'tokens', 'sessionTime'] },
+  piContext: { shown: {}, starred: ['model', 'contextUsed', 'costUsd', 'tokens'] },
+  basicContext: { shown: {}, starred: ['repo', 'branch'] },
+};
+
+/**
+ * Writes each agent's recommended status line into a record that was never saved, once, for a
+ * person who already used the chat, so the new default that pins nothing never takes their line
+ * away. Twin of `keep_status_line_for_existing_users` in the desktop's
+ * `apps/desktop/src/app/gx_chat/boot.rs`: someone who used the chat before has this phone's chat
+ * client id, a new install has none yet and gets the empty default, and the `statusLineDefault`
+ * record says this ran. A refused read or write leaves the marker unwritten so the next boot tries
+ * again, and a record the person saved is never overwritten.
+ */
+async function keepStatusLineForExistingUsers(nowMs: number, reads: BootReads): Promise<void> {
+  const stores = Object.keys(RECOMMENDED_STATUS_LINES);
+  const keys: ChatStorageKey[] = [
+    { store: 'statusLineDefault', suffix: '' },
+    { store: 'chatClient', suffix: '' },
+    ...stores.map((store) => ({ store, suffix: '' })),
+  ];
+  reads.attempts += keys.length;
+  let raws: (string | null)[];
+  try {
+    raws = await readRecords(keys, nowMs);
+  } catch {
+    reads.errors += keys.length;
+    return;
+  }
+  const [marker, client, ...records] = raws.map((raw) => (raw === null || raw.length === 0 ? null : raw));
+  if (marker !== null) return;
+  const existing = client !== null;
+  try {
+    if (existing) {
+      for (const [index, store] of stores.entries()) {
+        if (records[index] !== null) continue;
+        const { shown, starred } = RECOMMENDED_STATUS_LINES[store];
+        const record = {
+          shown,
+          starred: Object.fromEntries(starred.map((id) => [id, true])),
+          order: {},
+          starredOrder: starred,
+        };
+        await writeRecord({ store, suffix: '' }, JSON.stringify(record), nowMs);
+      }
+    }
+    await writeRecord({ store: 'statusLineDefault', suffix: '' }, existing ? 'kept' : 'new', nowMs);
+  } catch {
+    reads.errors += 1;
+  }
+}
+
 /** `Number.prototype.toString(36)` of a random 53-bit value. */
 function base36Random(): string {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(36);
@@ -133,6 +203,7 @@ function decodeVerbose(raw: string | null): boolean | null {
  */
 export async function readComposerBoot(sessionKey: string, nowMs: number): Promise<ComposerBootRead | null> {
   const reads: BootReads = { attempts: 0, errors: 0 };
+  await keepStatusLineForExistingUsers(nowMs, reads);
   // One multiGet for the records and the two prefix scans beside it, instead of thirteen reads
   // one after another: the cached transcript cannot paint before this read answers.
   const [records, optionStates, modelOutboxes] = await Promise.all([
@@ -208,7 +279,8 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
       hideAccountEmails: false,
       title: null,
       toolCards:
-        useSettingsStore.getState().settings.chatToolCallCards || useSettingsStore.getState().settings.chatToolCallLines,
+        useSettingsStore.getState().settings.chatToolCallCards ||
+        useSettingsStore.getState().settings.chatToolCallLines,
       detailedDefault: useSettingsStore.getState().settings.sessionChatDetailedView,
     },
     contextPreferences: { claude, codex, cursor, hermes, pi, basic },
