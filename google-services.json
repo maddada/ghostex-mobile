@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "567941398932",
+    "project_id": "ghostex-mobile",
+    "storage_bucket": "ghostex-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:567941398932:android:05e2c8ac1484542ae10f81",
+        "android_client_info": {
+          "package_name": "io.ghostex"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7iwJVo8hIo4IchhsXFAe8Q3SVKKqpXcA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

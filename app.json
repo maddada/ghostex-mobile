@@ -100,10 +100,17 @@
           "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "owner": "maddada",
+    "extra": {
+      "eas": {
+        "projectId": "12ee8101-5ce6-4931-8a32-1ecc52de0b5e"
+      }
     }
   }
 }
