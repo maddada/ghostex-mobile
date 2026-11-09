@@ -417,7 +417,9 @@ export function useDictation(
     } else if (offered !== null) {
       await dismissKeptLocal(offered);
     }
-  }, [machine, failure, waiting, dismissKeptLocal]);
+    // The row is free again: the next recording still waiting shows at once, not only when the chat opens again.
+    await refreshWaiting();
+  }, [machine, failure, waiting, dismissKeptLocal, refreshWaiting]);
 
   const retry = useCallback(async () => {
     if (failure !== null) await transcribeKept(failure.kept);
