@@ -15,7 +15,7 @@ import type {
   TranscriptItem,
 } from '../../rust/document';
 import { QuestionExchangeCards } from '../cards';
-import { hiddenWork, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { hiddenWork, useChatLook, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { DeferredNotice } from './DeferredNotice';
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
@@ -45,7 +45,7 @@ const IN_WORK_FOLD = { inWorkFold: true, hideFileChanges: true };
 const HIDE_FILES = { inWorkFold: false, hideFileChanges: true };
 
 export const TranscriptItemView = memo(function TranscriptItemView({ item }: { item: TranscriptItem }) {
-  const { chatLook } = useTranscriptFlags();
+  const chatLook = useChatLook();
   switch (item.kind) {
     case 'message':
       return <MessageRow message={(item as { message: ProjectedMessage }).message} />;

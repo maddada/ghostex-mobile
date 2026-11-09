@@ -13,7 +13,7 @@ import { memo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
-import { useTranscriptEnv, useTranscriptFlags } from './context';
+import { useChatLook, useTranscriptEnv, useTranscriptFlags } from './context';
 import { Glyph } from './icons';
 import { arr, obj, str } from './json';
 import { messageCommands } from './markdown/runCommands';
@@ -74,7 +74,7 @@ export const ReplyActions = memo(function ReplyActions({
   flush: boolean;
   work?: HiddenWork | null;
 }) {
-  const compact = compactSpacing(useTranscriptFlags().chatLook);
+  const compact = compactSpacing(useChatLook());
   if (compact) {
     return (
       <View style={[styles.footer, { paddingLeft: flush ? 0 : PROSE_COLUMN }]}>
@@ -232,7 +232,7 @@ export const UserActions = memo(function UserActions({
   start?: boolean;
 }) {
   const prompt = typeof message.copyText === 'string' ? message.copyText : '';
-  const compact = compactSpacing(useTranscriptFlags().chatLook);
+  const compact = compactSpacing(useChatLook());
   // A message the agent itself queued comes back to the composer (CDXC:SessionChat 2026-10-11 in
   // packages/gx-chat-core/src/composer/queue_take_back.rs); `DeliveryIndicator` spins while it does.
   if (prompt.length === 0) return null;

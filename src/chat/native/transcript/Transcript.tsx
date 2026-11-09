@@ -34,6 +34,7 @@ import { holdForAnswer, holdsTranscript, releaseAnswerHold, useAnswerHold } from
 import { QuestionReplyHost } from './QuestionReply';
 import {
   ChatImagesProvider,
+  ChatLookProvider,
   RowDetailsProvider,
   TranscriptEnvProvider,
   TranscriptFlagsProvider,
@@ -181,17 +182,20 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
           document.chatLook,
         ]);
   const flags = useMemo(() => transcriptFlags(document), [flagsSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chatLook = flags.chatLook;
   // Only the forms read this, and it changes with every pick, so it rides apart from the flags.
   const formsSignature = JSON.stringify(document?.questionForms ?? null);
   const forms = useMemo(() => document?.questionForms ?? EMPTY_FORMS, [formsSignature]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <TranscriptEnvProvider value={env}>
       <TranscriptFlagsProvider value={flags}>
-        <RowDetailsProvider value={state?.rowDetails ?? EMPTY_DETAILS}>
-          <ChatImagesProvider value={state?.images ?? EMPTY_IMAGES}>
-            <QuestionFormsProvider value={forms}>{children}</QuestionFormsProvider>
-          </ChatImagesProvider>
-        </RowDetailsProvider>
+        <ChatLookProvider value={chatLook}>
+          <RowDetailsProvider value={state?.rowDetails ?? EMPTY_DETAILS}>
+            <ChatImagesProvider value={state?.images ?? EMPTY_IMAGES}>
+              <QuestionFormsProvider value={forms}>{children}</QuestionFormsProvider>
+            </ChatImagesProvider>
+          </RowDetailsProvider>
+        </ChatLookProvider>
       </TranscriptFlagsProvider>
     </TranscriptEnvProvider>
   );

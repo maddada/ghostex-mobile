@@ -293,6 +293,17 @@ export function useTranscriptFlags(): TranscriptFlags {
   return useContext(FlagsContext);
 }
 
+/**
+ * The chat look on its own (the flags' `chatLook`), for the rows that read nothing else from the
+ * flags: reading it through `useTranscriptFlags` redrew every row whenever any flag moved (a turn's
+ * `finalIds`, Read aloud), with every look at Default too.
+ */
+const ChatLookContext = createContext<ChatLook>(DEFAULT_CHAT_LOOK);
+export const ChatLookProvider = ChatLookContext.Provider;
+export function useChatLook(): ChatLook {
+  return useContext(ChatLookContext);
+}
+
 export function transcriptFlags(document: ChatDocument | null): TranscriptFlags {
   if (document === null) return EMPTY_FLAGS;
   return {

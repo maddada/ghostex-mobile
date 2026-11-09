@@ -12,7 +12,7 @@
 
 import type { ChatLook } from '../../rust/document';
 import { ROW_GAP } from './cardSpacing';
-import { useTranscriptFlags } from './context';
+import { useChatLook } from './context';
 import { MESSAGE_PART_GAP } from './theme';
 
 /** The space every row ends with at Compact (desktop `COMPACT_ROW_GAP`). */
@@ -36,7 +36,7 @@ export function rowGapOf(look: ChatLook): number {
 
 /** This transcript's row gap (`rowGapOf`). */
 export function useRowGap(): number {
-  return rowGapOf(useTranscriptFlags().chatLook);
+  return rowGapOf(useChatLook());
 }
 
 /** How far a quiet line under the agent's text is pulled up from the message's part gap: nothing at Default. */
