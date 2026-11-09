@@ -197,6 +197,8 @@ export type TranscriptFlags = {
   takeBackIds: ReadonlySet<string>;
   /** The message a Back to composer is taking back right now. */
   takeBackBusy: string | null;
+  /** Your messages still waiting for their pictures (core `composer/attaching.rs`), by id. */
+  attaching: ReadonlyMap<string, { pictures: number; status: boolean }>;
   deferredWork: { [itemId: string]: { loading: boolean; error?: string | null } };
   /** The open API error card (`apiErrorCard`); the row whose id it names draws it, other failed-call rows a quiet line. */
   apiErrorCard: Json;
@@ -274,6 +276,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   sendFailureCardPromptId: null,
   takeBackIds: new Set(),
   takeBackBusy: null,
+  attaching: new Map(),
   deferredWork: {},
   apiErrorCard: null,
   markedHeadingStrength: 0.6,
@@ -332,6 +335,12 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
       typeof document.sendFailureCardPromptId === 'string' ? document.sendFailureCardPromptId : null,
     takeBackIds: new Set(arr(document.queueTakeBackIds).filter((id): id is string => typeof id === 'string')),
     takeBackBusy: typeof document.queueTakeBackBusy === 'string' ? document.queueTakeBackBusy : null,
+    attaching: new Map(
+      arr(document.attachingMessages)
+        .map((entry) => obj(entry))
+        .filter((entry): entry is { id: string; pictures: number; status: boolean } => typeof entry?.id === 'string')
+        .map((entry) => [entry.id, { pictures: Number(entry.pictures) || 0, status: entry.status === true }]),
+    ),
     deferredWork: obj(document.deferredWork) === null ? {} : document.deferredWork,
     apiErrorCard: document.apiErrorCard ?? null,
     markedHeadingStrength:

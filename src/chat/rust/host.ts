@@ -493,16 +493,18 @@ export class RustChatHost {
    */
   async attachFiles(files: readonly { uri: string; name?: string }[]): Promise<void> {
     if (files.length === 0) return;
-    this.composer.uploadStarted();
-    this.dispatch({ type: 'attachmentsStarted' });
+    // A send made before the upload lands takes it by this id (core `composer/attaching.rs`).
+    const id = this.composer.uploadStarted();
+    this.dispatch({ type: 'attachmentsStarted', id });
     try {
       const paths = await this.uploadLocalFiles(files);
-      this.composer.uploadFinished(paths.length > 0);
-      this.dispatch({ type: 'attachmentsFinished', paths });
+      this.composer.uploadFinished(id, paths.length > 0);
+      this.dispatch({ type: 'attachmentsFinished', id, paths });
     } catch (error) {
-      this.composer.uploadFinished(false);
+      this.composer.uploadFinished(id, false);
       this.dispatch({
         type: 'attachmentsFinished',
+        id,
         error: error instanceof Error ? error.message : 'The attachment could not be uploaded.',
       });
     }

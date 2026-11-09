@@ -173,6 +173,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
           obj(document.queue)?.capabilities,
           document.queueTakeBackIds,
           document.queueTakeBackBusy,
+          document.attachingMessages,
           document.deferredWork,
           document.markedHeadingStrength,
           document.chatTextStrength,

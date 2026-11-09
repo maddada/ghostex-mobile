@@ -11,7 +11,7 @@
 
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 
 import type { UserAction } from '../../rust/actions';
 import type { ChatDocument } from '../../rust/document';
@@ -52,11 +52,14 @@ export function SendControl({
     [],
   );
   const working = document?.working === true;
-  const stop = (working || cooling) && !hasDraft;
+  // A picture still uploading can be sent on its own: the message takes it along and waits for it
+  // in the transcript (core `composer/attaching.rs`).
   const pendingAttachments = document?.pendingAttachments ?? 0;
-  const disabled = stop ? cooling : !hasDraft || !ready || pendingAttachments > 0;
+  const sendable = hasDraft || pendingAttachments > 0;
+  const stop = (working || cooling) && !sendable;
+  const disabled = stop ? cooling : !sendable || !ready;
   const blocked = !stop && typeof document?.sendBlockedReason === 'string';
-  const canQueue = hasDraft && document?.queue.capabilities.canQueue === true;
+  const canQueue = sendable && document?.queue.capabilities.canQueue === true;
   const holdMs = document?.interaction.queueLongPressMs ?? 500;
 
   const onStop = (): void => {
@@ -72,7 +75,7 @@ export function SendControl({
     dispatch({ type: 'interrupt' });
   };
 
-  const choosesOnHold = working && hasDraft && onHoldWhileWorking !== undefined;
+  const choosesOnHold = working && sendable && onHoldWhileWorking !== undefined;
   const label = stop
     ? 'Stop the agent'
     : choosesOnHold
@@ -115,16 +118,12 @@ export function SendControl({
         pressed ? styles.pressed : null,
       ]}
     >
-      {!stop && pendingAttachments > 0 ? (
-        <ActivityIndicator size="small" color={P.send.ink} />
-      ) : (
-        <Glyph
-          name={stop ? 'player-stop-filled' : 'arrow-up'}
-          size={stop ? 12 : 16}
-          color={stop ? P.send.stopInk : P.send.ink}
-          strokeWidth={2.4}
-        />
-      )}
+      <Glyph
+        name={stop ? 'player-stop-filled' : 'arrow-up'}
+        size={stop ? 12 : 16}
+        color={stop ? P.send.stopInk : P.send.ink}
+        strokeWidth={2.4}
+      />
     </Pressable>
   );
 }

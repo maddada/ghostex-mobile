@@ -570,6 +570,12 @@ export type ChatDocument = {
   queueTakeBackIds: string[];
   /** The message a Back to composer is taking back right now, or null. */
   queueTakeBackBusy: string | null;
+  /**
+   * Your messages still waiting for pictures on their way into them: a loading tile per picture,
+   * and once `status` the spinner and Back to composer beside the bubble (core
+   * `composer/attaching.rs`). Absent when there are none.
+   */
+  attachingMessages?: { id: string; pictures: number; status: boolean }[];
   /** The desktop composer's key for Back to composer, which its tooltip names. */
   queueTakeBackHotkey: string;
   /** The cross-client composer draft. Desktop: `composer.rs` (incoming draft bar). */

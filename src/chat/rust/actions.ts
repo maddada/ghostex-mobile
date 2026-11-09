@@ -137,9 +137,12 @@ export type ActionFields = {
   restoreSubmission: { text: string; current: string };
 
   // ---- attachments --------------------------------------------------------------------------
-  /** Uploads began (the send button waits). Pair with `attachmentsFinished`. */
-  attachmentsStarted: {};
-  attachmentsFinished: { paths?: string[]; error?: string };
+  /**
+   * An upload began. Pair with `attachmentsFinished` under the same `id`: a send made before it
+   * lands takes it along (core `composer/attaching.rs`).
+   */
+  attachmentsStarted: { id?: number };
+  attachmentsFinished: { id?: number; paths?: string[]; error?: string };
   /** Local files picked on the phone; the host uploads them (`importNativeAttachments`). */
   attachPaths: { paths: string[] };
   /** Insert reference pills for machine paths at the selection. */
@@ -164,9 +167,10 @@ export type ActionFields = {
 
   // ---- sending ------------------------------------------------------------------------------
   /** `interrupt`: interrupt and send, which stops the agent's running turn first (the core's `interrupts_turn`). */
-  send: { text: string; draftVersion: DraftVersion; imagePaths?: string[]; interrupt?: boolean };
-  queue: { text: string; draftVersion: DraftVersion };
-  compact: { text: string; draftVersion: DraftVersion };
+  /** `caret`: where pictures still uploading go in `text` (core `composer/attaching.rs`). */
+  send: { text: string; draftVersion: DraftVersion; imagePaths?: string[]; interrupt?: boolean; caret?: number };
+  queue: { text: string; draftVersion: DraftVersion; caret?: number };
+  compact: { text: string; draftVersion: DraftVersion; caret?: number };
   /** A terminal key: `enter`, `shift-tab`, `shift-up`, `shift-down`. */
   sendKey: { key: string; marker?: string };
   interrupt: {};

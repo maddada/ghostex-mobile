@@ -13,7 +13,7 @@ import { cardStackMargin } from './cardSpacing';
 import { quietStyle, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { Chevron, DisclosureBody, DisclosureHeading, LaneMarker, useFoldPlace } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
-import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip } from './Images';
+import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip, WithLoadingPictures } from './Images';
 import { arr, obj, str } from './json';
 import { MessageLongPressContext } from './markdown/blockLongPress';
 import { messageMenuSelection } from './messageCopy';
@@ -109,7 +109,7 @@ function useMessageMenu(
 
 function UserMessage({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
-  const { chatTextStrength, chatLook } = useTranscriptFlags();
+  const { chatTextStrength, chatLook, attaching } = useTranscriptFlags();
   // Your messages Band: brighter text than the agent's prose (`userMessageLook.tsx`).
   const textColor =
     chatLook.userStyle !== 'default'
@@ -153,11 +153,15 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
     ) : (
       prose
     );
+  // Pictures still being saved show as loading tiles where they will land (core `composer/attaching.rs`).
+  const loading = attaching.get(message.id)?.pictures ?? 0;
+  const content = <WithLoadingPictures count={loading}>{body.length > 0 ? bubble : null}</WithLoadingPictures>;
+  const hasBody = body.length > 0 || loading > 0;
   // Message layout Left aligned, or any Your messages style (`userMessageLook.tsx`).
   if (chatLook.messageLayout === 'left') {
     return (
-      <LeftUserMessage message={message} look={chatLook} hasBody={body.length > 0} openMenu={openMenu}>
-        {bubble}
+      <LeftUserMessage message={message} look={chatLook} hasBody={hasBody} openMenu={openMenu}>
+        {content}
       </LeftUserMessage>
     );
   }
@@ -168,12 +172,12 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
       <View style={styles.userColumn}>
         <View style={styles.bubbleRow}>
           <DeliveryIndicator message={message} />
-          {body.length > 0 ? (
+          {hasBody ? (
             openMenu === undefined ? (
-              <View style={[styles.bubble, { backgroundColor: theme.input }]}>{bubble}</View>
+              <View style={[styles.bubble, { backgroundColor: theme.input }]}>{content}</View>
             ) : (
               <MessageSelection openMenu={openMenu} style={[styles.bubble, { backgroundColor: theme.input }]}>
-                <MessageLongPressContext.Provider value={openMenu}>{bubble}</MessageLongPressContext.Provider>
+                <MessageLongPressContext.Provider value={openMenu}>{content}</MessageLongPressContext.Provider>
               </MessageSelection>
             )
           ) : null}

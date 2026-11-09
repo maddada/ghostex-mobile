@@ -40,8 +40,9 @@ export type ComposerModelState = {
   /** A send left the composer and has not settled. Send does not wait for it: the core holds later sends behind it. */
   pendingSend: boolean;
   /**
-   * A send pressed while an attachment was still uploading: its mode, sent with the pills once the
-   * last upload lands, dropped (text kept) when one fails. Desktop: `composer_attach.rs`.
+   * A send pressed while an upload's pills were on their way into the field (uploaded, not written
+   * yet): its mode, sent the moment they are in. An upload still uploading does not hold a send:
+   * the send takes it along (core `composer/attaching.rs`). Desktop: `composer_attach.rs`.
    */
   heldSend: SubmitMode | null;
 };
@@ -74,7 +75,12 @@ export class ComposerModel {
    * Uploads still on their way into the field: being uploaded, or uploaded with their pills not in
    * the text yet. Counted here, not from the document, which answers a turn later.
    */
-  private readonly uploads = { saving: 0, inserting: 0 };
+  private readonly uploads: { next: number; saving: number[]; claimed: number[]; inserting: number } = {
+    next: 0,
+    saving: [],
+    claimed: [],
+    inserting: 0,
+  };
 
   private selectionSent: { text: string; caret: number } | null = null;
 
@@ -140,12 +146,16 @@ export class ComposerModel {
     const mode = interrupt ? 'send' : requested;
     const document = this.hooks.document();
     if (!this.state.ready) return false;
-    // An attachment still uploading: the message waits for its pill instead of leaving without it.
-    if (this.uploads.saving + this.uploads.inserting > 0) {
+    // An upload's pills on their way into the field: the message waits the moment it takes them.
+    if (this.uploads.inserting > 0) {
       this.set({ heldSend: requested });
       return false;
     }
-    if (this.state.text.trim().length === 0) return false;
+    // CDXC:Clipboard 2026-11-09 DECISION: a picture still uploading goes with the message, which
+    // leaves now and waits for it in the transcript (core `composer/attaching.rs`, where the
+    // user's words are). Even a message of pictures alone.
+    const uploading = this.uploads.saving.length > 0;
+    if (this.state.text.trim().length === 0 && !uploading) return false;
     if (mode !== 'send' && mode !== 'handoff' && document?.queue.capabilities.canQueue !== true) return false;
     const blocked = document?.sendBlockedReason ?? null;
     if (blocked !== null) {
@@ -161,7 +171,9 @@ export class ComposerModel {
       text: this.state.text,
       draftVersion: this.version(),
       ...(interrupt ? { interrupt } : {}),
+      ...(uploading ? { caret: utf16Caret(this.state.text, this.state.selection.end) } : {}),
     } as UserAction;
+    if (uploading) this.uploads.claimed.push(...this.uploads.saving.splice(0));
     this.set({
       pendingSend: true,
       text: '',
@@ -210,28 +222,32 @@ export class ComposerModel {
     this.hooks.dispatch({ type: 'refreshComposerChrome', sessionId });
   }
 
-  /** An upload into the field began (`RustChatHost.attachFiles`). */
-  uploadStarted(): void {
-    this.uploads.saving += 1;
+  /** An upload into the field began (`RustChatHost.attachFiles`); answers the id the core knows it by. */
+  uploadStarted(): number {
+    this.uploads.next += 1;
+    this.uploads.saving.push(this.uploads.next);
+    return this.uploads.next;
   }
 
   /**
-   * An upload ended; with `references` its pills are on their way (`attachmentReferences`). One
-   * that failed drops a held send and leaves its text in the field, beside the core's error.
+   * Upload `id` ended; with `references` its pills are on their way (`attachmentReferences`),
+   * unless a send took it, whose message they go to instead.
    */
-  uploadFinished(references: boolean): void {
-    this.uploads.saving = Math.max(0, this.uploads.saving - 1);
-    if (references) {
-      this.uploads.inserting += 1;
+  uploadFinished(id: number, references: boolean): void {
+    const claimed = this.uploads.claimed.indexOf(id);
+    if (claimed >= 0) {
+      this.uploads.claimed.splice(claimed, 1);
       return;
     }
-    if (this.state.heldSend !== null) this.set({ heldSend: null });
+    const at = this.uploads.saving.indexOf(id);
+    if (at >= 0) this.uploads.saving.splice(at, 1);
+    if (references) this.uploads.inserting += 1;
   }
 
-  /** The held send goes once nothing is on its way any more. */
+  /** The held send goes once the pills it waited for are in. */
   private releaseHeldSend(): void {
     const held = this.state.heldSend;
-    if (held === null || this.uploads.saving + this.uploads.inserting > 0) return;
+    if (held === null || this.uploads.inserting > 0) return;
     this.set({ heldSend: null });
     this.submit(held);
   }
@@ -341,4 +357,9 @@ export class ComposerModel {
       ...(preserveError ? { preserveError: true } : {}),
     });
   }
+}
+
+/** `selection` (a JavaScript string index, UTF-16 already) clamped to `text`. */
+function utf16Caret(text: string, selection: number): number {
+  return Math.max(0, Math.min(selection, text.length));
 }

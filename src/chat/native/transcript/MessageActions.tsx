@@ -168,6 +168,30 @@ export function DeliveryIndicator({ message, inline = false }: { message: Projec
   const waiting =
     delivery !== undefined && delivery !== null && delivery.state !== 'failed' && delivery.state !== 'unconfirmed';
   const queued = message.queued === true && (delivery === undefined || delivery === null);
+  // CDXC:Clipboard 2026-11-09 DECISION: a message sent while its picture is still uploading gets
+  // the same spinner and Back to composer arrow, once the wait has lasted a moment (core
+  // `composer/attaching.rs`, where the user's words are; desktop `startup_delivery.rs`).
+  const attaching = flags.attaching.get(message.id)?.status === true;
+  if (attaching) {
+    return (
+      <View style={[styles.indicatorRow, inline ? styles.inlineIndicator : styles.indicator]}>
+        {main ? (
+          <Pressable
+            style={styles.button}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 1 }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to composer"
+            onPress={() => dispatch({ type: 'takeBackQueued', messageId: message.id })}
+          >
+            <Glyph name="arrow-back-up" size={13} color={theme.muted} />
+          </Pressable>
+        ) : null}
+        <View style={styles.button} accessibilityRole="progressbar" accessibilityLabel="Attaching the picture">
+          <ActivityIndicator size={13} color={theme.muted} />
+        </View>
+      </View>
+    );
+  }
   // A held message waits for its computer, not for the agent: a clock, not a spinner (desktop:
   // startup_delivery.rs).
   if (waiting && delivery.state === 'held') {

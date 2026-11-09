@@ -5,7 +5,7 @@
  * (`loadImage`), and a tap opens the image viewer `NativeChatOverlays` draws.
  */
 
-import { memo, useId, useRef, useState } from 'react';
+import { memo, useId, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { openChatImageViewer } from '../cards';
@@ -241,6 +241,31 @@ function StripTile({
 }
 
 /** A message's own pictures: right-aligned above a prompt, left-aligned above an agent's prose. */
+/**
+ * Your message's words with a loading tile after them for each picture still being saved (core
+ * `composer/attaching.rs`; desktop `images.rs` `with_loading_pictures`): where the picture shows once
+ * it is in, as a thumbnail beside the words.
+ */
+export function WithLoadingPictures({ count, children }: { count: number; children: ReactNode }) {
+  const { theme } = useTranscriptEnv();
+  if (count === 0) return <>{children}</>;
+  return (
+    <View style={styles.loadingRow}>
+      {children !== null ? <View style={styles.loadingText}>{children}</View> : null}
+      {Array.from({ length: count }, (_, index) => (
+        <View
+          key={index}
+          style={[styles.thumbnail, styles.centered, styles.missing, { borderColor: theme.border }]}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Attaching the picture"
+        >
+          <ActivityIndicator size="small" color={theme.muted} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export const ImageRow = memo(function ImageRow({
   images,
   user,
@@ -448,6 +473,8 @@ function ImageTile({
 }
 
 const styles = StyleSheet.create({
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  loadingText: { flexShrink: 1 },
   thumbnail: {
     width: VISUAL.thumbnailSize,
     height: VISUAL.thumbnailSize,
