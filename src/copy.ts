@@ -1613,26 +1613,48 @@ export const LicencesCopy = {
  * GitHub #495, 11.1.0: pairing this phone with a computer it signs in to over SSH (Tailscale, the
  * local network), with three matching words (`machines/sshPairing.ts`).
  */
+/*
+CDXC:RemotePairing 2026-11-09 WHY:
+User (Android, 11.2.1, two tall "Pair this phone with madda@100.77.81.4" / "Pair this phone with W"
+cards): "i don't understand as a user what the heck I need to do here". The card now says it
+plainly: this phone isn't approved on that computer yet; Ghostex on the computer (named as the
+person named it, or as the computer names itself, not by its address) shows "Approve this phone?"
+with the same words, and Approve is the step; reading works meanwhile and replying, Stop and typing
+wait. Several computers share one compact card. The computer's notice carries the same title
+(apps/desktop/src/app/owner_security/ui.rs `approval_title`).
+*/
 export const SshPairingCopy = {
   theComputer: 'the computer',
-  askingTitle: (computer: string) => `Asking ${computer} to pair this phone`,
-  pendingTitle: (computer: string) => `Pair this phone with ${computer}`,
-  pendingBody: (computer: string) =>
-    `This phone signs in to ${computer} over SSH. Approve it there, or on a phone already paired, when it shows these words:`,
-  pendingWhy:
-    'Until then, answering the agent, Stop and typing from this phone wait for approval on the computer. Each phone pairs once, with its own key.',
+  approveTitle: (computer: string) => `Approve this phone on ${computer}`,
+  approveTitleMany: (count: number) => `Approve this phone on ${count} computers`,
+  pendingSteps: (computer: string) =>
+    `This phone isn't approved on ${computer} yet. Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there.`,
+  pendingStepsMany:
+    "This phone isn't approved on these computers yet. Ghostex on each one shows “Approve this phone?” with the words next to its name. If they match, choose Approve there.",
+  lapsedSteps: (computer: string) =>
+    `This phone isn't approved on ${computer} yet, and nobody approved its last request in time. Tap Ask again, then approve it in Ghostex on ${computer}.`,
+  lapsedRow: 'Not approved in time',
+  meanwhile: 'Until then you can read everything here. Replying, Stop and typing wait for approval on the computer.',
+  hideHint: (computer: string) => `Hide puts this away. To see it again, open Machines and tap ${computer}.`,
+  hideHintMany: 'Hide puts this away. To see it again, open Machines and tap the computer.',
   pairedTitle: (computer: string) => `Paired with ${computer}`,
-  pairedBody: 'Answers, Stop and typing from this phone go through now.',
-  deniedTitle: (computer: string) => `${computer} didn't pair this phone`,
-  deniedBody: 'Answering the agent, Stop and typing from this phone still wait for approval there.',
-  expiredTitle: 'Nobody approved this phone in time',
+  pairedRow: 'Paired',
+  pairedBody: 'Replying, Stop and typing from this phone go through now.',
+  deniedTitle: (computer: string) => `${computer} didn't approve this phone`,
+  deniedRow: 'Not approved',
+  deniedBody: 'Replying, Stop and typing from this phone still wait for approval there each time.',
   failedTitle: "Couldn't ask to pair this phone",
   askAgain: 'Ask again',
   hide: 'Hide',
   mismatch: 'The computer named different words from this phone, so pairing stopped. Try again.',
   actionDenied: (computer: string) => `You denied this on ${computer}.`,
   actionLapsed: (computer: string) =>
-    `This wasn't approved on ${computer} in time. Pair this phone with ${computer} so it doesn't have to be.`,
+    `This wasn't approved on ${computer} in time. Approve this phone on ${computer} once and it won't have to be.`,
+  /** The computer's page under Machines, while this phone isn't approved there. */
+  rowLabel: 'Approve this phone',
+  rowDetail: (computer: string) =>
+    `Not approved on ${computer} yet. Replying, Stop and typing wait for approval there.`,
+  rowShow: 'Show',
 } as const;
 
 export const ApprovalsCopy = {

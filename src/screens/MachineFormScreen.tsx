@@ -36,12 +36,13 @@ import {
 import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { CheckIcon } from '../components/terminal/icons';
-import { ApprovalsCopy, EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
+import { ApprovalsCopy, EditMachineCopy, MachineCopy, SshPairingCopy, TailscaleFormCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
 import DemoMachineForm from '../demo/DemoMachineForm';
 import { isDemoMachine } from '../demo/identity';
 import { refreshMachineTools } from '../machines/machineTools';
+import { signsInOverSsh, startSshPairing, useSshPairings } from '../machines/sshPairing';
 import {
   getPassphrase,
   getPublicKey,
@@ -118,6 +119,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   );
   const removalAsksComputer = useRemovalAsksComputer();
   const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
+  const sshPairing = useSshPairings((state) => (machineId === null ? undefined : state.pairings[machineId]));
   const editing = existing !== null;
 
   const [transport, setTransport] = useState<MachineTransport>(
@@ -555,6 +557,24 @@ export default function MachineFormScreen({ navigation, route }: Props) {
                   {tailscaleFields}
                   <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
                 </>
+              )}
+              {/* CDXC:RemotePairing 2026-11-09: where a hidden pairing card comes back. Shown while this
+                  phone isn't approved on this computer (it signs in over SSH and has no device id there);
+                  Show brings the card back and asks again when the last request lapsed. */}
+              {signsInOverSsh(existing) && existing.deviceId === undefined && sshPairing !== undefined && (
+                <View style={formStyles.rowsCard}>
+                  <View style={[formStyles.row, formStyles.rowFirst]}>
+                    <View style={formStyles.rowMain}>
+                      <Text style={formStyles.rowLabel}>{SshPairingCopy.rowLabel}</Text>
+                      <Text style={formStyles.rowDetail}>{SshPairingCopy.rowDetail(sshPairing.computer)}</Text>
+                    </View>
+                    <SetupButton
+                      small
+                      label={SshPairingCopy.rowShow}
+                      onPress={() => void startSshPairing(existing, { auto: false })}
+                    />
+                  </View>
+                </View>
               )}
               <FormSection name="machine-form:app-update">
                 <AppUpdateSection machine={existing} />
