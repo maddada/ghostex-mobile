@@ -10,13 +10,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance 
 import type { ProjectedMessage } from '../../rust/document';
 import { ApiErrorCard, ApiErrorNote, QuestionExchangeCards } from '../cards';
 import { cardStackMargin } from './cardSpacing';
-import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { quietStyle, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { Chevron, DisclosureBody, DisclosureHeading, LaneMarker, useFoldPlace } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
 import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip } from './Images';
 import { arr, obj, str } from './json';
 import { MessageLongPressContext } from './markdown/blockLongPress';
 import { messageMenuSelection } from './messageCopy';
+import { quietLineLift } from './messageSpacing';
 import { ignoreHold, MESSAGE_TEXT_SELECTABLE, MessageSelection, messageMenuAccessibility } from './messageSelection';
 import { Markdown } from './markdown/Markdown';
 import {
@@ -36,15 +37,16 @@ import { InterAgentCard, SentAgentMessageCards } from './AgentMessageCards';
 import { WorkflowCards } from './WorkflowCard';
 import { GbotCards } from './GbotCard';
 import { estimatedLines, StartupDelivery, SuppressedRow, SystemCard } from './SystemRows';
-import { MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
+import { MESSAGE_PART_GAP, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
-import { ShellCommandCard, ToolRows } from './ToolRows';
+import { hasVisibleTools, ShellCommandCard, ToolRows } from './ToolRows';
+import { fileNames, QuietEditLine } from './quietWork';
+import { LeftUserMessage, userStyleProse } from './userMessageLook';
 import { Glyph } from './icons';
 import { strengthenedText } from './textStrength';
+import { useHiddenWorkFor } from './hiddenWorkButton';
 
 /** React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`). */
-/** The space between the parts of one message row (desktop `MESSAGE_PART_GAP` in transcript.rs). */
-const MESSAGE_PART_GAP = 8;
 const THINKING_CAP = 288;
 
 /**
@@ -107,7 +109,12 @@ function useMessageMenu(
 
 function UserMessage({ message }: { message: ProjectedMessage }) {
   const { theme } = useTranscriptEnv();
-  const { chatTextStrength } = useTranscriptFlags();
+  const { chatTextStrength, chatLook } = useTranscriptFlags();
+  // Your messages Band: brighter text than the agent's prose (`userMessageLook.tsx`).
+  const textColor =
+    chatLook.userStyle !== 'default'
+      ? userStyleProse(theme, chatTextStrength)
+      : strengthenedText(theme.primary, chatTextStrength, theme.light);
   const { disclosures } = useNativeChatUi();
   const body = typeof message.text === 'string' ? message.text : '';
   // A long prompt shows its first lines until it is expanded (core `long_prompt.rs`, desktop `transcript.rs` `prompt_body`).
@@ -119,7 +126,7 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
   const prose = message.slashCommand === true ? (
     <Text
       selectable={openMenu === undefined || MESSAGE_TEXT_SELECTABLE}
-      style={[styles.slashCommand, { color: strengthenedText(theme.primary, chatTextStrength, theme.light) }]}
+      style={[styles.slashCommand, { color: textColor }]}
     >
       {message.copyText ?? body}
     </Text>
@@ -127,7 +134,7 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
     <Markdown
       text={shortened ? collapsed : body}
       references={shortened ? message.collapsedReferences : message.markdownReferences}
-      color={strengthenedText(theme.primary, chatTextStrength, theme.light)}
+      color={textColor}
       codeColor={strengthenedText(theme.primary, chatTextStrength, theme.light)}
       breaks
       selectable={openMenu === undefined || MESSAGE_TEXT_SELECTABLE}
@@ -146,6 +153,14 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
     ) : (
       prose
     );
+  // Message layout Left aligned, or any Your messages style (`userMessageLook.tsx`).
+  if (chatLook.messageLayout === 'left') {
+    return (
+      <LeftUserMessage message={message} look={chatLook} hasBody={body.length > 0} openMenu={openMenu}>
+        {bubble}
+      </LeftUserMessage>
+    );
+  }
   return (
     <View style={styles.message} accessibilityLabel={`user message: ${body.slice(0, 2000)}`}>
       <StartupDelivery message={message} waitingLine={false} />
@@ -174,7 +189,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
   const strengthened = (color: string) => strengthenedText(color, flags.chatTextStrength, theme.light);
-  const { inWorkFold, hideFileChanges } = useFoldPlace();
+  const { inWorkFold, hideFileChanges, quietSteps } = useFoldPlace();
   const id = message.id;
   const body = typeof message.text === 'string' ? message.text : '';
   const reasoning = message.role === 'reasoning';
@@ -189,6 +204,8 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   // A running summary turn's newest row opens its tools (gx-chat-core `summary_mode_turns`).
   const [toolsOpen, toggleTools] = useDisclosure(disclosures, toolsKey, workOpen || message.toolsOpen === true);
   const openMenu = useMessageMenu(message, useReplyMenuActions(message));
+  // Agent work Quiet: the reply that carries its turn's work button (`hiddenWork.tsx`).
+  const work = useHiddenWorkFor(id);
   const find = useRowFind();
   let lead = null;
   let toolsRendered = false;
@@ -304,12 +321,38 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const questionCards = !inWorkFold && arr(message.questions).length > 0;
   const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;
   const gbotCards = !inWorkFold && arr(message.gbotCards).length > 0;
+  // Agent work Reduced or Quiet: the edit line comes right after the work line, with no gap
+  // between them (`quietWork.tsx`, desktop `transcript.rs`).
+  const quietOrder = quietStyle(flags.chatLook) && !toolsRendered && !toolCard;
+  // Message spacing Compact: the first quiet line sits closer to the text above it
+  // (`messageSpacing.ts`); an opened line's steps keep their rail's spacing.
+  const lift = quietOrder && body.length > 0 && quietSteps !== true ? quietLineLift(flags.chatLook) : 0;
+  const toolLine = quietOrder && hasVisibleTools(message, inWorkFold, flags.workflowCards);
   return (
     <View style={styles.message} accessibilityLabel={`${message.role} message: ${body.slice(0, 2000)}`}>
       <ImageRow images={message.images} user={false} />
       {lead}
-      {filesCard ? <MessageFiles message={message} /> : null}
-      {!toolsRendered ? <ToolRows message={message} /> : null}
+      {quietOrder ? (
+        <>
+          {lift > 0 && toolLine ? (
+            <View style={{ marginTop: -lift }}>
+              <ToolRows message={message} />
+            </View>
+          ) : (
+            <ToolRows message={message} />
+          )}
+          {filesCard ? (
+            <View style={toolLine ? styles.afterWorkLine : lift > 0 ? { marginTop: -lift } : null}>
+              <MessageFiles message={message} />
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {filesCard ? <MessageFiles message={message} /> : null}
+          {!toolsRendered ? <ToolRows message={message} /> : null}
+        </>
+      )}
       {/* Inside a turn's work fold the answered cards are hoisted onto the turn instead. Two one-line
           cards in a row (the tool card, a message to another agent…) are a row gap apart (`cardSpacing.ts`). */}
       {!inWorkFold ? (
@@ -336,19 +379,41 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
           <WorkflowCards ids={message.workflows} />
         </View>
       ) : null}
-      {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} flush={flush} /> : null}
+      {hasReplyActions(message, flags.finalIds) ? <ReplyActions message={message} flush={flush} work={work} /> : null}
+      {/* Agent work Quiet: the opened work sits right under the reply's time row. */}
+      {work !== null && work.open ? work.steps : null}
     </View>
   );
 }
 
 /** A message's file cards; Simple mode folds them behind "Edited N files" (desktop `file_change_card.rs`). */
 function MessageFiles({ message }: { message: ProjectedMessage }) {
-  const { simple } = useTranscriptEnv();
+  const { simple, workOpen } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
+  const { chatLook } = useTranscriptFlags();
+  // Agent work Reduced or Quiet: the edits are one live edit line in every view, open in
+  // Detailed (`quietWork.tsx`, desktop `file_change_card.rs`).
+  const quiet = quietStyle(chatLook);
   // A write waiting on an approval opens the group (gx-chat-core `approval_wait.rs`).
   const awaiting = arr(message.files).some((file) => obj(file)?.awaitingApproval === true);
-  const [open, toggle] = useDisclosure(disclosures, `files:${message.id}`, awaiting);
+  const [open, toggle] = useDisclosure(disclosures, `files:${message.id}`, awaiting || (quiet && workOpen));
   const stack = <FileChangeStack stackId={message.id} files={message.files} card={message.fileCard} />;
+  if (quiet) {
+    const summary = obj(message.fileCard);
+    return (
+      <View style={styles.message}>
+        <QuietEditLine
+          label={str(message, 'simpleFileLabel')}
+          added={typeof summary?.added === 'number' ? summary.added : 0}
+          removed={typeof summary?.removed === 'number' ? summary.removed : 0}
+          names={fileNames(summary?.paths)}
+          open={open}
+          onPress={toggle}
+        />
+        {open ? stack : null}
+      </View>
+    );
+  }
   if (!simple) return stack;
   return (
     <View style={styles.message}>
@@ -499,6 +564,7 @@ function PendingRow({ user }: { user: boolean }) {
 const styles = StyleSheet.create({
   answersWithText: { gap: 8 },
   message: { gap: MESSAGE_PART_GAP, minWidth: 0 },
+  afterWorkLine: { marginTop: -MESSAGE_PART_GAP },
   userColumn: { alignItems: 'flex-end', gap: 4 },
   bubbleRow: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 6 },
   bubble: { maxWidth: '80%', flexShrink: 1, borderRadius: 16, padding: 12 },

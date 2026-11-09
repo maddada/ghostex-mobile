@@ -37,6 +37,7 @@ import {
 import { useDisclosure } from './state';
 import type { TranscriptTheme } from './theme';
 import { ROW_GAP, cardStackMargin } from './cardSpacing';
+import { useRowGap } from './messageSpacing';
 
 /** A status tone's colour on a message card: `failed` red, `waiting` amber, otherwise green (the advisor card's red and amber too, `SystemRows.tsx`). */
 export function toneColor(tone: string, theme: TranscriptTheme): string {
@@ -270,12 +271,19 @@ export function SubagentMessageCard({ id, card, references }: { id: string; card
 
 /** The messages this session's agent sent other agents, one row each. */
 export function SentAgentMessageCards({ cards, aboveIsCard = false, columnGap = 0 }: { cards: unknown; aboveIsCard?: boolean; columnGap?: number }) {
+  const rowGap = useRowGap();
   const list = arr(cards)
     .map((card) => obj(card))
     .filter((card): card is JsonRecord => card !== null && obj(card.card) !== null);
   if (list.length === 0) return null;
   return (
-    <View style={[styles.column, { marginTop: cardStackMargin(aboveIsCard, columnGap) }]}>
+    <View
+      style={[
+        styles.column,
+        rowGap !== ROW_GAP && { gap: rowGap },
+        { marginTop: cardStackMargin(aboveIsCard, columnGap, rowGap) },
+      ]}
+    >
       {list.map((sent) => {
         const marked = str(sent, 'markdown');
         return (

@@ -7,9 +7,16 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { CompletedWorkItem, ProjectedMessage, SummaryItem, TranscriptItem } from '../../rust/document';
+import type {
+  CompletedWorkItem,
+  GroupedWorkItem,
+  ProjectedMessage,
+  SummaryItem,
+  TranscriptItem,
+} from '../../rust/document';
 import { QuestionExchangeCards } from '../cards';
-import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { hiddenWork, useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
+import { DeferredNotice } from './DeferredNotice';
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
 import { CompletedFilesFold } from './FileChanges';
@@ -29,7 +36,8 @@ import {
   singleLinePressed,
   singleLineShell,
 } from './singleLineCard';
-import { PROSE_SIZE } from './theme';
+import { GroupedWorkRow } from './quietWorkRows';
+import { HiddenGroupedWorkRow } from './hiddenWork';
 
 /** The space between the parts of a finished turn (desktop `PART_GAP` in completed_work_row.rs). */
 const COMPLETED_PART_GAP = 10;
@@ -37,6 +45,7 @@ const IN_WORK_FOLD = { inWorkFold: true, hideFileChanges: true };
 const HIDE_FILES = { inWorkFold: false, hideFileChanges: true };
 
 export const TranscriptItemView = memo(function TranscriptItemView({ item }: { item: TranscriptItem }) {
+  const { chatLook } = useTranscriptFlags();
   switch (item.kind) {
     case 'message':
       return <MessageRow message={(item as { message: ProjectedMessage }).message} />;
@@ -44,6 +53,13 @@ export const TranscriptItemView = memo(function TranscriptItemView({ item }: { i
       return <SummaryRow item={item as SummaryItem} />;
     case 'completed-work':
       return <CompletedWorkRow item={item as CompletedWorkItem} />;
+    case 'grouped-work':
+      // Agent work Quiet: no line, the work in the reply's time row (`hiddenWork.tsx`).
+      return hiddenWork(chatLook) ? (
+        <HiddenGroupedWorkRow item={item as GroupedWorkItem} />
+      ) : (
+        <GroupedWorkRow item={item as GroupedWorkItem} />
+      );
     default:
       return null;
   }
@@ -125,13 +141,19 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
           card={item.filesCard}
           label={simple ? item.simpleFilesLabel : item.filesLabel}
           deferred={item.deferred}
-          notice={deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
+          notice={
+            deferredState !== undefined ? (
+              <DeferredNotice id={item.id} deferred={item.deferred} error={deferredState.error ?? ''} />
+            ) : null
+          }
         />
       ) : null}
       {open ? (
         <FoldPlaceProvider value={IN_WORK_FOLD}>
           <DisclosureBody onCollapse={toggle} label="Collapse completed work" rail="work">
-            {deferredState !== undefined ? <DeferredNotice item={item} error={deferredState.error ?? ''} /> : null}
+            {deferredState !== undefined ? (
+              <DeferredNotice id={item.id} deferred={item.deferred} error={deferredState.error ?? ''} />
+            ) : null}
             {item.work.map((message, index) => {
               // A row that opens on its tool card right under one that closes on its own is a row
               // gap away from it, like any two one-line cards (`cardSpacing.ts`); the log's own gap
@@ -226,28 +248,6 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
   );
 }
 
-/** The work fold while its history is being read, or after the read failed (`deferred_work.rs`). */
-function DeferredNotice({ item, error }: { item: CompletedWorkItem; error: string }) {
-  const { theme, dispatch } = useTranscriptEnv();
-  const failed = error.length > 0;
-  return (
-    <View style={styles.deferred}>
-      <Text style={[styles.deferredText, { color: failed ? theme.error : theme.muted }]}>
-        {failed ? error : 'Loading work details…'}
-      </Text>
-      {failed ? (
-        <Pressable
-          onPress={() => dispatch({ type: 'loadWork', id: item.id, work: (item.deferred ?? null) as never })}
-          style={({ pressed }) => [styles.retry, pressed && { backgroundColor: theme.pressed }]}
-          accessibilityRole="button"
-        >
-          <Text style={[styles.deferredText, { color: theme.muted }]}>Retry</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   column: { gap: 8, minWidth: 0 },
   completedColumn: { gap: COMPLETED_PART_GAP, minWidth: 0 },
@@ -273,7 +273,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  deferred: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  deferredText: { fontSize: PROSE_SIZE, flexShrink: 1 },
-  retry: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
 });

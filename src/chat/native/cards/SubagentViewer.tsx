@@ -16,7 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFoldSheetTop } from '../../../components/common/foldAvoidance';
 import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
-import { transcriptItemKey, type ProjectedMessage, type TranscriptItem } from '../../rust/document';
+import {
+  transcriptItemKey,
+  type GroupedWorkItem,
+  type ProjectedMessage,
+  type TranscriptItem,
+} from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph, type GlyphName } from './icons';
 import { isTrue, obj, str } from './json';
@@ -113,13 +118,18 @@ export function SubagentViewer({
 /** A row read plainly: who said it and what. Stands in until the transcript's renderer is handed in. */
 function PlainRow({ item }: { item: TranscriptItem }) {
   const styles = useStyles();
+  const finals = (rows: { final?: ProjectedMessage | null }[]) =>
+    rows.map((row) => row.final ?? null).filter((m): m is ProjectedMessage => m !== null);
   const messages: ProjectedMessage[] =
     item.kind === 'message'
       ? [(item as { message: ProjectedMessage }).message]
       : item.kind === 'summary' || item.kind === 'completed-work'
-        ? [(item as { final?: ProjectedMessage | null }).final ?? null].filter((m): m is ProjectedMessage => m !== null)
-        : [];
-  const label = item.kind === 'completed-work' ? str(item, 'label') : '';
+        ? finals([item as { final?: ProjectedMessage | null }])
+        : item.kind === 'grouped-work'
+          ? // Agent work Reduced or Quiet: the line, then each merged turn's reply after it.
+            finals((item as GroupedWorkItem).turns)
+          : [];
+  const label = item.kind === 'completed-work' || item.kind === 'grouped-work' ? str(item, 'label') : '';
   return (
     <View style={styles.plainRow}>
       {label.length > 0 ? <Text style={styles.muted}>{label}</Text> : null}

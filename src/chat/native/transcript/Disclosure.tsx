@@ -17,7 +17,12 @@ import { MARKER_INSET, MARKER_SLOT, PROSE_LINE, PROSE_SIZE } from './theme';
  * (`in_work_fold`), and every row of a finished turn hides its writes, which belong to the turn's
  * "N files changed" fold instead (`hide_file_changes`).
  */
-export type FoldPlace = { inWorkFold: boolean; hideFileChanges: boolean };
+export type FoldPlace = {
+  inWorkFold: boolean;
+  hideFileChanges: boolean;
+  /** An opened quiet line (Agent work Reduced or Quiet): each call draws as one of its steps (`quietWork.tsx`). */
+  quietSteps?: boolean;
+};
 const FoldContext = createContext<FoldPlace>({ inWorkFold: false, hideFileChanges: false });
 export const FoldPlaceProvider = FoldContext.Provider;
 export function useFoldPlace(): FoldPlace {

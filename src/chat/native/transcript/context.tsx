@@ -10,7 +10,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import type { RustChat } from '../../rust/useRustChat';
-import type { ChatDocument, Json } from '../../rust/document';
+import type { ChatDocument, ChatLook, Json } from '../../rust/document';
 import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
 import { openChatImageViewer } from '../cards/overlayStore';
@@ -220,7 +220,43 @@ export type TranscriptFlags = {
    * its ref is not in it. Null on a chat without a board, or a gxserver that sends no index.
    */
   boardItemTitles: { [ref: string]: string } | null;
+  /** The chat look (`chatLook`; absent is all Default, today's chat). Every path it opens is gated on a non-Default value. */
+  chatLook: ChatLook;
 };
+
+/** Every chat look setting at Default: today's chat. */
+export const DEFAULT_CHAT_LOOK: ChatLook = {
+  messageLayout: 'default',
+  userStyle: 'default',
+  agentWork: 'default',
+  statusInTranscript: false,
+  spacing: 'default',
+};
+
+/** The document's chat look; a missing look or an unknown value reads as Default (gx-chat-core `transcript/chat_look.rs`). */
+export function chatLookOf(document: ChatDocument | null): ChatLook {
+  const look = obj(document?.chatLook);
+  if (look === null) return DEFAULT_CHAT_LOOK;
+  const userStyle = look.userStyle === 'band' ? 'band' : 'default';
+  return {
+    // `effective_layout`: Your messages Band draws on the left.
+    messageLayout: look.messageLayout === 'left' || userStyle !== 'default' ? 'left' : 'default',
+    userStyle,
+    agentWork: look.agentWork === 'reduced' || look.agentWork === 'quiet' ? look.agentWork : 'default',
+    statusInTranscript: look.statusInTranscript === true,
+    spacing: look.spacing === 'compact' ? 'compact' : 'default',
+  };
+}
+
+/** Agent work is Reduced or Quiet: the work draws in the quiet style (desktop `ChatAppearance::quiet_style`). */
+export function quietStyle(look: ChatLook): boolean {
+  return look.agentWork !== 'default';
+}
+
+/** Agent work is Quiet: no line before a reply, the work in its footer (`hiddenWork.tsx`, desktop `ChatAppearance::hidden_work`). */
+export function hiddenWork(look: ChatLook): boolean {
+  return look.agentWork === 'quiet';
+}
 
 const EMPTY_FLAGS: TranscriptFlags = {
   finalIds: new Set(),
@@ -248,6 +284,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   readAloudSpeakingId: null,
   relayedApprovals: {},
   boardItemTitles: null,
+  chatLook: DEFAULT_CHAT_LOOK,
 };
 
 const FlagsContext = createContext<TranscriptFlags>(EMPTY_FLAGS);
@@ -297,6 +334,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),
     boardItemTitles: boardItemTitles(document),
+    chatLook: chatLookOf(document),
   };
 }
 

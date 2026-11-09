@@ -437,6 +437,9 @@ export const CODE_SIZE = 12.6;
 export const CODE_LINE = 20.5;
 export const MONO_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
+/** The space between the parts of one message row (desktop `MESSAGE_PART_GAP` in transcript.rs). */
+export const MESSAGE_PART_GAP = 8;
+
 /** The marker column every prose lane hangs its first line from (React's `--chat-marker-*`). */
 export const MARKER_INSET = 2;
 export const MARKER_SLOT = 16;

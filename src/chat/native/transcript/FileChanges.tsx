@@ -172,7 +172,9 @@ const FileChangeRow = memo(function FileChangeRow({
 }) {
   const { theme, filePreviews } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
-  const key = `file:${stackId}:${index}`;
+  // Agent work Quiet draws only the edit waiting on an approval, which keeps the key of its place in
+  // the message (gx-chat-core `grouped_work::only_what_waits`).
+  const key = `file:${stackId}:${num(file, 'disclosureIndex') ?? index}`;
   // Settings > Chat > Show file edit previews opens every row to its preview, and a write waiting on
   // an approval opens its own row so the diff shows beside the card (gx-chat-core `approval_wait.rs`).
   const [open, toggle] = useDisclosure(disclosures, key, filePreviews || file.awaitingApproval === true);

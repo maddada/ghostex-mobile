@@ -12,12 +12,14 @@
  * above it, as hovering does on the desktop.
  */
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
 import { useChatPlacement } from '../chatPlacement';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
+import { chatLookOf } from '../transcript/context';
+import { QUIET_ICON_GAP, QUIET_LINE_HEIGHT, QUIET_TEXT_SIZE, quietDim } from '../transcript/quietWork';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { IconPill } from './ChatPills';
 import { Glyph } from './icons';
@@ -72,7 +74,21 @@ export function cardGap(document: ChatDocument): number {
 /** Whether the working card draws a bar (the same test `WorkingCard` returns null on). */
 export function workingCardShown(document: ChatDocument): boolean {
   const card = document.workingCard;
+  // Status line in the chat: the line is the transcript's last row instead (`StatusTail`).
+  if (chatLookOf(document).statusInTranscript) return false;
   return card !== undefined && card.visible === true && card.label !== null;
+}
+
+/** Whether the transcript ends with the status row (`StatusTail`): Status line in the chat is on, the transcript has rows and the card would show (desktop `status_tail_wanted`). */
+export function statusTailShown(document: ChatDocument, rowCount: number): boolean {
+  const card = document.workingCard;
+  return (
+    chatLookOf(document).statusInTranscript &&
+    rowCount > 0 &&
+    card !== undefined &&
+    card.visible === true &&
+    card.label !== null
+  );
 }
 
 export function WorkingCard({ document }: { document: ChatDocument }) {
@@ -82,6 +98,8 @@ export function WorkingCard({ document }: { document: ChatDocument }) {
   const [held, setHeld] = useState(false);
   const card = document.workingCard;
   if (card === undefined || card.visible !== true || card.label === null) return null;
+  // Status line in the chat: the line is the transcript's last row instead (`StatusTail`).
+  if (chatLookOf(document).statusInTranscript) return null;
   const showJump = awayFromBottom && jumpToBottom !== null;
   const label = card.label;
   const strong = card.labelKind === 'tool' || card.labelKind === 'activity';
@@ -120,6 +138,62 @@ export function WorkingCard({ document }: { document: ChatDocument }) {
     </View>
   );
 }
+
+/**
+ * Status line in the chat (`chatLook.statusInTranscript`, gx-chat-core `transcript/chat_look.rs`):
+ * the card's line drawn as the transcript's last row while the agent works (or a compaction runs),
+ * in the quiet style's type (12.5pt on a 20pt line, dim), instead of the capsule above the chat box.
+ * When the turn ends the row goes and that reply's Worked line keeps the time. The pills and armed
+ * timers stay in the chat box's strip. The spark and the activity's loader animate on the native
+ * driver inside this row alone, so the transcript's rows never draw again for its frames.
+ *
+ * CDXC:SessionChat 2026-11-07 SEE-ALSO:
+ * packages/gx-chat-core/src/transcript/chat_look.rs (the user decision; an opt-in alternative to the 2026-10-18 DECISION in packages/gx-chat-core/src/extras/working_card.rs, which still describes the default), apps/desktop/src/app/native_chat/status_tail.rs (the desktop's row).
+ */
+export const StatusTail = memo(function StatusTail({ document }: { document: ChatDocument }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const card = document.workingCard;
+  if (card === undefined || card.label === null) return null;
+  const named = card.labelKind === 'tool' || card.labelKind === 'activity';
+  const parts = card.labelParts ?? [];
+  const activity = obj(card.activity);
+  const percent = num(activity, 'percent');
+  const spoken = [
+    card.label,
+    str(activity, 'elapsedLabel'),
+    str(activity, 'tokens'),
+    percent !== null ? `${percent}%` : '',
+  ]
+    .filter((part) => part.length > 0)
+    .join(', ');
+  return (
+    <View
+      accessibilityRole="summary"
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={spoken}
+      style={styles.tail}
+    >
+      <Lead card={card} />
+      <View style={[styles.labelSlot, styles.tailSlot]}>
+        <Text
+          style={[styles.tailLabel, { color: named ? P.muted : quietDim(P) }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {parts.length > 0
+            ? parts.map((part, index) => (
+                <Text key={index} style={part.dim === true ? { color: quietDim(P) } : null}>
+                  {part.text}
+                </Text>
+              ))
+            : card.label}
+        </Text>
+        {card.labelKind === 'activity' ? <ActivityTrailing activity={activity} /> : null}
+      </View>
+    </View>
+  );
+});
 
 /**
  * Scroll-to-bottom on its own over the transcript's bottom edge, while the reader is away from the
@@ -302,5 +376,21 @@ const useStyles = themedStyles((P) => ({
   track: {
     width: 48,
     flexShrink: 0,
+  },
+  /** The status row: no capsule, the quiet style's line height and gap; its glow stays within the row. */
+  tail: {
+    minHeight: QUIET_LINE_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: QUIET_ICON_GAP,
+    overflow: 'hidden',
+  },
+  tailSlot: {
+    gap: QUIET_ICON_GAP,
+  },
+  tailLabel: {
+    flexShrink: 1,
+    fontSize: QUIET_TEXT_SIZE,
+    lineHeight: QUIET_LINE_HEIGHT,
   },
 }));
