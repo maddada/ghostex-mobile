@@ -233,8 +233,9 @@ export type SummaryItem = {
 /** One count beside a finished turn's "Worked for 2m 5s" (gx-chat-core `work_summary.rs`). */
 export type WorkStat = {
   /** Picks the chip's glyph and tone. */
-  kind: 'images' | 'tools' | 'files' | 'failed' | 'recovered';
-  /** "3 images" (the pictures in the closed card's strip, first), "4 tool calls", "1 file", "1 failed, then passed". */
+  kind: 'images' | 'tools' | 'files' | 'failed' | 'recovered' | 'messages' | 'answers';
+  /** "3 images" (the pictures in the closed card's strip, first), "4 tool calls", "1 file", "1 failed, then passed",
+   * "2 messages" and "1 answer" (the cards folded into the row, gx-chat-core `folded_cards.rs`). */
   label: string;
 };
 
@@ -280,6 +281,10 @@ export type CompletedWorkItem = {
    * still on the server, drawn under the closed fold (gx-chat-core `read_images.rs`); omitted when
    * there are none. */
   readImages?: Json[];
+  /** The turn's messages between agents and answers fold into its row (gx-chat-core
+   * `folded_cards.rs`): the `artifacts` marked `foldedIntoWork`, then `questions`, then
+   * `sentMessages` are drawn at the top of the opened row instead of after it; absent when not. */
+  cardsInFold?: boolean;
 };
 
 /** Agent work set to Reduced or Quiet (gx-chat-core `transcript/grouped_work.rs`): the finished turns the
@@ -316,6 +321,9 @@ export type GroupedWorkItem = {
   /** Agent work Quiet: the id of the reply whose time row carries the work button; absent when no
    * reply has one (the button then stands on its own row after the tails) and under Reduced. */
   workCarrier?: string;
+  /** As on {@link CompletedWorkItem}, for every merged turn: what folds is drawn at the top of the
+   * opened line instead of in the tails; absent when not. */
+  cardsInFold?: boolean;
 };
 
 /** One turn a {@link GroupedWorkItem} merged, shaped like the same-named {@link CompletedWorkItem}
@@ -439,6 +447,9 @@ export type ProjectedMessage = {
   toolsShowAllRows?: boolean;
   /** Inside a turn fold: the text owns none of its calls, which follow it at the same level. */
   toolsFlat?: boolean;
+  /** A message between agents or an answers card folded into its finished turn's row
+   * (`cardsInFold`), drawn at the top of the opened row instead of after it. */
+  foldedIntoWork?: boolean;
   /** A running summary turn's newest row: its tool calls start open (gx-chat-core `summary_mode_turns` in `transcript/turns.rs`). */
   toolsOpen?: boolean;
   /** Settings > Chat > Tool call cards: the message's calls and edits as one card (gx-chat-core

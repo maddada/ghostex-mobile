@@ -17,6 +17,7 @@ import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context
 import { DeferredNotice } from './DeferredNotice';
 import { FoldPlaceProvider } from './Disclosure';
 import { FileChangeStack } from './FileChanges';
+import { FoldedCards, foldsCards, splitFolded } from './foldedCards';
 import { ReadImageStrip } from './Images';
 import { arr, num, obj, str, type JsonRecord } from './json';
 import { useRowGap } from './messageSpacing';
@@ -86,6 +87,19 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
       <DeferredNotice key={owner} id={owner} deferred={work} error={flags.deferredWork[owner]?.error ?? ''} />
     ));
   const hasFiles = arr(item.files).length > 0;
+  // Each merged turn's messages between agents and answers fold into the line (gx-chat-core
+  // `folded_cards.rs`): drawn at the top of its opened steps and never in the tails.
+  const folded = item.turns.map((turn) => ({
+    turn,
+    split: splitFolded(item.cardsInFold, turn.artifacts, turn.questions, turn.sentMessages),
+  }));
+  const foldedCards = folded.filter(({ split }) => foldsCards(split));
+  const tails: WorkTail[] = folded.map(({ turn, split }) => ({
+    ...turn,
+    artifacts: split.kept,
+    questions: split.tailQuestions,
+    sentMessages: split.tailSent,
+  }));
   return (
     <View style={styles.column}>
       <QuietWorkLine
@@ -96,9 +110,14 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
         onPress={toggle}
       />
       {open ? (
-        notices.length > 0 || item.work.length > 0 || hasFiles ? (
+        notices.length > 0 || item.work.length > 0 || hasFiles || foldedCards.length > 0 ? (
           <FoldPlaceProvider value={QUIET_STEPS}>
             <QuietSteps>
+              {foldedCards.map(({ turn, split }) => (
+                <View key={`folded:${turn.id}`} style={styles.foldedCards}>
+                  <FoldedCards split={split} />
+                </View>
+              ))}
               {notices}
               {item.work.map((message) => (
                 <MessageRow key={message.id} message={message} />
@@ -117,7 +136,7 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
           <ReadImageStrip images={item.readImages} inset={0} />
         </View>
       ) : null}
-      <QuietTail tails={item.turns} />
+      <QuietTail tails={tails} />
     </View>
   );
 }
@@ -182,4 +201,5 @@ const styles = StyleSheet.create({
   column: { minWidth: 0 },
   groupedFiles: { paddingTop: 4, paddingBottom: 2 },
   groupedPictures: { paddingTop: 4 },
+  foldedCards: { paddingVertical: 2 },
 });

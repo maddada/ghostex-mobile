@@ -26,6 +26,7 @@ import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
 import { WorkflowCards } from './WorkflowCard';
 import { GbotCards } from './GbotCard';
+import { FoldedCards, foldsCards, splitFolded } from './foldedCards';
 import { useDisclosure } from './state';
 import {
   SINGLE_LINE_CARD,
@@ -123,14 +124,18 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
     toggleRaw();
   };
   const deferredState = flags.deferredWork[item.id];
+  // The turn's messages between agents and answers fold into the row (gx-chat-core
+  // `folded_cards.rs`, where the user's decision is): drawn at the top of the opened row, never after it.
+  const folded = splitFolded(item.cardsInFold, item.artifacts, item.questions, item.sentMessages);
   // Two one-line cards in a row are a row gap apart (`cardSpacing.ts`): the answered-question and
   // sent-message stacks sit that far under the "Worked for" fold, or under each other, when nothing
   // else comes between.
-  const foldAbove = !open && (item.readImages ?? []).length === 0 && item.artifacts.length === 0;
-  const hasQuestions = arr(item.questions).length > 0;
+  const foldAbove = !open && (item.readImages ?? []).length === 0 && folded.kept.length === 0;
+  const hasQuestions = arr(folded.tailQuestions).length > 0;
   return (
     <View style={styles.completedColumn}>
       <WorkSummary item={item} open={open} onToggle={toggle} />
+      {open && foldsCards(folded) ? <FoldedCards split={folded} columnGap={COMPLETED_PART_GAP} /> : null}
       {/* The turn's files fold shows only while its card is open, collapsed, right under the card
           (gx-chat-core `turn_files_fold`, where the user's decision is; desktop `completed_work_row.rs`).
           A closed card leaves the files to its "N files" pill. */}
@@ -174,12 +179,16 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
         </FoldPlaceProvider>
       ) : null}
       <FoldPlaceProvider value={HIDE_FILES}>
-        {item.artifacts.map((message) => (
+        {folded.kept.map((message) => (
           <MessageRow key={message.id} message={message} />
         ))}
-        <QuestionExchangeCards exchanges={item.questions} aboveIsCard={foldAbove} columnGap={COMPLETED_PART_GAP} />
+        <QuestionExchangeCards
+          exchanges={folded.tailQuestions}
+          aboveIsCard={foldAbove}
+          columnGap={COMPLETED_PART_GAP}
+        />
         <SentAgentMessageCards
-          cards={item.sentMessages}
+          cards={folded.tailSent}
           aboveIsCard={foldAbove || hasQuestions}
           columnGap={COMPLETED_PART_GAP}
         />
@@ -228,9 +237,13 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
                     ? 'pencil'
                     : stat.kind === 'images'
                       ? 'photo'
-                      : failed
-                        ? 'alert-triangle'
-                        : 'tool'
+                      : stat.kind === 'messages'
+                        ? 'messages'
+                        : stat.kind === 'answers'
+                          ? 'message-question'
+                          : failed
+                            ? 'alert-triangle'
+                            : 'tool'
                 }
                 label={stat.label}
                 color={tone}
