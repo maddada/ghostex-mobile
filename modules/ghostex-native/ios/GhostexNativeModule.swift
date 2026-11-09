@@ -129,6 +129,19 @@ public class GhostexNativeModule: Module {
         barWindowObservers = listening ? GhostexVerticalBar.windowChangeObservers() : []
     }
 
+    /// Where `machineId`'s own Easy Connect key lives, beside the shared one (kept out of backups too).
+    static func tailcatMachineKeyPath(_ machineId: String) throws -> String {
+        guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw TailcatClientKeyException("Application Support is unavailable.")
+        }
+        let safe = String(machineId.map { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" ? $0 : "_" })
+        return support
+            .appendingPathComponent("tailcat", isDirectory: true)
+            .appendingPathComponent("machines", isDirectory: true)
+            .appendingPathComponent("\(safe).key")
+            .path
+    }
+
     /// Loads (or creates) this phone's Easy Connect client key; see `tailcatClientPublicKey`.
     /// Application Support is private to the app, and the key stays out of backups: a restored
     /// phone pairs again, as it must for its SSH key.
@@ -306,6 +319,26 @@ public class GhostexNativeModule: Module {
 
         AsyncFunction("tailcatClientPublicKey") { () throws -> String in
             try GhostexNativeModule.useTailcatClientKey()
+        }
+
+        // CDXC:RemotePairing 2026-11-10: a key of the phone's own per computer, so two Easy Connect
+        // computers on one relay never share a key (src/machines/easyConnectLinkKeyState.ts).
+        AsyncFunction("tailcatMachineClientKey") { (machineId: String) throws -> String in
+            var bridgeError: NSError?
+            let publicKey = TailcatbridgeMachineClientKeyPublic(try GhostexNativeModule.tailcatMachineKeyPath(machineId), &bridgeError)
+            if let bridgeError {
+                throw TailcatClientKeyException(bridgeError.localizedDescription)
+            }
+            return publicKey
+        }
+
+        AsyncFunction("useTailcatMachineClientKey") { (machineId: String, enabled: Bool) throws in
+            let path = enabled ? try GhostexNativeModule.tailcatMachineKeyPath(machineId) : ""
+            var bridgeError: NSError?
+            TailcatbridgeUseMachineClientKeyFile(machineId, path, &bridgeError)
+            if let bridgeError {
+                throw TailcatClientKeyException(bridgeError.localizedDescription)
+            }
         }
 
         // GitHub #495: the approver key (GhostexApproverKey.swift).
