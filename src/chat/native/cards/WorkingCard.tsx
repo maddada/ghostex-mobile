@@ -18,7 +18,6 @@ import { Pressable, Text, View } from 'react-native';
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
 import { useChatPlacement } from '../chatPlacement';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
-import { chatLookOf } from '../transcript/context';
 import { QUIET_ICON_GAP, QUIET_LINE_HEIGHT, QUIET_TEXT_SIZE, quietDim } from '../transcript/quietWork';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { IconPill } from './ChatPills';
@@ -74,16 +73,17 @@ export function cardGap(document: ChatDocument): number {
 /** Whether the working card draws a bar (the same test `WorkingCard` returns null on). */
 export function workingCardShown(document: ChatDocument): boolean {
   const card = document.workingCard;
-  // Status line in the chat: the line is the transcript's last row instead (`StatusTail`).
-  if (chatLookOf(document).statusInTranscript) return false;
+  // Status line in the chat: the line is the transcript's last row instead (`StatusTail`), unless
+  // the chat is empty and has no row to end with (gx-chat-core `inTranscript`).
+  if (card?.inTranscript === true) return false;
   return card !== undefined && card.visible === true && card.label !== null;
 }
 
-/** Whether the transcript ends with the status row (`StatusTail`): Status line in the chat is on, the transcript has rows and the card would show (desktop `status_tail_wanted`). */
+/** Whether the transcript ends with the status row (`StatusTail`): the core draws the line in the transcript (`inTranscript`: Status line in the chat is on and the transcript has rows), the list has rows and the card would show (desktop `status_tail_wanted`). */
 export function statusTailShown(document: ChatDocument, rowCount: number): boolean {
   const card = document.workingCard;
   return (
-    chatLookOf(document).statusInTranscript &&
+    card?.inTranscript === true &&
     rowCount > 0 &&
     card !== undefined &&
     card.visible === true &&
@@ -99,7 +99,7 @@ export function WorkingCard({ document }: { document: ChatDocument }) {
   const card = document.workingCard;
   if (card === undefined || card.visible !== true || card.label === null) return null;
   // Status line in the chat: the line is the transcript's last row instead (`StatusTail`).
-  if (chatLookOf(document).statusInTranscript) return null;
+  if (card.inTranscript === true) return null;
   const showJump = awayFromBottom && jumpToBottom !== null;
   const label = card.label;
   const strong = card.labelKind === 'tool' || card.labelKind === 'activity';

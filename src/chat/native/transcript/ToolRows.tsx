@@ -105,7 +105,10 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   // Simple mode's run heading opens on demand only; verbose mode never opens it. A call waiting on
   // an approval opens it (gx-chat-core `approval_wait.rs`).
   const awaiting = tools.some((tool) => tool.awaitingApproval === true);
-  const [simpleOpen, toggleSimple] = useDisclosure(disclosures, `tools:${message.id}`, awaiting || (quiet && workOpen));
+  // Under kept words the line has a key of its own, apart from their chevron's (gx-chat-core
+  // `grouped_work::only_what_waits`).
+  const lineKey = message.toolsLineKey ?? `tools:${message.id}`;
+  const [simpleOpen, toggleSimple] = useDisclosure(disclosures, lineKey, awaiting || (quiet && workOpen));
   if (tools.length === 0) return null;
   // Under a heading that already folds the run, every row shows (React's `showAllRows`).
   const showAll = message.toolsShowAllRows === true;
@@ -536,26 +539,29 @@ const QuietStepRow = memo(function QuietStepRow({
   index: number;
   tool: JsonRecord;
 }) {
-  const { theme } = useTranscriptEnv();
+  const { theme, dispatch } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const key = `tool:${messageId}:${index}`;
   const [open, toggle] = useDisclosure(disclosures, key, tool.awaitingApproval === true);
+  // A Task or Agent call names its subagent after the step, and the name opens that child's
+  // transcript, as the full tool row does (`ToolRow`).
+  const subagent = str(tool.subagent, 'name');
+  const openSubagent = subagentOpenAction(tool.subagent);
   const hasDetail = tool.hasDetail === true;
   const expanded = open && hasDetail;
   const status = str(tool, 'status');
   const [name, preview] = quietStepText(tool);
   const filePath = str(tool, 'filePath');
   const find = useRowFind();
-  return (
-    <View style={styles.quietStep}>
-      <Pressable
+  const trigger = (
+    <Pressable
         disabled={!hasDetail && filePath.length === 0}
         onPress={hasDetail ? toggle : undefined}
         {...(filePath.length > 0 ? { onLongPress: () => openTranscriptMenu({ href: filePath }) } : {})}
         accessibilityRole="button"
         accessibilityLabel={`Tool ${name}: ${preview}`}
         accessibilityState={{ expanded }}
-        style={styles.quietStepTrigger}
+        style={[styles.quietStepTrigger, subagent.length > 0 && styles.quietStepTriggerBeside]}
       >
         {({ pressed }) => (
           <>
@@ -570,7 +576,11 @@ const QuietStepRow = memo(function QuietStepRow({
                       : 'done'
               }
             />
-            <Text numberOfLines={1} style={[styles.quietStepLine, { color: pressed ? theme.muted : quietDim(theme) }]}>
+            <Text numberOfLines={1} style={[
+                styles.quietStepLine,
+                subagent.length > 0 && styles.quietStepLineBeside,
+                { color: pressed ? theme.muted : quietDim(theme) },
+              ]}>
               <Text style={[styles.quietStepName, { color: status === 'failed' ? theme.error : theme.muted }]}>
                 {highlightLabel(name, find, key)}
               </Text>
@@ -588,6 +598,32 @@ const QuietStepRow = memo(function QuietStepRow({
           </>
         )}
       </Pressable>
+  );
+  return (
+    <View style={styles.quietStep}>
+      {subagent.length === 0 ? (
+        trigger
+      ) : (
+        <View style={styles.subagentLine}>
+          {trigger}
+          {openSubagent !== null ? (
+            <Pressable
+              onPress={() => dispatch(openSubagent)}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${subagent}'s transcript`}
+              style={styles.subagentLink}
+            >
+              <Text numberOfLines={1} style={[styles.quietStepSubagent, { color: theme.controlPrimary }]}>
+                {subagent}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text numberOfLines={1} style={[styles.quietStepSubagent, { color: theme.controlPrimary }]}>
+              {subagent}
+            </Text>
+          )}
+        </View>
+      )}
       <ToolDetail
         messageId={messageId}
         index={index}
@@ -612,9 +648,13 @@ const styles = StyleSheet.create({
   quietStep: { minWidth: 0 },
   quietStepTrigger: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   quietStepLine: { flex: 1, minWidth: 0, fontSize: QUIET_TEXT_SIZE, lineHeight: QUIET_LINE_HEIGHT },
+  // Beside a subagent link the step takes only its text's width, so the link follows it.
+  quietStepTriggerBeside: { flexShrink: 1 },
+  quietStepLineBeside: { flex: 0, flexShrink: 1 },
   quietStepName: { fontWeight: '500' },
   quietStepPreview: { fontFamily: MONO_FONT, fontSize: 12 },
   quietStepPictures: { flexShrink: 0 },
+  quietStepSubagent: { fontSize: QUIET_TEXT_SIZE, lineHeight: QUIET_LINE_HEIGHT },
   // The detail's rail hangs from the middle of the step's 12pt mark (the rail's own centre sits 10pt in).
   quietStepDetail: { marginLeft: -4, paddingVertical: 4 },
   shellColumn: { alignItems: 'flex-end', gap: 6 },
