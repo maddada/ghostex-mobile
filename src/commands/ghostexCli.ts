@@ -308,6 +308,7 @@ function gbotFieldFlags(fields: Record<string, string | undefined>): string {
     ['agent', fields.agentId],
     ['model', fields.model],
     ['approval', fields.approval],
+    ['preset', fields.preset],
   ];
   return flags
     .filter((entry): entry is [string, string] => entry[1] !== undefined)
@@ -356,6 +357,44 @@ export function gbotsDepartmentRemoveCommand(departmentId: string): string {
 export function gbotsCreateCommand(fields: Record<string, string | undefined>): string {
   requireId(fields.name ?? '', 'GBot name');
   return `ghostex gbots create${gbotFieldFlags(fields)} --json`;
+}
+
+/** Every GBot and department, for Export Team's picks. */
+export function gbotsListCommand(): string {
+  return 'ghostex gbots list --json';
+}
+
+/** The presets New GBot starts from: built in and kept (server/src/gbots/team_file/presets.rs). */
+export function gbotsPresetsCommand(): string {
+  return 'ghostex gbots preset list --json';
+}
+
+/** A team or preset file's preview. The file travels as base64 so no shell quoting or Windows command line limits apply. */
+export function gbotsTeamPreviewCommand(fileBase64: string): string {
+  return `ghostex gbots team import --file-base64=${shellQuote(requireId(fileBase64, 'team file'))} --dry-run --json`;
+}
+
+/** Imports a team file; from the phone gxserver asks for the user's approval first, and the command waits for it. */
+export function gbotsTeamImportCommand(fileBase64: string): string {
+  return `ghostex gbots team import --file-base64=${shellQuote(requireId(fileBase64, 'team file'))} --json`;
+}
+
+/** Keeps a preset file for New GBot. */
+export function gbotsPresetImportCommand(fileBase64: string): string {
+  return `ghostex gbots preset import --file-base64=${shellQuote(requireId(fileBase64, 'preset file'))} --json`;
+}
+
+/** Undoes a GBots change (an import's undoes the whole import). */
+export function gbotsUndoCommand(change: string): string {
+  return `ghostex gbots undo ${shellQuote(requirePositional(change, 'change id'))} --json`;
+}
+
+/** A team file's JSON: the whole team, a department, or one GBot as a preset; `notes` adds starter notes. */
+export function gbotsTeamExportCommand(scope: { department?: string; preset?: string; notes: boolean }): string {
+  const department = scope.department === undefined ? '' : ` --department=${shellQuote(scope.department)}`;
+  const preset = scope.preset === undefined ? '' : ` --preset=${shellQuote(scope.preset)}`;
+  const notes = scope.notes ? ' --notes' : '';
+  return `ghostex gbots team export${department}${preset}${notes} --json`;
 }
 
 /** The New Coordinator form's choices: agents, their model lineups and the defaults `create` applies. */

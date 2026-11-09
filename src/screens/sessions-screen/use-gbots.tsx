@@ -1,6 +1,6 @@
 /**
  * What the Sessions screen does for Main Hub's GBots (contract/gbots.ts): the bot's long-press menu (New Chat, GBot
- * Settings, Department, Remove GBot), the heading's (New GBot), a department's (Department Settings, Remove
+ * Settings, Department, Remove GBot), the heading's (New GBot, Import Team, Export Team), a department's (Department Settings, Remove
  * Department), the remove confirms, GBot Settings and the New GBot form, each run as a `ghostex gbots` command on the
  * bot's computer. Kept out of SessionsScreen.tsx, which only wires it in.
  *
@@ -8,28 +8,37 @@
  * menu with routines in a later milestone.
  */
 
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useCallback, useState, type ReactElement } from 'react';
 
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../components/sessions/ContextMenu';
 import { runGhostexCli } from '../../components/sessions/cli';
-import { CrewGlyph, PlusGlyph, SettingsGlyph, TrashGlyph } from '../../components/sessions/icons';
+import {
+  CrewGlyph,
+  DownloadGlyph,
+  FileExportGlyph,
+  PlusGlyph,
+  SettingsGlyph,
+  TrashGlyph,
+} from '../../components/sessions/icons';
 import {
   gbotsCreateCommand,
   gbotsDepartmentRemoveCommand,
+  gbotsListCommand,
   gbotsNewChatCommand,
+  gbotsPresetsCommand,
   gbotsRemoveCommand,
+  gbotsTeamPreviewCommand,
 } from '../../commands/ghostexCli';
-import {
-  gbotsOnIn,
-  parseGbotNewChat,
-  type GbotRowModel,
-  type GbotsDepartmentModel,
-} from '../../contract/gbots';
+import { parseGbotPresets, parseTeamPreview, type GbotPreset } from '../../contract/gbotTeam';
+import { gbotsOnIn, parseGbotNewChat, type GbotRowModel, type GbotsDepartmentModel } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import type { MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
 import GbotSettingsHost from './GbotSettingsHost';
+import GbotTeamSheet, { type GbotTeamSheetProps } from './GbotTeamSheet';
 import type { GbotSettingsTab } from './GbotSettingsSheet';
 import NewGbotSheet from './NewGbotSheet';
 
@@ -52,14 +61,13 @@ export function useGbots(deps: GbotsScreenDeps) {
   const appearance = useAppearance();
   const [menu, setMenu] = useState<{ title: string; items: ContextMenuItem[]; anchor?: MenuAnchor } | null>(null);
   const [removing, setRemoving] = useState<{ target: MachineRecord; bot: GbotRef } | null>(null);
-  const [settings, setSettings] = useState<{ target: MachineRecord; bot: GbotRef; tab?: GbotSettingsTab } | null>(
-    null,
-  );
+  const [settings, setSettings] = useState<{ target: MachineRecord; bot: GbotRef; tab?: GbotSettingsTab } | null>(null);
   const [removingDepartment, setRemovingDepartment] = useState<{
     target: MachineRecord;
     department: GbotsDepartmentModel;
   } | null>(null);
   const [adding, setAdding] = useState<MachineRecord | null>(null);
+  const [team, setTeam] = useState<{ target: MachineRecord; start: GbotTeamSheetProps['start'] } | null>(null);
 
   const failed = useCallback(
     (title: string, error: unknown): void =>
@@ -190,14 +198,96 @@ export function useGbots(deps: GbotsScreenDeps) {
     [iconColor],
   );
 
+  /** New GBot's Start from: the presets of the computer it is added on. */
+  const loadPresets = useCallback(async (): Promise<GbotPreset[]> => {
+    if (adding === null) return [];
+    const result = await runGhostexCli(adding, gbotsPresetsCommand());
+    return parseGbotPresets(result.json);
+  }, [adding]);
+
+  /** Import Team: a file from the phone, previewed on the computer before anything is added. */
+  const importTeam = useCallback(
+    async (target: MachineRecord): Promise<void> => {
+      setMenu(null);
+      const picked = await DocumentPicker.getDocumentAsync({ multiple: false, copyToCacheDirectory: true });
+      const asset = picked.canceled ? undefined : picked.assets[0];
+      if (asset === undefined) return;
+      setProgress('Reading the team file…');
+      try {
+        const file = new File(asset.uri);
+        let fileBase64: string;
+        try {
+          fileBase64 = await file.base64();
+        } finally {
+          // The picker supplied a cache copy, never the document provider's original file.
+          file.delete();
+        }
+        const result = await runGhostexCli(target, gbotsTeamPreviewCommand(fileBase64));
+        setProgress(null);
+        const preview = parseTeamPreview(result.json);
+        if (preview === null) throw new Error('The computer did not answer with a preview.');
+        setTeam({ target, start: { kind: 'import', fileBase64, preview } });
+      } catch (error) {
+        setProgress(null);
+        failed('Team file not read', error);
+      }
+    },
+    [failed, setProgress],
+  );
+
+  /** Export Team: the GBots and departments to pick from, then the sheet. */
+  const exportTeam = useCallback(
+    async (target: MachineRecord): Promise<void> => {
+      setMenu(null);
+      setProgress('Reading your GBots…');
+      try {
+        const result = await runGhostexCli(target, gbotsListCommand());
+        setProgress(null);
+        const rows = (key: string, id: string): { id: string; name: string }[] =>
+          (Array.isArray(result.json?.[key]) ? (result.json[key] as Record<string, unknown>[]) : []).map((row) => ({
+            id: String(row[id] ?? ''),
+            name: String(row.name ?? ''),
+          }));
+        setTeam({
+          target,
+          start: { kind: 'export', bots: rows('bots', 'botId'), departments: rows('departments', 'departmentId') },
+        });
+      } catch (error) {
+        setProgress(null);
+        failed('Export Team did not open', error);
+      }
+    },
+    [failed, setProgress],
+  );
+
   /** Long press on the GBots heading. */
   const openHeadingMenu = useCallback(
     (machineId: string): void => {
       const target = machineById(machineId);
       if (target === null) return;
-      setMenu({ title: 'GBots', items: [newGbotItem(target, () => setMenu(null))] });
+      setMenu({
+        title: 'GBots',
+        items: [
+          newGbotItem(target, () => setMenu(null)),
+          { kind: 'separator', key: 'gbots-team-separator' },
+          {
+            kind: 'item',
+            key: 'gbots-import-team',
+            label: 'Import Team',
+            icon: <DownloadGlyph size={14} color={iconColor} />,
+            onPress: () => void importTeam(target),
+          },
+          {
+            kind: 'item',
+            key: 'gbots-export-team',
+            label: 'Export Team',
+            icon: <FileExportGlyph size={14} color={iconColor} />,
+            onPress: () => void exportTeam(target),
+          },
+        ],
+      });
     },
-    [machineById, newGbotItem],
+    [exportTeam, iconColor, importTeam, machineById, newGbotItem],
   );
 
   /** Long press on a department's sub-heading: its settings open in its lead's (or first GBot's) GBot Settings. */
@@ -308,8 +398,17 @@ export function useGbots(deps: GbotsScreenDeps) {
           }}
         />
       ) : null}
+      {team !== null ? (
+        <GbotTeamSheet
+          target={team.target}
+          start={team.start}
+          onChanged={() => void refreshMachine(team.target)}
+          onClose={() => setTeam(null)}
+        />
+      ) : null}
       {adding !== null ? (
         <NewGbotSheet
+          loadPresets={loadPresets}
           onCreate={async (fields) => {
             const target = adding;
             await runGhostexCli(target, gbotsCreateCommand(fields), { timeoutMs: CREATE_TIMEOUT_MS });
@@ -325,5 +424,12 @@ export function useGbots(deps: GbotsScreenDeps) {
     </>
   );
 
-  return { openBotMenu, openHeadingMenu, openDepartmentMenu, homeMenuItems, newChatFor: toggleBotChatOnEmpty, overlays };
+  return {
+    openBotMenu,
+    openHeadingMenu,
+    openDepartmentMenu,
+    homeMenuItems,
+    newChatFor: toggleBotChatOnEmpty,
+    overlays,
+  };
 }
