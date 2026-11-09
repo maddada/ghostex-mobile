@@ -502,6 +502,11 @@ export function acknowledgeCoordinatorThreadsCommand(globalRef: string): string 
 }
 
 /** An orchestrator's goal, instructions, memory and threads: `ghostex coordinator status --coordinator <ref> --json`. */
+/** The playbook a project's coordinators read, as text: `ghostex coordinator guide --project-id <id>`. */
+export function coordinatorGuideCommand(projectId: string): string {
+  return `ghostex coordinator guide --project-id ${shellQuote(requireId(projectId, 'project'))}`;
+}
+
 export function coordinatorStatusCommand(globalRef: string): string {
   return `ghostex coordinator status --coordinator ${shellQuote(requireId(globalRef, 'orchestrator'))} --json`;
 }

@@ -67,6 +67,7 @@ import {
   promoteCoordinatorCommand,
   coordinatorEditCommand,
   coordinatorResolveCommand,
+  coordinatorGuideCommand,
   coordinatorStatusCommand,
   sleepInactiveCoordinatorThreadsCommand,
   moveProjectCommand,
@@ -472,6 +473,12 @@ export function useSessionsScreenMenus({
     return parseCoordinatorDetails(json);
   };
 
+  /** The playbook the coordinator reads (`ghostex coordinator guide`), for its View playbook sheet. */
+  const loadCoordinatorPlaybook = async (ctx: SessionContext): Promise<string> => {
+    const { stdout } = await runGhostexCli(ctx.machine, coordinatorGuideCommand(ctx.item.session.projectId));
+    return stdout.trim();
+  };
+
   /** Saves an editor's copy in one `ghostex coordinator edit`; a failure stays in the open sheet. */
   const saveCoordinatorDetails = async (ctx: SessionContext, edit: CoordinatorDetailsEdit): Promise<void> => {
     await runGhostexCli(ctx.machine, coordinatorEditCommand(ctx.item.session.globalRef, edit));
@@ -762,6 +769,10 @@ export function useSessionsScreenMenus({
           if (ctx === undefined) throw new Error('A coordinator action needs a session.');
           if (menuCommand.action === 'goal' || menuCommand.action === 'memory') {
             setOverlay({ kind: 'coordinatorDetails', ctx, mode: menuCommand.action });
+            return;
+          }
+          if (menuCommand.action === 'viewPlaybook') {
+            setOverlay({ kind: 'coordinatorPlaybook', ctx });
             return;
           }
           setOverlay(NONE);
@@ -1781,6 +1792,7 @@ export function useSessionsScreenMenus({
     createCoordinator,
     loadCoordinatorOptions,
     loadCoordinatorDetails,
+    loadCoordinatorPlaybook,
     saveCoordinatorDetails,
     actionsMenuItems,
     recoveryItems,

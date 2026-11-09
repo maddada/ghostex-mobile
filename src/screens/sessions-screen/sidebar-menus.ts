@@ -91,8 +91,12 @@ export type SidebarMenuCommand =
   | { type: 'projectActions'; sessionId: string }
   /** The phone's own row: a Claude cloud session's terminal, whose tap opens claude.ai (`contract/claudeCloud.ts`). */
   | { type: 'claudeCloudTerminal'; sessionId: string }
-  /** gx-core `MenuCommand::coordinator_session`: an orchestrator's Goal & Instructions / Memory, a thread's Mark Thread Done / Reopen Thread. */
-  | { type: 'coordinatorSessionAction'; sessionId: string; action: 'goal' | 'memory' | 'markDone' | 'reopen' }
+  /** gx-core `MenuCommand::coordinator_session`: an orchestrator's Goal & Instructions / Memory / View playbook, a thread's Mark Thread Done / Reopen Thread. */
+  | {
+      type: 'coordinatorSessionAction';
+      sessionId: string;
+      action: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen';
+    }
   | {
       type: 'projectMembership';
       groupId: string;
@@ -652,13 +656,13 @@ function copySubmenu(session: GhostexSession, project: SessionMenuInput['project
 
 /**
  * gx-core `coordinator_rows` (CDXC:Coordinators 2026-10-13, the user's decision there): an
- * orchestrator's Goal & Instructions and Memory editors, a thread's Mark Thread Done (disabled
+ * orchestrator's Goal & Instructions and Memory editors and its View playbook page, a thread's Mark Thread Done (disabled
  * while it works or waits on an answer) or, once done, Reopen Thread, after a separator.
  */
 function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
   if (session.isDraft === true) return [];
   const id = session.sessionId;
-  const action = (kind: 'goal' | 'memory' | 'markDone' | 'reopen'): SidebarMenuCommand => ({
+  const action = (kind: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen'): SidebarMenuCommand => ({
     type: 'coordinatorSessionAction',
     sessionId: id,
     action: kind,
@@ -667,6 +671,8 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
   if (session.isCoordinator) {
     rows.push(row('Goal & Instructions…', 'checklist', action('goal')));
     rows.push(row('Memory…', 'brain', action('memory')));
+    // CDXC:Coordinators 2026-11-09 (gx-core `coordinator_rows`): the playbook this coordinator reads.
+    rows.push(row('View playbook', 'book', action('viewPlaybook')));
   } else if ((session.coordinatorSessionId ?? '').length > 0) {
     const state = session.coordinatorThreadState;
     if (state === 'done') {

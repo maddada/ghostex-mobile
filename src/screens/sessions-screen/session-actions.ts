@@ -56,6 +56,8 @@ export type Overlay =
   | { kind: 'sessionLinks'; ctx: SessionContext }
   /** An orchestrator's Goal & Instructions or Memory editor (./CoordinatorDetailsSheet.tsx). */
   | { kind: 'coordinatorDetails'; ctx: SessionContext; mode: 'goal' | 'memory' }
+  /** An orchestrator's playbook, read-only (./CoordinatorPlaybookSheet.tsx). */
+  | { kind: 'coordinatorPlaybook'; ctx: SessionContext }
   | { kind: 'closeConfirm'; ctx: SessionContext }
   /** Handoff / Export's result: the exported path and the follow-up conversation. */
   | { kind: 'exportedTranscript'; exported: ExportedTranscript; projectTitle: string }

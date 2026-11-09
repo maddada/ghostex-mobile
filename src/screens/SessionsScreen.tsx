@@ -90,6 +90,7 @@ import SessionSearchSheet from '../components/sessions/SessionSearchSheet';
 import DelayedSendDialog from '../components/sessions/DelayedSendDialog';
 import NewCoordinatorSheet from './sessions-screen/NewCoordinatorSheet';
 import CoordinatorDetailsSheet from './sessions-screen/CoordinatorDetailsSheet';
+import CoordinatorPlaybookSheet from './sessions-screen/CoordinatorPlaybookSheet';
 import WorkLinkPicker from './sessions-screen/work-link-picker';
 import DrawerBlockView, { type DrawerBlockActions } from './sessions-screen/DrawerBlockView';
 import { useGbots } from './sessions-screen/use-gbots';
@@ -771,6 +772,7 @@ export default function SessionsScreen({ navigation }: Props) {
     createCoordinator,
     loadCoordinatorOptions,
     loadCoordinatorDetails,
+    loadCoordinatorPlaybook,
     saveCoordinatorDetails,
     actionsMenuItems,
     recoveryItems,
@@ -1970,6 +1972,10 @@ export default function SessionsScreen({ navigation }: Props) {
           onSave={(edit) => saveCoordinatorDetails(overlay.ctx, edit)}
           onCancel={() => setOverlay(NONE)}
         />
+      ) : null}
+
+      {overlay.kind === 'coordinatorPlaybook' ? (
+        <CoordinatorPlaybookSheet load={() => loadCoordinatorPlaybook(overlay.ctx)} onClose={() => setOverlay(NONE)} />
       ) : null}
 
       {overlay.kind === 'actionsMenu' ? (
