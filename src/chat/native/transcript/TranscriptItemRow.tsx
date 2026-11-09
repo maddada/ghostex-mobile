@@ -38,6 +38,7 @@ import {
   singleLineShell,
 } from './singleLineCard';
 import { GroupedWorkRow } from './quietWorkRows';
+import { StatPills } from './statPills';
 import { HiddenGroupedWorkRow } from './hiddenWork';
 
 /** The space between the parts of a finished turn (desktop `PART_GAP` in completed_work_row.rs). */
@@ -224,33 +225,8 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
       >
         <SingleLineTile glyph="clock" badge="check" />
         <Text style={[SINGLE_LINE_TITLE, { color: theme.foreground }]}>{item.label}</Text>
-        {/* The count pills sit at the row's right end and wrap among themselves (desktop `work_summary`). */}
-        <View style={styles.chips}>
-          {stats.map((stat) => {
-            const failed = stat.kind === 'failed' || stat.kind === 'recovered';
-            const tone = failed ? theme.error : theme.cardMuted;
-            return (
-              <SingleLinePill
-                key={stat.kind}
-                icon={
-                  stat.kind === 'files'
-                    ? 'pencil'
-                    : stat.kind === 'images'
-                      ? 'photo'
-                      : stat.kind === 'messages'
-                        ? 'messages'
-                        : stat.kind === 'answers'
-                          ? 'message-question'
-                          : failed
-                            ? 'alert-triangle'
-                            : 'tool'
-                }
-                label={stat.label}
-                color={tone}
-              />
-            );
-          })}
-        </View>
+        {/* The count pills sit at the row's right end on one line (`statPills.tsx`). */}
+        <StatPills stats={stats} />
       </Pressable>
       {pictures ? (
         <View style={[styles.cardPictures, { borderTopColor: theme.ink(SINGLE_LINE_CARD.borderAlpha) }]}>
@@ -276,14 +252,5 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SINGLE_LINE_CARD.paddingX,
     paddingVertical: 8,
-  },
-  chips: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 6,
   },
 });
