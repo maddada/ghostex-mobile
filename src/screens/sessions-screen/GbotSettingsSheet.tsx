@@ -2,7 +2,8 @@
  * GBot Settings on the phone, from a bot's long press: Profile (name, title, description, icon, colour, agent, model,
  * approval level, and its department, which opens the Department tab), Instructions (the GBot's standing instructions, with the computer's
  * notice when SOUL.md was changed by hand), Department (GbotDepartmentView.tsx), Memory (GbotMemoryView.tsx: read-only, with Undo) and Routines
- * (GbotRoutinesView.tsx). It edits a local copy read with
+ * (GbotRoutinesView.tsx), Computer (GbotComputerView.tsx: where its chats run) and Bot API (GbotApiView.tsx: apps messaging
+ * it with a key). It edits a local copy read with
  * `ghostex gbots show` and saves the changed fields in one `ghostex gbots edit`, so Cancel leaves everything as it
  * was; a refusal (a taken name, say) shows the computer's own sentence.
  *
@@ -36,6 +37,10 @@ import { SegmentedRow } from '../settings/SettingsControls';
 import GbotDepartmentView, { type GbotDepartmentAction, type GbotDepartmentState } from './GbotDepartmentView';
 import GbotMemoryView from './GbotMemoryView';
 import GbotRoutinesView, { type GbotRoutineVerb } from './GbotRoutinesView';
+import GbotComputerView, { type GbotComputerChange } from './GbotComputerView';
+import GbotApiView, { type GbotApiVerb } from './GbotApiView';
+import type { GbotApi } from '../../contract/gbotApi';
+import type { GbotComputer } from '../../contract/gbotComputer';
 import type { GbotRoutine } from '../../contract/gbotRoutines';
 import {
   GbotChoiceChips,
@@ -47,7 +52,7 @@ import {
   useGbotFormStyles,
 } from './GbotFormParts';
 
-export type GbotSettingsTab = 'profile' | 'instructions' | 'department' | 'memory' | 'routines';
+export type GbotSettingsTab = 'profile' | 'instructions' | 'department' | 'memory' | 'routines' | 'computer' | 'api';
 type Tab = GbotSettingsTab;
 
 /** Why the phone can't raise a GBot's approval level, and where to do it. */
@@ -65,6 +70,9 @@ const TABS: readonly { value: Tab; label: string }[] = [
   { value: 'department', label: 'Department' },
   { value: 'memory', label: 'Memory' },
   { value: 'routines', label: 'Routines' },
+  { value: 'computer', label: 'Computer' },
+  // "Bot API" on the desktop; seven tabs leave the phone's row room for three letters each.
+  { value: 'api', label: 'API' },
 ];
 
 export type GbotSettingsSheetProps = {
@@ -82,6 +90,12 @@ export type GbotSettingsSheetProps = {
   /** The Routines tab (GbotRoutinesView.tsx): list the GBot's routines, and pause, resume, run or remove one. */
   loadRoutines: () => Promise<GbotRoutine[]>;
   actRoutine: (verb: GbotRoutineVerb, id: string) => Promise<GbotRoutine[]>;
+  /** The Computer tab (GbotComputerView.tsx): where its chats run, and giving it this computer back. */
+  loadComputer: () => Promise<GbotComputer>;
+  actComputer: (change: GbotComputerChange) => Promise<GbotComputer>;
+  /** The Bot API tab (GbotApiView.tsx): read it, and turn it on, give it a new key or turn it off. */
+  loadApi: () => Promise<GbotApi>;
+  actApi: (verb: GbotApiVerb) => Promise<GbotApi>;
   /** The Department tab (GbotDepartmentView.tsx): read the departments, and run a change. */
   loadDepartments: () => Promise<GbotDepartmentState>;
   actDepartment: (action: GbotDepartmentAction) => Promise<GbotDepartmentState>;
@@ -288,6 +302,10 @@ export default function GbotSettingsSheet(props: GbotSettingsSheetProps): ReactE
       {tab === 'routines' ? (
         <GbotRoutinesView name={saved?.name ?? props.name} load={props.loadRoutines} act={props.actRoutine} />
       ) : null}
+      {tab === 'computer' ? (
+        <GbotComputerView name={saved?.name ?? props.name} load={props.loadComputer} act={props.actComputer} />
+      ) : null}
+      {tab === 'api' ? <GbotApiView name={saved?.name ?? props.name} load={props.loadApi} act={props.actApi} /> : null}
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
     </GbotSheetCard>
   );

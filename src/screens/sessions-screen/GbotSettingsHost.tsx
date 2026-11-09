@@ -17,6 +17,9 @@ import {
   gbotsDepartmentEditCommand,
   gbotsDepartmentListCommand,
   gbotsDepartmentRemoveCommand,
+  gbotsApiCommand,
+  gbotsComputerCommand,
+  gbotsComputerSetCommand,
   gbotsEditCommand,
   gbotsMemoryShowCommand,
   gbotsMemoryUndoCommand,
@@ -25,6 +28,8 @@ import {
   gbotsPlaceCommand,
   gbotsShowCommand,
 } from '../../commands/ghostexCli';
+import { parseGbotApi, type GbotApi } from '../../contract/gbotApi';
+import { parseGbotComputer, type GbotComputer } from '../../contract/gbotComputer';
 import { parseGbotDepartments } from '../../contract/gbotDepartments';
 import { parseGbotRoutines, type GbotRoutine } from '../../contract/gbotRoutines';
 import { parseChiefAgents } from '../../contract/chief';
@@ -95,6 +100,11 @@ export default function GbotSettingsHost({
     if (routines === null) throw new Error(`${name}'s routines could not be read. Try again in a moment.`);
     return routines;
   };
+  const readComputer = async (): Promise<GbotComputer> => {
+    const computer = parseGbotComputer((await runGhostexCli(target, gbotsComputerCommand(botId))).json);
+    if (computer === null) throw new Error(`Where ${name} works could not be read. Try again in a moment.`);
+    return computer;
+  };
   const readMemory = async (): Promise<GbotMemory> => {
     const memory = parseGbotMemory((await runGhostexCli(target, gbotsMemoryShowCommand(botId))).json);
     if (memory === null) throw new Error(`${name}'s memory could not be read. Try again in a moment.`);
@@ -125,6 +135,24 @@ export default function GbotSettingsHost({
       actRoutine={async (verb, id) => {
         await runGhostexCli(target, gbotsRoutineActCommand(verb, id));
         return readRoutines();
+      }}
+      loadComputer={readComputer}
+      actComputer={async (change) => {
+        await runGhostexCli(target, gbotsComputerSetCommand(botId, change));
+        onChanged?.();
+        return readComputer();
+      }}
+      loadApi={async (): Promise<GbotApi> => {
+        const api = parseGbotApi((await runGhostexCli(target, gbotsApiCommand('status', botId))).json);
+        if (api === null) throw new Error(`${name}'s Bot API could not be read. Try again in a moment.`);
+        return api;
+      }}
+      actApi={async (verb): Promise<GbotApi> => {
+        // Turning it on and a new key wait for the user's approval in the command (as adding a GBot does).
+        const result = await runGhostexCli(target, gbotsApiCommand(verb, botId), { timeoutMs: 5 * 60 * 1000 });
+        const api = parseGbotApi(result.json);
+        if (api === null) throw new Error(`${name}'s Bot API could not be read. Try again in a moment.`);
+        return api;
       }}
       loadDepartments={readDepartments}
       actDepartment={actDepartment}

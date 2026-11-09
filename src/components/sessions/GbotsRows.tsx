@@ -25,7 +25,7 @@ import {
 import { measureInWindow } from '../common/measureInWindow';
 import type { MenuAnchor } from './ContextMenu';
 import { GbotIcon } from './gbotIcons';
-import { ChevronRightGlyph, CoordinatorGlyph } from './icons';
+import { ChevronRightGlyph, CloudGlyph, CoordinatorGlyph, MachinesGlyph } from './icons';
 import {
   ProjectEmptyRow,
   SectionStatusDots,
@@ -166,6 +166,10 @@ function GbotRow({
   const { status } = bot;
   const hasDot =
     status.workingCount > 0 || status.attentionCount > 0 || status.questionCount > 0 || status.approvalCount > 0;
+  const computer =
+    bot.bot.computer !== undefined && bot.bot.computer.kind !== 'this' && bot.bot.computer.name.length > 0
+      ? bot.bot.computer
+      : null;
   return (
     <Pressable
       ref={rowRef}
@@ -195,6 +199,19 @@ function GbotRow({
         </View>
       ) : null}
       <View style={rowStyles.spacer} />
+      {/* Where its chats run when that isn't this computer (server/src/gbots/computer/), as the desktop row shows it. */}
+      {computer !== null ? (
+        <View style={rowStyles.computer} accessibilityLabel={`Runs on ${computer.name}`}>
+          {computer.kind === 'cloudBox' ? (
+            <CloudGlyph size={ds(11)} color={ink.muted} />
+          ) : (
+            <MachinesGlyph size={ds(11)} color={ink.muted} />
+          )}
+          <Text numberOfLines={1} style={rowStyles.computerName}>
+            {computer.name}
+          </Text>
+        </View>
+      ) : null}
       {hasDot ? (
         <StatusDotStack
           workingCount={status.workingCount}
@@ -254,6 +271,19 @@ const gbotInkStyles = inkStyleSheets((ink) =>
     },
     spacer: {
       flex: 1,
+    },
+    computer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+      maxWidth: ds(110),
+      gap: ds(3),
+    },
+    computerName: {
+      flexShrink: 1,
+      color: ink.muted,
+      fontSize: ds(12),
+      lineHeight: ds(16),
     },
     /* A paused GBot's icon dims; its row and chats stay. */
     paused: {

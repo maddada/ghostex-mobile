@@ -263,7 +263,12 @@ export type GhostexGbotsBot = {
   departmentOrder?: number;
   isLead?: boolean;
   paused?: boolean;
+  /** Where its chats run when not on that computer, or that it may use the screen (server/src/gbots/computer/). */
+  computer?: GhostexGbotsComputer;
 };
+
+/** Where a GBot's chats run (`gbotsBot.computer`): a connected computer or a Cloud Box, by name. */
+export type GhostexGbotsComputer = { kind: 'this' | 'computer' | 'cloudBox'; name: string; computerUse: boolean };
 
 /** A GBot chat's bot and who opened it (`gbotsChat`): `user`, `chief`, later others. */
 export type GhostexGbotsChat = { botId: string; openedBy: string };
@@ -1677,6 +1682,17 @@ function parseGbotsBot(value: unknown): GhostexGbotsBot | undefined {
       departmentId.length > 0 && typeof value.departmentOrder === 'number' ? value.departmentOrder : undefined,
     isLead: value.isLead === true ? true : undefined,
     paused: value.paused === true ? true : undefined,
+    computer: parseGbotsComputer(value.computer),
+  };
+}
+
+function parseGbotsComputer(value: unknown): GhostexGbotsComputer | undefined {
+  if (!isObject(value)) return undefined;
+  const kind = trimmedValue(value, 'kind');
+  return {
+    kind: kind === 'computer' || kind === 'cloudBox' ? kind : 'this',
+    name: trimmedValue(value, 'name'),
+    computerUse: value.computerUse === true,
   };
 }
 

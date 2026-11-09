@@ -281,9 +281,40 @@ export function gbotsRoutineListCommand(botId: string): string {
   return `ghostex gbots routine list --bot ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
 }
 
+/** Where a GBot's chats run, what it could be given, and its chats elsewhere (server/src/gbots/computer/ops.rs). */
+export function gbotsComputerCommand(botId: string): string {
+  return `ghostex gbots computer ${shellQuote(requirePositional(botId, 'GBot id'))} --json`;
+}
+
+/**
+ * Gives a GBot this computer back, or turns its computer use off: all the phone may change, since giving it another
+ * computer, a Cloud Box or computer use is done on the computer itself (the same rule as its approval level).
+ */
+export function gbotsComputerSetCommand(botId: string, change: { thisComputer?: true; screen?: false }): string {
+  const flags = [change.thisComputer === true ? '--use this' : '', change.screen === false ? '--screen off' : '']
+    .filter((flag) => flag.length > 0)
+    .join(' ');
+  return `ghostex gbots computer ${shellQuote(requirePositional(botId, 'GBot id'))} ${flags} --json`;
+}
+
 /** Pauses, resumes, runs now or removes one routine, by its id. */
 export function gbotsRoutineActCommand(verb: 'pause' | 'resume' | 'run-now' | 'remove', routineId: string): string {
   return `ghostex gbots routine ${verb} ${shellQuote(requirePositional(routineId, 'routine id'))} --json`;
+}
+
+/**
+ * A GBot's API (server/src/gbots/api/ops.rs): `status` reads it; `on` and `new-key` make its key (the CLI waits for the
+ * user's approval, so give it a long timeout) and answer the key once; `off` stops it.
+ */
+export function gbotsApiCommand(
+  verb: 'status' | 'on' | 'new-key' | 'off' | 'share-memory-on' | 'share-memory-off',
+  botId: string,
+): string {
+  const bot = shellQuote(requirePositional(botId, 'GBot id'));
+  if (verb === 'share-memory-on' || verb === 'share-memory-off') {
+    return `ghostex gbots api share-memory ${bot} ${verb === 'share-memory-on' ? 'on' : 'off'} --json`;
+  }
+  return `ghostex gbots api ${verb} ${bot} --json`;
 }
 
 /** Opens another chat with a GBot; the answer's `chat` names it. */
