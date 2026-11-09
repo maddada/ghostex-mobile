@@ -103,6 +103,12 @@ class GhostexNativeModule : Module() {
     }
   }
 
+  /** Where `machineId`'s own Easy Connect key lives, beside the shared one. */
+  private fun tailcatMachineKeyPath(machineId: String): String {
+    val safe = machineId.map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")
+    return File(File(File(requireAndroidContext().filesDir, "tailcat"), "machines"), "$safe.key").absolutePath
+  }
+
   /** Loads (or creates) this phone's Easy Connect client key; see `tailcatClientPublicKey`. */
   private fun useTailcatClientKey(): String {
     val dir = File(requireAndroidContext().filesDir, "tailcat")
@@ -265,6 +271,29 @@ class GhostexNativeModule : Module() {
           promise.resolve(useTailcatClientKey())
         } catch (error: Exception) {
           promise.reject(CodedException("Could not load the Easy Connect client key: ${error.message}", error))
+        }
+      }
+    }
+
+    // CDXC:RemotePairing 2026-11-10: a key of the phone's own per computer, so two Easy Connect
+    // computers on one relay never share a key (src/machines/easyConnectLinkKeyState.ts).
+    AsyncFunction("tailcatMachineClientKey") { machineId: String, promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          promise.resolve(Tailcatbridge.machineClientKeyPublic(tailcatMachineKeyPath(machineId)))
+        } catch (error: Exception) {
+          promise.reject(CodedException("Could not load the Easy Connect key for this computer: ${error.message}", error))
+        }
+      }
+    }
+
+    AsyncFunction("useTailcatMachineClientKey") { machineId: String, enabled: Boolean, promise: Promise ->
+      backgroundExecutor.execute {
+        try {
+          Tailcatbridge.useMachineClientKeyFile(machineId, if (enabled) tailcatMachineKeyPath(machineId) else "")
+          promise.resolve(null)
+        } catch (error: Exception) {
+          promise.reject(CodedException("Could not switch this computer's Easy Connect key: ${error.message}", error))
         }
       }
     }
