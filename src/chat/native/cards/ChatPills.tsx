@@ -423,12 +423,11 @@ function QuestionsSection({
             // This group's own Show more, under its own rows; a folded group shows none.
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Show more, ${section.remaining} left`}
+              accessibilityLabel={`Show all ${section.count}`}
               onPress={onShowMore}
               style={({ pressed }) => [styles.questionsMore, pressed && styles.pillPressed]}
             >
-              <Text style={styles.questionsSectionLabel}>Show more</Text>
-              <Text style={styles.questionsMeta}>{String(section.remaining)}</Text>
+              <Text style={styles.questionsSectionLabel}>{`Show all ${section.count}`}</Text>
             </Pressable>
           ) : null}
         </>
