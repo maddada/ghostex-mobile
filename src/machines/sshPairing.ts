@@ -31,7 +31,7 @@ import { create } from 'zustand';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { chatMachineLink, onChatLinkCutOff, onChatLinkHandshake, onChatLinkTokenRefused } from '../chat/rust/machine-link';
 import { setHeldAnswerHandler, type RpcAnswer } from '../chat/rust/transport';
-import { approvalIdOf } from '../security/approvals';
+import { approvalIdOf, notePlainApprovals } from '../security/approvals';
 import { SshPairingCopy } from '../copy';
 import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
 import { getDeviceApiToken, setDeviceApiToken, setDeviceTokenExpiresAt, type MachineConnectionTarget } from './credentials';
@@ -47,6 +47,9 @@ export const PAIR_OVER_SSH_CAPABILITY = 'pairOverSsh';
 CDXC:RemotePairing 2026-11-10 DECISION:
 User (Q2109, Q2110, option C: "what are we protecting against even? i want to reduce the friction connecting"): a phone that signs in over SSH works at once with everything that computer's token file allows (reading, replying, Stop, typing, starting sessions); only its owner powers (approving requests with Face ID, answering secret requests) wait for the one-time "Approve this phone?" with the three words. A gxserver that says `sshPhoneWorksUnpaired` works that way (server/src/security/policy.rs), so the waiting request is one small line the person can hide, never a card in the way; the computer's page under Machines keeps Show. A gxserver that doesn't say it keeps the card and its copy.
 */
+/** What `ghostex server endpoint` lists when the computer takes Approve as one tap (option B). */
+export const PLAIN_APPROVALS_CAPABILITY = 'plainApprovals';
+
 /** What `ghostex server endpoint` lists when a phone on the token file works there before pairing. */
 export const SSH_PHONE_WORKS_UNPAIRED_CAPABILITY = 'sshPhoneWorksUnpaired';
 const RPC_TIMEOUT_MS = 20_000;
@@ -452,6 +455,15 @@ onChatLinkHandshake((machine, capabilities) => {
   // A handshake means the computer answers now; its card may show again.
   setReachable(machine.id, true);
   setQuiet(machine.id, capabilities.includes(SSH_PHONE_WORKS_UNPAIRED_CAPABILITY));
+  const plain = capabilities.includes(PLAIN_APPROVALS_CAPABILITY);
+  notePlainApprovals(machine.id, plain);
+  // A computer that approves plainly lets a phone on its SSH login do everything, approving
+  // included, so there is nothing to pair: no "Approve this phone?" there (CDXC:Security 2026-11-10
+  // in `security/approvals.ts`).
+  if (plain) {
+    forget(machine.id);
+    return;
+  }
   if (capabilities.includes(PAIR_OVER_SSH_CAPABILITY)) void startSshPairing(machine, { auto: true });
 });
 onChatLinkCutOff((machineId) => setReachable(machineId, false));

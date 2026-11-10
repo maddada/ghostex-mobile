@@ -17,7 +17,7 @@
 
 import { useAppearance } from '../theme/useAppearance';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, Switch, Text, View } from 'react-native';
+import { Keyboard, Platform, Pressable, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -43,6 +43,7 @@ import DemoMachineForm from '../demo/DemoMachineForm';
 import { isDemoMachine } from '../demo/identity';
 import { refreshMachineTools } from '../machines/machineTools';
 import { signsInOverSsh, startSshPairing, useSshPairings } from '../machines/sshPairing';
+import { approvalMode, setRequirePresence, usePlainApprovals } from '../security/approvals';
 import {
   getPassphrase,
   getPublicKey,
@@ -121,6 +122,31 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
   const sshPairing = useSshPairings((state) => (machineId === null ? undefined : state.pairings[machineId]));
   const sshPairingQuiet = useSshPairings((state) => machineId !== null && state.quiet[machineId] === true);
+  const plainApprovals = usePlainApprovals((state) => machineId !== null && state.plain[machineId] === true);
+  // The computer's "Require Face ID to approve" switch, read when its page opens (null until read).
+  const [requirePresence, setRequirePresenceShown] = useState<boolean | null>(null);
+  const [requirePresenceError, setRequirePresenceError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!plainApprovals || existing === null) return;
+    let live = true;
+    approvalMode(existing)
+      .then((mode) => {
+        if (live) setRequirePresenceShown(mode.requirePresence);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [plainApprovals, existing?.id]);
+  const changeRequirePresence = (on: boolean) => {
+    if (existing === null) return;
+    setRequirePresenceShown(on);
+    setRequirePresenceError(null);
+    setRequirePresence(existing, on).catch((error: unknown) => {
+      setRequirePresenceShown(!on);
+      setRequirePresenceError(`${ApprovalsCopy.requirePresenceFailed}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  };
   const editing = existing !== null;
 
   const [transport, setTransport] = useState<MachineTransport>(
@@ -592,10 +618,12 @@ export default function MachineFormScreen({ navigation, route }: Props) {
               <FormSection name="machine-form:tools">
                 <MachineToolsSection machine={existing} reachable={reachable} />
               </FormSection>
-              {/* GitHub #495: requests on this computer that only its owner may allow. Approving needs a
-                  device token of this phone's own: Easy Connect pairing gives one, and so does pairing over
-                  SSH (`deviceId` set); a phone still on the computer's token file may not approve. */}
-              {(existing.transport === 'tailcat' || existing.deviceId !== undefined) && (
+              {/* GitHub #495: requests on this computer that only its owner may allow. On a computer from
+                  before plain approvals, approving needs a device token of this phone's own (Easy Connect
+                  pairing, or pairing over SSH: `deviceId` set). A computer that approves plainly lets a
+                  phone on its SSH login approve too, and holds the Face ID switch (CDXC:Security 2026-11-10
+                  in `security/approvals.ts`). */}
+              {(existing.transport === 'tailcat' || existing.deviceId !== undefined || plainApprovals) && (
               <View style={formStyles.rowsCard}>
                 <View style={[formStyles.row, formStyles.rowFirst]}>
                   <View style={formStyles.rowMain}>
@@ -608,6 +636,25 @@ export default function MachineFormScreen({ navigation, route }: Props) {
                     onPress={() => navigation.navigate('Approvals', { machineId: existing.id })}
                   />
                 </View>
+                {plainApprovals && requirePresence !== null && (
+                  <SwitchRow
+                    value={requirePresence}
+                    onValueChange={changeRequirePresence}
+                    label={ApprovalsCopy.requirePresence(Platform.OS === 'ios')}
+                    style={formStyles.row}
+                  >
+                    <View style={formStyles.rowMain}>
+                      <Text style={formStyles.rowLabel}>{ApprovalsCopy.requirePresence(Platform.OS === 'ios')}</Text>
+                      <Text style={formStyles.rowDetail}>{requirePresenceError ?? ApprovalsCopy.requirePresenceDetail}</Text>
+                    </View>
+                    <Switch
+                      value={requirePresence}
+                      onValueChange={changeRequirePresence}
+                      trackColor={{ false: appearance.cardActive, true: appearance.accent }}
+                      thumbColor={appearance.foreground}
+                    />
+                  </SwitchRow>
+                )}
               </View>
               )}
               {advanced}

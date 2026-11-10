@@ -8,9 +8,19 @@
  * - `denyRequest`: no prompt; saying no only closes a door.
  *
  * Contract: ai/security-tokens-and-approvals.md in the Ghostex repo.
+ *
+ * CDXC:Security 2026-11-10 DECISION:
+ * User (Q2140 = B): "thinking of removing all these dumb blocks because they're adding friction and a lot
+ * of bugs", and "add a toggle to require touch id/pin etc for access but disabled by default, add it to
+ * security". A computer that says `plainApprovals` takes Approve as one tap: no approver key, no
+ * signature. When its "Require Face ID to approve" switch is on (`requirePresence`, shared with the
+ * computer's Settings > Security), the phone asks for Face ID or the fingerprint first. A computer from
+ * before plain approvals (Ghostex 11.2.2 and earlier) still gets the signed approval below; delete that
+ * path, `ensureEnrolled` and `waitForApproval` once those computers no longer matter.
  */
 
 import { Platform } from 'react-native';
+import { create } from 'zustand';
 
 import { chatMachineLink } from '../chat/rust/machine-link';
 import type { RpcAnswer } from '../chat/rust/transport';
@@ -29,6 +39,40 @@ async function rpc(machine: MachineConnectionTarget, method: string, params: Rec
 
 function failed(answer: RpcAnswer): Error | null {
   return answer.error === null ? null : new Error(answer.error.message);
+}
+
+/** What the computer says about approving: one tap (`plainApprovals`), and its Face ID switch. */
+export type ApprovalMode = { plain: boolean; requirePresence: boolean };
+
+/** Computers whose handshake said `plainApprovals` (machine-link's endpoint capabilities). */
+export const usePlainApprovals = create<{ plain: Record<string, true> }>(() => ({ plain: {} }));
+
+/** Records whether `machineId`'s gxserver approves plainly, from its handshake's capabilities. */
+export function notePlainApprovals(machineId: string, plain: boolean): void {
+  if ((usePlainApprovals.getState().plain[machineId] === true) === plain) return;
+  usePlainApprovals.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.plain;
+    return { plain: plain ? { ...rest, [machineId]: true } : rest };
+  });
+}
+
+export async function approvalMode(machine: MachineConnectionTarget): Promise<ApprovalMode> {
+  const answer = await rpc(machine, 'securityStatus', {});
+  const error = failed(answer);
+  if (error !== null) throw error;
+  const result = (answer.result ?? {}) as { plainApprovals?: boolean; requirePresence?: boolean };
+  return { plain: result.plainApprovals === true, requirePresence: result.requirePresence === true };
+}
+
+/** Turns the computer's "Require Face ID to approve" switch on or off (its Settings > Security). */
+export async function setRequirePresence(machine: MachineConnectionTarget, on: boolean): Promise<void> {
+  const error = failed(
+    await rpc(machine, 'dispatchRendererCommand', {
+      action: 'updateSettingsPatch',
+      payload: { patch: { approvalsRequirePresence: on } },
+    }),
+  );
+  if (error !== null) throw error;
 }
 
 export async function listApprovals(machine: MachineConnectionTarget): Promise<ApprovalRequest[]> {
@@ -114,6 +158,15 @@ export async function approveRequest(
   request: ApprovalRequest,
   onWaitingForComputer: () => void = () => {},
 ): Promise<void> {
+  const mode = await approvalMode(machine);
+  if (mode.plain) {
+    // The computer's Face ID switch: the system prompt first (the approver key's own prompt, over a
+    // payload nobody checks), then the same one-tap approval.
+    if (mode.requirePresence) await approverKeySign(`ghostex-approve-check\n${request.id}`, request.summary);
+    const error = failed(await rpc(machine, 'approveApprovalRequest', { id: request.id }));
+    if (error !== null) throw error;
+    return;
+  }
   const { keyId, serverId } = await ensureEnrolled(machine, onWaitingForComputer);
   const signature = await approverKeySign(approvalSigningPayload(serverId, request), request.summary);
   const error = failed(await rpc(machine, 'approveApprovalRequest', { id: request.id, keyId, signature }));

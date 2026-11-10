@@ -1678,4 +1678,9 @@ export const ApprovalsCopy = {
   notApproved: 'Not approved',
   couldNotDeny: 'Could not deny it',
   updateApp: 'This version of Ghostex can’t approve. Update the app.',
+  /** The computer's "Require … to approve" switch (its Settings > Security), on a computer that approves plainly. */
+  requirePresence: (ios: boolean) => (ios ? 'Require Face ID to approve' : 'Require your fingerprint to approve'),
+  requirePresenceDetail:
+    'Off: Approve goes through with one tap. On: this phone asks for Face ID or your fingerprint first, and your computer for Touch ID or its password. It applies to every device that approves for this computer.',
+  requirePresenceFailed: 'Could not change it',
 } as const;
