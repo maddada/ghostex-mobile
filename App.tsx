@@ -91,6 +91,7 @@ import {
   FeedbackCopy,
   FindPromptsCopy,
   MachineCopy,
+  MachinesCopy,
   NotificationsCopy,
   PanesCopy,
   SettingsCopy,
@@ -265,7 +266,7 @@ export default function App() {
               <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: FeedbackCopy.title }} />
               {hasMachines ? (
                 <>
-                  <Stack.Screen name="Machines" component={MachinesScreen} options={{ title: 'Machines' }} />
+                  <Stack.Screen name="Machines" component={MachinesScreen} options={{ title: MachinesCopy.title }} />
                   <Stack.Screen name="CantReach" component={CantReachScreen} options={{ title: '' }} />
                   <Stack.Screen
                     name="Terminal"

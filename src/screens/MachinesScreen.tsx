@@ -1,11 +1,15 @@
 /**
- * Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): one
+ * Computers list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): one
  * card per saved computer with a status badge and a one-line "how / what's
- * wrong" detail, tap → Edit machine, swipe left → Edit / Remove (Remove
- * confirms with the computer's name), and "Add a computer" with the two
- * onboarding path cards. Hidden machines stay here with a Hidden badge; the
- * Sessions strip shows only visible ones. Passwords, host keys, details and
- * diagnostics moved to Edit machine, so this page has no per-card menu.
+ * wrong" detail, tap → the computer's page, swipe left → Remove (it confirms
+ * with the computer's name), and "Add a computer" with one compact card per
+ * way (scan, Tailscale, the demo). Hidden computers stay here with a Hidden
+ * badge; the Sessions strip shows only visible ones.
+ *
+ * CDXC:RemotePairing 2026-11-10 DECISION:
+ * On the pairing page the user kept this screen (Q2192), "but please improve it a bit and clean it up": same
+ * structure, "Computers" as everywhere else, state coloured once (the badge), no line explaining the swipe, the
+ * swipe's Edit gone (a tap opens the page that edits), and the add cards one row each without a coloured border.
  */
 
 import { useMemo, useCallback, useState } from 'react';
@@ -16,16 +20,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GhostexNative } from '../../modules/ghostex-native/src';
-import { markManualDisconnect } from '../app/autoReconnect';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
 import { CameraGlyph, QrcodeGlyph, ShieldGlyph, SparklesGlyph } from '../components/onboarding/SetupIcons';
-import { useSetupText } from '../components/onboarding/SetupPrimitives';
 import { MachinesCopy } from '../copy';
 import { DemoCopy } from '../demo/copy';
 import { useInventoryStore } from '../inventory/store';
+import { removeComputerFromPhone } from '../machines/removeComputer';
 import {
   APP_UPDATE_FRESH_MS,
   appUpdateCardLine,
@@ -36,9 +38,7 @@ import {
 } from '../machines/appUpdate';
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
-import { unregisterBeforeRemoval, useRemovalAsksComputer } from '../notifications/pushStore';
-import { useSpacesStore } from '../spaces/store';
-import { useWorkspacesStore } from '../workspaces/store';
+import { useRemovalAsksComputer } from '../notifications/pushStore';
 
 import MachineCard from './machines-screen/MachineCard';
 import { machineCardDetail, machineCardStatus, machineCardTitle } from './machines-screen/machineCardModel';
@@ -52,14 +52,10 @@ const NONE: Overlay = { kind: 'none' };
 export default function MachinesScreen({ navigation }: Props) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const setupText = useSetupText();
   const machines = useMachinesStore((state) => state.machines);
   // The list reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
-  const removeMachine = useMachinesStore((state) => state.removeMachine);
   const inventoriesByMachineId = useInventoryStore((state) => state.inventoriesByMachineId);
-  const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
-  const clearMachineSpace = useSpacesStore((state) => state.clearMachine);
 
   const appUpdates = useAppUpdateStore((state) => state.byMachineId);
   const removalAsksComputer = useRemovalAsksComputer();
@@ -83,24 +79,10 @@ export default function MachinesScreen({ navigation }: Props) {
     [navigation],
   );
 
-  const deleteMachine = useCallback(
-    async (machine: MachineRecord): Promise<void> => {
-      setOverlay(NONE);
-      clearMachineInventory(machine.id);
-      clearMachineSpace(machine.id);
-      useWorkspacesStore.getState().clearMachine(machine.id);
-      // While its record and link still exist; waits a bounded time, and an unreachable computer is removed anyway.
-      await unregisterBeforeRemoval(machine.id);
-      try {
-        markManualDisconnect(machine.id);
-        await GhostexNative.disconnect(machine.id);
-      } catch {
-        // Not connected is fine.
-      }
-      await removeMachine(machine.id);
-    },
-    [clearMachineInventory, clearMachineSpace, removeMachine],
-  );
+  const deleteMachine = useCallback(async (machine: MachineRecord): Promise<void> => {
+    setOverlay(NONE);
+    await removeComputerFromPhone(machine.id);
+  }, []);
 
   const now = new Date();
 
@@ -108,8 +90,7 @@ export default function MachinesScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={edges.scroll} contentContainerStyle={[styles.content, edges.content]}>
         {machines.length > 0 ? (
-          <>
-            <View style={styles.cards}>
+          <View style={styles.cards}>
               {machines.map((machine) => {
                 const inventory = inventoriesByMachineId[machine.id];
                 const status = machineCardStatus(machine, inventory);
@@ -128,14 +109,11 @@ export default function MachinesScreen({ navigation }: Props) {
                         : null
                     }
                     onPress={() => editMachine(machine)}
-                    onEdit={() => editMachine(machine)}
                     onRemove={() => setOverlay({ kind: 'remove', machine })}
                   />
                 );
               })}
             </View>
-            <Text style={[setupText.small, setupText.dim, styles.swipeHint]}>{MachinesCopy.swipe.hint}</Text>
-          </>
         ) : null}
 
         <Text style={[styles.sectionLabel, machines.length > 0 ? styles.sectionLabelSpaced : null]}>
@@ -143,8 +121,8 @@ export default function MachinesScreen({ navigation }: Props) {
         </Text>
         <View style={styles.cards}>
           <PathCard
-            recommended
-            icon={<QrcodeGlyph size={20} color={appearance.accent} />}
+            primary
+            icon={<QrcodeGlyph size={18} color={appearance.accent} />}
             title={MachinesCopy.add.easyConnect.title}
             subtitle={MachinesCopy.add.easyConnect.subtitle}
             button={{
@@ -154,7 +132,7 @@ export default function MachinesScreen({ navigation }: Props) {
             }}
           />
           <PathCard
-            icon={<ShieldGlyph size={20} color={appearance.foreground} />}
+            icon={<ShieldGlyph size={18} color={appearance.accent} />}
             title={MachinesCopy.add.tailscale.title}
             subtitle={MachinesCopy.add.tailscale.subtitle}
             button={{
@@ -163,9 +141,9 @@ export default function MachinesScreen({ navigation }: Props) {
             }}
           />
           <PathCard
-            icon={<SparklesGlyph size={20} color={appearance.foreground} />}
+            icon={<SparklesGlyph size={18} color={appearance.accent} />}
             title={DemoCopy.entryTitle}
-            subtitle={DemoCopy.entrySubtitle}
+            subtitle={DemoCopy.cardDetail}
             button={{
               label: DemoCopy.entryButton,
               onPress: () => {
@@ -205,10 +183,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   },
   cards: {
     gap: 10,
-  },
-  swipeHint: {
-    marginTop: 12,
-    paddingHorizontal: 4,
   },
   sectionLabel: {
     color: appearance.muted,

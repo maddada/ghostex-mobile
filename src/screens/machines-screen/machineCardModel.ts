@@ -59,7 +59,7 @@ export function machineCardTitle(machine: MachineRecord): string {
 /**
  * "Easy Connect · madda · paired Sep 3" or "Tailscale · madda@100.101.4.20 ·
  * no route to host". The trailing part is the sanitized failure reason when
- * the connection failed, or the hidden note; a healthy machine has none.
+ * the connection failed; a healthy or hidden machine has none.
  */
 export function machineCardDetail(
   machine: MachineRecord,
@@ -79,7 +79,7 @@ export function machineCardDetail(
     const portSuffix = machine.port === 22 ? '' : `:${machine.port}`;
     parts.push(`${machine.username}@${machine.host}${portSuffix}`);
   }
-  if (status === 'hidden') parts.push(MachinesCopy.detail.hidden);
-  else if (status === 'failed' && inventory?.lastError) parts.push(inventory.lastError);
+  // A hidden computer says so in its badge only.
+  if (status === 'failed' && inventory?.lastError) parts.push(inventory.lastError);
   return parts.join(' · ');
 }

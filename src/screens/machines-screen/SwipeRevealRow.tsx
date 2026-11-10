@@ -13,7 +13,8 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-export const SWIPE_REVEAL_WIDTH = 176;
+/** Room for the one action behind a card (Remove). */
+export const SWIPE_REVEAL_WIDTH = 88;
 
 const SNAP_DURATION_MS = 180;
 /** Flick speed that opens/closes regardless of how far the finger travelled. */

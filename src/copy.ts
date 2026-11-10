@@ -683,24 +683,21 @@ export const MachineNoticeCopy = {
   expandHint: 'Shows the reason and the Reconnect and Remote Settings buttons',
 } as const;
 
-/** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html). */
+/** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): "Computers" on screen, as everywhere else. */
 export const MachinesCopy = {
-  title: 'Machines',
+  title: 'Computers',
   badge: {
     connected: 'Connected',
-    failed: 'Failed',
+    failed: "Can't reach",
     hidden: 'Hidden',
     notConnected: 'Not connected',
   },
   detail: {
     /** "Easy Connect · madda · paired Sep 3". */
     paired: (date: string) => `paired ${date}`,
-    hidden: 'not shown in Sessions',
   },
   swipe: {
-    edit: 'Edit',
     remove: 'Remove',
-    hint: 'Swipe left on a machine to edit or remove it. Tap to open it.',
   },
   /** The card's Update button (its long label is "Update to <version>"). */
   update: 'Update',
@@ -714,13 +711,13 @@ export const MachinesCopy = {
   add: {
     sectionLabel: 'Add a computer',
     easyConnect: {
-      title: 'Scan a code',
-      subtitle: 'Easy Connect. Nothing to type.',
-      button: 'Scan code',
+      title: 'Scan the code',
+      subtitle: 'Click Connect a phone on the computer.',
+      button: 'Scan',
     },
     tailscale: {
       title: 'Use Tailscale',
-      subtitle: 'Enter address, user, password.',
+      subtitle: "Type the computer's address and password.",
       button: 'Type details',
     },
   },

@@ -1,10 +1,9 @@
 /**
  * One Machines card (`.mach` in docs/2026-09-03/mobile-setup/mobile-07-machines.html):
- * cloud icon tile tinted by status, name + status badge, the one-line
- * "how / what's wrong" detail, and a chevron. Tap opens Edit machine; a left
- * swipe shrinks the card to reveal Edit and Remove at its right edge while
- * the icon, name and badge stay put (SwipeRevealRow). Tapping an open card
- * closes it instead of opening the editor.
+ * cloud icon tile, name + status badge (the only place its state is coloured), the one-line
+ * "how / what's wrong" detail, and a chevron. Tap opens the computer's page; a left
+ * swipe shrinks the card to reveal Remove at its right edge while the icon, name and
+ * badge stay put (SwipeRevealRow). Tapping an open card closes it instead.
  */
 
 import { readableSecondaryText } from '../../theme/sidebarAppearance';
@@ -13,7 +12,7 @@ import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ChevronRightGlyph, CloudGlyph, DownloadGlyph, PencilGlyph, TrashGlyph } from '../../components/sessions/icons';
+import { ChevronRightGlyph, CloudGlyph, DownloadGlyph, TrashGlyph } from '../../components/sessions/icons';
 import { MachinesCopy } from '../../copy';
 import type { AppUpdateView } from '../../machines/appUpdate';
 import { GhostexRadii, GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
@@ -55,7 +54,6 @@ export default function MachineCard({
   status,
   update,
   onPress,
-  onEdit,
   onRemove,
 }: {
   title: string;
@@ -63,7 +61,6 @@ export default function MachineCard({
   status: MachineCardStatus;
   update?: MachineCardUpdate | null;
   onPress: () => void;
-  onEdit: () => void;
   onRemove: () => void;
 }) {
   const appearance = useAppearance();
@@ -82,17 +79,7 @@ export default function MachineCard({
       style={styles.row}
       onOpenChange={setOpen}
       actions={
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={MachinesCopy.swipe.edit}
-            onPress={closeThen(onEdit)}
-            style={[styles.action, styles.actionEdit]}
-          >
-            <PencilGlyph size={16} color={appearance.foreground} />
-            <Text style={styles.actionLabel}>{MachinesCopy.swipe.edit}</Text>
-          </Pressable>
-          <Pressable
+        <Pressable
             accessibilityRole="button"
             accessibilityLabel={MachinesCopy.swipe.remove}
             onPress={closeThen(onRemove)}
@@ -101,7 +88,6 @@ export default function MachineCard({
             <TrashGlyph size={16} color="#ffffff" />
             <Text style={[styles.actionLabel, styles.actionRemoveLabel]}>{MachinesCopy.swipe.remove}</Text>
           </Pressable>
-        </>
       }
     >
       <Pressable
@@ -111,7 +97,7 @@ export default function MachineCard({
         style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
       >
         <View style={styles.iconTile}>
-          <CloudGlyph size={20} color={MACHINE_STATUS_COLOR[status]} />
+          <CloudGlyph size={20} color={appearance.muted} />
         </View>
         <View style={styles.text}>
           <View style={styles.titleRow}>
@@ -252,9 +238,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-  },
-  actionEdit: {
-    backgroundColor: appearance.cardActive,
   },
   actionRemove: {
     backgroundColor: appearance.dangerFill,

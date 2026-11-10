@@ -5,7 +5,6 @@
 
 export const DemoCopy = {
   entryTitle: 'Try a demo computer',
-  entrySubtitle: 'Look around with sample projects. No account, no computer, and no network.',
   entryButton: 'Open demo',
   welcomeButton: 'Try a demo computer',
   banner:
