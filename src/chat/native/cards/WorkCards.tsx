@@ -36,7 +36,7 @@ const STATUS_COLOR: Record<string, string> = {
 const CHIP_ICON: Record<string, GlyphName> = {
   you: 'user',
   thread: 'robot',
-  coordinator: 'coordinator-crown',
+  coordinator: 'coordinator-captain-hat',
   steps: 'checklist',
   item: 'stack',
   wait: 'clock',

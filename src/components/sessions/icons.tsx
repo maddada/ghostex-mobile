@@ -247,11 +247,40 @@ export function PencilGlyph({ size, color }: GlyphProps) {
   );
 }
 
+/** The captain's hat's paths (desktop apps/desktop/assets/titlebar/coordinator-captain-hat.svg). */
+export const CAPTAIN_HAT_PATHS = {
+  /** The cap's top, stroked. */
+  crown: 'M4.4 11.6c-1-4 4.5-7.5 11.2-8.2c5.3-.5 7.3 1.6 5.6 4.9l-1.6 3.3',
+  /** The band, filled and stroked. */
+  band: 'M4.4 11.6h15.2v3.2h-15.2z',
+  /** The peak and the badge dot, filled. */
+  peak: 'M4.8 16.6h9.7c-2.7 2.9-7.2 4.2-11 3.6c-1.5-.3-1.6-2-.2-3.1c.4-.3.9-.5 1.5-.5z',
+  badge: 'M9.1 7.9a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
+};
+
 /**
- * Crown (a coordinator row's icon in place of its agent logo): the paths of the
- * desktop's apps/desktop/assets/titlebar/coordinator-crown.svg.
+ * Captain's hat (a coordinator's icon in place of its agent logo, on its row, its pills, its
+ * message cards and the `+` picker): the paths of the desktop's
+ * apps/desktop/assets/titlebar/coordinator-captain-hat.svg (CDXC:Coordinators 2026-11-10 in the
+ * desktop's native_sidebar/threads.rs).
  */
 export function CoordinatorGlyph({ size, color }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d={CAPTAIN_HAT_PATHS.crown} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d={CAPTAIN_HAT_PATHS.band} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d={CAPTAIN_HAT_PATHS.peak} fill={color} />
+      <Path d={CAPTAIN_HAT_PATHS.badge} fill={color} />
+    </Svg>
+  );
+}
+
+/**
+ * Crown (Chief of Staff's row, which kept it when coordinators took the captain's hat, and a GBots
+ * department lead's mark): the paths of the desktop's
+ * apps/desktop/assets/titlebar/coordinator-crown.svg.
+ */
+export function CrownGlyph({ size, color }: GlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Path

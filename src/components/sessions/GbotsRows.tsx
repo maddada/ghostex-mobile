@@ -25,7 +25,7 @@ import {
 import { measureInWindow } from '../common/measureInWindow';
 import type { MenuAnchor } from './ContextMenu';
 import { GbotIcon } from './gbotIcons';
-import { ChevronRightGlyph, CloudGlyph, CoordinatorGlyph, MachinesGlyph } from './icons';
+import { ChevronRightGlyph, CloudGlyph, CrownGlyph, MachinesGlyph } from './icons';
 import {
   ProjectEmptyRow,
   SectionStatusDots,
@@ -195,7 +195,7 @@ function GbotRow({
       </Text>
       {bot.bot.isLead === true ? (
         <View accessibilityLabel="Leads its department" style={rowStyles.crown}>
-          <CoordinatorGlyph size={ds(11)} color={ink.muted} />
+          <CrownGlyph size={ds(11)} color={ink.muted} />
         </View>
       ) : null}
       <View style={rowStyles.spacer} />

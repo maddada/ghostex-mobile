@@ -35,7 +35,9 @@ export function coordinatorIntro(document: ChatDocument): CoordinatorIntro | nul
 }
 
 const TIP_GLYPHS: Record<string, GlyphName> = {
-  'coordinator-crown': 'coordinator-crown',
+  'coordinator-captain-hat': 'coordinator-captain-hat',
+  // An older chat core still names the crown.
+  'coordinator-crown': 'coordinator-captain-hat',
   'file-type-html': 'file-type-html',
   microscope: 'microscope',
   photo: 'photo',

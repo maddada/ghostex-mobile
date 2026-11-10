@@ -61,6 +61,7 @@ import {
   ClockGlyph,
   CloudGlyph,
   CoordinatorGlyph,
+  CrownGlyph,
   CrewGlyph,
   PencilGlyph,
   HeadsetGlyph,
@@ -603,6 +604,8 @@ export default function SessionRow({
               <PencilGlyph size={ds(15)} color={sidebarForeground} />
             ) : session.isCoordinator && nesting?.containsActive === true ? (
               <View style={[styles.containsActiveRing, inkStyle.containsActiveRing]} />
+            ) : session.isCoordinator && session.isChief ? (
+              <CrownGlyph size={ds(13)} color={ink.crown} />
             ) : session.isCoordinator ? (
               <CoordinatorGlyph size={ds(13)} color={ink.crown} />
             ) : (

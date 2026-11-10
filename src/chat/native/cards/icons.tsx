@@ -5,7 +5,8 @@
 
 import Svg, { Path } from 'react-native-svg';
 
-type GlyphSpec = { paths: string[]; strokeWidth?: number; filled?: boolean };
+/** `solid` paths are filled and stroked, `fills` only filled, on top of the stroked `paths`. */
+type GlyphSpec = { paths: string[]; strokeWidth?: number; filled?: boolean; solid?: string[]; fills?: string[] };
 
 const GLYPHS = {
   /** The "+N" pill and its sheet (desktop `titlebar/dots.svg`). */
@@ -43,15 +44,14 @@ const GLYPHS = {
       'M9.7 17l4.6 0',
     ],
   },
-  'coordinator-crown': {
-    paths: [
-      'M3.2 8.2 7.8 12.4 12 5.2 16.2 12.4 20.8 8.2 19.2 17.2H4.8Z',
-      'M6 18.8h12a1.2 1.2 0 0 1 0 2.4h-12a1.2 1.2 0 0 1 0 -2.4z',
-      'M1.3 7a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
-      'M10.1 3.8a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
-      'M18.9 7a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
+  /** A coordinator (desktop `titlebar/coordinator-captain-hat.svg`). */
+  'coordinator-captain-hat': {
+    paths: ['M4.4 11.6c-1-4 4.5-7.5 11.2-8.2c5.3-.5 7.3 1.6 5.6 4.9l-1.6 3.3'],
+    solid: ['M4.4 11.6h15.2v3.2h-15.2z'],
+    fills: [
+      'M4.8 16.6h9.7c-2.7 2.9-7.2 4.2-11 3.6c-1.5-.3-1.6-2-.2-3.1c.4-.3.9-.5 1.5-.5z',
+      'M9.1 7.9a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
     ],
-    filled: true,
   },
   'file-type-html': {
     paths: [
@@ -379,6 +379,10 @@ export function Glyph({
           />
         ),
       )}
+      {spec.solid?.map((d) => (
+        <Path key={d} d={d} fill={color} stroke={color} strokeWidth={width} strokeLinejoin="round" />
+      ))}
+      {spec.fills?.map((d) => <Path key={d} d={d} fill={color} />)}
     </Svg>
   );
 }
