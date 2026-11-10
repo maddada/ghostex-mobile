@@ -25,6 +25,52 @@ import { remoteWorkerNotice } from './remoteWorker';
 import { AgentMark } from './agentMark';
 import { BoardRelayButtons } from './RelayedApprovalCard';
 import { openRelayedCardForThread } from './relayedApprovals';
+import { openQuestionReply } from '../transcript/QuestionReply';
+
+/** An opened card's Reply, Open, Show in chat, Dismiss and Snooze (desktop `board_card_buttons`). */
+function BoardCardActions({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone: () => void }) {
+  const styles = useStyles();
+  const [snoozing, setSnoozing] = useState(false);
+  const actions = obj(obj(row)?.actions);
+  if (actions === null) return null;
+  const reply = obj(actions.reply);
+  const snooze = arr(actions.snooze)
+    .map(obj)
+    .filter((choice): choice is Record<string, unknown> => choice !== null);
+  const button = (label: string, onPress: () => void) => (
+    <Pressable
+      key={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.cardButton, pressed && styles.cardButtonPressed]}
+    >
+      <Text style={styles.cardButtonText}>{label}</Text>
+    </Pressable>
+  );
+  const run = (command: unknown) => {
+    chat.dispatch(command as unknown as UserAction);
+    onDone();
+  };
+  return (
+    <>
+      {reply !== null
+        ? button('Reply', () => {
+            onDone();
+            openQuestionReply({
+              form: typeof reply.form === 'string' ? reply.form : null,
+              tag: str(reply, 'tag'),
+              ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
+            });
+          })
+        : null}
+      {obj(actions.open) !== null ? button('Open', () => run(actions.open)) : null}
+      {obj(actions.showInChat) !== null ? button('Show in chat', () => run(actions.showInChat)) : null}
+      {obj(actions.dismiss) !== null ? button('Dismiss', () => run(actions.dismiss)) : null}
+      {snooze.length > 0 ? button(snoozing ? 'Snooze for' : 'Snooze', () => setSnoozing((was) => !was)) : null}
+      {snoozing ? snooze.map((choice) => button(str(choice, 'label'), () => run(choice.command))) : null}
+    </>
+  );
+}
 
 /** Each group's colour: the sidebar's question pink, approval red and working amber. */
 const GROUP_COLOR: Record<string, string | null> = {
@@ -526,6 +572,9 @@ export function CoordinatorBoardMenu({
                         {/* No Open button: the link chip opens the link and the agent button the
                             thread, each thing once (the user's 2026-11-06 words on the desktop's
                             `board_card_buttons`). Open stays in the long-press menu. */}
+                        {/* The dock's actions (gx-chat-core `panel_actions`): Reply, Open, Show in
+                            chat, Dismiss, Snooze, so an opened card offers the same everywhere. */}
+                        <BoardCardActions row={row} chat={chat} onDone={onDone} />
                         {reference.length > 0 ? (
                           <Pressable
                             accessibilityRole="button"
@@ -671,6 +720,7 @@ const useStyles = themedStyles((P) => ({
   },
   cardButtons: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
   },
