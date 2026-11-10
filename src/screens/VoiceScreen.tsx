@@ -9,7 +9,7 @@
  */
 
 import { readableSecondaryText } from '../theme/sidebarAppearance';
-import { useMemo, useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -59,6 +59,7 @@ import {
   type VoiceLine,
   VOICE_CALL_MODES,
   VOICE_CALL_MODE_NOTE,
+  VOICE_CALL_MODE_NOTE_LIVE,
 } from '../voice/conversation';
 import { focusBannerDetail } from '../voice/focus';
 import { GbotCallBanner, useGbotCallOpen } from '../voice/GbotCallBanner';
@@ -277,6 +278,7 @@ function VoiceSettingsSheet({ visible, onClose }: { visible: boolean; onClose: (
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const current = useVoiceStore((state) => state.callMode);
+  const live = useVoiceStore((state) => state.callModeLive);
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <Text style={styles.sheetTitle}>Call mode</Text>
@@ -304,7 +306,7 @@ function VoiceSettingsSheet({ visible, onClose }: { visible: boolean; onClose: (
           </Pressable>
         );
       })}
-      <Text style={styles.sheetNote}>{VOICE_CALL_MODE_NOTE}</Text>
+      <Text style={styles.sheetNote}>{live ? VOICE_CALL_MODE_NOTE_LIVE : VOICE_CALL_MODE_NOTE}</Text>
     </BottomSheet>
   );
 }
@@ -449,7 +451,20 @@ export default function VoiceScreen({ navigation }: Props) {
   const chatTheme = useTranscriptTheme();
   const { away, jumpToBottom, scrollProps } = useFollowBottom();
   const [toast, setToast] = useState<Toast>(null);
-  const showCopied = useCallback(() => setToast((last) => ({ id: (last?.id ?? 0) + 1, message: 'Copied', error: false })), []);
+  const showToast = useCallback(
+    (message: string) => setToast((last) => ({ id: (last?.id ?? 0) + 1, message, error: false })),
+    [],
+  );
+  const showCopied = useCallback(() => showToast('Copied'), [showToast]);
+  // The call's own notes (a call mode change) show in the same toast.
+  const callToast = voice.toast;
+  // A note from before the screen opened is not shown again.
+  const seenCallToast = useRef(callToast?.id ?? 0);
+  useEffect(() => {
+    if (callToast === null || callToast.id === seenCallToast.current) return;
+    seenCallToast.current = callToast.id;
+    showToast(callToast.message);
+  }, [callToast, showToast]);
   const look = stateLook(voice);
   const active = voiceActive(voice.phase);
   const compact = voice.lines.length > 0;
