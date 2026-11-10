@@ -292,13 +292,16 @@ export function useUnifiedList(deps: UnifiedListDeps) {
    * the desktop's reveal does (gx-core unified_sidebar/reveal.rs): the coordinators above it unfold, the shelf and
    * project group holding its card open, and a filter or search that leaves it out gives way. The open session is
    * watched rather than each way in, and a reveal completes only once the saved folds are read and every computer's
-   * list has answered, so a thread whose coordinator's computer answers later still nests and unfolds. Each open
-   * session is revealed once (again only when a computer that answers later gives it coordinators it did not have),
+   * list has answered, so a thread whose coordinator's computer answers later still nests and unfolds. Each time a
+   * session is opened it is revealed once (again only when a computer that answers later gives it coordinators it did not have),
    * so folding its coordinator again afterwards sticks; a session in no list yet stays pending until it is. The open
    * session is listed rather than its coordinator's older threads (`focusedSession`).
    */
-  /** The session revealed last and the coordinators above it then (the desktop's `reveal_watch`). */
-  const revealed = useRef<{ key: string; ancestors: string } | null>(null);
+  /**
+   * The open session (a new one each time the selection changes, also back to an earlier one) and, once it has been
+   * revealed, the coordinators above it then (the desktop's `reveal_watch`); `null` until it is found in a list.
+   */
+  const activation = useRef<{ key: string | null; ancestors: string | null }>({ key: null, ancestors: null });
   const storeReady = useUnifiedListStore((state) => state.ready);
   const inventoriesReady = useMemo(
     () =>
@@ -308,6 +311,8 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     [machines, inventoriesByMachineId],
   );
   useEffect(() => {
+    // Every change of the open session is a new activation, even back to one revealed before.
+    if (activation.current.key !== selectedSessionKey) activation.current = { key: selectedSessionKey, ancestors: null };
     if (!on || selectedSessionKey === null || !storeReady || !inventoriesReady) return;
     const isOpen = (row: UnifiedRow<GhostexSession>) =>
       attachSessionKey(row.machine, row.session.sessionId) === selectedSessionKey;
@@ -330,15 +335,15 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     const { card, row } = found;
     const ancestors = ancestorsOf(card, row.id) ?? [];
     const chain = ancestors.join('\n');
-    const previous = revealed.current;
-    if (previous !== null && previous.key === selectedSessionKey) {
-      // Revealed already: again only when it now has coordinators it did not have (one on a computer that answered
-      // later), so a fold the user makes afterwards sticks.
-      if (previous.ancestors === chain) return;
-      revealed.current = { key: selectedSessionKey, ancestors: chain };
+    const revealedWith = activation.current.ancestors;
+    if (revealedWith !== null) {
+      // Revealed in this activation already: again only when it now has coordinators it did not have (one on a
+      // computer that answered later), so a fold the user makes afterwards sticks.
+      if (revealedWith === chain) return;
+      activation.current = { key: selectedSessionKey, ancestors: chain };
       if (ancestors.length === 0) return;
     }
-    revealed.current = { key: selectedSessionKey, ancestors: chain };
+    activation.current = { key: selectedSessionKey, ancestors: chain };
     const shelf = card.shelf;
     const inGroup = layout.groupByProject && shelf !== 'drafts';
     const repoKey = inGroup ? card.repo.key : null;
