@@ -5,7 +5,7 @@
  * off the fold (`useFoldCardPlacement`).
  */
 
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
@@ -108,33 +108,46 @@ export default function DelayedSendDialog({
     [pickerMode],
   );
 
+  /**
+   * CDXC:DelayedSend 2026-11-11 DECISION:
+   * Issue #546: seed the form once each time the dialog opens, like the desktop
+   * modal. The countdown label and deadline refresh while a send is armed, and
+   * re-seeding on each refresh snapped a just-picked Specific time back to After
+   * a delay and reset the fields the user was editing.
+   * SEE-ALSO: apps/desktop/src/app/window/delayed_send_modal.rs
+   */
+  const seededForOpenRef = useRef(false);
   useEffect(() => {
-    if (visible) {
-      const remainingMs = remainingMsUntil(delayedSendDeadlineAt, Date.now());
-      const duration = remainingMs > 0 ? durationPartsFromMs(remainingMs) : undefined;
-      setHours(String(duration?.hours ?? 0));
-      setMinutes(String(duration?.minutes ?? 5));
-      setSpecificTime(new Date(Math.ceil((Date.now() + (remainingMs || 5 * 60_000)) / 60_000) * 60_000));
-      setPickerMode(null);
-      setSendEnterEnabled(true);
-      setCloseAfterDoneEnabled(closeAfterDoneActive);
-      const hasArmedTimer = delayedSendDeadlineAt.length > 0 || remainingLabel.length > 0;
-      /**
-       * CDXC:DelayedSend 2026-09-19 DECISION:
-       * User: the default Delayed Send trigger is When all agents finish.
-       * An already armed send still reopens on its own trigger.
-       * SEE-ALSO: packages/core-ui/delayed-send-modal.tsx, apps/desktop/src/app/window/delayed_send_modal.rs
-       */
-      setTrigger(
-        sendWhenAllProjectSessionsStopActive
-          ? 'allAgentsStop'
-          : sendWhenAgentStopsActive
-            ? 'agentStops'
-            : hasArmedTimer
-              ? 'afterDelay'
-              : 'allAgentsStop',
-      );
+    if (!visible) {
+      seededForOpenRef.current = false;
+      return;
     }
+    if (seededForOpenRef.current) return;
+    seededForOpenRef.current = true;
+    const remainingMs = remainingMsUntil(delayedSendDeadlineAt, Date.now());
+    const duration = remainingMs > 0 ? durationPartsFromMs(remainingMs) : undefined;
+    setHours(String(duration?.hours ?? 0));
+    setMinutes(String(duration?.minutes ?? 5));
+    setSpecificTime(new Date(Math.ceil((Date.now() + (remainingMs || 5 * 60_000)) / 60_000) * 60_000));
+    setPickerMode(null);
+    setSendEnterEnabled(true);
+    setCloseAfterDoneEnabled(closeAfterDoneActive);
+    const hasArmedTimer = delayedSendDeadlineAt.length > 0 || remainingLabel.length > 0;
+    /**
+     * CDXC:DelayedSend 2026-09-19 DECISION:
+     * User: the default Delayed Send trigger is When all agents finish.
+     * An already armed send still reopens on its own trigger.
+     * SEE-ALSO: packages/core-ui/delayed-send-modal.tsx, apps/desktop/src/app/window/delayed_send_modal.rs
+     */
+    setTrigger(
+      sendWhenAllProjectSessionsStopActive
+        ? 'allAgentsStop'
+        : sendWhenAgentStopsActive
+          ? 'agentStops'
+          : hasArmedTimer
+            ? 'afterDelay'
+            : 'allAgentsStop',
+    );
   }, [
     closeAfterDoneActive,
     delayedSendDeadlineAt,
