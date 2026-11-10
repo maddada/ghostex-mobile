@@ -883,9 +883,55 @@ export function setVoiceMuted(muted: boolean): void {
   void GhostexNative.voiceSetMuted(muted).catch(() => undefined);
 }
 
+/**
+ * CDXC:VoiceMode 2026-11-10 DECISION:
+ * User: "Add an input area at the bottom for the voice agent on the phone and on PC, so I can be muted and still type to the voice agent." A typed message is the user's turn in the running call: gxserver's `text` input (server/src/voice_agent/conversation.rs, `Input::Text`) shows it as the user's caption, cuts a reply being spoken and answers it like a spoken turn. Mute is left as it is.
+ *
+ * Recorded-turn calls (`clipTalk.ts`) send the `text` frame on their own socket, which every gxserver
+ * with voice already takes. A native call's socket (`GhostexVoice.kt` / `.swift`) forwards only its
+ * fixed frames, so its typed turn goes through gxserver's `voiceAgentText` route
+ * `{conversationId, text}` instead, which hands it to the same call.
+ *
+ * Answers null when sent, or the sentence the text box shows when it could not be.
+ */
+export async function sendVoiceText(text: string): Promise<string | null> {
+  const typed = text.trim();
+  if (typed.length === 0) return null;
+  if (useVoiceStore.getState().phase !== 'live') return 'The call is not connected right now.';
+  if (clipTalkActive()) {
+    return clipSend({ type: 'text', text: typed })
+      ? null
+      : "Couldn't send that. The call is reconnecting; try again in a moment.";
+  }
+  return sendNativeCallText(typed);
+}
+
+/**
+ * VOICE-TEXT-SERVER-ROUTE: the one place a native call's typed turn leaves the phone. It needs
+ * gxserver's `/api/voiceAgentText` `{conversationId, text}` (answers `{sent: true}`, or `notFound`
+ * once the call ended), allowed for remote clients like `/api/voiceAgentClip`.
+ */
+async function sendNativeCallText(text: string): Promise<string | null> {
+  const machine = target;
+  const status = await GhostexNative.voiceStatus().catch(() => null);
+  const conversationId = status?.conversationId;
+  if (machine === null || !conversationId) return 'The call is still connecting. Try again in a moment.';
+  try {
+    const answer = await chatMachineLink(machine).rpc('voiceAgentText', { conversationId, text }, READ_TIMEOUT_MS);
+    if (answer.error === null) return null;
+    if (answer.error.code === 'notFound' && /conversation/i.test(answer.error.message)) return answer.error.message;
+    return `Typing to the voice agent needs a newer Ghostex on ${useVoiceStore.getState().machineName || 'your computer'} (${answer.error.message.replace(/\.$/, '')}).`;
+  } catch {
+    return "Couldn't reach your computer. Try again in a moment.";
+  }
+}
+
 /** "Stop talking": cuts the agent's reply. */
 export function interruptVoice(): void {
-  if (clipTalkActive()) return clipSend({ type: 'interrupt' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'interrupt' });
+    return;
+  }
   void GhostexNative.voiceInterrupt().catch(() => undefined);
 }
 
@@ -1037,7 +1083,10 @@ export function pickVoice(voice: string): void {
 export function continueVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memoryState: 'continued' });
-  if (clipTalkActive()) return clipSend({ type: 'continueMemory' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'continueMemory' });
+    return;
+  }
   void GhostexNative.voiceSendControl('continueMemory').catch(() => undefined);
 }
 
@@ -1050,7 +1099,10 @@ export function startVoiceFresh(): void {
 export function forgetVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memory: null, memoryState: 'forgotten' });
-  if (clipTalkActive()) return clipSend({ type: 'forgetMemory' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'forgetMemory' });
+    return;
+  }
   void GhostexNative.voiceSendControl('forgetMemory').catch(() => undefined);
 }
 
