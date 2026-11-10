@@ -21,7 +21,7 @@ import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import { defaultSettings, useSettingsStore } from '../settings/store';
 import { useTerminalStore } from '../terminal/sessions';
 import { THEME_PRESETS, themePresetPatch } from '../theme/presets';
-import { ConnectChooseCopy } from '../copy';
+import { ConnectStartCopy } from '../copy';
 import ConnectChooseScreen from './ConnectChooseScreen';
 import WorkLinkPicker from './sessions-screen/work-link-picker';
 import TerminalScreen from './TerminalScreen';
@@ -183,11 +183,11 @@ describe.each(LIGHT_PRESETS)('%s', (id, background) => {
 });
 
 describe.each(THEME_PRESETS.map((preset) => [preset.id, preset.mode] as const))('%s (%s) setup and link surfaces', (id) => {
-  test('connection instructions keep 4.5:1 on their actual option card', async () => {
+  test('connection instructions keep 4.5:1 on the surface they are drawn on', async () => {
     useSettingsStore.getState().patchSettings(themePresetPatch(id, false)!);
     await render(<ConnectChooseScreen navigation={nav as never} route={{} as never} />);
-    for (const step of ConnectChooseCopy.easyConnect.steps) {
-      const label = screen.getByText(step);
+    for (const step of ConnectStartCopy.steps.filter((entry) => entry.link.length === 0)) {
+      const label = screen.getByText(step.lead);
       const card = ancestors(label).slice(1).find((node) => /^#[0-9a-f]{6}$/iu.test(String(flat(node).backgroundColor)));
       expect(card).toBeDefined();
       expect(contrast(String(flat(label).color), String(flat(card!).backgroundColor))).toBeGreaterThanOrEqual(4.5);

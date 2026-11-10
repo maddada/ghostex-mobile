@@ -8,58 +8,57 @@
  * User decision: Ghostex-owned user-facing copy in the desktop, web, and mobile apps uses no em dashes; use punctuation that preserves the sentence's natural reading instead.
  */
 
-/**
- * Welcome (docs/2026-09-03/mobile-setup/mobile-01-welcome.html). Sells the three
- * things the phone can do and asks for one tap; none of the transport
- * vocabulary appears here.
- */
+/** The first screen, shown while no computer is saved: the app's name over the connect steps. */
 export const WelcomeCopy = {
   headline: 'Ghostex',
   subheadline: 'Your agents, from your pocket.',
-  features: [
-    {
-      key: 'sessions',
-      title: 'Watch and reply to sessions',
-      description:
-        'Claude, Codex and Gemini sessions running on your computer, with approvals and questions right on the phone.',
-    },
-    {
-      key: 'terminal',
-      title: 'Open a real terminal',
-      description: "Attach to any session's terminal, with extra keys that make sense on a phone.",
-    },
-    {
-      key: 'projects',
-      title: 'Start new work',
-      description: 'Add projects, clone repos and kick off sessions without opening the computer.',
-    },
-  ],
-  connectButton: 'Connect your computer',
-  footnote: 'Takes about a minute. Keep Ghostex open on your computer.',
 } as const;
 
-/** Choose how to connect (mobile-02-choose.html). */
-export const ConnectChooseCopy = {
-  eyebrow: 'Connect your computer',
-  title: 'How does your phone reach your computer?',
-  lede: 'Both work from anywhere, not just at home. You can add more computers later.',
-  easyConnect: {
-    title: 'Scan a code',
-    tag: 'Recommended',
-    subtitle: 'Uses Easy Connect, built into Ghostex. Nothing to install, nothing to type.',
-    steps: [
-      'On the computer, open the Ghostex menu → Mobile & Remote → Connect',
-      'Point the phone at the code that appears',
-    ],
-    duration: 'About a minute',
-    button: 'Scan code',
-  },
-  tailscale: {
-    title: 'Use Tailscale',
-    subtitle:
-      'If Tailscale is already on this phone and the computer. Scan the Tailscale code from Settings → Remote, then enter your computer password.',
-    typeDetailsLink: 'Or type the details',
-    button: 'Scan code',
+/**
+ * The connect steps, the first screen's and Add a computer's: what to do on each device, in the words the
+ * computer's own menu uses, then one button that opens the scanner.
+ *
+ * CDXC:RemotePairing 2026-11-10 DECISION:
+ * The user picked the suggested first screen of the pairing page (Q2181) with "add 1 more item there please and i
+ * like having icons like in the old one", and the suggested chooser without the demo (Q2182, "remove try a demo
+ * computer from here pls"): three steps with icons (getting Ghostex on the computer is the third, since nothing
+ * else on the screen works without it), Scan the code as the one button, and Paste a code and Use Tailscale as a
+ * sheet behind "Other ways to connect". The demo stays a small link on the first screen only, where App Review
+ * finds it.
+ */
+export const ConnectStartCopy = {
+  /** The title of the Add a computer screen (the sessions screen's + and its menu). */
+  addTitle: 'Add a computer',
+  steps: [
+    {
+      key: 'install',
+      title: 'Get Ghostex on your computer',
+      lead: 'Free at ',
+      link: 'ghostex.dev',
+      tail: '. Skip this if it is already there.',
+    },
+    {
+      key: 'computer',
+      title: 'On your computer',
+      lead: 'Open the Ghostex menu and click Connect a phone.',
+      link: '',
+      tail: '',
+    },
+    {
+      key: 'phone',
+      title: 'On this phone',
+      lead: 'Scan the code it shows.',
+      link: '',
+      tail: '',
+    },
+  ],
+  installUrl: 'https://ghostex.dev',
+  scanButton: 'Scan the code',
+  otherWays: 'Other ways to connect',
+  otherWaysSheet: {
+    title: 'Other ways to connect',
+    paste: { title: 'Paste a code', detail: "When the camera can't scan it." },
+    tailscale: { title: 'Use Tailscale', detail: "Type the computer's address and password." },
   },
 } as const;
 
@@ -134,12 +133,12 @@ export const ScanCopy = {
         detail: 'The code is only shown while Ghostex is open.',
       },
       {
-        title: 'Click the Ghostex menu at the top of the sidebar → Mobile & Remote',
-        detail: 'Or open Settings → Remote.',
+        title: 'Open the Ghostex menu and click Connect a phone',
+        detail: 'The menu is at the top of the sidebar. On Ghostex 11.2 or earlier, click Mobile & Remote, then Connect.',
       },
       {
-        title: 'Click the QR under Easy Connect',
-        detail: 'Show QR opens the Easy Connect code. It works once, for 5 minutes.',
+        title: 'Scan the code in that window',
+        detail: 'It works once, for 5 minutes. Keep the window open until this phone is in.',
       },
     ],
     notInstalledPrefix: "Ghostex isn't installed on the computer yet? ",
