@@ -1222,9 +1222,11 @@ export default function SessionsScreen({ navigation }: Props) {
       <MenuGlyph size={20} color={sidebarAppearance.foreground} />
     </Pressable>
   );
-  // The rail keeps one entry while the handler reads each render's stores.
+  // The rail keeps one entry while the handler reads each committed render's stores.
   const openNewSessionRef = useRef(openNewSessionSheet);
-  openNewSessionRef.current = openNewSessionSheet;
+  useEffect(() => {
+    openNewSessionRef.current = openNewSessionSheet;
+  });
   // Memoized on the header's inputs, so unrelated list updates do not republish the side bar.
   const railButtons = useMemo<RailButtons>(() => {
     const color = sidebarAppearance.foreground;
