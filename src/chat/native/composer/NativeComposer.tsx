@@ -183,7 +183,7 @@ export function NativeComposer({
   const model = state?.composer ?? null;
   const dispatch = chat.dispatch;
   const [projectChoices, setProjectChoices] = useState<UnifiedProjectChoice[] | null>(null);
-  const moveDraftHere = (repoKey: string, machineId: string, toProjectId: string): void => {
+  const moveDraftHere = (machineId: string, toProjectId: string): void => {
     const from = chat.machine;
     const agentId = document?.sessionAgentId ?? null;
     if (from === null || agentId === null) return;
@@ -196,7 +196,6 @@ export function NativeComposer({
       fromSessionId: sessionId,
       agentId,
       text: draftAt.current.text,
-      repoKey,
       to,
       toProjectId,
     }).catch((error: unknown) => {
@@ -726,7 +725,7 @@ export function NativeComposer({
               );
               if (ownProject && machineIndex === choice.selected) return;
               const picked = choice.machines[machineIndex];
-              if (picked !== undefined && picked.connected) moveDraftHere(choice.repoKey, picked.machineId, picked.projectId);
+              if (picked !== undefined && picked.connected) moveDraftHere(picked.machineId, picked.projectId);
             }}
           />
           <MachinePickerSheet
@@ -737,7 +736,7 @@ export function NativeComposer({
             onPick={(picked) => {
               const choice = machineChoice;
               setMachineChoice(null);
-              if (choice !== null) moveDraftHere(choice.repoKey, picked.machineId, picked.projectId);
+              if (choice !== null) moveDraftHere(picked.machineId, picked.projectId);
             }}
           />
           {document?.worktreeTray ? (
