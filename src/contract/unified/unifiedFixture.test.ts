@@ -151,7 +151,11 @@ describe('the Unified list matches the desktop builder', () => {
           query: fixtureCase.filter?.query ?? '',
         },
         fixtureCase.nowMs,
-        { unfolded: fixtureCase.folds?.unfolded ?? [], olderShown: fixtureCase.folds?.olderShown ?? [] },
+        {
+          unfolded: fixtureCase.folds?.unfolded ?? [],
+          olderShown: fixtureCase.folds?.olderShown ?? [],
+          reveal: fixtureCase.folds?.reveal,
+        },
       );
       const order: string[] = fixtureCase.order ?? [];
       assert.deepEqual(

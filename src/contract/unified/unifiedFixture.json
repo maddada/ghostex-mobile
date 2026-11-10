@@ -6907,6 +6907,324 @@
             "containsActive": false,
             "folded": [],
             "key": "local|p|lead",
+            "listed": 4,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 4,
+            "unfolded": true
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [
+              "question"
+            ],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 1,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|lead",
+              "local|orphan",
+              "local|mine",
+              "studio|elsewhere"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|lead": [
+            "local|sub-lead@1",
+            "studio|away@1",
+            "local|worker@1",
+            "local|old@1"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            },
+            {
+              "detail": null,
+              "key": "studio",
+              "label": "Studio"
+            }
+          ],
+          "repos": [
+            {
+              "detail": "Local, Studio",
+              "key": "dir:p",
+              "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|lead": {
+            "cameBackMs": 9700000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": "Working"
+          },
+          "local|mine": {
+            "cameBackMs": 3000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|orphan": {
+            "cameBackMs": 4000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "studio|elsewhere": {
+            "cameBackMs": 2000,
+            "machineLabel": "Studio",
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 4,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {},
+      "folds": {
+        "reveal": "old",
+        "unfolded": [
+          "local|p|lead"
+        ]
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
+            },
+            {
+              "activity": "working",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
+              "createdMs": 10,
+              "projectId": "p",
+              "sessionId": "worker",
+              "title": "worker",
+              "workingStartedMs": 9600000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9500000,
+              "projectId": "p",
+              "sessionId": "sub-lead"
+            },
+            {
+              "activity": "attention",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
+              "createdMs": 10,
+              "lastInteractionMs": 9700000,
+              "projectId": "p",
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "closed",
+              "createdMs": 10,
+              "lastInteractionMs": 4000,
+              "projectId": "p",
+              "sessionId": "orphan"
+            },
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "lastInteractionMs": 3000,
+              "projectId": "p",
+              "sessionId": "mine"
+            }
+          ]
+        },
+        {
+          "label": "Studio",
+          "machine": "studio",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
+            }
+          ],
+          "serverId": "S2",
+          "sessions": [
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 2000,
+              "projectId": "p",
+              "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
+            }
+          ]
+        }
+      ],
+      "name": "a revealed older thread is listed with its coordinators unfolded, its siblings' older threads stay tucked",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|lead",
+          "local|orphan",
+          "local|mine",
+          "studio|elsewhere"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              },
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|lead",
             "listed": 3,
             "older": 1,
             "olderRow": true,
@@ -7447,6 +7765,381 @@
         }
       ],
       "name": "a search for a thread keeps its coordinator's card and shows the way to it while folded",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|api-lead"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|api-lead": {
+            "badgeCount": 2,
+            "badgeTone": "idle",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|api-lead",
+            "listed": 2,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 2,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|api-lead"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|api-lead": [
+            "local|api-tests@1"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            }
+          ],
+          "repos": [
+            {
+              "detail": null,
+              "key": "dir:p",
+              "label": "p"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|api-lead": {
+            "cameBackMs": 9000000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 1,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {
+        "query": "api"
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "api-lead",
+              "title": "API coordinator"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "api-lead",
+              "createdMs": 10,
+              "lastInteractionMs": 9100000,
+              "projectId": "p",
+              "sessionId": "api-tests",
+              "title": "API tests"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "api-lead",
+              "createdMs": 10,
+              "lastInteractionMs": 9200000,
+              "projectId": "p",
+              "sessionId": "docs",
+              "title": "Docs"
+            }
+          ]
+        }
+      ],
+      "name": "a search matching a folded coordinator and one of its threads opens it to that thread",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|c1"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|c1": {
+            "badgeCount": 1,
+            "badgeTone": "idle",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|c1",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": true
+          },
+          "local|c2": {
+            "badgeCount": 1,
+            "badgeTone": "idle",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|c2",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": true
+          },
+          "local|c3": {
+            "badgeCount": 1,
+            "badgeTone": "idle",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|c3",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": true
+          },
+          "local|c4": {
+            "badgeCount": 1,
+            "badgeTone": "idle",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|c4",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": true
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|c1"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|c1": [
+            "local|c2@1",
+            "local|c3@2",
+            "local|c4@3",
+            "local|leaf@3"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            }
+          ],
+          "repos": [
+            {
+              "detail": null,
+              "key": "dir:p",
+              "label": "p"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|c1": {
+            "cameBackMs": 9000000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 1,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {},
+      "folds": {
+        "unfolded": [
+          "local|p|c1",
+          "local|p|c2",
+          "local|p|c3",
+          "local|p|c4"
+        ]
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "c1"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "c1",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "c2"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "c2",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "c3"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "c3",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "c4"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "c4",
+              "createdMs": 10,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "leaf"
+            }
+          ]
+        }
+      ],
+      "name": "a chain of unfolded coordinators is drawn no deeper than the Project sidebar's tree",
       "nowMs": 10000000,
       "settings": {
         "parking": true,

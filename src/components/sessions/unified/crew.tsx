@@ -11,12 +11,20 @@ import type { UnifiedRow } from '../../../contract/unified/build';
 import { CoordinatorBadgeView, FoldedStatusIndicator } from '../CoordinatorBadgeView';
 import { ds, useSidebarInk } from '../rows';
 
-/** "Show 3 threads" / "Hide threads": what the crew count does. */
+/**
+ * What a tap on the crew count does (the desktop's unified/threads.rs `crew_label`): "Hide threads" once unfolded;
+ * "Keep threads open" while a search holds it open; otherwise what the unfold shows: "Show 3 threads",
+ * "Show 2 threads (5 older)", or "Show threads (20 older)" when every thread waits behind the older-threads row.
+ */
 export function crewLabel(row: UnifiedRow<GhostexSession>): string {
   const crew = row.crew;
   if (crew === null) return '';
-  if (crew.open) return 'Hide threads';
-  return crew.total === 1 ? 'Show 1 thread' : `Show ${crew.total} threads`;
+  const plural = (count: number) => (count === 1 ? 'thread' : 'threads');
+  if (crew.unfolded) return 'Hide threads';
+  if (crew.open) return 'Keep threads open';
+  if (crew.listed === 0) return `Show threads (${crew.older} older)`;
+  if (crew.older > 0 && !crew.olderShown) return `Show ${crew.listed} ${plural(crew.listed)} (${crew.older} older)`;
+  return `Show ${crew.total} ${plural(crew.total)}`;
 }
 
 /**
@@ -34,7 +42,7 @@ export function UnifiedCrewToggle({ row, onToggle }: { row: UnifiedRow<GhostexSe
         badge={badge}
         onPress={() => onToggle(crew.key)}
         accessibilityLabel={crewLabel(row)}
-        expanded={crew.open}
+        expanded={crew.unfolded}
       />
       {/* A folded card stands in for the open thread it hides: the hollow ring (gx-core `contains_active`). */}
       {crew.containsActive ? (

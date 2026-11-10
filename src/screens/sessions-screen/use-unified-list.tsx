@@ -28,6 +28,7 @@ import {
   type GhostexSession,
 } from '../../contract/mobileSummary';
 import {
+  admittingFilter,
   EMPTY_UNIFIED_FILTER,
   isUnifiedFilterEmpty,
   type UnifiedFilter,
@@ -58,6 +59,7 @@ import { EditGlyph, FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../compo
 import { PlusGlyph } from '../../components/sessions/icons';
 import { StatusSlot, statusLook, UnifiedCard, UnifiedGroupHeader, UnifiedShelfHeader, UnifiedSlimRow } from '../../components/sessions/unified/UnifiedCard';
 import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/unified/UnifiedThreadRow';
+import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
 import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
 import { useSettingsStore } from '../../settings/store';
@@ -286,23 +288,58 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       drawnLines(row).some((line) => line.kind === 'thread' && line.row.status === 'Working'),
     );
   /**
-   * Opening a thread unfolds the coordinators above it, from the list, a coordinator's Workers sheet, a notification
-   * or a link, as the desktop's reveal does (gx-core unified_sidebar/reveal.rs): the open session is watched rather
-   * than each way in, so a session opened before its computer's list arrived is unfolded once it does. Each open
-   * session is revealed once, so folding its coordinator again afterwards sticks.
+   * Opening a session brings it on screen, from the list, a coordinator's Workers sheet, a notification or a link, as
+   * the desktop's reveal does (gx-core unified_sidebar/reveal.rs): the coordinators above it unfold, the shelf and
+   * project group holding its card open, and a filter or search that leaves it out gives way. The open session is
+   * watched rather than each way in, and a reveal completes only once the saved folds are read and every computer's
+   * list has answered, so a thread whose coordinator's computer answers later still nests and unfolds. Each open
+   * session is revealed once, so folding its coordinator again afterwards sticks. The open session is listed rather
+   * than its coordinator's older threads (`focusedSession`).
    */
   const revealedSession = useRef<string | null>(null);
+  const storeReady = useUnifiedListStore((state) => state.ready);
+  const inventoriesReady = useMemo(
+    () =>
+      machines
+        .filter((machine) => machine.disabled !== true)
+        .every((machine) => inventoriesByMachineId[machine.id]?.hasLoaded === true),
+    [machines, inventoriesByMachineId],
+  );
   useEffect(() => {
     if (!on || selectedSessionKey === null || revealedSession.current === selectedSessionKey) return;
-    for (const card of [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked]) {
-      const found = rowsInTree(card).find((row) => attachSessionKey(row.machine, row.session.sessionId) === selectedSessionKey);
-      if (found === undefined) continue;
-      revealedSession.current = selectedSessionKey;
-      const ancestors = ancestorsOf(card, found.id) ?? [];
-      useUnifiedListStore.getState().revealThread(ancestors, found.shown ? null : (ancestors[ancestors.length - 1] ?? null));
-      return;
+    if (!storeReady || !inventoriesReady) return;
+    revealedSession.current = selectedSessionKey;
+    const isOpen = (row: UnifiedRow<GhostexSession>) =>
+      attachSessionKey(row.machine, row.session.sessionId) === selectedSessionKey;
+    const findIn = (list: typeof view) => {
+      for (const card of [...list.drafts, ...list.pinned, ...list.active, ...list.working, ...list.snoozed, ...list.parked]) {
+        const row = rowsInTree(card).find(isOpen);
+        if (row !== undefined) return { card, row };
+      }
+      return null;
+    };
+    let admitted = null;
+    let found = findIn(view);
+    if (found === null) {
+      // Left out by the filter or the search: found in the list with nothing filtering, and let through.
+      found = findIn(unifiedListOf(computers, unifiedSettings, EMPTY_UNIFIED_FILTER, nowMs, folds, focusedSession));
+      if (found === null) return;
+      admitted = admittingFilter(view.filter, found.row);
     }
-  }, [on, selectedSessionKey, view]);
+    const { card, row } = found;
+    const shelf = card.shelf;
+    const inGroup = layout.groupByProject && shelf !== 'drafts';
+    const repoKey = inGroup ? card.repo.key : null;
+    const foldsShelf = shelf === 'working' || shelf === 'snoozed' || shelf === 'parked' || shelf === 'drafts';
+    useUnifiedListStore.getState().revealThread({
+      ancestors: ancestorsOf(card, row.id) ?? [],
+      shelfKey:
+        foldsShelf && !shelfOpen(shelf, toggledShelves, repoKey) ? (repoKey === null ? shelf : `${repoKey}|${shelf}`) : null,
+      groupKey: inGroup ? card.repo.key : null,
+      filter: admitted,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, selectedSessionKey, view, storeReady, inventoriesReady]);
   useOpenUnifiedDraftsOnArrival(view.drafts, on);
   const computerLayout = unifiedLayoutOf(selectedSummary);
   const layout = seeded ? { ...computerLayout, groupByProject: phoneGroupByProject } : computerLayout;
@@ -512,16 +549,29 @@ export function useUnifiedList(deps: UnifiedListDeps) {
           {item.rows.map((row) => {
             const tileTarget = machineById(row.machine);
             const tileSession = row.session.source!;
+            // A folded coordinator's tile carries what its fold hides, as its card does: the crew count that unfolds
+            // it and the dots of its threads, and its word and ring follow the most urgent of them.
+            const folded = showsFoldedStatus(row);
+            const tileStatus = folded ? mostUrgent([row]) : row.status;
             return (
               <UnifiedSessionTile
                 key={row.id}
                 session={tileSession}
                 sessionKey={attachSessionKey(row.machine, tileSession.sessionId)}
                 appearance={wall.appearance}
-                slot={<StatusSlot row={row} nowMs={nowMs} />}
-                statusWord={row.status ?? lastInteractionLabel(tileSession, nowMs)}
-                status={row.status}
-                statusColor={row.status === null ? null : statusLook(row.status, ink).color}
+                slot={
+                  <View style={styles.tileSlot}>
+                    <UnifiedCrewToggle row={row} onToggle={toggleCoordinator} />
+                    {folded ? (
+                      <UnifiedFoldedStatus row={row} ringColor={wall.appearance.card} />
+                    ) : (
+                      <StatusSlot row={row} nowMs={nowMs} />
+                    )}
+                  </View>
+                }
+                statusWord={tileStatus ?? lastInteractionLabel(tileSession, nowMs)}
+                status={tileStatus}
+                statusColor={tileStatus === null ? null : statusLook(tileStatus, ink).color}
                 onPress={() => tileTarget !== null && void attach(tileTarget, tileSession)}
                 onMenu={() => openMenu(row)}
               />
@@ -782,6 +832,7 @@ const unifiedListStyles = inkStyleSheets((ink) =>
       divider: { height: StyleSheet.hairlineWidth, marginVertical: ds(6), marginHorizontal: ds(9), backgroundColor: inkWash(ink, 0.12) },
     /* A row of tiles keeps the cards' side inset. */
     tiles: { paddingHorizontal: ds(3) },
+    tileSlot: { flexDirection: 'row', alignItems: 'center', gap: ds(4) },
     empty: {
       paddingVertical: ds(26),
       textAlign: 'center',

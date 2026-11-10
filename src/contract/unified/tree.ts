@@ -16,10 +16,15 @@ import type { UnifiedFilter, UnifiedRow, UnifiedSessionInput, UnifiedSettings } 
 /** How long after its last activity a thread that neither works nor waits is still listed. */
 const RECENT_THREAD_MS = 2 * 60 * 60 * 1000;
 
+/** Threads are drawn no deeper than the Project sidebar's tree (gx-core `MAX_DEPTH`, coordinatorTree.ts). */
+const MAX_DRAWN_DEPTH = 3;
+
 /** What the user unfolded and listed, by `unifiedCoordinatorKey`. */
 export type UnifiedFolds = {
   unfolded: readonly string[];
   olderShown: readonly string[];
+  /** The row a reveal is bringing on screen (its `sidebarSessionId`): listed like a busy thread, never saved. */
+  reveal?: string;
 };
 
 export const NO_UNIFIED_FOLDS: UnifiedFolds = { unfolded: [], olderShown: [] };
@@ -182,7 +187,12 @@ export function nestUnifiedRows<S>(
     const session = row.session;
     const facts: Subtree = {
       matched: row.matched,
-      listed: isRecent(session, nowMs) || needsYou(session) || session.isFocused === true || session.isVisible === true,
+      listed:
+        isRecent(session, nowMs) ||
+        needsYou(session) ||
+        session.isFocused === true ||
+        session.isVisible === true ||
+        folds.reveal === row.sidebarSessionId,
       rank: busyRank(session),
     };
     const ranked = row.threads.map((child) => ({ facts: gather(child), child }));
@@ -207,6 +217,7 @@ export function nestUnifiedRows<S>(
   const approvalsBelow = (row: UnifiedRow<S>): number =>
     row.threads.reduce((sum, child) => sum + (child.session.awaitingApproval ? 1 : 0) + approvalsBelow(child), 0);
   const layOut = (row: UnifiedRow<S>, narrowingHere: boolean, subtreeMatched: boolean): void => {
+    const query = narrowing;
     row.subtreeMatched = subtreeMatched;
     if (row.threads.length === 0) {
       row.crew = null;
@@ -218,14 +229,18 @@ export function nestUnifiedRows<S>(
     const narrowed = narrowingHere && !row.matched;
     const listed = row.threads.filter((child) => child.shown).length;
     const total = row.threads.length;
-    const open = narrowed ? row.threads.some((child) => child.subtreeMatched) : unfolded;
+    const matchBelow = row.threads.some((child) => child.subtreeMatched);
+    // A text search opens a folded row whose threads match, even one it matched itself; a filter pick that keeps
+    // the row itself leaves its fold alone (gx-core tree.rs `lay_out`).
+    const forced = !narrowed && query && !unfolded && matchBelow;
+    const open = narrowed ? matchBelow : unfolded || forced;
     const tally = { total: 0, waiting: 0, working: 0, approval: 0 };
     for (const child of row.threads) {
       tally.total += 1;
       if (child.session.threadState === 'waiting') tally.waiting += 1;
       if (child.session.threadState === 'working') tally.working += 1;
       const listedChild = child.shown;
-      child.shown = narrowed
+      child.shown = narrowed || forced
         ? child.subtreeMatched
         : listedChild || olderShown || (narrowingHere && child.subtreeMatched);
     }
@@ -252,7 +267,7 @@ export function nestUnifiedRows<S>(
       listed,
       older: total - listed,
       olderShown,
-      olderRow: open && !narrowed && total > listed,
+      olderRow: open && !narrowed && !forced && total > listed,
       badge: badgeOf(tally),
       foldedStatus,
       containsActive: false,
@@ -302,10 +317,10 @@ export function drawnLines<S>(card: UnifiedRow<S>): UnifiedTreeLine<S>[] {
     if (row.crew === null || !row.crew.open) return;
     for (const child of row.threads) {
       if (!child.shown) continue;
-      lines.push({ kind: 'thread', row: child, depth });
+      lines.push({ kind: 'thread', row: child, depth: Math.min(depth, MAX_DRAWN_DEPTH) });
       into(child, depth + 1);
     }
-    if (row.crew.olderRow) lines.push({ kind: 'older', coordinator: row, depth });
+    if (row.crew.olderRow) lines.push({ kind: 'older', coordinator: row, depth: Math.min(depth, MAX_DRAWN_DEPTH) });
   };
   into(card, 1);
   return lines;

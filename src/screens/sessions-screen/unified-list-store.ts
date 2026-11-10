@@ -31,6 +31,8 @@ type UnifiedListState = {
   unfoldedCoordinators: string[];
   olderShownCoordinators: string[];
   hydrated: boolean;
+  /** The saved state has been read (`hydrated` only says the read started). */
+  ready: boolean;
   hydrate: () => void;
   setFilter: (filter: UnifiedFilter) => void;
   setQuery: (query: string) => void;
@@ -42,8 +44,17 @@ type UnifiedListState = {
   toggleCoordinator: (key: string) => void;
   /** The "N older threads" row's tap. */
   toggleOlderThreads: (key: string) => void;
-  /** Opening a thread unfolds the coordinators above it, and lists the older threads it waits behind. */
-  revealThread: (ancestors: readonly string[], listOlderOf: string | null) => void;
+  /**
+   * Opening a session brings it on screen (gx-core unified_sidebar/reveal.rs): the coordinators above it unfold, the
+   * shelf (`shelfKey`, only when it is folded) and project group (`groupKey`) holding its card open, and a filter
+   * that leaves it out gives way to `filter`.
+   */
+  revealThread: (reveal: {
+    ancestors: readonly string[];
+    shelfKey: string | null;
+    groupKey: string | null;
+    filter: UnifiedFilter | null;
+  }) => void;
   noteLastMachine: (repoKey: string, machineId: string) => void;
   /**
    * A session started in `repoKey` on `machineId` (gx-core `remember_new_session` and
@@ -81,6 +92,7 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
     unfoldedCoordinators: [],
     olderShownCoordinators: [],
     hydrated: false,
+    ready: false,
     hydrate: () => {
       if (get().hydrated) return;
       set({ hydrated: true });
@@ -94,6 +106,7 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
           recentRepos: saved.recentRepos,
           unfoldedCoordinators: saved.unfoldedCoordinators,
           olderShownCoordinators: saved.olderShownCoordinators,
+          ready: true,
         }));
       });
     },
@@ -123,14 +136,16 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
       set((state) => ({ olderShownCoordinators: flip(state.olderShownCoordinators, key) }));
       save();
     },
-    revealThread: (ancestors, listOlderOf) => {
+    revealThread: ({ ancestors, shelfKey, groupKey, filter }) => {
       const state = get();
       const unfold = ancestors.filter((key) => !state.unfoldedCoordinators.includes(key));
-      const listOlder = listOlderOf !== null && !state.olderShownCoordinators.includes(listOlderOf);
-      if (unfold.length === 0 && !listOlder) return;
+      const openGroup = groupKey !== null && state.foldedGroups.includes(groupKey);
+      if (unfold.length === 0 && shelfKey === null && !openGroup && filter === null) return;
       set({
         unfoldedCoordinators: [...state.unfoldedCoordinators, ...unfold],
-        olderShownCoordinators: listOlder ? [...state.olderShownCoordinators, listOlderOf] : state.olderShownCoordinators,
+        toggledShelves: shelfKey === null ? state.toggledShelves : flip(state.toggledShelves, shelfKey),
+        foldedGroups: openGroup ? state.foldedGroups.filter((key) => key !== groupKey) : state.foldedGroups,
+        filter: filter ?? state.filter,
       });
       save();
     },

@@ -4,9 +4,9 @@
  * request, its own crew count, then its status) and each coordinator's "N older threads" row.
  * The desktop draws the same in apps/desktop/src/app/native_sidebar/unified/threads.rs.
  *
- * CDXC:Sidebar 2026-11-09 SEE-ALSO: the maintainer's decision in packages/gx-core/src/unified_sidebar/tree.rs. On the
- * phone a thread row opens on a tap and shows its actions on a long press only (user decision 2026-10-12: no
- * always-visible buttons on the phone's rows).
+ * CDXC:Sidebar 2026-11-09 SEE-ALSO: the maintainer's decision in packages/gx-core/src/unified_sidebar/tree.rs. A thread
+ * row is the compact one-line row of the agreed thread-row plan: a tap opens it and a long press opens its menu, with no
+ * swipe actions of its own; its crew count is its only control.
  */
 
 import { useRef } from 'react';

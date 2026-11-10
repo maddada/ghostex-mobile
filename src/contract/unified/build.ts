@@ -297,6 +297,22 @@ function queryMatches(query: string, row: UnifiedRow<unknown>): boolean {
 }
 
 /**
+ * The filter with every pick that leaves `row` out lifted and the others kept (gx-core `UnifiedFilter::admitting`):
+ * a repository, computer or Space pick the row does not match is cleared, and so is a search it does not match.
+ * `null` when the filter already keeps the row. A row's computer key is `local` when its card names no computer.
+ */
+export function admittingFilter(filter: UnifiedFilter, row: UnifiedRow<unknown>): UnifiedFilter | null {
+  const machineKey = row.machineLabel === null ? LOCAL_MACHINE_KEY : row.machine;
+  if (keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row)) return null;
+  const lifted: UnifiedFilter = { ...filter };
+  if (filter.repos.length > 0 && !filter.repos.includes(row.repo.key)) lifted.repos = [];
+  if (filter.machines.length > 0 && !filter.machines.includes(machineKey)) lifted.machines = [];
+  if (filter.spaces.length > 0 && (row.spaceKey === null || !filter.spaces.includes(row.spaceKey))) lifted.spaces = [];
+  if (!queryMatches(lifted.query ?? '', row)) lifted.query = '';
+  return lifted;
+}
+
+/**
  * Whether a card says its session works outside git: it has no branch and its project's folder is
  * in no git work tree (gx-core unified_sidebar/build.rs `no_source_control`, CDXC:Sidebar
  * 2026-11-04: "it shouldn't do this, should say something that indicates that it's without source
@@ -406,16 +422,18 @@ export function buildUnifiedList<S>(
   }
   // Each worker under its coordinator (tree.ts, CDXC:Sidebar 2026-11-09 in gx-core unified_sidebar/tree.rs): by its
   // link on its own computer, or by the coordinator's `coordinatorRemoteThreads` for a thread on another computer.
+  // Keyed by the computer's own id, never the `local` the cards use for a phone holding one computer, so a saved
+  // fold survives a second computer connecting.
   const nest: NestInput<S>[] = rows.map(({ row, machineKey }) => {
     const session = row.session;
     const coordinatorSessionId = session.coordinatorSessionId ?? '';
     return {
       row,
-      key: unifiedCoordinatorKey(machineKey, session.projectId, session.sessionId),
+      key: unifiedCoordinatorKey(row.machine, session.projectId, session.sessionId),
       parent:
         coordinatorSessionId === ''
           ? null
-          : unifiedCoordinatorKey(machineKey, session.coordinatorProjectId ?? '', coordinatorSessionId),
+          : unifiedCoordinatorKey(row.machine, session.coordinatorProjectId ?? '', coordinatorSessionId),
       matched: keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row),
     };
   });
