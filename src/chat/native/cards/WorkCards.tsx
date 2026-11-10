@@ -243,45 +243,80 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
         style={styles.movingHead}
       >
         <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
-        <StatusMarker status="moving" size={11} />
+        {/* The same 14 px as the list's who-has-it marks under it. */}
+        <StatusMarker status="moving" size={14} />
         <Text style={[styles.movingTitle, { color: body }]}>{str(card, 'title')}</Text>
+        {/* Closed, it says who has what ("1 with you · 1 on GitHub · 5 threads"), what is with the
+            user in the question colour (gx-chat-core `who_has`, Q2207 B). */}
         <Text numberOfLines={1} style={styles.movingSummary}>
-          {open ? '' : str(card, 'summary')}
+          {open
+            ? ''
+            : arr(card.summaryParts)
+                .map(obj)
+                .filter((part): part is JsonRecord => part !== null)
+                .map((part, index) => (
+                  <Text key={`part:${index}`}>
+                    {index > 0 ? ' · ' : ''}
+                    <Text style={{ color: toneColor(str(part, 'tone')) ?? P.cardMuted }}>{str(part, 'text')}</Text>
+                  </Text>
+                ))}
         </Text>
       </Pressable>
-      {open
-        ? rows.map((row, index) => {
+      {open ? (
+        // Grouped by who has it under quiet labels, the full text wrapping, no hairlines (Q2207 B;
+        // the phone always takes the rows, never the desktop's table).
+        <View style={styles.movingList}>
+          {rows.map((row, index) => {
             const command = obj(row.command);
             const line = str(row, 'line');
+            const who = obj(row.who);
+            const group = str(row, 'group');
+            const first = index === 0 || str(rows[index - 1], 'group') !== group;
+            const count = arr(card.groups)
+              .map(obj)
+              .find((entry) => entry !== null && str(entry, 'key') === group);
             return (
-              <Pressable
-                key={`row:${index}`}
-                accessibilityRole="button"
-                accessibilityLabel={str(row, 'title')}
-                disabled={command === null}
-                onPress={() => (command !== null ? dispatch(command as never) : undefined)}
-                style={styles.movingRow}
-              >
-                <View style={styles.movingMarker}>
-                  <StatusMarker status={str(row, 'status')} size={10} />
-                </View>
-                <View style={styles.movingText}>
-                  <Text numberOfLines={1} style={[styles.movingRowTitle, { color: body }]}>
-                    {str(row, 'title')}
+              <View key={`row:${index}`}>
+                {first ? (
+                  <Text style={styles.movingGroup}>
+                    {str(row, 'groupLabel')} · {count ? String(count.count ?? '') : ''}
                   </Text>
-                  {line.length > 0 ? (
-                    <Text numberOfLines={1} style={styles.movingRowLine}>
-                      {line}
-                    </Text>
-                  ) : null}
-                </View>
-                <Text style={styles.foldTime}>{str(row, 'age')}</Text>
-              </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${str(row, 'title')}, ${who ? str(who, 'label') : ''}`}
+                  disabled={command === null}
+                  onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+                  style={styles.movingRow}
+                >
+                  <View style={styles.movingMarker}>
+                    <WhoMark who={who} />
+                  </View>
+                  <View style={styles.movingText}>
+                    <Text style={[styles.movingRowTitle, { color: body }]}>{str(row, 'title')}</Text>
+                    {line.length > 0 ? <Text style={styles.movingRowLine}>{line}</Text> : null}
+                  </View>
+                  <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+                </Pressable>
+              </View>
             );
-          })
-        : null}
+          })}
+        </View>
+      ) : null}
     </View>
   );
+}
+
+/** Who has a line of work: the thread's agent logo, GitHub's mark, the user, the coordinator's hat. */
+function WhoMark({ who }: { who: JsonRecord | null }) {
+  const P = useTranscriptTheme();
+  const kind = who ? str(who, 'kind') : '';
+  const agent = who ? str(who, 'agentIcon') : '';
+  if (kind === 'thread') return <AgentMark icon={agent || null} size={14} />;
+  if (kind === 'github') return <Glyph name="brand-github" size={14} color={P.muted} />;
+  if (kind === 'you') return <Glyph name="user" size={14} color={SidebarPalette.ROW_QUESTION} />;
+  if (kind === 'coordinator') return <Glyph name="coordinator-captain-hat" size={14} color={P.muted} />;
+  return <Glyph name="clock" size={14} color={P.muted} />;
 }
 
 /** An item's earlier card, or a settled ask: one quiet line, what that turn did, and when. */
@@ -358,16 +393,17 @@ const useStyles = themedStyles((P) => ({
   movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, paddingHorizontal: 12 },
   movingTitle: { fontSize: PROSE_SIZE, fontWeight: '500', color: P.prose },
   movingSummary: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
-  movingRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderTopWidth: 1,
-    borderTopColor: P.inputBorder,
+  movingList: { paddingHorizontal: 12, paddingBottom: 8 },
+  movingGroup: {
+    paddingTop: 8,
+    paddingBottom: 2,
+    fontSize: PROSE_SIZE,
+    lineHeight: PROSE_LINE,
+    fontWeight: '500',
+    color: P.muted,
   },
-  movingMarker: { width: 32, height: PROSE_LINE, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 2 },
+  movingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 4 },
+  movingMarker: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   movingText: { flex: 1, minWidth: 0 },
   movingRowTitle: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.prose },
   movingRowLine: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
