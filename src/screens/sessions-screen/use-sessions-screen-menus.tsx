@@ -190,7 +190,8 @@ export type SessionsScreenMenusDeps = {
     command: string,
     message: string,
     chatLaunch?: { agentId: string; projectId: string; title: string },
-  ) => Promise<void>;
+    options?: { keepOverlay?: boolean },
+  ) => Promise<string | null>;
   runQuickAction: (target: MachineRecord, projectId: string, projectTitle: string, entry: QuickActionEntry) => void;
   runSessionCommand: (
     target: MachineRecord,
@@ -1676,19 +1677,28 @@ export function useSessionsScreenMenus({
     );
   };
 
-  /** The New Coordinator form's Create: the coordinator opens in chat, where its reports read best (as on the desktop). */
-  const createCoordinator = (
+  /**
+   * The New Coordinator form's Create: the coordinator opens in chat, where its reports read best (as on the desktop).
+   * It starts in the folder the form's Folder row picked (a project cloned twice on this computer), else the
+   * project's own. The form stays open until the computer has created it; a refusal comes back to the form.
+   */
+  const createCoordinator = async (
     ctx: ProjectContext,
-    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string },
-  ): void => {
+    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
+  ): Promise<string | null> => {
+    const projectId = input.projectId ?? ctx.header.projectId;
+    if (!(summaryFor(ctx.machine.id)?.projects ?? []).some((project) => project.projectId === projectId)) {
+      return 'That folder is no longer open. Pick another.';
+    }
     const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
     const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
     const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
-    void runCreationFlow(
+    return runCreationFlow(
       ctx.machine,
-      createCoordinatorCommand({ ...input, projectId: ctx.header.projectId }),
+      createCoordinatorCommand({ ...input, projectId }),
       ProgressCopy.startingCoordinator(ctx.header.title),
-      { agentId: iconId, projectId: ctx.header.projectId, title },
+      { agentId: iconId, projectId, title },
+      { keepOverlay: true },
     );
   };
 

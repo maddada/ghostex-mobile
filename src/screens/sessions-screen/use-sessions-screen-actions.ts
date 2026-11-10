@@ -269,17 +269,36 @@ export function useSessionsScreenActions({
   );
 
   /** Chat creation opens from the returned identity; inventory and attachment finish in the background. */
+  /**
+   * Runs a create command and opens what it made. With `keepOverlay` (the New Coordinator form) the
+   * form stays open while the computer answers and closes only once it is created; a refusal is
+   * returned for the form to show instead of the transient status line.
+   */
   const runCreationFlow = useCallback(
     async (
       target: MachineRecord,
       command: string,
       message: string,
       chatLaunch?: { agentId: string; projectId: string; title: string },
-    ): Promise<void> => {
-      setOverlay(NONE);
-      setProgress(message);
+      options?: { keepOverlay?: boolean },
+    ): Promise<string | null> => {
+      const keepOverlay = options?.keepOverlay === true;
+      if (!keepOverlay) {
+        setOverlay(NONE);
+        setProgress(message);
+      }
+      let result: Awaited<ReturnType<typeof runGhostexCli>>;
       try {
-        const result = await runGhostexCli(target, command);
+        result = await runGhostexCli(target, command);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        setProgress(null);
+        if (keepOverlay) return reason;
+        setTransientStatus(reason);
+        return reason;
+      }
+      if (keepOverlay) setOverlay(NONE);
+      try {
         if (!chatLaunch) await refreshMachine(target);
         setProgress(null);
         const sessionId = createdSessionId(result);
@@ -294,6 +313,7 @@ export function useSessionsScreenActions({
         setProgress(null);
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }
+      return null;
     },
     [attachCreated, refreshMachine, setTransientStatus],
   );

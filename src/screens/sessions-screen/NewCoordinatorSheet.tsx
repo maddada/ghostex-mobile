@@ -9,6 +9,10 @@
  * (server/src/ghostex_cli/coordinator/command.rs), and an unnamed orchestrator gets gxserver's
  * placeholder title. Half folded like a laptop the card keeps off the fold (`useFoldCardPlacement`).
  *
+ * CDXC:Coordinators 2026-11-09 DECISION:
+ * User: "Can I choose where the coordinator runs?" and then "Let's just do it". A project cloned twice on this computer (the list merges the copies, contract/grouping.ts) gets a Folder row between Name and Agent, each folder named by the end of its path, starting on the folder with the project's newest session (else the project's own); the form stays open until the coordinator is created and shows a refusal itself. One folder shows no row.
+ * SEE-ALSO: apps/desktop/src/app/window/new_coordinator_computer.rs (the desktop's Computer field, which also offers other computers).
+ *
  * CDXC:Coordinators 2026-10-17 DECISION:
  * User: "let's please allow picking more cli agents here ... we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]", and for the phone: "phone too". No Goal or First request field; the first message is shown locked.
  */
@@ -19,6 +23,7 @@ import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { CreateCoordinatorInput } from '../../commands/ghostexCli';
+import type { ProjectCopy } from '../../contract/grouping';
 import { useFoldCardPlacement } from '../../components/common/foldAvoidance';
 import KeyboardAvoidingContainer from '../../components/common/keyboard/KeyboardAvoidingContainer';
 import { LockGlyph } from '../../components/onboarding/SetupIcons';
@@ -129,13 +134,22 @@ function effortFor(model: CoordinatorModel | undefined, picked: string, fallback
 
 export type NewCoordinatorSheetProps = {
   projectTitle: string;
+  /** The project's folders on this computer when it is cloned twice (the Folder row); absent for one. */
+  copies?: ProjectCopy[];
+  /** The folder the Folder row starts on: one of `copies`. */
+  defaultProjectId?: string;
   loadOptions: () => Promise<CoordinatorOptions>;
-  onCreate: (input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string }) => void;
+  /** Resolves to why it was not created, or null once it is (the form is closed then). */
+  onCreate: (
+    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
+  ) => Promise<string | null>;
   onCancel: () => void;
 };
 
 export default function NewCoordinatorSheet({
   projectTitle,
+  copies,
+  defaultProjectId,
   loadOptions,
   onCreate,
   onCancel,
@@ -149,6 +163,12 @@ export default function NewCoordinatorSheet({
   const [effort, setEffort] = useState('');
   const [name, setName] = useState('');
   const [modelQuery, setModelQuery] = useState('');
+  const folders = copies !== undefined && copies.length > 1 ? copies : null;
+  const [folder, setFolder] = useState(
+    () => folders?.find((copy) => copy.projectId === defaultProjectId)?.projectId ?? folders?.[0]?.projectId ?? '',
+  );
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,17 +200,29 @@ export default function NewCoordinatorSheet({
 
   const agent = options?.agents.find((entry) => entry.agentId === agentId);
   const selectedModel = agent?.models.find((entry) => entry.value === model);
-  const canCreate = agent !== undefined;
+  const canCreate = agent !== undefined && !creating;
 
   const create = (): void => {
-    if (agent === undefined) return;
-    onCreate({
+    if (agent === undefined || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    void onCreate({
       agentId: agent.agentId,
       agentName: agent.name,
       title: name,
       model,
       effort,
-    });
+      ...(folders !== null ? { projectId: folder } : {}),
+    }).then(
+      (refused) => {
+        setCreating(false);
+        setCreateError(refused);
+      },
+      (error: unknown) => {
+        setCreating(false);
+        setCreateError(error instanceof Error ? error.message : String(error));
+      },
+    );
   };
 
   const chipRow = (
@@ -248,6 +280,18 @@ export default function NewCoordinatorSheet({
                   Shown in the sidebar so you can find this coordinator later. It keeps this name.
                 </Text>
               </View>
+              {folders !== null
+                ? chipRow(
+                    'Folder',
+                    folders.map((copy) => ({ value: copy.projectId, label: copy.label })),
+                    folder,
+                    (value) => {
+                      setFolder(value);
+                      setCreateError(null);
+                    },
+                  )
+                : null}
+              {folders !== null ? <Text style={styles.hint}>Where the coordinator runs.</Text> : null}
               {options === null ? (
                 loadError === null ? (
                   <ActivityIndicator style={styles.loading} color={appearance.muted} />
@@ -322,6 +366,7 @@ export default function NewCoordinatorSheet({
                   </Text>
                 </View>
               ) : null}
+              {createError !== null ? <Text style={styles.error}>{createError}</Text> : null}
               <View style={styles.buttonRow}>
                 <Pressable
                   accessibilityRole="button"
@@ -336,7 +381,7 @@ export default function NewCoordinatorSheet({
                   style={[styles.primaryButton, !canCreate ? styles.buttonDisabled : null]}
                   onPress={create}
                 >
-                  <Text style={styles.primaryLabel}>Create</Text>
+                  <Text style={styles.primaryLabel}>{creating ? 'Creating…' : 'Create'}</Text>
                 </Pressable>
               </View>
             </KeyboardAwareScrollView>

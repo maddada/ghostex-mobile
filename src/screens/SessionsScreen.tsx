@@ -1968,6 +1968,8 @@ export default function SessionsScreen({ navigation }: Props) {
       {overlay.kind === 'newCoordinator' ? (
         <NewCoordinatorSheet
           projectTitle={overlay.ctx.header.title}
+          copies={overlay.ctx.header.copies}
+          defaultProjectId={overlay.ctx.header.defaultCopyProjectId}
           loadOptions={() => loadCoordinatorOptions(overlay.ctx)}
           onCreate={(input) => createCoordinator(overlay.ctx, input)}
           onCancel={() => setOverlay(NONE)}
