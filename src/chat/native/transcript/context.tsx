@@ -15,7 +15,7 @@ import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
 import { workCardIndex, type WorkCardIndex } from '../cards/WorkCards';
 import { openChatImageViewer } from '../cards/overlayStore';
-import { DictationTargets } from '../composer/dictationTarget';
+import { dictationInserted, DictationTargets } from '../composer/dictationTarget';
 import { DisclosureStore, RowDetailDemand } from './state';
 import type { TranscriptTheme } from './theme';
 
@@ -129,6 +129,26 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
     [demand, dictationTargets, disclosures, requestImage, renderVisual, renderVisualAsync, openPicture, toolAppLogo],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
+}
+
+/**
+ * Shows the chat's question form boxes what the core says their drafts hold after a dictation
+ * (`dictationInserted`), whether or not the chat box, whose microphone asked, is on screen. Drawn
+ * once by `NativeChatScreen`, inside its `NativeChatUiProvider`.
+ */
+export function DictatedFormBoxes({ chat }: { chat: RustChat }): null {
+  const { dictationTargets } = useNativeChatUi();
+  const { onViewRequest } = chat;
+  useEffect(
+    () =>
+      onViewRequest((request) => {
+        if (request.kind !== 'hostAction' || request.action !== 'dictationInserted') return;
+        const result = dictationInserted(request.params);
+        if (result !== null) dictationTargets.inserted(result);
+      }),
+    [onViewRequest, dictationTargets],
+  );
+  return null;
 }
 
 /** The chat screen's shared drawing state, or null outside `NativeChatScreen` (Markdown in a card). */

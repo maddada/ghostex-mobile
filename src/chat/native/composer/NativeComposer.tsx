@@ -238,20 +238,17 @@ export function NativeComposer({
   const [menu, setMenu] = useState<OpenMenu>(null);
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
-  // Dictated text goes into the draft at the caret it started from, a space apart from the text around it.
+  // The draft as it is drawn now, for a press that acts on it later (moving it to another project).
   const draftAt = useRef({ text, caret });
   draftAt.current = { text, caret };
-  const fieldFocused = useRef(false);
-  fieldFocused.current = focused;
-  // A recording started from one of the chat's question form boxes types there (`dictationTarget.ts`).
+  // A dictation is typed into the question form box its recording started from
+  // (`dictationTarget.ts`), else into this field as the chat's host holds it (`dictate` in host.ts).
   const dictationTargets = useOptionalNativeChatUi()?.dictationTargets ?? null;
+  const dictationChat = useMemo(() => ({ dispatch, targets: dictationTargets }), [dispatch, dictationTargets]);
   const dictation = useDictation(
     chat.machine,
-    // An unfocused field has no caret the reader chose: dictation goes after the draft.
-    () => (fieldFocused.current ? draftAt.current : { text: draftAt.current.text, caret: draftAt.current.text.length }),
-    (draft) => input?.replace(draft),
     (message) => onHostAction?.('toast', { message, level: 'error' }),
-    dictationTargets,
+    dictationChat,
   );
 
   useEffect(

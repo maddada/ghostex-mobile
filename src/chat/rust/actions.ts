@@ -208,11 +208,39 @@ export type ActionFields = {
   questionNext: {};
   questionCancel: {};
   formChoice: { form: string; question: number; choice: number };
-  formText: { form: string; question: number; text: string };
-  formNotes: { form: string; text: string };
+  /**
+   * A box's whole text after an edit. `rev` is how many dictations the copy that sends it shows
+   * (the form's `dictated` in the document, or a `dictationInserted` answer's `rev`) and `caret`
+   * its caret after the edit: the core puts a dictation the copy had not shown yet back into the
+   * text there (`keep` in `questions/dictation.rs`). Without `rev` the text is taken as it is.
+   */
+  formText: { form: string; question: number; text: string; rev?: number; caret?: number };
+  formNotes: { form: string; text: string; rev?: number; caret?: number };
   formSend: { form: string };
   formSkipAll: { form: string };
   formToggle: { form: string };
+  /**
+   * Dictate's words, for the core to type into a draft (`questions/dictation.rs`): the question
+   * form box the recording started in (`form`, `slot`) while it still takes text, else the chat
+   * box (`draft`, `start`, `end`). `shown*` is that form box as this screen draws it now, left out
+   * when it is not drawn. `spacing` is on when absent. The chat box's text is the host's: the
+   * screen leaves `draft`, `start` and `end` out and the host puts them in (`dictate` in host.ts).
+   * Answered by the `dictationInserted` host action with the same `id`, which the host takes too:
+   * a chat box that changed meanwhile sends the action again, as it is then and with no `form`.
+   */
+  insertDictation: {
+    text: string;
+    spacing?: boolean;
+    id?: string;
+    draft?: string;
+    start?: number;
+    end?: number;
+    form?: string;
+    slot?: number | 'notes';
+    shown?: string;
+    shownStart?: number;
+    shownEnd?: number;
+  };
   inlineAnswer: { form: string; choice: number };
   inlineAnswerChange: { form: string };
   /** The reader's own words as a one-click question's answer: by its form, or its tag alone. */

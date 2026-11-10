@@ -15,22 +15,31 @@ export function useEchoedText(
   identity: string,
   serverValue: string,
   report: (text: string) => void,
-): [string, (text: string) => void] {
+): [string, (text: string) => void, (value: string) => void, (value: string) => void] {
   const [text, setText] = useState(serverValue);
   const sent = useRef<string[]>([]);
   const seen = useRef(serverValue);
+  /** Values the core wrote itself that the field already holds in what it reports next (`expect`). */
+  const expected = useRef<string[]>([]);
   const currentIdentity = useRef(identity);
 
   useEffect(() => {
     if (currentIdentity.current !== identity) {
       currentIdentity.current = identity;
       sent.current = [];
+      expected.current = [];
       seen.current = serverValue;
       setText(serverValue);
       return;
     }
     if (seen.current === serverValue) return;
     seen.current = serverValue;
+    const passing = expected.current.indexOf(serverValue);
+    if (passing >= 0) {
+      expected.current.splice(passing, 1);
+      return;
+    }
+    expected.current = [];
     const settled = sent.current.indexOf(serverValue);
     if (settled >= 0) {
       // The core caught up with an edit this field made; anything typed since is still on its way.
@@ -41,6 +50,24 @@ export function useEchoedText(
     setText(serverValue);
   }, [identity, serverValue]);
 
+  /**
+   * The core wrote `value` itself (a dictation typed into this field's draft) while the field holds
+   * an edit the core has not answered yet: the document showing `value` on its way must not replace
+   * the text.
+   */
+  const expect = useCallback((value: string) => {
+    expected.current.push(value);
+  }, []);
+
+  /**
+   * The core wrote `value` itself and the field takes it: shown, and not reported back as an edit
+   * (the core already has it; a report would be a whole-text write over whatever came after).
+   */
+  const adopt = useCallback((value: string) => {
+    sent.current.push(value);
+    setText(value);
+  }, []);
+
   const change = useCallback(
     (next: string) => {
       setText(next);
@@ -50,5 +77,5 @@ export function useEchoedText(
     },
     [report],
   );
-  return [text, change];
+  return [text, change, expect, adopt];
 }

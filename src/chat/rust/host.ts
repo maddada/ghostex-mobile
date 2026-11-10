@@ -60,7 +60,9 @@ import { checkComputer, HELD_SEND_METHODS, heldSendRpc, sessionComputer, subscri
 import { coreUnavailableMessage } from './wasm-core/pageLoad';
 import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
 import { markSessionOpen } from '../../terminal/openTiming';
+import { dictationInserted } from '../native/composer/dictationTarget';
 import { receivePageThumbnail } from '../native/transcript/pageThumbnails';
+import { recordingPlaced, wordsAsked, wordsAwaited, wordsPlaced } from '../../voice/dictation';
 import { readAloudSetAuto, readAloudSpeak, readAloudStopSpeaking, registerReadAloudChat } from '../../voice/readAloud';
 
 /** Which chat a host serves. */
@@ -405,7 +407,8 @@ export class RustChatHost {
 
   /** One user gesture, as desktop's view sends it. */
   dispatch(action: UserAction): void {
-    this.enqueue({ type: 'action', action });
+    if (action.type === 'insertDictation') this.dictate(action);
+    else this.enqueue({ type: 'action', action });
   }
 
   /** A size or position only the screen knows (toolbar overflow, status rows, open rows). */
@@ -482,8 +485,8 @@ export class RustChatHost {
     focused: () => this.composer.focused(),
     blurred: () => this.composer.blurred(),
     submit: (mode: SubmitMode) => this.composer.submit(mode),
-    /** Replaces the whole draft (a picked saved prompt), desktop's `insert_prompt`. */
-    replace: (text: string) => this.composer.replace(text, null, false),
+    /** Replaces the whole draft (a picked saved prompt), desktop's `insert_prompt`; `caret` when the caller knows where it belongs (a dictation), the end otherwise. */
+    replace: (text: string, caret: number | null = null) => this.composer.replace(text, caret, false),
   };
 
   /**
@@ -826,8 +829,73 @@ export class RustChatHost {
       case 'draftReceived':
         this.composer.received(fields);
         return;
+      case 'dictationInserted':
+        this.dictationInserted(params, answers);
+        return;
       default:
         this.view({ kind: 'hostAction', action, params });
+    }
+  }
+
+  /**
+   * `insertDictation` from the screen (`useDictation.ts`): the request for the core to type a
+   * recording's words. The chat box's text is this host's, so the request carries the field as it
+   * is now, and the recording counts as asked for until the answer comes (`dictationInserted`).
+   */
+  private dictate(action: UserAction & { type: 'insertDictation' }): void {
+    const { id } = action;
+    if (id !== undefined) {
+      // Typed already (another transcription of the recording was on its way): only its copy goes.
+      if (wordsPlaced(id)) {
+        void recordingPlaced(id);
+        return;
+      }
+      wordsAsked(id);
+    }
+    const { text, caret } = this.composer.dictationPoint();
+    this.enqueue({ type: 'action', action: { ...action, draft: text, start: caret, end: caret } });
+  }
+
+  /**
+   * The core's `dictationInserted`, taken here whether or not a chat box is on screen, in the same
+   * step as the draft's own save.
+   *
+   * A form box's draft has the words when the answer comes: its recording is placed, and the box's
+   * drawn copies are told (`dictationTarget.ts`). The chat box's text is this host's (`composer`,
+   * as the desktop view holds its draft, `dictation_inserted` in native_chat/dictation.rs): it
+   * takes the core's text if it still holds what the words were put into, and its recording is
+   * placed then; a field that changed meanwhile asks again, as it is now.
+   *
+   * CDXC:Dictate 2026-11-10 WHY: The chat box's screen took the answer first. Its copy of the draft changes with the next render, so two recordings answered in one moment were both put into the same text, the second over the first, and both were forgotten; and a chat that was closed before the answer never heard that a form's draft had the words, so the recording was offered and typed again. The field's text lives here and changes in this step, and the recording is placed here, so neither depends on what is drawn.
+   */
+  private dictationInserted(params: unknown, answers: ChatCoreEvent[]): void {
+    const result = dictationInserted(params);
+    if (result === null) return;
+    const { id } = result;
+    if (result.box !== null) {
+      if (id !== null) void recordingPlaced(id);
+      this.view({ kind: 'hostAction', action: 'dictationInserted', params });
+      return;
+    }
+    // An answer for a recording typed already, or dismissed since it was asked for, types nothing.
+    if (id !== null && (wordsPlaced(id) || !wordsAwaited(id))) return;
+    const { text, caret } = this.composer.dictationPoint();
+    if (result.supersedes.includes(text)) {
+      this.composer.replace(result.content, result.caret, false);
+      if (id !== null) void recordingPlaced(id);
+    } else if (result.text !== null) {
+      answers.push({
+        type: 'action',
+        action: {
+          type: 'insertDictation',
+          text: result.text,
+          spacing: result.spacing,
+          ...(id === null ? {} : { id }),
+          draft: text,
+          start: caret,
+          end: caret,
+        },
+      });
     }
   }
 

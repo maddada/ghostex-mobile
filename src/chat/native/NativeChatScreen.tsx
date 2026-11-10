@@ -70,6 +70,7 @@ import { attachIntakeImages } from './composer/imageIntake';
 import { SavedPromptsSheet } from './composer/SavedPromptsSheet';
 import { openForkBranch, runCommandInTerminal, takeLaunchDraft } from './sessionShell';
 import {
+  DictatedFormBoxes,
   NativeChatUiProvider,
   NativeTranscript,
   RewindDialog,
@@ -388,6 +389,7 @@ export default function NativeChatScreen({
 
   return (
     <NativeChatUiProvider chat={chat}>
+      <DictatedFormBoxes chat={chat} />
       <ChatPlacementProvider value={placement}>
         {/* An Expo view takes no `pointerEvents`, so the preloading chat's stays on the view inside. */}
         <GhostexImageIntakeView

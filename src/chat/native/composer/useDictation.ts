@@ -31,6 +31,7 @@ import {
   forgetRecording,
   latestUntranscribed,
   localRecording,
+  onWaitingChanged,
   saveAndTranscribe,
   sendUnsent,
   startRecording,
@@ -43,6 +44,7 @@ import {
 import type { DictateEngine } from '../../../voice/dictateModel';
 import { readDictateEngine } from '../../../voice/dictateSettings';
 import type { DictationTargets } from './dictationTarget';
+import type { UserAction } from '../../rust/actions';
 import { chatMachineLink } from '../../rust/machine-link';
 import { setReadAloudDictating } from '../../../voice/readAloud';
 
@@ -94,22 +96,27 @@ export function dictationClock(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+/** The chat a dictation is typed into: its core, and its question form boxes (`dictationTarget.ts`). */
+export type DictationChat = {
+  dispatch(action: UserAction): void;
+  targets: DictationTargets | null;
+};
+
 /**
- * Dictate into the draft. `draft()` reads the composer's text and caret when the text arrives;
- * `replace` writes the draft with the dictated text in place; `onError` gets a short message for a
- * problem no row shows (no microphone permission, nothing waiting for Transcribe previous).
- * `targets` holds the chat's question form boxes: a recording started while one of them has the
- * keyboard types there instead (`dictationTarget.ts`).
+ * Dictate into a draft. The chat's core types the words (`insertDictation`): into the question
+ * form box that had the keyboard when the recording started while that box still takes text, into
+ * the chat box otherwise. `onError` gets a short message for a problem no row shows (no microphone
+ * permission, nothing waiting for Transcribe previous).
  *
  * CDXC:VoiceMode 2026-11-09 WHY: A user lost recordings while the phone kept reconnecting ("not saving my audio is killer"). A recording the computer could not be reached for waits in the row as "Waiting for your computer" and goes again on its own (when the link comes back, and on a timer); leaving the chat keeps a recording (it is offered again, not dismissed); a recording still on the phone without its words is offered in the chat box ("Recording not transcribed") with Transcribe, Share (iPhone) and ✕ until its words are in a draft.
+ * CDXC:Dictate 2026-11-10 WHY: "In a draft" is the core's answer (`dictationInserted`), not the request: the phone used to forget a recording as soon as it had asked for its words to be typed, so words the core then refused (their form had just been sent) left nothing to transcribe again. This hook only hands the words over. The chat's host takes the answer (it holds the chat box's text, and is there when no chat box is drawn) and the recording's state is kept for the whole phone in `voice/dictation.ts`; the row hears from there when a recording waits again (no answer after five seconds).
  */
 export function useDictation(
   machine: MachineConnectionTarget | null,
-  draft: () => { text: string; caret: number },
-  replace: (text: string) => void,
   onError: (message: string) => void,
-  targets: DictationTargets | null = null,
+  chat: DictationChat,
 ) {
+  const { dispatch, targets } = chat;
   const [available, setAvailable] = useState(() => DICTATION_ENABLED && dictationSupported(machine));
   const [phase, setPhase] = useState<DictationPhase>('idle');
   const [failure, setFailure] = useState<{ kept: Kept; message: string; code: string | null } | null>(null);
@@ -127,8 +134,8 @@ export function useDictation(
   const mounted = useRef(true);
   /** The recording the microphone is writing now. */
   const recordingId = useRef<string | null>(null);
-  const callbacks = useRef({ draft, replace, onError });
-  callbacks.current = { draft, replace, onError };
+  const callbacks = useRef({ onError });
+  callbacks.current = { onError };
   /** How many times the recording in the row went again on its own, so the waits keep growing across tries. */
   const autoTries = useRef<{ id: string; count: number }>({ id: '', count: 0 });
 
@@ -169,6 +176,15 @@ export function useDictation(
     if (available && phase === 'idle') void refreshWaiting();
   }, [available, phase, refreshWaiting]);
 
+  // A recording waits again, or no longer does (`voice/dictation.ts`): whichever chat box is on
+  // screen then shows it, not only the one that asked for its words.
+  useEffect(() => {
+    if (!available) return undefined;
+    return onWaitingChanged(() => {
+      if (phaseRef.current === 'idle') void refreshWaiting();
+    });
+  }, [available, refreshWaiting]);
+
   // Read aloud keeps quiet while the microphone records (the core's `setDictating`), so the
   // recording never takes in the phone's own voice; transcribing no longer listens.
   const recording = phase === 'starting' || phase === 'recording';
@@ -202,20 +218,32 @@ export function useDictation(
     };
   }, []);
 
+  // The box a run was aimed at is released with the chat box too (a question card takes its place
+  // while the form stays), so no box stays marked for a run nothing shows any more.
+  useEffect(() => () => targets?.release(), [targets]);
+
+  /** Asks the core to type `dictated`, the words of recording `id`, into the run's target. */
   const insert = useCallback(
-    (dictated: string) => {
+    (dictated: string, id: string) => {
       const words = dictated.trim();
-      if (words.length === 0) return;
-      // The question form box the recording started in, while it still takes text; else the chat box.
-      const field = targets?.target() ?? callbacks.current;
-      const { text, caret } = field.draft();
-      const before = text.slice(0, caret);
-      const after = text.slice(caret);
-      const lead = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
-      const trail = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
-      field.replace(before + lead + words + trail + after);
+      if (words.length === 0) {
+        void forgetRecording(id);
+        return;
+      }
+      // The question form box the recording started in; the core checks that it still takes text.
+      // The host adds the chat box as it is now, which takes the words when the form box does not.
+      const box = targets?.target() ?? null;
+      const shown = box === null ? null : (targets?.shownBy(box) ?? null);
+      dispatch({
+        type: 'insertDictation',
+        text: words,
+        // Transcribe previous can come back without the recording's id: nothing is kept for it then.
+        ...(id.length > 0 ? { id } : {}),
+        ...(box === null ? {} : { form: box.form, slot: box.slot }),
+        ...(shown === null ? {} : { shown: shown.text, shownStart: shown.caret, shownEnd: shown.caret }),
+      });
     },
-    [targets],
+    [dispatch, targets],
   );
 
   const settle = useCallback(
@@ -226,8 +254,7 @@ export function useDictation(
       if (!mounted.current) return;
       if (result.kind === 'text') {
         setPhase('idle');
-        insert(result.text);
-        void forgetRecording(result.id);
+        insert(result.text, result.id);
       } else if (result.kind === 'nothing') {
         setPhase('idle');
         if (result.message) callbacks.current.onError(result.message);
