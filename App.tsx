@@ -1,8 +1,7 @@
 /**
  * ghostex-mobile entry: dark navigation shell over the shared TS core.
  * Welcome shows while no machine is saved; once one exists Sessions is home.
- * The setup routes (ConnectChoose, ScanCode, TailscaleForm, Connected,
- * MachineForm) are registered in both states so the stack survives the
+ * The setup routes (ConnectChoose, ScanCode, TailscaleForm, MachineForm) are registered in both states so the stack survives the
  * moment the first machine is saved mid-flow.
  */
 
@@ -72,7 +71,6 @@ import WebPreviewPortsScreen from './src/screens/WebPreviewPortsScreen';
 import WebPreviewScreen from './src/screens/WebPreviewScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import ConnectChooseScreen from './src/screens/ConnectChooseScreen';
-import ConnectedScreen from './src/screens/ConnectedScreen';
 import ScanCodeScreen from './src/screens/ScanCodeScreen';
 import CantReachScreen from './src/screens/CantReachScreen';
 import AttentionListScreen from './src/screens/AttentionListScreen';
@@ -262,11 +260,6 @@ export default function App() {
                   title:
                     route.params?.machineId !== undefined ? MachineCopy.editor.editTitle : MachineCopy.editor.addTitle,
                 })}
-              />
-              <Stack.Screen
-                name="Connected"
-                component={ConnectedScreen}
-                options={{ headerShown: false, gestureEnabled: false }}
               />
               {/* Outside the machine routes: feedback posts with no computer connected. */}
               <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: FeedbackCopy.title }} />

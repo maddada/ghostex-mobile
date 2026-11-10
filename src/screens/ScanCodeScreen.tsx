@@ -6,7 +6,9 @@
  * the drawing over the camera in scan-code/ScannerOverlay.
  *
  * Camera permission denied → the paste sheet opens directly with a line that
- * says why. Back is disabled while pairing is in flight.
+ * says why. Once a code is read, the screen becomes the waiting screen
+ * (scan-code/PairingWaitView), and a pairing that fails stays on its failure
+ * screen (scan-code/PairingFailureView). Back is disabled while pairing is in flight.
  *
  * On iOS the camera is Apple's scanner (scan-code/systemScanner.ts): it opens
  * over this screen once the camera is allowed, and "Open the scanner" brings it
@@ -32,6 +34,9 @@ import { ScanCopy } from '../copy';
 import { tailscaleCodeAddress } from '../machines/pairingCodes';
 import type { RootStackParamList } from '../navigation/types';
 
+import PairingFailureView from './scan-code/PairingFailureView';
+import PairingWaitView from './scan-code/PairingWaitView';
+import { failureText } from './scan-code/pairingFailure';
 import ScannerOverlay from './scan-code/ScannerOverlay';
 import { useScanController } from './scan-code/useScanController';
 import { useSystemScanner } from './scan-code/useSystemScanner';
@@ -63,6 +68,8 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
     saveTailscale,
     dismissTailscale,
     cancelPairing,
+    scanAgain,
+    pasteAfterFailure,
   } = useScanController(navigation, rePairMachineId, pasteFirst ? 'paste' : 'none');
 
   const granted = permission?.granted === true;
@@ -108,11 +115,11 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: ScanCopy.title,
+      title: phase.kind === 'pairing' || phase.kind === 'failed' ? '' : ScanCopy.title,
       headerBackVisible: !pairing,
       gestureEnabled: !pairing,
       headerRight: () =>
-        pairing ? null : (
+        pairing || phase.kind === 'failed' ? null : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={ScanCopy.helpAccessibilityLabel}
@@ -123,7 +130,7 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
           </Pressable>
         ),
     });
-  }, [navigation, pairing, setSheet, appearance]);
+  }, [navigation, pairing, phase.kind, setSheet, appearance]);
   // On the iPhone Duo, Help stands in the side bar under Back; the paste-code and password sheets take
   // the keyboard.
   useStackScreenRail(
@@ -153,19 +160,7 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
   };
 
   const status =
-    phase.kind === 'pairing'
-      ? phase.words
-        ? {
-            icon: 'spinner' as const,
-            title: ScanCopy.waitingTitle(phase.code.name),
-            detail: ScanCopy.waitingDetail,
-          }
-        : {
-            icon: 'spinner' as const,
-            title: ScanCopy.found(phase.code.name),
-            detail: ScanCopy.pairingAs(phase.code.user),
-          }
-      : phase.kind === 'tailscale'
+    phase.kind === 'tailscale'
         ? {
             icon: 'check' as const,
             title: ScanCopy.found(phase.code.name),
@@ -175,6 +170,24 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {phase.kind === 'pairing' ? (
+        <PairingWaitView
+          computer={phase.code.name}
+          words={phase.words}
+          giveUpAtMs={phase.giveUpAtMs}
+          onCancel={cancelPairing}
+        />
+      ) : phase.kind === 'failed' ? (
+        <PairingFailureView
+          text={failureText(phase.failure)}
+          onScanAgain={() => {
+            scanAgain();
+            if (granted && systemScanner.active) systemScanner.open();
+          }}
+          onPaste={pasteAfterFailure}
+        />
+      ) : (
+        <>
       {securityNotice !== null && phase.kind === 'scanning' ? (
         <View style={styles.notice}>
           <Text style={setupText.title}>{securityNotice.title}</Text>
@@ -199,25 +212,7 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
       </View>
 
       <View style={styles.footer}>
-        {phase.kind === 'pairing' && phase.words ? (
-          <>
-            <Text style={[styles.words, { color: appearance.foreground }]} accessibilityRole="header">
-              {phase.words.join(' · ')}
-            </Text>
-            <SetupRows panel>
-              <SetupRow first label={ScanCopy.summary.computer} value={phase.code.name} />
-              <SetupRow mono label={ScanCopy.summary.user} value={phase.code.user} />
-            </SetupRows>
-            <SetupButton label={ScanCopy.cancelWaiting} onPress={cancelPairing} />
-          </>
-        ) : phase.kind === 'pairing' ? (
-          <SetupRows panel>
-            <SetupRow first label={ScanCopy.summary.computer} value={phase.code.name} />
-            <SetupRow mono label={ScanCopy.summary.user} value={phase.code.user} />
-            <SetupRow label={ScanCopy.summary.connection} value={ScanCopy.summary.easyConnect} />
-          </SetupRows>
-        ) : (
-          <>
+        <>
             {granted && systemScanner.active ? (
               <SetupButton
                 variant="primary"
@@ -253,9 +248,9 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
               </Text>
             )}
           </>
-        )}
       </View>
-
+        </>
+      )}
       <PasteCodeSheet
         visible={sheet === 'paste'}
         cameraDenied={cameraDenied}
@@ -293,14 +288,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     flex: 1,
     backgroundColor: '#050505',
     overflow: 'hidden',
-  },
-  // Pairing v2: the three words to compare with the computer's, large enough to read at arm's length.
-  words: {
-    fontSize: 24,
-    lineHeight: 32,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingVertical: 8,
   },
   footer: {
     paddingHorizontal: 16,

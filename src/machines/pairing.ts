@@ -92,12 +92,20 @@ export type PairDeviceResponse = {
   easyConnectAddresses: unknown;
 };
 
-/** What the Scan screen shows while the phone waits as Pending. */
-export type PairingPending = { words: string[]; computerName: string };
+/** What the Scan screen shows while the phone waits as Pending; `giveUpAtMs`: when this phone stops waiting. */
+export type PairingPending = { words: string[]; computerName: string; giveUpAtMs: number };
 
 export type EasyConnectPairingFailure =
   /** The one-time secret was already used or is past `expiresAt`. */
   | 'expired'
+  /** The phone waited as Pending until the request's time ran out, and nobody approved or denied. */
+  | 'timedOut'
+  /** The computer stopped knowing the request well before its time was up (Ghostex there restarted, or replaced it). */
+  | 'dropped'
+  /** The computer named other words than the ones this phone worked out, so pairing stopped. */
+  | 'wordsMismatch'
+  /** The computer's Ghostex predates pairing v2. */
+  | 'computerTooOld'
   /** The code carries no secret, so the computer cannot register the phone's key. */
   | 'noSecret'
   /** The tunnel could not reach the computer at all. */
@@ -112,7 +120,9 @@ export type EasyConnectPairingFailure =
   | 'needsUpdate';
 
 export type EasyConnectPairingResult =
-  { ok: true; machine: MachineRecord } | { ok: false; reason: EasyConnectPairingFailure; message: string };
+  | { ok: true; machine: MachineRecord }
+  /** `waitedMs`: how long the phone waited as Pending (set for `timedOut`). */
+  | { ok: false; reason: EasyConnectPairingFailure; message: string; waitedMs?: number };
 
 /** What this phone calls itself in the computer's Paired devices list. */
 export function pairingDeviceName(): string {
@@ -135,10 +145,17 @@ class PairDeviceError extends Error {
   constructor(
     readonly reason: EasyConnectPairingFailure,
     message: string,
+    readonly waitedMs?: number,
   ) {
     super(message);
   }
 }
+
+/**
+ * A request the computer no longer knows this long before its own time was up was dropped there (Ghostex
+ * restarted, or a newer request from this phone replaced it), not left unanswered.
+ */
+const DROPPED_BEFORE_DEADLINE_MS = 30_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -211,7 +228,7 @@ export function readPairingStarted(result: Record<string, unknown>): {
   if (result.status !== 'pending' || typeof result.pendingId !== 'string' || words.length !== 3) {
     // A computer whose Ghostex predates pairing v2 answers without a Pending step.
     throw new PairDeviceError(
-      'rejected',
+      'computerTooOld',
       'Update Ghostex on the computer to 11.1.0 or later, then scan its code again.',
     );
   }
@@ -252,14 +269,19 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
     });
   });
 
+/** When a Pending phone stops waiting: the computer's own deadline, at most `PAIRING_WAIT_MAX_MS` from now. */
+function pairingGiveUpAt(expiresAtMs: number): number {
+  return Math.min(expiresAtMs, Date.now() + PAIRING_WAIT_MAX_MS);
+}
+
 /** Asks, signed with the device key, until the owner approves or denies, or the request lapses. */
 async function waitForApproval(
   localPort: number,
   pendingId: string,
-  expiresAtMs: number,
+  giveUpAt: number,
   signal: AbortSignal | undefined,
 ): Promise<PairDeviceResponse> {
-  const giveUpAt = Math.min(expiresAtMs, Date.now() + PAIRING_WAIT_MAX_MS);
+  const startedAt = Date.now();
   let lastTimestamp = 0;
   for (;;) {
     if (signal?.aborted) throw new PairDeviceError('cancelled', 'Pairing was cancelled on this phone.');
@@ -272,10 +294,15 @@ async function waitForApproval(
     if (result.status === 'denied') {
       throw new PairDeviceError('denied', 'The computer denied this phone. Scan a new code to try again.');
     }
-    if (result.status === 'expired' || Date.now() >= giveUpAt) {
+    const now = Date.now();
+    if (result.status === 'expired' && now < giveUpAt - DROPPED_BEFORE_DEADLINE_MS) {
+      throw new PairDeviceError('dropped', 'The computer stopped waiting for this phone before anyone approved it.');
+    }
+    if (result.status === 'expired' || now >= giveUpAt) {
       throw new PairDeviceError(
-        'expired',
+        'timedOut',
         'Nobody approved this phone in time. Show a new code on the computer and scan again.',
+        now - startedAt,
       );
     }
     await sleep(PAIRING_POLL_MS, signal);
@@ -436,12 +463,13 @@ export async function pairEasyConnect(
       const words = matchWords(secret, devicePublicKey);
       if (!sameWords(words, started.words)) {
         throw new PairDeviceError(
-          'rejected',
+          'wordsMismatch',
           'The computer showed different words from this phone, so pairing stopped. Show a new code on the computer and scan again.',
         );
       }
-      options.onPending?.({ words, computerName: started.computerName || code.name });
-      const registration = await waitForApproval(localPort, started.pendingId, started.expiresAtMs, options.signal);
+      const giveUpAtMs = pairingGiveUpAt(started.expiresAtMs);
+      options.onPending?.({ words, computerName: started.computerName || code.name, giveUpAtMs });
+      const registration = await waitForApproval(localPort, started.pendingId, giveUpAtMs, options.signal);
       const machine = await saveEasyConnectMachine(code, registration, rePairMachineId);
       await Promise.all([
         setSshKey(machine.id, key.privateKey),
@@ -467,7 +495,7 @@ export async function pairEasyConnect(
     }
   } catch (error) {
     if (error instanceof PairDeviceError) {
-      return { ok: false, reason: error.reason, message: error.message };
+      return { ok: false, reason: error.reason, message: error.message, waitedMs: error.waitedMs };
     }
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, reason: 'rejected', message };

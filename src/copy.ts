@@ -72,23 +72,7 @@ export const ScanCopy = {
   cantFindPrefix: "Can't find the code? ",
   cantFindLink: 'Show me where it is',
   found: (computer: string) => `Found ${computer}`,
-  pairingAs: (user: string) => `Pairing as ${user}…`,
-  /** Pairing v2 (GitHub #495): the phone waits as Pending until the owner approves. */
-  waitingTitle: (computer: string) => `Approve this phone on ${computer}`,
-  waitingDetail: 'Check the computer shows the same three words, then approve there.',
-  wordsLabel: 'Words',
-  cancelWaiting: 'Cancel',
-  denied: {
-    title: 'The computer said no',
-    detail: 'This phone was denied. Show a new code on the computer and scan again.',
-  },
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
-  summary: {
-    computer: 'Computer',
-    user: 'User',
-    connection: 'Connection',
-    easyConnect: 'Easy Connect',
-  },
   rejected: {
     title: "That's not a Ghostex code",
     detail: 'Point at the code in Ghostex → Mobile & Remote on the computer.',
@@ -96,17 +80,6 @@ export const ScanCopy = {
   outdated: {
     title: 'This code needs a newer Ghostex app',
     detail: 'Update Ghostex on this phone, or click Copy Easy Connect code on the computer and paste the code here.',
-  },
-  expired: {
-    title: 'This code has expired',
-    detail: 'Open Show QR on the computer again and scan the new Easy Connect code.',
-  },
-  pairingFailed: {
-    title: "Couldn't pair with the computer",
-  },
-  noSecret: {
-    title: 'This code cannot pair by itself',
-    detail: 'On the computer, open Settings → Remote → Easy Connect → Show QR, and scan or copy the Easy Connect code there.',
   },
   cameraDenied: 'Camera access is off for Ghostex, so paste the code instead.',
   cameraDeniedSettingsLink: 'Allow the camera in Settings',
@@ -157,35 +130,84 @@ export const ScanCopy = {
   },
 } as const;
 
-/** Connected (mobile-05-connected.html): end of setup. */
-export const ConnectedCopy = {
-  title: 'Connected',
-  ledePrefix: 'This phone can now reach ',
-  ledeSuffix: ' from anywhere.',
-  connectingTitle: (name: string) => `Connecting to ${name}…`,
-  connectingLede: 'Saved on this phone. Checking that the computer answers.',
-  failedTitle: (name: string) => `Saved, but can't reach ${name} yet`,
-  failedLede: 'The computer is saved on this phone. Fix the connection and try again from Sessions.',
-  whatCanICheck: 'What can I check?',
-  rows: {
-    connection: 'Connection',
-    runsAs: 'Runs as',
-    version: 'Ghostex on the computer',
-    sessions: 'Sessions right now',
+/**
+ * After a code is scanned: the screen that waits for Approve on the computer, and the screen a failed pairing
+ * stays on until the person acts. Each failure names what really happened, in the computer's own words for the
+ * way back ("Connect a phone").
+ */
+export const PairingCopy = {
+  reachingTitle: (computer: string) => `Reaching ${computer}…`,
+  reachingLede: 'Keep the Connect a phone window open on the computer.',
+  checkTitle: 'Check your computer',
+  checkLede: (computer: string) =>
+    `${computer} shows three words. If they are the same as these, click Approve there.`,
+  waiting: 'Waiting for Approve on the computer…',
+  minutesLeft: (minutes: number) => (minutes <= 1 ? 'Less than a minute left' : `${minutes} minutes left`),
+  showsNothing: 'The computer shows nothing',
+  cancel: 'Cancel',
+  showsNothingSheet: {
+    title: 'The computer shows nothing?',
+    steps: [
+      {
+        title: 'Look for the words on the computer',
+        detail: 'They show in its Connect a phone window, or in a window called "Approve this phone?". It can take a few seconds.',
+      },
+      {
+        title: 'Open Settings > Remote there',
+        detail: 'A phone that waits for approval is listed there, with its words and Approve.',
+      },
+      {
+        title: 'Still nothing? Start again',
+        detail: 'Tap Cancel, click Connect a phone on the computer again, and scan the new code.',
+      },
+    ],
   },
-  easyConnect: 'Easy Connect',
-  tailscale: (address: string) => `Tailscale · ${address}`,
-  checking: 'Checking…',
-  unavailable: 'Not reachable yet',
-  cliNotFound: 'Ghostex CLI not found',
-  versionFailed: (exitCode: number) => `ghostex server version exited with code ${exitCode}`,
-  sessionsValue: (total: number, working: number) => (working > 0 ? `${total} · ${working} working` : `${total}`),
-  calloutEasyConnect:
-    'The computer needs to be awake and Ghostex open. Ghostex can keep it awake while sessions run: turn on Keep awake in Settings → General on the computer.',
-  calloutTailscale:
-    'The computer needs to be awake, Ghostex open, and Tailscale connected on both devices. Ghostex can keep it awake while sessions run: turn on Keep awake in Settings → General on the computer.',
-  openSessions: 'Open sessions',
-  addAnother: 'Add another computer',
+  scanAgain: 'Scan again',
+  pasteInstead: 'Paste a code instead',
+  details: 'Details',
+  hideDetails: 'Hide details',
+  backToComputer: 'On the computer, click Connect a phone again, then scan the new code.',
+  failure: {
+    timedOut: {
+      title: 'Nobody approved this phone in time',
+      body: (computer: string, minutes: number | null) =>
+        `${minutes !== null && minutes > 0 ? `${computer} waited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : `${computer} stopped waiting.`} On the computer, click Connect a phone again, then scan the new code.`,
+    },
+    dropped: {
+      title: 'The computer stopped waiting',
+      body: (computer: string) =>
+        `${computer} let go of this phone's request before anyone approved it, for example because Ghostex there restarted. Click Connect a phone there again, then scan the new code.`,
+    },
+    expired: {
+      title: 'That code is used up',
+      body: 'A code works once, for 5 minutes. On the computer, click Connect a phone again, then scan the new code.',
+    },
+    denied: {
+      title: 'The computer said no',
+      body: (computer: string) =>
+        `This phone was turned away on ${computer}. If that was a mistake, click Connect a phone there again and scan the new code.`,
+    },
+    noSecret: {
+      title: 'That code is not complete',
+      body: 'It was copied while the Connect a phone window was closed. Open that window on the computer and scan the code it shows.',
+    },
+    wordsMismatch: {
+      title: 'The words did not match',
+      body: 'So pairing stopped, to keep this phone safe. On the computer, click Connect a phone again, then scan the new code.',
+    },
+    needsUpdate: { title: 'Update Ghostex on this phone' },
+    computerTooOld: { title: 'Update Ghostex on the computer' },
+    unreachable: {
+      title: (computer: string) => `Can't reach ${computer}`,
+      body: 'Keep Ghostex open on the computer and check that both have internet, then scan again.',
+    },
+    rejected: { title: (computer: string) => `Couldn't pair with ${computer}` },
+  },
+  /** The line on top of Sessions once a new computer answers: pairing ends in the sessions list. */
+  connected: (computer: string) => `Connected to ${computer}`,
+  connectedSessions: (total: number, working: number) =>
+    `${total} ${total === 1 ? 'session' : 'sessions'}${working > 0 ? `, ${working} working` : ''}`,
+  dismiss: 'Dismiss',
 } as const;
 
 export const SessionCopy = {

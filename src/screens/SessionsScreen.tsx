@@ -121,6 +121,7 @@ import {
   WebPreviewCopy,
   WallCopy,
 } from '../copy';
+import JustPairedLine from './sessions-screen/JustPairedLine';
 import MachineNotice from './sessions-screen/MachineNotice';
 import { machineNotice } from '../components/sessions/machineNotice';
 import type { FailureReasonCode } from '../inventory/client';
@@ -1275,6 +1276,14 @@ export default function SessionsScreen({ navigation }: Props) {
             setOverlay({ kind: 'machineMenu', ctx: { machine: target } });
           }}
           onAdd={() => navigation.navigate('ConnectChoose')}
+        />
+      ) : null}
+      {machine !== null ? (
+        <JustPairedLine
+          machineId={machine.id}
+          name={machineDisplayLabel(machine)}
+          inventory={selectedInventory}
+          appearance={sidebarAppearance}
         />
       ) : null}
       {machine !== null && isDemoMachine(machine) ? (

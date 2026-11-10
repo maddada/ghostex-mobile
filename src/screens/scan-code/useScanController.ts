@@ -2,10 +2,11 @@
  * State machine behind the Scan code screen. Every barcode and every pasted
  * string goes through `readPairingCode`; the user never picks a code type.
  *
- * - easyConnect → freeze the viewfinder, show what was read, run
- *   `pairEasyConnect`, then replace the screen with Connected.
+ * - easyConnect → the waiting screen (`pairEasyConnect`: "Reaching…", then the
+ *   three words), then Sessions; a failure stays on its own screen until the
+ *   person picks Scan again or Paste a code.
  * - tailscale → freeze, then the password sheet; "Save and connect" saves the
- *   machine with the password in the secure keystore, then Connected.
+ *   machine with the password in the secure keystore, then Sessions.
  * - legacyAddress → the Easy Connect form, prefilled with the address (the
  *   documented Advanced route: name and user are typed there).
  * - anything else → red toast, keep scanning.
@@ -16,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 
 import { ScanCopy } from '../../copy';
+import { useOpenSessionsAfterPairing } from '../../machines/justPaired';
 import { pairEasyConnect, type EasyConnectPairingResult } from '../../machines/pairing';
 import {
   tailscaleCodeAddress,
@@ -25,13 +27,16 @@ import {
 } from '../../machines/pairingCodes';
 import { useMachinesStore } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
+import type { ScanFailure } from './pairingFailure';
 import { readScan } from './readScan';
 
 export type ScanPhase =
   | { kind: 'scanning' }
   /** `words`: the phone is Pending and these three words must match the computer's (pairing v2). */
-  | { kind: 'pairing'; code: EasyConnectCode; words?: string[] }
-  | { kind: 'tailscale'; code: TailscaleCode };
+  | { kind: 'pairing'; code: EasyConnectCode; words?: string[]; giveUpAtMs?: number }
+  | { kind: 'tailscale'; code: TailscaleCode }
+  /** A pairing that did not finish: its screen stays until Scan again or Paste a code. */
+  | { kind: 'failed'; failure: ScanFailure };
 
 export type ScanToast = { tone: 'error' | 'ok'; title: string; detail?: string };
 
@@ -87,13 +92,7 @@ export function useScanController(
     void Haptics.notificationAsync(type).catch(() => undefined);
   };
 
-  const finish = useCallback(
-    (machineId: string): void => {
-      useMachinesStore.getState().selectMachine(machineId);
-      navigation.replace('Connected', { machineId });
-    },
-    [navigation],
-  );
+  const finish = useOpenSessionsAfterPairing(navigation);
 
   const runEasyConnect = useCallback(
     async (code: EasyConnectCode): Promise<void> => {
@@ -106,8 +105,8 @@ export function useScanController(
         result = await pairEasyConnect(code, {
           rePairMachineId: rePairMachineId ?? undefined,
           signal: abort.signal,
-          onPending: ({ words }) => {
-            if (mounted.current && !abort.signal.aborted) movePhase({ kind: 'pairing', code, words });
+          onPending: ({ words, giveUpAtMs }) => {
+            if (mounted.current && !abort.signal.aborted) movePhase({ kind: 'pairing', code, words, giveUpAtMs });
           },
         });
       } catch (error) {
@@ -125,17 +124,17 @@ export function useScanController(
         finish(result.machine.id);
         return;
       }
-      movePhase({ kind: 'scanning' });
-      if (result.reason === 'cancelled') return;
+      if (result.reason === 'cancelled') {
+        movePhase({ kind: 'scanning' });
+        return;
+      }
       haptic(Haptics.NotificationFeedbackType.Error);
-      if (result.reason === 'expired') showToast({ tone: 'error', ...ScanCopy.expired });
-      else if (result.reason === 'denied') showToast({ tone: 'error', ...ScanCopy.denied });
-      else if (result.reason === 'needsUpdate')
-        showToast({ tone: 'error', title: ScanCopy.outdated.title, detail: result.message });
-      else if (result.reason === 'noSecret') showToast({ tone: 'error', ...ScanCopy.noSecret });
-      else showToast({ tone: 'error', title: ScanCopy.pairingFailed.title, detail: result.message });
+      movePhase({
+        kind: 'failed',
+        failure: { reason: result.reason, message: result.message, computer: code.name, waitedMs: result.waitedMs },
+      });
     },
-    [finish, movePhase, rePairMachineId, showToast],
+    [finish, movePhase, rePairMachineId],
   );
 
   /** Route an already-decoded code (from the camera or the paste sheet). */
@@ -221,6 +220,13 @@ export function useScanController(
     [finish, tailscaleBusy],
   );
 
+  /** Leave a failure's screen for the scanner, or for the scanner's paste sheet. */
+  const scanAgain = useCallback((): void => movePhase({ kind: 'scanning' }), [movePhase]);
+  const pasteAfterFailure = useCallback((): void => {
+    movePhase({ kind: 'scanning' });
+    setSheet('paste');
+  }, [movePhase]);
+
   /** Stop waiting as Pending; the computer's request lapses by itself. */
   const cancelPairing = useCallback((): void => {
     pairingAbort.current?.abort();
@@ -244,5 +250,7 @@ export function useScanController(
     saveTailscale,
     dismissTailscale,
     cancelPairing,
+    scanAgain,
+    pasteAfterFailure,
   };
 }

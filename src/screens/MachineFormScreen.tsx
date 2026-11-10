@@ -63,6 +63,7 @@ import {
   type MachineTransport,
   type MachineValidationErrors,
 } from '../machines/store';
+import { useOpenSessionsAfterPairing } from '../machines/justPaired';
 import type { RootStackParamList } from '../navigation/types';
 import { unregisterBeforeRemoval, useRemovalAsksComputer } from '../notifications/pushStore';
 import { useSpacesStore } from '../spaces/store';
@@ -109,7 +110,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const updateMachine = useMachinesStore((state) => state.updateMachine);
   const removeMachine = useMachinesStore((state) => state.removeMachine);
   const setMachineDisabled = useMachinesStore((state) => state.setMachineDisabled);
-  const selectMachine = useMachinesStore((state) => state.selectMachine);
+  const openSessions = useOpenSessionsAfterPairing(navigation);
   const inventory = useInventoryStore((state) =>
     machineId === null ? undefined : state.inventoriesByMachineId[machineId],
   );
@@ -331,8 +332,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       setPublicKey(id, publicKey ?? ''),
     ]);
     if (existing === null) {
-      selectMachine(id);
-      navigation.navigate('Connected', { machineId: id });
+      openSessions(id);
       return;
     }
     leaving.current = true;
@@ -364,7 +364,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (removed === 'no') return;
     if (removed === 'noneRemain') {
-      // The same reset pattern ConnectedScreen uses for "Open sessions".
+      // No computer is left, so Welcome is the only home route.
       navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
       return;
     }

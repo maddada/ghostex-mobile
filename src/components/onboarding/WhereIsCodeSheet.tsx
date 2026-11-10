@@ -4,14 +4,11 @@
  * copy written for someone standing at the computer.
  */
 
-import { useMemo } from 'react';
-import { useAppearance, type Appearance } from '../../theme/useAppearance';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { Linking, Text } from 'react-native';
 
 import { ScanCopy } from '../../copy';
-import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
-import BottomSheet from '../common/BottomSheet';
-import { StepNumber, useSetupText } from './SetupPrimitives';
+import SetupStepsSheet from './SetupStepsSheet';
+import { useSetupText } from './SetupPrimitives';
 
 export type WhereIsCodeSheetProps = {
   visible: boolean;
@@ -20,71 +17,23 @@ export type WhereIsCodeSheetProps = {
 
 export default function WhereIsCodeSheet({ visible, onClose }: WhereIsCodeSheetProps) {
   const setupText = useSetupText();
-  const appearance = useAppearance();
-  const styles = useMemo(() => createStyles(appearance), [appearance]);
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
-      <Text style={setupText.title}>{ScanCopy.whereIsCode.title}</Text>
-      <View style={styles.steps}>
-        {ScanCopy.whereIsCode.steps.map((step, index) => (
-          <View key={step.title} style={[styles.step, index === 0 ? styles.stepFirst : null]}>
-            <StepNumber number={index + 1} />
-            <View style={styles.stepBody}>
-              <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepDetail}>{step.detail}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-      <Text style={[setupText.small, setupText.dim, setupText.center, styles.footnote]}>
-        {ScanCopy.whereIsCode.notInstalledPrefix}
-        <Text
-          style={setupText.accent}
-          onPress={() => void Linking.openURL(ScanCopy.whereIsCode.notInstalledUrl).catch(() => undefined)}
-        >
-          {ScanCopy.whereIsCode.notInstalledLink}
+    <SetupStepsSheet
+      visible={visible}
+      onClose={onClose}
+      title={ScanCopy.whereIsCode.title}
+      steps={ScanCopy.whereIsCode.steps}
+      footer={
+        <Text style={[setupText.small, setupText.dim, setupText.center]}>
+          {ScanCopy.whereIsCode.notInstalledPrefix}
+          <Text
+            style={setupText.accent}
+            onPress={() => void Linking.openURL(ScanCopy.whereIsCode.notInstalledUrl).catch(() => undefined)}
+          >
+            {ScanCopy.whereIsCode.notInstalledLink}
+          </Text>
         </Text>
-      </Text>
-    </BottomSheet>
+      }
+    />
   );
 }
-
-const createStyles = (appearance: Appearance) => StyleSheet.create({
-  steps: {
-    marginTop: 16,
-    backgroundColor: appearance.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: appearance.border,
-    borderRadius: GhostexRadii.section,
-    overflow: 'hidden',
-  },
-  step: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderTopWidth: GhostexStrokeWidth,
-    borderTopColor: appearance.border,
-  },
-  stepFirst: {
-    borderTopWidth: 0,
-  },
-  stepBody: {
-    flex: 1,
-    gap: 3,
-  },
-  stepTitle: {
-    color: appearance.foreground,
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 19,
-  },
-  stepDetail: {
-    color: appearance.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  footnote: {
-    marginTop: 16,
-  },
-});
