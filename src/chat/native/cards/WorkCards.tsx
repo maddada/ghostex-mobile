@@ -21,9 +21,25 @@ import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { ToneButton } from './ToneCard';
 import { askColor, tint } from './askCard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
-import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { useTranscriptFlags } from '../transcript/context';
+import { strengthenedText } from '../transcript/textStrength';
 
 type Dispatch = RustChat['dispatch'];
+
+/**
+ * A title's colour: the chat's body text at the user's Text strength, as a reply's prose is drawn.
+ *
+ * CDXC:Coordinators 2026-11-10 DECISION: User, on the opened Moving list: "the font size must match
+ * the font size of the chat here please and same text strength should apply". Titles are the chat's
+ * body text, second lines, folds and the Moving row's names its muted text at the same size; chips
+ * and the status and age labels stay small (desktop `native_chat/work_cards.rs`).
+ */
+function useBodyColor(): string {
+  const P = useTranscriptTheme();
+  const { chatTextStrength } = useTranscriptFlags();
+  return strengthenedText(P.prose, chatTextStrength, P.light);
+}
 
 /** Each status's colour, the board's (`CoordinatorBoard.tsx` `GROUP_COLOR`, desktop `group_look`). */
 const STATUS_COLOR: Record<string, string> = {
@@ -129,13 +145,14 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
     .map(obj)
     .filter((button): button is JsonRecord => button !== null);
   const busy = isTrue(card, 'busy');
+  const body = useBodyColor();
   return (
     <View accessible={false} accessibilityLabel={`${str(card, 'title')}, ${status}`} style={styles.card}>
       <View style={styles.top}>
         <View style={styles.marker}>
           <StatusMarker status={str(card, 'status')} size={13} />
         </View>
-        <Text style={styles.title}>{str(card, 'title')}</Text>
+        <Text style={[styles.title, { color: body }]}>{str(card, 'title')}</Text>
         {right.length > 0 ? <Text style={styles.right}>{right}</Text> : null}
       </View>
       {line.length > 0 ? <Text style={styles.line}>{line}</Text> : null}
@@ -202,7 +219,7 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
   const rows = arr(card.rows)
     .map(obj)
     .filter((row): row is JsonRecord => row !== null);
-  const waiting = str(card, 'waiting');
+  const body = useBodyColor();
   return (
     <View style={styles.moving}>
       <Pressable
@@ -214,11 +231,10 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
       >
         <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
         <StatusMarker status="moving" size={11} />
-        <Text style={styles.movingTitle}>{str(card, 'title')}</Text>
+        <Text style={[styles.movingTitle, { color: body }]}>{str(card, 'title')}</Text>
         <Text numberOfLines={1} style={styles.movingSummary}>
           {open ? '' : str(card, 'summary')}
         </Text>
-        {waiting.length > 0 ? <Text style={styles.foldTime}>{waiting}</Text> : null}
       </Pressable>
       {open
         ? rows.map((row, index) => {
@@ -237,11 +253,11 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
                   <StatusMarker status={str(row, 'status')} size={10} />
                 </View>
                 <View style={styles.movingText}>
-                  <Text numberOfLines={1} style={styles.movingRowTitle}>
+                  <Text numberOfLines={1} style={[styles.movingRowTitle, { color: body }]}>
                     {str(row, 'title')}
                   </Text>
                   {line.length > 0 ? (
-                    <Text numberOfLines={1} style={styles.foldText}>
+                    <Text numberOfLines={1} style={styles.movingRowLine}>
                       {line}
                     </Text>
                   ) : null}
@@ -283,10 +299,10 @@ const useStyles = themedStyles((P) => ({
   },
   // On a narrow screen the status and age wrap under the title rather than squeeze it.
   top: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', columnGap: 8 },
-  marker: { width: 14, height: 20, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, minWidth: 140, fontSize: 14, lineHeight: 20, fontWeight: '500', color: P.foreground },
-  right: { marginLeft: 'auto', fontSize: 12.5, lineHeight: 20, color: P.cardMuted },
-  line: { paddingLeft: 22, fontSize: 13, lineHeight: 19, color: P.cardMuted },
+  marker: { width: 14, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
+  title: { flex: 1, minWidth: 140, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, fontWeight: '500', color: P.prose },
+  right: { marginLeft: 'auto', fontSize: 12.5, lineHeight: PROSE_LINE, color: P.cardMuted },
+  line: { paddingLeft: 22, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
   meta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -303,18 +319,18 @@ const useStyles = themedStyles((P) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: 28,
+    height: 34,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: P.inputBorder,
   },
-  foldText: { flex: 1, minWidth: 0, fontSize: 12.5, color: P.muted },
+  foldText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
   foldTime: { fontSize: 12.5, color: P.muted },
   moving: { borderRadius: 8, borderWidth: 1, borderColor: P.inputBorder, overflow: 'hidden' },
-  movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 32, paddingHorizontal: 12 },
-  movingTitle: { fontSize: 12.5, fontWeight: '500', color: P.cardMuted },
-  movingSummary: { flex: 1, minWidth: 0, fontSize: 12.5, color: P.muted },
+  movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, paddingHorizontal: 12 },
+  movingTitle: { fontSize: PROSE_SIZE, fontWeight: '500', color: P.prose },
+  movingSummary: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
   movingRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -324,9 +340,10 @@ const useStyles = themedStyles((P) => ({
     borderTopWidth: 1,
     borderTopColor: P.inputBorder,
   },
-  movingMarker: { width: 32, height: 18, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 2 },
+  movingMarker: { width: 32, height: PROSE_LINE, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 2 },
   movingText: { flex: 1, minWidth: 0 },
-  movingRowTitle: { fontSize: 13, lineHeight: 18, color: P.foreground },
+  movingRowTitle: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.prose },
+  movingRowLine: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
   ring: { borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   ringDot: { width: 4, height: 4, borderRadius: 2 },
   pause: { flexDirection: 'row', justifyContent: 'center', gap: 2.5 },
