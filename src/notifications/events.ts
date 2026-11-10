@@ -83,6 +83,8 @@ export type AttentionEvent = {
   sessionId: string;
   agentName: string;
   projectName: string;
+  /** The session's title as the computer's session list has it ('' when it has none). */
+  sessionTitle: string;
   occurredAt: string;
 };
 
@@ -146,6 +148,7 @@ export function mapEvent(event: HostEvent, facts: SessionFacts | undefined): Att
     sessionId: event.sessionId,
     agentName: facts.agentLabel,
     projectName: facts.projectName,
+    sessionTitle: facts.title,
     occurredAt: event.occurredAt,
   };
 }

@@ -165,6 +165,7 @@ const notifyDeps: NotifyDeps = {
   soundOn: () => useSettingsStore.getState().settings.doneNotificationSound,
   needsYouOnly: () => useSettingsStore.getState().settings.attentionAlertsFor === 'needsYou',
   onScreen: sessionOnScreen,
+  sessionNames: () => useSettingsStore.getState().settings.liveActivitySessionNames,
   log: logAppEvent,
 };
 

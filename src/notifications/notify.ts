@@ -74,6 +74,8 @@ export type NotifyDeps = {
   needsYouOnly?(): boolean;
   /** Whether the session is open on screen now: no banner and no sound for it, and its event counts as seen. */
   onScreen(machineId: string, sessionId: string): boolean;
+  /** The "Show session names" switch (`liveActivitySessionNames`): on, a notification leads with the session's title. */
+  sessionNames?(): boolean;
   log(message: string): void;
 };
 
@@ -92,8 +94,24 @@ export function notificationAllowed(kind: AttentionKind, settings: NotificationS
   return settings.waiting;
 }
 
-export function notificationRequestFor(event: AttentionEvent, sound: boolean): NotificationRequest {
-  const agent = event.agentName.length > 0 ? event.agentName : NotificationsCopy.unknownAgent;
+/*
+CDXC:Notifications 2026-11-11 DECISION: User (push follow-ups, fault 4): the notification the app posts while it runs
+follows the push's names rule (CDXC:Notifications 2026-11-11 in server/src/push/message.rs), so a notice reads the same
+whether the app is open or closed: with "Show session names" off (the default) it leads with the agent's name, on with
+the session's title (the agent's name when the session has none).
+*/
+export function notificationRequestFor(
+  event: AttentionEvent,
+  sound: boolean,
+  sessionNames = false,
+): NotificationRequest {
+  const sessionTitle = event.sessionTitle.split(/\s+/u).filter(Boolean).join(' ');
+  const agent =
+    sessionNames && sessionTitle.length > 0
+      ? sessionTitle
+      : event.agentName.length > 0
+        ? event.agentName
+        : NotificationsCopy.unknownAgent;
   return {
     identifier:
       event.eventId.length > 0
@@ -137,7 +155,7 @@ export function postNotification(event: AttentionEvent, identity: EventIdentity,
     deps.log(`Notification held back by the rate limit (${event.kind}); it is in the attention list.`);
   }
   if (!announcement.notification) return false;
-  void deps.centre.post(notificationRequestFor(event, announcement.sound)).catch(() => {
+  void deps.centre.post(notificationRequestFor(event, announcement.sound, deps.sessionNames?.() ?? false)).catch(() => {
     // iOS's own error text stays out of the app log, which can be exported.
     deps.log(`Notification not shown (${event.kind}): iOS did not take it.`);
   });
