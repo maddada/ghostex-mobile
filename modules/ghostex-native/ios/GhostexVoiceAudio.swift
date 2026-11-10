@@ -236,6 +236,11 @@ final class GhostexVoiceEngine {
     private(set) var itemId: String?
     private(set) var running = false
 
+    /// A line for the Logs sheet, and the system log (`GhostexVoice.journal`).
+    private func note(_ message: String) {
+        GhostexVoice.journal(message, mode: conversation ? "conversation" : "dictation")
+    }
+
     init(conversation: Bool, onChunk: @escaping (Data) -> Void, onError: @escaping (String) -> Void) {
         self.conversation = conversation
         self.onChunk = onChunk
@@ -265,6 +270,7 @@ final class GhostexVoiceEngine {
     private func fail() {
         guard !reportedFailure else { return }
         reportedFailure = true
+        note("gave up on the microphone after its tries; saying \"The microphone stopped.\"")
         onError("The microphone stopped.")
     }
 
@@ -291,7 +297,7 @@ final class GhostexVoiceEngine {
                 self.fail()
                 return
             }
-            GhostexVoiceAudio.log.info("the voice engine stopped right after starting; building it again")
+            self.note("the microphone stopped by itself right after starting; building it again (try \(attempt + 1))")
             self.rebuild(attempt + 1, after: built)
         }
     }
@@ -317,9 +323,10 @@ final class GhostexVoiceEngine {
         rebuildLock.unlock()
         guard current else { return }
         if stillRunning {
-            GhostexVoiceAudio.log.info("audio configuration changed; the voice engine still runs, so it is kept")
+            note("the audio configuration changed; the microphone still runs, so it is kept")
             return
         }
+        note("the audio configuration changed and stopped the microphone; starting it again")
         if restartInPlace(built) { return }
         // Each attempt counts toward the cap, so a change that stops every new engine at once ends in one error.
         rebuild(quick, after: built)
@@ -349,10 +356,10 @@ final class GhostexVoiceEngine {
             engine.prepare()
             try engine.start()
             player?.play()
-            GhostexVoiceAudio.log.info("the voice engine stopped for an audio configuration change; started it again as it is")
+            note("the microphone started again as it was")
             return true
         } catch {
-            GhostexVoiceAudio.log.warning("the voice engine did not start again: \(error.localizedDescription, privacy: .public)")
+            note("the microphone did not start again as it was: \(error.localizedDescription)")
             return false
         }
     }
@@ -369,7 +376,7 @@ final class GhostexVoiceEngine {
             do {
                 try input.setVoiceProcessingEnabled(true)
             } catch {
-                GhostexVoiceAudio.log.warning("voice processing unavailable: \(error.localizedDescription, privacy: .public)")
+                note("echo cancellation (voice processing) is unavailable: \(error.localizedDescription)")
             }
             #endif
             let player = AVAudioPlayerNode()
@@ -401,6 +408,12 @@ final class GhostexVoiceEngine {
         try engine.start()
         player?.play()
         builtAt = Date()
+        #if targetEnvironment(simulator)
+        let processing = false
+        #else
+        let processing = conversation && engine.inputNode.isVoiceProcessingEnabled
+        #endif
+        note("the microphone started (\(Int(format.sampleRate)) Hz, \(format.channelCount) channel\(format.channelCount == 1 ? "" : "s"), echo cancellation \(processing ? "on" : "off"))")
         // Watched only from here: switching voice processing on above can post a configuration change of its own.
         let built = engine
         configObserver = NotificationCenter.default.addObserver(
@@ -430,7 +443,7 @@ final class GhostexVoiceEngine {
             fail()
             return
         }
-        GhostexVoiceAudio.log.info("audio route changed; rebuilding the voice engine (try \(attempt))")
+        note("building a new microphone (try \(attempt))")
         teardown()
         playLock.lock()
         scheduledEnd = 0
@@ -440,7 +453,7 @@ final class GhostexVoiceEngine {
             try build()
             watch(attempt, generation)
         } catch {
-            GhostexVoiceAudio.log.warning("voice engine did not start: \(error.localizedDescription, privacy: .public)")
+            note("the new microphone did not start: \(error.localizedDescription)")
             guard attempt < 4 else {
                 fail()
                 return
@@ -459,6 +472,7 @@ final class GhostexVoiceEngine {
         let stopped = running && !engine.isRunning
         rebuildLock.unlock()
         guard stopped else { return }
+        note("Unmute or Talk: building the microphone again")
         DispatchQueue.global().async { [weak self] in self?.rebuild(0) }
     }
 
@@ -483,7 +497,9 @@ final class GhostexVoiceEngine {
         do {
             try engine.start()
             player?.play()
+            note("the microphone started again after the interruption")
         } catch {
+            note("the microphone did not start again after the interruption: \(error.localizedDescription)")
             DispatchQueue.global().async { [weak self] in self?.rebuild(0) }
         }
     }
@@ -495,6 +511,7 @@ final class GhostexVoiceEngine {
         running = false
         generation += 1
         teardown()
+        note("the microphone stopped (the call or recording ended)")
     }
 
     private func captured(_ buffer: AVAudioPCMBuffer) {

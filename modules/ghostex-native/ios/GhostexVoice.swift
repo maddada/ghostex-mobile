@@ -128,6 +128,50 @@ final class GhostexVoice {
         emitter?(event)
     }
 
+    /**
+     * A line for the phone's Logs sheet (`kind: log`, GitHub #500): what the audio side did and the reason the
+     * system gave, also written to the system log. Never audio or words. JavaScript from before it ignores it.
+     */
+    static func journal(_ message: String, mode: String = "conversation", session: String = "") {
+        GhostexVoiceAudio.log.info("\(message, privacy: .public)")
+        emit(["sessionId": session, "mode": mode, "kind": "log", "message": message])
+    }
+
+    /// An interruption's reason, as the system names it.
+    fileprivate static func interruptionReason(_ info: [AnyHashable: Any]?) -> String {
+        guard #available(iOS 14.5, *),
+              let raw = info?[AVAudioSessionInterruptionReasonKey] as? UInt,
+              let reason = AVAudioSession.InterruptionReason(rawValue: raw) else { return "no reason given" }
+        switch reason {
+        case .default: return "another app or a call took the audio"
+        case .appWasSuspended: return "the app was suspended"
+        case .builtInMicMuted: return "the built-in microphone was muted"
+        default:
+            if #available(iOS 17.0, *), reason == .routeDisconnected { return "the audio route disconnected" }
+            return "reason \(raw)"
+        }
+    }
+
+    /// A route change's reason and the route now, by port type only (never a device's name).
+    fileprivate static func routeChange(_ info: [AnyHashable: Any]?) -> String {
+        let raw = info?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+        let reason: String
+        switch AVAudioSession.RouteChangeReason(rawValue: raw) {
+        case .newDeviceAvailable: reason = "a new device is available"
+        case .oldDeviceUnavailable: reason = "a device went away"
+        case .categoryChange: reason = "the audio category changed"
+        case .override: reason = "the route was overridden"
+        case .wakeFromSleep: reason = "the device woke from sleep"
+        case .noSuitableRouteForCategory: reason = "no route suits the audio category"
+        case .routeConfigurationChange: reason = "the route's configuration changed"
+        default: reason = "reason \(raw)"
+        }
+        let route = AVAudioSession.sharedInstance().currentRoute
+        let inputs = route.inputs.map { $0.portType.rawValue }.joined(separator: "+")
+        let outputs = route.outputs.map { $0.portType.rawValue }.joined(separator: "+")
+        return "\(reason); in \(inputs.isEmpty ? "none" : inputs), out \(outputs.isEmpty ? "none" : outputs)"
+    }
+
     /// The socket's delegate for one open: its callbacks name the generation they belong to.
     private final class SocketDelegate: NSObject, URLSessionWebSocketDelegate {
         weak var session: Session?
@@ -258,7 +302,7 @@ final class GhostexVoice {
         private func armAudioFallback() {
             let fallback = DispatchWorkItem { [weak self] in
                 guard let self, !self.disposed, self.audio?.running != true else { return }
-                GhostexVoiceAudio.log.info("CallKit did not activate the audio session; activating it")
+                self.journal("CallKit did not activate the audio session within 2 s; activating it")
                 self.startAudio(activate: true)
             }
             audioFallback = fallback
@@ -270,13 +314,14 @@ final class GhostexVoice {
             do {
                 try GhostexAudioSession.shared.acquire(.conversation, activate: false)
             } catch {
-                GhostexVoiceAudio.log.warning("audio session refused: \(error.localizedDescription, privacy: .public)")
+                journal("the audio session refused the call's setup: \(error.localizedDescription)")
             }
             onCall = true
             GhostexVoiceCall.shared.start(title: noticeTitle(), delegate: self) { [weak self] accepted in
                 guard let self else { return }
                 self.queue.async {
                     guard !self.disposed else { return }
+                    self.journal(accepted ? "CallKit took the call" : "CallKit declined the call; the phone opens the audio itself")
                     if !accepted {
                         self.onCall = false
                         self.startAudio(activate: true)
@@ -295,7 +340,7 @@ final class GhostexVoice {
                 audio.setSpeed(speed)
                 try audio.start()
             } catch {
-                GhostexVoiceAudio.log.warning("microphone did not start: \(error.localizedDescription, privacy: .public)")
+                journal("the microphone did not start: \(error.localizedDescription)")
                 status("micError", "Ghostex could not open the microphone.")
             }
         }
@@ -305,13 +350,17 @@ final class GhostexVoice {
             observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { [weak self] note in
                 guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                       let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+                let info = note.userInfo
                 self?.queue.async {
                     guard let self, !self.disposed else { return }
                     switch type {
                     case .began:
+                        self.journal("audio interruption began (\(GhostexVoice.interruptionReason(info)))")
                         // A call, Siri or an alarm took the audio: the agent stops talking and listening.
                         self.onFocus(false)
                     case .ended:
+                        let options = AVAudioSession.InterruptionOptions(rawValue: info?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+                        self.journal("audio interruption ended (\(options.contains(.shouldResume) ? "the system says resume" : "the system did not say resume"))")
                         if !self.onCall { GhostexAudioSession.shared.reactivate() }
                         self.audio?.resume()
                         self.onFocus(true)
@@ -320,9 +369,17 @@ final class GhostexVoice {
                     }
                 }
             })
+            observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { [weak self] note in
+                let change = GhostexVoice.routeChange(note.userInfo)
+                self?.queue.async {
+                    guard let self, !self.disposed else { return }
+                    self.journal("audio route changed: \(change)")
+                }
+            })
             observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil) { [weak self] _ in
                 self?.queue.async {
                     guard let self, !self.disposed, let old = self.audio else { return }
+                    self.journal("the system's media services were reset; building the microphone again")
                     old.stop()
                     self.audio = self.makeEngine()
                     self.startAudio(activate: true)
@@ -347,6 +404,7 @@ final class GhostexVoice {
         func callAudioDeactivated() {
             queue.async {
                 guard !self.disposed else { return }
+                self.journal("CallKit took the call's audio away")
                 self.onFocus(false)
             }
         }
@@ -358,6 +416,7 @@ final class GhostexVoice {
         func callHeld(_ held: Bool) {
             queue.async {
                 guard !self.disposed else { return }
+                self.journal(held ? "CallKit put the call on hold" : "CallKit took the call off hold")
                 self.onFocus(!held)
             }
         }
@@ -365,6 +424,7 @@ final class GhostexVoice {
         func callEndedBySystem() {
             queue.async {
                 guard !self.disposed else { return }
+                self.journal("CallKit ended the call")
                 self.onCall = false
                 self.endLocked()
             }
@@ -705,6 +765,11 @@ final class GhostexVoice {
 
         private func status(_ status: String, _ message: String?) {
             GhostexVoice.emit(["sessionId": id, "mode": mode, "kind": "status", "status": status, "message": message])
+        }
+
+        /// A line for the Logs sheet about this call or recording (`GhostexVoice.journal`).
+        private func journal(_ message: String) {
+            GhostexVoice.journal(message, mode: mode, session: id)
         }
 
         /// A focus object's session title, or nil for all sessions (or an older gxserver's missing key).
