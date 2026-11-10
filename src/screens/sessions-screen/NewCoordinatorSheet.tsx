@@ -17,7 +17,7 @@
  * User: "let's please allow picking more cli agents here ... we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]", and for the phone: "phone too". No Goal or First request field; the first message is shown locked.
  */
 
-import { useMemo, useEffect, useState, type ReactNode } from 'react';
+import { useMemo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -132,6 +132,9 @@ function effortFor(model: CoordinatorModel | undefined, picked: string, fallback
   );
 }
 
+/** Why Create did not make the coordinator: a plain sentence, the computer's words (behind Details), and `open` when it made one that did not start. */
+export type NewCoordinatorRefusal = { message: string; details?: string; open?: () => void };
+
 export type NewCoordinatorSheetProps = {
   projectTitle: string;
   /** The project's folders on this computer when it is cloned twice (the Folder row); absent for one. */
@@ -139,10 +142,14 @@ export type NewCoordinatorSheetProps = {
   /** The folder the Folder row starts on: one of `copies`. */
   defaultProjectId?: string;
   loadOptions: () => Promise<CoordinatorOptions>;
-  /** Resolves to why it was not created, or null once it is (the form is closed then). */
+  /**
+   * Resolves to why it was not created, or null once it is (the form is closed then). `stillOpen` says whether this
+   * form is still the one on screen, so a late answer never closes a newer one.
+   */
   onCreate: (
     input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
-  ) => Promise<string | null>;
+    stillOpen: () => boolean,
+  ) => Promise<NewCoordinatorRefusal | null>;
   onCancel: () => void;
 };
 
@@ -168,7 +175,15 @@ export default function NewCoordinatorSheet({
     () => folders?.find((copy) => copy.projectId === defaultProjectId)?.projectId ?? folders?.[0]?.projectId ?? '',
   );
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<NewCoordinatorRefusal | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -200,27 +215,38 @@ export default function NewCoordinatorSheet({
 
   const agent = options?.agents.find((entry) => entry.agentId === agentId);
   const selectedModel = agent?.models.find((entry) => entry.value === model);
-  const canCreate = agent !== undefined && !creating;
+  // A coordinator made but not started is opened, never created again.
+  const createdAlready = createError?.open !== undefined;
+  const canCreate = agent !== undefined && !creating && !createdAlready;
 
   const create = (): void => {
-    if (agent === undefined || creating) return;
+    if (agent === undefined || creating || createdAlready) return;
     setCreating(true);
     setCreateError(null);
-    void onCreate({
-      agentId: agent.agentId,
-      agentName: agent.name,
-      title: name,
-      model,
-      effort,
-      ...(folders !== null ? { projectId: folder } : {}),
-    }).then(
+    setDetailsOpen(false);
+    void onCreate(
+      {
+        agentId: agent.agentId,
+        agentName: agent.name,
+        title: name,
+        model,
+        effort,
+        ...(folders !== null ? { projectId: folder } : {}),
+      },
+      () => mounted.current,
+    ).then(
       (refused) => {
+        if (!mounted.current) return;
         setCreating(false);
         setCreateError(refused);
       },
       (error: unknown) => {
+        if (!mounted.current) return;
         setCreating(false);
-        setCreateError(error instanceof Error ? error.message : String(error));
+        setCreateError({
+          message: 'Coordinator not created. Try again.',
+          details: error instanceof Error ? error.message : String(error),
+        });
       },
     );
   };
@@ -286,6 +312,7 @@ export default function NewCoordinatorSheet({
                     folders.map((copy) => ({ value: copy.projectId, label: copy.label })),
                     folder,
                     (value) => {
+                      if (createdAlready) return;
                       setFolder(value);
                       setCreateError(null);
                     },
@@ -366,7 +393,21 @@ export default function NewCoordinatorSheet({
                   </Text>
                 </View>
               ) : null}
-              {createError !== null ? <Text style={styles.error}>{createError}</Text> : null}
+              {createError !== null ? (
+                <View>
+                  <Text style={styles.error}>{createError.message}</Text>
+                  {createError.details !== undefined && createError.details.length > 0 ? (
+                    <Pressable accessibilityRole="button" onPress={() => setDetailsOpen((open) => !open)}>
+                      <Text style={styles.hint}>{detailsOpen ? 'Hide details' : 'Details'}</Text>
+                    </Pressable>
+                  ) : null}
+                  {detailsOpen && createError.details !== undefined ? (
+                    <Text style={styles.hint} selectable>
+                      {createError.details}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
               <View style={styles.buttonRow}>
                 <Pressable
                   accessibilityRole="button"
@@ -375,14 +416,20 @@ export default function NewCoordinatorSheet({
                 >
                   <Text style={styles.cancelLabel}>Cancel</Text>
                 </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canCreate}
-                  style={[styles.primaryButton, !canCreate ? styles.buttonDisabled : null]}
-                  onPress={create}
-                >
-                  <Text style={styles.primaryLabel}>{creating ? 'Creating…' : 'Create'}</Text>
-                </Pressable>
+                {createError?.open !== undefined ? (
+                  <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={createError.open}>
+                    <Text style={styles.primaryLabel}>Open coordinator</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!canCreate}
+                    style={[styles.primaryButton, !canCreate ? styles.buttonDisabled : null]}
+                    onPress={create}
+                  >
+                    <Text style={styles.primaryLabel}>{creating ? 'Creating…' : 'Create'}</Text>
+                  </Pressable>
+                )}
               </View>
             </KeyboardAwareScrollView>
           </Pressable>

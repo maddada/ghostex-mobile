@@ -139,7 +139,13 @@ import {
   type SessionContext,
 } from './session-actions';
 import { coordinatorsClosingLine } from './close-confirm';
-import { NEW_ORCHESTRATOR_BENEFITS, parseCoordinatorOptions, type CoordinatorOptions } from './NewCoordinatorSheet';
+import {
+  NEW_ORCHESTRATOR_BENEFITS,
+  parseCoordinatorOptions,
+  type CoordinatorOptions,
+  type NewCoordinatorRefusal,
+} from './NewCoordinatorSheet';
+import type { CreationRefusal } from './use-sessions-screen-actions';
 import {
   parseCoordinatorDetails,
   type CoordinatorDetails,
@@ -163,6 +169,17 @@ import {
 } from './sidebar-menus';
 
 type SessionsNavigation = NativeStackScreenProps<RootStackParamList, 'Sessions'>['navigation'];
+
+/**
+ * The session id in `ghostex coordinator create`'s "Created coordinator <ref>, but its agent did not start" refusal
+ * (server/src/ghostex_cli/coordinator/command.rs): the coordinator exists, so the form opens it rather than making
+ * another. Null for any other refusal.
+ */
+export function createdButNotStartedSessionId(reason: string): string | null {
+  const reference = /Created coordinator ([^\s,]+), but its agent did not start/.exec(reason)?.[1];
+  const sessionId = reference?.split(':').pop();
+  return sessionId !== undefined && sessionId.length > 0 ? sessionId : null;
+}
 
 export type SessionsScreenMenusDeps = {
   entries: DrawerBlock[];
@@ -190,8 +207,12 @@ export type SessionsScreenMenusDeps = {
     command: string,
     message: string,
     chatLaunch?: { agentId: string; projectId: string; title: string },
-    options?: { keepOverlay?: boolean },
-  ) => Promise<string | null>;
+    options?: {
+      keepOverlay?: boolean;
+      stillOpen?: () => boolean;
+      createdSessionIdOf?: (reason: string) => string | null;
+    },
+  ) => Promise<CreationRefusal | null>;
   runQuickAction: (target: MachineRecord, projectId: string, projectTitle: string, entry: QuickActionEntry) => void;
   runSessionCommand: (
     target: MachineRecord,
@@ -1680,26 +1701,39 @@ export function useSessionsScreenMenus({
   /**
    * The New Coordinator form's Create: the coordinator opens in chat, where its reports read best (as on the desktop).
    * It starts in the folder the form's Folder row picked (a project cloned twice on this computer), else the
-   * project's own. The form stays open until the computer has created it; a refusal comes back to the form.
+   * project's own. The form stays open until the computer has created it, and a refusal comes back to the form: a
+   * plain sentence, the computer's words behind Details. When the computer made the coordinator but its agent did not
+   * start (`ghostex coordinator create` says so), the form offers to open that one instead of creating another.
    */
   const createCoordinator = async (
     ctx: ProjectContext,
     input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
-  ): Promise<string | null> => {
+    stillOpen: () => boolean,
+  ): Promise<NewCoordinatorRefusal | null> => {
     const projectId = input.projectId ?? ctx.header.projectId;
     if (!(summaryFor(ctx.machine.id)?.projects ?? []).some((project) => project.projectId === projectId)) {
-      return 'That folder is no longer open. Pick another.';
+      return { message: 'That folder is no longer open. Pick another.' };
     }
     const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
     const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
     const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
-    return runCreationFlow(
+    const refusal = await runCreationFlow(
       ctx.machine,
       createCoordinatorCommand({ ...input, projectId }),
       ProgressCopy.startingCoordinator(ctx.header.title),
       { agentId: iconId, projectId, title },
-      { keepOverlay: true },
+      { keepOverlay: true, stillOpen, createdSessionIdOf: createdButNotStartedSessionId },
     );
+    if (refusal === null) return null;
+    if (refusal.open !== undefined) {
+      const open = refusal.open;
+      return {
+        message: "Coordinator created, but it didn't start. Open it to start it.",
+        details: refusal.reason,
+        open: () => void open(),
+      };
+    }
+    return { message: 'Coordinator not created. Try again, or pick another folder.', details: refusal.reason };
   };
 
   const loadCoordinatorOptions = async (ctx: ProjectContext): Promise<CoordinatorOptions> => {
