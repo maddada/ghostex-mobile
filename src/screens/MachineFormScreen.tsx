@@ -121,7 +121,6 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const removalAsksComputer = useRemovalAsksComputer();
   const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
   const sshPairing = useSshPairings((state) => (machineId === null ? undefined : state.pairings[machineId]));
-  const sshPairingQuiet = useSshPairings((state) => machineId !== null && state.quiet[machineId] === true);
   const plainApprovals = usePlainApprovals((state) => machineId !== null && state.plain[machineId] === true);
   // The computer's "Require Face ID to approve" switch, read when its page opens (null until read).
   const [requirePresence, setRequirePresenceShown] = useState<boolean | null>(null);
@@ -593,11 +592,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
                   <View style={[formStyles.row, formStyles.rowFirst]}>
                     <View style={formStyles.rowMain}>
                       <Text style={formStyles.rowLabel}>{SshPairingCopy.rowLabel}</Text>
-                      <Text style={formStyles.rowDetail}>
-                        {sshPairingQuiet
-                          ? SshPairingCopy.quietRowDetail(sshPairing.computer)
-                          : SshPairingCopy.rowDetail(sshPairing.computer)}
-                      </Text>
+                      <Text style={formStyles.rowDetail}>{SshPairingCopy.rowDetail(sshPairing.computer)}</Text>
                     </View>
                     <SetupButton
                       small
