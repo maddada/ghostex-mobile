@@ -224,6 +224,9 @@ export default function NewCoordinatorSheet({
   // A coordinator made but not started is opened, never created again.
   const createdAlready = createError?.open !== undefined || createError?.uncertain === true;
   const canCreate = agent !== undefined && !creating && !createdAlready;
+  // While Create runs (and once a coordinator was made) the choices it sent are fixed, so the form never shows
+  // a folder, name or agent other than the ones the computer is acting on.
+  const locked = creating || createdAlready;
 
   const create = (): void => {
     if (agent === undefined || creating || createdAlready) return;
@@ -274,7 +277,8 @@ export default function NewCoordinatorSheet({
             <Pressable
               key={item.value || 'default'}
               accessibilityRole="radio"
-              accessibilityState={{ selected: isSelected }}
+              accessibilityState={{ selected: isSelected, disabled: locked }}
+              disabled={locked}
               style={[styles.chip, isSelected ? styles.chipSelected : null]}
               onPress={() => onPick(item.value)}
             >
@@ -302,6 +306,7 @@ export default function NewCoordinatorSheet({
                 <TextInput
                   keyboardAppearance={appearance.light ? 'light' : 'dark'}
                   accessibilityLabel="Name"
+                  editable={!locked}
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
@@ -318,7 +323,7 @@ export default function NewCoordinatorSheet({
                     folders.map((copy) => ({ value: copy.projectId, label: copy.label })),
                     folder,
                     (value) => {
-                      if (createdAlready) return;
+                      if (locked) return;
                       setFolder(value);
                       setCreateError(null);
                     },
