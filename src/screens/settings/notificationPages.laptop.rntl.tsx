@@ -304,7 +304,7 @@ describe('Settings › Live Activity (its preview card)', () => {
   });
   const units = () => [
     screen.getByText(LiveActivityCopy.previewTitle),
-    screen.getByLabelText(LiveActivityCopy.previewLabelWithSessionNames),
+    screen.getByLabelText(LiveActivityCopy.previewLabel),
   ];
 
   test('laptop pose: the page ends above the fold, also scrolled, and the preview carries no gap', async () => {
@@ -315,8 +315,8 @@ describe('Settings › Live Activity (its preview card)', () => {
   test.each(OTHER_POSES)('%s: the page keeps its whole frame and its frame measures nothing', async (_pose, division, window) => {
     listFrame = { top: 0, height: window.height };
     await renderPage(<LiveActivityPage />, division, window);
-    expect(visibleBottom(screen.getByLabelText(LiveActivityCopy.previewLabelWithSessionNames))).toBe(window.height);
-    expect(gapAbove(screen.getByLabelText(LiveActivityCopy.previewLabelWithSessionNames))).toBe(0);
+    expect(visibleBottom(screen.getByLabelText(LiveActivityCopy.previewLabel))).toBe(window.height);
+    expect(gapAbove(screen.getByLabelText(LiveActivityCopy.previewLabel))).toBe(0);
     expect(measuredViews()).toBe(0);
   });
 });

@@ -24,7 +24,7 @@ of `plugins/withWidgets.js` together with the Live Activity.
   the counts still show it.
 - Text level: event and session only. Leading name, project, state and times; no prompt or reply. The leading name
   ("name" in the table above) is the session's name as the Sessions list shows it while Settings › Live Activity ›
-  "Show session names" is on (`liveActivitySessionNames`, on by default) and the session has one, else the agent's
+  "Show session names" is on (`liveActivitySessionNames`, off by default) and the session has one, else the agent's
   name; the mark tells the agent either way. The Live Activity's rows follow the same switch and rule (`leadingName`
   in `src/notifications/contentState.ts`). The snapshot carries that name in `agentName`, the key the widgets draw
   first, so the format version stays 2 and the widgets need no new build.
