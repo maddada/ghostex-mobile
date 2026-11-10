@@ -134,7 +134,7 @@ export const VOICE_CALL_MODES: { mode: VoiceCallMode; label: string; detail: str
   },
 ];
 
-/** Computers whose gxserver said `ready.callModeLive` (it switches a running call's mode) since the app started. */
+/** Computers whose gxserver said `callModeLive` (it switches a running call's mode), in a call's `ready` or in `readVoiceAgent`, since the app started. */
 const liveCallModeComputers = new Set<string>();
 
 /**
@@ -148,7 +148,7 @@ export function voiceCallModeNote(live: boolean): string {
     : 'GPT Realtime bills only audio in both modes. A change applies to your next call.';
 }
 
-/** Whether `machineId`'s gxserver is known to switch a running call's mode (a call there said so). */
+/** Whether `machineId`'s gxserver is known to switch a running call's mode (a call or `readVoiceAgent` there said so). */
 export function callModeSwitchesLive(machineId: string): boolean {
   return liveCallModeComputers.has(machineId);
 }
@@ -1054,7 +1054,9 @@ export async function readComputerCallMode(
   try {
     const answer = await chatMachineLink(machine).rpc('readVoiceAgent', {}, READ_TIMEOUT_MS);
     if (answer.error !== null) return { error: answer.error.message };
-    const result = (answer.result ?? {}) as { callMode?: string };
+    const result = (answer.result ?? {}) as { callMode?: string; callModeLive?: boolean };
+    // A gxserver that switches a running call says so here too, so Settings' note is right before any call.
+    if (result.callModeLive === true) liveCallModeComputers.add(machine.id);
     return { mode: result.callMode === 'pushToTalk' ? 'pushToTalk' : 'regular' };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Couldn't reach your computer." };
