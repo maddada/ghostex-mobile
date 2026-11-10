@@ -243,18 +243,70 @@ function DockBody({
   );
 }
 
+/**
+ * Snooze (1 hour, 6 hours or 24 hours, opened from a quiet "Snooze") and Cancel, on a docked ask,
+ * form or page (gx-chat-core `snooze_choices`; desktop `snooze_cancel_row`). Null when neither.
+ */
+function SnoozeCancelRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const [open, setOpen] = useState(false);
+  const choices = arr(card.snooze)
+    .map(obj)
+    .filter((choice): choice is JsonRecord => choice !== null);
+  const cancel = obj(card.cancel);
+  if (choices.length === 0 && cancel === null) return null;
+  return (
+    <View style={styles.snoozeRow}>
+      {choices.length > 0 ? (
+        <Pressable accessibilityRole="button" hitSlop={6} onPress={() => setOpen((was) => !was)}>
+          <Text style={styles.quiet}>{open ? 'Snooze for' : 'Snooze'}</Text>
+        </Pressable>
+      ) : null}
+      {open
+        ? choices.map((choice, index) => (
+            <Pressable
+              key={`snooze:${index}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Snooze for ${str(choice, 'label')}`}
+              onPress={() => {
+                setOpen(false);
+                dispatch(choice.command as never);
+              }}
+              style={styles.snoozeChoice}
+            >
+              <Text style={styles.chipText}>{str(choice, 'label')}</Text>
+            </Pressable>
+          ))
+        : null}
+      {cancel !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel it for good and tell the agent"
+          hitSlop={6}
+          onPress={() => dispatch(cancel as never)}
+        >
+          <Text style={styles.quiet}>Cancel</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 /** An unanswered form or page in the dock: its title, how many questions are open, and Open. */
 function DockQuestionsCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
   const styles = useStyles();
   const body = useBodyColor();
   return (
-    <View style={[styles.card, styles.questionsCard]}>
-      <Glyph name="help-circle" size={14} color={SidebarPalette.ROW_QUESTION} />
-      <View style={styles.movingText}>
-        <Text style={[styles.title, { color: body, minWidth: 0 }]}>{str(card, 'title')}</Text>
-        <Text style={styles.chipText}>{str(card, 'line')}</Text>
+    <View style={styles.card}>
+      <View style={styles.questionsCard}>
+        <Glyph name="help-circle" size={14} color={SidebarPalette.ROW_QUESTION} />
+        <View style={styles.movingText}>
+          <Text style={[styles.title, { color: body, minWidth: 0 }]}>{str(card, 'title')}</Text>
+          <Text style={styles.chipText}>{str(card, 'line')}</Text>
+        </View>
+        <ToneButton kind="secondary" label="Open" onPress={() => dispatch(card.command as never)} />
       </View>
-      <ToneButton kind="secondary" label="Open" onPress={() => dispatch(card.command as never)} />
+      <SnoozeCancelRow card={card} dispatch={dispatch} />
     </View>
   );
 }
@@ -354,6 +406,9 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
           ) : null}
         </View>
       ) : null}
+      <View style={styles.snoozeIndent}>
+        <SnoozeCancelRow card={card} dispatch={dispatch} />
+      </View>
     </View>
   );
 }
@@ -517,6 +572,10 @@ const useStyles = themedStyles((P) => ({
   },
   linkDots: { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: P.muted },
   questionsCard: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  snoozeIndent: { paddingLeft: 22 },
+  snoozeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4, paddingTop: 2 },
+  snoozeChoice: { paddingHorizontal: 8, borderRadius: 6, backgroundColor: 'rgba(127,127,127,0.12)' },
+  quiet: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   whoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   whoText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
