@@ -1,42 +1,17 @@
 /**
- * What is drawn over the camera on the Scan code screen: the corner frame with
- * its moving scan line, the hint under it, the dimmed "frozen" state once a
- * code is recognized, and the toast at the top (`.viewfinder` in
- * mobile-03-scan.html).
+ * What is drawn over the camera on the scan screen: the corner frame with its moving scan line, and the short
+ * box at the top for a code that is not Ghostex's.
  */
 
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
-import { AlertTriangleGlyph, CheckGlyph, LoaderGlyph } from '../../components/onboarding/SetupIcons';
-import { ScanCopy } from '../../copy';
+import { AlertTriangleGlyph, CheckGlyph } from '../../components/onboarding/SetupIcons';
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import type { ScanToast } from './useScanController';
 
-const FRAME_SIZE = 220;
+const FRAME_SIZE = 190;
 const CORNER = 30;
-
-function Spinner() {
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [spin]);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  return (
-    <Animated.View style={{ transform: [{ rotate }] }}>
-      <LoaderGlyph size={20} color={SetupPalette.ACCENT} />
-    </Animated.View>
-  );
-}
 
 function ScanLine() {
   const position = useRef(new Animated.Value(0)).current;
@@ -68,39 +43,27 @@ function ScanLine() {
 }
 
 export type ScannerOverlayProps = {
-  /** True once a code is recognized: dims the camera and stops the scan line. */
-  frozen: boolean;
-  /** Persistent toast while frozen (spinner or check), or the transient error toast. */
-  status: { icon: 'spinner' | 'check'; title: string; detail: string } | null;
+  /** The corner frame and its scan line, over the live camera. */
+  frame: boolean;
+  /** The short box for a code that is not Ghostex's. */
   toast: ScanToast | null;
-  /** Hidden while the camera is unavailable (the paste sheet is open instead). */
-  showHint: boolean;
 };
 
-export default function ScannerOverlay({ frozen, status, toast, showHint }: ScannerOverlayProps) {
+export default function ScannerOverlay({ frame, toast }: ScannerOverlayProps) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {frozen ? <View style={styles.dim} /> : null}
-      <View style={styles.frameArea}>
-        <View style={[styles.frame, frozen ? styles.frameFrozen : null]}>
-          <View style={[styles.corner, styles.cornerTopLeft]} />
-          <View style={[styles.corner, styles.cornerTopRight]} />
-          <View style={[styles.corner, styles.cornerBottomLeft]} />
-          <View style={[styles.corner, styles.cornerBottomRight]} />
-          {frozen ? null : <ScanLine />}
-        </View>
-      </View>
-      {showHint && !frozen ? <Text style={styles.hint}>{ScanCopy.hint}</Text> : null}
-
-      {status !== null ? (
-        <View style={styles.toast}>
-          {status.icon === 'spinner' ? <Spinner /> : <CheckGlyph size={20} color={SetupPalette.OK} />}
-          <View style={styles.toastText}>
-            <Text style={styles.toastTitle}>{status.title}</Text>
-            <Text style={styles.toastDetail}>{status.detail}</Text>
+      {frame ? (
+        <View style={styles.frameArea}>
+          <View style={styles.frame}>
+            <View style={[styles.corner, styles.cornerTopLeft]} />
+            <View style={[styles.corner, styles.cornerTopRight]} />
+            <View style={[styles.corner, styles.cornerBottomLeft]} />
+            <View style={[styles.corner, styles.cornerBottomRight]} />
+            <ScanLine />
           </View>
         </View>
-      ) : toast !== null ? (
+      ) : null}
+      {toast !== null ? (
         <View style={[styles.toast, toast.tone === 'error' ? styles.toastError : null]}>
           {toast.tone === 'error' ? (
             <AlertTriangleGlyph size={20} color={SetupPalette.ERROR} />
@@ -118,14 +81,6 @@ export default function ScannerOverlay({ frozen, status, toast, showHint }: Scan
 }
 
 const styles = StyleSheet.create({
-  dim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
   frameArea: {
     flex: 1,
     alignItems: 'center',
@@ -134,11 +89,6 @@ const styles = StyleSheet.create({
   frame: {
     width: FRAME_SIZE,
     height: FRAME_SIZE,
-  },
-  frameFrozen: {
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: SetupPalette.OK,
   },
   corner: {
     position: 'absolute',
@@ -182,18 +132,6 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: SetupPalette.ACCENT,
     opacity: 0.85,
-  },
-  hint: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 18,
-    textAlign: 'center',
-    color: '#ffffff',
-    fontSize: 13,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 1 },
   },
   toast: {
     position: 'absolute',

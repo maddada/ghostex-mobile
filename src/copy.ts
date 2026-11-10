@@ -62,20 +62,50 @@ export const ConnectStartCopy = {
   },
 } as const;
 
-/** Scan pairing code (mobile-03-scan.html): one scanner for both code kinds. */
+/**
+ * Scan the code: one scanner for both code kinds, laid out as two steps with the camera as step 2.
+ *
+ * CDXC:RemotePairing 2026-11-10 DECISION:
+ * The user picked take C of the scan screen page (Q2208, "Two steps, the camera is step 2"): the first screen's
+ * two numbered items with icons, the camera inside step 2, Paste a code as a real second way, and "It won't scan"
+ * opening its sheet. Android keeps its live camera there; an iPhone keeps Apple's scanner for now and shows the
+ * still "Open the scanner" tile in the camera's place, until an in-app camera that can focus close up has been
+ * tried on a real iPhone. The light is offered only where the in-app camera runs.
+ */
 export const ScanCopy = {
-  title: 'Scan code',
-  helpAccessibilityLabel: 'Where is the code?',
-  hint: 'Point at the code in Ghostex → Settings → Remote',
+  title: 'Scan the code',
+  steps: {
+    computer: { title: '1. On your computer', detail: 'Open the Ghostex menu and click Connect a phone.' },
+    phone: { title: '2. On this phone', detail: 'Point the camera at the code it shows.' },
+  },
+  stillTile: 'The camera opens over this screen.',
+  cameraOff: 'The camera is off for Ghostex.',
   pasteButton: 'Paste a code instead',
   openScanner: 'Open the scanner',
-  cantFindPrefix: "Can't find the code? ",
-  cantFindLink: 'Show me where it is',
+  lightOn: 'Turn on the light',
+  lightOff: 'Turn off the light',
+  wontScan: "It won't scan",
+  wontScanSheet: {
+    title: "It won't scan",
+    hold: { title: 'Hold the phone a hand away from the screen', detail: 'Too close and the camera cannot focus.' },
+    brightness: {
+      title: "Turn up the computer's brightness",
+      detail: 'A dim screen is hard to read.',
+      detailWithLight: 'Or tap the light on this phone.',
+    },
+    stillNothing: {
+      title: 'Still nothing?',
+      detail: 'On the computer, click the Copy button under the code, send the text to this phone and paste it.',
+    },
+    olderComputer: "No Connect a phone in the computer's menu? On Ghostex 11.2 or earlier, click Mobile & Remote, then Connect.",
+    paste: 'Paste a code',
+  },
   found: (computer: string) => `Found ${computer}`,
+  connecting: 'Connecting…',
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
   rejected: {
     title: "That's not a Ghostex code",
-    detail: 'Point at the code in Ghostex → Mobile & Remote on the computer.',
+    detail: "Point at the code in the computer's Connect a phone window.",
   },
   outdated: {
     title: 'This code needs a newer Ghostex app',
@@ -98,26 +128,6 @@ export const ScanCopy = {
     outdated: 'This code is from a newer Ghostex. Update Ghostex on this phone to pair with it.',
     button: 'Pair',
   },
-  whereIsCode: {
-    title: 'Where is the code?',
-    steps: [
-      {
-        title: 'Open Ghostex on your computer',
-        detail: 'The code is only shown while Ghostex is open.',
-      },
-      {
-        title: 'Open the Ghostex menu and click Connect a phone',
-        detail: 'The menu is at the top of the sidebar. On Ghostex 11.2 or earlier, click Mobile & Remote, then Connect.',
-      },
-      {
-        title: 'Scan the code in that window',
-        detail: 'It works once, for 5 minutes. Keep the window open until this phone is in.',
-      },
-    ],
-    notInstalledPrefix: "Ghostex isn't installed on the computer yet? ",
-    notInstalledLink: 'ghostex.dev',
-    notInstalledUrl: 'https://ghostex.dev',
-  },
   tailscalePassword: {
     eyebrow: 'Tailscale',
     title: 'One more thing: your computer password',
@@ -136,8 +146,6 @@ export const ScanCopy = {
  * way back ("Connect a phone").
  */
 export const PairingCopy = {
-  reachingTitle: (computer: string) => `Reaching ${computer}…`,
-  reachingLede: 'Keep the Connect a phone window open on the computer.',
   checkTitle: 'Check your computer',
   checkLede: (computer: string) =>
     `${computer} shows three words. If they are the same as these, click Approve there.`,

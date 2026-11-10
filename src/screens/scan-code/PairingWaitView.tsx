@@ -1,6 +1,5 @@
 /**
- * After a code is scanned: "Reaching <computer>…" until the computer answers, then "Check your computer" with the
- * three words in the middle, how long the phone still waits, and help for the computer that shows nothing
+ * Once the computer answered a scanned code: "Check your computer" with the three words in the middle, how long the phone still waits, and help for the computer that shows nothing
  * (CDXC:RemotePairing 2026-11-10 in copy.ts `PairingCopy`).
  */
 
@@ -17,8 +16,7 @@ const MINUTE_TICK_MS = 15_000;
 
 export type PairingWaitViewProps = {
   computer: string;
-  /** Absent until the computer answered with its words. */
-  words?: string[];
+  words: string[];
   giveUpAtMs?: number;
   onCancel: () => void;
 };
@@ -39,16 +37,6 @@ export default function PairingWaitView({ computer, words, giveUpAtMs, onCancel 
     const timer = setInterval(() => setLeft(minutesLeft(giveUpAtMs)), MINUTE_TICK_MS);
     return () => clearInterval(timer);
   }, [giveUpAtMs]);
-
-  if (words === undefined) {
-    return (
-      <View style={styles.body}>
-        <ActivityIndicator size="large" color={appearance.muted} />
-        <Text style={[setupText.titleLg, setupText.center]}>{PairingCopy.reachingTitle(computer)}</Text>
-        <Text style={[setupText.lede, setupText.center]}>{PairingCopy.reachingLede}</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>

@@ -2,7 +2,7 @@
  * Stroke glyphs for the setup flow (Welcome, Choose, Scan, Connected), drawn
  * with react-native-svg from the Tabler outlines the mockup's shared.js uses
  * (terminal, sparkles, folders, qrcode, shield, camera, paste, help-circle,
- * check, alert-triangle, loader, info, lock, download, device-desktop, chevron-right), so no icon font is needed.
+ * check, alert-triangle, loader, info, lock, download, device-desktop, chevron-right, bulb), so no icon font is needed.
  */
 
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -189,6 +189,16 @@ export function ChevronRightGlyph(props: SetupGlyphProps) {
   return (
     <Glyph {...props}>
       <Path d="M9 6l6 6l-6 6" />
+    </Glyph>
+  );
+}
+
+export function BulbGlyph(props: SetupGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <Path d="M3 12h1m8 -9v1m8 8h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7" />
+      <Path d="M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3" />
+      <Path d="M9.7 17l4.6 0" />
     </Glyph>
   );
 }
