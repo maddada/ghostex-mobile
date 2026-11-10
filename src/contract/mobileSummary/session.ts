@@ -25,7 +25,7 @@ import type {
 export type GhostexSession = {
   /** Display-only compact badge; derived from first 4 chars of sessionId when omitted. */
   alias: string;
-  /** Stable Ghostex session id — the CLI action selector. Never empty. */
+  /** Stable Ghostex session id: the CLI action selector. Never empty. */
   sessionId: string;
   /** projectId || groupId fallback chain. */
   projectId: string;

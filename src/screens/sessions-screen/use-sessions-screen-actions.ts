@@ -58,14 +58,12 @@ type SessionsNavigation = NativeStackScreenProps<RootStackParamList, 'Sessions'>
 
 /**
  * A create the computer refused (`runCreationFlow`): the summarized sentence, the computer's own output (`raw`, read
- * before summarizing), `open` when its output names a session it made anyway, and `openSession` to open one the caller
- * finds itself (keepOverlay only).
+ * before summarizing), and `open` when its output names a session it made anyway.
  */
 export type CreationRefusal = {
   reason: string;
   raw: string;
   open?: () => Promise<void>;
-  openSession?: (sessionId: string) => Promise<void>;
 };
 
 export type SessionsScreenActionsDeps = {
@@ -339,7 +337,6 @@ export function useSessionsScreenActions({
           reason,
           raw,
           ...(createdId !== null ? { open: () => openSession(createdId) } : {}),
-          ...(keepOverlay ? { openSession } : {}),
         };
         if (!keepOverlay || !stillOpen()) setTransientStatus(reason);
         return refusal;

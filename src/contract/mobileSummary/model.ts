@@ -40,7 +40,7 @@ export type GhostexProject = {
   /** The GBot this project is the folder of (`gbotsBot`), only while GBots are on: drawn as its row under Main Hub. */
   gbotsBot?: GhostexGbotsBot;
   icon: GhostexProjectIcon;
-  /** Workspace theme color ("#rrggbb"), or "" — tints the project rail. */
+  /** Workspace theme color ("#rrggbb"), or "": tints the project rail. */
   themeColor: string;
   /**
    * `worktree.parentProjectId` for a git worktree, "" otherwise. Space
