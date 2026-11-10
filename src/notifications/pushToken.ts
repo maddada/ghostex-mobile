@@ -142,6 +142,10 @@ export class PushTokenRegistration {
   private token: string | null = null;
   /** How often iOS issued a new token: a fetch that began before the latest issue is stale. */
   private tokenIssues = 0;
+  /** iOS's device token from its last announcement (`tokenChanged`); it stays here, never in the log. */
+  private deviceToken: string | null = null;
+  /** Whether a token fetch is in flight: the announcement it causes is not a new issue. */
+  private fetching = false;
   /** Per enabled computer, the request it took last in this launch: a registration, or the removal. */
   private readonly taken = new Map<string, PushTokenParams>();
   /** Computers that have no push or cannot be asked, until the app starts again or the token changes. */
@@ -169,8 +173,24 @@ export class PushTokenRegistration {
     return this.again;
   }
 
-  /** iOS issued a new token: it is fetched anew and goes to every computer, those without push included. */
-  tokenChanged(): Promise<void> {
+  /**
+   * iOS issued a new token: it is fetched anew and goes to every computer, those without push included.
+   * `deviceToken` is iOS's own token from the event; one the phone already saw is no new token.
+   */
+  tokenChanged(deviceToken?: string): Promise<void> {
+    /*
+    CDXC:Notifications 2026-11-10 WHY:
+    iOS announces the device token after every registration, also the one each token fetch makes itself, so every
+    fetch counted as a new issue: the token it got was dropped as stale and the next pass fetched again, a loop of
+    fetches and permission reads (about every 280 ms, also in the background) that never registered a token with any
+    computer (11.3.0, no push at all). Only a device token that differs from the last one seen is a new issue; the
+    first one seen during a fetch is the one that fetch gets.
+    */
+    if (deviceToken !== undefined) {
+      const previous = this.deviceToken;
+      this.deviceToken = deviceToken;
+      if (deviceToken === previous || (previous === null && this.fetching)) return Promise.resolve();
+    }
     this.token = null;
     this.tokenIssues += 1;
     this.unsupported.clear();
@@ -329,17 +349,39 @@ export class PushTokenRegistration {
       return undefined;
     }
     const issued = this.tokenIssues;
+    this.fetching = true;
     try {
       const token = await this.deps.obtainToken(projectId);
-      if (!EXPO_PUSH_TOKEN.test(token)) throw new Error('not an Expo push token');
+      if (!EXPO_PUSH_TOKEN.test(token)) throw new TokenFetchError('notAnExpoPushToken');
       // iOS issued a newer token while this one was fetched: the pass that issue asked for fetches that one.
       if (issued !== this.tokenIssues) return undefined;
       this.token = token;
       return token;
-    } catch {
-      // iOS's or Expo's own error text stays out of the app log: it can carry the token.
-      this.deps.log('Push: no push token this time; asked again at the next occasion');
+    } catch (error) {
+      // iOS's or Expo's own error text stays out of the app log (it can carry the token); its code says why.
+      this.deps.log(`Push: no push token this time (${tokenFetchFailure(error)}); asked again at the next occasion`);
       return undefined;
+    } finally {
+      this.fetching = false;
     }
   }
+}
+
+class TokenFetchError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
+/**
+ * Why a token fetch failed, fit for the app log: the error's code (Expo's `ERR_NOTIFICATIONS_…`, iOS's registration
+ * code) and, for an answer Expo refused, its HTTP status; never the message, which can quote the token.
+ */
+export function tokenFetchFailure(error: unknown): string {
+  const record = typeof error === 'object' && error !== null ? (error as { code?: unknown; message?: unknown }) : {};
+  const code = typeof record.code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/u.test(record.code) ? record.code : null;
+  const message = typeof record.message === 'string' ? record.message : '';
+  const status = /expected an OK response, received: (\d{3})\b/u.exec(message)?.[1];
+  const name = error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? error.name : 'unexpected';
+  return [code ?? name, status === undefined ? null : `HTTP ${status}`].filter(Boolean).join(', ');
 }

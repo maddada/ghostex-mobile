@@ -274,14 +274,16 @@ describe('no token without permission, master switch and push project', () => {
     const app = harness({ token: async () => Promise.reject(new Error(`network down for ${TOKEN}`)) });
     await app.registration.sync();
     assert.deepEqual(app.sent, []);
-    assert.deepEqual(app.logs, ['Push: no push token this time; asked again at the next occasion']);
+    assert.deepEqual(app.logs, ['Push: no push token this time (Error); asked again at the next occasion']);
   });
 
   test('a token that is not an Expo push token is not sent', async () => {
     const app = harness({ token: async () => 'not-a-token' });
     await app.registration.sync();
     assert.deepEqual(app.sent, []);
-    assert.deepEqual(app.logs, ['Push: no push token this time; asked again at the next occasion']);
+    assert.deepEqual(app.logs, [
+      'Push: no push token this time (notAnExpoPushToken); asked again at the next occasion',
+    ]);
   });
 });
 
