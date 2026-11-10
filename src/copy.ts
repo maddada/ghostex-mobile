@@ -691,9 +691,9 @@ export const MachineNoticeCopy = {
   expandHint: 'Shows the reason and the Reconnect and Remote Settings buttons',
 } as const;
 
-/** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): "Computers" on screen, as everywhere else. */
+/** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html). */
 export const MachinesCopy = {
-  title: 'Computers',
+  title: 'Machines',
   badge: {
     connected: 'Connected',
     failed: "Can't reach",

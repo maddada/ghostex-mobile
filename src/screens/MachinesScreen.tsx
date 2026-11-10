@@ -1,5 +1,5 @@
 /**
- * Computers list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): one
+ * Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html): one
  * card per saved computer with a status badge and a one-line "how / what's
  * wrong" detail, tap → the computer's page, swipe left → Remove (it confirms
  * with the computer's name), and "Add a computer" with one compact card per
@@ -8,7 +8,7 @@
  *
  * CDXC:RemotePairing 2026-11-10 DECISION:
  * On the pairing page the user kept this screen (Q2192), "but please improve it a bit and clean it up": same
- * structure, "Computers" as everywhere else, state coloured once (the badge), no line explaining the swipe, the
+ * structure (still "Machines", the name of the Sessions button that opens it), state coloured once (the badge), no line explaining the swipe, the
  * swipe's Edit gone (a tap opens the page that edits), and the add cards one row each without a coloured border.
  */
 
