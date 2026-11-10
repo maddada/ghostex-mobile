@@ -38,7 +38,7 @@ export type UnifiedSessionInput = {
   activity: string;
   awaitingApproval: boolean;
   /**
-   * The session has a question. The phone decides it by its one rule (`hasQuestion` in ../mobileSummary.ts: an open
+   * The session has a question. The phone decides it by its one rule (`hasQuestion` in ../mobileSummary/session.ts: an open
    * question card from a computer that announces it, or a counted question). The host fixture carries the count
    * alone, so its adapter derives the same boolean from `pendingQuestionCount`.
    */

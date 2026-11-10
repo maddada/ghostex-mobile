@@ -55,7 +55,7 @@ const OPTION_BY_VALUE: Readonly<Record<string, SessionTagOption>> = Object.fromE
 /**
  * CDXC:Sessions 2026-09-11 SEE-ALSO:
  * Custom tags are one more value of the single `sessionTag` marker: `custom-` ids resolved against the per-machine catalog gxserver ships as `customSessionTags`, with the built-ins kept in this file.
- * The id rules and catalog shape live in packages/shared/session-tags.ts and server/src/custom_session_tags.rs; the wire parse is `parseCustomSessionTags` in ./mobileSummary.ts.
+ * The id rules and catalog shape live in packages/shared/session-tags.ts and server/src/custom_session_tags.rs; the wire parse is `parseCustomSessionTags` in ./mobileSummary/parseSummary.ts.
  */
 export const CUSTOM_SESSION_TAG_ID_PREFIX = 'custom-';
 
