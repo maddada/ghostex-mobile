@@ -1,8 +1,9 @@
 /**
- * What the Live Activity switch controls, drawn once with sample agents (the
- * design's preview, so that it is clear what the switch controls). A picture of
+ * What the Live Activity switches control, drawn once with sample agents (the
+ * design's preview, so that it is clear what the switches control). A picture of
  * the Lock Screen card, not live data: the real one is rendered by the widget extension
  * (modules/ghostex-live-activity/ios/Extension/GhostexActivityViews.swift), whose colours and words it repeats.
+ * `showSessionNames` is the "Show session names" switch: on, a row leads with its session's sample name.
  */
 
 import { useMemo } from 'react';
@@ -49,11 +50,18 @@ function Glyph({ state, size }: { state: PreviewState; size: number }) {
   );
 }
 
-export default function LiveActivityPreview() {
+export default function LiveActivityPreview({ showSessionNames }: { showSessionNames: boolean }) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   return (
-    <View style={styles.frame} accessible accessibilityRole="image" accessibilityLabel={LiveActivityCopy.previewLabel}>
+    <View
+      style={styles.frame}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={
+        showSessionNames ? LiveActivityCopy.previewLabelWithSessionNames : LiveActivityCopy.previewLabel
+      }
+    >
       <View style={styles.card}>
         <View style={styles.head}>
           <View style={styles.count}>
@@ -74,7 +82,7 @@ export default function LiveActivityPreview() {
           <View key={`${row.agent}:${row.project}`} style={[styles.row, index > 0 && styles.rowDivider]}>
             <View style={styles.identity}>
               <Text style={[styles.agent, row.state === 'finished' && styles.secondary]} numberOfLines={1}>
-                {row.agent}
+                {showSessionNames ? row.session : row.agent}
               </Text>
               <Text style={styles.project} numberOfLines={1}>
                 {row.project}

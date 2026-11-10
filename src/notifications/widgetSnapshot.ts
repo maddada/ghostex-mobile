@@ -7,14 +7,16 @@
  * The agents are the ones the Live Activity shows, classified by its rules (`candidateFor` in `contentState.ts`):
  * finished agents are neither counted nor listed, an agent whose state has no start time in the summary is counted but
  * gets no row, and a waiting agent with a question is just waiting here (the snapshot has no question field). An agent
- * carries its name, resolved artwork and tint, project, state and since when; no prompt, reply or title text.
+ * carries its leading name, resolved artwork and tint, project, state and since when; no prompt or reply text. The
+ * leading name is the Live Activity row's (`leadingName`): the agent's, or the session's name where Settings ›
+ * Live Activity › "Show session names" is on and the session has one.
  *
  * Kept free of React Native so the rules are testable under `bun test`.
  */
 
 import type { AgentArtId } from '../contract/mobileSummary';
 import type { UsageBar } from '../usage/usageMeters';
-import { candidateFor, compareShown, type ActivitySource, type Shown } from './contentState';
+import { candidateFor, compareShown, leadingName, type ActivitySource, type Shown } from './contentState';
 
 /** The snapshot's format; the widget shows its empty state for any other version. */
 export const WIDGET_SNAPSHOT_VERSION = 2;
@@ -22,6 +24,7 @@ export const WIDGET_SNAPSHOT_VERSION = 2;
 export const MAX_WIDGET_AGENTS = 8;
 
 export type WidgetAgent = {
+  /** The name the agent's lines lead with, as `LiveActivityRow.agentName`. */
   agentName: string;
   /** Artwork and packed RGB tint already resolved by the shared Live Activity candidate. */
   agentIcon: AgentArtId;
@@ -47,12 +50,14 @@ export type WidgetSnapshot = {
 /**
  * The snapshot at `now` (epoch ms) over every given computer, with `usageBars` (the large widget's, possibly none).
  * The data time is the oldest summary read, which is the refresh time when every computer answered; `now` only
- * when no summary is given.
+ * when no summary is given. `showSessionNames` is the Settings switch (`liveActivitySessionNames`): off, every agent
+ * leads with its agent's name.
  */
 export function buildSnapshot(
   sources: readonly ActivitySource[],
   now: number,
   usageBars: readonly UsageBar[] = [],
+  showSessionNames = false,
 ): WidgetSnapshot {
   const counts = { working: 0, waiting: 0 };
   const shown: Shown[] = [];
@@ -69,13 +74,13 @@ export function buildSnapshot(
   const agents = shown
     .sort(compareShown)
     .slice(0, MAX_WIDGET_AGENTS)
-    .map(({ row }): WidgetAgent => ({
-      agentName: row.agentName,
-      agentIcon: row.agentIcon,
-      agentTint: row.agentTint,
-      project: row.project,
-      state: row.state === 'waiting' ? 'waiting' : 'working',
-      sinceAt: row.startedAt,
+    .map((entry): WidgetAgent => ({
+      agentName: leadingName(entry, showSessionNames),
+      agentIcon: entry.row.agentIcon,
+      agentTint: entry.row.agentTint,
+      project: entry.row.project,
+      state: entry.row.state === 'waiting' ? 'waiting' : 'working',
+      sinceAt: entry.row.startedAt,
     }));
   return {
     schemaVersion: WIDGET_SNAPSHOT_VERSION,

@@ -22,7 +22,12 @@ of `plugins/withWidgets.js` together with the Live Activity.
 - "No agent is working or waiting." (medium and large, in the agents' place) only when both counts are 0. An agent
   counted without a row (a computer that sends no start time, an approval without a time) leaves that place empty;
   the counts still show it.
-- Text level: event and session only. Agent name, project, state and times; no prompt, reply or session title.
+- Text level: event and session only. Leading name, project, state and times; no prompt or reply. The leading name
+  ("name" in the table above) is the session's name as the Sessions list shows it while Settings › Live Activity ›
+  "Show session names" is on (`liveActivitySessionNames`, on by default) and the session has one, else the agent's
+  name; the mark tells the agent either way. The Live Activity's rows follow the same switch and rule (`leadingName`
+  in `src/notifications/contentState.ts`). The snapshot carries that name in `agentName`, the key the widgets draw
+  first, so the format version stays 2 and the widgets need no new build.
 - No data written yet (or a snapshot of another version, or one with an agent neither working nor waiting): the
   Ghostex mark only, no numbers.
 - Colour never carries meaning alone: every state colour comes with its glyph (open arc working, clock waiting, bell
@@ -56,7 +61,8 @@ of `plugins/withWidgets.js` together with the Live Activity.
   format. The app and extension ship together; no name-based identity is reconstructed from an old snapshot.
 - Data time (`writtenAt`): when the oldest summary used was read; the refresh time when every computer answered.
 - A refresh that changes nothing shown, compared with the data time to the minute, writes nothing; while the poll runs
-  an unchanged state is written once a minute, so the shown time stays current.
+  an unchanged state is written once a minute, so the shown time stays current. Switching "Show session names"
+  writes at once, and nothing is written before the stored settings were read.
 - Nothing is written before the first summary was read. Removing the last computer deletes the file.
 - Not written while the app is in the background except in a run iOS grants for a push with content-available.
   The registered task refreshes the session list once, then `updateWidgets()` installs the existing writer if a

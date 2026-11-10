@@ -1,7 +1,8 @@
 /**
- * Runs the Home Screen widgets' writer for the app's lifetime: every change of the inventory (each summary refresh)
- * or of the machines brings the App Group snapshot in line and, when it changed, asks WidgetKit to reload the
- * widgets (`widgetWriter.ts`). iOS only; on Android the native module does not exist and nothing is installed.
+ * Runs the Home Screen widgets' writer for the app's lifetime: every change of the inventory (each summary refresh),
+ * of the machines or of the settings (the "Show session names" switch) brings the App Group snapshot in line and,
+ * when it changed, asks WidgetKit to reload the widgets (`widgetWriter.ts`). iOS only; on Android the native module
+ * does not exist and nothing is installed.
  *
  * `updateWidgets` applies the latest summaries after a background push refreshed them, beside `updateLiveActivity`.
  * It installs the existing writer when a background launch mounted no screen and resolves after its write/reload.
@@ -15,6 +16,7 @@ import { wasmCoreBridge } from '../chat/rust/wasm-core/bridge';
 import { useInventoryStore } from '../inventory/store';
 import { selectedMachine, useMachinesStore } from '../machines/store';
 import { machineTargetFor } from '../screens/terminal-screen/session-lookups';
+import { useSettingsStore } from '../settings/store';
 import { readAccountsAnswer } from '../usage/client';
 import { buildUsageBars } from '../usage/usageMeters';
 import { currentSources } from './liveActivity';
@@ -23,15 +25,20 @@ import { createWidgetWriter, type WidgetInputs, type WidgetWriter } from './widg
 let installed = false;
 let writer: WidgetWriter | null = null;
 
-/** Null until the saved computers are loaded: before that, no computer would read as the last one removed. */
+/**
+ * Null until the saved computers and the settings are loaded: before that, no computer would read as the last one
+ * removed, and a "Show session names" switched off would read as its default and put the names into the snapshot.
+ */
 function currentInputs(): WidgetInputs | null {
   const machines = useMachinesStore.getState();
-  if (!machines.hydrated) return null;
+  const settings = useSettingsStore.getState();
+  if (!machines.hydrated || !settings.hydrated) return null;
   return {
     computersSaved: machines.machines.length > 0,
     sources: currentSources(),
     selectedMachineId: selectedMachine(machines)?.id ?? null,
     polling: useInventoryStore.getState().polling,
+    showSessionNames: settings.settings.liveActivitySessionNames,
   };
 }
 
@@ -67,6 +74,15 @@ export function initWidgets(): void {
   });
   useInventoryStore.subscribe(() => void syncWidgets());
   useMachinesStore.subscribe(() => void syncWidgets());
+  // Of the settings only these two reach the snapshot; any other change would rebuild it to write nothing.
+  useSettingsStore.subscribe((state, previous) => {
+    if (
+      state.hydrated !== previous.hydrated ||
+      state.settings.liveActivitySessionNames !== previous.settings.liveActivitySessionNames
+    ) {
+      void syncWidgets();
+    }
+  });
   void syncWidgets();
 }
 

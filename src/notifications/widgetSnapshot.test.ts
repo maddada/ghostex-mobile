@@ -290,6 +290,7 @@ function inputs(overrides: Partial<WidgetInputs> = {}): WidgetInputs {
     sources: sources(twoWorkingOneWaiting),
     selectedMachineId: MACHINE,
     polling: true,
+    showSessionNames: false,
     ...overrides,
   };
 }

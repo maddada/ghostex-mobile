@@ -20,6 +20,7 @@ import { initAppLifecycle } from '../app/lifecycle';
 import { sessionChatRpc } from '../chat/rust/transport';
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import { execRemoteCommand } from '../remote/commands';
+import { useSettingsStore } from '../settings/store';
 import { initWidgets } from './widgets';
 import type { WidgetSnapshot } from './widgetSnapshot';
 
@@ -131,6 +132,7 @@ afterAll(() => {
 
 test('through the app wiring: each refresh reaches the widgets with one reload per write, usage every 2 minutes, nothing in the background', async () => {
   useMachinesStore.setState({ machines: [MACHINE], selectedMachineId: MACHINE.id, hydrated: true });
+  useSettingsStore.setState({ hydrated: true });
   mockWire = { sessions: [working('s1', T0 - 60_000)] };
 
   // App start, as App.tsx installs them.

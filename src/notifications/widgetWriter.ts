@@ -38,6 +38,8 @@ export type WidgetInputs = {
   selectedMachineId: string | null;
   /** Whether the summary poll runs (the app in the foreground with a computer selected). */
   polling: boolean;
+  /** The Settings switch (`liveActivitySessionNames`): the agents lead with their sessions' names. */
+  showSessionNames: boolean;
 };
 
 export type WidgetWriterDeps = {
@@ -90,7 +92,7 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
     const now = deps.now();
     const reading = inputs.selectedMachineId === null ? undefined : usage.get(inputs.selectedMachineId);
     const fresh = reading !== undefined && now - reading.readAt <= USAGE_MAX_AGE_MS;
-    const snapshot = buildSnapshot(inputs.sources, now, fresh ? reading.bars : []);
+    const snapshot = buildSnapshot(inputs.sources, now, fresh ? reading.bars : [], inputs.showSessionNames);
     const shown = JSON.stringify({ ...snapshot, writtenAt: snapshot.writtenAt.slice(0, 16) });
     if (shown === lastShown) return queue;
     const json = JSON.stringify(snapshot);
