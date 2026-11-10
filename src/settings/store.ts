@@ -186,8 +186,8 @@ export type GhostexSettings = ThemeColourSettings & {
    * follows the computer's `sidebarHideProjectsWithoutSessions`; from then on it keeps its own value, and
    * flipping it never changes the computer.
    *
-   * CDXC:Sidebar 2026-11-09 DECISION:
-   * User (Q34): the phone gets its own Hide projects without sessions switch with the desktop's rule. It starts from the computer's value and, once changed on the phone, remembers its own (the Sessions list layout's pattern, Q933); flipping it on the phone never changes the desktop.
+   * CDXC:Sidebar 2026-11-09 WHY:
+   * The contributor (sebastianarena, PR #540) chose this: the phone gets its own Hide projects without sessions switch with the desktop's rule. It starts from the computer's value and, once changed on the phone, remembers its own (the Sessions list layout's pattern, Q933); flipping it on the phone never changes the desktop.
    */
   sessionsListHideProjectsWithoutSessions: boolean | null;
   /**
