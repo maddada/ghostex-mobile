@@ -8,7 +8,7 @@
  * SEE-ALSO: apps/desktop/src/app/gx_store/unified_new_session.rs (the desktop's picker host).
  */
 
-import { LOCAL_MACHINE_KEY, spaceFilterKey, spaceOfProject } from '../../contract/unified/build';
+import { LOCAL_MACHINE_KEY, OTHER_SPACE_ID, spaceFilterKey, spaceOfProject } from '../../contract/unified/build';
 import {
   unifiedProjectChoices,
   type UnifiedChoiceMachineInput,
@@ -20,6 +20,7 @@ import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../machines/store';
 import { filterSummaryForSpace } from '../../spaces/spaceFilter';
+import { filterSummaryForWorkspace, projectWorkspaceIdOf } from '../../workspaces/workspaceFilter';
 import type { NewSessionComputer } from './new-session-button';
 import { useUnifiedListStore } from './unified-list-store';
 
@@ -119,8 +120,9 @@ export function newSessionComputersNow(): NewSessionComputer[] {
 }
 
 /**
- * The Space a project's agent pick is looked up and remembered under: the drawer's Space when it
- * shows the project (so the Project list's headers keep theirs), else the Space that shows it
+ * The Space a project's agent pick is looked up and remembered under, in `summary` (the project's
+ * own workspace): the drawer's Space when it shows the project (so the Project list's headers keep
+ * theirs), else the Space that shows it
  * (`spaceOfProject`: its collection's, its worktree parent's, or Other). A start from the New
  * session sheet, a Unified group or the filter can be in a project of another Space.
  */
@@ -130,11 +132,25 @@ export function agentSpaceOfProject(
   projectId: string,
   drawerSpaceId: string,
 ): string {
-  if (filterSummaryForSpace(summary, drawerSpaceId).projects.some((project) => project.projectId === projectId)) {
+  // A Space of this summary (the drawer can be on another workspace's).
+  const drawerHere = drawerSpaceId === OTHER_SPACE_ID || summary.sidebarSpaces.spaces[drawerSpaceId] !== undefined;
+  if (
+    drawerHere &&
+    filterSummaryForSpace(summary, drawerSpaceId).projects.some((project) => project.projectId === projectId)
+  ) {
     return drawerSpaceId;
   }
   const machine = unifiedMachineInput({ machineId, label: '', summary, workspaceId: null }, false);
   const project = machine.projects.find((entry) => entry.projectId === projectId);
-  if (machine.spaces === null || project === undefined) return drawerSpaceId;
+  if (machine.spaces === null || project === undefined) return OTHER_SPACE_ID;
   return spaceOfProject(machine.spaces, project);
+}
+
+/**
+ * A computer's summary as the workspace of one of its projects sees it, with that workspace's
+ * Spaces: the workspace shown on the phone can have none while the project's has some.
+ */
+export function summaryOfProjectWorkspace(summary: GhostexMobileSummary, projectId: string): GhostexMobileSummary {
+  const workspaceId = projectWorkspaceIdOf(summary, projectId);
+  return workspaceId === null ? summary : filterSummaryForWorkspace(summary, workspaceId);
 }

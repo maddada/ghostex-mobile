@@ -8,7 +8,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ProjectPickerSheet } from '../chat/native/composer/ProjectPickerSheet';
-import { agentSpaceOfProject, newSessionComputersNow, projectChoicesNow } from './sessions-screen/new-session-place';
+import {
+  agentSpaceOfProject,
+  newSessionComputersNow,
+  projectChoicesNow,
+  summaryOfProjectWorkspace,
+} from './sessions-screen/new-session-place';
 import { NewSessionButton, newSessionEmptyList } from './sessions-screen/new-session-button';
 import {
   AppState,
@@ -448,29 +453,27 @@ export default function SessionsScreen({ navigation }: Props) {
    */
   const agentChoiceContext = useCallback(
     (machineId: string, projectId: string): AgentChoiceContext => {
-      const summary =
-        machineId === machine?.id ? selectedSummary : (inventoriesByMachineId[machineId]?.summary ?? null);
-      const spaces = machineId === machine?.id ? machineSpaces : (summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES);
+      const whole = inventoriesByMachineId[machineId]?.summary ?? null;
+      // The project's own workspace and its Spaces: the workspace shown can have none while the project's has some.
+      const own = whole === null ? null : summaryOfProjectWorkspace(whole, projectId);
+      const spaces = own?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
       const drawerSpaceId =
         machineId === machine?.id
           ? selectedSpaceId
           : resolveSelectedSpaceId(spaces, selectedSpaceIdByMachine[machineId]);
       // The project's own Space: a start from New session, a Unified group or the filter can be in another one.
-      const whole = inventoriesByMachineId[machineId]?.summary ?? summary;
       const spaceId =
-        spaces.order.length === 0
+        own === null || spaces.order.length === 0
           ? null
-          : whole === null
-            ? drawerSpaceId
-            : agentSpaceOfProject(whole, machineId, projectId, drawerSpaceId);
+          : agentSpaceOfProject(own, machineId, projectId, drawerSpaceId);
       const worktreeParent =
         whole?.projects.find((project) => project.projectId === projectId)?.worktreeParentProjectId ?? '';
       return {
-        scope: parseAgentChoiceScope(summary?.newSessionAgentScope),
+        scope: parseAgentChoiceScope(whole?.newSessionAgentScope),
         place: agentChoicePlace(machineId, projectId, worktreeParent, spaceId),
       };
     },
-    [machine?.id, selectedSummary, inventoriesByMachineId, machineSpaces, selectedSpaceId, selectedSpaceIdByMachine],
+    [machine?.id, inventoriesByMachineId, selectedSpaceId, selectedSpaceIdByMachine],
   );
   const spaceCounts = useMemo(
     () =>

@@ -541,6 +541,48 @@ describe("the header's New session", () => {
     expect(useLauncherStore.getState().agentByProject[`${MACHINE.id}:P1`]).toBe('codex');
   });
 
+  test("Per Space: a project in another workspace's Space, while the shown workspace has none", async () => {
+    await renderSessions({
+      extra: {
+        agents: TWO_AGENTS,
+        newSessionAgentScope: 'space',
+        sidebarWorkspaces: {
+          defaultWorkspaceId: 'wa',
+          order: ['wa', 'wb'],
+          workspaces: { wa: { name: 'Alpha' }, wb: { name: 'Beta' } },
+        },
+        projects: PROJECTS.map((project) => (project.projectId === 'P1' ? { ...project, workspaceId: 'wb' } : project)),
+        sidebarSpaces: {
+          order: ['sb'],
+          spaces: { sb: { name: 'Beta work', memberProjectIds: ['P1'], workspaceId: 'wb' } },
+        },
+      },
+      launcher: { primaryAgentId: 'claude', agentBySpace: { [`${MACHINE.id}:sb`]: 'codex' } },
+    });
+    await openNewSession();
+    await pick('website');
+    expect(launches()[0]![1]).toMatch(createCommand('codex', 'P1'));
+    expect(useLauncherStore.getState().agentBySpace[`${MACHINE.id}:sb`]).toBe('codex');
+  });
+
+  test('a copy of a repository the Project list folds into another entry still starts', async () => {
+    const copy = { gitRemoteOriginUrl: 'git@github.com:acme/web.git' };
+    await renderSessions({
+      extra: {
+        projects: [
+          { projectId: 'P1', name: 'web', path: '/one/web', gitRepositoryRootPath: '/one/web', ...copy },
+          { projectId: 'P2', name: 'web', path: '/two/web', gitRepositoryRootPath: '/two/web', ...copy },
+        ],
+        sessions: [session('s-web', 'Landing copy', 'P1', 5)],
+        workspaceGroups: { projectOrder: ['P2', 'P1'] },
+      },
+    });
+    await openNewSession();
+    await pick('web');
+    expect(screen.queryByText('Project not found')).toBeNull();
+    expect(launches()).toEqual([[MACHINE.id, expect.stringMatching(createCommand('claude', 'P1'))]]);
+  });
+
   test('with no computer it opens Add computer', async () => {
     await renderSessions({ noMachines: true });
     await press('New session');
