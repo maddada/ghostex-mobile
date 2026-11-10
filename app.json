@@ -64,7 +64,8 @@
         "NSMicrophoneUsageDescription": "Ghostex uses the microphone when you talk with the voice agent, dictate a message in the chat or record a video to attach to a session.",
         "NSSpeechRecognitionUsageDescription": "Ghostex turns what you dictate in the chat into text.",
         "UIBackgroundModes": ["audio", "voip"],
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,

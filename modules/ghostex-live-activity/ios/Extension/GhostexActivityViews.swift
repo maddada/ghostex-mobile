@@ -223,16 +223,20 @@ struct ActivityRows: View {
   }
 }
 
-struct NotCurrentLabel: View {
+/// Past the stale date: when the phone last heard from the computer, said plainly, as the widgets say it.
+///
+/// CDXC:Notifications 2026-11-11 FIX: User: "why does it always say Not current? pls fix both". iOS holds the app
+/// suspended while the phone is locked, so the content outlives its stale date in normal use; a warning triangle
+/// and "Not current" made that ordinary state look like a fault. The rows still dim and their times stop at the
+/// data time, so nothing claims to be live.
+struct LastUpdateLabel: View {
   let updatedAt: Date
 
   var body: some View {
-    HStack(spacing: 4) {
-      Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
-      Text("Not current · \(Text(updatedAt, style: .time))")
-    }
-    .fontWeight(.semibold)
-    .lineLimit(1)
+    Text("Updated \(Text(updatedAt, style: .time))")
+      .fontWeight(.semibold)
+      .foregroundStyle(ActivityStyle.secondaryText)
+      .lineLimit(1)
   }
 }
 
@@ -247,7 +251,7 @@ struct GhostexMark: View {
 }
 
 /// The Lock Screen presentation: counts, then up to four rows; past its stale date
-/// it says how old it is and dims the rows.
+/// it says when it was last updated and dims the rows.
 struct LockScreenCard: View {
   let content: GhostexActivityContent
   let isStale: Bool
@@ -257,7 +261,7 @@ struct LockScreenCard: View {
       HStack(spacing: 10) {
         GhostexMark()
         if isStale {
-          NotCurrentLabel(updatedAt: content.updatedAt)
+          LastUpdateLabel(updatedAt: content.updatedAt)
           Spacer(minLength: 4)
           CountLabel(kind: .working, count: content.counts.working, showsWord: false)
           CountLabel(kind: .waiting, count: content.counts.waiting, showsWord: false)
@@ -308,7 +312,7 @@ struct ExpandedRows: View {
         .opacity(isStale ? 0.5 : 1)
       HStack {
         if isStale {
-          NotCurrentLabel(updatedAt: content.updatedAt)
+          LastUpdateLabel(updatedAt: content.updatedAt)
         } else {
           Text("Ghostex").fontWeight(.semibold)
         }

@@ -1669,7 +1669,7 @@ export const NotificationsCopy = {
 
 /**
  * Settings › Live Activity (approved mockup). The activity's own words (working,
- * waiting, has a question, finished, "+N more", "Not current") are drawn by the widget extension
+ * waiting, has a question, finished, "+N more", "Updated <time>") are drawn by the widget extension
  * (modules/ghostex-live-activity/ios/Extension); the preview here repeats them.
  */
 export const LiveActivityCopy = {
