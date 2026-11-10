@@ -11,8 +11,7 @@
  * not link gx-core, and the phone's WebAssembly chat core answers asynchronously from a hidden
  * WebView, too late for the session list), so this is a port, held to the desktop by
  * `unifiedFixture.json`: a gx-core test writes the desktop builder's answers for a set of cases
- * into it and fails when they change, and `unifiedFixture.test.ts` runs the same cases through
- * this file. The summary adapter supplies `hasQuestion` through the shared mobile-summary predicate.
+ * into it and fails when they change; this file must give the same answers. The summary adapter supplies `hasQuestion` through the shared mobile-summary predicate.
  */
 
 import { mergedRepoIdentities, repoIdentity, type RepoIdentity } from './repo';

@@ -1,7 +1,6 @@
 /**
  * The folded triage's rules (the triage design): on the iPhone Duo's outer display the Sessions list starts with
- * the sessions that wait for the user, each with the quick answer that fits it. Free of React Native, so the rules load
- * in a plain `bun test` (`src/screens/triage.test.ts`).
+ * the sessions that wait for the user, each with the quick answer that fits it. Free of React Native.
  *
  * - Waiting is what the list's dots say, less the finished turns: the blue attention dot of a wait for the
  *   user (a finished turn stays in the normal list only; an attention whose kind the computer does not send still

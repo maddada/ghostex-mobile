@@ -3,7 +3,7 @@
  * instead of letting the error close the whole app. React Native has no hook for this, so it is a
  * class component. Try Again (`retry`) remounts the children from scratch.
  *
- * Kept free of react-native imports so `bun test` can drive it (ErrorBoundary.test.tsx); the styled
+ * Kept free of react-native imports; the styled
  * fallback cards live with the screens that use it (settings/SectionBoundary.tsx,
  * machine-form/SectionBoundary.tsx).
  *

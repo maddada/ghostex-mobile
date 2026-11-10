@@ -2,8 +2,7 @@
  * Which repository a project is, so the same checkout on two computers reads as one project in
  * the Unified list.
  *
- * A port of packages/gx-core/src/unified_sidebar/repo.rs; `unifiedFixture.test.ts` runs the
- * desktop builder's answers through it, so keep the two in step.
+ * A port of packages/gx-core/src/unified_sidebar/repo.rs, so keep the two in step.
  */
 
 /** A project as the Unified list names and groups it. */

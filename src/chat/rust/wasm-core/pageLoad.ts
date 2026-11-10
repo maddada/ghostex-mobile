@@ -1,6 +1,6 @@
 /**
  * The rules for starting the chat core's page (ChatCoreWebView.tsx, bridge.ts), kept free of React
- * Native so they are unit tested (pageLoad.test.ts): which file the page loads from, what a failed
+ * Native: which file the page loads from, what a failed
  * load says, and how often a page that keeps failing is tried again.
  *
  * CDXC:SessionChat 2026-11-02 WHY: issue #393. After the 10.42.1 OTA every iPhone resolved the page

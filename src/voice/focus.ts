@@ -1,6 +1,6 @@
 /**
  * The scope of a voice call: all sessions, or one session (a "focused" call). The rules here are
- * pure so they can be unit-tested (`focus.test.ts`); `conversation.ts` keeps the state and talks to
+ * pure; `conversation.ts` keeps the state and talks to
  * the native socket. The wire is the voice agent contract's "Focused calls" section
  * (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
  *

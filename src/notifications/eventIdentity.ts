@@ -71,14 +71,6 @@
  *   change up to one more batch of notifications or sounds can come than the limit allows. That holds for a
  *   change of any size: the phone's clock alone cannot tell a clock set forward from time that passed.
  *
- * `eventIdentity.model.test.ts` checks the three invariants after every step of long random sequences of
- * feed reads, pushes, the Sessions list's attention sound (with and without the row it names), the sound
- * switched off and on, sessions open on screen and leaving attention, restarts (also many in a row, and the
- * app ended before its write), clock changes, stored records that load only after hours, rate-limit pressure
- * and computers hidden, removed and added again, against a reference that counts every notification and
- * sound as the person gets it; it allows exactly the deviations of the two exceptions. Its fixed cases replay
- * the counterexamples that earlier versions of this record failed.
- *
  * Identity contract (the part the push route depends on):
  *
  * 1. A feed row is the event: computer + session + row id + the host kind it entered. The host never reuses
