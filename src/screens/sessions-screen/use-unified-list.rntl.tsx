@@ -127,6 +127,7 @@ function UnifiedHarness() {
     reconnectMachine: jest.fn(),
     refreshAll: jest.fn(),
     refreshMachine: jest.fn(),
+    attachCreated: jest.fn(),
     runBulkSessionActions: jest.fn(),
     runCreationFlow: jest.fn(),
     runQuickAction,
@@ -151,6 +152,7 @@ function UnifiedHarness() {
     runBulkSessionActions: async () => {},
     snoozeSession: async () => {},
     openAddProject: () => {},
+    notify: () => {},
   });
   return (
     <View>
@@ -303,6 +305,7 @@ describe("the list's clock while an agent works", () => {
       runBulkSessionActions: async () => {},
       snoozeSession: async () => {},
       openAddProject: () => {},
+      notify: () => {},
     });
     return <FlatList data={unified.items} renderItem={unified.renderItem} keyExtractor={unified.keyExtractor} />;
   }

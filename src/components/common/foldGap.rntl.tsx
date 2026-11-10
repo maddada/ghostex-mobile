@@ -611,6 +611,7 @@ describe("the Unified sessions list (useUnifiedList cards in the screen's Sessio
       runBulkSessionActions: () => Promise.resolve(),
       snoozeSession: () => Promise.resolve(),
       openAddProject: () => undefined,
+      notify: () => undefined,
     });
     return (
       <SessionList

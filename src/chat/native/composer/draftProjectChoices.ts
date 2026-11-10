@@ -10,8 +10,7 @@
  */
 
 import type { UnifiedProjectChoice } from '../../../contract/unified/choices';
-import { projectChoicesNow } from '../../../screens/sessions-screen/new-session-place';
-import { useUnifiedListStore } from '../../../screens/sessions-screen/unified-list-store';
+import { noteNewSessionIn, projectChoicesNow } from '../../../screens/sessions-screen/new-session-place';
 import { sessionChatRpc } from '../../rust/transport';
 import type { MachineConnectionTarget } from '../../../machines/credentials';
 import { createAgentWithFirstInputDraft, machineAgents, openSessionTab } from '../sessionShell';
@@ -26,7 +25,6 @@ export async function moveDraftToProject(input: {
   fromSessionId: string;
   agentId: string;
   text: string;
-  repoKey: string;
   to: MachineConnectionTarget;
   toProjectId: string;
 }): Promise<void> {
@@ -37,7 +35,9 @@ export async function moveDraftToProject(input: {
     agent,
     draft: input.text,
   });
-  useUnifiedListStore.getState().noteNewSession(input.repoKey, to.id, null);
+  // As every start notes it: the repository merged across computers, a lone computer as `local`, and
+  // the project's Space, so a Unified filter narrowed by computer or Space widens to show the draft.
+  noteNewSessionIn(to.id, input.toProjectId);
   await openSessionTab(to, sessionId, input.toProjectId);
   await sessionChatRpc(from, 'draftWorktree', {
     projectId: input.fromProjectId,

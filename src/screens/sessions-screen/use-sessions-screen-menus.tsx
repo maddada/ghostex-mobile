@@ -24,7 +24,8 @@ import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
 import { blockedDetail } from '../../components/sessions/sessionStatus';
 import { noteNewSessionIn, projectChoicesNow, repoKeyOfProject } from './new-session-place';
-import { type DrawerBlock } from '../../components/sessions/drawerModel';
+import { agentMenuNotice, newSessionStart } from './new-session-button';
+import { hidesProjectsWithoutSessions, type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
   ArrowGlyph,
   ChevronDownGlyph,
@@ -117,7 +118,12 @@ import { useAppearance } from '../../theme/useAppearance';
 import { useUpdateNotice } from '../../updates/updateNotice';
 import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
 import { handoffLastTurns } from '../../contract/handoff/handoff';
-import { stagedHandoffDraft } from '../../chat/native/sessionShell';
+import {
+  createAgentWithFirstInputDraft,
+  machineAgents,
+  opensInChatFor,
+  stagedHandoffDraft,
+} from '../../chat/native/sessionShell';
 import type { ExportedTranscript } from '../terminal-screen/session-lookups';
 import {
   cancelDelayedSendSessionAction,
@@ -184,6 +190,12 @@ export type SessionsScreenMenusDeps = {
   reconnectMachine: (target: MachineRecord) => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshMachine: (machine: MachineRecord) => Promise<void>;
+  /** Opens a session just created, in chat when `chatLaunch` names it (use-sessions-screen-actions.ts). */
+  attachCreated: (
+    target: MachineRecord,
+    sessionId: string,
+    chatLaunch?: { agentId: string; projectId: string; title: string },
+  ) => Promise<void>;
   runBulkSessionActions: (target: MachineRecord, actions: readonly BulkSessionAction[]) => Promise<void>;
   runCreationFlow: (
     target: MachineRecord,
@@ -202,7 +214,7 @@ export type SessionsScreenMenusDeps = {
   ) => Promise<void>;
   sessionsForProject: (target: MachineRecord, header: ProjectHeaderItem) => GhostexSession[];
   setOverlay: (overlay: Overlay) => void;
-  setTransientStatus: (message: string | null) => void;
+  setTransientStatus: (message: string | null, options?: { title?: string }) => void;
   /** The Unified list's Snooze (a wake time) and Unsnooze (`null`), through gxserver. */
   snoozeSession?: (target: MachineRecord, session: GhostexSession, wakeAt: Date | null) => Promise<void>;
 };
@@ -219,6 +231,7 @@ export function useSessionsScreenMenus({
   reconnectMachine,
   refreshAll,
   refreshMachine,
+  attachCreated,
   runBulkSessionActions,
   runCreationFlow,
   runQuickAction,
@@ -532,20 +545,48 @@ export function useSessionsScreenMenus({
     void runSessionCommand(ctx.machine, setSessionWorkLinksCommand(session.sessionId, session.projectId, links));
   };
 
-  /** The exported transcript's follow-up: the same agent, with the path staged as its first input. */
+  /**
+   * The exported transcript's follow-up: the same agent, with the path staged as its first input,
+   * started the way the chat's own Handoff starts it (`createAgentWithFirstInputDraft`): a chat
+   * agent starts deferred and its composer claims the staged link, instead of the link being typed
+   * into the terminal behind the chat.
+   */
   const startTranscriptConversation = (exported: ExportedTranscript, projectTitle: string): void => {
     if (exported.agentId.length === 0) return;
-    void stagedHandoffDraft(exported.machine, {
-      path: exported.path,
-      sessionTitle: exported.sessionTitle,
-      projectTitle,
-    }).then((draft) =>
-      runCreationFlow(
-        exported.machine,
-        createAgentCommand(exported.agentId, exported.projectId, draft),
-        ProgressCopy.startingAgent(exported.agentLabel, projectTitle),
-      ),
-    );
+    const { machine } = exported;
+    const agent = machineAgents(machine.id).find((entry) => entry.agentId === exported.agentId) ?? {
+      agentId: exported.agentId,
+      name: exported.agentLabel,
+    };
+    setOverlay(NONE);
+    setProgress(ProgressCopy.startingAgent(exported.agentLabel, projectTitle));
+    void (async () => {
+      try {
+        const draft = await stagedHandoffDraft(machine, {
+          path: exported.path,
+          sessionTitle: exported.sessionTitle,
+          projectTitle,
+        });
+        const sessionId = await createAgentWithFirstInputDraft(machine, {
+          projectId: exported.projectId,
+          agent,
+          draft,
+        });
+        setProgress(null);
+        const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+        await attachCreated(
+          machine,
+          sessionId,
+          opensInChatFor(agent)
+            ? { agentId: resolveAgentIconId(agent.icon, agentName), projectId: exported.projectId, title: agentName }
+            : undefined,
+        );
+        void refreshMachine(machine).catch(() => undefined);
+      } catch (error) {
+        setProgress(null);
+        setTransientStatus(error instanceof Error ? error.message : String(error));
+      }
+    })();
   };
 
   /** Close the menu, put `text` on the phone's clipboard and say so. */
@@ -1280,6 +1321,10 @@ export function useSessionsScreenMenus({
     const projectKeys: string[] = [];
     for (const project of summary?.projects ?? []) projectKeys.push(`id:${project.projectId}`);
     const collectionIds = (summary?.projectCollections ?? []).map((entry) => entry.collectionId);
+    const hidesEmpty = hidesProjectsWithoutSessions(
+      useSettingsStore.getState().settings.sessionsListHideProjectsWithoutSessions,
+      summary,
+    );
     return [
       { kind: 'separator', key: 'sep-project-list' },
       {
@@ -1307,6 +1352,17 @@ export function useSessionsScreenMenus({
         onPress: () => {
           setOverlay(NONE);
           collapse.expandAllProjects(target.id, projectKeys, collectionIds);
+        },
+      },
+      {
+        kind: 'item',
+        key: 'hide-projects-without-sessions',
+        label: 'Hide Projects Without Sessions',
+        selected: hidesEmpty,
+        hint: 'Leaves projects with no sessions out of the Project list on this phone',
+        onPress: () => {
+          setOverlay(NONE);
+          useSettingsStore.getState().setSetting('sessionsListHideProjectsWithoutSessions', !hidesEmpty);
         },
       },
     ];
@@ -1588,12 +1644,58 @@ export function useSessionsScreenMenus({
   }, []);
 
   /** The agent menu on a project of a computer; nothing is opened first, so no default agent starts. */
-  const openAgentMenuAt = (machineId: string, projectId: string): void => {
-    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId) ?? null;
-    const summary = summaryFor(machineId);
-    if (machine === null || summary === null) return;
-    const header = projectHeaderOf(machineId, summary, projectId, { throughCollections: true });
-    if (header !== null) setOverlay({ kind: 'agentMenu', ctx: { machine, header } });
+  const openAgentMenuAt = (place: {
+    machineId: string;
+    projectId: string;
+    connected: boolean;
+    label: string;
+  }): void => {
+    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === place.machineId) ?? null;
+    if (machine === null) return;
+    const summary = summaryFor(place.machineId);
+    const header =
+      summary === null
+        ? null
+        : projectHeaderOf(place.machineId, summary, place.projectId, { throughCollections: true });
+    // The computer is off, not read yet, or the project is gone: say so instead of opening nothing.
+    const notice = agentMenuNotice({
+      connected: place.connected,
+      computer: place.label,
+      read: summary !== null,
+      found: header !== null,
+    });
+    if (notice !== null) setTransientStatus(notice.message, { title: notice.title });
+    else if (header !== null) setOverlay({ kind: 'agentMenu', ctx: { machine, header } });
+  };
+
+  /**
+   * The header's New session, a project picked in its sheet: the project's remembered agent starts
+   * there as the project's agent button starts it, or the toast says why it can't
+   * (./new-session-button.tsx).
+   */
+  const startNewSessionAt = (pick: {
+    machineId: string;
+    projectId: string;
+    connected: boolean;
+    label: string;
+  }): void => {
+    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === pick.machineId) ?? null;
+    const summary = summaryFor(pick.machineId);
+    const header =
+      machine === null || summary === null
+        ? null
+        : projectHeaderOf(pick.machineId, summary, pick.projectId, { throughCollections: true });
+    const outcome = newSessionStart({
+      connected: pick.connected,
+      computer: pick.label,
+      header,
+      agent: header === null ? null : resolvePrimaryAgent(header),
+    });
+    if (outcome.kind === 'notice') {
+      setTransientStatus(outcome.notice.message, { title: outcome.notice.title });
+      return;
+    }
+    if (machine !== null) launchAgent(machine, outcome.header, outcome.agent);
   };
 
   /** The project row above the agents, naming the computer while there is more than one. */
@@ -1615,7 +1717,9 @@ export function useSessionsScreenMenus({
             label={choice.label}
             machineLabel={machineLabel}
             onPress={() =>
-              closeAgentMenuThen(() => setOverlay({ kind: 'newSessionProject', currentMachineId: ctx.machine.id }))
+              closeAgentMenuThen(() =>
+                setOverlay({ kind: 'newSessionProject', currentMachineId: ctx.machine.id, purpose: 'agentMenu' }),
+              )
             }
           />
         ),
@@ -1806,6 +1910,7 @@ export function useSessionsScreenMenus({
     agentMenuItems,
     placeItems,
     openAgentMenuAt,
+    startNewSessionAt,
     closeAgentMenuThen,
     onAgentMenuDismissed,
     createCoordinator,

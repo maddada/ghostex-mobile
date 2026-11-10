@@ -431,6 +431,15 @@ export function takeLaunchDraft(machineId: string, projectId: string, sessionId:
   return draft;
 }
 
+/** Whether a new session of `agent` opens in Chat: the phone's Default Agent View, for an agent that has a chat. */
+export function opensInChatFor(agent: Pick<GhostexAgentLauncher, 'agentId' | 'icon' | 'name'>): boolean {
+  const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+  return (
+    useSettingsStore.getState().settings.preferredAgentInterface === 'chat' &&
+    isSessionChatSupportedAgent(resolveAgentIconId(agent.icon, agentName))
+  );
+}
+
 /**
  * Creates an agent session whose first input is `draft` (a Handoff's transcript link), staged and
  * never sent, and answers its session id.
@@ -456,10 +465,7 @@ export async function createAgentWithFirstInputDraft(
   },
 ): Promise<string> {
   const { agent, projectId, model } = input;
-  const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
-  const opensInChat =
-    useSettingsStore.getState().settings.preferredAgentInterface === 'chat' &&
-    isSessionChatSupportedAgent(resolveAgentIconId(agent.icon, agentName));
+  const opensInChat = opensInChatFor(agent);
   let command = createAgentCommand(agent.agentId, projectId, input.draft, opensInChat);
   if (model != null && model.model.trim().length > 0) {
     command += ` --model ${shellQuote(model.model.trim())}`;
