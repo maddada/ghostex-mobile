@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ProjectPickerSheet } from '../chat/native/composer/ProjectPickerSheet';
-import { projectChoicesNow } from './sessions-screen/new-session-place';
+import { agentSpaceOfProject, newSessionComputersNow, projectChoicesNow } from './sessions-screen/new-session-place';
+import { NewSessionButton, newSessionEmptyList } from './sessions-screen/new-session-button';
 import {
   AppState,
   BackHandler,
@@ -60,6 +61,7 @@ import {
 } from '../components/sessions/drawerModel';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
+import { EditGlyph } from '../components/sessions/unified/glyphs';
 import { bellLabel, BellWithCount, useNeedsYouCount } from '../notifications/NotificationsBell';
 import { VoiceButton } from '../voice/VoiceButton';
 import { useVoiceStore, voiceActive } from '../voice/conversation';
@@ -116,6 +118,7 @@ import { coordinatorRowKey } from '../contract/coordinatorTree';
 import { EMPTY_SIDEBAR_SPACES, NO_SUMMARY_CAPABILITIES, type GhostexSession } from '../contract/mobileSummary';
 import {
   DuoChromeCopy,
+  NewSessionCopy,
   ProgressCopy,
   RenameCopy,
   SessionCopy,
@@ -440,21 +443,28 @@ export default function SessionsScreen({ navigation }: Props) {
   /**
    * Where a project's agent pick is remembered and which pick it starts (./agentChoice.ts): the
    * computer's "Remember the agent you pick", the project (a worktree counts as its parent) and the
-   * Space the drawer shows it in, since the drawer lists only the selected Space's projects.
+   * Space that shows it: the drawer's selected Space when it lists the project, else the project's
+   * own (`agentSpaceOfProject`), so a pick is never looked up or remembered in another Space.
    */
   const agentChoiceContext = useCallback(
     (machineId: string, projectId: string): AgentChoiceContext => {
       const summary =
         machineId === machine?.id ? selectedSummary : (inventoriesByMachineId[machineId]?.summary ?? null);
       const spaces = machineId === machine?.id ? machineSpaces : (summary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES);
+      const drawerSpaceId =
+        machineId === machine?.id
+          ? selectedSpaceId
+          : resolveSelectedSpaceId(spaces, selectedSpaceIdByMachine[machineId]);
+      // The project's own Space: a start from New session, a Unified group or the filter can be in another one.
+      const whole = inventoriesByMachineId[machineId]?.summary ?? summary;
       const spaceId =
         spaces.order.length === 0
           ? null
-          : machineId === machine?.id
-            ? selectedSpaceId
-            : resolveSelectedSpaceId(spaces, selectedSpaceIdByMachine[machineId]);
+          : whole === null
+            ? drawerSpaceId
+            : agentSpaceOfProject(whole, machineId, projectId, drawerSpaceId);
       const worktreeParent =
-        summary?.projects.find((project) => project.projectId === projectId)?.worktreeParentProjectId ?? '';
+        whole?.projects.find((project) => project.projectId === projectId)?.worktreeParentProjectId ?? '';
       return {
         scope: parseAgentChoiceScope(summary?.newSessionAgentScope),
         place: agentChoicePlace(machineId, projectId, worktreeParent, spaceId),
@@ -665,6 +675,10 @@ export default function SessionsScreen({ navigation }: Props) {
     () => hideProjectsWithoutSessions(entries, hideProjects, showAllProjects),
     [entries, hideProjects, showAllProjects],
   );
+  const openAddProject = (machineId: string): void =>
+    machines.length > 1
+      ? setOverlay({ kind: 'machinePicker', purpose: 'addProject' })
+      : navigation.navigate('AddProjectSource', { machineId });
   const unified = useUnifiedList({
     machines,
     selectedMachine: machine,
@@ -677,10 +691,7 @@ export default function SessionsScreen({ navigation }: Props) {
     attach: (target, session) => attach(target, session),
     runBulkSessionActions,
     snoozeSession,
-    openAddProject: (machineId) =>
-      machines.length > 1
-        ? setOverlay({ kind: 'machinePicker', purpose: 'addProject' })
-        : navigation.navigate('AddProjectSource', { machineId }),
+    openAddProject,
     wall: tileColumns === null ? null : { columns: tileColumns, appearance: sidebarAppearance },
   });
   useOpenProjectDraftsOnArrival(inventoriesByMachineId, !unified.on);
@@ -773,6 +784,7 @@ export default function SessionsScreen({ navigation }: Props) {
     agentMenuItems,
     placeItems,
     openAgentMenuAt,
+    startNewSessionAt,
     closeAgentMenuThen,
     onAgentMenuDismissed,
     createCoordinator,
@@ -803,6 +815,22 @@ export default function SessionsScreen({ navigation }: Props) {
     setOverlay,
     setTransientStatus,
   });
+
+  /**
+   * The header's New session (./sessions-screen/new-session-button.tsx): the project sheet, or,
+   * with no project to list, Add computer, Add project, or why the list is empty.
+   */
+  const openNewSessionSheet = (): void => {
+    const currentMachineId = machine?.id ?? '';
+    if (projectChoicesNow(currentMachineId).length > 0) {
+      setOverlay({ kind: 'newSessionProject', currentMachineId, purpose: 'start' });
+      return;
+    }
+    const empty = newSessionEmptyList(newSessionComputersNow());
+    if (empty.kind === 'addComputer') navigation.navigate('ConnectChoose');
+    else if (empty.kind === 'addProject') openAddProject(currentMachineId);
+    else setTransientStatus(empty.notice.message, { title: empty.notice.title });
+  };
 
   // -------------------------------------------------------------------------
   // Rendering.
@@ -1159,6 +1187,9 @@ export default function SessionsScreen({ navigation }: Props) {
   // same row. In the side bar (a system that stands one) the bell and the menu stand there as its entries. On the
   // iPhone Duo's inner display the list/tiles switch stands before the bell, in the side bar as two switch entries.
   // The bell opens the attention list with the number of sessions that need the user.
+  const newSessionButton = (
+    <NewSessionButton color={sidebarAppearance.foreground} style={styles.headerButton} onPress={openNewSessionSheet} />
+  );
   const bellButton = (
     <Pressable
       accessibilityRole="button"
@@ -1185,6 +1216,9 @@ export default function SessionsScreen({ navigation }: Props) {
       <MenuGlyph size={20} color={sidebarAppearance.foreground} />
     </Pressable>
   );
+  // The rail keeps one entry while the handler reads each render's stores.
+  const openNewSessionRef = useRef(openNewSessionSheet);
+  openNewSessionRef.current = openNewSessionSheet;
   // Memoized on the header's inputs, so unrelated list updates do not republish the side bar.
   const railButtons = useMemo<RailButtons>(() => {
     const color = sidebarAppearance.foreground;
@@ -1208,6 +1242,12 @@ export default function SessionsScreen({ navigation }: Props) {
             },
           ]
         : []),
+      {
+        key: 'newSession',
+        label: NewSessionCopy.button,
+        icon: (size) => <EditGlyph size={size} color={color} />,
+        onPress: () => openNewSessionRef.current(),
+      },
       {
         key: 'notifications',
         label: bellLabel(needsYou),
@@ -1266,6 +1306,7 @@ export default function SessionsScreen({ navigation }: Props) {
         {wallOffered && !inRail ? (
           <WallSwitch view={sessionListView} appearance={sidebarAppearance} onChange={chooseListView} />
         ) : null}
+        {inRail ? null : newSessionButton}
         {inRail ? null : bellButton}
         {inRail ? null : moreButton}
       </View>
@@ -1939,10 +1980,17 @@ export default function SessionsScreen({ navigation }: Props) {
         onDismissed={onAgentMenuDismissed}
       />
 
-      {/* The agent menu's project row; a pick opens the menu again there once the sheet has gone (iOS). */}
+      {/*
+        The agent menu's project row (a pick opens the menu again there) and the header's New session
+        (a pick starts there); either runs once the sheet has gone (iOS).
+      */}
       <ProjectPickerSheet
         visible={overlay.kind === 'newSessionProject'}
-        title="Choose a project"
+        title={
+          overlay.kind === 'newSessionProject' && overlay.purpose === 'start'
+            ? NewSessionCopy.sheetTitle
+            : 'Choose a project'
+        }
         choices={overlay.kind === 'newSessionProject' ? projectChoicesNow(overlay.currentMachineId) : []}
         onClose={() => setOverlay(NONE)}
         onDismissed={() => {
@@ -1952,9 +2000,18 @@ export default function SessionsScreen({ navigation }: Props) {
         }}
         onPick={(choice, machineIndex) => {
           const machine = choice.machines[machineIndex];
+          const purpose = overlay.kind === 'newSessionProject' ? overlay.purpose : 'agentMenu';
           setOverlay(NONE);
           if (machine === undefined) return;
-          const work = (): void => openAgentMenuAt(machine.machineId, machine.projectId);
+          const work = (): void =>
+            purpose === 'start'
+              ? startNewSessionAt({
+                  machineId: machine.machineId,
+                  projectId: machine.projectId,
+                  connected: machine.connected,
+                  label: machine.label,
+                })
+              : openAgentMenuAt(machine.machineId, machine.projectId);
           if (Platform.OS === 'ios') afterProjectSheet.current = work;
           else work();
         }}

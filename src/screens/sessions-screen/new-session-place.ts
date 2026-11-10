@@ -16,8 +16,11 @@ import {
 } from '../../contract/unified/choices';
 import { unifiedMachineInput } from '../../contract/unified/fromSummary';
 import { mergedRepoIdentities, repoIdentity } from '../../contract/unified/repo';
+import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../machines/store';
+import { filterSummaryForSpace } from '../../spaces/spaceFilter';
+import type { NewSessionComputer } from './new-session-button';
 import { useUnifiedListStore } from './unified-list-store';
 
 /** Each computer the phone has read, with its projects and which of them has an open session. */
@@ -100,4 +103,38 @@ export function noteNewSessionIn(machineId: string, projectId: string): void {
   useUnifiedListStore
     .getState()
     .noteNewSession(repoKey, alone ? LOCAL_MACHINE_KEY : machineId, spaceKeyOfProject(machineId, projectId));
+}
+
+/** Every saved computer, as the New session button reads an empty project list (./new-session-button.tsx). */
+export function newSessionComputersNow(): NewSessionComputer[] {
+  const inventories = useInventoryStore.getState().inventoriesByMachineId;
+  return enabledMachines(useMachinesStore.getState()).map((machine) => {
+    const inventory = inventories[machine.id];
+    return {
+      label: machineDisplayLabel(machine),
+      read: (inventory?.summary ?? null) !== null,
+      failed: (inventory?.lastError ?? null) !== null,
+    };
+  });
+}
+
+/**
+ * The Space a project's agent pick is looked up and remembered under: the drawer's Space when it
+ * shows the project (so the Project list's headers keep theirs), else the Space that shows it
+ * (`spaceOfProject`: its collection's, its worktree parent's, or Other). A start from the New
+ * session sheet, a Unified group or the filter can be in a project of another Space.
+ */
+export function agentSpaceOfProject(
+  summary: GhostexMobileSummary,
+  machineId: string,
+  projectId: string,
+  drawerSpaceId: string,
+): string {
+  if (filterSummaryForSpace(summary, drawerSpaceId).projects.some((project) => project.projectId === projectId)) {
+    return drawerSpaceId;
+  }
+  const machine = unifiedMachineInput({ machineId, label: '', summary, workspaceId: null }, false);
+  const project = machine.projects.find((entry) => entry.projectId === projectId);
+  if (machine.spaces === null || project === undefined) return drawerSpaceId;
+  return spaceOfProject(machine.spaces, project);
 }

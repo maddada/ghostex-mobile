@@ -511,6 +511,30 @@ export const ProgressCopy = {
   restoredProject: (title: string) => `Restored ${title}.`,
 } as const;
 
+/**
+ * The Sessions header's New session button (screens/sessions-screen/new-session-button.tsx): its
+ * project sheet and what it says when it cannot start, as card wording (a short title, then what
+ * happened and what to do).
+ */
+export const NewSessionCopy = {
+  button: 'New session',
+  sheetTitle: 'New session',
+  offlineTitle: 'Computer not connected',
+  offline: (computer: string) => `${computer} isn't connected. Reconnect it, then try again.`,
+  unreachable: (computers: readonly string[]) =>
+    computers.length === 1
+      ? `Can't reach ${computers[0]}. Reconnect it, then try again.`
+      : "Can't reach your computers. Reconnect them, then try again.",
+  noAgentsTitle: 'No agents turned on',
+  noAgents: (computer: string) => `Turn on an agent in Settings > Agents on ${computer}, then try again.`,
+  noProjectIdTitle: "Can't start here",
+  noProjectId: "This folder isn't a project yet. Add it as a project on the computer, then try again.",
+  goneTitle: 'Project not found',
+  gone: (computer: string) => `This project is no longer on ${computer}. Pick another one.`,
+  loadingTitle: 'Still loading',
+  loading: 'Your computers are still loading. Try again in a moment.',
+} as const;
+
 /** The project header's Actions… list and the hint shown when an action cannot start. */
 export const ActionCopy = {
   /** Section names of the desktop's Actions settings. */

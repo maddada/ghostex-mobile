@@ -24,6 +24,7 @@ import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
 import { blockedDetail } from '../../components/sessions/sessionStatus';
 import { noteNewSessionIn, projectChoicesNow, repoKeyOfProject } from './new-session-place';
+import { newSessionStart } from './new-session-button';
 import { hidesProjectsWithoutSessions, type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
   ArrowGlyph,
@@ -202,7 +203,7 @@ export type SessionsScreenMenusDeps = {
   ) => Promise<void>;
   sessionsForProject: (target: MachineRecord, header: ProjectHeaderItem) => GhostexSession[];
   setOverlay: (overlay: Overlay) => void;
-  setTransientStatus: (message: string | null) => void;
+  setTransientStatus: (message: string | null, options?: { title?: string }) => void;
   /** The Unified list's Snooze (a wake time) and Unsnooze (`null`), through gxserver. */
   snoozeSession?: (target: MachineRecord, session: GhostexSession, wakeAt: Date | null) => Promise<void>;
 };
@@ -1548,8 +1549,14 @@ export function useSessionsScreenMenus({
     [agentChoiceContext, agentChoices],
   );
 
+  /** `alwaysChat`: New session opens a chat-capable agent's chat draft whatever the phone's view preference. */
   const launchAgent = useCallback(
-    (target: MachineRecord, header: ProjectHeaderItem, agent: GhostexAgentLauncher): void => {
+    (
+      target: MachineRecord,
+      header: ProjectHeaderItem,
+      agent: GhostexAgentLauncher,
+      options: { alwaysChat?: boolean } = {},
+    ): void => {
       if (header.projectId.length === 0) {
         setTransientStatus(ProgressCopy.noStableProjectId);
         return;
@@ -1563,7 +1570,8 @@ export function useSessionsScreenMenus({
       const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, agentName);
       const chatFirst =
-        useSettingsStore.getState().settings.preferredAgentInterface === 'chat' && isSessionChatSupportedAgent(iconId);
+        (options.alwaysChat === true || useSettingsStore.getState().settings.preferredAgentInterface === 'chat') &&
+        isSessionChatSupportedAgent(iconId);
       void runCreationFlow(
         target,
         createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst, true),
@@ -1611,6 +1619,35 @@ export function useSessionsScreenMenus({
     if (header !== null) setOverlay({ kind: 'agentMenu', ctx: { machine, header } });
   };
 
+  /**
+   * The header's New session, a project picked in its sheet: the project's remembered agent starts
+   * there in its chat draft, or the toast says why it can't (./new-session-button.tsx).
+   */
+  const startNewSessionAt = (pick: {
+    machineId: string;
+    projectId: string;
+    connected: boolean;
+    label: string;
+  }): void => {
+    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === pick.machineId) ?? null;
+    const summary = summaryFor(pick.machineId);
+    const header =
+      machine === null || summary === null
+        ? null
+        : projectHeaderOf(pick.machineId, summary, pick.projectId, { throughCollections: true });
+    const outcome = newSessionStart({
+      connected: pick.connected,
+      computer: pick.label,
+      header,
+      agent: header === null ? null : resolvePrimaryAgent(header),
+    });
+    if (outcome.kind === 'notice') {
+      setTransientStatus(outcome.notice.message, { title: outcome.notice.title });
+      return;
+    }
+    if (machine !== null) launchAgent(machine, outcome.header, outcome.agent, { alwaysChat: true });
+  };
+
   /** The project row above the agents, naming the computer while there is more than one. */
   const placeItems = (ctx: ProjectContext): ContextMenuItem[] => {
     const repoKey = repoKeyOfProject(ctx.machine.id, ctx.header.projectId);
@@ -1630,7 +1667,9 @@ export function useSessionsScreenMenus({
             label={choice.label}
             machineLabel={machineLabel}
             onPress={() =>
-              closeAgentMenuThen(() => setOverlay({ kind: 'newSessionProject', currentMachineId: ctx.machine.id }))
+              closeAgentMenuThen(() =>
+                setOverlay({ kind: 'newSessionProject', currentMachineId: ctx.machine.id, purpose: 'agentMenu' }),
+              )
             }
           />
         ),
@@ -1821,6 +1860,7 @@ export function useSessionsScreenMenus({
     agentMenuItems,
     placeItems,
     openAgentMenuAt,
+    startNewSessionAt,
     closeAgentMenuThen,
     onAgentMenuDismissed,
     createCoordinator,

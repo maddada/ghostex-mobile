@@ -1,7 +1,8 @@
 /**
  * The session list drawn as the desktop's Unified sidebar: every computer's sessions in one list
- * (contract/unified/), with its header (the search field, the filter, Add project, New session), its
- * cards, project groups and shelves, its swipe buttons, and the menus they open.
+ * (contract/unified/), with its header (the search field, the filter, Add project; New session is in
+ * the screen's title row), its cards, project groups and shelves, its swipe buttons, and the menus
+ * they open.
  *
  * CDXC:Sidebar 2026-11-01 DECISION:
  * User (Q933, Q934): the phone picks Unified or Project itself, in Settings › Sessions list
@@ -36,7 +37,7 @@ import {
   type UnifiedShelf,
   type UnifiedStatus,
 } from '../../contract/unified/build';
-import { unifiedNewSessionTarget, unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
+import { unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
 import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../../contract/unified/filterMenu';
 import {
   sessionsListSeedOf,
@@ -55,7 +56,7 @@ import { chatMachineLink } from '../../chat/rust/machine-link';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../components/sessions/ContextMenu';
 import { ds, inkStyleSheets, inkWash, sidebarInk, useSidebarInk } from '../../components/sessions/rows';
 import { lastInteractionLabel } from '../../components/sessions/sessionStatus';
-import { EditGlyph, FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
+import { FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
 import { PlusGlyph } from '../../components/sessions/icons';
 import { StatusSlot, statusLook, UnifiedCard, UnifiedGroupHeader, UnifiedShelfHeader, UnifiedSlimRow } from '../../components/sessions/unified/UnifiedCard';
 import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/unified/UnifiedThreadRow';
@@ -667,25 +668,6 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     );
   };
 
-  /**
-   * The pencil: the agent menu where gx-core `unified_new_session_target` aims it (the one filtered
-   * project, else the open session's project on its machine, else the list's first project).
-   */
-  const openNewSession = (): void => {
-    const all = [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked];
-    const open = all.find((row) => selectedSessionKey === attachSessionKey(row.machine, row.session.sessionId));
-    const target = unifiedNewSessionTarget(
-      view.filter,
-      choices,
-      open === undefined ? null : { repoKey: open.repo.key, machineId: open.machine, projectId: open.session.projectId },
-    );
-    if (target === null) {
-      if (selectedMachine !== null) openAddProject(selectedMachine.id);
-      return;
-    }
-    openPickerIn(target.machineId, target.projectId);
-  };
-
   const filtered = !isUnifiedFilterEmpty(view.filter);
   const filterButtonRef = useRef<ViewInstance | null>(null);
   const header: ReactElement | null = on ? (
@@ -718,9 +700,6 @@ export function useUnifiedList(deps: UnifiedListDeps) {
         onPress={() => selectedMachine !== null && openAddProject(selectedMachine.id)}
       >
         <FolderPlusGlyph size={ds(15)} color={ink.text} />
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="New session" style={styles.iconButton} onPress={openNewSession}>
-        <EditGlyph size={ds(15)} color={ink.text} />
       </Pressable>
     </View>
   ) : null;
