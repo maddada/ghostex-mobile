@@ -55,6 +55,9 @@ export function createWasmChatCore(): ChatCoreBackend {
         lostListeners.delete(listener);
       };
     },
+    stalled() {
+      if (!disposed && !lost) wasmCoreBridge.stalled();
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

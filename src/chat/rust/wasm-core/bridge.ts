@@ -247,6 +247,15 @@ class WasmCoreBridge {
     return Promise.all(answers);
   }
 
+  /**
+   * A chat's core owes an answer for too long (`RustChatHost.watchDictations`). A page that is up
+   * and does not answer is treated as one that died: what it still owes is rejected, every chat
+   * rebuilds, and the page is loaded again. A page still starting has its own wait (`ready`).
+   */
+  stalled(): void {
+    if (this.phase === 'ready') this.died('The chat core page stopped answering.');
+  }
+
   /** A chat created a core in the page. */
   coreCreated(): void {
     this.liveHandles += 1;

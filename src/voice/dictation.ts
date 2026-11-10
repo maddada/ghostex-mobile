@@ -63,7 +63,7 @@ const settled = new Set<string>();
  * or when its chat can take no answer any more (`requestEnded`), and only then is the recording
  * offered again.
  *
- * CDXC:Dictate 2026-11-10 WHY: The words reach a draft through the chat's core, a moment after they are back, where the released phone wrote them into the chat box at once; a recording was offered again in that moment, and one whose words a form had already taken was transcribed and typed a second time into another chat. A wait that offered the recording after five seconds did the same whenever the first request was only slow. The chat's host knows when its request is over (answered, or its core gone), so the request itself holds the recording back and no clock decides.
+ * CDXC:Dictate 2026-11-10 WHY: The words reach a draft through the chat's core, a moment after they are back, where the released phone wrote them into the chat box at once; a recording was offered again in that moment, and one whose words a form had already taken was transcribed and typed a second time into another chat. A wait that offered the recording after five seconds did the same whenever the first request was only slow. The chat's host knows when its request is over (answered, or its core gone), so the request itself holds the recording back; one that stays open too long is ended by the host together with its core (`watchDictations` in host.ts), never by offering the recording beside it.
  */
 const asked = new Set<string>();
 
