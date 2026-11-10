@@ -313,7 +313,8 @@ export function CoordinatorBoardMenu({
     onDone();
   };
   return (
-    <View accessibilityLabel="Board" style={styles.menu}>
+    // "Work" over the coordinator's work items (gx-chat-core `work_panel.rs`), "Board" from an older gxserver.
+    <View accessibilityLabel={str(board, 'title') || 'Board'} style={styles.menu}>
       <Text style={styles.meta} numberOfLines={1}>
         {isTrue(board, 'empty') ? 'Nothing open' : str(board, 'meta')}
       </Text>
@@ -431,6 +432,13 @@ export function CoordinatorBoardMenu({
                         {relayed !== null ? (
                           <BoardRelayButtons card={relayed} dispatch={chat.dispatch} />
                         ) : answers.length > 0 ? (
+                          <>
+                          {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
+                          {str(row, 'lead').length > 0 ? (
+                            <Text numberOfLines={1} style={styles.lead}>
+                              {str(row, 'lead')}
+                            </Text>
+                          ) : null}
                           <View style={styles.answers}>
                             {answers.map((answer, answerIndex) => (
                               <Pressable
@@ -461,6 +469,7 @@ export function CoordinatorBoardMenu({
                               </Pressable>
                             ))}
                           </View>
+                          </>
                         ) : tags.length === 0 && !expanded ? (
                           <Text style={note.length > 0 ? styles.note : styles.noLinks} numberOfLines={1}>
                             {note.length > 0 ? note : 'No links yet'}
@@ -794,6 +803,7 @@ const useStyles = themedStyles((P) => ({
     height: 6,
     borderRadius: 3,
   },
+  lead: { flexShrink: 1, minWidth: 40, fontSize: 12.5, color: P.cardMuted },
   tagText: {
     flexShrink: 1,
     color: P.cardMuted,
