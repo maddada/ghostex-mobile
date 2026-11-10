@@ -607,7 +607,8 @@ export default function SessionRow({
             ) : session.isCoordinator && session.isChief ? (
               <CrownGlyph size={ds(13)} color={ink.crown} />
             ) : session.isCoordinator ? (
-              <CoordinatorGlyph size={ds(13)} color={ink.crown} />
+              /* The hat is wide and short, so it fills the 15dp slot like the desktop's row (threads.rs `coordinator_icon`). */
+              <CoordinatorGlyph size={ds(15)} color={ink.crown} />
             ) : (
               <Icon size={iconSize} color={agentIconTint(iconId)} />
             )}
