@@ -24,7 +24,7 @@ import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
 import { blockedDetail } from '../../components/sessions/sessionStatus';
 import { noteNewSessionIn, projectChoicesNow, repoKeyOfProject } from './new-session-place';
-import { type DrawerBlock } from '../../components/sessions/drawerModel';
+import { hidesProjectsWithoutSessions, type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
   ArrowGlyph,
   ChevronDownGlyph,
@@ -1280,6 +1280,10 @@ export function useSessionsScreenMenus({
     const projectKeys: string[] = [];
     for (const project of summary?.projects ?? []) projectKeys.push(`id:${project.projectId}`);
     const collectionIds = (summary?.projectCollections ?? []).map((entry) => entry.collectionId);
+    const hidesEmpty = hidesProjectsWithoutSessions(
+      useSettingsStore.getState().settings.sessionsListHideProjectsWithoutSessions,
+      summary,
+    );
     return [
       { kind: 'separator', key: 'sep-project-list' },
       {
@@ -1307,6 +1311,17 @@ export function useSessionsScreenMenus({
         onPress: () => {
           setOverlay(NONE);
           collapse.expandAllProjects(target.id, projectKeys, collectionIds);
+        },
+      },
+      {
+        kind: 'item',
+        key: 'hide-projects-without-sessions',
+        label: 'Hide Projects Without Sessions',
+        selected: hidesEmpty,
+        hint: 'Leaves projects with no sessions out of the Project list on this phone',
+        onPress: () => {
+          setOverlay(NONE);
+          useSettingsStore.getState().setSetting('sessionsListHideProjectsWithoutSessions', !hidesEmpty);
         },
       },
     ];

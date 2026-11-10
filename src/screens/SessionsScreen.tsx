@@ -52,7 +52,12 @@ import { useOpenProjectDraftsOnArrival } from '../components/sessions/useDraftAr
 import { useSessionListClock } from '../components/sessions/useSessionListClock';
 import ContextMenu, { type ContextMenuItem } from '../components/sessions/ContextMenu';
 import SessionLinksSheet from '../chat/native/SessionLinksSheet';
-import { buildDrawerList, hideProjectsWithoutSessions, type DrawerBlock } from '../components/sessions/drawerModel';
+import {
+  buildDrawerList,
+  hideProjectsWithoutSessions,
+  hidesProjectsWithoutSessions,
+  type DrawerBlock,
+} from '../components/sessions/drawerModel';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
 import { bellLabel, BellWithCount, useNeedsYouCount } from '../notifications/NotificationsBell';
@@ -651,14 +656,14 @@ export default function SessionsScreen({ navigation }: Props) {
     [runBulkSessionActions, refreshMachine, setTransientStatus],
   );
   const [showAllProjects, setShowAllProjects] = useState(false);
+  const ownHideProjects = useSettingsStore((state) => state.settings.sessionsListHideProjectsWithoutSessions);
+  const hideProjects = hidesProjectsWithoutSessions(
+    ownHideProjects,
+    machine === null ? null : (inventoriesByMachineId[machine.id]?.summary ?? null),
+  );
   const visibleEntries = useMemo(
-    () =>
-      hideProjectsWithoutSessions(
-        entries,
-        machine === null ? null : (inventoriesByMachineId[machine.id]?.summary ?? null),
-        showAllProjects,
-      ),
-    [entries, machine, inventoriesByMachineId, showAllProjects],
+    () => hideProjectsWithoutSessions(entries, hideProjects, showAllProjects),
+    [entries, hideProjects, showAllProjects],
   );
   const unified = useUnifiedList({
     machines,

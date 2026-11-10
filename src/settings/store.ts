@@ -181,6 +181,16 @@ export type GhostexSettings = ThemeColourSettings & {
   /** Unified only: working sessions fold into the Moving section (the computer's `unifiedWorkingSection` until first set here). */
   sessionsListWorkingSection: boolean;
   /**
+   * Project list only: leave projects with no session out of the list (Hide Projects Without Sessions in the
+   * computer menu, Settings › Sessions list). `null` until it is first changed here: the phone then
+   * follows the computer's `sidebarHideProjectsWithoutSessions`; from then on it keeps its own value, and
+   * flipping it never changes the computer.
+   *
+   * CDXC:Sidebar 2026-11-09 DECISION:
+   * User (Q34): the phone gets its own Hide projects without sessions switch with the desktop's rule. It starts from the computer's value and, once changed on the phone, remembers its own (the Sessions list layout's pattern, Q933); flipping it on the phone never changes the desktop.
+   */
+  sessionsListHideProjectsWithoutSessions: boolean | null;
+  /**
    * Show the "Tailscale isn't connected" notice on Sessions when Tailscale is off on this phone and
    * the computer cannot be reached (Settings > Connection; the notice's close button turns it off).
    */
@@ -313,6 +323,7 @@ export function defaultSettings(): GhostexSettings {
     attentionAlertsFor: 'all',
     sessionsListGroupByProject: false,
     sessionsListWorkingSection: true,
+    sessionsListHideProjectsWithoutSessions: null,
     tailscaleReminder: true,
     showHiddenFiles: false,
     sessionListView: 'list',
@@ -564,6 +575,10 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     attentionAlertsFor: record.attentionAlertsFor === 'needsYou' ? 'needsYou' : defaults.attentionAlertsFor,
     sessionsListGroupByProject: bool('sessionsListGroupByProject', defaults.sessionsListGroupByProject),
     sessionsListWorkingSection: bool('sessionsListWorkingSection', defaults.sessionsListWorkingSection),
+    sessionsListHideProjectsWithoutSessions:
+      typeof record.sessionsListHideProjectsWithoutSessions === 'boolean'
+        ? record.sessionsListHideProjectsWithoutSessions
+        : defaults.sessionsListHideProjectsWithoutSessions,
     tailscaleReminder: bool('tailscaleReminder', defaults.tailscaleReminder),
     showHiddenFiles: bool('showHiddenFiles', defaults.showHiddenFiles),
     sessionListView: record.sessionListView === 'tiles' ? 'tiles' : defaults.sessionListView,

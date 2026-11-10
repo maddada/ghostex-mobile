@@ -1,3 +1,6 @@
+import { hidesProjectsWithoutSessions } from '../../components/sessions/drawerModel';
+import { useInventoryStore } from '../../inventory/store';
+import { useMachinesStore } from '../../machines/store';
 import { useSettingsStore, type SessionsListLayout } from '../../settings/store';
 import { SettingsSection } from './SectionBoundary';
 import { Caption, SectionHeader, SegmentedRow, SettingsScreenLayout, ToggleRow } from './SettingsControls';
@@ -15,7 +18,13 @@ export default function SessionsListPage() {
   const layout = useSettingsStore((state) => state.settings.sessionsListLayout) ?? 'project';
   const groupByProject = useSettingsStore((state) => state.settings.sessionsListGroupByProject);
   const workingSection = useSettingsStore((state) => state.settings.sessionsListWorkingSection);
+  const ownHideProjects = useSettingsStore((state) => state.settings.sessionsListHideProjectsWithoutSessions);
   const setSetting = useSettingsStore((state) => state.setSetting);
+  const selectedSummary = useInventoryStore((state) => {
+    const machineId = useMachinesStore.getState().selectedMachineId;
+    return machineId === null ? null : (state.inventoriesByMachineId[machineId]?.summary ?? null);
+  });
+  const hideProjects = hidesProjectsWithoutSessions(ownHideProjects, selectedSummary);
 
   return (
     <SettingsScreenLayout>
@@ -32,6 +41,20 @@ export default function SessionsListPage() {
             ? "Every computer's sessions in one list. The filter narrows it by computer, Space or project."
             : 'One computer at a time: pick it from the tabs, and its sessions show under their projects.'}
         </Caption>
+        {layout === 'project' ? (
+          <>
+            <ToggleRow
+              label="Hide projects without sessions"
+              detail="Project only"
+              value={hideProjects}
+              onValueChange={(next) => setSetting('sessionsListHideProjectsWithoutSessions', next)}
+            />
+            <Caption>
+              Leaves projects with no sessions out of the list, whatever state a session is in. A Show all projects row
+              at the end brings them back. Starts as the computer has it; changing it here never changes the computer.
+            </Caption>
+          </>
+        ) : null}
         {layout === 'unified' ? (
           <>
             <ToggleRow
