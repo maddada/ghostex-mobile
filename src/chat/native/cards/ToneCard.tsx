@@ -217,12 +217,18 @@ export function ToneButton({
   kind,
   disabled,
   onPress,
+  trailing,
+  accessibilityLabel,
 }: {
   label: string;
   icon?: GlyphName;
   kind: ToneButtonKind;
   disabled?: boolean;
   onPress: () => void;
+  /** A small mark after the label (a recommended answer's star, `WorkCards.tsx`). */
+  trailing?: ReactNode;
+  /** What a screen reader says, when it is more than the label. */
+  accessibilityLabel?: string;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -233,7 +239,7 @@ export function ToneButton({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={disabled === true}
       onPress={onPress}
       hitSlop={6}
@@ -246,6 +252,7 @@ export function ToneButton({
     >
       {icon !== undefined ? <Glyph name={icon} size={14} color={ink} /> : null}
       <Text style={[styles.buttonLabel, { color: ink }]}>{label}</Text>
+      {trailing}
     </Pressable>
   );
 }

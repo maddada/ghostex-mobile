@@ -18,6 +18,7 @@ import { SidebarPalette } from '../../../theme/palette';
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { ToneButton } from './ToneCard';
+import { askColor, tint } from './askCard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
@@ -146,7 +147,16 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
                 <ToneButton
                   key={`answer:${index}`}
                   kind="secondary"
-                  label={isTrue(button, 'recommended') ? `${str(button, 'label')} ★` : str(button, 'label')}
+                  label={str(button, 'label')}
+                  // The recommended answer carries the question forms' star (`askCard.tsx` `RecommendedMark`).
+                  trailing={
+                    isTrue(button, 'recommended') ? (
+                      <Glyph name="star" size={10} color={tint(askColor(P.light), 0.75)} />
+                    ) : undefined
+                  }
+                  accessibilityLabel={
+                    isTrue(button, 'recommended') ? `${str(button, 'label')}, Recommended` : undefined
+                  }
                   icon={isTrue(button, 'picked') ? 'check' : undefined}
                   disabled={busy}
                   onPress={() => dispatch(button.command as never)}
