@@ -219,6 +219,8 @@ export type TranscriptFlags = {
   relayedApprovals: { [messageId: string]: JsonRecord };
   /** A coordinator's work item cards, by the reply each sits under and by summary-mode turn (`workCards`). */
   workCards: WorkCardIndex;
+  /** The question tags work items ask, uppercased (`workAskTags`): a one-click question asking one is not drawn. */
+  workAskTags: ReadonlySet<string>;
   /**
    * Every card on the chat's board by ref (`B4`) with its title now (`coordinatorBoard.itemTitles`,
    * gx-chat-core `board_reference`): a board mention reads its label from it and draws dimmed when
@@ -290,6 +292,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   readAloudSpeakingId: null,
   relayedApprovals: {},
   workCards: { byAnchor: {}, byTurn: {} },
+  workAskTags: new Set(),
   boardItemTitles: null,
   chatLook: DEFAULT_CHAT_LOOK,
 };
@@ -368,6 +371,11 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),
     workCards: workCardIndex(document),
+    workAskTags: new Set(
+      arr(document.workAskTags)
+        .filter((tag): tag is string => typeof tag === 'string')
+        .map((tag) => tag.toUpperCase()),
+    ),
     boardItemTitles: boardItemTitles(document),
     chatLook: chatLookOf(document),
   };

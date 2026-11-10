@@ -9,7 +9,7 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useTranscriptEnv } from '../context';
+import { useTranscriptEnv, useTranscriptFlags } from '../context';
 import { arr, obj, str, type JsonRecord } from '../json';
 import { QuestionFlashFrame } from '../OpenQuestions';
 import { useQuestionFormState } from '../QuestionForm';
@@ -35,7 +35,8 @@ export function InlineAnswers({ mark }: { mark: JsonRecord }) {
   const formId = str(mark, 'form');
   const form = useQuestionFormState(formId);
   // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs `card_tags`).
-  const covered = form?.coveredByCard === true;
+  const { workAskTags } = useTranscriptFlags();
+  const covered = form?.coveredByCard === true || workAskTags.has(str(mark, 'tag').toUpperCase());
   const phase = form === null ? 'open' : str(form, 'state') || 'open';
   const changing = form?.changing === true;
   const withdrawn = form?.tagWithdrawn === true || phase === 'withdrawn' || phase === 'canceled';
