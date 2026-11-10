@@ -208,8 +208,27 @@ export type ActionFields = {
   questionNext: {};
   questionCancel: {};
   formChoice: { form: string; question: number; choice: number };
-  formText: { form: string; question: number; text: string };
-  formNotes: { form: string; text: string };
+  /** `core`, `rev` and `caret`: the draft the box's text was made from and its caret after the
+   * edit, so the core keeps a dictation this copy has not shown yet (gx-chat-core
+   * `questions/dictation.rs`, `edited`). Left out by a core that does not name itself. */
+  formText: { form: string; question: number; text: string; core?: string; rev?: number; caret?: number };
+  formNotes: { form: string; text: string; core?: string; rev?: number; caret?: number };
+  /** Dictate's words into the form box the recording started in (`form`, `slot`, and `shown*`, the
+   * box as drawn), or into the chat box (`draft`, `start`, `end`, always sent). Answered by the host
+   * action `dictationInserted` (gx-chat-core `questions/dictation.rs`, `insert`). */
+  insertDictation: {
+    text: string;
+    id?: string;
+    spacing?: boolean;
+    draft: string;
+    start: number;
+    end: number;
+    form?: string;
+    slot?: number | 'notes';
+    shown?: string;
+    shownStart?: number;
+    shownEnd?: number;
+  };
   formSend: { form: string };
   formSkipAll: { form: string };
   formToggle: { form: string };

@@ -9,7 +9,7 @@
  * packages/gx-chat-core/src/transcript/question_forms.rs. Change them together.
  */
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
   View,
   type StyleProp,
+  type TextInputInstance,
   type TextStyle,
   type ViewInstance,
 } from 'react-native';
@@ -37,6 +38,13 @@ import { LinkWords } from './LinkWords';
 import { QuestionFlashFrame, useQuestionAnchor } from './OpenQuestions';
 import GhostexImageIntakeView from '../../../../modules/ghostex-native/src/GhostexImageIntakeView';
 import { imagesFromIntake } from '../composer/imageIntake';
+import { Glyph as ComposerGlyph } from '../composer/icons';
+import {
+  formBoxKey,
+  registerDictationBox,
+  useDictationAimed,
+  type FormSlot,
+} from '../composer/dictationTarget';
 
 /** The document's `questionForms`, by form id. */
 const FormsContext = createContext<{ [id: string]: Json }>({});
@@ -335,9 +343,8 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
 }
 
 function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; enabled: boolean }) {
-  const { theme, dispatch } = useTranscriptEnv();
-  const report = useCallback((text: string) => dispatch({ type: 'formNotes', form: formId, text }), [dispatch, formId]);
-  const [text, setText] = useEchoedText(`${formId}:notes`, notes, report);
+  const { theme } = useTranscriptEnv();
+  const box = useFormBoxText(formId, 'notes', notes);
   const reveal = useRevealFocusedField();
   if (!enabled) {
     return (
@@ -347,28 +354,32 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
     );
   }
   return (
-    <FormBox formId={formId} slot="notes" text={text} setText={setText}>
-      {(onSelectionChange) => (
-        <TextInput
-          multiline
-          value={text}
-          placeholder={NOTES_PLACEHOLDER}
-          placeholderTextColor={theme.placeholder}
-          accessibilityLabel="Notes"
-          onFocus={reveal}
-          onContentSizeChange={reveal}
-          onChangeText={setText}
-          onSelectionChange={onSelectionChange}
-          style={[
-            styles.input,
-            {
-              color: theme.foreground,
-              borderColor: theme.inputBorder,
-              backgroundColor: theme.light ? theme.background : theme.cardRow,
-            },
-          ]}
-        />
-      )}
+    <FormBox formId={formId} slot="notes" box={box}>
+      <TextInput
+        ref={box.field}
+        multiline
+        value={box.text}
+        placeholder={NOTES_PLACEHOLDER}
+        placeholderTextColor={theme.placeholder}
+        accessibilityLabel="Notes"
+        onFocus={() => {
+          box.onFocus();
+          reveal();
+        }}
+        onBlur={box.onBlur}
+        onContentSizeChange={reveal}
+        onChangeText={box.change}
+        onSelectionChange={box.onSelectionChange}
+        style={[
+          styles.input,
+          {
+            color: theme.foreground,
+            borderColor: box.aimed ? theme.ring : theme.inputBorder,
+            backgroundColor: theme.light ? theme.background : theme.cardRow,
+          },
+          box.aimed && styles.aimedInput,
+        ]}
+      />
     </FormBox>
   );
 }
@@ -381,31 +392,139 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
  *
  * CDXC:Clipboard 2026-11-02 SEE-ALSO: the user's DECISION on pasting images into question notes is in apps/desktop/src/app/native_chat/form_attachments.rs. A React Native `TextInput` cannot draw a pill inside its text without the composer's hidden-glyph projection, so the box shows the reference as text.
  */
+type SelectionEvent = { nativeEvent: { selection: { start: number; end: number } } };
+
+/**
+ * A form box's text: the reader's edits go to the core stamped with the draft they were made from
+ * (`core` and `rev`, the form's `core` and `dictated` in the document, or a `dictationInserted`
+ * answer's) and the caret after them, so the core keeps a dictation this copy has not shown yet
+ * (gx-chat-core `questions/dictation.rs`, `edited`). The box tells Dictate when it has the caret
+ * (`../composer/dictationTarget.ts`) and shows the words the core typed into it, caret after them.
+ */
+function useFormBoxText(formId: string, slot: FormSlot, written: string) {
+  const { dispatch } = useTranscriptEnv();
+  const form = obj(useContext(FormsContext)[formId]);
+  // A core that does not name itself here (an older core page) takes edits whole, unstamped.
+  const documentCore = typeof form?.core === 'string' ? form.core : null;
+  const dictated = obj(form?.dictated)?.[String(slot)];
+  const latest = useRef({ core: documentCore, rev: typeof dictated === 'number' ? dictated : 0 });
+  latest.current = { core: documentCore, rev: typeof dictated === 'number' ? dictated : 0 };
+  /** The draft the text the box shows was made from. */
+  const stamp = useRef(latest.current);
+  const selection = useRef<{ start: number; end: number } | null>(null);
+  const caretAfter = useRef<number | null>(null);
+  const report = useCallback(
+    (text: string) => {
+      const { core, rev } = stamp.current;
+      const caret = caretAfter.current ?? text.length;
+      if (slot === 'notes') {
+        dispatch(
+          core === null
+            ? { type: 'formNotes', form: formId, text }
+            : { type: 'formNotes', form: formId, text, core, rev, caret },
+        );
+      } else {
+        dispatch(
+          core === null
+            ? { type: 'formText', form: formId, question: slot, text }
+            : { type: 'formText', form: formId, question: slot, text, core, rev, caret },
+        );
+      }
+    },
+    [dispatch, formId, slot],
+  );
+  const [text, setEcho, adopt] = useEchoedText(formBoxKey(formId, slot), written, report, () => {
+    stamp.current = latest.current;
+  });
+  const textRef = useRef(text);
+  textRef.current = text;
+  // A chat core that started again names itself anew; a box that shows the draft as the document
+  // has it takes the new name, so its next edit is not refused as another core's.
+  useEffect(() => {
+    if (documentCore !== null && stamp.current.core !== documentCore && textRef.current === written) {
+      stamp.current = latest.current;
+    }
+  }, [documentCore, written]);
+  /** An edit, with the caret it leaves: the selection's start plus what took the selection's place. */
+  const change = useCallback(
+    (next: string, caret?: number) => {
+      const before = textRef.current;
+      const at = selection.current ?? { start: before.length, end: before.length };
+      caretAfter.current = Math.max(
+        0,
+        Math.min(next.length, caret ?? at.start + next.length - before.length + (at.end - at.start)),
+      );
+      setEcho(next);
+    },
+    [setEcho],
+  );
+  const field = useRef<TextInputInstance>(null);
+  const registered = useRef<ReturnType<typeof registerDictationBox> | null>(null);
+  useEffect(() => {
+    const handle = registerDictationBox({
+      form: formId,
+      slot,
+      read: () => {
+        const shown = textRef.current;
+        const at = selection.current ?? { start: shown.length, end: shown.length };
+        return { text: shown, start: at.start, end: at.end };
+      },
+      show: (answer) => {
+        const shown = textRef.current;
+        // Typed in since the text the core placed the words in: the next edit carries them.
+        if (shown !== answer.content && !answer.supersedes.includes(shown)) return;
+        stamp.current = { core: answer.core, rev: answer.rev };
+        adopt(answer.content);
+        textRef.current = answer.content;
+        selection.current = { start: answer.caret, end: answer.caret };
+        // The caret after the words, once the field shows them.
+        requestAnimationFrame(() => {
+          if (field.current?.isFocused()) field.current.setSelection(answer.caret, answer.caret);
+        });
+      },
+    });
+    registered.current = handle;
+    if (field.current?.isFocused()) handle.focus();
+    return () => {
+      handle.remove();
+      registered.current = null;
+    };
+  }, [adopt, formId, slot]);
+  const onFocus = useCallback(() => registered.current?.focus(), []);
+  const onBlur = useCallback(() => registered.current?.blur(), []);
+  const onSelectionChange = useCallback((event: SelectionEvent) => {
+    selection.current = event.nativeEvent.selection;
+  }, []);
+  const aimed = useDictationAimed(formId, slot);
+  return { text, textRef, change, selection, field, onFocus, onBlur, onSelectionChange, aimed };
+}
+
+type FormBoxText = ReturnType<typeof useFormBoxText>;
+
+/**
+ * A form's note or text box that takes an image the keyboard inserts or the long-press Paste puts
+ * in (`GhostexImageIntakeView`, Android), the composer's own intake: it is uploaded like an attached
+ * photo and written into the box as the composer's `[Image #N](path)` reference, numbered on from the
+ * form's other boxes (gx-chat-core `insert_answer_attachments`), so the answers carry it. While
+ * Dictate is aimed at the box (`useDictationAimed`), a small microphone sits at its corner.
+ *
+ * CDXC:Clipboard 2026-11-02 SEE-ALSO: the user's DECISION on pasting images into question notes is in apps/desktop/src/app/native_chat/form_attachments.rs. A React Native `TextInput` cannot draw a pill inside its text without the composer's hidden-glyph projection, so the box shows the reference as text.
+ */
 function FormBox({
   formId,
   slot,
-  text,
-  setText,
+  box,
   children,
 }: {
   formId: string;
-  slot: number | 'notes';
-  text: string;
-  setText: (text: string) => void;
-  children: (onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void) => ReactNode;
+  slot: FormSlot;
+  box: FormBoxText;
+  children: ReactNode;
 }) {
   const { theme, uploadFiles, queryAsync } = useTranscriptEnv();
   const forms = useContext(FormsContext);
-  const textRef = useRef(text);
-  textRef.current = text;
-  const selection = useRef<{ start: number; end: number } | null>(null);
+  const { textRef, selection, change, aimed } = box;
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
-  const onSelectionChange = useCallback(
-    (event: { nativeEvent: { selection: { start: number; end: number } } }) => {
-      selection.current = event.nativeEvent.selection;
-    },
-    [],
-  );
   const onImages = useCallback(
     (event: { nativeEvent: unknown }) => {
       if (uploadFiles === undefined || queryAsync === undefined) return;
@@ -430,27 +549,31 @@ function FormBox({
             ]),
           );
           if (typeof edit?.text !== 'string') throw new Error('The image reference could not be inserted. Please paste it again.');
-          setText(edit.text);
+          change(edit.text, typeof edit.caret === 'number' ? edit.caret : undefined);
           setStatus(null);
         })
         .catch((error: unknown) =>
           setStatus({ text: error instanceof Error ? error.message : 'The pasted image could not be saved.', error: true }),
         );
     },
-    [formId, forms, queryAsync, setText, slot, uploadFiles],
+    [change, formId, forms, queryAsync, selection, slot, textRef, uploadFiles],
   );
   return (
     <View>
-      <GhostexImageIntakeView onImages={onImages}>{children(onSelectionChange)}</GhostexImageIntakeView>
+      <GhostexImageIntakeView onImages={onImages}>{children}</GhostexImageIntakeView>
+      {aimed ? (
+        <View pointerEvents="none" style={styles.aimedMark}>
+          <ComposerGlyph name="microphone" size={13} color={theme.ring} />
+        </View>
+      ) : null}
       {status !== null ? (
         <Text style={[styles.hint, { color: status.error ? '#fb7185' : theme.muted }]}>{status.text}</Text>
       ) : null}
     </View>
   );
 }
-
 /** The text of form `form`'s boxes other than `slot`, which go to the agent in the same message. */
-function otherBoxes(form: Json | undefined, slot: number | 'notes'): string {
+function otherBoxes(form: Json | undefined, slot: FormSlot): string {
   const record = obj(form);
   const texts = arr(record?.drafts)
     .map((draft, index) => (index === slot ? '' : str(draft, 'other')))
@@ -485,11 +608,7 @@ function FormQuestion({
   const choices = arr(question?.choices);
   const written = str(draft, 'other');
   const pick = (choice: number) => dispatch({ type: 'formChoice', form: formId, question: index, choice });
-  const report = useCallback(
-    (text: string) => dispatch({ type: 'formText', form: formId, question: index, text }),
-    [dispatch, formId, index],
-  );
-  const [text, setText] = useEchoedText(`${formId}:${index}`, written, report);
+  const box = useFormBoxText(formId, index, written);
   const reveal = useRevealFocusedField();
   const skipped = draft?.skipped === true;
   const anchor = useQuestionAnchor(formId, tag);
@@ -546,28 +665,32 @@ function FormQuestion({
         />
       ) : null}
       {enabled ? (
-        <FormBox formId={formId} slot={index} text={text} setText={setText}>
-          {(onSelectionChange) => (
-            <TextInput
-              multiline
-              value={text}
-              placeholder={placeholder(question, draft)}
-              placeholderTextColor={theme.placeholder}
-              onFocus={reveal}
-              onContentSizeChange={reveal}
-              onChangeText={setText}
-              onSelectionChange={onSelectionChange}
-              style={[
-                styles.input,
-                {
-                  color: theme.foreground,
-                  borderColor: theme.inputBorder,
-                  backgroundColor: theme.light ? theme.background : theme.cardRow,
-                },
-                isText && styles.textAnswer,
-              ]}
-            />
-          )}
+        <FormBox formId={formId} slot={index} box={box}>
+          <TextInput
+            ref={box.field}
+            multiline
+            value={box.text}
+            placeholder={placeholder(question, draft)}
+            placeholderTextColor={theme.placeholder}
+            onFocus={() => {
+              box.onFocus();
+              reveal();
+            }}
+            onBlur={box.onBlur}
+            onContentSizeChange={reveal}
+            onChangeText={box.change}
+            onSelectionChange={box.onSelectionChange}
+            style={[
+              styles.input,
+              {
+                color: theme.foreground,
+                borderColor: box.aimed ? theme.ring : theme.inputBorder,
+                backgroundColor: theme.light ? theme.background : theme.cardRow,
+              },
+              isText && styles.textAnswer,
+              box.aimed && styles.aimedInput,
+            ]}
+          />
         </FormBox>
       ) : written.trim().length > 0 ? (
         <Text selectable style={[styles.detail, { color: theme.cardMuted }]}>
@@ -612,6 +735,9 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   textAnswer: { minHeight: 70 },
+  // Dictate is aimed at the box: a ring, and room for the microphone at its corner.
+  aimedInput: { borderWidth: 1.5, paddingRight: 26 },
+  aimedMark: { position: 'absolute', top: 10, right: 9 },
   status: { flex: 1, minWidth: 0, fontSize: 12.5 },
   info: { alignSelf: 'flex-start', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   bubble: {

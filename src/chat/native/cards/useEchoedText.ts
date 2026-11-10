@@ -11,15 +11,24 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/**
+ * `[text, change, adopt]`. `change` is the reader's edit (shown and reported). `adopt` shows a text
+ * the core handed the field (a dictation, `questions/dictation.rs`) without reporting it, and lets
+ * the document's copy of it settle like an edit. `onAdopt` hears when the field takes the
+ * document's value in place of what it showed.
+ */
 export function useEchoedText(
   identity: string,
   serverValue: string,
   report: (text: string) => void,
-): [string, (text: string) => void] {
+  onAdopt?: () => void,
+): [string, (text: string) => void, (text: string) => void] {
   const [text, setText] = useState(serverValue);
   const sent = useRef<string[]>([]);
   const seen = useRef(serverValue);
   const currentIdentity = useRef(identity);
+  const adopted = useRef(onAdopt);
+  adopted.current = onAdopt;
 
   useEffect(() => {
     if (currentIdentity.current !== identity) {
@@ -27,6 +36,7 @@ export function useEchoedText(
       sent.current = [];
       seen.current = serverValue;
       setText(serverValue);
+      adopted.current?.();
       return;
     }
     if (seen.current === serverValue) return;
@@ -39,6 +49,7 @@ export function useEchoedText(
     }
     sent.current = [];
     setText(serverValue);
+    adopted.current?.();
   }, [identity, serverValue]);
 
   const change = useCallback(
@@ -50,5 +61,11 @@ export function useEchoedText(
     },
     [report],
   );
-  return [text, change];
+  const adopt = useCallback((next: string) => {
+    setText(next);
+    // The document already shows it: nothing to wait for.
+    if (seen.current === next || sent.current[sent.current.length - 1] === next) return;
+    sent.current.push(next);
+  }, []);
+  return [text, change, adopt];
 }

@@ -68,6 +68,7 @@ import { Suggestions } from './Suggestions';
 import { useComposerMotion } from './useComposerMotion';
 import { DictationBar } from './DictationBar';
 import { dictationClock, useDictation } from './useDictation';
+import { focusedDictationBox } from './dictationTarget';
 import { engineStatusLine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
@@ -242,20 +243,37 @@ export function NativeComposer({
   draftAt.current = { text, caret };
   const fieldFocused = useRef(false);
   fieldFocused.current = focused;
+  // The forms as the core draws them now, for Dictate's aim when a recording starts.
+  const questionForms = useRef(document?.questionForms);
+  questionForms.current = document?.questionForms;
   const dictation = useDictation(
     chat.machine,
     // An unfocused field has no caret the reader chose: dictation goes after the draft.
     () => (fieldFocused.current ? draftAt.current : { text: draftAt.current.text, caret: draftAt.current.text.length }),
     (draft) => input?.replace(draft),
     (message) => onHostAction?.('toast', { message, level: 'error' }),
+    {
+      // A question form's box with the caret, in this chat, whose core places dictated words
+      // (it names itself in the form, `core`; an older core page does not, and the chat box takes them).
+      aim: () => {
+        const box = focusedDictationBox();
+        if (box === null) return null;
+        const form = questionForms.current?.[box.form];
+        const named = typeof form === 'object' && form !== null && !Array.isArray(form) && typeof form.core === 'string';
+        return named ? { form: box.form, slot: box.slot } : null;
+      },
+      dispatch,
+    },
   );
+  const dictationAnswered = dictation.answered;
 
   useEffect(
     () =>
       chat.onViewRequest((request) => {
         if (request.kind === 'focusComposer') field.current?.focus();
+        else if (request.kind === 'hostAction' && request.action === 'dictationInserted') dictationAnswered(request.params);
       }),
-    [chat.onViewRequest],
+    [chat.onViewRequest, dictationAnswered],
   );
   const handledFocusRequest = useRef(focusRequestId);
   useEffect(() => {
