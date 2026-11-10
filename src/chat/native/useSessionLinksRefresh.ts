@@ -7,7 +7,7 @@
  * `sidebar_view/links.rs`).
  */
 
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 import { useInventoryStore } from '../../inventory/store';
 import type { MachineRecord } from '../../machines/store';
@@ -15,11 +15,21 @@ import type { MachineRecord } from '../../machines/store';
 const LINKS_REFRESH_MS = 60_000;
 
 export function useSessionLinksRefresh(machine: MachineRecord | null, sessionId: string | undefined, active: boolean): void {
+  /*
+   * CDXC:SessionLinks 2026-11-10 WHY: the effect is keyed on the computer's id, not its record. Every
+   * successful read calls `markConnected`, which replaces the record, so keying on the object made each
+   * finished read start the next one: a phone with a chat open ran `ghostex sessions --json
+   * --mobile-summary` about 3.5 times a second (70 runs in 20 s) instead of once a minute, about half of
+   * gxserver's CPU. The refresh still reads the latest record (host or port edits) through an effect event.
+   */
+  const machineId = machine?.id;
+  const refresh = useEffectEvent(() => {
+    if (machine !== null) void useInventoryStore.getState().refreshMachineFresh(machine);
+  });
   useEffect(() => {
-    if (!active || machine === null || sessionId === undefined) return;
-    const refresh = () => void useInventoryStore.getState().refreshMachineFresh(machine);
+    if (!active || machineId === undefined || sessionId === undefined) return;
     refresh();
     const timer = setInterval(refresh, LINKS_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [active, machine, sessionId]);
+  }, [active, machineId, sessionId]);
 }
