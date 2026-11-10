@@ -84,6 +84,20 @@ export function repoKeyOfProject(machineId: string, projectId: string): string |
   return identities[machineIndex]![projectIndex]!.key;
 }
 
+/**
+ * Whether the Unified list keys its computer as `local`: it lists only one, counting what it
+ * renders (a computer that is read and connected, use-unified-list.tsx), not every computer whose
+ * summary the phone still holds.
+ */
+function unifiedListIsAlone(): boolean {
+  const inventories = useInventoryStore.getState().inventoriesByMachineId;
+  const listed = enabledMachines(useMachinesStore.getState()).filter((machine) => {
+    const inventory = inventories[machine.id];
+    return (inventory?.summary ?? null) !== null && (inventory?.lastError ?? null) === null;
+  });
+  return listed.length === 1;
+}
+
 /** The Unified filter's key of the Space that shows a project, or null when its computer has none. */
 export function spaceKeyOfProject(machineId: string, projectId: string): string | null {
   const summary = useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
@@ -92,18 +106,20 @@ export function spaceKeyOfProject(machineId: string, projectId: string): string 
   const project = machine.projects.find((entry) => entry.projectId === projectId);
   if (machine.spaces === null || project === undefined) return null;
   // The list keys a lone computer as `local` (`unifiedListOf`), and its Spaces with it.
-  const alone = projectChoiceInputsNow().length === 1;
-  return spaceFilterKey(alone ? LOCAL_MACHINE_KEY : machineId, spaceOfProject(machine.spaces, project));
+  return spaceFilterKey(unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId, spaceOfProject(machine.spaces, project));
 }
 
 /** A session started in a project of a computer: its machine and Recent, and the filter's chips. */
 export function noteNewSessionIn(machineId: string, projectId: string): void {
   const repoKey = repoKeyOfProject(machineId, projectId);
   if (repoKey === null) return;
-  const alone = projectChoiceInputsNow().length === 1;
   useUnifiedListStore
     .getState()
-    .noteNewSession(repoKey, alone ? LOCAL_MACHINE_KEY : machineId, spaceKeyOfProject(machineId, projectId));
+    .noteNewSession(
+      repoKey,
+      unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId,
+      spaceKeyOfProject(machineId, projectId),
+    );
 }
 
 /** Every saved computer, as the New session button reads an empty project list (./new-session-button.tsx). */

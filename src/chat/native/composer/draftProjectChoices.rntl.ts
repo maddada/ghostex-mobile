@@ -5,10 +5,10 @@
  * Space widens to show the moved draft and a lone computer is remembered under the list's `local` key.
  */
 
-import { parseMobileSummary } from '../../../contract/mobileSummary';
+import { parseMobileSummary, type GhostexMobileSummary } from '../../../contract/mobileSummary';
 import { EMPTY_UNIFIED_FILTER } from '../../../contract/unified/build';
 import { repoIdentity } from '../../../contract/unified/repo';
-import { emptyMachineInventory, useInventoryStore } from '../../../inventory/store';
+import { emptyMachineInventory, useInventoryStore, type MachineInventory } from '../../../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../../../machines/store';
 import { useUnifiedListStore } from '../../../screens/sessions-screen/unified-list-store';
 import { moveDraftToProject } from './draftProjectChoices';
@@ -42,7 +42,8 @@ const MACHINE: MachineRecord = {
   lastConnectedAt: null,
 };
 
-test('a draft moved into a project of another Space joins a Space filter, on the lone computer as local', async () => {
+/** One computer's two projects, `inventory` in Space Alpha and `website` in Space Beta. */
+function twoSpaces(): GhostexMobileSummary {
   const summary = parseMobileSummary(
     JSON.stringify({
       ok: true,
@@ -59,19 +60,19 @@ test('a draft moved into a project of another Space joins a Space filter, on the
     }),
   );
   if (summary === null) throw new Error('the summary did not parse');
-  useMachinesStore.setState({ hydrated: true, machines: [MACHINE], selectedMachineId: MACHINE.id });
-  useInventoryStore.setState({
-    inventoriesByMachineId: {
-      [MACHINE.id]: { ...emptyMachineInventory(), summary, serverSummary: summary, hasLoaded: true },
-    },
-  });
+  return summary;
+}
+
+/** Studio's draft in `inventory` moved to `website` (Space Beta), with the Unified filter on Studio's Space Alpha. */
+async function moveIntoBeta(machines: MachineRecord[], inventories: Record<string, MachineInventory>): Promise<void> {
+  useMachinesStore.setState({ hydrated: true, machines, selectedMachineId: MACHINE.id });
+  useInventoryStore.setState({ inventoriesByMachineId: inventories });
   useUnifiedListStore.setState({
     hydrated: true,
     filter: { ...EMPTY_UNIFIED_FILTER, spaces: ['local|sa'] },
     lastMachines: {},
     recentRepos: [],
   });
-
   await moveDraftToProject({
     from: MACHINE as never,
     fromProjectId: 'P2',
@@ -81,8 +82,28 @@ test('a draft moved into a project of another Space joins a Space filter, on the
     to: MACHINE as never,
     toProjectId: 'P1',
   });
+}
 
+const read = (summary: GhostexMobileSummary, extra: Partial<MachineInventory> = {}): MachineInventory => ({
+  ...emptyMachineInventory(),
+  summary,
+  serverSummary: summary,
+  hasLoaded: true,
+  ...extra,
+});
+
+test('a draft moved into a project of another Space joins a Space filter, on the lone computer as local', async () => {
+  await moveIntoBeta([MACHINE], { [MACHINE.id]: read(twoSpaces()) });
   const { filter, lastMachines } = useUnifiedListStore.getState();
   expect(filter.spaces).toEqual(['local|sa', 'local|sb']);
   expect(lastMachines).toEqual({ [repoIdentity(null, '/repo/website', null, 'website').key]: 'local' });
+});
+
+test("a computer that isn't connected leaves the list, so the connected one is still keyed as local", async () => {
+  const MINI: MachineRecord = { ...MACHINE, id: 'm2', name: 'Mac mini', host: 'mini.local' };
+  await moveIntoBeta([MACHINE, MINI], {
+    [MACHINE.id]: read(twoSpaces()),
+    [MINI.id]: read(twoSpaces(), { lastError: 'Connection refused' }),
+  });
+  expect(useUnifiedListStore.getState().filter.spaces).toEqual(['local|sa', 'local|sb']);
 });
