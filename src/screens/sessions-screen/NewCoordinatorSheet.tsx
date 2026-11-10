@@ -9,8 +9,8 @@
  * (server/src/ghostex_cli/coordinator/command.rs), and an unnamed orchestrator gets gxserver's
  * placeholder title. Half folded like a laptop the card keeps off the fold (`useFoldCardPlacement`).
  *
- * CDXC:Coordinators 2026-11-09 DECISION:
- * User: "Can I choose where the coordinator runs?" and then "Let's just do it". A project cloned twice on this computer (the list merges the copies, contract/grouping.ts) gets a Folder row between Name and Agent, each folder named by the end of its path, starting on the folder with the project's newest session (else the project's own); the form stays open until the coordinator is created and shows a refusal itself. One folder shows no row.
+ * CDXC:Coordinators 2026-11-09 WHY:
+ * The contributor (sebastianarena, PR #542) chose this, from his own "Can I choose where the coordinator runs?": A project cloned twice on this computer (the list merges the copies, contract/grouping.ts) gets a Folder row between Name and Agent, each folder named by the end of its path, starting on the folder with the project's newest session (else the project's own); the form stays open until the coordinator is created and shows a refusal itself. One folder shows no row.
  * SEE-ALSO: apps/desktop/src/app/window/new_coordinator_computer.rs (the desktop's Computer field, which also offers other computers).
  *
  * CDXC:Coordinators 2026-10-17 DECISION:
