@@ -11,7 +11,8 @@ import { create } from 'zustand';
 import { useTranscriptEnv } from './context';
 import { ReplySheet } from './ReplySheet';
 
-export type QuestionReplyTarget = { form: string | null; tag: string };
+/** `item` and `key` when it answers a coordinator's work item ask (the dock's Reply). */
+export type QuestionReplyTarget = { form: string | null; tag: string; item?: string; key?: string };
 
 const useQuestionReply = create<{ target: QuestionReplyTarget | null }>(() => ({ target: null }));
 
@@ -35,6 +36,19 @@ export function QuestionReplyHost() {
         closeQuestionReply();
         const text = reply.trim();
         if (target === null || text.length === 0) return;
+        // A work item ask: the words are its answer, recorded once and sent as "W7 Q12: words".
+        if (target.item !== undefined && target.item.length > 0) {
+          dispatch({
+            type: 'coordinatorBoardAnswer',
+            op: 'reply',
+            key: target.key ?? '',
+            item: target.item,
+            ask: target.tag,
+            label: text,
+            text: `${target.item} ${target.tag}: ${text}`,
+          } as never);
+          return;
+        }
         dispatch({
           type: 'inlineAnswerText',
           ...(target.form !== null ? { form: target.form } : {}),

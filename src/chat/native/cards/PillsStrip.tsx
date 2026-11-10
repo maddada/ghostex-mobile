@@ -160,7 +160,10 @@ export function PillsStrip({
         ? // Blocked opens the board at its Blocked group (gx-chat-core `show_group`), through
           // the board focus the chat screen keeps for the pill sheet.
           chat.dispatch({ type: 'showCoordinatorBoardGroup', group: 'blocked' } as unknown as UserAction)
-        : onMenuChange(pill.id);
+        : pill.id === 'board' && (document.workDock as { hidden?: boolean } | null | undefined)?.hidden === true
+          ? // The dock hidden by its x comes back with the Work pill (gx-chat-core `dock`).
+            chat.dispatch({ type: 'showWorkDock' } as unknown as UserAction)
+          : onMenuChange(pill.id);
   const panel = pills.map((pill) => ({
     id: pill.id,
     pill,

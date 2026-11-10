@@ -26,6 +26,7 @@ import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { TranscriptFlagsProvider, transcriptFlags, useTranscriptFlags } from '../transcript/context';
 import { strengthenedText } from '../transcript/textStrength';
+import { openQuestionReply } from '../transcript/QuestionReply';
 
 type Dispatch = RustChat['dispatch'];
 
@@ -139,35 +140,177 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
 const DOCK_MAX_HEIGHT = 420;
 
 /**
- * The dock above a chat box (gx-chat-core `work_cards::dock`, which holds the user's decisions;
- * desktop `render_work_dock`): every open ask, unanswered form or page, blocked line of work and
- * what the latest turn finished, as cards; nothing when there are none. The counts are the Work
- * pill's. It sits outside the transcript, so it carries the transcript's flags (Text strength).
+ * The dock directly on the chat box (gx-chat-core `work_cards::dock`, which holds the user's
+ * decisions; desktop `render_work_dock`): one surface of compact rows, what needs him first, then
+ * blocked work and what the newest turn finished; at most `phoneLimit` rows, then "N more need
+ * you". A row shows its answer buttons; a tap expands it in place to its full text, links and
+ * actions (Reply, Open, Mention, Show in chat, Dismiss, Snooze), and a tap again folds it. Its x
+ * hides the whole dock; the Work pill brings it back. It sits outside the transcript, so it
+ * carries the transcript's flags (Text strength).
  */
-export function WorkDock({ document, dispatch }: { document: ChatDocument | null; dispatch: Dispatch }) {
+export function WorkDock({ document, chat }: { document: ChatDocument | null; chat: RustChat }) {
   const flags = useMemo(() => transcriptFlags(document), [document]);
   const styles = useStyles();
   const P = useTranscriptTheme();
-  const cards = arr(obj(document?.workDock)?.cards)
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const dock = obj(document?.workDock);
+  const rows = arr(dock?.rows)
     .map(obj)
-    .filter((card): card is JsonRecord => card !== null);
-  if (cards.length === 0) return null;
+    .filter((row): row is JsonRecord => row !== null);
+  if (dock === null || rows.length === 0 || isTrue(dock, 'hidden')) return null;
+  const limit = typeof dock.phoneLimit === 'number' ? dock.phoneLimit : 3;
+  const hidden = Math.max(0, rows.length - limit);
+  const toggle = (key: string) =>
+    setOpen((was) => {
+      const next = new Set(was);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   return (
     <TranscriptFlagsProvider value={flags}>
-      <View style={styles.dock}>
-        <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockCards}>
-          {cards.map((card) => (
-            <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>
-              {str(card, 'kind') === 'questions' ? (
-                <DockQuestionsCard card={card} dispatch={dispatch} />
-              ) : (
-                <WorkCard card={card} dispatch={dispatch} />
-              )}
+      <View style={styles.dockSurface}>
+        <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockRows}>
+          {rows.slice(0, limit).map((row) => (
+            <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
+              <DockRow
+                row={row}
+                chat={chat}
+                open={open.has(str(row, 'key'))}
+                onToggle={() => toggle(str(row, 'key'))}
+              />
             </QuestionFlashFrame>
           ))}
+          {hidden > 0 ? (
+            <Pressable accessibilityRole="button" onPress={() => chat.dispatch(dock.more as never)}>
+              <Text style={styles.dockMore}>{hidden} more need you</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Hide until something new needs you"
+          hitSlop={10}
+          onPress={() => chat.dispatch({ type: 'hideWorkDock' } as never)}
+          style={styles.dockHide}
+        >
+          <Glyph name="x" size={10} color={P.muted} />
+        </Pressable>
       </View>
     </TranscriptFlagsProvider>
+  );
+}
+
+function DockRow({
+  row,
+  chat,
+  open,
+  onToggle,
+}: {
+  row: JsonRecord;
+  chat: RustChat;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const body = useBodyColor();
+  const [snoozing, setSnoozing] = useState(false);
+  const dispatch = chat.dispatch;
+  const busy = isTrue(row, 'busy');
+  const buttons = arr(row.buttons)
+    .map(obj)
+    .filter((button): button is JsonRecord => button !== null);
+  const reply = obj(row.reply);
+  const openCommand = obj(row.open);
+  const show = obj(row.showInChat);
+  const dismiss = obj(row.dismiss);
+  const mention = str(row, 'mention');
+  const snooze = arr(row.snooze)
+    .map(obj)
+    .filter((choice): choice is JsonRecord => choice !== null);
+  const action = (label: string, onPress: () => void) => (
+    <ToneButton key={label} kind="secondary" label={label} onPress={onPress} />
+  );
+  return (
+    <View style={open ? styles.dockRowOpen : null}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={styles.dockRow}
+      >
+        <View style={styles.dockIcon}>
+          <StatusMarker status={str(row, 'status')} size={13} />
+        </View>
+        <Text numberOfLines={open ? undefined : 2} style={[styles.dockTitle, { color: body }]}>
+          {str(row, 'title')}
+        </Text>
+        <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+      </Pressable>
+      {buttons.length > 0 ? (
+        <View style={styles.dockButtons}>
+          {buttons.map((button, index) => (
+            <ToneButton
+              key={`answer:${index}`}
+              kind="secondary"
+              label={str(button, 'label')}
+              trailing={
+                isTrue(button, 'recommended') ? (
+                  <Glyph name="star" size={10} color={tint(askColor(P.light), 0.75)} />
+                ) : undefined
+              }
+              icon={isTrue(button, 'picked') ? 'check' : undefined}
+              disabled={busy}
+              onPress={() => dispatch(button.command as never)}
+            />
+          ))}
+        </View>
+      ) : null}
+      {open ? (
+        <View style={styles.dockDetail}>
+          {arr(row.detail)
+            .map((line) => (typeof line === 'string' ? line : ''))
+            .filter((line) => line.length > 0)
+            .map((line, index) => (
+              <Text key={`line:${index}`} style={styles.movingRowLine}>
+                {line}
+              </Text>
+            ))}
+          <View style={styles.dockActions}>
+            {reply !== null
+              ? action('Reply', () =>
+                  openQuestionReply({
+                    form: typeof reply.form === 'string' ? reply.form : null,
+                    tag: str(reply, 'tag'),
+                    ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
+                  }),
+                )
+              : null}
+            {openCommand !== null ? action('Open', () => dispatch(openCommand as never)) : null}
+            {mention.length > 0
+              ? action('Mention', () =>
+                  dispatch({
+                    type: 'insertBoardReference',
+                    reference: mention,
+                    text: chat.state?.composer.text ?? '',
+                  } as never),
+                )
+              : null}
+            {show !== null ? action('Show in chat', () => dispatch(show as never)) : null}
+            {dismiss !== null ? action('Dismiss', () => dispatch(dismiss as never)) : null}
+            {snooze.length > 0 ? action(snoozing ? 'Snooze for' : 'Snooze', () => setSnoozing((was) => !was)) : null}
+            {snoozing
+              ? snooze.map((choice) =>
+                  action(str(choice, 'label'), () => {
+                    setSnoozing(false);
+                    dispatch(choice.command as never);
+                  }),
+                )
+              : null}
+          </View>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -514,6 +657,36 @@ const useStyles = themedStyles((P) => ({
   quiet: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   whoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   whoText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
+  dockSurface: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: P.inputBorder,
+    backgroundColor: P.cardPanel,
+  },
+  dockRows: { padding: 4 },
+  dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 6, paddingHorizontal: 8 },
+  dockRowOpen: { borderRadius: 8, backgroundColor: 'rgba(127,127,127,0.06)' },
+  dockIcon: { height: PROSE_LINE, justifyContent: 'center' },
+  dockTitle: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
+  dockButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 31, paddingRight: 8, paddingBottom: 6 },
+  dockDetail: { gap: 4, paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
+  dockActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 2 },
+  dockMore: { paddingLeft: 31, paddingRight: 8, paddingTop: 2, paddingBottom: 6, fontSize: PROSE_SIZE, color: P.muted },
+  dockHide: {
+    position: 'absolute',
+    top: -9,
+    right: -9,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: P.inputBorder,
+    backgroundColor: P.cardPanel,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
