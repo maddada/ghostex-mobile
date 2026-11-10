@@ -333,7 +333,7 @@ async function savedMachineForComputer(address: string, answered: unknown): Prom
   );
   // Since 11.3.0 the code carries the computer's pairing door, a key of its own: a record is
   // found by it only under `machineToPairAgain`'s two-way rule (computerIdentity.ts).
-  const proven = await loadProvenServerKeys();
+  const proven = await loadProvenServerKeys((id) => tokens.get(id) ?? null);
   return (
     machineToPairAgain(
       tailcat,

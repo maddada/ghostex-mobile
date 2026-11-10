@@ -17,27 +17,29 @@
 import { logAppEvent } from '../app/appLog';
 import { staleDuplicatesOf } from './computerIdentity';
 import { getTailcatToken } from './credentials';
-import { recordProvenAddress } from './provenComputer';
+import { loadProvenServerKeys, recordProvenAddress } from './provenComputer';
 import { useMachinesStore } from './store';
 
 /**
- * `machineId` connected through `address`. `disconnect` ends a record's connection and tunnel
- * (given by the caller, which owns them).
+ * `machineId` connected through `address`, in an attempt that began while it was paired with
+ * `pairedAddress` (a proof counts only for that pairing, provenComputer.ts). `disconnect` ends a
+ * record's connection and tunnel (given by the caller, which owns them).
  */
 export function noteConnectedThrough(
   machineId: string,
+  pairedAddress: string | null,
   address: string,
   disconnect: (staleMachineId: string) => void,
 ): void {
   void (async () => {
-    const proven = await recordProvenAddress(machineId, address);
-    if (proven === null) return;
+    await recordProvenAddress(machineId, pairedAddress, address);
     const { machines } = useMachinesStore.getState();
     const tailcat = machines.filter((machine) => machine.transport === 'tailcat');
     if (tailcat.length < 2) return;
     const tokens = new Map<string, string | null>(
       await Promise.all(tailcat.map(async (machine) => [machine.id, await getTailcatToken(machine.id)] as const)),
     );
+    const proven = await loadProvenServerKeys((id) => tokens.get(id) ?? null);
     const stale = staleDuplicatesOf(
       machines,
       (id) => tokens.get(id) ?? null,

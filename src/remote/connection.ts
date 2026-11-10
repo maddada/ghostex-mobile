@@ -1,5 +1,5 @@
 import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src';
-import { resolveSshConfig, type MachineConnectionTarget } from '../machines/credentials';
+import { getTailcatToken, resolveSshConfig, type MachineConnectionTarget } from '../machines/credentials';
 import { forgetRemoteEnvironment } from './commands';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { isDemoMachine } from '../demo/identity';
@@ -114,6 +114,8 @@ async function connectEasyConnect(
   config: SshConfig,
   assertCurrent: () => void,
 ): Promise<void> {
+  // What a connect proves counts for the pairing it began under (machines/provenComputer.ts).
+  const pairedAddress = await getTailcatToken(machine.id);
   const candidates = await easyConnectDialCandidates(machine.id);
   assertCurrent();
   // This computer's own key once it accepted one, the phone's shared key otherwise (easyConnectLinkKeyState.ts).
@@ -131,7 +133,7 @@ async function connectEasyConnect(
       await GhostexNative.connect(machine.id, { ...config, tailcatToken: candidate.address });
       noteEasyConnectDial(machine.id, candidate, { ok: true, elapsedMs: Date.now() - startedAt });
       // This record reached the computer behind this address: an older record of the same computer stops now.
-      noteConnectedThrough(machine.id, candidate.address, (staleMachineId) => {
+      noteConnectedThrough(machine.id, pairedAddress, candidate.address, (staleMachineId) => {
         cancelConnectionAttempt(staleMachineId);
         void GhostexNative.disconnect(staleMachineId).catch(() => undefined);
         void GhostexNative.stopTailcatForward(staleMachineId).catch(() => undefined);

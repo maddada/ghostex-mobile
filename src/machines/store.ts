@@ -12,20 +12,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import { MachineCopy } from '../copy';
-import { dedupeMachineRecords, machineForSameComputer } from './computerIdentity';
+import { dedupeMachineRecords, machineForSameComputer, tailcatServerKey } from './computerIdentity';
 import {
   clearSessionPassword,
   deleteAllCredentials,
   deleteSavedPassword,
   getSavedPassword,
   getTailcatToken,
+  setEasyConnectAddresses,
   setSavedPassword,
   setSessionPassword,
   setTailcatToken,
   type MachineTransport,
 } from './credentials';
 import { migrateMachineData } from './machineDataMigration';
-import { loadProvenServerKeys } from './provenComputer';
+import { forgetProvenServerKeys, loadProvenServerKeys, PROVEN_SERVER_KEYS_STORAGE_KEY } from './provenComputer';
 import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
 
@@ -372,7 +373,7 @@ async function healDuplicateComputers(machines: MachineRecord[]): Promise<Machin
   try {
     const tokens = await loadTailcatTokens(machines);
     // Records under different addresses are one computer when earlier connects proved it (provenComputer.ts).
-    const proven = await loadProvenServerKeys();
+    const proven = await loadProvenServerKeys((id) => tokens.get(id) ?? null);
     const { machines: deduped, merges } = dedupeMachineRecords(
       machines,
       (id) => tokens.get(id) ?? null,
@@ -382,9 +383,11 @@ async function healDuplicateComputers(machines: MachineRecord[]): Promise<Machin
     const renames = new Map<string, string>();
     for (const merge of merges) for (const staleId of merge.staleIds) renames.set(staleId, merge.survivorId);
     // Data first: if the app stops halfway, the duplicates are still saved and the next launch redoes it.
-    await migrateMachineData(AsyncStorage, renames, new Set([MACHINES_STORAGE_KEY]));
+    // What a dropped record proved goes with it instead of moving to the kept one (provenComputer.ts).
+    await migrateMachineData(AsyncStorage, renames, new Set([MACHINES_STORAGE_KEY, PROVEN_SERVER_KEYS_STORAGE_KEY]));
     await AsyncStorage.setItem(MACHINES_STORAGE_KEY, JSON.stringify(deduped));
     await Promise.all([...renames.keys()].map((staleId) => deleteAllCredentials(staleId)));
+    await forgetProvenServerKeys([...renames.keys()]);
     return deduped;
   } catch {
     // A failed heal leaves the records as they were; the next launch tries again.
@@ -476,7 +479,26 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       ...tailscaleSshOf(input),
     };
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
+    /*
+     * CDXC:RemotePairing 2026-11-11 WHY:
+     * A record given an address with another key (paired again, its address edited) or another
+     * transport may now be a different computer. What it proved before is void (provenComputer.ts),
+     * and the address list it holds is the other computer's: it goes first, so no connect can
+     * dial the computer before under the pairing after. Pairing saves the new list right after
+     * this; an edit gets one at the next connect.
+     */
+    const addressBefore = await getTailcatToken(machine.id);
+    const addressAfter =
+      normalized.transport !== 'tailcat'
+        ? null
+        : normalized.tailcatToken.length > 0
+          ? normalized.tailcatToken
+          : addressBefore;
+    const keyOf = (address: string | null): string | null => (address === null ? null : tailcatServerKey(address));
+    const computerMayDiffer = keyOf(addressBefore) !== keyOf(addressAfter);
+    if (computerMayDiffer) await setEasyConnectAddresses(machine.id, '');
     await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
+    if (computerMayDiffer) await forgetProvenServerKeys([machine.id]);
     const nextMachines = get().machines.map((entry) => (entry.id === id ? machine : entry));
     set({ machines: nextMachines });
     persistMachines(nextMachines);
@@ -508,6 +530,7 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       resetDemoWorld();
     }
     await deleteAllCredentials(id);
+    await forgetProvenServerKeys([id]);
     const nextMachines = get().machines.filter((machine) => machine.id !== id);
     const selectedMachineId = resolveSelectedMachineId(
       nextMachines,
