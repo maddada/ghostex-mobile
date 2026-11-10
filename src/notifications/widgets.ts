@@ -21,15 +21,18 @@ import { useSettingsStore } from '../settings/store';
 import { readAccountsAnswer } from '../usage/client';
 import { buildUsageBars } from '../usage/usageMeters';
 import { currentSources } from './liveActivity';
-import { createWidgetWriter, type WidgetInputs, type WidgetWriter } from './widgetWriter';
+import { createWidgetWriter, type NamesRecord, type WidgetInputs, type WidgetWriter } from './widgetWriter';
 
 let installed = false;
 let writer: WidgetWriter | null = null;
 
 /** Where the writer's record is stored: '1' while the snapshot in the App Group may carry session names. */
 const NAMES_RECORD_KEY = 'widgets.snapshotMayHoldNames.v1';
-/** That record; null until it was read. A record that cannot be read counts as "may carry names". */
-let snapshotMayHoldNames: boolean | null = null;
+/**
+ * What is known of that record; null until the read answered. A read that fails leaves it `unknown`: the file may
+ * carry names, but '1' is not known to be stored, so the writer stores it before it writes names.
+ */
+let namesRecord: NamesRecord | null = null;
 /** Resolves once the record was read and the widgets were brought in line with it. */
 let namesRecordRead: Promise<void> = Promise.resolve();
 
@@ -41,7 +44,7 @@ let namesRecordRead: Promise<void> = Promise.resolve();
 function currentInputs(): WidgetInputs | null {
   const machines = useMachinesStore.getState();
   const settings = useSettingsStore.getState();
-  if (!machines.hydrated || !settings.hydrated || snapshotMayHoldNames === null) return null;
+  if (!machines.hydrated || !settings.hydrated || namesRecord === null) return null;
   return {
     computersSaved: machines.machines.length > 0,
     sources: currentSources(),
@@ -67,10 +70,10 @@ export function initWidgets(): void {
       write: (json) => native.writeSnapshot(json),
       remove: () => native.removeSnapshot(),
       reloadTimelines: () => native.reloadTimelines(),
-      mayHoldNames: () => snapshotMayHoldNames !== false,
+      namesRecord: () => namesRecord ?? 'unknown',
       rememberNames: async (mayHold) => {
         await AsyncStorage.setItem(NAMES_RECORD_KEY, mayHold ? '1' : '0');
-        snapshotMayHoldNames = mayHold;
+        namesRecord = mayHold ? 'names' : 'none';
       },
     },
     now: Date.now,
@@ -100,10 +103,10 @@ export function initWidgets(): void {
   namesRecordRead = AsyncStorage.getItem(NAMES_RECORD_KEY)
     .then(
       (stored) => {
-        snapshotMayHoldNames = stored === '1';
+        namesRecord = stored === '1' ? 'names' : 'none';
       },
       () => {
-        snapshotMayHoldNames = true;
+        namesRecord = 'unknown';
       },
     )
     .then(syncWidgets);

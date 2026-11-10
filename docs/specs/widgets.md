@@ -71,6 +71,10 @@ of `plugins/withWidgets.js` together with the Live Activity.
   in the app's storage): set before a snapshot with names shown is written, cleared only after one without names was
   written or the file was deleted, and read before anything is written. A snapshot written without names is not
   deleted for this, so with the switch off the widgets keep their last state while no summary is there, as before.
+  A record that could not be read is "unknown", which is not the same as stored: it counts as "may carry names"
+  when the switch is off (the file is deleted or rewritten, and the record then stored as clear), and with the
+  switch on the record is stored first, as when it was clear; if it cannot be stored, no names are written. So a
+  file with names always has the record set in storage, and a later launch that reads it finds it.
 - Not written while the app is in the background except in a run iOS grants for a push with content-available.
   The registered task refreshes the session list once, then `updateWidgets()` installs the existing writer if a
   background launch mounted no screen and applies that list. The task awaits the write and reload within its 25 s

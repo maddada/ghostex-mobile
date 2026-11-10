@@ -11,7 +11,9 @@
  * - "Show session names" switched off takes the names out of the widgets also when no summary is there to rebuild
  *   the rows from (the computers cannot be reached, or the app just started): a snapshot that may carry names is then
  *   deleted, and the next summary writes it again. The app cannot read the file back, so the host keeps a record of
- *   whether it may carry names, across launches; a snapshot written without names is never deleted for this.
+ *   whether it may carry names, across launches; a snapshot written without names is never deleted for this. A
+ *   record that could not be read is "unknown": it counts as "may carry names" for deleting, but not as stored, so
+ *   a write with names still stores the record first and does not happen when that fails.
  * - Usage: the selected computer's accounts (`agentAccounts`, the usage pane's read) are read at most every 2 minutes
  *   per computer, also across switching computers, and only while the summary poll runs: the computer answers from a
  *   reading of up to 2 minutes anyway, so a faster read brings nothing new. A reading older than 5 minutes, or of
@@ -27,14 +29,21 @@ import { buildSnapshot } from './widgetSnapshot';
 export const USAGE_READ_EVERY_MS = 120_000;
 export const USAGE_MAX_AGE_MS = 300_000;
 
+/**
+ * What is known of the record, kept across launches, of whether the snapshot in the App Group may carry session
+ * names: `names`, it is stored that it may; `none`, it is stored (or was never stored) that it carries none;
+ * `unknown`, the record could not be read, so the file may carry names but nothing says so in storage.
+ */
+export type NamesRecord = 'names' | 'none' | 'unknown';
+
 /** The App Group file and WidgetKit (`modules/ghostex-widgets`). */
 export type WidgetHost = {
   write: (json: string) => Promise<void>;
   remove: () => Promise<void>;
   reloadTimelines: () => void;
-  /** The record, kept across launches, of whether the snapshot in the App Group may carry session names. */
-  mayHoldNames: () => boolean;
-  /** Stores that record; resolves once it is stored. */
+  /** The record as it is known now. */
+  namesRecord: () => NamesRecord;
+  /** Stores the record; resolves once it is stored, after which `namesRecord` is `names` or `none`. */
   rememberNames: (mayHold: boolean) => Promise<void>;
 };
 
@@ -82,18 +91,19 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
   let namesQueued = false;
 
   /**
-   * Queues one native call. `names`: the call writes a snapshot built with session names shown. The host's record
-   * is set before such a write and cleared only after a write or delete without names went through, so whatever
-   * fails or is cut short, a file that carries names is never recorded as free of them.
+   * Queues one native call. `names`: the call writes a snapshot built with session names shown. Unless the record
+   * is known to be stored as `names`, it is stored before such a write, also when it is `unknown`, and a failure
+   * to store it stops the write; it is cleared only after a write or delete without names went through. So
+   * whatever fails or is cut short, a file that carries names always has `names` in storage.
    */
   const run = (shown: string, names: boolean, call: () => Promise<void>): Promise<void> => {
     lastShown = shown;
     namesQueued = names;
     queue = queue
-      .then(() => (names && !deps.host.mayHoldNames() ? deps.host.rememberNames(true) : undefined))
+      .then(() => (names && deps.host.namesRecord() !== 'names' ? deps.host.rememberNames(true) : undefined))
       .then(call)
       .then(() => deps.host.reloadTimelines())
-      .then(() => (!names && deps.host.mayHoldNames() ? deps.host.rememberNames(false) : undefined))
+      .then(() => (!names && deps.host.namesRecord() !== 'none' ? deps.host.rememberNames(false) : undefined))
       .catch((error: unknown) => {
         // The next refresh writes again.
         lastShown = null;
@@ -108,8 +118,9 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
   const write = (inputs: WidgetInputs): Promise<void> => {
     if (!inputs.computersSaved) return remove();
     if (inputs.sources.length === 0) {
-      // No summary to build rows without names from: with names switched off, a file that may carry them goes.
-      return !inputs.showSessionNames && (namesQueued || deps.host.mayHoldNames()) ? remove() : queue;
+      // No summary to build rows without names from: with names switched off, a file that may carry them goes,
+      // also one whose record is unknown.
+      return !inputs.showSessionNames && (namesQueued || deps.host.namesRecord() !== 'none') ? remove() : queue;
     }
     const now = deps.now();
     const reading = inputs.selectedMachineId === null ? undefined : usage.get(inputs.selectedMachineId);

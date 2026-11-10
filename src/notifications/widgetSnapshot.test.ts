@@ -280,7 +280,7 @@ function fakeHost(failWrites = 0) {
     reloadTimelines: () => {
       calls.push('reload');
     },
-    mayHoldNames: () => false,
+    namesRecord: () => 'none',
     rememberNames: () => Promise.resolve(),
   };
   return { host, calls, written };
