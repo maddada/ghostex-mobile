@@ -8,6 +8,7 @@
  * It installs the existing writer when a background launch mounted no screen and resolves after its write/reload.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { GhostexWidgets } from '../../modules/ghostex-widgets/src/GhostexWidgets';
@@ -25,14 +26,22 @@ import { createWidgetWriter, type WidgetInputs, type WidgetWriter } from './widg
 let installed = false;
 let writer: WidgetWriter | null = null;
 
+/** Where the writer's record is stored: '1' while the snapshot in the App Group may carry session names. */
+const NAMES_RECORD_KEY = 'widgets.snapshotMayHoldNames.v1';
+/** That record; null until it was read. A record that cannot be read counts as "may carry names". */
+let snapshotMayHoldNames: boolean | null = null;
+/** Resolves once the record was read and the widgets were brought in line with it. */
+let namesRecordRead: Promise<void> = Promise.resolve();
+
 /**
- * Null until the saved computers and the settings are loaded: before that, no computer would read as the last one
- * removed, and a "Show session names" switched off would read as its default and put the names into the snapshot.
+ * Null until the saved computers, the settings and the names record are loaded: before that, no computer would
+ * read as the last one removed, a "Show session names" switched off would read as its default and put the names
+ * into the snapshot, and a snapshot that carries names would read as free of them.
  */
 function currentInputs(): WidgetInputs | null {
   const machines = useMachinesStore.getState();
   const settings = useSettingsStore.getState();
-  if (!machines.hydrated || !settings.hydrated) return null;
+  if (!machines.hydrated || !settings.hydrated || snapshotMayHoldNames === null) return null;
   return {
     computersSaved: machines.machines.length > 0,
     sources: currentSources(),
@@ -58,6 +67,11 @@ export function initWidgets(): void {
       write: (json) => native.writeSnapshot(json),
       remove: () => native.removeSnapshot(),
       reloadTimelines: () => native.reloadTimelines(),
+      mayHoldNames: () => snapshotMayHoldNames !== false,
+      rememberNames: async (mayHold) => {
+        await AsyncStorage.setItem(NAMES_RECORD_KEY, mayHold ? '1' : '0');
+        snapshotMayHoldNames = mayHold;
+      },
     },
     now: Date.now,
     readUsageBars: async (machineId) => {
@@ -83,11 +97,21 @@ export function initWidgets(): void {
       void syncWidgets();
     }
   });
-  void syncWidgets();
+  namesRecordRead = AsyncStorage.getItem(NAMES_RECORD_KEY)
+    .then(
+      (stored) => {
+        snapshotMayHoldNames = stored === '1';
+      },
+      () => {
+        snapshotMayHoldNames = true;
+      },
+    )
+    .then(syncWidgets);
 }
 
 /** Installs the existing writer and applies the summaries read last; resolves after the snapshot write and reload. */
 export async function updateWidgets(): Promise<void> {
   initWidgets();
+  await namesRecordRead;
   await syncWidgets();
 }

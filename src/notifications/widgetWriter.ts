@@ -8,6 +8,10 @@
  *   again once a minute, so the data time stays current.
  * - Before any summary was read nothing is written (the widgets keep what they have); with no computer saved any
  *   more the snapshot is deleted.
+ * - "Show session names" switched off takes the names out of the widgets also when no summary is there to rebuild
+ *   the rows from (the computers cannot be reached, or the app just started): a snapshot that may carry names is then
+ *   deleted, and the next summary writes it again. The app cannot read the file back, so the host keeps a record of
+ *   whether it may carry names, across launches; a snapshot written without names is never deleted for this.
  * - Usage: the selected computer's accounts (`agentAccounts`, the usage pane's read) are read at most every 2 minutes
  *   per computer, also across switching computers, and only while the summary poll runs: the computer answers from a
  *   reading of up to 2 minutes anyway, so a faster read brings nothing new. A reading older than 5 minutes, or of
@@ -28,6 +32,10 @@ export type WidgetHost = {
   write: (json: string) => Promise<void>;
   remove: () => Promise<void>;
   reloadTimelines: () => void;
+  /** The record, kept across launches, of whether the snapshot in the App Group may carry session names. */
+  mayHoldNames: () => boolean;
+  /** Stores that record; resolves once it is stored. */
+  rememberNames: (mayHold: boolean) => Promise<void>;
 };
 
 export type WidgetInputs = {
@@ -70,12 +78,22 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
   const usage = new Map<string, { readAt: number; bars: readonly UsageBar[] }>();
   const usageReads = new Map<string, { startedAt: number; done: boolean }>();
   let lastInputs: WidgetInputs | null = null;
+  /** The last call queued may put names into the file (a write with session names shown). */
+  let namesQueued = false;
 
-  const run = (shown: string, call: () => Promise<void>): Promise<void> => {
+  /**
+   * Queues one native call. `names`: the call writes a snapshot built with session names shown. The host's record
+   * is set before such a write and cleared only after a write or delete without names went through, so whatever
+   * fails or is cut short, a file that carries names is never recorded as free of them.
+   */
+  const run = (shown: string, names: boolean, call: () => Promise<void>): Promise<void> => {
     lastShown = shown;
+    namesQueued = names;
     queue = queue
+      .then(() => (names && !deps.host.mayHoldNames() ? deps.host.rememberNames(true) : undefined))
       .then(call)
       .then(() => deps.host.reloadTimelines())
+      .then(() => (!names && deps.host.mayHoldNames() ? deps.host.rememberNames(false) : undefined))
       .catch((error: unknown) => {
         // The next refresh writes again.
         lastShown = null;
@@ -84,11 +102,15 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
     return queue;
   };
 
+  const remove = (): Promise<void> =>
+    lastShown === REMOVED ? queue : run(REMOVED, false, () => deps.host.remove());
+
   const write = (inputs: WidgetInputs): Promise<void> => {
-    if (!inputs.computersSaved) {
-      return lastShown === REMOVED ? queue : run(REMOVED, () => deps.host.remove());
+    if (!inputs.computersSaved) return remove();
+    if (inputs.sources.length === 0) {
+      // No summary to build rows without names from: with names switched off, a file that may carry them goes.
+      return !inputs.showSessionNames && (namesQueued || deps.host.mayHoldNames()) ? remove() : queue;
     }
-    if (inputs.sources.length === 0) return queue;
     const now = deps.now();
     const reading = inputs.selectedMachineId === null ? undefined : usage.get(inputs.selectedMachineId);
     const fresh = reading !== undefined && now - reading.readAt <= USAGE_MAX_AGE_MS;
@@ -96,7 +118,7 @@ export function createWidgetWriter(deps: WidgetWriterDeps): WidgetWriter {
     const shown = JSON.stringify({ ...snapshot, writtenAt: snapshot.writtenAt.slice(0, 16) });
     if (shown === lastShown) return queue;
     const json = JSON.stringify(snapshot);
-    return run(shown, () => deps.host.write(json));
+    return run(shown, inputs.showSessionNames, () => deps.host.write(json));
   };
 
   /** Starts the selected computer's usage read when one is due; resolves after it and the write it leads to. */

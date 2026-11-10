@@ -41,10 +41,7 @@ export type LiveActivityRow = {
   /**
    * The name the row leads with (`leadingName`): the agent's, or the session's where session names are shown.
    *
-   * CDXC:Notifications 2026-11-10 WHY: the session's name travels in this key instead of one of its own. The widget
-   * extension draws `agentName` as a row's leading text and tells the agent by `agentIcon`, and it is native code: a
-   * new key would be drawn only by a new app build, while this key reaches the apps already installed with an
-   * over-the-air update.
+   * CDXC:Notifications 2026-11-10 WHY: The session's name travels in this key instead of one of its own. The widget extension draws `agentName` as a row's leading text and tells the agent by `agentIcon`, and it is native code: a new key would be drawn only by a new app build, while this key reaches the apps already installed with an over-the-air update.
    */
   agentName: string;
   /** Artwork identity resolved exactly as the session row, including an explicit icon and the cloud artwork. */

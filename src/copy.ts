@@ -1683,9 +1683,9 @@ export const LiveActivityCopy = {
   previewTitle: 'Preview',
   previewLabel:
     'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Claude Code in ghostex-mobile has a question, Codex in homeserver is waiting, Codex in ghostex-mobile is working, omp in Ghostex finished.',
-  /** The same preview while "Show session names" is on. */
+  /** The same preview while "Show session names" is on: each row's session, and the agent its mark shows. */
   previewLabelWithSessionNames:
-    'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Widget refresh in ghostex-mobile has a question, Backup script in homeserver is waiting, Release notes in ghostex-mobile is working, Sidebar search in Ghostex finished.',
+    'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Widget refresh, Claude Code, in ghostex-mobile has a question. Backup script, Codex, in homeserver is waiting. Release notes, Codex, in ghostex-mobile is working. Sidebar search, omp, in Ghostex finished.',
   working: 'working',
   waiting: 'waiting',
   question: 'has a question',
@@ -1693,14 +1693,14 @@ export const LiveActivityCopy = {
   count: (count: number, word: string) => `${count} ${word}`,
   more: (count: number) => `+${count} more`,
   /**
-   * Sample rows of the preview: agent, session name, project, state and time, as the design's Lock Screen. A row
-   * leads with `session` while "Show session names" is on, else with `agent`.
+   * Sample rows of the preview: agent, its artwork, session name, project, state and time, as the design's Lock
+   * Screen. A row leads with `session` and the agent's mark while "Show session names" is on, else with `agent`.
    */
   previewRows: [
-    { agent: 'Claude Code', session: 'Widget refresh', project: 'ghostex-mobile', state: 'question', time: '4m' },
-    { agent: 'Codex', session: 'Backup script', project: 'homeserver', state: 'waiting', time: '1m' },
-    { agent: 'Codex', session: 'Release notes', project: 'ghostex-mobile', state: 'working', time: '12m' },
-    { agent: 'omp', session: 'Sidebar search', project: 'Ghostex', state: 'finished', time: '18m' },
+    { agent: 'Claude Code', icon: 'claude', session: 'Widget refresh', project: 'ghostex-mobile', state: 'question', time: '4m' },
+    { agent: 'Codex', icon: 'codex', session: 'Backup script', project: 'homeserver', state: 'waiting', time: '1m' },
+    { agent: 'Codex', icon: 'codex', session: 'Release notes', project: 'ghostex-mobile', state: 'working', time: '12m' },
+    { agent: 'omp', icon: 'omp', session: 'Sidebar search', project: 'Ghostex', state: 'finished', time: '18m' },
   ],
 } as const;
 

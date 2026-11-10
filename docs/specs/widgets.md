@@ -64,6 +64,13 @@ of `plugins/withWidgets.js` together with the Live Activity.
   an unchanged state is written once a minute, so the shown time stays current. Switching "Show session names"
   writes at once, and nothing is written before the stored settings were read.
 - Nothing is written before the first summary was read. Removing the last computer deletes the file.
+- "Show session names" switched off never leaves names in the widgets: with summaries read, the snapshot is written
+  again without them; with none (the computers cannot be reached, every computer is disabled, the app just started),
+  a snapshot that may carry names is deleted and the widgets reloaded, and the next summary writes it again. The app
+  cannot read the file back, so it keeps a record of whether the file may carry names (`widgets.snapshotMayHoldNames.v1`
+  in the app's storage): set before a snapshot with names shown is written, cleared only after one without names was
+  written or the file was deleted, and read before anything is written. A snapshot written without names is not
+  deleted for this, so with the switch off the widgets keep their last state while no summary is there, as before.
 - Not written while the app is in the background except in a run iOS grants for a push with content-available.
   The registered task refreshes the session list once, then `updateWidgets()` installs the existing writer if a
   background launch mounted no screen and applies that list. The task awaits the write and reload within its 25 s
