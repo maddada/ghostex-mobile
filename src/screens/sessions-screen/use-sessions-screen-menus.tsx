@@ -1631,14 +1631,10 @@ export function useSessionsScreenMenus({
   }): void => {
     const machine = useMachinesStore.getState().machines.find((entry) => entry.id === pick.machineId) ?? null;
     const summary = summaryFor(pick.machineId);
-    // The picked folder's own header: the Project list may fold a copy of the same repository into
-    // another entry (Merge copies of the same repository), which would leave this one without a header.
     const header =
       machine === null || summary === null
         ? null
-        : projectHeaderOf(pick.machineId, { ...summary, mergeRepositoryCopies: false }, pick.projectId, {
-            throughCollections: true,
-          });
+        : projectHeaderOf(pick.machineId, summary, pick.projectId, { throughCollections: true });
     const outcome = newSessionStart({
       connected: pick.connected,
       computer: pick.label,

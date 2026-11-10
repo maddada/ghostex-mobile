@@ -399,6 +399,49 @@ const SPACES = {
   },
 };
 
+/** Two clones of one repository on Studio; the Project list's saved order puts P2 first, so P1 folds into its entry. */
+const COPIES = {
+  projects: [
+    {
+      projectId: 'P1',
+      name: 'web',
+      path: '/one/web',
+      gitRepositoryRootPath: '/one/web',
+      gitRemoteOriginUrl: 'git@github.com:acme/web.git',
+    },
+    {
+      projectId: 'P2',
+      name: 'web',
+      path: '/two/web',
+      gitRepositoryRootPath: '/two/web',
+      gitRemoteOriginUrl: 'git@github.com:acme/web.git',
+    },
+  ],
+  sessions: [session('s-web', 'Landing copy', 'P1', 5)],
+  workspaceGroups: { projectOrder: ['P2', 'P1'] },
+  sidebarProjectCollections: { order: [], collections: {} },
+};
+
+describe('a copy of a repository the Project list folds into another entry', () => {
+  test("the agent menu's project row opens the menu on the copy picked", async () => {
+    await renderSessions({ extra: COPIES, expandedProjects: ['id:P2'] });
+    await press('Select agent');
+    await pressAndDismiss(screen.getByRole('button', { name: 'Project: web. Tap to change' }));
+    const rows = screen.getAllByRole('button', { name: 'web' });
+    await pressAndDismiss(rows[rows.length - 1]!);
+    await expectPickerStarting('web', 'P1');
+  });
+
+  test('a Unified group\'s "+" opens the menu on it, also while the computer shows the Project list', async () => {
+    await renderSessions({
+      extra: { ...COPIES, unifiedGroupByProject: true },
+      settings: { sessionsListLayout: 'unified', sessionsListGroupByProject: true },
+    });
+    await press('New session in web');
+    await expectPickerStarting('web', 'P1');
+  });
+});
+
 describe("the header's New session", () => {
   const UNIFIED = { sidebarView: 'unified' };
 
