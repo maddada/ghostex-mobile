@@ -202,7 +202,11 @@ function DockBody({
         <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockCards}>
           {cards.map((card) => (
             <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>
-              <WorkCard card={card} dispatch={dispatch} />
+              {str(card, 'kind') === 'questions' ? (
+                <DockQuestionsCard card={card} dispatch={dispatch} />
+              ) : (
+                <WorkCard card={card} dispatch={dispatch} />
+              )}
             </QuestionFlashFrame>
           ))}
         </ScrollView>
@@ -235,6 +239,22 @@ function DockBody({
         </Text>
         <Glyph name="chevron-right" size={12} color={P.muted} />
       </Pressable>
+    </View>
+  );
+}
+
+/** An unanswered form or page in the dock: its title, how many questions are open, and Open. */
+function DockQuestionsCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const body = useBodyColor();
+  return (
+    <View style={[styles.card, styles.questionsCard]}>
+      <Glyph name="help-circle" size={14} color={SidebarPalette.ROW_QUESTION} />
+      <View style={styles.movingText}>
+        <Text style={[styles.title, { color: body, minWidth: 0 }]}>{str(card, 'title')}</Text>
+        <Text style={styles.chipText}>{str(card, 'line')}</Text>
+      </View>
+      <ToneButton kind="secondary" label="Open" onPress={() => dispatch(card.command as never)} />
     </View>
   );
 }
@@ -343,10 +363,26 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
  * row of the list goes to that item's newest card (gx-chat-core `moving_row`, desktop
  * `work_moving_row`).
  */
+/**
+ * The In progress lists the reader opened, by card key, kept outside the component: the row moves
+ * to the newest reply (a new parent), and an opened list stays open across live updates, the end
+ * of a turn and a new reply until the reader folds it (the user's "this gets collapsed after the
+ * turn ends and new text comes in, let's not do that").
+ */
+const openedLists = new Set<string>();
+
 function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
-  const [open, setOpen] = useState(false);
+  const listKey = str(card, 'key');
+  const [open, setOpenState] = useState(() => openedLists.has(listKey));
+  const setOpen = (next: (was: boolean) => boolean) =>
+    setOpenState((was) => {
+      const value = next(was);
+      if (value) openedLists.add(listKey);
+      else openedLists.delete(listKey);
+      return value;
+    });
   const rows = arr(card.rows)
     .map(obj)
     .filter((row): row is JsonRecord => row !== null);
@@ -407,13 +443,17 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
                   onPress={() => (command !== null ? dispatch(command as never) : undefined)}
                   style={styles.movingRow}
                 >
-                  <View style={styles.movingMarker}>
-                    <WhoMark who={who} />
-                  </View>
                   <View style={styles.movingText}>
                     <Text style={[styles.movingRowTitle, { color: body }, command !== null ? styles.linkDots : null]}>
                       {str(row, 'title')}
                     </Text>
+                    {/* Who has it, as a quiet line under the title (the user's "just put it under Item's title"). */}
+                    <View style={styles.whoLine}>
+                      <WhoMark who={who} />
+                      <Text numberOfLines={1} style={styles.whoText}>
+                        {who ? str(who, 'label') : ''}
+                      </Text>
+                    </View>
                     {line.length > 0 ? <Text style={styles.movingRowLine}>{line}</Text> : null}
                   </View>
                   <Text style={styles.foldTime}>{str(row, 'age')}</Text>
@@ -476,6 +516,9 @@ const useStyles = themedStyles((P) => ({
     backgroundColor: P.cardPanel,
   },
   linkDots: { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: P.muted },
+  questionsCard: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  whoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  whoText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
