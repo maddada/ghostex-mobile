@@ -378,6 +378,18 @@ function finish(message: string, problem?: VoiceProblem): void {
 
 let currentProvider: string | null = null;
 
+/**
+ * One line in the phone's Logs sheet about the call (GitHub #500: the Logs had nothing about voice, so a
+ * report could not show why the microphone stopped). Never what the person said or typed, nor a reply's
+ * words: captions, typed turns and announcements stay out, and so do session titles.
+ */
+function voiceLog(message: string): void {
+  logAppEvent(`Voice agent: ${message}`);
+}
+
+/** The agent's last state logged, so a call logs each change once. */
+let loggedAgentState = '';
+
 function onFrame(json: string): void {
   let frame: Record<string, unknown>;
   try {
@@ -424,6 +436,11 @@ function onFrame(json: string): void {
        * which sends `memory: null` unless the call continued it) keeps the memory card as it was.
        */
       const keepMemory = frame.resumed === true && memory === null;
+      voiceLog(
+        `${frame.resumed === true ? 'the call is back' : 'the call is ready'} (${currentProvider ?? 'unknown provider'}, ${
+          frame.callMode === 'pushToTalk' ? 'push to talk' : 'regular'
+        }, ${focus !== null ? 'about one session' : 'all sessions'})`,
+      );
       set({
         phase: 'live',
         problem: null,
@@ -449,6 +466,7 @@ function onFrame(json: string): void {
       const pushToTalk = frame.callMode === 'pushToTalk';
       const state = useVoiceStore.getState();
       if (pushToTalk === state.pushToTalk) return;
+      voiceLog(`the computer switched the call to ${pushToTalk ? 'push to talk' : 'regular'}`);
       set({
         pushToTalk,
         callMode: pushToTalk ? 'pushToTalk' : 'regular',
@@ -460,6 +478,7 @@ function onFrame(json: string): void {
     }
     case 'memory': {
       // Continued (the button or the agent's own recall), nothing to continue, or forgotten anywhere.
+      voiceLog(`memory ${text('state') || 'hidden'}`);
       if (frame.state === 'continued') {
         set({ memory: parseMemory(frame.memory) ?? useVoiceStore.getState().memory, memoryState: 'continued' });
       } else if (frame.state === 'forgotten') {
@@ -472,6 +491,7 @@ function onFrame(json: string): void {
     case 'voice': {
       // gxserver's answer to a picked voice: switched now, or kept for the next conversation.
       const voice = text('voice');
+      voiceLog(`voice ${voice || 'unknown'} ${frame.applied === 'now' ? 'switched now' : `kept for the next call (${text('reason') || 'no reason'})`}`);
       if (frame.applied === 'now') {
         set({ voice, nextVoice: null });
         return;
@@ -489,6 +509,7 @@ function onFrame(json: string): void {
     case 'focus': {
       // The scope changed: one the phone asked for, the agent widening it by voice, or the session closing.
       const next = parseFocus(frame.focus);
+      voiceLog(next !== null ? 'the call is about one session now' : 'the call is about all sessions now');
       const note = focusChangeNotice(useVoiceStore.getState().focus, next);
       set({ focus: next, ...(next !== null ? { shownSession: shownFromFocus(next) } : {}) });
       if (note !== null) notice(note);
@@ -496,6 +517,7 @@ function onFrame(json: string): void {
     }
     case 'talk':
       // gxserver's word on a hold (server/src/voice_agent/talk.rs).
+      voiceLog(`the computer said the hold was ${text('event') || 'answered'}`);
       if (frame.event === 'tooShort') flashVoiceHint(HINT_TOO_SHORT);
       else if (frame.event === 'refused') {
         set({ talking: false });
@@ -503,6 +525,10 @@ function onFrame(json: string): void {
       } else if (frame.event === 'cancelled') flashVoiceHint(HINT_CANCELLED);
       return;
     case 'state':
+      if (text('state') !== loggedAgentState) {
+        loggedAgentState = text('state');
+        voiceLog(`the agent is ${loggedAgentState || 'listening'}`);
+      }
       set({
         agentState: (text('state') || 'listening') as VoiceAgentState,
         ...(text('state') === 'toolRunning' ? {} : { toolLabel: null }),
@@ -530,6 +556,8 @@ function onFrame(json: string): void {
     case 'tool': {
       const finished = frame.phase === 'finished';
       const label = text('label') || text('name');
+      // The tool's name only: its label and arguments can carry what was said.
+      voiceLog(`tool ${text('name') || 'unnamed'} ${finished ? 'finished' : text('phase') || 'started'}`);
       pushLine({ kind: 'tool', ...toolLineFrame(frame) });
       set({ toolLabel: finished ? null : label });
       // In a call about one session the Open chip stays on that session (`shownFromFocus`).
@@ -551,7 +579,7 @@ function onFrame(json: string): void {
     }
     case 'ended': {
       const reason = text('reason');
-      if (reason !== 'user') logAppEvent(`Voice agent: the call ended (${reason || 'no reason'})`);
+      voiceLog(`the call ended (${reason || 'no reason'})`);
       const problem = useVoiceStore.getState().problem;
       finish(reason === 'error' && problem !== null ? problem.message : endedMessage(reason, text('message')));
       return;
@@ -563,13 +591,16 @@ function onFrame(json: string): void {
 async function relink(): Promise<void> {
   if (relinking || target === null) return;
   relinking = true;
+  voiceLog('the call asked for a new link to the computer');
   try {
     const link = await chatMachineLink(target).gxserverLink({ repair: true });
     if (link !== null && nativeSessionId !== null) {
       await GhostexNative.voiceUpdateLink('conversation', link.localPort, link.authToken);
     }
-  } catch {
+    voiceLog(link !== null ? 'a new link to the computer is ready' : 'no new link to the computer yet');
+  } catch (error) {
     // The native ladder asks again on its next attempt.
+    voiceLog(`no new link to the computer yet (${error instanceof Error ? error.message : String(error)})`);
   } finally {
     relinking = false;
   }
@@ -606,10 +637,11 @@ function microphoneStopped(message: string): void {
   }
   clearMicRetries();
   const session = nativeSessionId;
-  micRetryTimers = MIC_RETRY_MS.map((delay) =>
+  micRetryTimers = MIC_RETRY_MS.map((delay, index) =>
     setTimeout(() => {
       const state = useVoiceStore.getState();
       if (nativeSessionId !== session || session === null || state.phase !== 'live' || state.muted) return;
+      voiceLog(`asking the microphone to start again (try ${index + 1} of ${MIC_RETRY_MS.length}, ${delay / 1000} s after it stopped)`);
       void GhostexNative.voiceSetMuted(false).catch(() => undefined);
     }, delay),
   );
@@ -640,6 +672,7 @@ async function switchToClipTalk(machine: MachineConnectionTarget): Promise<void>
       return;
     }
     clearMicRetries();
+    voiceLog('the call microphone keeps stopping; switching to recorded turns');
     nativeSessionId = null;
     await GhostexNative.voiceCancel('conversation').catch(() => undefined);
     set({ clipTalk: true, talking: false });
@@ -647,9 +680,13 @@ async function switchToClipTalk(machine: MachineConnectionTarget): Promise<void>
     startClipTalk(machine, conversationId, useVoiceStore.getState().muted, {
       onFrame,
       onRejoining: () => {
+        voiceLog('recorded turns: the link to the computer dropped; joining again');
         if (useVoiceStore.getState().phase !== 'ended') set({ phase: 'reattaching' });
       },
-      onLost: (message) => finish(message),
+      onLost: (message) => {
+        voiceLog(`recorded turns: the call was lost (${message})`);
+        finish(message);
+      },
     });
   } finally {
     switchingToClips = false;
@@ -659,23 +696,30 @@ async function switchToClipTalk(machine: MachineConnectionTarget): Promise<void>
 function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
   switch (event.status) {
     case 'reattaching':
+      voiceLog('the link to the computer dropped; joining the call again');
       if (useVoiceStore.getState().phase !== 'ended') set({ phase: 'reattaching' });
       return;
     case 'linkNeeded':
       void relink();
       return;
     case 'open':
+      voiceLog('the call is connected to the computer');
       return;
     case 'focusPaused':
+      // An audio session interruption began (a phone call, Siri, an alarm) or the app lost the audio.
+      voiceLog('the audio was taken away (an interruption: a call, Siri, an alarm); the call is paused');
       set({ paused: true });
       return;
     case 'focusResumed':
+      voiceLog('the audio came back; the call goes on');
       set({ paused: false });
       return;
     case 'muted':
+      voiceLog('muted');
       set({ muted: true });
       return;
     case 'unmuted':
+      voiceLog('unmuted');
       set({ muted: false });
       return;
     case 'talking':
@@ -685,6 +729,7 @@ function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
       set({ talking: false });
       return;
     case 'talkRefused':
+      voiceLog(`a hold was refused (${event.message === 'heard' ? 'already hearing you' : 'muted'})`);
       flashVoiceHint(event.message === 'heard' ? HINT_ALREADY_HEARD : HINT_UNMUTE);
       return;
     case 'micError':
@@ -702,6 +747,7 @@ function onStatus(event: Extract<VoiceEvent, { kind: 'status' }>): void {
       finish(endedMessage('lost', ''));
       return;
     case 'closed':
+      voiceLog('the call closed on the phone');
       if (useVoiceStore.getState().phase !== 'ended') {
         finish(useVoiceStore.getState().problem?.message ?? 'The conversation ended.');
       }
@@ -715,6 +761,11 @@ export function initVoice(): void {
   if (installed || !VOICE_SUPPORTED) return;
   installed = true;
   GhostexNative.addListener('onVoiceEvent', (event) => {
+    // The native audio side's own lines, for any call or recording (it may not know the session).
+    if (event.kind === 'log') {
+      logAppEvent(`Voice audio${event.mode === 'dictation' ? ' (Dictate)' : ''}: ${event.message}`);
+      return;
+    }
     if (event.mode !== 'conversation' || event.sessionId !== nativeSessionId) return;
     if (event.kind === 'frame') onFrame(event.json);
     else onStatus(event);
@@ -842,6 +893,8 @@ export async function startVoice(
   clipTurns = false;
   switchOnReady = false;
   set({ ...INITIAL, phase: 'starting', machineId: machine.id, machineName, requestedFocus: about ?? null });
+  loggedAgentState = '';
+  voiceLog(`starting a call on ${machineName} (${about !== undefined ? 'about one session' : 'all sessions'}, ${Platform.OS})`);
   const fail = (code: string, message: string) => {
     logAppEvent(`Voice agent: couldn't start on ${useVoiceStore.getState().machineName} (${code}): ${message}`);
     finish(message, { code, message });
@@ -896,6 +949,7 @@ export async function startVoice(
       title: machineName,
       ...(about !== undefined ? { focus: focusQuery(about) } : {}),
     });
+    voiceLog(`the phone opened its call (${provider}, speed ${speed}×${clipTurns ? ', recorded turns offered' : ''})`);
     if (movedNote !== null) notice(movedNote);
     if (speed !== 1) await GhostexNative.voiceSetSpeed(speed);
   } catch (error) {
@@ -924,6 +978,7 @@ export function focusVoiceOn(about: VoiceFocusTarget | null): void {
 /** Hangs up (or abandons a conversation still opening). */
 export function hangUpVoice(): void {
   const phase = useVoiceStore.getState().phase;
+  voiceLog('hung up');
   if (clipTalkActive()) {
     clipHangUp();
     // The computer answers `ended`; a link that is already gone ends it here.

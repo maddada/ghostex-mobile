@@ -333,6 +333,12 @@ export type VoiceMode = 'conversation' | 'dictation';
  */
 export type VoiceEvent =
   | { sessionId: string; mode: VoiceMode; kind: 'frame'; json: string }
+  /**
+   * A line for the phone's Logs sheet from the native audio side (GitHub #500): microphone starts,
+   * stops and restarts, audio session interruptions and route changes, with the reason the system
+   * gave. Never audio or words. A native build from before it sends none.
+   */
+  | { sessionId: string; mode: VoiceMode; kind: 'log'; message: string }
   | {
       sessionId: string;
       mode: VoiceMode;
