@@ -114,8 +114,10 @@ export type ChatKnownSession = {
   title: string;
   agentId: string;
   agentName: string;
-  /** A coordinator (orchestrator): its message cards draw the crown, as its row does. */
+  /** A coordinator (orchestrator): its message cards draw the captain's hat, as its row does. */
   coordinator: boolean;
+  /** Its project's main coordinator on its computer: the `+` picker's row says "Main". */
+  mainCoordinator?: boolean;
   /** `working`, `idle` or `attention`, for the composer's `+` picker. */
   activity?: string;
   /** `running`, `sleeping` or `stopped`, for the `+` picker. */

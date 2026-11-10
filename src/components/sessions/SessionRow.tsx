@@ -40,7 +40,7 @@ import {
 import { resolveSessionTag } from '../../contract/sessionTags';
 import { SessionCopy } from '../../copy';
 import { useSettingsStore } from '../../settings/store';
-import { mixHexColors, SidebarPalette } from '../../theme/palette';
+import { colorWithOpacity, mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import {
   ds,
@@ -691,6 +691,7 @@ export default function SessionRow({
           indicator !== null ||
           timeLabel !== null ||
           shownCoordinatorBadge !== undefined ||
+          session.isMainCoordinator ||
           linksBadge !== null ||
           voiceCall ||
           session.agentbox !== undefined ||
@@ -727,6 +728,14 @@ export default function SessionRow({
                 </View>
               ) : null}
               {shownCoordinatorBadge !== undefined ? <CoordinatorBadgeView badge={shownCoordinatorBadge} /> : null}
+              {/* The project's main coordinator: the desktop's quiet "Main" tag (native_sidebar/threads.rs `main_coordinator_tag`). */}
+              {session.isMainCoordinator ? (
+                <View style={[styles.mainTag, inkStyle.mainTag]} accessibilityLabel="Main coordinator">
+                  <Text style={[styles.mainTagText, inkStyle.agentboxLabel]} numberOfLines={1}>
+                    Main
+                  </Text>
+                </View>
+              ) : null}
               {voiceCall ? <VoiceCallBadge /> : null}
               {worktree !== undefined && worktree.length > 0 ? <WorktreeBadge label={worktree} /> : null}
               {openerTag !== undefined && openerTag.length > 0 ? (
@@ -814,6 +823,15 @@ const styles = StyleSheet.create({
     gap: ds(3),
     maxWidth: ds(110),
     flexShrink: 1,
+  },
+  /** threads.rs `main_coordinator_tag`: 4dp padding and radius, a hairline in the muted colour at 35%, 10dp text. */
+  mainTag: {
+    paddingHorizontal: ds(4),
+    borderRadius: ds(4),
+    borderWidth: 1,
+  },
+  mainTagText: {
+    fontSize: ds(10),
   },
   agentboxLabel: {
     fontSize: ds(11.5),
@@ -1000,6 +1018,7 @@ const styles = StyleSheet.create({
 const inkStyles = inkStyleSheets((ink) =>
   StyleSheet.create({
     agentboxLabel: { color: ink.muted },
+    mainTag: { borderColor: colorWithOpacity(ink.muted, 35) },
     threadLine: { borderLeftColor: ink.threadLine },
     threadLineAcross: { backgroundColor: ink.threadLine },
     containsActiveRing: { borderColor: ink.activeRing },

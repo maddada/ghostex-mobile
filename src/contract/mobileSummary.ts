@@ -62,6 +62,8 @@ export type MobileSummaryWireSession = {
   coordinatorRole?: string;
   /** This computer's Chief (server/src/chief/): drawn as its own row, never in its project. */
   isChief?: boolean;
+  /** Its project's main coordinator on its computer (server/src/coordinators/main_coordinator.rs); absent from an older gxserver. */
+  isMainCoordinator?: boolean;
   /** On a thread: its coordinator's ids and the thread's state (server/src/coordinators/presentation.rs). */
   coordinatorProjectId?: string;
   coordinatorSessionId?: string;
@@ -625,8 +627,10 @@ export type GhostexSession = {
    * note follows the conversation across resumes and across clients.
    */
   sessionNote: string;
-  /** The session is a coordinator: its row draws the crown instead of its agent logo. */
+  /** The session is a coordinator: its row draws the captain's hat instead of its agent logo. */
   isCoordinator: boolean;
+  /** The coordinator is its project's main one on its computer: the row's "Main" tag. */
+  isMainCoordinator: boolean;
   /** The computer's Chief: drawn as the Chief row under the Spaces tabs (contract/chief.ts). */
   isChief: boolean;
   /** A GBot's chat (`gbotsChat`), while GBots are on: drawn under its bot's row (contract/gbots.ts). */
@@ -1575,6 +1579,7 @@ export function parseSession(value: unknown): GhostexSession | null {
         : 0,
     sessionNote: trimmedValue(value, 'sessionNote'),
     isCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator',
+    isMainCoordinator: trimmedValue(value, 'coordinatorRole') === 'coordinator' && value.isMainCoordinator === true,
     isChief: value.isChief === true,
     gbotsChat: parseGbotsChat(value.gbotsChat),
     coordinatorProjectId: trimmedValue(value, 'coordinatorProjectId'),

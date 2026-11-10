@@ -95,7 +95,7 @@ export type SidebarMenuCommand =
   | {
       type: 'coordinatorSessionAction';
       sessionId: string;
-      action: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen';
+      action: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen' | 'makeMain';
     }
   | {
       type: 'projectMembership';
@@ -662,13 +662,18 @@ function copySubmenu(session: GhostexSession, project: SessionMenuInput['project
 function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
   if (session.isDraft === true) return [];
   const id = session.sessionId;
-  const action = (kind: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen'): SidebarMenuCommand => ({
+  const action = (kind: 'goal' | 'memory' | 'viewPlaybook' | 'markDone' | 'reopen' | 'makeMain'): SidebarMenuCommand => ({
     type: 'coordinatorSessionAction',
     sessionId: id,
     action: kind,
   });
   const rows: SidebarMenuItem[] = [separator()];
   if (session.isCoordinator) {
+    // CDXC:Coordinators 2026-11-10 (gx-core `coordinator_rows`): gives this coordinator its project's
+    // main-coordinator label on its computer; hidden on the main one and on Chief of Staff.
+    if (!session.isMainCoordinator && !session.isChief) {
+      rows.push(row('Make main coordinator', 'coordinator-captain-hat', action('makeMain')));
+    }
     rows.push(row('Goal & Instructions…', 'checklist', action('goal')));
     rows.push(row('Memory…', 'brain', action('memory')));
     // CDXC:Coordinators 2026-11-09 (gx-core `coordinator_rows`): the playbook this coordinator reads.

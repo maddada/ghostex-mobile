@@ -484,6 +484,15 @@ export function promoteCoordinatorCommand(globalRef: string): string {
 }
 
 /**
+ * `ghostex coordinator make-main`: makes the coordinator its project's main one on its computer,
+ * taking the label from the one that had it (server/src/coordinators/main_coordinator.rs). A
+ * computer whose Ghostex is older answers "Unknown coordinator command", shown as is.
+ */
+export function makeMainCoordinatorCommand(globalRef: string): string {
+  return `ghostex coordinator make-main ${shellQuote(requireId(globalRef, 'session reference'))} --json`;
+}
+
+/**
  * `ghostex coordinator sleep-inactive-threads`: sleeps the orchestrator's own threads that the
  * project menu's Sleep Inactive would sleep. gxserver picks the threads
  * (server/src/coordinators/sleep_threads.rs), the same set the desktop's menu sleeps.

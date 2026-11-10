@@ -65,6 +65,7 @@ import {
   exportSessionTranscriptCommand,
   forkSessionCommand,
   promoteCoordinatorCommand,
+  makeMainCoordinatorCommand,
   coordinatorEditCommand,
   coordinatorResolveCommand,
   coordinatorGuideCommand,
@@ -434,6 +435,19 @@ export function useSessionsScreenMenus({
     }
   };
 
+  /** Make main coordinator: its project's main one on that computer (`ghostex coordinator make-main`). */
+  const makeMainCoordinator = async (machine: MachineRecord, session: GhostexSession): Promise<void> => {
+    setProgress('Making it the main coordinator…');
+    try {
+      await runGhostexCli(machine, makeMainCoordinatorCommand(session.globalRef));
+      setTransientStatus('Now the main coordinator');
+    } catch (error) {
+      setTransientStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProgress(null);
+    }
+  };
+
   /** Sleep Inactive Threads: gxserver picks the orchestrator's idle threads and sleeps them. */
   const sleepInactiveCoordinatorThreads = async (machine: MachineRecord, session: GhostexSession): Promise<void> => {
     setProgress('Sleeping inactive threads…');
@@ -773,6 +787,11 @@ export function useSessionsScreenMenus({
           }
           if (menuCommand.action === 'viewPlaybook') {
             setOverlay({ kind: 'coordinatorPlaybook', ctx });
+            return;
+          }
+          if (menuCommand.action === 'makeMain') {
+            setOverlay(NONE);
+            void makeMainCoordinator(machine, ctx.item.session);
             return;
           }
           setOverlay(NONE);
