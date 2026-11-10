@@ -428,8 +428,8 @@ export default function NativeChatScreen({
             {/* The working card in its own row above the cards and the composer: the transcript ends above it. */}
             {document === null ? null : <WorkingCard document={document} />}
             <NativeChatCards chat={chat} onHostAction={hostAction} />
-            {/* A coordinator's dock: its open asks and the status line, right above the box. */}
-            <WorkDock document={document} dispatch={chat.dispatch} onOpenWork={() => setPillMenu('board')} />
+            {/* The dock: what needs the reader, right above the box (`WorkCards.tsx`). */}
+            <WorkDock document={document} dispatch={chat.dispatch} />
             {!composerShown ? null : (
               <View
                 onLayout={(event) => {
