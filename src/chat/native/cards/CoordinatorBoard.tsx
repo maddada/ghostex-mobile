@@ -49,7 +49,7 @@ function chipLabel(kind: string, label: string): string {
 }
 
 /** A tag's tint (`BoardTag::tone`), or null for the muted chip. */
-function toneColor(tone: string): string | null {
+export function toneColor(tone: string): string | null {
   switch (tone) {
     case 'question':
       return SidebarPalette.ROW_QUESTION;
@@ -136,7 +136,8 @@ function tagIcon(icon: string): TablerIconComponent {
   };
   const tag = builtin[icon];
   if (tag !== undefined) return sessionTagIcon(tag) ?? TagGlyph;
-  const id = icon === 'terminal-2' ? 'terminal' : icon.replace(/-([a-z0-9])/gu, (_, next: string) => next.toUpperCase());
+  const id =
+    icon === 'terminal-2' ? 'terminal' : icon.replace(/-([a-z0-9])/gu, (_, next: string) => next.toUpperCase());
   return customSessionTagIcon(id);
 }
 
@@ -433,42 +434,44 @@ export function CoordinatorBoardMenu({
                           <BoardRelayButtons card={relayed} dispatch={chat.dispatch} />
                         ) : answers.length > 0 ? (
                           <>
-                          {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
-                          {str(row, 'lead').length > 0 ? (
-                            <Text numberOfLines={1} style={styles.lead}>
-                              {str(row, 'lead')}
-                            </Text>
-                          ) : null}
-                          <View style={styles.answers}>
-                            {answers.map((answer, answerIndex) => (
-                              <Pressable
-                                key={`answer:${answerIndex}`}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Answer ${str(answer, 'label')}`}
-                                disabled={isTrue(answer, 'locked')}
-                                onPress={() => {
-                                  const answerCommand = obj(obj(answer)?.command);
-                                  if (answerCommand !== null) chat.dispatch(asJson(answerCommand) as unknown as UserAction);
-                                }}
-                                style={[
-                                  styles.answer,
-                                  answerIndex > 0 && styles.answerDivider,
-                                  isTrue(answer, 'picked') && styles.answerPicked,
-                                  isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
-                                ]}
-                              >
-                                <Text
+                            {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
+                            {str(row, 'lead').length > 0 ? (
+                              <Text numberOfLines={1} style={styles.lead}>
+                                {str(row, 'lead')}
+                              </Text>
+                            ) : null}
+                            <View style={styles.answers}>
+                              {answers.map((answer, answerIndex) => (
+                                <Pressable
+                                  key={`answer:${answerIndex}`}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Answer ${str(answer, 'label')}`}
+                                  disabled={isTrue(answer, 'locked')}
+                                  onPress={() => {
+                                    const answerCommand = obj(obj(answer)?.command);
+                                    if (answerCommand !== null)
+                                      chat.dispatch(asJson(answerCommand) as unknown as UserAction);
+                                  }}
                                   style={[
-                                    styles.tagText,
-                                    (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) && styles.answerStrong,
+                                    styles.answer,
+                                    answerIndex > 0 && styles.answerDivider,
+                                    isTrue(answer, 'picked') && styles.answerPicked,
+                                    isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
                                   ]}
-                                  numberOfLines={1}
                                 >
-                                  {isTrue(answer, 'picked') ? `✓ ${str(answer, 'label')}` : str(answer, 'label')}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
+                                  <Text
+                                    style={[
+                                      styles.tagText,
+                                      (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) &&
+                                        styles.answerStrong,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {isTrue(answer, 'picked') ? `✓ ${str(answer, 'label')}` : str(answer, 'label')}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
                           </>
                         ) : tags.length === 0 && !expanded ? (
                           <Text style={note.length > 0 ? styles.note : styles.noLinks} numberOfLines={1}>

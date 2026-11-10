@@ -20,6 +20,8 @@ import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { ToneButton } from './ToneCard';
 import { askColor, tint } from './askCard';
+import { AgentMark } from './agentMark';
+import { toneColor } from './CoordinatorBoard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { useTranscriptFlags } from '../transcript/context';
@@ -58,6 +60,7 @@ const CHIP_ICON: Record<string, GlyphName> = {
   link: 'link',
   file: 'note',
   wait: 'clock',
+  github: 'brand-github',
 };
 
 /** The cards in the document, by the reply each sits under and by summary-mode turn. */
@@ -158,23 +161,33 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
       {line.length > 0 ? <Text style={styles.line}>{line}</Text> : null}
       {chips.length > 0 || buttons.length > 0 ? (
         <View style={styles.meta}>
-          {/* An icon and muted words, no outline or fill (Q2167); a thread, link or file opens. */}
+          {/* Each part a quiet link at the chat's size: the thread with its agent's logo, a GitHub PR
+              or issue with its state in that state's colour, a file, the steps; parts wrap, never
+              cut (Q2205 A, desktop `work_card_part`). */}
           {chips.map((chip, index) => {
             const command = obj(chip.command);
+            const kind = str(chip, 'kind');
+            const state = str(chip, 'state');
+            const agent = str(chip, 'agentIcon');
             return (
               <Pressable
                 key={`chip:${index}`}
                 accessibilityRole={command !== null ? 'button' : undefined}
-                accessibilityLabel={str(chip, 'label')}
+                accessibilityLabel={state.length > 0 ? `${str(chip, 'label')}, ${state}` : str(chip, 'label')}
                 disabled={command === null}
                 hitSlop={6}
                 onPress={() => (command !== null ? dispatch(command as never) : undefined)}
                 style={styles.chip}
               >
-                <Glyph name={CHIP_ICON[str(chip, 'kind')] ?? 'clock'} size={12} color={P.muted} />
-                <Text numberOfLines={1} style={styles.chipText}>
-                  {str(chip, 'label')}
-                </Text>
+                {kind === 'thread' && agent.length > 0 ? (
+                  <AgentMark icon={agent} size={14} />
+                ) : (
+                  <Glyph name={CHIP_ICON[kind] ?? 'clock'} size={14} color={P.muted} />
+                )}
+                <Text style={styles.chipText}>{str(chip, 'label')}</Text>
+                {state.length > 0 ? (
+                  <Text style={[styles.chipText, { color: toneColor(str(chip, 'tone')) ?? P.muted }]}>{state}</Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -278,9 +291,15 @@ function WorkFoldLine({ card }: { card: JsonRecord }) {
   return (
     <View accessibilityLabel={str(card, 'foldText')} style={styles.fold}>
       <StatusMarker status={status} size={11} dim />
+      {/* The question or title gives way; the outcome and time stay whole. */}
       <Text numberOfLines={1} style={styles.foldText}>
         {str(card, 'foldText')}
       </Text>
+      {str(card, 'foldOutcome').length > 0 ? (
+        <Text numberOfLines={1} style={styles.foldOutcome}>
+          {str(card, 'foldOutcome')}
+        </Text>
+      ) : null}
       <Text style={styles.foldTime}>{str(card, 'time')}</Text>
     </View>
   );
@@ -301,7 +320,7 @@ const useStyles = themedStyles((P) => ({
   top: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', columnGap: 8 },
   marker: { width: 14, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, minWidth: 140, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, fontWeight: '500', color: P.prose },
-  right: { marginLeft: 'auto', fontSize: 12.5, lineHeight: PROSE_LINE, color: P.cardMuted },
+  right: { marginLeft: 'auto', fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   line: { paddingLeft: 22, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
   meta: {
     flexDirection: 'row',
@@ -312,8 +331,8 @@ const useStyles = themedStyles((P) => ({
     paddingLeft: 22,
     paddingTop: 2,
   },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 22, flexShrink: 1, maxWidth: 260 },
-  chipText: { flexShrink: 1, fontSize: 12.5, color: P.cardMuted },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: PROSE_LINE, flexShrink: 1, maxWidth: '100%' },
+  chipText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 'auto' },
   fold: {
     flexDirection: 'row',
@@ -326,8 +345,16 @@ const useStyles = themedStyles((P) => ({
     borderColor: P.inputBorder,
   },
   foldText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
-  foldTime: { fontSize: 12.5, color: P.muted },
-  moving: { borderRadius: 8, borderWidth: 1, borderColor: P.inputBorder, overflow: 'hidden' },
+  foldTime: { fontSize: PROSE_SIZE, color: P.muted },
+  foldOutcome: { flexShrink: 0, maxWidth: '60%', fontSize: PROSE_SIZE, fontWeight: '500', color: P.cardMuted },
+  // The work item cards' own background, border and radius.
+  moving: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.inputBorder,
+    backgroundColor: P.cardPanel,
+    overflow: 'hidden',
+  },
   movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, paddingHorizontal: 12 },
   movingTitle: { fontSize: PROSE_SIZE, fontWeight: '500', color: P.prose },
   movingSummary: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },

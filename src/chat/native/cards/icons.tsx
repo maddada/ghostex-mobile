@@ -11,7 +11,13 @@ type GlyphSpec = { paths: string[]; strokeWidth?: number; filled?: boolean };
 
 const GLYPHS = {
   /** The "+N" pill and its sheet (desktop `titlebar/dots.svg`). */
-  dots: { paths: ['M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0'] },
+  dots: {
+    paths: [
+      'M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',
+      'M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',
+      'M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',
+    ],
+  },
   'arrow-down': { paths: ['M12 5l0 14', 'M18 13l-6 6', 'M6 13l6 6'] },
   'question-mark': {
     paths: ['M8.5 8.5a3.5 3.5 0 1 1 4.9 3.2c-.8 .4 -1.4 1.1 -1.4 2v.3', 'M12 18.5v.01'],
@@ -229,6 +235,12 @@ const GLYPHS = {
   },
   /** The Autopilot pill (desktop `titlebar/plane.svg`). */
   plane: { paths: ['M16 10h4a2 2 0 0 1 0 4h-4l-4 7h-3l2 -7h-4l-2 2h-3l2 -4l-2 -4h3l2 2h4l-2 -7h3z'] },
+  /** A GitHub PR or issue on a work item card (desktop `titlebar/brand-github.svg`). */
+  'brand-github': {
+    paths: [
+      'M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5',
+    ],
+  },
   robot: {
     paths: [
       'M6 6a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2l0 -4',
