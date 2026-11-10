@@ -127,7 +127,15 @@ export type PushTokenDeps = {
   log(message: string): void;
   /** A timer of `ms`: `expired` resolves when it ran out; `cancel` stops it. */
   startTimer(ms: number): { expired: Promise<void>; cancel(): void };
+  /** Whether the app is in front (a retry after a failed registration runs only then). */
+  inFront(): boolean;
 };
+
+/**
+ * How long after a registration a computer did not take the next tries wait, while the app stays in front: three
+ * spaced tries, then the usual occasions (the app comes back to the front, a switch or the computers change).
+ */
+export const REGISTRATION_RETRY_DELAYS_MS: readonly number[] = [5_000, 15_000, 45_000];
 
 /** How long removing a computer waits for its answer to the removal of the token. */
 export const REMOVAL_WAIT_MS = 2_000;
@@ -168,11 +176,18 @@ export class PushTokenRegistration {
   private toldNoProject = false;
   private running: Promise<void> | null = null;
   private again: Promise<void> | null = null;
+  /** The retry waiting after a registration a computer did not take, and how many tries this run of them made. */
+  private retry: { cancel(): void } | null = null;
+  private retries = 0;
+  private retrying = false;
 
   constructor(private readonly deps: PushTokenDeps) {}
 
   /** One pass now; an occasion during a pass gets one more pass after it, shared by every such occasion. */
   sync(): Promise<void> {
+    // An occasion starts a fresh run of retries; a retry's own pass keeps counting.
+    if (!this.retrying) this.retries = 0;
+    this.retrying = false;
     if (this.running === null) {
       this.running = this.pass().finally(() => {
         this.running = null;
@@ -254,6 +269,7 @@ export class PushTokenRegistration {
     for (const id of [...this.taken.keys()]) if (!enabled.has(id)) this.taken.delete(id);
     const wanted = await this.wantedToken();
     if (wanted === undefined) return;
+    let notTaken: string | null = null;
     for (const machine of machines) {
       if (this.removed.has(machine.id)) continue;
       const params = this.request(machine, wanted);
@@ -295,7 +311,11 @@ export class PushTokenRegistration {
       if (outcome === 'done') {
         this.taken.set(machine.id, params);
         this.deps.accepted(machine.id, wanted !== null);
-        this.deps.log(`${machine.label}: push token ${wanted === null ? 'removed' : 'registered'}`);
+        this.deps.log(
+          wanted === null
+            ? `${machine.label}: push token removed`
+            : `Push: ${machine.label} registered this phone's push token; its notifications reach the phone`,
+        );
       } else if (outcome === 'unsupported' || outcome === 'legacy') {
         this.unsupported.add(machine.id);
         // Only a Ghostex that answered it knows no push route surely holds no token.
@@ -303,9 +323,43 @@ export class PushTokenRegistration {
         this.deps.log(`${machine.label}: this computer has no push yet; not asked again until the app starts again`);
       } else {
         // Not taken: the computer keeps what it held before, so nothing is confirmed.
-        this.deps.log(`${machine.label}: push token ${what} not taken (${outcome}); asked again at the next occasion`);
+        if (params.action === 'register') notTaken ??= machine.label;
+        const next = params.action === 'register' ? this.nextRetryMs() : null;
+        this.deps.log(
+          next === null
+            ? `${machine.label}: push token ${what} not taken (${outcome}); asked again at the next occasion`
+            : `${machine.label}: push token ${what} not taken (${outcome}); trying again in ${next / 1000} s`,
+        );
       }
     }
+    if (notTaken !== null) this.scheduleRetry();
+  }
+
+  /** The wait before the next retry, or null when this run of retries is spent. */
+  private nextRetryMs(): number | null {
+    return REGISTRATION_RETRY_DELAYS_MS[this.retries] ?? null;
+  }
+
+  /**
+   * CDXC:Notifications 2026-11-11 WHY: a computer that did not take the registration (its link not ready yet right
+   * after pairing, or its answer lost) was asked again only at the next occasion, so a phone that paired and stayed
+   * open got no push until it left the front and came back. A few spaced tries follow while the app stays in front;
+   * each is a whole pass, so it also reaches any other computer that did not take it.
+   */
+  private scheduleRetry(): void {
+    const delay = this.nextRetryMs();
+    if (delay === null || this.retry !== null) return;
+    this.retries += 1;
+    const timer = this.deps.startTimer(delay);
+    this.retry = timer;
+    void timer.expired.then(() => {
+      if (this.retry !== timer) return;
+      this.retry = null;
+      // Out of the front, coming back is the next occasion.
+      if (!this.deps.inFront()) return;
+      this.retrying = true;
+      void this.sync();
+    });
   }
 
   /**

@@ -131,6 +131,7 @@ const registration = new PushTokenRegistration({
   accepted: pushAccepted,
   log: logAppEvent,
   startTimer,
+  inFront: () => AppState.currentState === 'active',
 });
 
 if (NOTIFICATIONS_SUPPORTED) {
