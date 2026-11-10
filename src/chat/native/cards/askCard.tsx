@@ -27,9 +27,13 @@ import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme
 /** Whether an answered exchange got an answer. */
 export type AskTone = 'answered' | 'quiet';
 
-/** The colour a waiting question and the option the reader picked share. */
+/**
+ * The colour a waiting question and the option the reader picked share: the questions pink
+ * (desktop `ask_color`; user, 2026-11-11: "let's change these to the same #F472B6 color that we use to
+ * represent questions everywhere", then "All four").
+ */
 export function askColor(light: boolean): string {
-  return light ? '#b45309' : '#fbbf24';
+  return light ? '#be185d' : '#f472b6';
 }
 
 /** The green that marks an answer. */
@@ -224,7 +228,7 @@ export function AskOption({
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
-  // A pick waiting to be sent is a light amber tint; once sent it reads green at full strength (desktop ask_card.rs).
+  // A pick waiting to be sent is a light pink tint; once sent it reads green at full strength (desktop ask_card.rs).
   const sent = answered === true;
   const hue = sent ? answeredColor(P.light) : askColor(P.light);
   const [edge, wash] = sent ? [0.55, 0.08] : [0.32, 0.04];
@@ -279,7 +283,7 @@ export function AskOption({
 
 /**
  * The quiet mark beside the option the agent recommends: a small muted "Recommended" in sentence
- * case after a faint amber star, with no pill, fill or border.
+ * case after a faint star in the asking colour, with no pill, fill or border.
  *
  * CDXC:SessionChat 2026-11-02 DECISION:
  * User: "make the 'recommended' tag more subtle, not like a pill, and not all caps", first on the HTML pages, then the chat's own question card to match them. The same mark as the desktop (apps/desktop/src/app/native_chat/ask_card.rs `recommended_mark`) and the pages (server/src/visual_pages/kit.rs `.gx-rec`). Supersedes the light-grey Recommended pill.

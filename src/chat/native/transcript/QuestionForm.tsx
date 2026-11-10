@@ -173,7 +173,7 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
   }
   const phase = str(form, 'state');
   const enabled = phase === 'open';
-  // Put off For later (gx-chat-core `questions/later.rs`): grey instead of the amber Waiting, and
+  // Put off For later (gx-chat-core `questions/later.rs`): grey instead of the pink Waiting, and
   // still answerable; desktop question_form.rs.
   const later = form.later === true;
   // Removed without an answer (gx-chat-core `questions/later.rs`): it opens to be read, takes no answer.

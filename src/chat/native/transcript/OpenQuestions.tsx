@@ -19,8 +19,8 @@ export const QUESTION_PILL = {
   flashMs: 1600,
   jumpMargin: 12,
   tone: {
-    dark: { background: '#1d1712', border: 'rgba(251,146,60,0.4)', text: '#fdba74', ring: '#fb923c' },
-    light: { background: '#fff7ed', border: 'rgba(234,88,12,0.35)', text: '#c2410c', ring: '#ea580c' },
+    dark: { background: '#1d1218', border: 'rgba(244,114,182,0.4)', text: '#f9a8d4', ring: '#f472b6' },
+    light: { background: '#fdf2f8', border: 'rgba(190,24,93,0.35)', text: '#9d174d', ring: '#be185d' },
   },
 };
 

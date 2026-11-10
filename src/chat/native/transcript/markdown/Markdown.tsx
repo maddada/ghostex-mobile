@@ -199,7 +199,7 @@ function renderInlines(
 }
 
 /**
- * A Q-tag (`Q80`) as an outlined pill in its question's state: amber with a ? while open, green with
+ * A Q-tag (`Q80`) as an outlined pill in its question's state: pink with a ? while open, green with
  * a check once answered, grey and struck through once withdrawn. Desktop draws the same pill from
  * `question_tag_link` in `open_questions.rs`; the state is gx-chat-core's `TagState`.
  */

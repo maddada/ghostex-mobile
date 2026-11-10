@@ -48,7 +48,7 @@ export const SINGLE_LINE_CARD = {
     glyphSize: 6,
     fill: '#16a34a',
     errorFill: '#dc2626',
-    askFill: '#D2A024',
+    askFill: '#F472B6',
     askInk: '#161616',
   },
 };
