@@ -133,7 +133,13 @@ function effortFor(model: CoordinatorModel | undefined, picked: string, fallback
 }
 
 /** Why Create did not make the coordinator: a plain sentence, the computer's words (behind Details), and `open` when it made one that did not start. */
-export type NewCoordinatorRefusal = { message: string; details?: string; open?: () => void };
+export type NewCoordinatorRefusal = {
+  message: string;
+  details?: string;
+  open?: () => void;
+  /** The computer's answer was not understood and its list could not be read: Create stays off. */
+  uncertain?: boolean;
+};
 
 export type NewCoordinatorSheetProps = {
   projectTitle: string;
@@ -216,7 +222,7 @@ export default function NewCoordinatorSheet({
   const agent = options?.agents.find((entry) => entry.agentId === agentId);
   const selectedModel = agent?.models.find((entry) => entry.value === model);
   // A coordinator made but not started is opened, never created again.
-  const createdAlready = createError?.open !== undefined;
+  const createdAlready = createError?.open !== undefined || createError?.uncertain === true;
   const canCreate = agent !== undefined && !creating && !createdAlready;
 
   const create = (): void => {

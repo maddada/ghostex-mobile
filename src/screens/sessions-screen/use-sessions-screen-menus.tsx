@@ -1711,9 +1711,16 @@ export function useSessionsScreenMenus({
     stillOpen: () => boolean,
   ): Promise<NewCoordinatorRefusal | null> => {
     const projectId = input.projectId ?? ctx.header.projectId;
-    if (!(summaryFor(ctx.machine.id)?.projects ?? []).some((project) => project.projectId === projectId)) {
+    const summary = summaryFor(ctx.machine.id);
+    if (!(summary?.projects ?? []).some((project) => project.projectId === projectId)) {
       return { message: 'That folder is no longer open. Pick another.' };
     }
+    // The project's coordinators before Create, so one the computer made despite a failure is found after it.
+    const before = new Set(
+      (summary?.sessions ?? [])
+        .filter((session) => session.projectId === projectId)
+        .map((session) => session.sessionId),
+    );
     const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
     const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
     const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
@@ -1725,15 +1732,42 @@ export function useSessionsScreenMenus({
       { keepOverlay: true, stillOpen, createdSessionIdOf: createdButNotStartedSessionId },
     );
     if (refusal === null) return null;
+    const notStarted = (open: () => void): NewCoordinatorRefusal => ({
+      message: "Coordinator created, but it didn't start. Open it to start it.",
+      details: refusal.raw,
+      open,
+    });
     if (refusal.open !== undefined) {
       const open = refusal.open;
-      return {
-        message: "Coordinator created, but it didn't start. Open it to start it.",
-        details: refusal.reason,
-        open: () => void open(),
-      };
+      return notStarted(() => void open());
     }
-    return { message: 'Coordinator not created. Try again, or pick another folder.', details: refusal.reason };
+    // Not recognised: check the computer's list before calling it not created, so Create never makes a second one.
+    // The list must be one read after the failure (a refresh already running when it came back may predate it, so a
+    // second one follows), and the read must have worked.
+    const askedAt = Date.now();
+    const uncertain: NewCoordinatorRefusal = {
+      message: "Couldn't tell whether the coordinator was created. Check this project's list before trying again.",
+      details: refusal.raw,
+      uncertain: true,
+    };
+    try {
+      await refreshMachine(ctx.machine);
+      await refreshMachine(ctx.machine);
+    } catch {
+      return uncertain;
+    }
+    const inventory = useInventoryStore.getState().inventoriesByMachineId[ctx.machine.id];
+    if (inventory === undefined || inventory.lastError !== null || (inventory.loadedAt ?? 0) < askedAt) {
+      return uncertain;
+    }
+    const made = (summaryFor(ctx.machine.id)?.sessions ?? []).find(
+      (session) => session.projectId === projectId && session.isCoordinator && !before.has(session.sessionId),
+    );
+    if (made !== undefined && refusal.openSession !== undefined) {
+      const openSession = refusal.openSession;
+      return notStarted(() => void openSession(made.sessionId));
+    }
+    return { message: 'Coordinator not created. Try again, or pick another folder.', details: refusal.raw };
   };
 
   const loadCoordinatorOptions = async (ctx: ProjectContext): Promise<CoordinatorOptions> => {

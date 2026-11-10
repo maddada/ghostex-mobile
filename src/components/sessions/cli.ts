@@ -31,9 +31,23 @@ function firstJsonObject(output: string): Record<string, unknown> | null {
 }
 
 /**
- * Run a ghostex CLI command on the machine. Throws an Error whose message is
+ * A failed CLI run: `message` is the summarized §5 copy shown to the person, `raw` the command's
+ * own output, for a caller that must read what the computer said (New Coordinator's "created, but
+ * its agent did not start") and for Details.
+ */
+export class GhostexCliFailure extends Error {
+  readonly raw: string;
+
+  constructor(message: string, raw: string) {
+    super(message);
+    this.raw = raw;
+  }
+}
+
+/**
+ * Run a ghostex CLI command on the machine. Throws a `GhostexCliFailure` whose message is
  * already summarized to the §5 failure copy when the command fails (non-zero
- * exit or `{ok:false}` payload).
+ * exit or `{ok:false}` payload), with the raw output kept apart.
  */
 export async function runGhostexCli(
   machine: MachineConnectionTarget,
@@ -53,7 +67,7 @@ export async function runGhostexCli(
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
     const machineHasPassword = await hasPassword(machine.id);
-    throw new Error(summarizeFailure(raw, machineHasPassword));
+    throw new GhostexCliFailure(summarizeFailure(raw, machineHasPassword), raw);
   }
 }
 

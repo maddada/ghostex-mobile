@@ -20,7 +20,7 @@ import {
   sessionNoteSaveCommand,
 } from '../../commands/ghostexCli';
 import type { Notice } from '../../components/common/NoticeToast';
-import { createdSessionId, runGhostexCli } from '../../components/sessions/cli';
+import { createdSessionId, GhostexCliFailure, runGhostexCli } from '../../components/sessions/cli';
 import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { claudeCloudPageUrl } from '../../contract/claudeCloud';
 import { projectKeyForSession, type ProjectHeaderItem } from '../../contract/grouping';
@@ -55,8 +55,17 @@ import {
 
 type SessionsNavigation = NativeStackScreenProps<RootStackParamList, 'Sessions'>['navigation'];
 
-/** A create the computer refused (`runCreationFlow`): its words, and `open` when it made the session anyway. */
-export type CreationRefusal = { reason: string; open?: () => Promise<void> };
+/**
+ * A create the computer refused (`runCreationFlow`): the summarized sentence, the computer's own output (`raw`, read
+ * before summarizing), `open` when its output names a session it made anyway, and `openSession` to open one the caller
+ * finds itself (keepOverlay only).
+ */
+export type CreationRefusal = {
+  reason: string;
+  raw: string;
+  open?: () => Promise<void>;
+  openSession?: (sessionId: string) => Promise<void>;
+};
 
 export type SessionsScreenActionsDeps = {
   navigation: SessionsNavigation;
@@ -311,22 +320,22 @@ export function useSessionsScreenActions({
         result = await runGhostexCli(target, command);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
+        const raw = error instanceof GhostexCliFailure ? error.raw : reason;
         setProgress(null);
-        const createdId = options?.createdSessionIdOf?.(reason) ?? null;
+        const openSession = async (sessionId: string): Promise<void> => {
+          setOverlay(NONE);
+          try {
+            await open(sessionId);
+          } catch (openError) {
+            setTransientStatus(openError instanceof Error ? openError.message : String(openError));
+          }
+        };
+        const createdId = options?.createdSessionIdOf?.(raw) ?? null;
         const refusal: CreationRefusal = {
           reason,
-          ...(createdId !== null
-            ? {
-                open: async () => {
-                  setOverlay(NONE);
-                  try {
-                    await open(createdId);
-                  } catch (openError) {
-                    setTransientStatus(openError instanceof Error ? openError.message : String(openError));
-                  }
-                },
-              }
-            : {}),
+          raw,
+          ...(createdId !== null ? { open: () => openSession(createdId) } : {}),
+          ...(keepOverlay ? { openSession } : {}),
         };
         if (!keepOverlay || !stillOpen()) setTransientStatus(reason);
         return refusal;
