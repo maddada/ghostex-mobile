@@ -40,7 +40,7 @@ export const ConnectStartCopy = {
     {
       key: 'computer',
       title: 'On your computer',
-      lead: 'Open the Ghostex menu and click Connect a phone.',
+      lead: 'Open the Ghostex menu and click Connect a Device.',
       link: '',
       tail: '',
     },
@@ -75,7 +75,7 @@ export const ConnectStartCopy = {
 export const ScanCopy = {
   title: 'Scan the code',
   steps: {
-    computer: { title: '1. On your computer', detail: 'Open the Ghostex menu and click Connect a phone.' },
+    computer: { title: '1. On your computer', detail: 'Open the Ghostex menu and click Connect a Device.' },
     phone: { title: '2. On this phone', detail: 'Point the camera at the code it shows.' },
   },
   stillTile: 'The camera opens over this screen.',
@@ -97,7 +97,7 @@ export const ScanCopy = {
       title: 'Still nothing?',
       detail: 'On the computer, click the Copy button under the code, send the text to this phone and paste it.',
     },
-    olderComputer: "No Connect a phone in the computer's menu? On Ghostex 11.2 or earlier, click Mobile & Remote, then Connect.",
+    olderComputer: "No Connect a Device in the computer's menu? On Ghostex 11.3 it is called Connect a phone; on 11.2 or earlier, click Mobile & Remote, then Connect.",
     paste: 'Paste a code',
   },
   found: (computer: string) => `Found ${computer}`,
@@ -143,7 +143,7 @@ export const ScanCopy = {
 /**
  * After a code is scanned: the screen that waits for Approve on the computer, and the screen a failed pairing
  * stays on until the person acts. Each failure names what really happened, in the computer's own words for the
- * way back ("Connect a phone").
+ * way back ("Connect a Device").
  */
 export const PairingCopy = {
   checkTitle: 'Check your computer',
@@ -166,7 +166,7 @@ export const PairingCopy = {
       },
       {
         title: 'Still nothing? Start again',
-        detail: 'Tap Cancel, click Connect a phone on the computer again, and scan the new code.',
+        detail: 'Tap Cancel, click Connect a Device on the computer again, and scan the new code.',
       },
     ],
   },
@@ -174,26 +174,26 @@ export const PairingCopy = {
   pasteInstead: 'Paste a code instead',
   details: 'Details',
   hideDetails: 'Hide details',
-  backToComputer: 'On the computer, click Connect a phone again, then scan the new code.',
+  backToComputer: 'On the computer, click Connect a Device again, then scan the new code.',
   failure: {
     timedOut: {
       title: 'Nobody approved this phone in time',
       body: (computer: string, minutes: number | null) =>
-        `${minutes !== null && minutes > 0 ? `${computer} waited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : `${computer} stopped waiting.`} On the computer, click Connect a phone again, then scan the new code.`,
+        `${minutes !== null && minutes > 0 ? `${computer} waited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : `${computer} stopped waiting.`} On the computer, click Connect a Device again, then scan the new code.`,
     },
     dropped: {
       title: 'The computer stopped waiting',
       body: (computer: string) =>
-        `${computer} let go of this phone's request before anyone approved it, for example because Ghostex there restarted. Click Connect a phone there again, then scan the new code.`,
+        `${computer} let go of this phone's request before anyone approved it, for example because Ghostex there restarted. Click Connect a Device there again, then scan the new code.`,
     },
     expired: {
       title: 'That code is used up',
-      body: 'A code works once, for 5 minutes. On the computer, click Connect a phone again, then scan the new code.',
+      body: 'A code works once, for 5 minutes. On the computer, click Connect a Device again, then scan the new code.',
     },
     denied: {
       title: 'The computer said no',
       body: (computer: string) =>
-        `This phone was turned away on ${computer}. If that was a mistake, click Connect a phone there again and scan the new code.`,
+        `This phone was turned away on ${computer}. If that was a mistake, click Connect a Device there again and scan the new code.`,
     },
     noSecret: {
       title: 'That code is not complete',
@@ -201,7 +201,7 @@ export const PairingCopy = {
     },
     wordsMismatch: {
       title: 'The words did not match',
-      body: 'So pairing stopped, to keep this phone safe. On the computer, click Connect a phone again, then scan the new code.',
+      body: 'So pairing stopped, to keep this phone safe. On the computer, click Connect a Device again, then scan the new code.',
     },
     needsUpdate: { title: 'Update Ghostex on this phone' },
     computerTooOld: { title: 'Update Ghostex on the computer' },
@@ -747,7 +747,7 @@ export const MachinesCopy = {
     sectionLabel: 'Add a computer',
     easyConnect: {
       title: 'Scan the code',
-      subtitle: 'Click Connect a phone on the computer.',
+      subtitle: 'Click Connect a Device on the computer.',
       button: 'Scan',
     },
     tailscale: {

@@ -1,6 +1,6 @@
 /**
  * The connect steps the first screen and Add a computer share: three steps with an icon each (get Ghostex on the
- * computer, open Connect a phone there, scan here), Scan the code as the one button, and the small links under it:
+ * computer, open Connect a Device there, scan here), Scan the code as the one button, and the small links under it:
  * "Other ways to connect" opens a sheet with Paste a code and Use Tailscale, and the first screen adds the demo.
  * CDXC:RemotePairing 2026-11-10 in copy.ts (`ConnectStartCopy`) has the user's picks.
  */

@@ -1,6 +1,6 @@
 /**
  * Scan the code: the one scanner for Easy Connect and Tailscale codes, as two steps in one card (on the
- * computer: Connect a phone; on this phone: the camera, inside step 2), then "Paste a code instead" and
+ * computer: Connect a Device; on this phone: the camera, inside step 2), then "Paste a code instead" and
  * "It won't scan" (CDXC:RemotePairing 2026-11-10 in copy.ts `ScanCopy`). Once a code is read the card says
  * "Found <computer> · Connecting…". State lives in scan-code/useScanController; the drawing over the camera
  * in scan-code/ScannerOverlay.
