@@ -209,13 +209,15 @@ export type ActionFields = {
   questionCancel: {};
   formChoice: { form: string; question: number; choice: number };
   /**
-   * A box's whole text after an edit. `rev` is how many dictations the copy that sends it shows
-   * (the form's `dictated` in the document, or a `dictationInserted` answer's `rev`) and `caret`
-   * its caret after the edit: the core puts a dictation the copy had not shown yet back into the
-   * text there (`keep` in `questions/dictation.rs`). Without `rev` the text is taken as it is.
+   * A box's whole text after an edit. `core` and `rev` say which draft the copy that sends it
+   * showed before the edit: the core that gave it and how many dictations it held (the form's
+   * `core` and `dictated` in the document, or a `dictationInserted` answer's), and `caret` is the
+   * copy's caret after the edit. The core puts a dictation the copy had not shown yet back into
+   * the text there, and refuses a text another core's draft was edited into (`edited` in
+   * `questions/dictation.rs`). Without `rev` the text is taken as it is.
    */
-  formText: { form: string; question: number; text: string; rev?: number; caret?: number };
-  formNotes: { form: string; text: string; rev?: number; caret?: number };
+  formText: { form: string; question: number; text: string; core?: string; rev?: number; caret?: number };
+  formNotes: { form: string; text: string; core?: string; rev?: number; caret?: number };
   formSend: { form: string };
   formSkipAll: { form: string };
   formToggle: { form: string };

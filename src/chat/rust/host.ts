@@ -62,7 +62,7 @@ import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
 import { markSessionOpen } from '../../terminal/openTiming';
 import { dictationInserted } from '../native/composer/dictationTarget';
 import { receivePageThumbnail } from '../native/transcript/pageThumbnails';
-import { recordingPlaced, wordsAsked, wordsAwaited, wordsPlaced } from '../../voice/dictation';
+import { forgetRecording, requestEnded, wordsAsked, wordsAwaited } from '../../voice/dictation';
 import { readAloudSetAuto, readAloudSpeak, readAloudStopSpeaking, registerReadAloudChat } from '../../voice/readAloud';
 
 /** Which chat a host serves. */
@@ -150,6 +150,13 @@ function isImagePath(path: string): boolean {
   return /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/iu.test(path);
 }
 
+/** The recording whose words `event` asks the core to type, when it is such a request (`insertDictation` with an `id`). */
+function dictationRequest(event: ChatCoreEvent | undefined): string | undefined {
+  if (event?.type !== 'action' || event.action.type !== 'insertDictation') return undefined;
+  const { id } = event.action;
+  return typeof id === 'string' ? id : undefined;
+}
+
 function fileName(uri: string): string {
   const withoutQuery = uri.split(/[?#]/u)[0] ?? uri;
   const segment = withoutQuery.split('/').pop() ?? '';
@@ -181,6 +188,12 @@ export class RustChatHost {
   private queue: ChatCoreEvent[] = [];
   private driving = false;
   private disposed = false;
+  /**
+   * The recordings this chat's core is asked to type and has not answered for (`dictate`): this
+   * chat owns their requests (`voice/dictation.ts`, `wordsAsked`) and ends each one, with the
+   * words in a draft or without.
+   */
+  private readonly dictating = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private parked: ParkResult | null = null;
   private readonly unknownEffectNames = new Set<string>();
@@ -354,6 +367,7 @@ export class RustChatHost {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     this.queue = [];
+    this.endDictationRequests();
     this.unsubscribeCoreLost?.();
     this.unsubscribeCoreLost = null;
     try {
@@ -544,7 +558,9 @@ export class RustChatHost {
           // events are already built, so the effects are performed in the same order as before.
           const handled = await this.handleRound(core, pending);
           if (handled === null) return;
-          for (const effects of handled) {
+          for (const [index, effects] of handled.entries()) {
+            // Before any of its effects is performed (a stored write can take its time).
+            this.dictationAnswered(pending[index], effects);
             for (const effect of effects) {
               await this.perform(effect, answers);
             }
@@ -552,7 +568,11 @@ export class RustChatHost {
           pending = answers;
         }
         if (this.core !== core) continue;
-        if (pending.length > 0) this.state.stats.settleRoundsExhausted += 1;
+        if (pending.length > 0) {
+          this.state.stats.settleRoundsExhausted += 1;
+          // Left unsettled: a chat box that kept changing never took these words.
+          for (const event of pending) this.endDictationRequest(dictationRequest(event));
+        }
         await this.publish(core);
       }
     } finally {
@@ -840,49 +860,82 @@ export class RustChatHost {
   /**
    * `insertDictation` from the screen (`useDictation.ts`): the request for the core to type a
    * recording's words. The chat box's text is this host's, so the request carries the field as it
-   * is now, and the recording counts as asked for until the answer comes (`dictationInserted`).
+   * is now. A recording has one request at a time, on the whole phone (`wordsAsked`), and this
+   * chat ends the ones it makes: with the words in a draft (`dictationAnswered`,
+   * `dictationInserted`), or without (`endDictationRequest`).
    */
   private dictate(action: UserAction & { type: 'insertDictation' }): void {
     const { id } = action;
     if (id !== undefined) {
-      // Typed already (another transcription of the recording was on its way): only its copy goes.
-      if (wordsPlaced(id)) {
-        void recordingPlaced(id);
-        return;
-      }
-      wordsAsked(id);
+      if (this.disposed || this.state.status === 'failed' || !wordsAsked(id)) return;
+      this.dictating.add(id);
     }
     const { text, caret } = this.composer.dictationPoint();
     this.enqueue({ type: 'action', action: { ...action, draft: text, start: caret, end: caret } });
   }
 
   /**
-   * The core's `dictationInserted`, taken here whether or not a chat box is on screen, in the same
-   * step as the draft's own save.
+   * The core's effects for `event` are back, and none is performed yet. If `event` asked for a
+   * recording's words and a form box took them, they are in the box's draft now: the recording is
+   * retired here, as the chat box's is when the field shows its words (`dictationInserted`), and
+   * not behind the draft's stored write, which comes first among the effects. A request the core
+   * did not answer is over.
+   */
+  private dictationAnswered(event: ChatCoreEvent | undefined, effects: readonly ChatCoreEffect[]): void {
+    const id = dictationRequest(event);
+    if (id === undefined) return;
+    const answer = effects
+      .map((effect) =>
+        effect.type === 'hostAction' && effect.action === 'dictationInserted' ? dictationInserted(effect.params) : null,
+      )
+      .find((result) => result?.id === id);
+    if (answer === undefined || answer === null) this.endDictationRequest(id);
+    else if (answer.box !== null && this.dictating.delete(id)) void forgetRecording(id);
+  }
+
+  /** This chat's request for recording `id` is over without its words in a draft: the recording waits again. */
+  private endDictationRequest(id: string | undefined): void {
+    if (id !== undefined && this.dictating.delete(id)) requestEnded(id);
+  }
+
+  /** This chat's core is gone (the chat ended, or the core was lost or failed): no request of its can be answered. */
+  private endDictationRequests(): void {
+    for (const id of [...this.dictating]) this.endDictationRequest(id);
+  }
+
+  /**
+   * The core's `dictationInserted`, taken here whether or not a chat box is on screen.
    *
-   * A form box's draft has the words when the answer comes: its recording is placed, and the box's
-   * drawn copies are told (`dictationTarget.ts`). The chat box's text is this host's (`composer`,
-   * as the desktop view holds its draft, `dictation_inserted` in native_chat/dictation.rs): it
-   * takes the core's text if it still holds what the words were put into, and its recording is
-   * placed then; a field that changed meanwhile asks again, as it is now.
+   * A form box's draft has the words when the answer comes (its recording went with
+   * `dictationAnswered`), and the box's drawn copies are told (`dictationTarget.ts`). The chat
+   * box's text is this host's (`composer`, as the desktop view holds its draft,
+   * `dictation_inserted` in native_chat/dictation.rs): it takes the core's text if it still holds
+   * what the words were put into, and the recording is retired with that, as the released phone
+   * retires it when it writes the words into the chat box; a field that changed meanwhile asks
+   * again, as it is now.
    *
-   * CDXC:Dictate 2026-11-10 WHY: The chat box's screen took the answer first. Its copy of the draft changes with the next render, so two recordings answered in one moment were both put into the same text, the second over the first, and both were forgotten; and a chat that was closed before the answer never heard that a form's draft had the words, so the recording was offered and typed again. The field's text lives here and changes in this step, and the recording is placed here, so neither depends on what is drawn.
+   * CDXC:Dictate 2026-11-10 WHY: The chat box's screen took the answer first. Its copy of the draft changes with the next render, so two recordings answered in one moment were both put into the same text, the second over the first, and both were forgotten; and a chat that was closed before the answer never heard that a form's draft had the words, so the recording was offered and typed again. The field's text lives here and changes in this step, and the recording is retired here, so neither depends on what is drawn.
    */
   private dictationInserted(params: unknown, answers: ChatCoreEvent[]): void {
     const result = dictationInserted(params);
     if (result === null) return;
     const { id } = result;
     if (result.box !== null) {
-      if (id !== null) void recordingPlaced(id);
       this.view({ kind: 'hostAction', action: 'dictationInserted', params });
       return;
     }
-    // An answer for a recording typed already, or dismissed since it was asked for, types nothing.
-    if (id !== null && (wordsPlaced(id) || !wordsAwaited(id))) return;
+    // Not this chat's request any more (the recording was dismissed meanwhile): types nothing.
+    if (id !== null && !(this.dictating.has(id) && wordsAwaited(id))) {
+      this.endDictationRequest(id);
+      return;
+    }
     const { text, caret } = this.composer.dictationPoint();
     if (result.supersedes.includes(text)) {
       this.composer.replace(result.content, result.caret, false);
-      if (id !== null) void recordingPlaced(id);
+      if (id !== null) {
+        this.dictating.delete(id);
+        void forgetRecording(id);
+      }
     } else if (result.text !== null) {
       answers.push({
         type: 'action',
@@ -896,6 +949,8 @@ export class RustChatHost {
           end: caret,
         },
       });
+    } else if (id !== null) {
+      this.endDictationRequest(id);
     }
   }
 
@@ -1168,6 +1223,7 @@ export class RustChatHost {
     this.poll.stop();
     if (this.timer !== null) clearTimeout(this.timer);
     this.queue = [];
+    this.endDictationRequests();
     this.unsubscribeCoreLost?.();
     this.unsubscribeCoreLost = null;
     try {

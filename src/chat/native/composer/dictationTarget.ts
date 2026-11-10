@@ -25,7 +25,11 @@ export type DictationInserted = {
   /** The target's text now, and the offset after the words in it. */
   content: string;
   caret: number;
-  /** The form box's newest dictation, which a copy that shows `content` sends with its edits (`formText`). */
+  /**
+   * What a copy of the form box that shows `content` sends with its edits (`formText`): the core
+   * that holds the draft, and how many dictations it typed into the box.
+   */
+  core: string;
   rev: number;
   /** What was asked with, for a chat box that has to ask again; null when no recording was heard. */
   text: string | null;
@@ -45,6 +49,7 @@ export function dictationInserted(params: unknown): DictationInserted | null {
     supersedes: supersedes.filter((text): text is string => typeof text === 'string'),
     content,
     caret,
+    core: typeof fields.core === 'string' ? fields.core : '',
     rev: typeof fields.rev === 'number' ? fields.rev : 0,
     text: typeof fields.text === 'string' ? fields.text : null,
     spacing: fields.spacing !== false,

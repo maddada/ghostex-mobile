@@ -29,6 +29,7 @@ import {
   useWindowDimensions,
   View,
   type StyleProp,
+  type TextInputChangeEvent,
   type TextStyle,
   type ViewInstance,
 } from 'react-native';
@@ -216,22 +217,29 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
       />
     );
   const drafts = arr(form.drafts);
-  // Each box's newest dictation, by box (`dictated` in the core's form document; 0 for none).
+  // The core that holds the form's drafts, and how many dictations it typed into each box
+  // (`core` and `dictated` in the core's form document; 0 for a box that took none).
+  const core = str(form, 'core');
   const dictated = obj(form.dictated);
   const revOf = (slot: number | 'notes'): number => {
     const rev = dictated?.[String(slot)];
     return typeof rev === 'number' ? rev : 0;
   };
-  // A box's field belongs to its form and question: this card is drawn for another form when the
-  // transcript changes above it or the Resources sheet opens another one, and a field kept across
-  // that would report the new box's edits with the old one's text, caret and dictations (`FormBox`).
+  // A box's field belongs to its form and question, as one core holds them: this card is drawn for
+  // another form when the transcript changes above it or the Resources sheet opens another one,
+  // and a core that started again restored the drafts without what the old one had not saved. A
+  // field kept across either would report edits of a text the box's draft is not (`FormBox`).
   const questionViews = questions.map((question, index) => (
-    <View key={`${id}:${index}`} style={index > 0 ? [styles.later, { borderTopColor: theme.ink(0.06) }] : undefined}>
+    <View
+      key={`${core}:${id}:${index}`}
+      style={index > 0 ? [styles.later, { borderTopColor: theme.ink(0.06) }] : undefined}
+    >
       <FormQuestion
         formId={id}
         index={index}
         question={obj(question)}
         draft={obj(drafts[index])}
+        core={core}
         rev={revOf(index)}
         otherLabel={str(form, 'otherLabel')}
         enabled={enabled}
@@ -246,8 +254,8 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
     form.takesNotes === true && (enabled || notes.trim().length > 0) ? (
       <>
         {questionViews}
-        <View key={`${id}:notes`} style={[styles.later, { borderTopColor: theme.ink(0.06) }]}>
-          <FormNotes formId={id} notes={notes} rev={revOf('notes')} enabled={enabled} />
+        <View key={`${core}:${id}:notes`} style={[styles.later, { borderTopColor: theme.ink(0.06) }]}>
+          <FormNotes formId={id} notes={notes} core={core} rev={revOf('notes')} enabled={enabled} />
         </View>
       </>
     ) : (
@@ -356,9 +364,21 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
   );
 }
 
-function FormNotes({ formId, notes, rev, enabled }: { formId: string; notes: string; rev: number; enabled: boolean }) {
+function FormNotes({
+  formId,
+  notes,
+  core,
+  rev,
+  enabled,
+}: {
+  formId: string;
+  notes: string;
+  core: string;
+  rev: number;
+  enabled: boolean;
+}) {
   const { theme, dispatch } = useTranscriptEnv();
-  const edit = useRef<BoxEdit>({ rev, caret: notes.length });
+  const edit = useRef<BoxEdit>({ core, rev, caret: notes.length });
   const report = useCallback(
     (text: string) => dispatch({ type: 'formNotes', form: formId, text, ...edit.current }),
     [dispatch, formId],
@@ -378,6 +398,7 @@ function FormNotes({ formId, notes, rev, enabled }: { formId: string; notes: str
       slot="notes"
       text={text}
       setText={setText}
+      core={core}
       rev={rev}
       edit={edit}
       expect={expect}
@@ -396,7 +417,7 @@ function FormNotes({ formId, notes, rev, enabled }: { formId: string; notes: str
           }}
           onBlur={box.onBlur}
           onContentSizeChange={reveal}
-          onChangeText={box.onChangeText}
+          onChange={box.onChange}
           onSelectionChange={box.onSelectionChange}
           {...box.placed}
           style={[
@@ -415,20 +436,22 @@ function FormNotes({ formId, notes, rev, enabled }: { formId: string; notes: str
 }
 
 /**
- * What a box's edit says besides its text (`formText`, `formNotes`): the newest dictation the copy
- * shows (`rev`) and where its caret is after the edit. The core uses them to keep a dictation
- * this copy had not shown yet (`keep` in gx-chat-core's questions/dictation.rs).
+ * What a box's edit says besides its text (`formText`, `formNotes`): the draft the copy showed
+ * before it, by the core that holds it (`core`) and the dictations it had (`rev`), and where the
+ * copy's caret is after it. The core uses them to keep a dictation this copy had not shown yet,
+ * and to refuse an edit of a draft it does not hold (`edited` in gx-chat-core's
+ * questions/dictation.rs).
  */
-type BoxEdit = { rev: number; caret: number };
+type BoxEdit = { core: string; rev: number; caret: number };
 
 /**
- * What a form box's `TextInput` gets from its `FormBox`: where to report its text and caret and
+ * What a form box's `TextInput` gets from its `FormBox`: where to report its edits, its caret and
  * taking or losing the keyboard, the caret to show after a text the field did not type (spread it:
  * it is there for one render only), and the style that marks it while a running dictation will
  * type into it.
  */
 type FormBoxInput = {
-  onChangeText: (text: string) => void;
+  onChange: (event: TextInputChangeEvent) => void;
   onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void;
   onFocus: () => void;
   onBlur: () => void;
@@ -442,28 +465,6 @@ type FormBoxInput = {
  */
 const DICTATED_INTO = 'Your dictation goes here';
 const DICTATED_INTO_GLYPH = 13;
-
-/**
- * Where the caret is after the field turned `before` into `next` with its caret (or its
- * selection's end) at `was`: moved by what the edit added or took, when the text behind it is the
- * same as before. When it is not (a forward delete takes from behind the caret, or `was` is not
- * this text's caret), the caret is in front of what the two texts share at their ends. Offsets are
- * UTF-16, as the field's are.
- */
-function caretAfterEdit(before: string, next: string, was: number): number {
-  const from = Math.min(was, before.length);
-  const moved = from + next.length - before.length;
-  if (moved >= 0 && before.slice(from) === next.slice(moved)) return moved;
-  const shorter = Math.min(before.length, next.length);
-  let shared = 0;
-  while (
-    shared < shorter &&
-    before.charCodeAt(before.length - 1 - shared) === next.charCodeAt(next.length - 1 - shared)
-  ) {
-    shared += 1;
-  }
-  return next.length - shared;
-}
 
 /** `useSyncExternalStore`'s subscribe for a box outside a chat screen, where no Dictate types. */
 const neverChanges = (): (() => void) => () => undefined;
@@ -481,6 +482,7 @@ function FormBox({
   slot,
   text,
   setText,
+  core,
   rev,
   edit,
   expect,
@@ -491,7 +493,9 @@ function FormBox({
   slot: number | 'notes';
   text: string;
   setText: (text: string) => void;
-  /** The newest dictation the box's draft holds in the document (the form's `dictated`). */
+  /** The core that holds the box's draft (the form's `core`); a field is made for one. */
+  core: string;
+  /** How many dictations the box's draft holds in the document (the form's `dictated`). */
   rev: number;
   /** What the box's next report says besides its text (`BoxEdit`). */
   edit: { current: BoxEdit };
@@ -510,7 +514,7 @@ function FormBox({
   expectRef.current = expect;
   const adoptRef = useRef(adopt);
   adoptRef.current = adopt;
-  /** The newest dictation the text this copy shows holds; the document's when the text is from it. */
+  /** How many dictations the text this copy shows holds; the document's when the text is from it. */
   const shownRev = useRef(rev);
   const documentRev = useRef(rev);
   documentRev.current = rev;
@@ -537,6 +541,8 @@ function FormBox({
     return {
       shown: () => ({ text: textRef.current, caret: caret(textRef.current) }),
       show: (result) => {
+        // Another core's draft: this field goes with the document that brings it.
+        if (result.core !== core) return;
         const current = textRef.current;
         if (current === result.content) {
           shownRev.current = result.rev;
@@ -572,20 +578,22 @@ function FormBox({
   /** What the field itself typed last, or was made with: any other `text` came from outside it. */
   const typed = useRef(text);
   const [placed, setPlaced] = useState<{ start: number; end: number } | null>(null);
-  const onChangeText = useCallback(
-    (next: string) => {
-      // Key repeats (a held Backspace) arrive before the next render: each is measured against the
-      // text and caret the last one left, which are the box's at once, and reported with them.
-      const before = textRef.current;
-      if (next === before) return;
-      const at = caretAfterEdit(before, next, selection.current?.end ?? before.length);
+  const onChange = useCallback(
+    (event: TextInputChangeEvent) => {
+      // The field's own report of an edit: its text and its caret after it, from one event. Key
+      // repeats (a held Backspace) arrive before the next render, so both are the box's at once.
+      // The caret is never worked out from the two texts: Backspace and forward Delete inside a
+      // run of one letter leave the same text and different carets.
+      const next = event.nativeEvent.text;
+      if (next === textRef.current) return;
+      const at = Math.min(event.nativeEvent.selection?.end ?? next.length, next.length);
       textRef.current = next;
       selection.current = { start: at, end: at };
-      edit.current = { rev: shownRev.current, caret: at };
+      edit.current = { core, rev: shownRev.current, caret: at };
       typed.current = next;
       setTextRef.current(next);
     },
-    [edit],
+    [core, edit],
   );
   /**
    * A text the field did not type itself is followed by its caret, for one render.
@@ -606,12 +614,9 @@ function FormBox({
   useEffect(() => {
     if (placed !== null) setPlaced(null);
   }, [placed]);
-  const onSelectionChange = useCallback(
-    (event: { nativeEvent: { selection: { start: number; end: number } } }) => {
-      selection.current = event.nativeEvent.selection;
-    },
-    [],
-  );
+  const onSelectionChange = useCallback((event: { nativeEvent: { selection: { start: number; end: number } } }) => {
+    selection.current = event.nativeEvent.selection;
+  }, []);
   const onImages = useCallback(
     (event: { nativeEvent: unknown }) => {
       if (uploadFiles === undefined || queryAsync === undefined) return;
@@ -625,21 +630,29 @@ function FormBox({
       setStatus({ text: files.length > 1 ? 'Saving the pasted images…' : 'Saving the pasted image…', error: false });
       uploadFiles(files)
         .then(async (paths) => {
-          const inserted = obj(
-            await queryAsync('insertAnswerAttachments', [
-              textRef.current,
-              paths,
-              original,
-              start,
-              end,
-              otherBoxes(forms[formId], slot),
-            ]),
-          );
+          // The core answers on a later turn. An answer for a text the box no longer shows (typed
+          // into, or given a dictation, meanwhile) is asked for again: written as it came it
+          // would undo that, under the `rev` of a text it was not made from.
+          let asked: string;
+          let inserted: JsonRecord | null;
+          do {
+            asked = textRef.current;
+            inserted = obj(
+              await queryAsync('insertAnswerAttachments', [
+                asked,
+                paths,
+                original,
+                start,
+                end,
+                otherBoxes(forms[formId], slot),
+              ]),
+            );
+          } while (textRef.current !== asked);
           if (typeof inserted?.text !== 'string') throw new Error('The image reference could not be inserted. Please paste it again.');
-          // The box's own edit, made here: reported with its caret like a typed one (`onChangeText`).
+          // The box's own edit, made here: reported with its caret like a typed one (`onChange`).
           const at = typeof inserted.caret === 'number' ? inserted.caret : inserted.text.length;
           hand(inserted.text, at);
-          edit.current = { rev: shownRev.current, caret: at };
+          edit.current = { core, rev: shownRev.current, caret: at };
           setText(inserted.text);
           setStatus(null);
         })
@@ -647,13 +660,13 @@ function FormBox({
           setStatus({ text: error instanceof Error ? error.message : 'The pasted image could not be saved.', error: true }),
         );
     },
-    [edit, formId, forms, hand, queryAsync, setText, slot, uploadFiles],
+    [core, edit, formId, forms, hand, queryAsync, setText, slot, uploadFiles],
   );
   return (
     <View>
       <GhostexImageIntakeView onImages={onImages}>
         {children({
-          onChangeText,
+          onChange,
           onSelectionChange,
           onFocus,
           onBlur,
@@ -689,6 +702,7 @@ function FormQuestion({
   index,
   question,
   draft,
+  core,
   rev,
   otherLabel,
   enabled,
@@ -698,7 +712,8 @@ function FormQuestion({
   index: number;
   question: JsonRecord | null;
   draft: JsonRecord | null;
-  /** The newest dictation the question's box holds in the document (the form's `dictated`). */
+  /** The core that holds the question's box, and how many dictations it holds in the document (the form's `core` and `dictated`). */
+  core: string;
   rev: number;
   otherLabel: string;
   enabled: boolean;
@@ -713,7 +728,7 @@ function FormQuestion({
   const choices = arr(question?.choices);
   const written = str(draft, 'other');
   const pick = (choice: number) => dispatch({ type: 'formChoice', form: formId, question: index, choice });
-  const edit = useRef<BoxEdit>({ rev, caret: written.length });
+  const edit = useRef<BoxEdit>({ core, rev, caret: written.length });
   const report = useCallback(
     (text: string) => dispatch({ type: 'formText', form: formId, question: index, text, ...edit.current }),
     [dispatch, formId, index],
@@ -780,6 +795,7 @@ function FormQuestion({
           slot={index}
           text={text}
           setText={setText}
+          core={core}
           rev={rev}
           edit={edit}
           expect={expect}
@@ -797,7 +813,7 @@ function FormQuestion({
               }}
               onBlur={box.onBlur}
               onContentSizeChange={reveal}
-              onChangeText={box.onChangeText}
+              onChange={box.onChange}
               onSelectionChange={box.onSelectionChange}
               {...box.placed}
               style={[

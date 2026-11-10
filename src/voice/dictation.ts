@@ -12,8 +12,6 @@
  * CDXC:VoiceMode 2026-10-20 SEE-ALSO: the user's decision is in the computer's `server/src/voice_agent/recordings.rs` and `apps/desktop/src/app/voice_agent/dictation.rs`; the desktop records with `recorder.rs`.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { GhostexNative, type LocalDictation } from '../../modules/ghostex-native/src';
 import { chatMachineLink } from '../chat/rust/machine-link';
 import type { MachineConnectionTarget } from '../machines/credentials';
@@ -57,52 +55,21 @@ const handling = new Set<string>();
 const settled = new Set<string>();
 
 /**
- * The open requests to type a recording's words into a draft: a chat's core was asked
- * (`insertDictation`) and its answer (`dictationInserted`, which the chat's host takes in
- * `chat/rust/host.ts`, with or without a chat box on screen) has not come. The value is the timer
- * of a request still waited for: its recording is not offered as waiting meanwhile. After `ASK_MS`
- * without an answer (normally it takes milliseconds) the recording is offered again and the value
- * is null; the request stays open, so an answer that still comes counts. Dismissing the recording
- * closes the request, and an answer after that types nothing.
- */
-const asked = new Map<string, ReturnType<typeof setTimeout> | null>();
-const ASK_MS = 5_000;
-
-/**
- * The recordings whose words are in a draft, for every chat on this phone: none of them is typed a
- * second time, by any request or answer, and none is offered again.
+ * The recordings whose words a chat's core is asked to type right now: its `insertDictation` is
+ * on its way through that chat's host (`chat/rust/host.ts`) and the answer has not been taken.
+ * There is one request per recording, on the whole phone: the recording is not offered as waiting
+ * meanwhile and no second request is made for it, so its words go into one draft. The request
+ * ends when the words are in a draft (`forgetRecording`), when the reader dismissed the recording,
+ * or when its chat can take no answer any more (`requestEnded`), and only then is the recording
+ * offered again.
  *
- * CDXC:Dictate 2026-11-10 WHY: "Already typed" used to be read from `settled`, which also holds dismissed recordings, so Transcribe previous on a recording the reader had cancelled got its words back and dropped them. A dismissed recording was never typed; only an accepted request makes a recording placed. The ones whose copy is still on the phone (`unremoved`) are stored, so a recording that could not be removed is not offered and typed again after the app starts anew; the chat's core cannot know this, it is new with every chat.
+ * CDXC:Dictate 2026-11-10 WHY: The words reach a draft through the chat's core, a moment after they are back, where the released phone wrote them into the chat box at once; a recording was offered again in that moment, and one whose words a form had already taken was transcribed and typed a second time into another chat. A wait that offered the recording after five seconds did the same whenever the first request was only slow. The chat's host knows when its request is over (answered, or its core gone), so the request itself holds the recording back and no clock decides.
  */
-const placed = new Set<string>();
-/** The placed recordings whose copy the phone still has, stored under `PLACED_KEY`. */
-const unremoved = new Set<string>();
-const PLACED_KEY = 'ghostex.dictation.placed';
-let placedRead: Promise<void> | null = null;
-
-/** Reads the stored placed recordings once; every path that lists or transcribes a recording waits for it. */
-function placedLoaded(): Promise<void> {
-  placedRead ??= AsyncStorage.getItem(PLACED_KEY)
-    .then((raw) => {
-      const ids: unknown = raw === null ? [] : JSON.parse(raw);
-      if (!Array.isArray(ids)) return;
-      for (const id of ids) {
-        if (typeof id !== 'string') continue;
-        placed.add(id);
-        unremoved.add(id);
-      }
-    })
-    .catch(() => undefined);
-  return placedRead;
-}
-
-function saveUnremoved(): void {
-  void AsyncStorage.setItem(PLACED_KEY, JSON.stringify([...unremoved])).catch(() => undefined);
-}
+const asked = new Set<string>();
 
 const waitingListeners = new Set<() => void>();
 
-/** Hears when the recordings offered as waiting may have changed (a request went overdue, or was answered). */
+/** Hears when the recordings offered as waiting may have changed (a request ended without its words in a draft). */
 export function onWaitingChanged(listener: () => void): () => void {
   waitingListeners.add(listener);
   return () => {
@@ -110,71 +77,21 @@ export function onWaitingChanged(listener: () => void): () => void {
   };
 }
 
-function waitingChanged(): void {
-  waitingListeners.forEach((listener) => listener());
+/** A chat's core is about to be asked for recording `id`'s words; false when a request for it is already on its way. */
+export function wordsAsked(id: string): boolean {
+  if (asked.has(id)) return false;
+  asked.add(id);
+  return true;
 }
 
-/** A chat's core is asked to type recording `id`'s words. */
-export function wordsAsked(id: string): void {
-  clearTimeout(asked.get(id) ?? undefined);
-  asked.set(
-    id,
-    setTimeout(() => {
-      asked.set(id, null);
-      waitingChanged();
-    }, ASK_MS),
-  );
-}
-
-/** Whether an answer for recording `id` still counts: its request is open (asked, not dismissed since). */
+/** Whether an answer for recording `id` still counts: it is asked for, and not dismissed since. */
 export function wordsAwaited(id: string): boolean {
   return asked.has(id);
 }
 
-/** Whether recording `id`'s words are in a draft: nothing of it is typed again. */
-export function wordsPlaced(id: string): boolean {
-  return placed.has(id);
-}
-
-function closeRequest(id: string): void {
-  clearTimeout(asked.get(id) ?? undefined);
-  asked.delete(id);
-}
-
-/** Recording `id`'s words are in a draft: it is placed, and the phone's copy goes. */
-export async function recordingPlaced(id: string): Promise<void> {
-  closeRequest(id);
-  placed.add(id);
-  if (!unremoved.has(id)) {
-    unremoved.add(id);
-    saveUnremoved();
-  }
-  await removePlaced(id, null);
-  waitingChanged();
-}
-
-/**
- * Removes the phone's copy of placed recording `id` and stops storing it once the copy is gone.
- * `all` is the phone's recordings when the caller has just listed them.
- */
-async function removePlaced(id: string, all: readonly LocalDictation[] | null): Promise<void> {
-  let recordings = all;
-  if (recordings === null) {
-    try {
-      recordings = await GhostexNative.dictationUnsent();
-    } catch {
-      return;
-    }
-  }
-  const recording = recordings.find((kept) => kept.id === id);
-  if (recording !== undefined) {
-    try {
-      await GhostexNative.dictationForget(recording.path);
-    } catch {
-      return;
-    }
-  }
-  if (unremoved.delete(id)) saveUnremoved();
+/** The request for recording `id` ended without its words in a draft: the recording waits again. */
+export function requestEnded(id: string): void {
+  if (asked.delete(id)) waitingListeners.forEach((listener) => listener());
 }
 
 /** Whether the computer's gxserver can dictate (it lists the `voiceAgent` capability). */
@@ -291,13 +208,10 @@ export async function localRecording(id: string): Promise<LocalDictation | null>
   }
 }
 
-/**
- * Nothing was heard in recording `id`, or the reader dismissed it: the phone's copy goes; the
- * computer keeps its own. A recording whose words are in a draft goes with `recordingPlaced`.
- */
+/** The words are in a draft (or nothing was heard): the phone's copy of `id` goes; the computer keeps its own. */
 export async function forgetRecording(id: string): Promise<void> {
   settled.add(id);
-  closeRequest(id);
+  asked.delete(id);
   const recording = await localRecording(id);
   if (recording !== null) await GhostexNative.dictationForget(recording.path).catch(() => undefined);
 }
@@ -327,26 +241,17 @@ export async function sendUnsent(machine: MachineConnectionTarget): Promise<void
 
 /** Recordings on this phone still waiting for their words (not dismissed, not being worked on), newest first. */
 export async function waitingRecordings(): Promise<LocalDictation[]> {
-  await placedLoaded();
-  let all: LocalDictation[];
   try {
-    all = await GhostexNative.dictationUnsent();
+    const all = await GhostexNative.dictationUnsent();
+    return all
+      .filter(
+        (recording) =>
+          !recording.dismissed && !handling.has(recording.id) && !settled.has(recording.id) && !asked.has(recording.id),
+      )
+      .reverse();
   } catch {
     return [];
   }
-  // A placed recording's copy that could not be removed goes now; one already gone is no longer stored.
-  for (const id of [...unremoved]) void removePlaced(id, all);
-  return all
-    .filter(
-      (recording) =>
-        !recording.dismissed &&
-        !handling.has(recording.id) &&
-        !settled.has(recording.id) &&
-        !placed.has(recording.id) &&
-        // A request still waited for; an overdue one (null) is offered again.
-        (asked.get(recording.id) ?? null) === null,
-    )
-    .reverse();
 }
 
 function outcome(answer: { result: Record<string, unknown> } | { error: string }, kept: Kept, id: string): Transcription {
@@ -384,7 +289,6 @@ export async function saveAndTranscribe(
   const id = kept.kind === 'local' ? kept.recording.id : kept.id;
   handling.add(id);
   try {
-    await placedLoaded();
     if (kept.kind === 'local') {
       const recording = isCancelled() ? { ...kept.recording, dismissed: true } : kept.recording;
       const saved = await upload(machine, recording);
@@ -420,7 +324,6 @@ export async function transcribeLatest(
   machine: MachineConnectionTarget,
   isCancelled: () => boolean,
 ): Promise<Transcription | null> {
-  await placedLoaded();
   await sendUnsent(machine);
   const answer = await rpc(machine, 'transcribeDictation', { latest: true }, TRANSCRIBE_TIMEOUT_MS);
   const id = 'result' in answer ? (answer.result.dictation as ServerDictation | undefined)?.id : undefined;
@@ -440,7 +343,7 @@ export async function dismissDictation(machine: MachineConnectionTarget, id: str
 /** Marks a phone recording dismissed before it reaches the computer. */
 export async function dismissLocal(recording: LocalDictation): Promise<LocalDictation> {
   settled.add(recording.id);
-  closeRequest(recording.id);
+  asked.delete(recording.id);
   await GhostexNative.dictationDismissLocal(recording.path).catch(() => undefined);
   return { ...recording, dismissed: true };
 }
