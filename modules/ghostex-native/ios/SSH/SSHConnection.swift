@@ -233,6 +233,8 @@ nonisolated(unsafe) private let kbdintCallback: @convention(c) (
 // MARK: - SSH Connection (one per machineId)
 
 actor SSHConnection {
+    /// The bound on a blocking libssh2 call once the session is up (`connect`'s CDXC note).
+    static let connectedBlockingTimeout: TimeInterval = 8
     private final class ExecRequest {
         let id: UUID
         let command: String
@@ -599,6 +601,22 @@ actor SSHConnection {
 
         // Set non-blocking for I/O
         libssh2_session_set_blocking(session, 0)
+
+        /**
+         * CDXC:RemoteMachines 2026-11-10 WHY:
+         * Once connected, the only blocking libssh2 calls left are a terminal's channel setup in
+         * `startShell` (open, pty, shell), a few round trips that answer in well under a second on a
+         * live link. They still ran under the 20 s connect bound, inside this actor, so after Wi-Fi or
+         * Airplane Mode came back a reattach on the dead transport held the actor that long, and the
+         * phone's foreground check (`isConnected`, its probe, `disconnect`) queued behind it: on the
+         * user's iPhone one return in twelve waited about 15 s before the check could even start
+         * (2026-11-10). A connected session's blocking calls now give up after
+         * `connectedBlockingTimeout`; a timeout marks the transport dead (`noteTransportError`), as before.
+         */
+        libssh2_session_set_timeout(
+            session,
+            Int(min(config.connectionTimeout, Self.connectedBlockingTimeout) * 1000)
+        )
 
         // Protocol-level keepalive so a half-dead transport surfaces as a
         // socket error quickly on resume instead of hanging reads. Interval 0
