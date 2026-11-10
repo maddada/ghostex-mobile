@@ -2,11 +2,12 @@
  * Bottom sheet with free-form content: dimmed backdrop, #161616 panel with a
  * grabber and 20px top corners, keyboard-avoiding so inputs inside stay
  * visible. Dragging the grabber down closes it. `ActionSheet` stays the list-only variant; this one hosts the setup
- * flow's paste, help and password sheets. Half folded like a laptop it starts below the fold (with the
+ * flow's paste, help and password sheets, and the voice screen's sheets. Its backdrop fades in over the
+ * whole screen while the panel slides up (`useSheetPresence`). Half folded like a laptop it starts below the fold (with the
  * keyboard up, above it: the keyboard-avoiding layer).
  */
 
-import { useMemo, type ReactNode, type Ref } from 'react';
+import { useMemo, useRef, type ReactNode, type Ref } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
 import { Animated, Modal, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
@@ -19,6 +20,7 @@ import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
 import { useGrabberDrag } from './useGrabberDrag';
+import { useSheetPresence } from './useSheetPresence';
 
 export type BottomSheetProps = {
   visible: boolean;
@@ -37,16 +39,26 @@ export default function BottomSheet({ visible, onClose, children, scrollRef }: B
   const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
   const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: true });
   const drag = useGrabberDrag(visible, onClose);
+  // The Modal outlives `visible` until the panel has slid away, showing what it showed last.
+  const { mounted, progress, translateY, onPanelLayout } = useSheetPresence(visible);
+  const lastChildren = useRef(children);
+  if (visible) lastChildren.current = children;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingContainer style={styles.fill}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" />
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <KeyboardAvoidingContainer style={styles.fill} pointerEvents={visible ? 'auto' : 'none'}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button">
+          <Animated.View style={[styles.backdrop, { opacity: progress }]} />
+        </Pressable>
         <Animated.View
           testID="sheet-panel"
+          onLayout={onPanelLayout}
           style={[
             styles.sheet,
             bar.margin,
-            { paddingBottom: Math.max(bottomInset, 16) + 12, transform: [{ translateY: drag.offset }] },
+            {
+              paddingBottom: Math.max(bottomInset, 16) + 12,
+              transform: [{ translateY: Animated.add(translateY, drag.offset) }],
+            },
             foldMaxHeight !== undefined && { maxHeight: foldMaxHeight },
           ]}
         >
@@ -54,7 +66,7 @@ export default function BottomSheet({ visible, onClose, children, scrollRef }: B
             <View style={styles.grabber} />
           </View>
           <KeyboardAwareScrollView ref={scrollRef} bounces={false} contentContainerStyle={styles.content}>
-            {children}
+            {lastChildren.current}
           </KeyboardAwareScrollView>
         </Animated.View>
       </KeyboardAvoidingContainer>

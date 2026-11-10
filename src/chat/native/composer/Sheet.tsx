@@ -15,8 +15,8 @@
  * (with the keyboard up, above it: the keyboard-avoiding layer).
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useRef, type ReactNode } from 'react';
+import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFoldSheetMaxHeight } from '../../../components/common/foldAvoidance';
@@ -24,6 +24,7 @@ import { useKeyboardTop } from '../../../components/common/keyboard/keyboardFram
 import KeyboardAvoidingContainer from '../../../components/common/keyboard/KeyboardAvoidingContainer';
 import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
 import { useGrabberDrag } from '../../../components/common/useGrabberDrag';
+import { useSheetPresence } from '../../../components/common/useSheetPresence';
 import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
@@ -42,62 +43,22 @@ export type SheetProps = {
   onDismissed?: () => void;
 };
 
-/** How long the backdrop's fade and the panel's slide take, opening and closing. */
-const OPEN_MS = 260;
-const CLOSE_MS = 200;
-
 export function Sheet(props: SheetProps) {
   const { visible, onClose, onDismissed } = props;
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
   const bar = useVerticalBarSpace();
-  const windowHeight = useWindowDimensions().height;
   // The navigation bar's inset is under the keyboard while it is open; the sheet sits right on top of it.
   const bottomInset = useKeyboardTop() === null ? insets.bottom : 0;
   const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: true });
-  // Stays true until the closing animation has finished, so the Modal outlives `visible`.
-  const [mounted, setMounted] = useState(visible);
-  if (visible && !mounted) setMounted(true);
-  // 0 = closed (backdrop clear, panel below the screen), 1 = open.
-  const progress = useRef(new Animated.Value(0)).current;
-  const [panelHeight, setPanelHeight] = useState(0);
+  // The Modal outlives `visible` until the panel has slid away (`useSheetPresence`).
+  const { mounted, progress, translateY, onPanelLayout } = useSheetPresence(visible);
   // What the panel shows: the live props, then the last ones while it slides away.
   const lastProps = useRef(props);
   if (visible) lastProps.current = props;
   const { title, onBack, accessory, children, maxHeight = '80%' } = lastProps.current;
   const drag = useGrabberDrag(visible, onClose);
-  // The slide up starts once the panel has been measured, so it runs over the panel's own height.
-  const measured = panelHeight > 0;
-
-  useEffect(() => {
-    if (visible && mounted && measured) {
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: OPEN_MS,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    } else if (!visible && mounted) {
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: CLOSE_MS,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (!finished) return;
-        setMounted(false);
-        // The next open measures its own content.
-        setPanelHeight(0);
-      });
-    }
-  }, [visible, mounted, measured, progress]);
-
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    // Before the panel has been measured it waits a whole screen below.
-    outputRange: [panelHeight > 0 ? panelHeight : windowHeight, 0],
-  });
   return (
     <Modal
       visible={mounted}
@@ -118,7 +79,7 @@ export function Sheet(props: SheetProps) {
         </Pressable>
         <Animated.View
           testID="sheet-panel"
-          onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+          onLayout={onPanelLayout}
           style={[
             styles.panel,
             bar.margin,

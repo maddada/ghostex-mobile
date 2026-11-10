@@ -179,15 +179,17 @@ function closeSocket(current: Link): void {
 }
 
 /** Sends a control frame on the call (mute, voice, focus, interrupt, memory). */
-export function clipSend(frame: Record<string, unknown>): void {
+/** Sends a control frame on the call's socket; false when the socket is not open (rejoining). */
+export function clipSend(frame: Record<string, unknown>): boolean {
   if (frame.type === 'mute' && link !== null) link.muted = frame.muted === true;
-  send(frame);
+  return send(frame);
 }
 
-function send(frame: Record<string, unknown>): void {
+function send(frame: Record<string, unknown>): boolean {
   const socket = link?.socket;
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return false;
   socket.send(JSON.stringify(frame));
+  return true;
 }
 
 /** Hang up: the computer ends the call and answers `ended`. */

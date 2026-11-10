@@ -96,8 +96,12 @@ type VoiceState = {
   speed: number;
   /** `voiceAgentCallMode`: the kind of call the next one will be (the gear sheet's tick). */
   callMode: VoiceCallMode;
-  /** This call is push-to-talk (`ready` said so), and whether Talk is held. */
+  /** This call is push-to-talk (`ready` said so, or a later `callMode` frame), and whether Talk is held. */
   pushToTalk: boolean;
+  /** This call's gxserver switches a running call when the call mode changes (`ready.callModeLive`). */
+  callModeLive: boolean;
+  /** A short note the voice screen shows as a toast; a new `id` shows it again. */
+  toast: { id: number; message: string } | null;
   talking: boolean;
   /** A short note above the buttons ("Unmute to talk", "Hold to talk, then let go to send"). */
   hint: string | null;
@@ -130,8 +134,24 @@ export const VOICE_CALL_MODES: { mode: VoiceCallMode; label: string; detail: str
   },
 ];
 
-/** Said once under the two modes: GPT Realtime bills by audio either way. */
-export const VOICE_CALL_MODE_NOTE = 'GPT Realtime bills only audio in both modes. A change applies to your next call.';
+/** Computers whose gxserver said `callModeLive` (it switches a running call's mode), in a call's `ready` or in `readVoiceAgent`, since the app started. */
+const liveCallModeComputers = new Set<string>();
+
+/**
+ * Said once under the two modes: GPT Realtime bills by audio either way, and when a change applies.
+ * `live`: the computer switches a running call (`ready.callModeLive`); an older one keeps the call's
+ * mode until the next call.
+ */
+export function voiceCallModeNote(live: boolean): string {
+  return live
+    ? 'GPT Realtime bills only audio in both modes. A change switches a running call at once.'
+    : 'GPT Realtime bills only audio in both modes. A change applies to your next call.';
+}
+
+/** Whether `machineId`'s gxserver is known to switch a running call's mode (a call or `readVoiceAgent` there said so). */
+export function callModeSwitchesLive(machineId: string): boolean {
+  return liveCallModeComputers.has(machineId);
+}
 
 /** A session the agent showed, as gxserver names it on the tool event (`server/src/voice_agent/show.rs`). */
 export type VoiceShownSession = { projectId: string; sessionId: string; title: string };
@@ -154,6 +174,8 @@ const INITIAL: VoiceState = {
   speed: 1,
   callMode: 'regular',
   pushToTalk: false,
+  callModeLive: false,
+  toast: null,
   talking: false,
   hint: null,
   memory: null,
@@ -187,6 +209,19 @@ export const HINT_TOO_SHORT = 'Hold to talk, then let go to send';
 export const HINT_UNMUTE = 'Unmute to talk';
 export const HINT_ALREADY_HEARD = 'Mute first, then hold to talk';
 export const HINT_CANCELLED = 'Talk cancelled';
+
+export const MODE_NOW_REGULAR = 'Microphone is open: regular mode';
+export const MODE_NOW_PUSH_TO_TALK = 'Hold to speak is on';
+const MODE_NEXT_REGULAR = 'Regular mode starts with your next call';
+const MODE_NEXT_PUSH_TO_TALK = 'Hold to speak starts with your next call';
+
+let toastCount = 0;
+
+/** Shows `message` as the voice screen's toast. */
+function showVoiceToast(message: string): void {
+  toastCount += 1;
+  set({ toast: { id: toastCount, message } });
+}
 
 /** Shows a short note above the buttons for a moment. */
 export function flashVoiceHint(text: string): void {
@@ -382,6 +417,13 @@ function onFrame(json: string): void {
         ? frame.voiceOptions.filter((voice): voice is string => typeof voice === 'string')
         : [];
       const memory = parseMemory(frame.memory);
+      const callModeLive = frame.callModeLive === true;
+      if (callModeLive && target !== null) liveCallModeComputers.add(target.id);
+      /*
+       * A `ready` again in the same call (`resumed`: a reattach, or gxserver's mid-call mode switch,
+       * which sends `memory: null` unless the call continued it) keeps the memory card as it was.
+       */
+      const keepMemory = frame.resumed === true && memory === null;
       set({
         phase: 'live',
         problem: null,
@@ -389,10 +431,31 @@ function onFrame(json: string): void {
         voice: text('voice') || null,
         ...(options.length > 0 ? { voiceOptions: options } : {}),
         pushToTalk: frame.callMode === 'pushToTalk',
+        callModeLive,
+        // Such a gxserver switches the call when the mode is saved, so the call's mode is the setting's.
+        ...(callModeLive ? { callMode: frame.callMode === 'pushToTalk' ? ('pushToTalk' as const) : ('regular' as const) } : {}),
         talking: false,
-        memory,
-        memoryState: memory === null ? 'hidden' : frame.memoryContinued === true ? 'continued' : 'offered',
+        ...(keepMemory
+          ? {}
+          : {
+              memory,
+              memoryState: memory === null ? 'hidden' : frame.memoryContinued === true ? 'continued' : 'offered',
+            }),
       });
+      return;
+    }
+    case 'callMode': {
+      // The running call switched mode (CDXC:VoiceMode 2026-11-10 on `setCallMode`).
+      const pushToTalk = frame.callMode === 'pushToTalk';
+      const state = useVoiceStore.getState();
+      if (pushToTalk === state.pushToTalk) return;
+      set({
+        pushToTalk,
+        callMode: pushToTalk ? 'pushToTalk' : 'regular',
+        talking: pushToTalk ? state.talking : false,
+        hint: null,
+      });
+      showVoiceToast(pushToTalk ? MODE_NOW_PUSH_TO_TALK : MODE_NOW_REGULAR);
       return;
     }
     case 'memory': {
@@ -883,9 +946,57 @@ export function setVoiceMuted(muted: boolean): void {
   void GhostexNative.voiceSetMuted(muted).catch(() => undefined);
 }
 
+/**
+ * CDXC:VoiceMode 2026-11-10 DECISION:
+ * User: "Add an input area at the bottom for the voice agent on the phone and on PC, so I can be muted and still type to the voice agent." A typed message is the user's turn in the running call: gxserver's `text` input (server/src/voice_agent/conversation.rs, `Input::Text`) shows it as the user's caption, cuts a reply being spoken and answers it like a spoken turn. Mute is left as it is.
+ *
+ * Recorded-turn calls (`clipTalk.ts`) send the `text` frame on their own socket, which every gxserver
+ * with voice already takes. A native call's socket (`GhostexVoice.kt` / `.swift`) forwards only its
+ * fixed frames, so its typed turn goes through gxserver's `voiceAgentText` route
+ * `{conversationId, text}` instead, which hands it to the same call.
+ *
+ * Answers null when sent, or the sentence the text box shows when it could not be.
+ */
+export async function sendVoiceText(text: string): Promise<string | null> {
+  const typed = text.trim();
+  if (typed.length === 0) return null;
+  if (useVoiceStore.getState().phase !== 'live') return 'The call is not connected right now.';
+  if (clipTalkActive()) {
+    return clipSend({ type: 'text', text: typed })
+      ? null
+      : "Couldn't send that. The call is reconnecting; try again in a moment.";
+  }
+  return sendNativeCallText(typed);
+}
+
+/**
+ * VOICE-TEXT-SERVER-ROUTE: the one place a native call's typed turn leaves the phone. It needs
+ * gxserver's `/api/voiceAgentText` `{conversationId, text}` (answers `{sent: true}`, or `notFound`
+ * once the call ended), allowed for remote clients like `/api/voiceAgentClip`.
+ */
+async function sendNativeCallText(text: string): Promise<string | null> {
+  const machine = target;
+  const status = await GhostexNative.voiceStatus().catch(() => null);
+  const conversationId = status?.conversationId;
+  if (machine === null || !conversationId) return 'The call is still connecting. Try again in a moment.';
+  try {
+    const answer = await chatMachineLink(machine).rpc('voiceAgentText', { conversationId, text }, READ_TIMEOUT_MS);
+    if (answer.error === null) return null;
+    // The call ended (`notFound` naming the conversation), or the text was refused (`badRequest`).
+    const olderComputer = answer.error.code === 'notFound' && !/conversation/i.test(answer.error.message);
+    if (!olderComputer) return answer.error.message;
+    return `Typing to the voice agent needs a newer Ghostex on ${useVoiceStore.getState().machineName || 'your computer'} (${answer.error.message.replace(/\.$/, '')}).`;
+  } catch {
+    return "Couldn't reach your computer. Try again in a moment.";
+  }
+}
+
 /** "Stop talking": cuts the agent's reply. */
 export function interruptVoice(): void {
-  if (clipTalkActive()) return clipSend({ type: 'interrupt' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'interrupt' });
+    return;
+  }
   void GhostexNative.voiceInterrupt().catch(() => undefined);
 }
 
@@ -912,15 +1023,27 @@ async function saveVoiceSettings(
 }
 
 /**
- * The gear sheet and the voice settings page: saves the computer's `voiceAgentCallMode`, which
- * gxserver reads when the next call starts (a call never changes mode midway).
+ * The gear sheet and the voice settings page: saves the computer's `voiceAgentCallMode`.
+ *
+ * CDXC:VoiceMode 2026-11-10 DECISION: User: "I had push-to-talk selected, then switched to regular mode mid-conversation, and after that it kept forcing me to use hold-to-speak instead of regular. [...] Please fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode. Also consider showing the user a notice when the mode is about to switch." A change during a call switches that call at once, both ways: gxserver switches the running call and sends a `callMode` frame, which sets `pushToTalk` (the hold button and the open microphone follow it) and shows "Microphone is open: regular mode" or "Hold to speak is on". A gxserver that cannot switch a running call (no `ready.callModeLive`) keeps it as it started, and the phone says the mode starts with the next call instead of leaving the tick and the call disagreeing silently. Supersedes the 2026-10-21 "a call never changes mode midway" on the phone.
  */
 export function setCallMode(mode: VoiceCallMode): void {
-  const previous = useVoiceStore.getState().callMode;
-  if (mode === previous) return;
+  const state = useVoiceStore.getState();
+  const previous = state.callMode;
+  const callPushToTalk = state.pushToTalk;
+  const inCall = state.phase === 'live' || state.phase === 'reattaching';
+  // The tick already matches, but the running call does not (it started in the other mode).
+  if (mode === previous && (!inCall || callPushToTalk === (mode === 'pushToTalk'))) return;
   set({ callMode: mode });
   void saveVoiceSettings({ callMode: mode }, 'call mode', '').then((saved) => {
-    if (!saved) set({ callMode: previous });
+    if (!saved) {
+      set({ callMode: previous });
+      return;
+    }
+    const now = useVoiceStore.getState();
+    if (!voiceActive(now.phase) || now.pushToTalk === (mode === 'pushToTalk')) return;
+    // gxserver answers with a `callMode` frame and its own notice when it switches the call.
+    if (!now.callModeLive) showVoiceToast(mode === 'pushToTalk' ? MODE_NEXT_PUSH_TO_TALK : MODE_NEXT_REGULAR);
   });
 }
 
@@ -931,7 +1054,9 @@ export async function readComputerCallMode(
   try {
     const answer = await chatMachineLink(machine).rpc('readVoiceAgent', {}, READ_TIMEOUT_MS);
     if (answer.error !== null) return { error: answer.error.message };
-    const result = (answer.result ?? {}) as { callMode?: string };
+    const result = (answer.result ?? {}) as { callMode?: string; callModeLive?: boolean };
+    // A gxserver that switches a running call says so here too, so Settings' note is right before any call.
+    if (result.callModeLive === true) liveCallModeComputers.add(machine.id);
     return { mode: result.callMode === 'pushToTalk' ? 'pushToTalk' : 'regular' };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Couldn't reach your computer." };
@@ -1037,7 +1162,10 @@ export function pickVoice(voice: string): void {
 export function continueVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memoryState: 'continued' });
-  if (clipTalkActive()) return clipSend({ type: 'continueMemory' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'continueMemory' });
+    return;
+  }
   void GhostexNative.voiceSendControl('continueMemory').catch(() => undefined);
 }
 
@@ -1050,7 +1178,10 @@ export function startVoiceFresh(): void {
 export function forgetVoiceMemory(): void {
   if (useVoiceStore.getState().phase !== 'live') return;
   set({ memory: null, memoryState: 'forgotten' });
-  if (clipTalkActive()) return clipSend({ type: 'forgetMemory' });
+  if (clipTalkActive()) {
+    clipSend({ type: 'forgetMemory' });
+    return;
+  }
   void GhostexNative.voiceSendControl('forgetMemory').catch(() => undefined);
 }
 

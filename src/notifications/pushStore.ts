@@ -183,7 +183,7 @@ export function initPushNotifications(): void {
   if (installed || !NOTIFICATIONS_SUPPORTED) return;
   installed = true;
   const sync = (): void => void registration.sync();
-  watchPushToken(() => void registration.tokenChanged());
+  watchPushToken((deviceToken) => void registration.tokenChanged(deviceToken));
   let switches = useSettingsStore.getState().settings.notifications;
   useSettingsStore.subscribe((state) => {
     const next = state.settings.notifications;

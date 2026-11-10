@@ -9,7 +9,7 @@
  */
 
 import { readableSecondaryText } from '../theme/sidebarAppearance';
-import { useMemo, useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -26,9 +26,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
+import * as Clipboard from 'expo-clipboard';
+
+import GhostexSelectionMenuView from '../../modules/ghostex-native/src/GhostexSelectionMenuView';
+import { ChatToast, type Toast } from '../chat/native/ChatToast';
 import { IconPill } from '../chat/native/cards/ChatPills';
+import { MESSAGE_TEXT_SELECTABLE } from '../chat/native/transcript/messageSelection';
 import { useTranscriptTheme } from '../chat/native/transcript/theme';
 import BottomSheet from '../components/common/BottomSheet';
+import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { CheckGlyph } from '../components/onboarding/SetupIcons';
 import { SettingsGlyph } from '../components/sessions/icons';
@@ -52,13 +58,14 @@ import {
   VOICE_SPEEDS,
   type VoiceLine,
   VOICE_CALL_MODES,
-  VOICE_CALL_MODE_NOTE,
+  voiceCallModeNote,
 } from '../voice/conversation';
 import { focusBannerDetail } from '../voice/focus';
 import { GbotCallBanner, useGbotCallOpen } from '../voice/GbotCallBanner';
 import { HeadsetGlyph, MicrophoneGlyph } from '../voice/VoiceButton';
 import { VoiceHoldButton } from '../voice/VoiceHoldButton';
 import { VoiceStopPill } from '../voice/VoiceStopPill';
+import { VoiceTextBox } from '../voice/VoiceTextBox';
 import { VoiceMemoryCard } from '../voice/VoiceMemoryCard';
 import { voiceSheetScrollY } from '../voice/voiceList';
 
@@ -270,6 +277,7 @@ function VoiceSettingsSheet({ visible, onClose }: { visible: boolean; onClose: (
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const current = useVoiceStore((state) => state.callMode);
+  const live = useVoiceStore((state) => state.callModeLive);
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <Text style={styles.sheetTitle}>Call mode</Text>
@@ -297,7 +305,7 @@ function VoiceSettingsSheet({ visible, onClose }: { visible: boolean; onClose: (
           </Pressable>
         );
       })}
-      <Text style={styles.sheetNote}>{VOICE_CALL_MODE_NOTE}</Text>
+      <Text style={styles.sheetNote}>{voiceCallModeNote(live)}</Text>
     </BottomSheet>
   );
 }
@@ -352,26 +360,60 @@ function FocusBanner() {
   );
 }
 
-function Line({ line }: { line: VoiceLine }) {
+/** What a screen reader says a caption's hold does. */
+const CAPTION_HOLD_HINT = 'Hold the words to select them, or hold beside them to copy the whole message';
+
+const CAPTION_ACTIONS = [{ name: 'longpress', label: 'Copy message' }];
+
+/**
+ * CDXC:VoiceMode 2026-11-10 DECISION:
+ * User: "I should be able to copy my messages or the agent's messages by long-pressing on them in the voice agent. I should be able to also select text in the transcript." A caption holds like a session chat message (`messageSelection.tsx`, the same native view): holding its words starts the phone's own selection, whose bar offers Copy for the selected words; holding beside the words, or the bar's More, copies the whole message with the chat's haptic and "Copied" toast (the chat's menu would hold one Copy row here, so the copy is done at once). The bar's Add to Chat has no chat here and copies the selected words instead, until the native bar can leave it out.
+ */
+function Caption({ line, onCopied }: { line: Extract<VoiceLine, { kind: 'caption' }>; onCopied: () => void }) {
+  const appearance = useAppearance();
+  const styles = useMemo(() => createStyles(appearance), [appearance]);
+  const parts = line.paragraphs.length > 1 ? line.paragraphs : [line.text];
+  const copy = (text: string) => {
+    if (text.length === 0) return;
+    void Clipboard.setStringAsync(text);
+    onCopied();
+  };
+  const copyWhole = () => copy(line.paragraphs.length > 1 ? line.paragraphs.join('\n\n') : line.text);
+  return (
+    <GhostexSelectionMenuView
+      style={[styles.caption, line.role === 'user' ? styles.captionUser : styles.captionAgent]}
+      onHold={copyWhole}
+      onSelectionAction={({ nativeEvent }) => {
+        if (nativeEvent.action === 'more') copyWhole();
+        else copy(nativeEvent.text);
+      }}
+      accessible
+      accessibilityHint={CAPTION_HOLD_HINT}
+      accessibilityActions={CAPTION_ACTIONS}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') copyWhole();
+      }}
+    >
+      <Text style={styles.captionWho}>{line.role === 'user' ? 'You' : 'Agent'}</Text>
+      {parts.map((part, at) => (
+        <Text
+          key={at}
+          selectable={MESSAGE_TEXT_SELECTABLE}
+          style={[styles.captionText, at > 0 && styles.captionParagraph, !line.final && styles.captionDraft]}
+        >
+          {line.cut && at === parts.length - 1 ? (part.trim().length > 0 ? `${part} …` : '…') : part}
+        </Text>
+      ))}
+    </GhostexSelectionMenuView>
+  );
+}
+
+function Line({ line, onCopied }: { line: VoiceLine; onCopied: () => void }) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   switch (line.kind) {
-    case 'caption': {
-      const parts = line.paragraphs.length > 1 ? line.paragraphs : [line.text];
-      return (
-        <View style={[styles.caption, line.role === 'user' ? styles.captionUser : styles.captionAgent]}>
-          <Text style={styles.captionWho}>{line.role === 'user' ? 'You' : 'Agent'}</Text>
-          {parts.map((part, at) => (
-            <Text
-              key={at}
-              style={[styles.captionText, at > 0 && styles.captionParagraph, !line.final && styles.captionDraft]}
-            >
-              {line.cut && at === parts.length - 1 ? (part.trim().length > 0 ? `${part} …` : '…') : part}
-            </Text>
-          ))}
-        </View>
-      );
-    }
+    case 'caption':
+      return <Caption line={line} onCopied={onCopied} />;
     case 'tool':
       return (
         <View style={styles.toolRow}>
@@ -407,6 +449,21 @@ export default function VoiceScreen({ navigation }: Props) {
   const voice = useVoiceStore();
   const chatTheme = useTranscriptTheme();
   const { away, jumpToBottom, scrollProps } = useFollowBottom();
+  const [toast, setToast] = useState<Toast>(null);
+  const showToast = useCallback(
+    (message: string) => setToast((last) => ({ id: (last?.id ?? 0) + 1, message, error: false })),
+    [],
+  );
+  const showCopied = useCallback(() => showToast('Copied'), [showToast]);
+  // The call's own notes (a call mode change) show in the same toast.
+  const callToast = voice.toast;
+  // A note from before the screen opened is not shown again.
+  const seenCallToast = useRef(callToast?.id ?? 0);
+  useEffect(() => {
+    if (callToast === null || callToast.id === seenCallToast.current) return;
+    seenCallToast.current = callToast.id;
+    showToast(callToast.message);
+  }, [callToast, showToast]);
   const look = stateLook(voice);
   const active = voiceActive(voice.phase);
   const compact = voice.lines.length > 0;
@@ -443,223 +500,228 @@ export default function VoiceScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close the voice screen"
-          hitSlop={10}
-          style={styles.headerButton}
-          onPress={close}
-        >
-          <ChevronDown color={appearance.foreground} />
-        </Pressable>
-        <View style={styles.headerTitles}>
-          <Text style={styles.title}>Voice agent</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {voice.machineName}
-          </Text>
-          <View style={styles.voiceChips}>
-            {voice.voice !== null ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Voice: ${voiceName(voice.voice)}. Change the voice`}
-                disabled={!canPickVoice}
-                hitSlop={8}
-                style={({ pressed }) => [styles.voiceChip, pressed && styles.controlPressed]}
-                onPress={() => setPickerOpen(true)}
-              >
-                <Text style={styles.voiceChipText} numberOfLines={1}>
-                  {`${voiceProviderName(voice.provider)} · ${voiceName(voice.voice)}`}
-                </Text>
-                {canPickVoice ? (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      {/* The text box and everything above it stand above the keyboard while it is up. */}
+      <KeyboardAvoidingContainer style={styles.body}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close the voice screen"
+            hitSlop={10}
+            style={styles.headerButton}
+            onPress={close}
+          >
+            <ChevronDown color={appearance.foreground} />
+          </Pressable>
+          <View style={styles.headerTitles}>
+            <Text style={styles.title}>Voice agent</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {voice.machineName}
+            </Text>
+            <View style={styles.voiceChips}>
+              {voice.voice !== null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Voice: ${voiceName(voice.voice)}. Change the voice`}
+                  disabled={!canPickVoice}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.voiceChip, pressed && styles.controlPressed]}
+                  onPress={() => setPickerOpen(true)}
+                >
+                  <Text style={styles.voiceChipText} numberOfLines={1}>
+                    {`${voiceProviderName(voice.provider)} · ${voiceName(voice.voice)}`}
+                  </Text>
+                  {canPickVoice ? (
+                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M 6 9 l 6 6 6 -6"
+                        stroke={appearance.muted}
+                        strokeWidth={2.4}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </Svg>
+                  ) : null}
+                </Pressable>
+              ) : null}
+              {active ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Speaking speed ${speedLabel(voice.speed)}. Change the speed`}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.voiceChip, styles.speedChip, pressed && styles.controlPressed]}
+                  onPress={() => setSpeedOpen(true)}
+                >
+                  <Text style={styles.speedChipText}>{speedLabel(voice.speed)}</Text>
+                  <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
                     <Path
                       d="M 6 9 l 6 6 6 -6"
                       stroke={appearance.muted}
-                      strokeWidth={2.4}
+                      strokeWidth={2.6}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
                   </Svg>
-                ) : null}
-              </Pressable>
-            ) : null}
-            {active ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Speaking speed ${speedLabel(voice.speed)}. Change the speed`}
-                hitSlop={8}
-                style={({ pressed }) => [styles.voiceChip, styles.speedChip, pressed && styles.controlPressed]}
-                onPress={() => setSpeedOpen(true)}
-              >
-                <Text style={styles.speedChipText}>{speedLabel(voice.speed)}</Text>
-                <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M 6 9 l 6 6 6 -6"
-                    stroke={appearance.muted}
-                    strokeWidth={2.6}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              </Pressable>
-            ) : null}
+                </Pressable>
+              ) : null}
+            </View>
           </View>
-        </View>
-        {active ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Voice settings"
-            hitSlop={10}
-            style={({ pressed }) => [styles.headerButton, pressed && styles.controlPressed]}
-            onPress={() => setSettingsOpen(true)}
-          >
-            <SettingsGlyph size={22} color={appearance.muted} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerButton} />
-        )}
-      </View>
-
-      {/* Big while nothing has been said yet; once captions arrive it shrinks so they get the room. */}
-      <View style={[styles.stateBlock, compact && styles.stateBlockCompact]} accessibilityLiveRegion="polite">
-        <View style={[styles.orb, compact && styles.orbCompact, { borderColor: look.color }]}>
-          <View style={[styles.orbCore, compact && styles.orbCoreCompact, { backgroundColor: look.color }]} />
-        </View>
-        <Text style={[styles.stateLabel, compact && styles.stateLabelCompact, { color: readableSecondaryText(look.color, appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]) }]} numberOfLines={2}>
-          {look.label}
-        </Text>
-      </View>
-
-      {voice.problem !== null ? (
-        <View style={styles.problem}>
-          <Text style={styles.problemText}>{voice.problem.message}</Text>
-        </View>
-      ) : null}
-
-      <FocusBanner />
-
-      <View style={styles.lines}>
-        <ScrollView
-          {...scrollProps}
-          style={[styles.lines, linesEdges.scroll]}
-          contentContainerStyle={[styles.linesContent, linesEdges.content]}
-        >
-          {voice.phase === 'live' ? <VoiceMemoryCard /> : null}
-          {voice.lines.length === 0 && active ? (
-            <Text style={styles.hint}>
-              {voice.focus?.gbot !== undefined
-                ? `Talk with ${voice.focus.gbot.name} as you would in its chat.`
-                : voice.focus !== null && !voice.focus.closed
-                ? `Ask what ${voice.focus.title} is doing, or tell it what to do next.`
-                : 'Ask what your agents are doing, or tell one what to do next.'}
-            </Text>
-          ) : null}
-          {voice.lines.map((line) => (
-            <Line key={line.key} line={line} />
-          ))}
-          {voice.phase === 'ended' && voice.endedMessage !== null && voice.problem?.message !== voice.endedMessage ? (
-            <Text style={styles.notice}>{voice.endedMessage}</Text>
-          ) : null}
-        </ScrollView>
-        {away ? (
-          <View pointerEvents="box-none" style={styles.jumpRow}>
-            <IconPill
-              glyph="arrow-down"
-              accessibilityLabel="Scroll to bottom"
-              color={chatTheme.primary}
-              onPress={jumpToBottom}
-            />
-          </View>
-        ) : null}
-      </View>
-
-      {shown !== null ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${shown.title}`}
-          style={({ pressed }) => [styles.openSession, pressed && styles.controlPressed]}
-          onPress={openShown}
-        >
-          <Text style={styles.openSessionText} numberOfLines={1}>{`Open ${shown.title}`}</Text>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-            <Path
-              d="M 9 6 l 6 6 -6 6"
-              stroke={appearance.muted}
-              strokeWidth={2.4}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
-        </Pressable>
-      ) : null}
-
-      {active ? <VoiceStopPill slidOff={holdSlidOff} /> : null}
-      {active ? (
-        <View style={styles.controls}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={voice.muted ? 'Unmute the microphone' : 'Mute the microphone'}
-            style={({ pressed }) => [styles.control, voice.muted && styles.controlOn, pressed && styles.controlPressed]}
-            onPress={() => setVoiceMuted(!voice.muted)}
-          >
-            <MicrophoneGlyph
-              size={30}
-              color={voice.muted ? appearance.accentForeground : appearance.foreground}
-              crossed={voice.muted}
-            />
-            <Text style={[styles.controlLabel, voice.muted && styles.controlLabelOn]}>
-              {voice.muted ? 'Unmute' : 'Mute'}
-            </Text>
-          </Pressable>
-          <VoiceHoldButton style={styles.control} onSlide={setHoldSlidOff} />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Hang up"
-            style={({ pressed }) => [styles.control, styles.hangUp, pressed && styles.hangUpPressed]}
-            onPress={hangUpVoice}
-          >
-            <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M 3 14 c 5 -5 13 -5 18 0 l -2 3 l -4 -1.5 v -2.5 c -2 -0.6 -4 -0.6 -6 0 v 2.5 l -4 1.5 z"
-                fill={appearance.accentForeground}
-              />
-            </Svg>
-            <Text style={[styles.controlLabel, styles.controlLabelOn]}>Hang up</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.controls}>
-          {machine !== null ? (
+          {active ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Start a new conversation"
-              style={({ pressed }) => [styles.control, styles.wide, styles.controlOn, pressed && styles.controlPressed]}
-              onPress={() =>
-                // Talk again keeps the call's scope: about the same session, unless it was closed.
-                void startVoice(
-                  machine,
-                  voice.machineName,
-                  voice.focus !== null && !voice.focus.closed
-                    ? { projectId: voice.focus.projectId, sessionId: voice.focus.sessionId, title: voice.focus.title }
-                    : undefined,
-                )
-              }
+              accessibilityLabel="Voice settings"
+              hitSlop={10}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.controlPressed]}
+              onPress={() => setSettingsOpen(true)}
             >
-              <HeadsetGlyph size={30} color={appearance.accentForeground} />
-              <Text style={[styles.controlLabel, styles.controlLabelOn]}>Talk again</Text>
+              <SettingsGlyph size={22} color={appearance.muted} />
             </Pressable>
+          ) : (
+            <View style={styles.headerButton} />
+          )}
+        </View>
+
+        {/* Big while nothing has been said yet; once captions arrive it shrinks so they get the room. */}
+        <View style={[styles.stateBlock, compact && styles.stateBlockCompact]} accessibilityLiveRegion="polite">
+          <View style={[styles.orb, compact && styles.orbCompact, { borderColor: look.color }]}>
+            <View style={[styles.orbCore, compact && styles.orbCoreCompact, { backgroundColor: look.color }]} />
+          </View>
+          <Text style={[styles.stateLabel, compact && styles.stateLabelCompact, { color: readableSecondaryText(look.color, appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]) }]} numberOfLines={2}>
+            {look.label}
+          </Text>
+        </View>
+
+        {voice.problem !== null ? (
+          <View style={styles.problem}>
+            <Text style={styles.problemText}>{voice.problem.message}</Text>
+          </View>
+        ) : null}
+
+        <FocusBanner />
+
+        <View style={styles.lines}>
+          <ScrollView
+            {...scrollProps}
+            style={[styles.lines, linesEdges.scroll]}
+            contentContainerStyle={[styles.linesContent, linesEdges.content]}
+          >
+            {voice.phase === 'live' ? <VoiceMemoryCard /> : null}
+            {voice.lines.length === 0 && active ? (
+              <Text style={styles.hint}>
+                {voice.focus?.gbot !== undefined
+                  ? `Talk with ${voice.focus.gbot.name} as you would in its chat.`
+                  : voice.focus !== null && !voice.focus.closed
+                  ? `Ask what ${voice.focus.title} is doing, or tell it what to do next.`
+                  : 'Ask what your agents are doing, or tell one what to do next.'}
+              </Text>
+            ) : null}
+            {voice.lines.map((line) => (
+              <Line key={line.key} line={line} onCopied={showCopied} />
+            ))}
+            {voice.phase === 'ended' && voice.endedMessage !== null && voice.problem?.message !== voice.endedMessage ? (
+              <Text style={styles.notice}>{voice.endedMessage}</Text>
+            ) : null}
+          </ScrollView>
+          {away ? (
+            <View pointerEvents="box-none" style={styles.jumpRow}>
+              <IconPill
+                glyph="arrow-down"
+                accessibilityLabel="Scroll to bottom"
+                color={chatTheme.primary}
+                onPress={jumpToBottom}
+              />
+            </View>
           ) : null}
+          <ChatToast toast={toast} />
+        </View>
+
+        {shown !== null ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close"
-            style={({ pressed }) => [styles.control, styles.wide, pressed && styles.controlPressed]}
-            onPress={close}
+            accessibilityLabel={`Open ${shown.title}`}
+            style={({ pressed }) => [styles.openSession, pressed && styles.controlPressed]}
+            onPress={openShown}
           >
-            <Text style={styles.controlLabel}>Close</Text>
+            <Text style={styles.openSessionText} numberOfLines={1}>{`Open ${shown.title}`}</Text>
+            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M 9 6 l 6 6 -6 6"
+                stroke={appearance.muted}
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
           </Pressable>
-        </View>
-      )}
+        ) : null}
+
+        {active ? <VoiceStopPill slidOff={holdSlidOff} /> : null}
+        {active ? (
+          <View style={styles.controls}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={voice.muted ? 'Unmute the microphone' : 'Mute the microphone'}
+              style={({ pressed }) => [styles.control, voice.muted && styles.controlOn, pressed && styles.controlPressed]}
+              onPress={() => setVoiceMuted(!voice.muted)}
+            >
+              <MicrophoneGlyph
+                size={30}
+                color={voice.muted ? appearance.accentForeground : appearance.foreground}
+                crossed={voice.muted}
+              />
+              <Text style={[styles.controlLabel, voice.muted && styles.controlLabelOn]}>
+                {voice.muted ? 'Unmute' : 'Mute'}
+              </Text>
+            </Pressable>
+            <VoiceHoldButton style={styles.control} onSlide={setHoldSlidOff} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Hang up"
+              style={({ pressed }) => [styles.control, styles.hangUp, pressed && styles.hangUpPressed]}
+              onPress={hangUpVoice}
+            >
+              <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M 3 14 c 5 -5 13 -5 18 0 l -2 3 l -4 -1.5 v -2.5 c -2 -0.6 -4 -0.6 -6 0 v 2.5 l -4 1.5 z"
+                  fill={appearance.accentForeground}
+                />
+              </Svg>
+              <Text style={[styles.controlLabel, styles.controlLabelOn]}>Hang up</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.controls}>
+            {machine !== null ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Start a new conversation"
+                style={({ pressed }) => [styles.control, styles.wide, styles.controlOn, pressed && styles.controlPressed]}
+                onPress={() =>
+                  // Talk again keeps the call's scope: about the same session, unless it was closed.
+                  void startVoice(
+                    machine,
+                    voice.machineName,
+                    voice.focus !== null && !voice.focus.closed
+                      ? { projectId: voice.focus.projectId, sessionId: voice.focus.sessionId, title: voice.focus.title }
+                      : undefined,
+                  )
+                }
+              >
+                <HeadsetGlyph size={30} color={appearance.accentForeground} />
+                <Text style={[styles.controlLabel, styles.controlLabelOn]}>Talk again</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={({ pressed }) => [styles.control, styles.wide, pressed && styles.controlPressed]}
+              onPress={close}
+            >
+              <Text style={styles.controlLabel}>Close</Text>
+            </Pressable>
+          </View>
+        )}
+        {active ? <VoiceTextBox /> : null}
+      </KeyboardAvoidingContainer>
       <VoicePickerSheet visible={pickerOpen && canPickVoice} onClose={() => setPickerOpen(false)} />
       <VoiceSpeedSheet visible={speedOpen && active} onClose={() => setSpeedOpen(false)} />
       <VoiceSettingsSheet visible={settingsOpen && active} onClose={() => setSettingsOpen(false)} />
@@ -669,6 +731,7 @@ export default function VoiceScreen({ navigation }: Props) {
 
 const createStyles = (appearance: Appearance) => StyleSheet.create({
   root: { flex: 1, backgroundColor: appearance.background },
+  body: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   headerButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   headerTitles: { flex: 1, alignItems: 'center' },

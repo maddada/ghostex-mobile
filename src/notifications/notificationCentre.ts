@@ -133,10 +133,15 @@ export async function expoPushToken(projectId: string): Promise<string> {
   return (await Notifications.getExpoPushTokenAsync({ projectId })).data;
 }
 
-/** Calls `onChange` whenever iOS issues the phone a new push token (the token itself stays here). */
-export function watchPushToken(onChange: () => void): void {
+/**
+ * Calls `onChange` with iOS's device token each time iOS announces one: after every registration, also when the
+ * token is the same as before, so the caller tells a new token from a repeated one (it stays out of the log).
+ */
+export function watchPushToken(onChange: (deviceToken: string) => void): void {
   if (!NOTIFICATIONS_SUPPORTED) return;
-  Notifications.addPushTokenListener(() => onChange());
+  Notifications.addPushTokenListener((token) =>
+    onChange(typeof token.data === 'string' ? token.data : JSON.stringify(token.data)),
+  );
 }
 
 /** Lets iOS run the background task for pushes (`BACKGROUND_PUSH_TASK`, defined where the app starts). */
