@@ -136,6 +136,12 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
   );
 }
 
+/**
+ * Every dock button's touch area: 8 points above and below its 28-point pill make 44, Apple's
+ * least, and 3 at the sides keep neighbours apart; how the button looks does not change.
+ */
+const DOCK_BUTTON_SLOP = { top: 8, bottom: 8, left: 3, right: 3 };
+
 /** The dock's cards stop growing here and scroll inside it (desktop `DOCK_MAX_HEIGHT`). */
 const DOCK_MAX_HEIGHT = 420;
 
@@ -189,7 +195,7 @@ export function WorkDock({ document, chat }: { document: ChatDocument | null; ch
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Hide until something new needs you"
-          hitSlop={10}
+          hitSlop={13}
           onPress={() => chat.dispatch({ type: 'hideWorkDock' } as never)}
           style={styles.dockHide}
         >
@@ -229,7 +235,7 @@ function DockRow({
     .map(obj)
     .filter((choice): choice is JsonRecord => choice !== null);
   const action = (label: string, onPress: () => void) => (
-    <ToneButton key={label} kind="secondary" label={label} onPress={onPress} />
+    <ToneButton key={label} kind="secondary" label={label} onPress={onPress} hitSlop={DOCK_BUTTON_SLOP} />
   );
   return (
     <View style={open ? styles.dockRowOpen : null}>
@@ -261,6 +267,7 @@ function DockRow({
               }
               icon={isTrue(button, 'picked') ? 'check' : undefined}
               disabled={busy}
+              hitSlop={DOCK_BUTTON_SLOP}
               onPress={() => dispatch(button.command as never)}
             />
           ))}

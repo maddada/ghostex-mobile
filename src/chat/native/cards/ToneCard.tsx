@@ -219,6 +219,7 @@ export function ToneButton({
   onPress,
   trailing,
   accessibilityLabel,
+  hitSlop,
 }: {
   label: string;
   icon?: GlyphName;
@@ -229,6 +230,8 @@ export function ToneButton({
   trailing?: ReactNode;
   /** What a screen reader says, when it is more than the label. */
   accessibilityLabel?: string;
+  /** The touch area past the button's edges; 6 all round unless a card needs more. */
+  hitSlop?: number | { top: number; bottom: number; left: number; right: number };
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -242,7 +245,7 @@ export function ToneButton({
       accessibilityLabel={accessibilityLabel ?? label}
       disabled={disabled === true}
       onPress={onPress}
-      hitSlop={6}
+      hitSlop={hitSlop ?? 6}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: pressed ? pressedFill : fill, borderColor: border },
