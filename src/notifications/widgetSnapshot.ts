@@ -16,7 +16,7 @@
 
 import type { AgentArtId } from '../contract/mobileSummary';
 import type { UsageBar } from '../usage/usageMeters';
-import { candidateFor, compareShown, leadingName, type ActivitySource, type Shown } from './contentState';
+import { candidateFor, compareShown, dataTimeOf, leadingName, type ActivitySource, type Shown } from './contentState';
 
 /** The snapshot's format; the widget shows its empty state for any other version. */
 export const WIDGET_SNAPSHOT_VERSION = 2;
@@ -37,7 +37,7 @@ export type WidgetAgent = {
 
 export type WidgetSnapshot = {
   schemaVersion: typeof WIDGET_SNAPSHOT_VERSION;
-  /** The data time: when the oldest summary used was read from its computer. */
+  /** The data time (`dataTimeOf` in `contentState.ts`): when the oldest summary with an agent to show was read. */
   writtenAt: string;
   counts: { working: number; waiting: number };
   /** True while any agent waits for the user. */
@@ -49,8 +49,8 @@ export type WidgetSnapshot = {
 
 /**
  * The snapshot at `now` (epoch ms) over every given computer, with `usageBars` (the large widget's, possibly none).
- * The data time is the oldest summary read, which is the refresh time when every computer answered; `now` only
- * when no summary is given. `showSessionNames` is the Settings switch (`liveActivitySessionNames`): off, every agent
+ * The data time is `dataTimeOf`: the oldest read among the computers with an agent to show, which is the refresh
+ * time when they all answered. `showSessionNames` is the Settings switch (`liveActivitySessionNames`): off, every agent
  * leads with its agent's name.
  */
 export function buildSnapshot(
@@ -61,12 +61,20 @@ export function buildSnapshot(
 ): WidgetSnapshot {
   const counts = { working: 0, waiting: 0 };
   const shown: Shown[] = [];
-  let dataTime: number | null = null;
+  const readAt = new Map<string, number>();
+  const machinesShown = new Set<string>();
   for (const source of sources) {
-    dataTime = dataTime === null ? source.loadedAt : Math.min(dataTime, source.loadedAt);
+    readAt.set(source.machineId, source.loadedAt);
     for (const session of source.summary.sessions) {
-      const candidate = candidateFor(source.machineId, session, source.summary.capabilities, now);
+      const candidate = candidateFor(
+        source.machineId,
+        session,
+        source.summary.capabilities,
+        now,
+        source.summary.agents,
+      );
       if (candidate === null || candidate.state === 'finished') continue;
+      machinesShown.add(source.machineId);
       counts[candidate.state] += 1;
       if (candidate.shown !== null) shown.push(candidate.shown);
     }
@@ -84,7 +92,7 @@ export function buildSnapshot(
     }));
   return {
     schemaVersion: WIDGET_SNAPSHOT_VERSION,
-    writtenAt: new Date(dataTime ?? now).toISOString(),
+    writtenAt: new Date(dataTimeOf(readAt, machinesShown, now)).toISOString(),
     counts,
     attention: counts.waiting > 0,
     agents,

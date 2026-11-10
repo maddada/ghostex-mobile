@@ -23,7 +23,12 @@
  * Kept free of React Native so the rules are testable under `bun test`.
  */
 
-import type { GhostexMobileSummary, GhostexSession, GhostexSummaryCapabilities } from '../contract/mobileSummary';
+import type {
+  GhostexAgentLauncher,
+  GhostexMobileSummary,
+  GhostexSession,
+  GhostexSummaryCapabilities,
+} from '../contract/mobileSummary';
 import {
   agentIconTint,
   hasQuestion,
@@ -59,7 +64,7 @@ export type LiveActivityRow = {
 };
 
 export type LiveActivityContentState = {
-  /** The data time: when the oldest summary used was read from its computer. */
+  /** The data time (`dataTimeOf`): when the oldest summary with an agent to show was read from its computer. */
   updatedAt: string;
   counts: { working: number; waiting: number };
   agents: LiveActivityRow[];
@@ -129,9 +134,12 @@ function isoTime(time: number): string {
   return new Date(time).toISOString();
 }
 
-/** A session's agent name ('' for a plain terminal, which is not an agent and never a row). */
-function agentNameOf(session: GhostexSession): string {
-  return truncateName(sessionAgentName(session));
+/**
+ * A session's agent name as the Sessions list shows it ("Claude"), from the summary's launchers (`agents`); '' for a
+ * plain terminal, which is not an agent and never a row.
+ */
+function agentNameOf(session: GhostexSession, agents: readonly GhostexAgentLauncher[] = []): string {
+  return truncateName(sessionAgentName(session, agents));
 }
 
 /**
@@ -159,8 +167,9 @@ export function candidateFor(
   session: GhostexSession,
   capabilities: GhostexSummaryCapabilities,
   now: number,
+  agents: readonly GhostexAgentLauncher[] = [],
 ): Candidate | null {
-  const agentName = agentNameOf(session);
+  const agentName = agentNameOf(session, agents);
   // A row names its agent (never empty); a session without one is a plain terminal, not an agent.
   if (agentName.length === 0) return null;
   const attention = session.activity === 'attention';
@@ -244,6 +253,27 @@ export function leadingName(shown: Shown, showSessionNames: boolean): string {
 }
 
 /**
+ * The data time of what the activity or the widgets show (epoch ms): when the oldest summary that has an agent to
+ * show was read; with no agent to show anywhere, when the newest summary was read; `now` only when none was read.
+ * `readAt` holds each computer's read time, `shown` the computers with an agent to show.
+ *
+ * CDXC:Notifications 2026-11-11 FIX: User: "why does it always say Not current? pls fix both". The data time was
+ * the oldest read of every enabled computer, and a computer that does not answer (asleep, off, out of reach) keeps
+ * its last read time, so one such computer made the Live Activity "Not current" for good, also with Ghostex open and
+ * every other computer read 5 s ago. A computer with nothing to show adds no row, so its age says nothing about
+ * what is on screen; one that shows an agent still makes the content as old as its read, which is the truth.
+ */
+export function dataTimeOf(readAt: ReadonlyMap<string, number>, shown: ReadonlySet<string>, now: number): number {
+  let oldestShown: number | null = null;
+  let newest: number | null = null;
+  for (const [machineId, time] of readAt) {
+    newest = newest === null ? time : Math.max(newest, time);
+    if (shown.has(machineId)) oldestShown = oldestShown === null ? time : Math.min(oldestShown, time);
+  }
+  return oldestShown ?? newest ?? now;
+}
+
+/**
  * The content state at `now` (epoch ms) for every working and waiting agent plus every agent that finished
  * less than 2 minutes ago, over all given computers. `counts` hold every working and waiting agent (finished
  * excluded); `moreCount` the candidates without a row, including a candidate whose identifiers cannot be
@@ -260,13 +290,20 @@ export function buildContentState(
 ): LiveActivityContentState {
   const candidates: Candidate[] = [];
   const counts = { working: 0, waiting: 0 };
-  const machinesRead = new Set<string>();
-  let dataTime: number | null = null;
+  /** When each computer's summary was read. */
+  const machinesRead = new Map<string, number>();
+  /** The computers with an agent to show (a working, waiting or recently finished candidate). */
+  const machinesShown = new Set<string>();
   for (const source of sources) {
-    dataTime = dataTime === null ? source.loadedAt : Math.min(dataTime, source.loadedAt);
-    machinesRead.add(source.machineId);
+    machinesRead.set(source.machineId, source.loadedAt);
     for (const session of source.summary.sessions) {
-      const candidate = candidateFor(source.machineId, session, source.summary.capabilities, now);
+      const candidate = candidateFor(
+        source.machineId,
+        session,
+        source.summary.capabilities,
+        now,
+        source.summary.agents,
+      );
       const key = `${source.machineId}\n${session.sessionId}`;
       if (candidate?.state === 'finished') {
         memory.set(key, { machineId: source.machineId, candidate });
@@ -278,11 +315,15 @@ export function buildContentState(
       if (candidate.state === 'working') counts.working += 1;
       if (candidate.state === 'waiting') counts.waiting += 1;
       candidates.push(candidate);
+      machinesShown.add(source.machineId);
     }
   }
   for (const [key, { machineId, candidate }] of memory) {
     if (now - candidate.finishedAt >= FINISHED_ROW_MS) memory.delete(key);
-    else if (machinesRead.has(machineId)) candidates.push(candidate);
+    else if (machinesRead.has(machineId)) {
+      candidates.push(candidate);
+      machinesShown.add(machineId);
+    }
   }
   const agents = candidates
     .flatMap((candidate) => (candidate.shown === null ? [] : [candidate.shown]))
@@ -290,7 +331,7 @@ export function buildContentState(
     .slice(0, MAX_ACTIVITY_ROWS)
     .map((shown): LiveActivityRow => ({ ...shown.row, agentName: leadingName(shown, showSessionNames) }));
   return {
-    updatedAt: new Date(dataTime ?? now).toISOString(),
+    updatedAt: new Date(dataTimeOf(machinesRead, machinesShown, now)).toISOString(),
     counts,
     agents,
     moreCount: candidates.length - agents.length,
@@ -308,7 +349,11 @@ export function workingStints(sources: readonly ActivitySource[], now: number): 
   const stints: string[] = [];
   for (const source of sources) {
     for (const session of source.summary.sessions) {
-      if (candidateFor(source.machineId, session, source.summary.capabilities, now)?.state !== 'working') continue;
+      if (
+        candidateFor(source.machineId, session, source.summary.capabilities, now, source.summary.agents)?.state !==
+        'working'
+      )
+        continue;
       stints.push(`${source.machineId}\n${session.sessionId}\n${session.workingStartedAt}`);
     }
   }

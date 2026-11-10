@@ -175,8 +175,27 @@ const AGENT_ICON_NAMES: Partial<Record<AgentIconId, string>> = {
 };
 
 /**
+ * A built-in agent's id as the app names it ("claude" is "Claude", "factory droid" is "Factory Droid"); any other
+ * name as it is. Only an all-lowercase name that is a known id or alias is replaced, so a name someone typed stays.
+ * "claude-cloud" keeps its own name: it is Claude's alias for behaviour but its own agent to the eye.
+ */
+function builtInAgentName(name: string): string {
+  const id = name.toLowerCase();
+  if (name !== id || id === 'claude-cloud' || id === 'claude (cloud)') return name;
+  const icon = isKnownAgentIconId(id) ? id : AGENT_NAME_ALIASES[id];
+  return (icon !== undefined && AGENT_ICON_NAMES[icon]) || name;
+}
+
+/**
  * The name a row or notification shows for a session's agent: its launcher's name (Settings > Agents), else the
- * session's own agent name or id; '' for a session without an agent (a plain terminal).
+ * session's own agent name or id, a built-in agent's id as the app names it ("Claude", never "claude"); '' for a
+ * session without an agent (a plain terminal).
+ *
+ * CDXC:Notifications 2026-11-11 FIX: User, on the Live Activity's row "claude Ghostex working": "will we show
+ * project/session title here on ios?". The Live Activity and the widgets named the agent without the summary's
+ * launcher list, and the computer's `agentName` is the agent's runtime id ("claude", also after
+ * session_agent_name in server/src/presentation/util.rs), so the row printed the id in lowercase. They pass the
+ * launcher list now, and a built-in id without a launcher is named as the app names it.
  *
  * CDXC:AgentProviders 2026-11-08 FIX: User, on the bell's row titled "custom-claude-70-dl0rpxbt39e0-…": "Name of
  * coordinator here looks wrong please fix". A custom agent removed from Settings > Agents left its sessions with only
@@ -190,10 +209,12 @@ export function sessionAgentName(
   agents: readonly GhostexAgentLauncher[] = [],
 ): string {
   const launcher = agents.find((agent) => agent.agentId === session.agent);
-  const named = [launcher?.name, session.agentName, session.agent]
+  const launcherName = (launcher?.name ?? '').trim();
+  if (launcherName.length > 0 && !isCustomAgentId(launcherName)) return launcherName;
+  const named = [session.agentName, session.agent]
     .map((name) => (name ?? '').trim())
     .find((name) => name.length > 0 && !isCustomAgentId(name));
-  if (named !== undefined) return named;
+  if (named !== undefined) return builtInAgentName(named);
   if (session.agent.trim().length === 0 && session.agentName.trim().length === 0) return '';
   const icon = resolveAgentIconId(session.agentIcon, undefined);
   const base = agents.find(
