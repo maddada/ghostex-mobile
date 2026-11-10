@@ -96,7 +96,14 @@ function addFoldedStatus(
   session: GhostexSession,
   capabilities: GhostexSummaryCapabilities,
 ): void {
-  if (session.awaitingApproval) {
+  // Stuck, or failed, is the same red: it needs someone to look (gx-core `FoldedStatus::add`). A program's
+  // error counts once its turn is over, as the Unified list reads it (contract/unified/fromSummary.ts).
+  if (
+    session.awaitingApproval ||
+    (session.stuckSince ?? '').length > 0 ||
+    session.modelSelectionFailed === true ||
+    (session.programStatusFailed && session.activity === 'attention')
+  ) {
     status.approval = true;
     return;
   }

@@ -27,7 +27,12 @@ type UnifiedListState = {
   lastMachines: Record<string, string>;
   /** The repositories new sessions last started in, newest first: the project list's Recent. */
   recentRepos: string[];
+  /** Coordinators whose threads are shown, and whose older threads are listed (contract/unified/tree.ts). */
+  unfoldedCoordinators: string[];
+  olderShownCoordinators: string[];
   hydrated: boolean;
+  /** The saved state has been read (`hydrated` only says the read started). */
+  ready: boolean;
   hydrate: () => void;
   setFilter: (filter: UnifiedFilter) => void;
   setQuery: (query: string) => void;
@@ -35,6 +40,21 @@ type UnifiedListState = {
   /** Opens the Drafts shelf for a session that just arrived there (gx-core draft_arrivals.rs). */
   openDrafts: () => void;
   toggleGroup: (repoKey: string) => void;
+  /** The crew count's tap: folds or unfolds a coordinator's threads. */
+  toggleCoordinator: (key: string) => void;
+  /** The "N older threads" row's tap. */
+  toggleOlderThreads: (key: string) => void;
+  /**
+   * Opening a session brings it on screen (gx-core unified_sidebar/reveal.rs): the coordinators above it unfold, the
+   * shelf (`shelfKey`, only when it is folded) and project group (`groupKey`) holding its card open, and a filter
+   * that leaves it out gives way to `filter`.
+   */
+  revealThread: (reveal: {
+    ancestors: readonly string[];
+    shelfKey: string | null;
+    groupKey: string | null;
+    filter: UnifiedFilter | null;
+  }) => void;
   noteLastMachine: (repoKey: string, machineId: string) => void;
   /**
    * A session started in `repoKey` on `machineId` (gx-core `remember_new_session` and
@@ -46,10 +66,19 @@ type UnifiedListState = {
 
 export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
   const save = (): void => {
-    const { filter, toggledShelves, foldedGroups, lastMachines, recentRepos } = get();
+    const { filter, toggledShelves, foldedGroups, lastMachines, recentRepos, unfoldedCoordinators, olderShownCoordinators } =
+      get();
     void AsyncStorage.setItem(
       UNIFIED_SAVED_STATE_KEY,
-      serializeUnifiedSaved({ filter, toggledShelves, foldedGroups, lastMachines, recentRepos }),
+      serializeUnifiedSaved({
+        filter,
+        toggledShelves,
+        foldedGroups,
+        lastMachines,
+        recentRepos,
+        unfoldedCoordinators,
+        olderShownCoordinators,
+      }),
     );
   };
   const flip = (list: string[], key: string): string[] =>
@@ -60,7 +89,10 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
     foldedGroups: [],
     lastMachines: {},
     recentRepos: [],
+    unfoldedCoordinators: [],
+    olderShownCoordinators: [],
     hydrated: false,
+    ready: false,
     hydrate: () => {
       if (get().hydrated) return;
       set({ hydrated: true });
@@ -72,6 +104,9 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
           foldedGroups: saved.foldedGroups,
           lastMachines: saved.lastMachines,
           recentRepos: saved.recentRepos,
+          unfoldedCoordinators: saved.unfoldedCoordinators,
+          olderShownCoordinators: saved.olderShownCoordinators,
+          ready: true,
         }));
       });
     },
@@ -91,6 +126,27 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
     },
     toggleGroup: (repoKey) => {
       set((state) => ({ foldedGroups: flip(state.foldedGroups, repoKey) }));
+      save();
+    },
+    toggleCoordinator: (key) => {
+      set((state) => ({ unfoldedCoordinators: flip(state.unfoldedCoordinators, key) }));
+      save();
+    },
+    toggleOlderThreads: (key) => {
+      set((state) => ({ olderShownCoordinators: flip(state.olderShownCoordinators, key) }));
+      save();
+    },
+    revealThread: ({ ancestors, shelfKey, groupKey, filter }) => {
+      const state = get();
+      const unfold = ancestors.filter((key) => !state.unfoldedCoordinators.includes(key));
+      const openGroup = groupKey !== null && state.foldedGroups.includes(groupKey);
+      if (unfold.length === 0 && shelfKey === null && !openGroup && filter === null) return;
+      set({
+        unfoldedCoordinators: [...state.unfoldedCoordinators, ...unfold],
+        toggledShelves: shelfKey === null ? state.toggledShelves : flip(state.toggledShelves, shelfKey),
+        foldedGroups: openGroup ? state.foldedGroups.filter((key) => key !== groupKey) : state.foldedGroups,
+        filter: filter ?? state.filter,
+      });
       save();
     },
     noteLastMachine: (repoKey, machineId) => {

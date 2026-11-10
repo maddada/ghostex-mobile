@@ -45,8 +45,11 @@ describe('what the Unified list remembers', () => {
       foldedGroups: ['b'],
       lastMachines: { a: 'm' },
       recentRepos: ['a'],
+      unfoldedCoordinators: ['m|p|lead'],
+      olderShownCoordinators: [],
     };
     const restored = parseUnifiedSaved(serializeUnifiedSaved(saved));
+    assert.deepEqual(restored.unfoldedCoordinators, saved.unfoldedCoordinators);
     assert.deepEqual(restored.filter, { repos: ['a'], machines: ['m'], spaces: ['s'], query: '' });
     assert.deepEqual(restored.toggledShelves, saved.toggledShelves);
     assert.deepEqual(restored.foldedGroups, saved.foldedGroups);

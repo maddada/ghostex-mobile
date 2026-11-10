@@ -16,6 +16,15 @@
  */
 
 import { mergedRepoIdentities, repoIdentity, type RepoIdentity } from './repo';
+import {
+  NO_UNIFIED_FOLDS,
+  nestUnifiedRows,
+  treeDeadlineMs,
+  unifiedCoordinatorKey,
+  type NestInput,
+  type UnifiedCrew,
+  type UnifiedFolds,
+} from './tree';
 
 export const LOCAL_MACHINE_KEY = 'local';
 export const OTHER_SPACE_ID = 'other';
@@ -49,6 +58,19 @@ export type UnifiedSessionInput = {
    */
   coordinatorProjectId?: string;
   coordinatorSessionId?: string;
+  /** On a thread: waiting, working, finished… as its coordinator's computer reports it. */
+  threadState?: string;
+  /** A coordinator session (its crown). */
+  isCoordinator?: boolean;
+  /** Working with no output for long enough to count as stuck. */
+  stuck?: boolean;
+  /** The session the phone has open, and one shown elsewhere: never tucked behind an older-threads row. */
+  isFocused?: boolean;
+  isVisible?: boolean;
+  /** `<serverId>:<projectId>:<sessionId>`, which another computer's coordinator links it by. */
+  globalRef?: string;
+  /** On a coordinator: its threads on other computers, by their `globalRef`. */
+  remoteThreads?: Array<{ globalRef: string; threadState: string }>;
   createdMs: number | null;
   lastInteractionMs: number | null;
   workingStartedMs: number | null;
@@ -143,6 +165,16 @@ export type UnifiedRow<S = unknown> = {
   cameBackMs: number;
   /** The card says its folder is not under git ([`noSourceControl`]). */
   noSourceControl: boolean;
+  /** The threads nested under it (tree.ts), busy first; empty for every other row. */
+  threads: UnifiedRow<S>[];
+  /** On a thread: drawn while its coordinator is open. Always set on a card. */
+  shown: boolean;
+  /** The row itself passes the filter and search. */
+  matched: boolean;
+  /** It or a row under it passes the filter and search. */
+  subtreeMatched: boolean;
+  /** Set on a row with threads under it. */
+  crew: UnifiedCrew | null;
 };
 
 export type UnifiedFilterOption = {
@@ -168,13 +200,15 @@ export type UnifiedView<S = unknown> = {
   options: UnifiedFilterOptions;
   /** Rows before the filter, so an empty list can tell "nothing here" from "nothing left". */
   total: number;
+  /** When a nested thread stops being recent or a snoozed one wakes, so the list is built again then. */
+  deadlineMs: number | null;
 };
 
 /** The status a session shows, most urgent first, in the order the desktop row's dots use. */
 export function unifiedStatus(session: UnifiedSessionInput): UnifiedStatus | null {
   if (session.awaitingApproval) return 'Approval';
   if (session.hasQuestion) return 'Question';
-  if (session.modelSelectionFailed || session.programStatusFailed) return 'Failed';
+  if (session.modelSelectionFailed || session.programStatusFailed || session.stuck === true) return 'Failed';
   if (session.activity === 'working') return 'Working';
   if (session.activity === 'attention') return 'Done';
   if (session.hasBackgroundWork) return 'Waiting';
@@ -262,43 +296,20 @@ function queryMatches(query: string, row: UnifiedRow<unknown>): boolean {
   return words.every((word) => haystack.includes(word));
 }
 
-const workerId = (projectId: string, sessionId: string) => `${projectId}\u0000${sessionId}`;
-
 /**
- * The sessions of a computer that a coordinator in its list started, at any depth (gx-core
- * `worker_keys`, CDXC:Sidebar 2026-11-04): they are reached from the coordinator, so they are no
- * cards of their own. A worker whose coordinator is not in the list (closed) is a card again, and a
- * loop of coordinators that are each other's worker stays cards. The phone's summaries know a
- * worker's coordinator on the worker's own computer only, so a worker another computer's
- * coordinator started is still its computer's card here.
+ * The filter with every pick that leaves `row` out lifted and the others kept (gx-core `UnifiedFilter::admitting`):
+ * a repository, computer or Space pick the row does not match is cleared, and so is a search it does not match.
+ * `null` when the filter already keeps the row. A row's computer key is `local` when its card names no computer.
  */
-function workerIdsOf(sessions: UnifiedSessionInput[]): Set<string> {
-  const present = new Set(
-    sessions.filter((session) => !session.isBrowser).map((session) => workerId(session.projectId, session.sessionId)),
-  );
-  const parents = new Map<string, string>();
-  for (const session of sessions) {
-    if ((session.coordinatorSessionId ?? '') === '') continue;
-    parents.set(
-      workerId(session.projectId, session.sessionId),
-      workerId(session.coordinatorProjectId ?? '', session.coordinatorSessionId!),
-    );
-  }
-  const reachesTop = (key: string) => {
-    let at = key;
-    for (let step = 0; step <= parents.size; step += 1) {
-      const parent = parents.get(at);
-      if (parent === undefined) return true;
-      if (parent === key) return false;
-      at = parent;
-    }
-    return false;
-  };
-  const workers = new Set<string>();
-  for (const [key, parent] of parents) {
-    if (present.has(parent) && reachesTop(key)) workers.add(key);
-  }
-  return workers;
+export function admittingFilter(filter: UnifiedFilter, row: UnifiedRow<unknown>): UnifiedFilter | null {
+  const machineKey = row.machineLabel === null ? LOCAL_MACHINE_KEY : row.machine;
+  if (keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row)) return null;
+  const lifted: UnifiedFilter = { ...filter };
+  if (filter.repos.length > 0 && !filter.repos.includes(row.repo.key)) lifted.repos = [];
+  if (filter.machines.length > 0 && !filter.machines.includes(machineKey)) lifted.machines = [];
+  if (filter.spaces.length > 0 && (row.spaceKey === null || !filter.spaces.includes(row.spaceKey))) lifted.spaces = [];
+  if (!queryMatches(lifted.query ?? '', row)) lifted.query = '';
+  return lifted;
 }
 
 /**
@@ -316,6 +327,7 @@ export function buildUnifiedList<S>(
   settings: UnifiedSettings,
   filter: UnifiedFilter,
   nowMs: number,
+  folds: UnifiedFolds = NO_UNIFIED_FOLDS,
 ): UnifiedView<S> {
   const rows: Array<{ row: UnifiedRow<S>; machineKey: string }> = [];
   const repoMachines = new Map<string, { label: string; machines: Set<string> }>();
@@ -346,7 +358,6 @@ export function buildUnifiedList<S>(
         detail: remoteName,
       });
     }
-    const workers = workerIdsOf(machine.sessions);
     for (const [projectIndex, project] of machine.projects.entries()) {
       const repo = identities[machineIndex]![projectIndex]!;
       const entry = repoMachines.get(repo.key) ?? { label: repo.label, machines: new Set<string>() };
@@ -358,7 +369,6 @@ export function buildUnifiedList<S>(
           : spaceFilterKey(machineKey, spaceOfProject(machine.spaces, project));
       for (const session of machine.sessions) {
         if (session.projectId !== project.projectId || session.isBrowser) continue;
-        if (workers.has(workerId(session.projectId, session.sessionId))) continue;
         rows.push({
           machineKey,
           row: {
@@ -375,6 +385,11 @@ export function buildUnifiedList<S>(
             status: unifiedStatus(session),
             cameBackMs: cameBackMs(session),
             noSourceControl: noSourceControl(project, session),
+            threads: [],
+            shown: true,
+            matched: false,
+            subtreeMatched: false,
+            crew: null,
           },
         });
       }
@@ -405,6 +420,38 @@ export function buildUnifiedList<S>(
     const option = options.repos.find((candidate) => candidate.key === row.repo.key);
     if (option !== undefined) row.repo.label = option.label;
   }
+  // Each worker under its coordinator (tree.ts, CDXC:Sidebar 2026-11-09 in gx-core unified_sidebar/tree.rs): by its
+  // link on its own computer, or by the coordinator's `coordinatorRemoteThreads` for a thread on another computer.
+  // Keyed by the computer's own id, never the `local` the cards use for a phone holding one computer, so a saved
+  // fold survives a second computer connecting.
+  const nest: NestInput<S>[] = rows.map(({ row, machineKey }) => {
+    const session = row.session;
+    const coordinatorSessionId = session.coordinatorSessionId ?? '';
+    return {
+      row,
+      key: unifiedCoordinatorKey(row.machine, session.projectId, session.sessionId),
+      parent:
+        coordinatorSessionId === ''
+          ? null
+          : unifiedCoordinatorKey(row.machine, session.coordinatorProjectId ?? '', coordinatorSessionId),
+      matched: keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row),
+    };
+  });
+  const byGlobalRef = new Map<string, NestInput<S>>();
+  for (const entry of nest) {
+    const ref = entry.row.session.globalRef ?? '';
+    if (ref !== '') byGlobalRef.set(ref, entry);
+  }
+  for (const coordinator of nest) {
+    for (const thread of coordinator.row.session.remoteThreads ?? []) {
+      const linked = byGlobalRef.get(thread.globalRef);
+      if (linked === undefined || linked === coordinator) continue;
+      linked.parent = coordinator.key;
+      // The state its coordinator's computer last saw, as the desktop's borrowed copy carries it.
+      linked.row = { ...linked.row, session: { ...linked.row.session, threadState: thread.threadState } };
+    }
+  }
+  const tops = nestUnifiedRows(nest, folds, filter, settings, nowMs);
   const view: UnifiedView<S> = {
     drafts: [],
     pinned: [],
@@ -413,10 +460,11 @@ export function buildUnifiedList<S>(
     snoozed: [],
     parked: [],
     options,
-    total: rows.length,
+    total: tops.length,
+    deadlineMs: treeDeadlineMs(tops, nowMs),
   };
-  for (const { row, machineKey } of rows) {
-    if (keeps(filter, row, machineKey) && queryMatches(filter.query ?? '', row)) view[row.shelf].push(row);
+  for (const row of tops) {
+    if (row.subtreeMatched) view[row.shelf].push(row);
   }
   const tie = (left: UnifiedRow<S>, right: UnifiedRow<S>) =>
     compareText(left.sidebarSessionId, right.sidebarSessionId);
