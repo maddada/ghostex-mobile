@@ -556,9 +556,9 @@ describe("the header's New session", () => {
     expect(screen.getByText('Turn on an agent in Settings > Agents on Studio, then try again.')).toBeTruthy();
   });
 
-  test('with the phone preferring the terminal, a chat-capable agent still opens its chat draft', async () => {
+  test('it opens a chat-capable agent in its chat draft while the phone prefers chat', async () => {
     mockCreateAnswer = { json: { session: { sessionId: 's-new' } }, stdout: '' };
-    await renderSessions({ settings: { preferredAgentInterface: 'terminal' } });
+    await renderSessions();
     await openNewSession();
     await pick('inventory');
     expect(launches()[0]![1]).toMatch(createCommand('claude', 'P2'));
@@ -568,6 +568,17 @@ describe("the header's New session", () => {
       expect.objectContaining({ sessionKey: `${MACHINE.id}:s-new` }),
     );
     expect(useTerminalStore.getState().sessionViewModeBySessionKey[`${MACHINE.id}:s-new`]).toBe('chat');
+  });
+
+  test("with the phone preferring the terminal it opens the agent's terminal, as the project's agent button does", async () => {
+    mockCreateAnswer = { json: { session: { sessionId: 's-term' } }, stdout: '' };
+    await renderSessions({ settings: { preferredAgentInterface: 'terminal' } });
+    await openNewSession();
+    await pick('inventory');
+    // Started at once (no chat draft), and its tab isn't switched to chat; the terminal attach follows the refresh.
+    expect(launches()[0]![1]).toMatch(createCommand('claude', 'P2', false));
+    await act(async () => undefined);
+    expect(useTerminalStore.getState().sessionViewModeBySessionKey[`${MACHINE.id}:s-term`]).toBeUndefined();
   });
 
   test('an agent without chat starts in its terminal (no draft)', async () => {

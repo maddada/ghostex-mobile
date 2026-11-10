@@ -4,8 +4,8 @@
  * as the project's own agent button does. This file holds the button and what a pick or an empty
  * list comes to; the screen wires them to its sheet, its toast and its launch.
  *
- * CDXC:Sidebar 2026-11-09 DECISION:
- * User (Q35): a "New session" button always visible at the top of the phone's sessions list, in the Project and the Unified layouts. Tap it, pick any project from a searchable list (Recent first, computer shown), and it starts the last-used agent there and opens the chat draft, where agent, model, worktree, project and computer can still be changed before sending; the account stays in the draft. It sits in the title row beside the bell and the menu (a rail entry in the side-bar poses), Unified's search-row pencil went with it, and a chat-capable agent opens its chat draft even when the phone prefers the terminal. A pick that cannot start says why instead of doing nothing.
+ * CDXC:Sidebar 2026-11-10 DECISION:
+ * User (Q35): a "New session" button always visible at the top of the phone's sessions list, in the Project and the Unified layouts. Tap it, pick any project from a searchable list (Recent first, computer shown), and it starts the last-used agent there; agent, model, worktree, project and computer can still be changed in the chat draft before sending, and the account stays in the draft. It sits in the title row beside the bell and the menu (a rail entry in the side-bar poses), and Unified's search-row pencil went with it. User (Q47): it opens chat or terminal by the phone's own Default agent view, like the project's agent button, instead of always opening the chat (supersedes the 2026-11-09 always-chat rule). A pick that cannot start says why instead of doing nothing.
  * SEE-ALSO: ./new-session-place.ts (the rows and the agent's Space), ./use-sessions-screen-menus.tsx (`startNewSessionAt`).
  */
 

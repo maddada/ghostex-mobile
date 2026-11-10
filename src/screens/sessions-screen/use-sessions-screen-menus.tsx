@@ -1589,14 +1589,8 @@ export function useSessionsScreenMenus({
     [agentChoiceContext, agentChoices],
   );
 
-  /** `alwaysChat`: New session opens a chat-capable agent's chat draft whatever the phone's view preference. */
   const launchAgent = useCallback(
-    (
-      target: MachineRecord,
-      header: ProjectHeaderItem,
-      agent: GhostexAgentLauncher,
-      options: { alwaysChat?: boolean } = {},
-    ): void => {
+    (target: MachineRecord, header: ProjectHeaderItem, agent: GhostexAgentLauncher): void => {
       if (header.projectId.length === 0) {
         setTransientStatus(ProgressCopy.noStableProjectId);
         return;
@@ -1610,8 +1604,7 @@ export function useSessionsScreenMenus({
       const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
       const iconId = resolveAgentIconId(agent.icon, agentName);
       const chatFirst =
-        (options.alwaysChat === true || useSettingsStore.getState().settings.preferredAgentInterface === 'chat') &&
-        isSessionChatSupportedAgent(iconId);
+        useSettingsStore.getState().settings.preferredAgentInterface === 'chat' && isSessionChatSupportedAgent(iconId);
       void runCreationFlow(
         target,
         createAgentCommand(agent.agentId, header.projectId, undefined, chatFirst, true),
@@ -1677,7 +1670,8 @@ export function useSessionsScreenMenus({
 
   /**
    * The header's New session, a project picked in its sheet: the project's remembered agent starts
-   * there in its chat draft, or the toast says why it can't (./new-session-button.tsx).
+   * there as the project's agent button starts it, or the toast says why it can't
+   * (./new-session-button.tsx).
    */
   const startNewSessionAt = (pick: {
     machineId: string;
@@ -1701,7 +1695,7 @@ export function useSessionsScreenMenus({
       setTransientStatus(outcome.notice.message, { title: outcome.notice.title });
       return;
     }
-    if (machine !== null) launchAgent(machine, outcome.header, outcome.agent, { alwaysChat: true });
+    if (machine !== null) launchAgent(machine, outcome.header, outcome.agent);
   };
 
   /** The project row above the agents, naming the computer while there is more than one. */
