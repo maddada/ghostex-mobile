@@ -20,7 +20,7 @@ import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../machines/store';
 import { filterSummaryForSpace } from '../../spaces/spaceFilter';
-import { filterSummaryForWorkspace, projectWorkspaceIdOf } from '../../workspaces/workspaceFilter';
+import { filterSummaryForWorkspace, projectWorkspaceIdOf, resolveWorkspaceId } from '../../workspaces/workspaceFilter';
 import type { NewSessionComputer } from './new-session-button';
 import { useUnifiedListStore } from './unified-list-store';
 
@@ -147,10 +147,19 @@ export function agentSpaceOfProject(
 }
 
 /**
- * A computer's summary as the workspace of one of its projects sees it, with that workspace's
- * Spaces: the workspace shown on the phone can have none while the project's has some.
+ * A computer's summary as the workspace that holds a project's agent pick sees it, with that
+ * workspace's Spaces: the workspace shown on the phone (`shownWorkspaceId`) while it lists the
+ * project (a project shown in every workspace is listed by each), else the project's own
+ * workspace, since the one shown can have no Spaces while the project's has some.
  */
-export function summaryOfProjectWorkspace(summary: GhostexMobileSummary, projectId: string): GhostexMobileSummary {
+export function summaryOfProjectWorkspace(
+  summary: GhostexMobileSummary,
+  projectId: string,
+  shownWorkspaceId: string | undefined,
+): GhostexMobileSummary {
+  if (summary.workspaces === null) return summary;
+  const shown = filterSummaryForWorkspace(summary, resolveWorkspaceId(summary.workspaces, shownWorkspaceId));
+  if (shown.projects.some((project) => project.projectId === projectId)) return shown;
   const workspaceId = projectWorkspaceIdOf(summary, projectId);
   return workspaceId === null ? summary : filterSummaryForWorkspace(summary, workspaceId);
 }

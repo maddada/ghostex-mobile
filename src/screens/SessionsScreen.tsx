@@ -454,8 +454,9 @@ export default function SessionsScreen({ navigation }: Props) {
   const agentChoiceContext = useCallback(
     (machineId: string, projectId: string): AgentChoiceContext => {
       const whole = inventoriesByMachineId[machineId]?.summary ?? null;
-      // The project's own workspace and its Spaces: the workspace shown can have none while the project's has some.
-      const own = whole === null ? null : summaryOfProjectWorkspace(whole, projectId);
+      // The shown workspace while it lists the project, else the project's own (the shown one can have no Spaces).
+      const own =
+        whole === null ? null : summaryOfProjectWorkspace(whole, projectId, selectedWorkspaceIdByMachine[machineId]);
       const spaces = own?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
       const drawerSpaceId =
         machineId === machine?.id
@@ -473,7 +474,7 @@ export default function SessionsScreen({ navigation }: Props) {
         place: agentChoicePlace(machineId, projectId, worktreeParent, spaceId),
       };
     },
-    [machine?.id, inventoriesByMachineId, selectedSpaceId, selectedSpaceIdByMachine],
+    [machine?.id, inventoriesByMachineId, selectedSpaceId, selectedSpaceIdByMachine, selectedWorkspaceIdByMachine],
   );
   const spaceCounts = useMemo(
     () =>

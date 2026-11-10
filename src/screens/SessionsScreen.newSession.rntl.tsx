@@ -31,6 +31,7 @@ import { emptyMachineInventory, useInventoryStore, type MachineInventory } from 
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import { defaultSettings, useSettingsStore, type GhostexSettings } from '../settings/store';
 import { useSpacesStore } from '../spaces/store';
+import { useWorkspacesStore } from '../workspaces/store';
 import { useTerminalStore } from '../terminal/sessions';
 import { useUnifiedListStore } from './sessions-screen/unified-list-store';
 import SessionsScreen from './SessionsScreen';
@@ -187,6 +188,8 @@ type Setup = {
   };
   /** The drawer's selected Space per computer. */
   spaceByMachine?: Record<string, string>;
+  /** The shown workspace per computer. */
+  workspaceByMachine?: Record<string, string>;
 };
 
 async function renderSessions({
@@ -202,6 +205,7 @@ async function renderSessions({
   settings = {},
   launcher = {},
   spaceByMachine = {},
+  workspaceByMachine = {},
 }: Setup = {}): Promise<void> {
   const parsed = summary(extra);
   const machines = noMachines ? [] : withMini ? [MACHINE, MINI] : [MACHINE];
@@ -213,6 +217,7 @@ async function renderSessions({
     agentBySpace: launcher.agentBySpace ?? {},
   });
   useSpacesStore.setState({ selectedSpaceIdByMachine: spaceByMachine });
+  useWorkspacesStore.setState({ selectedWorkspaceIdByMachine: workspaceByMachine });
   useMachinesStore.setState({ hydrated: true, machines, selectedMachineId: noMachines ? null : MACHINE.id });
   useInventoryStore.setState({
     inventoriesByMachineId: Object.fromEntries(
@@ -563,6 +568,47 @@ describe("the header's New session", () => {
     await pick('website');
     expect(launches()[0]![1]).toMatch(createCommand('codex', 'P1'));
     expect(useLauncherStore.getState().agentBySpace[`${MACHINE.id}:sb`]).toBe('codex');
+  });
+
+  test("Per Space: a project shown in every workspace keeps the shown workspace's Space", async () => {
+    await renderSessions({
+      extra: {
+        agents: TWO_AGENTS,
+        newSessionAgentScope: 'space',
+        sidebarWorkspaces: {
+          defaultWorkspaceId: 'wa',
+          order: ['wa', 'wb'],
+          workspaces: { wa: { name: 'Alpha' }, wb: { name: 'Beta' } },
+        },
+        projects: PROJECTS.map((project) =>
+          project.projectId === 'P1'
+            ? { ...project, everyWorkspace: true }
+            : project.projectId === 'P2'
+              ? { ...project, workspaceId: 'wb' }
+              : project,
+        ),
+        sidebarSpaces: {
+          order: ['sa', 'sb'],
+          spaces: {
+            sa: { name: 'Alpha work', memberProjectIds: ['P1'], workspaceId: 'wa' },
+            sb: { name: 'Beta work', memberCollectionIds: ['internal'], workspaceId: 'wb' },
+          },
+        },
+      },
+      launcher: {
+        primaryAgentId: 'claude',
+        agentBySpace: { [`${MACHINE.id}:sa`]: 'claude', [`${MACHINE.id}:other`]: 'codex' },
+      },
+      workspaceByMachine: { [MACHINE.id]: 'wb' },
+      spaceByMachine: { [MACHINE.id]: 'other' },
+    });
+    await openNewSession();
+    await pick('website');
+    expect(launches()[0]![1]).toMatch(createCommand('codex', 'P1'));
+    expect(useLauncherStore.getState().agentBySpace).toEqual({
+      [`${MACHINE.id}:sa`]: 'claude',
+      [`${MACHINE.id}:other`]: 'codex',
+    });
   });
 
   test('a copy of a repository the Project list folds into another entry still starts', async () => {
