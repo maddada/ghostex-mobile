@@ -533,6 +533,9 @@ export const NewSessionCopy = {
   gone: (computer: string) => `This project is no longer on ${computer}. Pick another one.`,
   loadingTitle: 'Still loading',
   loading: 'Your computers are still loading. Try again in a moment.',
+  loadingOne: (computer: string) => `${computer} is still loading. Try again in a moment.`,
+  unopenedTitle: "Couldn't open it",
+  unopened: "The computer didn't say what it started. Look for it in the list.",
 } as const;
 
 /** The project header's Actions… list and the hint shown when an action cannot start. */

@@ -24,7 +24,7 @@ import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
 import { blockedDetail } from '../../components/sessions/sessionStatus';
 import { noteNewSessionIn, projectChoicesNow, repoKeyOfProject } from './new-session-place';
-import { newSessionStart } from './new-session-button';
+import { agentMenuNotice, newSessionStart } from './new-session-button';
 import { hidesProjectsWithoutSessions, type DrawerBlock } from '../../components/sessions/drawerModel';
 import {
   ArrowGlyph,
@@ -1611,12 +1611,28 @@ export function useSessionsScreenMenus({
   }, []);
 
   /** The agent menu on a project of a computer; nothing is opened first, so no default agent starts. */
-  const openAgentMenuAt = (machineId: string, projectId: string): void => {
-    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId) ?? null;
-    const summary = summaryFor(machineId);
-    if (machine === null || summary === null) return;
-    const header = projectHeaderOf(machineId, summary, projectId, { throughCollections: true });
-    if (header !== null) setOverlay({ kind: 'agentMenu', ctx: { machine, header } });
+  const openAgentMenuAt = (place: {
+    machineId: string;
+    projectId: string;
+    connected: boolean;
+    label: string;
+  }): void => {
+    const machine = useMachinesStore.getState().machines.find((entry) => entry.id === place.machineId) ?? null;
+    if (machine === null) return;
+    const summary = summaryFor(place.machineId);
+    const header =
+      summary === null
+        ? null
+        : projectHeaderOf(place.machineId, summary, place.projectId, { throughCollections: true });
+    // The computer is off, not read yet, or the project is gone: say so instead of opening nothing.
+    const notice = agentMenuNotice({
+      connected: place.connected,
+      computer: place.label,
+      read: summary !== null,
+      found: header !== null,
+    });
+    if (notice !== null) setTransientStatus(notice.message, { title: notice.title });
+    else if (header !== null) setOverlay({ kind: 'agentMenu', ctx: { machine, header } });
   };
 
   /**

@@ -42,6 +42,23 @@ export function newSessionStart(input: {
   return { kind: 'start', header, agent };
 }
 
+/**
+ * Why the agent menu can't open on a project of a computer (a project's "+", the agent menu's
+ * project row), or null when it can: the computer is off, its summary hasn't been read yet, or the
+ * project is gone from it.
+ */
+export function agentMenuNotice(input: {
+  connected: boolean;
+  computer: string;
+  read: boolean;
+  found: boolean;
+}): NewSessionNotice | null {
+  if (!input.connected) return { title: NewSessionCopy.offlineTitle, message: NewSessionCopy.offline(input.computer) };
+  if (!input.read) return { title: NewSessionCopy.loadingTitle, message: NewSessionCopy.loadingOne(input.computer) };
+  if (!input.found) return { title: NewSessionCopy.goneTitle, message: NewSessionCopy.gone(input.computer) };
+  return null;
+}
+
 /** A computer the phone has saved, as the empty sheet reads it. */
 export type NewSessionComputer = {
   label: string;

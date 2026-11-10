@@ -442,6 +442,33 @@ describe('a copy of a repository the Project list folds into another entry', () 
   });
 });
 
+describe('a start that cannot go ahead says why', () => {
+  test("the agent menu's project row on a computer that isn't connected", async () => {
+    await renderSessions({
+      expandedCollections: ['internal'],
+      expandedProjects: ['id:P2'],
+      inventory: { lastError: 'Connection refused' },
+    });
+    await press('Select agent');
+    await pressAndDismiss(screen.getByRole('button', { name: 'Project: inventory. Tap to change' }));
+    const rows = screen.getAllByRole('button', { name: 'website' });
+    await pressAndDismiss(rows[rows.length - 1]!);
+    expect(screen.queryByText('Start an agent session')).toBeNull();
+    expect(screen.getByText("Studio isn't connected. Reconnect it, then try again.")).toBeTruthy();
+  });
+
+  test('a create whose answer names no session', async () => {
+    mockCreateAnswer = { json: { ok: true }, stdout: '{"ok":true}' };
+    await renderSessions();
+    await press('New session');
+    const rows = screen.getAllByRole('button', { name: 'inventory' });
+    await pressAndDismiss(rows[rows.length - 1]!);
+    await act(async () => undefined);
+    expect(screen.getByText("Couldn't open it")).toBeTruthy();
+    expect(screen.getByText("The computer didn't say what it started. Look for it in the list.")).toBeTruthy();
+  });
+});
+
 describe("the header's New session", () => {
   const UNIFIED = { sidebarView: 'unified' };
 

@@ -63,6 +63,7 @@ import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/uni
 import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
 import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
+import { agentMenuNotice, type NewSessionNotice } from './new-session-button';
 import { useSettingsStore } from '../../settings/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
 import { attachSessionKey } from '../../terminal/sessions';
@@ -145,6 +146,8 @@ export type UnifiedListDeps = {
   runBulkSessionActions: (target: MachineRecord, actions: readonly BulkSessionAction[]) => Promise<void>;
   snoozeSession: (target: MachineRecord, session: GhostexSession, wakeAt: Date | null) => Promise<void>;
   openAddProject: (machineId: string) => void;
+  /** The screen's toast. */
+  notify: (notice: NewSessionNotice) => void;
   /** The session wall: tiles this many side by side, drawn in `appearance`; absent or null, the list's cards. */
   wall?: { columns: number; appearance: SidebarAppearance } | null;
 };
@@ -196,6 +199,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     runBulkSessionActions,
     snoozeSession,
     openAddProject,
+    notify,
     wall = null,
   } = deps;
   const selectedSummary = selectedMachine === null ? null : (inventoriesByMachineId[selectedMachine.id]?.summary ?? null);
@@ -519,25 +523,36 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     unifiedSettings.parking,
   );
 
-  /** The agent picker in one project; nothing is opened first, so no default agent starts. */
-  const openPickerIn = (machineId: string, projectId: string): void => {
-    const target = machineById(machineId);
-    const summary = summaryOf(machineId);
-    if (target === null || summary === null) return;
-    const projectHeader = projectHeaderOf(machineId, summary, projectId, { throughCollections: true });
-    if (projectHeader !== null) setOverlay({ kind: 'agentMenu', ctx: { machine: target, header: projectHeader } });
+  /**
+   * The agent picker in one project; nothing is opened first, so no default agent starts. When it
+   * can't open (the computer is off, not read yet, or the project is gone) the toast says why.
+   */
+  const openPickerIn = (place: UnifiedProjectChoice['machines'][number]): void => {
+    const target = machineById(place.machineId);
+    if (target === null) return;
+    const summary = summaryOf(place.machineId);
+    const projectHeader =
+      summary === null
+        ? null
+        : projectHeaderOf(place.machineId, summary, place.projectId, { throughCollections: true });
+    const notice = agentMenuNotice({
+      connected: place.connected,
+      computer: place.label,
+      read: summary !== null,
+      found: projectHeader !== null,
+    });
+    if (notice !== null) notify(notice);
+    else if (projectHeader !== null) setOverlay({ kind: 'agentMenu', ctx: { machine: target, header: projectHeader } });
   };
 
   /**
    * A project's "+" (its group header, its filter row): the agent menu on that project, on the
    * machine it starts on (gx-core `default_machine`); the menu's chips change the machine.
    */
-  const openGroupNewSession = (repoKey: string): boolean => {
+  const openGroupNewSession = (repoKey: string): void => {
     const choice = choices.find((entry) => entry.repoKey === repoKey);
     const machine = choice?.machines[choice.selected];
-    if (machine === undefined || !machine.connected) return false;
-    openPickerIn(machine.machineId, machine.projectId);
-    return true;
+    if (machine !== undefined) openPickerIn(machine);
   };
 
   const renderItem: FlatListProps<UnifiedListItem>['renderItem'] = ({ item }) => {

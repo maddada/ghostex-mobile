@@ -696,6 +696,7 @@ export default function SessionsScreen({ navigation }: Props) {
     runBulkSessionActions,
     snoozeSession,
     openAddProject,
+    notify: (notice) => setTransientStatus(notice.message, { title: notice.title }),
     wall: tileColumns === null ? null : { columns: tileColumns, appearance: sidebarAppearance },
   });
   useOpenProjectDraftsOnArrival(inventoriesByMachineId, !unified.on);
@@ -2015,7 +2016,7 @@ export default function SessionsScreen({ navigation }: Props) {
                   connected: machine.connected,
                   label: machine.label,
                 })
-              : openAgentMenuAt(machine.machineId, machine.projectId);
+              : openAgentMenuAt(machine);
           if (Platform.OS === 'ios') afterProjectSheet.current = work;
           else work();
         }}
