@@ -261,6 +261,18 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
         </View>
         <Text style={[styles.title, { color: body }]}>{str(card, 'title')}</Text>
         {right.length > 0 ? <Text style={styles.right}>{right}</Text> : null}
+        {/* A finished card in the dock goes away with its × (gx-chat-core `dock`). */}
+        {obj(card.dismiss) !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            hitSlop={8}
+            onPress={() => dispatch(card.dismiss as never)}
+            style={styles.dismiss}
+          >
+            <Glyph name="x" size={12} color={P.muted} />
+          </Pressable>
+        ) : null}
       </View>
       {line.length > 0 ? <Text style={styles.line}>{line}</Text> : null}
       {chips.length > 0 || buttons.length > 0 ? (
@@ -288,7 +300,9 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
                 ) : (
                   <Glyph name={CHIP_ICON[kind] ?? 'clock'} size={14} color={P.muted} />
                 )}
-                <Text style={styles.chipText}>{str(chip, 'label')}</Text>
+                {/* A part that opens something wears the faint dotted underline of a link in the chat
+                    (`LinkWords.tsx`): the phone has no hover, so it shows at rest. */}
+                <Text style={[styles.chipText, command !== null ? styles.linkDots : null]}>{str(chip, 'label')}</Text>
                 {state.length > 0 ? (
                   <Text style={[styles.chipText, { color: toneColor(str(chip, 'tone')) ?? P.muted }]}>{state}</Text>
                 ) : null}
@@ -397,7 +411,9 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
                     <WhoMark who={who} />
                   </View>
                   <View style={styles.movingText}>
-                    <Text style={[styles.movingRowTitle, { color: body }]}>{str(row, 'title')}</Text>
+                    <Text style={[styles.movingRowTitle, { color: body }, command !== null ? styles.linkDots : null]}>
+                      {str(row, 'title')}
+                    </Text>
                     {line.length > 0 ? <Text style={styles.movingRowLine}>{line}</Text> : null}
                   </View>
                   <Text style={styles.foldTime}>{str(row, 'age')}</Text>
@@ -459,6 +475,8 @@ const useStyles = themedStyles((P) => ({
     borderColor: P.inputBorder,
     backgroundColor: P.cardPanel,
   },
+  linkDots: { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: P.muted },
+  dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
   card: {
