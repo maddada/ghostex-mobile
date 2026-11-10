@@ -276,6 +276,37 @@ function DockRow({
                 {line}
               </Text>
             ))}
+          {/* Its links (the work it belongs to, its thread, a PR or issue, a file), as on the desktop row. */}
+          {arr(row.chips).length > 0 ? (
+            <View style={styles.dockLinks}>
+              {arr(row.chips)
+                .map(obj)
+                .filter((chip): chip is JsonRecord => chip !== null)
+                .map((chip, index) => {
+                  const command = obj(chip.command);
+                  const kind = str(chip, 'kind');
+                  return (
+                    <Pressable
+                      key={`link:${index}`}
+                      accessibilityRole={command !== null ? 'button' : undefined}
+                      disabled={command === null}
+                      hitSlop={6}
+                      onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+                      style={styles.chip}
+                    >
+                      {kind === 'thread' && str(chip, 'agentIcon').length > 0 ? (
+                        <AgentMark icon={str(chip, 'agentIcon')} size={14} />
+                      ) : (
+                        <Glyph name={CHIP_ICON[kind] ?? 'link'} size={14} color={P.muted} />
+                      )}
+                      <Text style={[styles.chipText, command !== null ? styles.linkDots : null]}>
+                        {str(chip, 'label')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
+          ) : null}
           <View style={styles.dockActions}>
             {reply !== null
               ? action('Reply', () =>
@@ -672,6 +703,7 @@ const useStyles = themedStyles((P) => ({
   dockTitle: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
   dockButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 31, paddingRight: 8, paddingBottom: 6 },
   dockDetail: { gap: 4, paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
+  dockLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
   dockActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 2 },
   dockMore: { paddingLeft: 31, paddingRight: 8, paddingTop: 2, paddingBottom: 6, fontSize: PROSE_SIZE, color: P.muted },
   dockHide: {
