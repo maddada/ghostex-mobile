@@ -68,6 +68,16 @@ function offersPush(machineId: string): boolean | null {
   return chatMachineLink(machine).capabilities()?.includes(PUSH_NOTIFICATIONS_CAPABILITY) ?? null;
 }
 
+/** gxserver's capability for `sessionNames` in `/api/registerPushToken`. */
+const PUSH_SESSION_NAMES_CAPABILITY = 'pushSessionNames';
+
+/** Whether the computer's endpoint lists `pushSessionNames`; false while its link has settled no endpoint. */
+function offersSessionNames(machineId: string): boolean {
+  const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
+  if (machine === undefined) return false;
+  return chatMachineLink(machine).capabilities()?.includes(PUSH_SESSION_NAMES_CAPABILITY) ?? false;
+}
+
 /**
  * One registration request to a computer's gxserver over its warm link. `current` is the pass's check that the
  * master switch and the token still ask for it: looking up the link's route can take a handshake, so it is checked
@@ -115,6 +125,8 @@ const registration = new PushTokenRegistration({
       ...(machine.deviceId === undefined ? {} : { deviceId: machine.deviceId }),
     })),
   offersPush,
+  offersSessionNames,
+  sessionNames: () => useSettingsStore.getState().settings.liveActivitySessionNames,
   send: sendPushToken,
   accepted: pushAccepted,
   log: logAppEvent,
@@ -185,9 +197,12 @@ export function initPushNotifications(): void {
   const sync = (): void => void registration.sync();
   watchPushToken((deviceToken) => void registration.tokenChanged(deviceToken));
   let switches = useSettingsStore.getState().settings.notifications;
+  let sessionNames = useSettingsStore.getState().settings.liveActivitySessionNames;
   useSettingsStore.subscribe((state) => {
     const next = state.settings.notifications;
+    const nextNames = state.settings.liveActivitySessionNames;
     if (
+      nextNames === sessionNames &&
       next.enabled === switches.enabled &&
       next.finished === switches.finished &&
       next.waiting === switches.waiting &&
@@ -197,6 +212,7 @@ export function initPushNotifications(): void {
       return;
     }
     switches = next;
+    sessionNames = nextNames;
     sync();
   });
   // The enabled computers and their pairing device ids: a re-pair sends the new id with a new registration.

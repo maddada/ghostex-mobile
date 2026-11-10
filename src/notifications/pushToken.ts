@@ -68,7 +68,15 @@ export type PushKinds = { finished: boolean; waiting: boolean; error: boolean };
 
 /** One request of the `registerPushToken` route; each names the computer by the phone's own id for it. */
 export type PushTokenParams =
-  | { action: 'register'; token: string; machineId: string; kinds: PushKinds; deviceId?: string }
+  | {
+      action: 'register';
+      token: string;
+      machineId: string;
+      kinds: PushKinds;
+      deviceId?: string;
+      /** The "Show session names" switch, sent only to a computer that lists `pushSessionNames`. */
+      sessionNames?: boolean;
+    }
   | { action: 'unregister'; machineId: string };
 
 /**
@@ -105,6 +113,10 @@ export type PushTokenDeps = {
    * `pushNotifications`, false when it does not, null when the link has settled no endpoint (no absence).
    */
   offersPush(machineId: string): boolean | null;
+  /** Whether the computer's endpoint lists `pushSessionNames` (it takes `sessionNames`); false while unknown. */
+  offersSessionNames(machineId: string): boolean;
+  /** The "Show session names" switch: on, the computer's pushes lead with the session's title. */
+  sessionNames(): boolean;
   /**
    * One request to a computer's gxserver over the warm link; `current` tells whether the pass still wants it sent,
    * checked right before it is handed to the link.
@@ -132,6 +144,7 @@ function holdsAlready(taken: PushTokenParams, wanted: PushTokenParams): boolean 
   return (
     taken.token === wanted.token &&
     taken.deviceId === wanted.deviceId &&
+    taken.sessionNames === wanted.sessionNames &&
     taken.kinds.finished === wanted.kinds.finished &&
     taken.kinds.waiting === wanted.kinds.waiting &&
     taken.kinds.error === wanted.kinds.error
@@ -320,6 +333,13 @@ export class PushTokenRegistration {
       machineId: machine.id,
       kinds: { finished, waiting, error },
       ...(DEVICE_ID.test(deviceId) ? { deviceId } : {}),
+      /*
+      CDXC:Notifications 2026-11-11 DECISION: the computer builds the push, so it learns the "Show session names"
+      switch with the registration: off (the default), its pushes lead with the agent's name; on, with the session's
+      title, like the Live Activity and the widgets. A computer whose endpoint does not list `pushSessionNames` refuses
+      the field and never puts a session title in a push, so it is not sent there.
+      */
+      ...(this.deps.offersSessionNames(machine.id) ? { sessionNames: this.deps.sessionNames() } : {}),
     };
   }
 
