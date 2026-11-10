@@ -281,20 +281,34 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
 }
 
 /**
- * `sidebarHideProjectsWithoutSessions`: the list without projects that have no session in any state,
- * and how many it left out, for the Show all projects row (`sidebar_view/assemble.rs` on desktop).
+ * Whether the Project list leaves out projects without sessions: the phone's own switch once it was changed here
+ * (`sessionsListHideProjectsWithoutSessions`), the computer's `sidebarHideProjectsWithoutSessions` until then.
+ */
+export function hidesProjectsWithoutSessions(
+  own: boolean | null,
+  summary: GhostexMobileSummary | null | undefined,
+): boolean {
+  return own ?? summary?.sidebarHideProjectsWithoutSessions === true;
+}
+
+/**
+ * Hide projects without sessions: the list without project cards that draw no session, and how many it left out,
+ * for the Show all projects row (`sidebar_view/assemble.rs` on desktop).
+ *
+ * The card decides, not the session list: a card draws its own sessions plus those of its worktrees and of the
+ * repository copies merged into it (`header.sessionCount`, in any state), so a project whose sessions all live
+ * in a worktree or a merged copy stays. Main Hub's home card always stays, as on the desktop.
  *
  * CDXC:Sidebar 2026-10-31 DECISION:
- * User (Q851, "show all row"; Q856): the phone follows the computer's switch and has the same row. With `showAll` they come back in their own places and the row stays, as the way back.
+ * User (Q851, "show all row"; Q856): the Project list has the same Show all projects row. With `showAll` they come back in their own places and the row stays, as the way back. Since 2026-11-09 the phone has its own switch for it (`sessionsListHideProjectsWithoutSessions`).
  */
 export function hideProjectsWithoutSessions(
   blocks: DrawerBlock[],
-  summary: GhostexMobileSummary | null | undefined,
+  hide: boolean,
   showAll: boolean,
 ): { blocks: DrawerBlock[]; emptyProjects: number } {
-  if (summary?.sidebarHideProjectsWithoutSessions !== true) return { blocks, emptyProjects: 0 };
-  const withSessions = new Set(summary.sessions.map((session) => session.projectId));
-  const hasSessions = (card: ProjectCardBlock): boolean => withSessions.has(card.header.projectId);
+  if (!hide) return { blocks, emptyProjects: 0 };
+  const hasSessions = (card: ProjectCardBlock): boolean => card.header.isHome === true || card.header.sessionCount > 0;
   let emptyProjects = 0;
   const kept: DrawerBlock[] = [];
   for (const block of blocks) {
@@ -302,9 +316,11 @@ export function hideProjectsWithoutSessions(
       if (hasSessions(block.card)) kept.push(block);
       else emptyProjects += 1;
     } else if (block.kind === 'collection') {
+      // A folded collection draws no cards, so its header knows which members are empty.
       const projects = block.projects.filter(hasSessions);
-      emptyProjects += block.projects.length - projects.length;
-      if (projects.length > 0) kept.push({ ...block, projects });
+      const empty = block.header.projectsWithoutSessions;
+      emptyProjects += empty;
+      if (block.header.projectCount - empty > 0) kept.push({ ...block, projects });
     } else {
       kept.push(block);
     }

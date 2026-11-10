@@ -71,10 +71,6 @@ export default function ChatPage() {
           rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. When the computer's
           Agent work is Reduced or Quiet, that look replaces these lines here too.
         </Caption>
-        <Caption>
-          Show the session's pull requests, issues and Linear tickets under the chat's header. Turn off to keep the
-          header to the title; the session list still shows them.
-        </Caption>
       </SettingsSection>
       <SettingsSection name="settings:chat:marked-sections">
         <SectionHeader title="Marked sections" />

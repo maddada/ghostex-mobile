@@ -94,6 +94,15 @@ export function filterSummaryForWorkspace(summary: GhostexMobileSummary, workspa
   return { ...summary, projects, sessions, sidebarSpaces: { order: spaceIds, spaces } };
 }
 
+/** The workspace a project is shown in (a worktree follows its parent's), or null when the computer has none. */
+export function projectWorkspaceIdOf(summary: GhostexMobileSummary, projectId: string): string | null {
+  const workspaces = summary.workspaces;
+  if (workspaces === null) return null;
+  const byId = projectsById(summary);
+  const project = byId.get(projectId);
+  return project === undefined ? null : projectWorkspaceId(workspaces, byId, project);
+}
+
 /**
  * The workspace a session is shown in, or null when it shows in every workspace (its project is
  * shown everywhere, is unknown to the summary, or the computer has no workspaces).

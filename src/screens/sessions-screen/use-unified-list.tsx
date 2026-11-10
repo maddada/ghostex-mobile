@@ -1,7 +1,8 @@
 /**
  * The session list drawn as the desktop's Unified sidebar: every computer's sessions in one list
- * (contract/unified/), with its header (the search field, the filter, Add project, New session), its
- * cards, project groups and shelves, its swipe buttons, and the menus they open.
+ * (contract/unified/), with its header (the search field, the filter, Add project; New session is in
+ * the screen's title row), its cards, project groups and shelves, its swipe buttons, and the menus
+ * they open.
  *
  * CDXC:Sidebar 2026-11-01 DECISION:
  * User (Q933, Q934): the phone picks Unified or Project itself, in Settings › Sessions list
@@ -36,7 +37,7 @@ import {
   type UnifiedShelf,
   type UnifiedStatus,
 } from '../../contract/unified/build';
-import { unifiedNewSessionTarget, unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
+import { unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
 import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../../contract/unified/filterMenu';
 import {
   sessionsListSeedOf,
@@ -55,13 +56,14 @@ import { chatMachineLink } from '../../chat/rust/machine-link';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../components/sessions/ContextMenu';
 import { ds, inkStyleSheets, inkWash, sidebarInk, useSidebarInk } from '../../components/sessions/rows';
 import { lastInteractionLabel } from '../../components/sessions/sessionStatus';
-import { EditGlyph, FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
+import { FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
 import { PlusGlyph } from '../../components/sessions/icons';
 import { StatusSlot, statusLook, UnifiedCard, UnifiedGroupHeader, UnifiedShelfHeader, UnifiedSlimRow } from '../../components/sessions/unified/UnifiedCard';
 import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/unified/UnifiedThreadRow';
 import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
 import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
+import { agentMenuNotice, type NewSessionNotice } from './new-session-button';
 import { useSettingsStore } from '../../settings/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
 import { attachSessionKey } from '../../terminal/sessions';
@@ -144,6 +146,8 @@ export type UnifiedListDeps = {
   runBulkSessionActions: (target: MachineRecord, actions: readonly BulkSessionAction[]) => Promise<void>;
   snoozeSession: (target: MachineRecord, session: GhostexSession, wakeAt: Date | null) => Promise<void>;
   openAddProject: (machineId: string) => void;
+  /** The screen's toast. */
+  notify: (notice: NewSessionNotice) => void;
   /** The session wall: tiles this many side by side, drawn in `appearance`; absent or null, the list's cards. */
   wall?: { columns: number; appearance: SidebarAppearance } | null;
 };
@@ -195,6 +199,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     runBulkSessionActions,
     snoozeSession,
     openAddProject,
+    notify,
     wall = null,
   } = deps;
   const selectedSummary = selectedMachine === null ? null : (inventoriesByMachineId[selectedMachine.id]?.summary ?? null);
@@ -518,25 +523,36 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     unifiedSettings.parking,
   );
 
-  /** The agent picker in one project; nothing is opened first, so no default agent starts. */
-  const openPickerIn = (machineId: string, projectId: string): void => {
-    const target = machineById(machineId);
-    const summary = summaryOf(machineId);
-    if (target === null || summary === null) return;
-    const projectHeader = projectHeaderOf(machineId, summary, projectId, { throughCollections: true });
-    if (projectHeader !== null) setOverlay({ kind: 'agentMenu', ctx: { machine: target, header: projectHeader } });
+  /**
+   * The agent picker in one project; nothing is opened first, so no default agent starts. When it
+   * can't open (the computer is off, not read yet, or the project is gone) the toast says why.
+   */
+  const openPickerIn = (place: UnifiedProjectChoice['machines'][number]): void => {
+    const target = machineById(place.machineId);
+    if (target === null) return;
+    const summary = summaryOf(place.machineId);
+    const projectHeader =
+      summary === null
+        ? null
+        : projectHeaderOf(place.machineId, summary, place.projectId, { throughCollections: true });
+    const notice = agentMenuNotice({
+      connected: place.connected,
+      computer: place.label,
+      read: summary !== null,
+      found: projectHeader !== null,
+    });
+    if (notice !== null) notify(notice);
+    else if (projectHeader !== null) setOverlay({ kind: 'agentMenu', ctx: { machine: target, header: projectHeader } });
   };
 
   /**
    * A project's "+" (its group header, its filter row): the agent menu on that project, on the
    * machine it starts on (gx-core `default_machine`); the menu's chips change the machine.
    */
-  const openGroupNewSession = (repoKey: string): boolean => {
+  const openGroupNewSession = (repoKey: string): void => {
     const choice = choices.find((entry) => entry.repoKey === repoKey);
     const machine = choice?.machines[choice.selected];
-    if (machine === undefined || !machine.connected) return false;
-    openPickerIn(machine.machineId, machine.projectId);
-    return true;
+    if (machine !== undefined) openPickerIn(machine);
   };
 
   const renderItem: FlatListProps<UnifiedListItem>['renderItem'] = ({ item }) => {
@@ -667,25 +683,6 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     );
   };
 
-  /**
-   * The pencil: the agent menu where gx-core `unified_new_session_target` aims it (the one filtered
-   * project, else the open session's project on its machine, else the list's first project).
-   */
-  const openNewSession = (): void => {
-    const all = [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked];
-    const open = all.find((row) => selectedSessionKey === attachSessionKey(row.machine, row.session.sessionId));
-    const target = unifiedNewSessionTarget(
-      view.filter,
-      choices,
-      open === undefined ? null : { repoKey: open.repo.key, machineId: open.machine, projectId: open.session.projectId },
-    );
-    if (target === null) {
-      if (selectedMachine !== null) openAddProject(selectedMachine.id);
-      return;
-    }
-    openPickerIn(target.machineId, target.projectId);
-  };
-
   const filtered = !isUnifiedFilterEmpty(view.filter);
   const filterButtonRef = useRef<ViewInstance | null>(null);
   const header: ReactElement | null = on ? (
@@ -718,9 +715,6 @@ export function useUnifiedList(deps: UnifiedListDeps) {
         onPress={() => selectedMachine !== null && openAddProject(selectedMachine.id)}
       >
         <FolderPlusGlyph size={ds(15)} color={ink.text} />
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="New session" style={styles.iconButton} onPress={openNewSession}>
-        <EditGlyph size={ds(15)} color={ink.text} />
       </Pressable>
     </View>
   ) : null;

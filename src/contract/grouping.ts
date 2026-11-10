@@ -98,6 +98,8 @@ export type CollectionHeaderItem = {
   color: string;
   collapsed: boolean;
   projectCount: number;
+  /** Member projects that draw no session; known while the collection is folded and draws no cards (Hide projects without sessions). */
+  projectsWithoutSessions: number;
   sessionCount: number;
   workingCount: number;
   attentionCount: number;
@@ -1235,6 +1237,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       color: collection.color,
       collapsed: collectionCollapsed,
       projectCount: memberKeys.length,
+      projectsWithoutSessions: memberKeys.filter((key) => (sessionsByProjectKey.get(key) ?? []).length === 0).length,
       sessionCount: collectionSessions.length,
       workingCount: counts.workingCount,
       attentionCount: counts.attentionCount - counts.questionCount,
@@ -1262,7 +1265,9 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
  * The project's header as its card in the Project list would carry it, for the Unified list, which has no header: its
  * agent picker and a session menu's Actions…. A project in a saved collection has a header only while that collection
  * is open, as the Project list draws it; `throughCollections` opens the project's collections for the lookup, so the
- * header does not depend on how the collection is folded (Actions… and the agent pickers use it).
+ * header does not depend on how the collection is folded (Actions… and the agent pickers use it). The project's own
+ * folder is looked up with copies of a repository unmerged, since the Project list folds every copy but the first into
+ * one entry and a picked copy (New session, the agent menu's project row, a Unified group) would have no header.
  */
 export function projectHeaderOf(
   machineId: string,
@@ -1272,8 +1277,9 @@ export function projectHeaderOf(
 ): ProjectHeaderItem | null {
   const items = buildDrawerItems({
     machineId,
-    // A worktree's own header, which the Project list may fold into its parent's (grouping.ts).
-    summary: { ...summary, worktreeSessionsInProject: false },
+    // A worktree's own header, which the Project list may fold into its parent's (grouping.ts), and a repository
+    // copy's own, which Merge copies of the same repository folds into the first copy's.
+    summary: { ...summary, worktreeSessionsInProject: false, mergeRepositoryCopies: false },
     nowMs: Date.now(),
     expandedProjectKeys: new Set([`id:${projectId}`]),
     expandedCollectionIds: new Set(

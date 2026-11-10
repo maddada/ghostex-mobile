@@ -8,7 +8,7 @@
  * SEE-ALSO: apps/desktop/src/app/gx_store/unified_new_session.rs (the desktop's picker host).
  */
 
-import { LOCAL_MACHINE_KEY, spaceFilterKey, spaceOfProject } from '../../contract/unified/build';
+import { LOCAL_MACHINE_KEY, OTHER_SPACE_ID, spaceFilterKey, spaceOfProject } from '../../contract/unified/build';
 import {
   unifiedProjectChoices,
   type UnifiedChoiceMachineInput,
@@ -16,8 +16,12 @@ import {
 } from '../../contract/unified/choices';
 import { unifiedMachineInput } from '../../contract/unified/fromSummary';
 import { mergedRepoIdentities, repoIdentity } from '../../contract/unified/repo';
+import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../machines/store';
+import { filterSummaryForSpace } from '../../spaces/spaceFilter';
+import { filterSummaryForWorkspace, projectWorkspaceIdOf, resolveWorkspaceId } from '../../workspaces/workspaceFilter';
+import type { NewSessionComputer } from './new-session-button';
 import { useUnifiedListStore } from './unified-list-store';
 
 /** Each computer the phone has read, with its projects and which of them has an open session. */
@@ -80,6 +84,20 @@ export function repoKeyOfProject(machineId: string, projectId: string): string |
   return identities[machineIndex]![projectIndex]!.key;
 }
 
+/**
+ * Whether the Unified list keys its computer as `local`: it lists only one, counting what it
+ * renders (a computer that is read and connected, use-unified-list.tsx), not every computer whose
+ * summary the phone still holds.
+ */
+function unifiedListIsAlone(): boolean {
+  const inventories = useInventoryStore.getState().inventoriesByMachineId;
+  const listed = enabledMachines(useMachinesStore.getState()).filter((machine) => {
+    const inventory = inventories[machine.id];
+    return (inventory?.summary ?? null) !== null && (inventory?.lastError ?? null) === null;
+  });
+  return listed.length === 1;
+}
+
 /** The Unified filter's key of the Space that shows a project, or null when its computer has none. */
 export function spaceKeyOfProject(machineId: string, projectId: string): string | null {
   const summary = useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
@@ -88,16 +106,78 @@ export function spaceKeyOfProject(machineId: string, projectId: string): string 
   const project = machine.projects.find((entry) => entry.projectId === projectId);
   if (machine.spaces === null || project === undefined) return null;
   // The list keys a lone computer as `local` (`unifiedListOf`), and its Spaces with it.
-  const alone = projectChoiceInputsNow().length === 1;
-  return spaceFilterKey(alone ? LOCAL_MACHINE_KEY : machineId, spaceOfProject(machine.spaces, project));
+  return spaceFilterKey(unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId, spaceOfProject(machine.spaces, project));
 }
 
 /** A session started in a project of a computer: its machine and Recent, and the filter's chips. */
 export function noteNewSessionIn(machineId: string, projectId: string): void {
   const repoKey = repoKeyOfProject(machineId, projectId);
   if (repoKey === null) return;
-  const alone = projectChoiceInputsNow().length === 1;
+  // The last computer is its real id, which the project rows' chips are; only the filter keys a lone computer as local.
   useUnifiedListStore
     .getState()
-    .noteNewSession(repoKey, alone ? LOCAL_MACHINE_KEY : machineId, spaceKeyOfProject(machineId, projectId));
+    .noteNewSession(
+      repoKey,
+      machineId,
+      spaceKeyOfProject(machineId, projectId),
+      unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId,
+    );
+}
+
+/** Every saved computer, as the New session button reads an empty project list (./new-session-button.tsx). */
+export function newSessionComputersNow(): NewSessionComputer[] {
+  const inventories = useInventoryStore.getState().inventoriesByMachineId;
+  return enabledMachines(useMachinesStore.getState()).map((machine) => {
+    const inventory = inventories[machine.id];
+    return {
+      label: machineDisplayLabel(machine),
+      read: (inventory?.summary ?? null) !== null,
+      failed: (inventory?.lastError ?? null) !== null,
+    };
+  });
+}
+
+/**
+ * The Space a project's agent pick is looked up and remembered under, in `summary` (the project's
+ * own workspace): the drawer's Space when it shows the project (so the Project list's headers keep
+ * theirs), else the Space that shows it
+ * (`spaceOfProject`: its collection's, its worktree parent's, or Other). A start from the New
+ * session sheet, a Unified group or the filter can be in a project of another Space.
+ */
+export function agentSpaceOfProject(
+  summary: GhostexMobileSummary,
+  machineId: string,
+  projectId: string,
+  drawerSpaceId: string,
+): string {
+  // A Space of this summary (the drawer can be on another workspace's).
+  const drawerHere = drawerSpaceId === OTHER_SPACE_ID || summary.sidebarSpaces.spaces[drawerSpaceId] !== undefined;
+  if (
+    drawerHere &&
+    filterSummaryForSpace(summary, drawerSpaceId).projects.some((project) => project.projectId === projectId)
+  ) {
+    return drawerSpaceId;
+  }
+  const machine = unifiedMachineInput({ machineId, label: '', summary, workspaceId: null }, false);
+  const project = machine.projects.find((entry) => entry.projectId === projectId);
+  if (machine.spaces === null || project === undefined) return OTHER_SPACE_ID;
+  return spaceOfProject(machine.spaces, project);
+}
+
+/**
+ * A computer's summary as the workspace that holds a project's agent pick sees it, with that
+ * workspace's Spaces: the workspace shown on the phone (`shownWorkspaceId`) while it lists the
+ * project (a project shown in every workspace is listed by each), else the project's own
+ * workspace, since the one shown can have no Spaces while the project's has some.
+ */
+export function summaryOfProjectWorkspace(
+  summary: GhostexMobileSummary,
+  projectId: string,
+  shownWorkspaceId: string | undefined,
+): GhostexMobileSummary {
+  if (summary.workspaces === null) return summary;
+  const shown = filterSummaryForWorkspace(summary, resolveWorkspaceId(summary.workspaces, shownWorkspaceId));
+  if (shown.projects.some((project) => project.projectId === projectId)) return shown;
+  const workspaceId = projectWorkspaceIdOf(summary, projectId);
+  return workspaceId === null ? summary : filterSummaryForWorkspace(summary, workspaceId);
 }

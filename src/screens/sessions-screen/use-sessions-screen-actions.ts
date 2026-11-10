@@ -25,7 +25,7 @@ import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { claudeCloudPageUrl } from '../../contract/claudeCloud';
 import { projectKeyForSession, type ProjectHeaderItem } from '../../contract/grouping';
 import type { GhostexSession } from '../../contract/mobileSummary';
-import { ActionCopy, ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
+import { ActionCopy, NewSessionCopy, ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import { useInventoryStore } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
@@ -353,6 +353,12 @@ export function useSessionsScreenActions({
         } else {
           if (!chatLaunch) await refreshMachine(target);
           setProgress(null);
+          // It ran, but the answer names no session to open: say so instead of leaving the list as it was.
+          setTransientStatus(NewSessionCopy.unopened, { title: NewSessionCopy.unopenedTitle });
+          if (chatLaunch)
+            void refreshMachine(target).catch((error: unknown) => {
+              setTransientStatus(error instanceof Error ? error.message : String(error));
+            });
         }
       } catch (error) {
         setProgress(null);
