@@ -1,7 +1,7 @@
 /**
  * The strip between the captions and the voice screen's buttons: a Stop talking pill while the
  * agent speaks, "Release to cancel" while a hold has slid off its button, and the short hints
- * ("Unmute to talk") otherwise. It keeps its height for the whole call, so nothing moves when the
+ * ("Unmute to talk", "Copied", a call mode change) otherwise, beside the pill while it shows. It keeps its height for the whole call, so nothing moves when the
  * pill comes and goes and it never covers a caption.
  *
  * CDXC:VoiceMode 2026-10-24 SEE-ALSO: the user's DECISION about the Stop talking pill is in apps/desktop/src/app/voice_agent/panel_controls.rs; the phone's buttons stay Mute, the hold button and Hang up for the whole call.
@@ -32,18 +32,27 @@ export function VoiceStopPill({ slidOff }: { slidOff: boolean }) {
     );
   } else if (speaking) {
     content = (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Stop the agent talking"
-        hitSlop={8}
-        style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
-        onPress={interruptVoice}
-      >
-        <Svg width={14} height={14} viewBox="0 0 24 24">
-          <Path d="M 7 7 h 10 v 10 h -10 z" fill={appearance.foreground} />
-        </Svg>
-        <Text style={styles.pillText}>Stop talking</Text>
-      </Pressable>
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Stop the agent talking"
+          hitSlop={8}
+          style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          onPress={interruptVoice}
+        >
+          <Svg width={14} height={14} viewBox="0 0 24 24">
+            <Path d="M 7 7 h 10 v 10 h -10 z" fill={appearance.foreground} />
+          </Svg>
+          <Text style={styles.pillText}>Stop talking</Text>
+        </Pressable>
+        {hint !== null ? (
+          <View style={[styles.note, styles.noteBeside]} accessibilityLiveRegion="polite">
+            <Text style={styles.noteText} numberOfLines={1}>
+              {hint}
+            </Text>
+          </View>
+        ) : null}
+      </View>
     );
   } else if (hint !== null) {
     content = (
@@ -56,7 +65,9 @@ export function VoiceStopPill({ slidOff }: { slidOff: boolean }) {
 }
 
 const createStyles = (appearance: Appearance) => StyleSheet.create({
-  strip: { height: VOICE_STRIP_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  strip: { height: VOICE_STRIP_HEIGHT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '100%' },
+  noteBeside: { flexShrink: 1 },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',

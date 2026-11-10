@@ -100,8 +100,6 @@ type VoiceState = {
   pushToTalk: boolean;
   /** This call's gxserver switches a running call when the call mode changes (`ready.callModeLive`). */
   callModeLive: boolean;
-  /** A short note the voice screen shows as a toast; a new `id` shows it again. */
-  toast: { id: number; message: string } | null;
   talking: boolean;
   /** A short note above the buttons ("Unmute to talk", "Hold to talk, then let go to send"). */
   hint: string | null;
@@ -175,7 +173,6 @@ const INITIAL: VoiceState = {
   callMode: 'regular',
   pushToTalk: false,
   callModeLive: false,
-  toast: null,
   talking: false,
   hint: null,
   memory: null,
@@ -211,17 +208,11 @@ export const HINT_ALREADY_HEARD = 'Mute first, then hold to talk';
 export const HINT_CANCELLED = 'Talk cancelled';
 
 export const MODE_NOW_REGULAR = 'Microphone is open: regular mode';
+/** Switched to Regular while muted: the microphone stays shut until Unmute. */
+export const MODE_NOW_REGULAR_MUTED = 'Regular mode: unmute to talk';
 export const MODE_NOW_PUSH_TO_TALK = 'Hold to speak is on';
 const MODE_NEXT_REGULAR = 'Regular mode starts with your next call';
 const MODE_NEXT_PUSH_TO_TALK = 'Hold to speak starts with your next call';
-
-let toastCount = 0;
-
-/** Shows `message` as the voice screen's toast. */
-function showVoiceToast(message: string): void {
-  toastCount += 1;
-  set({ toast: { id: toastCount, message } });
-}
 
 /** Shows a short note above the buttons for a moment. */
 export function flashVoiceHint(text: string): void {
@@ -473,7 +464,8 @@ function onFrame(json: string): void {
         talking: pushToTalk ? state.talking : false,
         hint: null,
       });
-      showVoiceToast(pushToTalk ? MODE_NOW_PUSH_TO_TALK : MODE_NOW_REGULAR);
+      // In the strip above the buttons (`VoiceStopPill`), which never covers a caption.
+      flashVoiceHint(pushToTalk ? MODE_NOW_PUSH_TO_TALK : state.muted ? MODE_NOW_REGULAR_MUTED : MODE_NOW_REGULAR);
       return;
     }
     case 'memory': {
@@ -1080,7 +1072,7 @@ async function saveVoiceSettings(
 /**
  * The gear sheet and the voice settings page: saves the computer's `voiceAgentCallMode`.
  *
- * CDXC:VoiceMode 2026-11-10 DECISION: User: "I had push-to-talk selected, then switched to regular mode mid-conversation, and after that it kept forcing me to use hold-to-speak instead of regular. [...] Please fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode. Also consider showing the user a notice when the mode is about to switch." A change during a call switches that call at once, both ways: gxserver switches the running call and sends a `callMode` frame, which sets `pushToTalk` (the hold button and the open microphone follow it) and shows "Microphone is open: regular mode" or "Hold to speak is on". A gxserver that cannot switch a running call (no `ready.callModeLive`) keeps it as it started, and the phone says the mode starts with the next call instead of leaving the tick and the call disagreeing silently. Supersedes the 2026-10-21 "a call never changes mode midway" on the phone.
+ * CDXC:VoiceMode 2026-11-10 DECISION: User: "I had push-to-talk selected, then switched to regular mode mid-conversation, and after that it kept forcing me to use hold-to-speak instead of regular. [...] Please fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode. Also consider showing the user a notice when the mode is about to switch." A change during a call switches that call at once, both ways: gxserver switches the running call and sends a `callMode` frame, which sets `pushToTalk` (the hold button and the open microphone follow it) and shows "Microphone is open: regular mode" (muted: "Regular mode: unmute to talk") or "Hold to speak is on" in the strip above the buttons, which never covers a caption (2026-11-11: as a toast it was drawn over the transcript's text on a real iPhone). A gxserver that cannot switch a running call (no `ready.callModeLive`) keeps it as it started, and the phone says the mode starts with the next call instead of leaving the tick and the call disagreeing silently. Supersedes the 2026-10-21 "a call never changes mode midway" on the phone.
  */
 export function setCallMode(mode: VoiceCallMode): void {
   const state = useVoiceStore.getState();
@@ -1098,7 +1090,7 @@ export function setCallMode(mode: VoiceCallMode): void {
     const now = useVoiceStore.getState();
     if (!voiceActive(now.phase) || now.pushToTalk === (mode === 'pushToTalk')) return;
     // gxserver answers with a `callMode` frame and its own notice when it switches the call.
-    if (!now.callModeLive) showVoiceToast(mode === 'pushToTalk' ? MODE_NEXT_PUSH_TO_TALK : MODE_NEXT_REGULAR);
+    if (!now.callModeLive) flashVoiceHint(mode === 'pushToTalk' ? MODE_NEXT_PUSH_TO_TALK : MODE_NEXT_REGULAR);
   });
 }
 
