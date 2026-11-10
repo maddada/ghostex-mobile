@@ -51,6 +51,7 @@
         "com.apple.security.application-groups": ["group.com.maddada.ghostex.ios"]
       },
       "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Ghostex connects straight to your computer when it is on the same network, which is faster than going through the internet.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false,
