@@ -33,6 +33,7 @@ import {
   type UnifiedFilter,
   type UnifiedRow,
   type UnifiedShelf,
+  type UnifiedStatus,
 } from '../../contract/unified/build';
 import { unifiedNewSessionTarget, unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
 import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../../contract/unified/filterMenu';
@@ -56,6 +57,8 @@ import { lastInteractionLabel } from '../../components/sessions/sessionStatus';
 import { EditGlyph, FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
 import { PlusGlyph } from '../../components/sessions/icons';
 import { StatusSlot, statusLook, UnifiedCard, UnifiedGroupHeader, UnifiedShelfHeader, UnifiedSlimRow } from '../../components/sessions/unified/UnifiedCard';
+import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/unified/UnifiedThreadRow';
+import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
 import { useSettingsStore } from '../../settings/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
@@ -104,17 +107,26 @@ export function makeSnoozeSession(deps: {
 }
 
 type UnifiedListItem =
-  | { kind: 'group'; key: string; repoKey: string; label: string; count: number; open: boolean }
+  | { kind: 'group'; key: string; repoKey: string; label: string; count: number; open: boolean; urgent: UnifiedStatus | null }
   | { kind: 'shelf'; key: string; shelf: UnifiedShelf; repoKey: string | null; count: number; open: boolean }
   | { kind: 'card'; key: string; row: UnifiedRow<GhostexSession>; inGroup?: boolean }
   | { kind: 'slim'; key: string; shelf: UnifiedShelf; row: UnifiedRow<GhostexSession> }
+  /** A thread drawn under its card (contract/unified/tree.ts `drawnLines`): its own item, so a card draws only itself. */
+  | { kind: 'thread'; key: string; row: UnifiedRow<GhostexSession>; card: UnifiedRow<GhostexSession>; depth: number }
+  | { kind: 'older'; key: string; coordinatorKey: string; older: number; shown: boolean; depth: number }
   | { kind: 'gap'; key: string }
   | { kind: 'divider'; key: string }
   | { kind: 'empty'; key: string; text: string }
   | { kind: 'tiles'; key: string; rows: UnifiedRow<GhostexSession>[] };
 
-/** The items the session wall draws as tiles: every session the list shows. */
-type TileItem = Extract<UnifiedListItem, { kind: 'card' | 'slim' }>;
+/** The items the session wall draws as tiles: every session the list shows, a card's drawn threads too. */
+type TileItem = Extract<UnifiedListItem, { kind: 'card' | 'slim' | 'thread' }>;
+
+/** The most urgent status among rows and every thread under them, which a folded project header shows (desktop groups.rs `most_urgent`). */
+function mostUrgent(rows: UnifiedRow<GhostexSession>[]): UnifiedStatus | null {
+  const statuses = new Set(rows.flatMap((row) => rowsInTree(row).map((inTree) => inTree.status)));
+  return (['Approval', 'Question', 'Failed', 'Done', 'Working'] as const).find((status) => statuses.has(status)) ?? null;
+}
 
 export type UnifiedListDeps = {
   machines: MachineRecord[];
@@ -209,6 +221,14 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   const toggleGroup = useUnifiedListStore((state) => state.toggleGroup);
   const lastMachines = useUnifiedListStore((state) => state.lastMachines);
   const recentRepos = useUnifiedListStore((state) => state.recentRepos);
+  const unfoldedCoordinators = useUnifiedListStore((state) => state.unfoldedCoordinators);
+  const olderShownCoordinators = useUnifiedListStore((state) => state.olderShownCoordinators);
+  const toggleCoordinator = useUnifiedListStore((state) => state.toggleCoordinator);
+  const toggleOlderThreads = useUnifiedListStore((state) => state.toggleOlderThreads);
+  const folds = useMemo(
+    () => ({ unfolded: unfoldedCoordinators, olderShown: olderShownCoordinators }),
+    [unfoldedCoordinators, olderShownCoordinators],
+  );
   const setQuery = useUnifiedListStore((state) => state.setQuery);
   useEffect(() => useUnifiedListStore.getState().hydrate(), []);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -245,11 +265,44 @@ export function useUnifiedList(deps: UnifiedListDeps) {
 
   const [clockTicking, setClockTicking] = useState(false);
   const nowMs = useListClock(on && focused, clockTicking);
+  // The open session, which is never tucked behind an older-threads row (contract/unified/tree.ts).
+  const focusedSession = useMemo(() => {
+    for (const computer of computers) {
+      const session = computer.summary.sessions.find(
+        (candidate) => attachSessionKey(computer.machineId, candidate.sessionId) === selectedSessionKey,
+      );
+      if (session !== undefined) return { machineId: computer.machineId, sessionId: session.sessionId };
+    }
+    return null;
+  }, [computers, selectedSessionKey]);
   const view = useMemo(
-    () => unifiedListOf(computers, unifiedSettings, filter, nowMs),
-    [computers, unifiedSettings, filter, nowMs],
+    () => unifiedListOf(computers, unifiedSettings, filter, nowMs, folds, focusedSession),
+    [computers, unifiedSettings, filter, nowMs, folds, focusedSession],
   );
-  const working = view.working.length > 0 || view.active.some((row) => row.status === 'Working');
+  const working =
+    view.working.length > 0 ||
+    view.active.some((row) => row.status === 'Working') ||
+    [...view.drafts, ...view.pinned, ...view.active, ...view.snoozed, ...view.parked].some((row) =>
+      drawnLines(row).some((line) => line.kind === 'thread' && line.row.status === 'Working'),
+    );
+  /**
+   * Opening a thread unfolds the coordinators above it, from the list, a coordinator's Workers sheet, a notification
+   * or a link, as the desktop's reveal does (gx-core unified_sidebar/reveal.rs): the open session is watched rather
+   * than each way in, so a session opened before its computer's list arrived is unfolded once it does. Each open
+   * session is revealed once, so folding its coordinator again afterwards sticks.
+   */
+  const revealedSession = useRef<string | null>(null);
+  useEffect(() => {
+    if (!on || selectedSessionKey === null || revealedSession.current === selectedSessionKey) return;
+    for (const card of [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked]) {
+      const found = rowsInTree(card).find((row) => attachSessionKey(row.machine, row.session.sessionId) === selectedSessionKey);
+      if (found === undefined) continue;
+      revealedSession.current = selectedSessionKey;
+      const ancestors = ancestorsOf(card, found.id) ?? [];
+      useUnifiedListStore.getState().revealThread(ancestors, found.shown ? null : (ancestors[ancestors.length - 1] ?? null));
+      return;
+    }
+  }, [on, selectedSessionKey, view]);
   useOpenUnifiedDraftsOnArrival(view.drafts, on);
   const computerLayout = unifiedLayoutOf(selectedSummary);
   const layout = seeded ? { ...computerLayout, groupByProject: phoneGroupByProject } : computerLayout;
@@ -295,10 +348,22 @@ export function useUnifiedList(deps: UnifiedListDeps) {
 
   const items = useMemo((): UnifiedListItem[] => {
     const list: UnifiedListItem[] = [];
+    // A card, then the threads drawn under it, each its own item (tiles on the wall).
+    const pushCard = (item: Extract<UnifiedListItem, { kind: 'card' | 'slim' }>): void => {
+      list.push(item);
+      for (const line of drawnLines(item.row)) {
+        if (line.kind === 'thread') {
+          list.push({ kind: 'thread', key: `thread:${line.row.id}`, row: line.row, card: item.row, depth: line.depth });
+        } else if (line.coordinator.crew !== null) {
+          const crew = line.coordinator.crew;
+          list.push({ kind: 'older', key: `older:${crew.key}`, coordinatorKey: crew.key, older: crew.older, shown: crew.olderShown, depth: line.depth });
+        }
+      }
+    };
     if (view.drafts.length > 0) {
       const open = shelfOpen('drafts', toggledShelves);
       list.push({ kind: 'shelf', key: 'shelf:drafts', shelf: 'drafts', repoKey: null, count: view.drafts.length, open });
-      if (open) for (const row of view.drafts) list.push({ kind: 'card', key: row.id, row });
+      if (open) for (const row of view.drafts) pushCard({ kind: 'card', key: row.id, row });
       list.push({ kind: 'gap', key: 'gap:drafts' });
     }
     const pushShelf = (shelf: 'working' | 'snoozed' | 'parked', rows: UnifiedRow<GhostexSession>[], repoKey: string | null): void => {
@@ -307,21 +372,22 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       list.push({ kind: 'shelf', key: `shelf:${scope}${shelf}`, shelf, repoKey, count: rows.length, open });
       if (!open) return;
       for (const row of rows) {
-        list.push(shelf === 'working' ? { kind: 'card', key: row.id, row, inGroup: repoKey !== null } : { kind: 'slim', key: row.id, shelf, row });
+        pushCard(shelf === 'working' ? { kind: 'card', key: row.id, row, inGroup: repoKey !== null } : { kind: 'slim', key: row.id, shelf, row });
       }
     };
     if (layout.groupByProject) {
       for (const group of groups) {
         const open = !foldedGroups.includes(group.repoKey);
-        list.push({ kind: 'group', key: `group:${group.repoKey}`, repoKey: group.repoKey, label: group.label, count: unifiedGroupCount(group), open });
+        const urgent = mostUrgent([...group.pinned, ...group.active, ...group.working, ...group.snoozed, ...group.parked]);
+        list.push({ kind: 'group', key: `group:${group.repoKey}`, repoKey: group.repoKey, label: group.label, count: unifiedGroupCount(group), open, urgent });
         if (!open) continue;
-        for (const row of [...group.pinned, ...group.active]) list.push({ kind: 'card', key: row.id, row, inGroup: true });
+        for (const row of [...group.pinned, ...group.active]) pushCard({ kind: 'card', key: row.id, row, inGroup: true });
         for (const shelf of ['working', 'snoozed', 'parked'] as const) {
           if (group[shelf].length > 0) pushShelf(shelf, group[shelf], group.repoKey);
         }
       }
     } else {
-      for (const row of [...view.pinned, ...view.active]) list.push({ kind: 'card', key: row.id, row });
+      for (const row of [...view.pinned, ...view.active]) pushCard({ kind: 'card', key: row.id, row });
       const shelves = (['working', 'snoozed', 'parked'] as const).filter((shelf) => view[shelf].length > 0);
       if (shelves.length > 0) list.push({ kind: 'gap', key: 'gap:shelves' });
       for (const shelf of shelves) pushShelf(shelf, view[shelf], null);
@@ -350,7 +416,11 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   const wallColumns = wall?.columns ?? null;
   const shownItems = useMemo((): UnifiedListItem[] => {
     if (wallColumns === null) return items;
-    return tileRunsOf(items, wallColumns, (item): item is TileItem => item.kind === 'card' || item.kind === 'slim').map(
+    return tileRunsOf(
+      items,
+      wallColumns,
+      (item): item is TileItem => item.kind === 'card' || item.kind === 'slim' || item.kind === 'thread',
+    ).map(
       (run): UnifiedListItem =>
         run.kind === 'row' ? run.item : { kind: 'tiles', key: run.key, rows: run.items.map((item) => item.row) },
     );
@@ -431,6 +501,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
           open={item.open}
           onToggle={() => toggleGroup(item.repoKey)}
           onNew={() => openGroupNewSession(item.repoKey)}
+          urgent={item.urgent}
         />
       );
     }
@@ -459,11 +530,36 @@ export function useUnifiedList(deps: UnifiedListDeps) {
         </WallTileRow>
       );
     }
+    if (item.kind === 'older') {
+      return (
+        <UnifiedOlderRow
+          depth={item.depth}
+          older={item.older}
+          shown={item.shown}
+          onPress={() => toggleOlderThreads(item.coordinatorKey)}
+        />
+      );
+    }
     const { row } = item;
     const target = machineById(row.machine);
     const session = row.session.source!;
     const active = selectedSessionKey === attachSessionKey(row.machine, session.sessionId);
     const repoIcon = repoIcons.get(row.repo.key) ?? null;
+    if (item.kind === 'thread') {
+      return (
+        <UnifiedThreadRow
+          row={row}
+          depth={item.depth}
+          card={item.card}
+          active={active}
+          nowMs={nowMs}
+          sidebarBackground={sidebarBackground}
+          onPress={() => target !== null && void attach(target, session)}
+          onMenu={() => openMenu(row)}
+          onToggleCrew={toggleCoordinator}
+        />
+      );
+    }
     if (item.kind === 'slim') {
       return (
         <UnifiedSlimRow
@@ -480,6 +576,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
             if (item.shelf === 'snoozed') void snoozeSession(target, session, null);
             else void runBulkSessionActions(target, [parkSessionAction(session, false)]);
           }}
+          onToggleCrew={toggleCoordinator}
         />
       );
     }
@@ -497,6 +594,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
         onSleep={() => target !== null && void runBulkSessionActions(target, [lifecycleSessionAction(session, true)])}
         swipeActions={swipeActions}
         inGroup={item.inGroup === true}
+        onToggleCrew={toggleCoordinator}
       />
     );
   };

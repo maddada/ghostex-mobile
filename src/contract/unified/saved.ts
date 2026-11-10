@@ -20,6 +20,10 @@ export type UnifiedSavedState = {
   lastMachines: Record<string, string>;
   /** The repositories new sessions last started in, newest first: the project list's Recent. */
   recentRepos: string[];
+  /** Coordinators whose threads are shown (`unifiedCoordinatorKey`); every one starts folded. */
+  unfoldedCoordinators: string[];
+  /** Coordinators whose older threads are listed. */
+  olderShownCoordinators: string[];
 };
 
 export const EMPTY_UNIFIED_SAVED: UnifiedSavedState = {
@@ -28,6 +32,8 @@ export const EMPTY_UNIFIED_SAVED: UnifiedSavedState = {
   foldedGroups: [],
   lastMachines: {},
   recentRepos: [],
+  unfoldedCoordinators: [],
+  olderShownCoordinators: [],
 };
 
 /** A session started in `repoKey` on `machineId`: where that repository starts next time, and the top of Recent. */
@@ -74,6 +80,8 @@ export function parseUnifiedSaved(raw: string | null): UnifiedSavedState {
     foldedGroups: strings(saved.foldedGroups),
     lastMachines,
     recentRepos: strings(saved.recentRepos).slice(0, RECENT_REPOS_MAX),
+    unfoldedCoordinators: strings(saved.unfoldedCoordinators),
+    olderShownCoordinators: strings(saved.olderShownCoordinators),
   };
 }
 
@@ -86,5 +94,7 @@ export function serializeUnifiedSaved(state: UnifiedSavedState): string {
     foldedGroups: state.foldedGroups,
     lastMachines: state.lastMachines,
     recentRepos: state.recentRepos,
+    unfoldedCoordinators: state.unfoldedCoordinators,
+    olderShownCoordinators: state.olderShownCoordinators,
   });
 }

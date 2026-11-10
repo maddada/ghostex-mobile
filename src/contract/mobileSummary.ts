@@ -68,6 +68,10 @@ export type MobileSummaryWireSession = {
   coordinatorProjectId?: string;
   coordinatorSessionId?: string;
   coordinatorThreadState?: string;
+  /** On a coordinator: its threads on other computers (server/src/coordinators/remote_threads.rs); absent when none. */
+  coordinatorRemoteThreads?: Array<{ serverId?: string; projectId?: string; sessionId?: string; threadState?: string }>;
+  /** Working with no output for long enough to count as stuck (server/src/coordinators/stall.rs); absent while it moves. */
+  stuckSince?: string;
   /** The provider resume id the note is keyed by; absent before the agent starts. */
   agentSessionId?: string;
   isFocused?: boolean;
@@ -644,6 +648,14 @@ export type GhostexSession = {
   /** On a thread: waiting, finished, working, sleeping, closed or done ('' otherwise). */
   coordinatorThreadState: string;
   /**
+   * On a coordinator: its threads on other computers, by the `globalRef` their computer gives them
+   * (`<serverId>:<projectId>:<sessionId>`), with the state its computer last saw. Empty when none, or
+   * from a computer that predates the field. The Unified list nests them under it (contract/unified/tree.ts).
+   */
+  coordinatorRemoteThreads: Array<{ globalRef: string; threadState: string }>;
+  /** Working with no output for long enough to count as stuck ('' while it moves, or from an older computer). */
+  stuckSince: string;
+  /**
    * On a side chat: the main session it was forked from ('' otherwise). Side chats are left out of
    * every session list and reached from their main chat's Side chats pill (`visibleSessions`).
    */
@@ -900,6 +912,21 @@ function isObject(value: unknown): value is JsonObject {
 }
 
 /** Treat JSON nulls as missing; stringify scalars like the Android parser does. */
+/** A coordinator's `coordinatorRemoteThreads`, each by the `globalRef` its own computer lists it under. */
+function parseRemoteThreads(value: unknown): Array<{ globalRef: string; threadState: string }> {
+  if (!Array.isArray(value)) return [];
+  const threads: Array<{ globalRef: string; threadState: string }> = [];
+  for (const entry of value) {
+    if (!isObject(entry)) continue;
+    const serverId = trimmedValue(entry, 'serverId');
+    const projectId = trimmedValue(entry, 'projectId');
+    const sessionId = trimmedValue(entry, 'sessionId');
+    if (serverId === '' || projectId === '' || sessionId === '') continue;
+    threads.push({ globalRef: `${serverId}:${projectId}:${sessionId}`, threadState: trimmedValue(entry, 'threadState') });
+  }
+  return threads;
+}
+
 function trimmedValue(json: JsonObject, key: string): string {
   const value = json[key];
   if (value === null || value === undefined) return '';
@@ -1585,6 +1612,8 @@ export function parseSession(value: unknown): GhostexSession | null {
     coordinatorProjectId: trimmedValue(value, 'coordinatorProjectId'),
     coordinatorSessionId: trimmedValue(value, 'coordinatorSessionId'),
     coordinatorThreadState: trimmedValue(value, 'coordinatorThreadState'),
+    coordinatorRemoteThreads: parseRemoteThreads(value.coordinatorRemoteThreads),
+    stuckSince: trimmedValue(value, 'stuckSince'),
     sideChatParentSessionId: trimmedValue(value, 'sideChatParentSessionId'),
     agentSessionId: trimmedValue(value, 'agentSessionId'),
     sendWhenAllProjectSessionsStopActive: boolValue(value, 'sendWhenAllProjectSessionsStopActive', false),

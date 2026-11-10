@@ -97,6 +97,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -143,6 +144,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -508,6 +510,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -554,6 +557,7 @@
             ]
           }
         ],
+        "lines": {},
         "moves": [
           [
             "github.com/o/acme",
@@ -962,6 +966,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -976,6 +981,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -1275,6 +1281,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -1289,6 +1296,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -1590,6 +1598,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -1604,6 +1613,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -1914,6 +1924,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -1938,6 +1949,7 @@
             ]
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -2295,6 +2307,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -2319,6 +2332,7 @@
             ]
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -2621,8 +2635,10 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "studio",
@@ -2919,6 +2935,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -2965,6 +2982,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -3336,6 +3354,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -3382,6 +3401,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -3751,6 +3771,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|a-draft"
         ],
@@ -3797,6 +3818,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -4164,6 +4186,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -4178,6 +4201,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -4496,6 +4520,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -4510,6 +4535,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -4766,6 +4792,7 @@
             "selected": 1
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -4781,6 +4808,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -5001,6 +5029,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -5050,6 +5079,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -5291,6 +5321,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [
           "local|draft-new",
           "local|draft-old"
@@ -5330,6 +5361,7 @@
             ]
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -5753,6 +5785,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -5769,6 +5802,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -5923,6 +5957,7 @@
             "selected": 0
           }
         ],
+        "crews": {},
         "drafts": [],
         "groups": [
           {
@@ -5939,6 +5974,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -6221,8 +6257,59 @@
             "recent": true,
             "repoKey": "dir:p",
             "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
           }
         ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [
+              "working",
+              "question"
+            ],
+            "key": "local|p|lead",
+            "listed": 3,
+            "older": 1,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 4,
+            "unfolded": false
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [
+              "question"
+            ],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 1,
+            "unfolded": false
+          }
+        },
         "drafts": [],
         "groups": [
           {
@@ -6240,6 +6327,7 @@
             "working": []
           }
         ],
+        "lines": {},
         "moves": [],
         "newSessionTarget": {
           "machineId": "local",
@@ -6264,6 +6352,11 @@
               "detail": "Local, Studio",
               "key": "dir:p",
               "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
             }
           ],
           "spaces": []
@@ -6272,12 +6365,12 @@
         "pinned": [],
         "rows": {
           "local|lead": {
-            "cameBackMs": 5000,
+            "cameBackMs": 9700000,
             "machineLabel": null,
             "repoKey": "dir:p",
             "repoLabel": "p",
             "spaceKey": null,
-            "status": null
+            "status": "Working"
           },
           "local|mine": {
             "cameBackMs": 3000,
@@ -6321,23 +6414,35 @@
               "title": "p"
             }
           ],
+          "serverId": "S1",
           "sessions": [
             {
-              "activity": "idle",
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
               "createdMs": 10,
               "isCoordinator": true,
-              "lastInteractionMs": 5000,
+              "lastInteractionMs": 9000000,
               "projectId": "p",
-              "sessionId": "lead"
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
             },
             {
               "activity": "working",
               "coordinatorProjectId": "p",
               "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
               "createdMs": 10,
               "projectId": "p",
               "sessionId": "worker",
-              "workingStartedMs": 6000
+              "title": "worker",
+              "workingStartedMs": 9600000
             },
             {
               "activity": "idle",
@@ -6345,18 +6450,29 @@
               "coordinatorSessionId": "lead",
               "createdMs": 10,
               "isCoordinator": true,
-              "lastInteractionMs": 4500,
+              "lastInteractionMs": 9500000,
               "projectId": "p",
               "sessionId": "sub-lead"
             },
             {
-              "activity": "idle",
+              "activity": "attention",
               "coordinatorProjectId": "p",
               "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
               "createdMs": 10,
-              "lastInteractionMs": 4400,
+              "lastInteractionMs": 9700000,
               "projectId": "p",
-              "sessionId": "deep"
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
             },
             {
               "activity": "idle",
@@ -6384,8 +6500,14 @@
               "path": "/p",
               "projectId": "p",
               "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
             }
           ],
+          "serverId": "S2",
           "sessions": [
             {
               "activity": "idle",
@@ -6395,11 +6517,1461 @@
               "lastInteractionMs": 2000,
               "projectId": "p",
               "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
             }
           ]
         }
       ],
-      "name": "a coordinator's workers are no cards of their own; a worker whose coordinator is gone, and a session started by hand, are",
+      "name": "a coordinator's threads nest under its card, folded by default; a worker whose coordinator is gone, and a session started by hand, are cards",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|lead",
+          "local|orphan",
+          "local|mine",
+          "studio|elsewhere"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              },
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|lead",
+            "listed": 3,
+            "older": 1,
+            "olderRow": true,
+            "olderShown": false,
+            "open": true,
+            "total": 4,
+            "unfolded": true
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [
+              "question"
+            ],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 1,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|lead",
+              "local|orphan",
+              "local|mine",
+              "studio|elsewhere"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|lead": [
+            "local|sub-lead@1",
+            "studio|away@1",
+            "local|worker@1",
+            "older:local|lead@1"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            },
+            {
+              "detail": null,
+              "key": "studio",
+              "label": "Studio"
+            }
+          ],
+          "repos": [
+            {
+              "detail": "Local, Studio",
+              "key": "dir:p",
+              "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|lead": {
+            "cameBackMs": 9700000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": "Working"
+          },
+          "local|mine": {
+            "cameBackMs": 3000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|orphan": {
+            "cameBackMs": 4000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "studio|elsewhere": {
+            "cameBackMs": 2000,
+            "machineLabel": "Studio",
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 4,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {},
+      "folds": {
+        "unfolded": [
+          "local|p|lead"
+        ]
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
+            },
+            {
+              "activity": "working",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
+              "createdMs": 10,
+              "projectId": "p",
+              "sessionId": "worker",
+              "title": "worker",
+              "workingStartedMs": 9600000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9500000,
+              "projectId": "p",
+              "sessionId": "sub-lead"
+            },
+            {
+              "activity": "attention",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
+              "createdMs": 10,
+              "lastInteractionMs": 9700000,
+              "projectId": "p",
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "closed",
+              "createdMs": 10,
+              "lastInteractionMs": 4000,
+              "projectId": "p",
+              "sessionId": "orphan"
+            },
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "lastInteractionMs": 3000,
+              "projectId": "p",
+              "sessionId": "mine"
+            }
+          ]
+        },
+        {
+          "label": "Studio",
+          "machine": "studio",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
+            }
+          ],
+          "serverId": "S2",
+          "sessions": [
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 2000,
+              "projectId": "p",
+              "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
+            }
+          ]
+        }
+      ],
+      "name": "an unfolded coordinator lists its busy and recent threads, busy first, with the rest behind its older row; a sub-coordinator stays folded",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|lead",
+          "local|orphan",
+          "local|mine",
+          "studio|elsewhere"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              },
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|lead",
+            "listed": 3,
+            "older": 1,
+            "olderRow": true,
+            "olderShown": true,
+            "open": true,
+            "total": 4,
+            "unfolded": true
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": true
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|lead",
+              "local|orphan",
+              "local|mine",
+              "studio|elsewhere"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|lead": [
+            "local|sub-lead@1",
+            "local|deep@2",
+            "studio|away@1",
+            "local|worker@1",
+            "local|old@1",
+            "older:local|lead@1"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            },
+            {
+              "detail": null,
+              "key": "studio",
+              "label": "Studio"
+            }
+          ],
+          "repos": [
+            {
+              "detail": "Local, Studio",
+              "key": "dir:p",
+              "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|lead": {
+            "cameBackMs": 9700000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": "Working"
+          },
+          "local|mine": {
+            "cameBackMs": 3000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|orphan": {
+            "cameBackMs": 4000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "studio|elsewhere": {
+            "cameBackMs": 2000,
+            "machineLabel": "Studio",
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 4,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {},
+      "folds": {
+        "olderShown": [
+          "local|p|lead"
+        ],
+        "unfolded": [
+          "local|p|lead",
+          "local|p|sub-lead"
+        ]
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
+            },
+            {
+              "activity": "working",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
+              "createdMs": 10,
+              "projectId": "p",
+              "sessionId": "worker",
+              "title": "worker",
+              "workingStartedMs": 9600000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9500000,
+              "projectId": "p",
+              "sessionId": "sub-lead"
+            },
+            {
+              "activity": "attention",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
+              "createdMs": 10,
+              "lastInteractionMs": 9700000,
+              "projectId": "p",
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "closed",
+              "createdMs": 10,
+              "lastInteractionMs": 4000,
+              "projectId": "p",
+              "sessionId": "orphan"
+            },
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "lastInteractionMs": 3000,
+              "projectId": "p",
+              "sessionId": "mine"
+            }
+          ]
+        },
+        {
+          "label": "Studio",
+          "machine": "studio",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
+            }
+          ],
+          "serverId": "S2",
+          "sessions": [
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 2000,
+              "projectId": "p",
+              "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
+            }
+          ]
+        }
+      ],
+      "name": "a coordinator's older threads and a sub-coordinator's threads listed",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|lead"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              },
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|lead",
+            "listed": 3,
+            "older": 1,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 4,
+            "unfolded": false
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 1,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|lead"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|lead": [
+            "local|sub-lead@1",
+            "local|deep@2"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            },
+            {
+              "detail": null,
+              "key": "studio",
+              "label": "Studio"
+            }
+          ],
+          "repos": [
+            {
+              "detail": "Local, Studio",
+              "key": "dir:p",
+              "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|lead": {
+            "cameBackMs": 9700000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": "Working"
+          }
+        },
+        "snoozed": [],
+        "total": 4,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {
+        "query": "deepest"
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
+            },
+            {
+              "activity": "working",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
+              "createdMs": 10,
+              "projectId": "p",
+              "sessionId": "worker",
+              "title": "worker",
+              "workingStartedMs": 9600000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9500000,
+              "projectId": "p",
+              "sessionId": "sub-lead"
+            },
+            {
+              "activity": "attention",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
+              "createdMs": 10,
+              "lastInteractionMs": 9700000,
+              "projectId": "p",
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "closed",
+              "createdMs": 10,
+              "lastInteractionMs": 4000,
+              "projectId": "p",
+              "sessionId": "orphan"
+            },
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "lastInteractionMs": 3000,
+              "projectId": "p",
+              "sessionId": "mine"
+            }
+          ]
+        },
+        {
+          "label": "Studio",
+          "machine": "studio",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
+            }
+          ],
+          "serverId": "S2",
+          "sessions": [
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 2000,
+              "projectId": "p",
+              "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
+            }
+          ]
+        }
+      ],
+      "name": "a search for a thread keeps its coordinator's card and shows the way to it while folded",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|lead",
+          "studio|elsewhere"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              },
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          },
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "q",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Studio",
+                "machineId": "studio",
+                "projectId": "q"
+              }
+            ],
+            "recent": false,
+            "repoKey": "dir:q",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|lead": {
+            "badgeCount": 2,
+            "badgeTone": "working",
+            "containsActive": false,
+            "folded": [],
+            "key": "local|p|lead",
+            "listed": 3,
+            "older": 1,
+            "olderRow": false,
+            "olderShown": false,
+            "open": true,
+            "total": 4,
+            "unfolded": false
+          },
+          "local|sub-lead": {
+            "badgeCount": 1,
+            "badgeTone": "waiting",
+            "containsActive": false,
+            "folded": [
+              "question"
+            ],
+            "key": "local|p|sub-lead",
+            "listed": 1,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 1,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|lead",
+              "studio|elsewhere"
+            ],
+            "label": "p",
+            "parked": [],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [],
+            "working": []
+          }
+        ],
+        "lines": {
+          "local|lead": [
+            "studio|away@1"
+          ]
+        },
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            },
+            {
+              "detail": null,
+              "key": "studio",
+              "label": "Studio"
+            }
+          ],
+          "repos": [
+            {
+              "detail": "Local, Studio",
+              "key": "dir:p",
+              "label": "p"
+            },
+            {
+              "detail": null,
+              "key": "dir:q",
+              "label": "q"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [],
+        "pinned": [],
+        "rows": {
+          "local|lead": {
+            "cameBackMs": 9700000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": "Working"
+          },
+          "studio|elsewhere": {
+            "cameBackMs": 2000,
+            "machineLabel": "Studio",
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [],
+        "total": 4,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {
+        "machines": [
+          "studio"
+        ]
+      },
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "working",
+              "coordinatorRemoteThreads": [
+                {
+                  "projectId": "q",
+                  "serverId": "S2",
+                  "sessionId": "away",
+                  "threadState": "working"
+                }
+              ],
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "lead",
+              "workingStartedMs": 8900000
+            },
+            {
+              "activity": "working",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "coordinatorThreadState": "working",
+              "createdMs": 10,
+              "projectId": "p",
+              "sessionId": "worker",
+              "title": "worker",
+              "workingStartedMs": 9600000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9500000,
+              "projectId": "p",
+              "sessionId": "sub-lead"
+            },
+            {
+              "activity": "attention",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "sub-lead",
+              "coordinatorThreadState": "waiting",
+              "createdMs": 10,
+              "lastInteractionMs": 9700000,
+              "projectId": "p",
+              "sessionId": "deep",
+              "title": "deepest thread"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 1000000,
+              "projectId": "p",
+              "sessionId": "old"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "closed",
+              "createdMs": 10,
+              "lastInteractionMs": 4000,
+              "projectId": "p",
+              "sessionId": "orphan"
+            },
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "lastInteractionMs": 3000,
+              "projectId": "p",
+              "sessionId": "mine"
+            }
+          ]
+        },
+        {
+          "label": "Studio",
+          "machine": "studio",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            },
+            {
+              "path": "/q",
+              "projectId": "q",
+              "title": "q"
+            }
+          ],
+          "serverId": "S2",
+          "sessions": [
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 2000,
+              "projectId": "p",
+              "sessionId": "elsewhere"
+            },
+            {
+              "activity": "working",
+              "createdMs": 10,
+              "projectId": "q",
+              "sessionId": "away",
+              "workingStartedMs": 9800000
+            }
+          ]
+        }
+      ],
+      "name": "a computer filter keeps a coordinator for its thread on that computer",
+      "nowMs": 10000000,
+      "settings": {
+        "parking": true,
+        "workingSection": true
+      }
+    },
+    {
+      "expected": {
+        "active": [
+          "local|boss",
+          "local|right",
+          "local|left"
+        ],
+        "choices": [
+          {
+            "detail": null,
+            "hasSessions": true,
+            "label": "p",
+            "machines": [
+              {
+                "connected": true,
+                "label": "Local",
+                "machineId": "local",
+                "projectId": "p"
+              }
+            ],
+            "recent": true,
+            "repoKey": "dir:p",
+            "selected": 0
+          }
+        ],
+        "crews": {
+          "local|boss": {
+            "badgeCount": 2,
+            "badgeTone": "idle",
+            "containsActive": true,
+            "folded": [
+              "approval"
+            ],
+            "key": "local|p|boss",
+            "listed": 2,
+            "older": 0,
+            "olderRow": false,
+            "olderShown": false,
+            "open": false,
+            "total": 2,
+            "unfolded": false
+          }
+        },
+        "drafts": [],
+        "groups": [
+          {
+            "active": [
+              "local|boss",
+              "local|right",
+              "local|left"
+            ],
+            "label": "p",
+            "parked": [
+              "local|parked"
+            ],
+            "pinned": [],
+            "repoKey": "dir:p",
+            "snoozed": [
+              "local|napping"
+            ],
+            "working": []
+          }
+        ],
+        "lines": {},
+        "moves": [],
+        "newSessionTarget": {
+          "machineId": "local",
+          "projectId": "p",
+          "repoKey": "dir:p"
+        },
+        "options": {
+          "machines": [
+            {
+              "detail": null,
+              "key": "local",
+              "label": "Local"
+            }
+          ],
+          "repos": [
+            {
+              "detail": null,
+              "key": "dir:p",
+              "label": "p"
+            }
+          ],
+          "spaces": []
+        },
+        "parked": [
+          "local|parked"
+        ],
+        "pinned": [],
+        "rows": {
+          "local|boss": {
+            "cameBackMs": 9300000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|left": {
+            "cameBackMs": 8000000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|napping": {
+            "cameBackMs": 9200000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|parked": {
+            "cameBackMs": 9100000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          },
+          "local|right": {
+            "cameBackMs": 8100000,
+            "machineLabel": null,
+            "repoKey": "dir:p",
+            "repoLabel": "p",
+            "spaceKey": null,
+            "status": null
+          }
+        },
+        "snoozed": [
+          "local|napping"
+        ],
+        "total": 5,
+        "widenedFilter": null,
+        "working": []
+      },
+      "filter": {},
+      "machines": [
+        {
+          "label": "Local",
+          "machine": "local",
+          "projects": [
+            {
+              "path": "/p",
+              "projectId": "p",
+              "title": "p"
+            }
+          ],
+          "serverId": "S1",
+          "sessions": [
+            {
+              "activity": "idle",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 9000000,
+              "projectId": "p",
+              "sessionId": "boss"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "boss",
+              "createdMs": 10,
+              "isParked": true,
+              "lastInteractionMs": 9100000,
+              "projectId": "p",
+              "sessionId": "parked"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "boss",
+              "createdMs": 10,
+              "lastInteractionMs": 9200000,
+              "projectId": "p",
+              "sessionId": "napping",
+              "snoozedUntilMs": 20000000
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "boss",
+              "createdMs": 10,
+              "lastInteractionMs": 9300000,
+              "modelSelectionFailed": true,
+              "projectId": "p",
+              "sessionId": "broke"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "boss",
+              "createdMs": 10,
+              "isFocused": true,
+              "lastInteractionMs": 9400000,
+              "projectId": "p",
+              "sessionId": "looking"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "right",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 8000000,
+              "projectId": "p",
+              "sessionId": "left"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
+              "coordinatorSessionId": "left",
+              "createdMs": 10,
+              "isCoordinator": true,
+              "lastInteractionMs": 8100000,
+              "projectId": "p",
+              "sessionId": "right"
+            }
+          ]
+        }
+      ],
+      "name": "parked and snoozed threads are cards; a failed hidden thread is red; a hidden focused thread marks its coordinator; a loop stays cards",
       "nowMs": 10000000,
       "settings": {
         "parking": true,

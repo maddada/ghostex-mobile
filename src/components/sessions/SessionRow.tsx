@@ -55,6 +55,7 @@ import {
 import CloudBoxBadge from './CloudBoxBadge';
 import { BranchGlyph } from './unified/glyphs';
 import StatusDotStack from './StatusDotStack';
+import { CoordinatorBadgeView, FoldedStatusIndicator } from './CoordinatorBadgeView';
 import {
   BoxGlyph,
   ChevronRightGlyph,
@@ -62,7 +63,6 @@ import {
   CloudGlyph,
   CoordinatorGlyph,
   CrownGlyph,
-  CrewGlyph,
   PencilGlyph,
   HeadsetGlyph,
   ServerGlyph,
@@ -270,28 +270,6 @@ function ThreadConnector({
 }
 
 /**
- * threads.rs `coordinator_badge`: the crew icon and one number (sessions waiting for approval, else
- * threads waiting, else working), tinted to match: red for approval, light blue for waiting, orange
- * for working. An idle coordinator draws no badge (CDXC:Coordinators 2026-10-29 in threads.rs).
- */
-function CoordinatorBadgeView({ badge }: { badge: CoordinatorBadge }) {
-  const tint =
-    badge.tone === 'approval'
-      ? SidebarPalette.ROW_APPROVAL
-      : badge.tone === 'waiting'
-      ? SidebarPalette.ROW_ATTENTION
-      : badge.tone === 'working'
-        ? SidebarPalette.ROW_WORKING
-        : SidebarPalette.MUTED;
-  return (
-    <View style={styles.coordinatorBadge}>
-      <CrewGlyph size={ds(13.55)} color={tint} />
-      {badge.count > 0 ? <Text style={[styles.coordinatorBadgeCount, { color: tint }]}>{badge.count}</Text> : null}
-    </View>
-  );
-}
-
-/**
  * native_sidebar/agentbox.rs `agentbox_badge`: where a box session's agent runs, the provider's glyph
  * (a box for local Docker, a server for a remote Docker host, else a cloud) and its label.
  */
@@ -362,25 +340,6 @@ function QuestionIndicator({ activity, ringColor }: { activity: string; ringColo
   );
 }
 
-/**
- * A folded coordinator's stack (coordinatorTree.ts `foldedStatus`): the dots of the threads its fold
- * hides plus its own, overlapping as the machine tabs draw them, in the same 19x16 slot.
- * CDXC:Coordinators 2026-10-24 SEE-ALSO: the user's decision on gx-core `RowNesting::folded_status`; the desktop draws it in apps/desktop/src/app/native_sidebar/threads.rs `folded_status_indicator`.
- */
-function FoldedStatusIndicator({ status, ringColor }: { status: FoldedStatus; ringColor: string }) {
-  return (
-    <View style={[styles.indicatorSlot, styles.foldedSlot]}>
-      <StatusDotStack
-        questionCount={status.question ? 1 : 0}
-        workingCount={status.working ? 1 : 0}
-        attentionCount={status.attention ? 1 : 0}
-        backgroundWorkCount={status.backgroundWork ? 1 : 0}
-        approvalCount={status.approval ? 1 : 0}
-        ringColor={ringColor}
-      />
-    </View>
-  );
-}
 
 export type SessionRowProps = {
   session: GhostexSession;
@@ -895,15 +854,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: ds(1.5),
   },
-  coordinatorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: ds(2),
-  },
-  coordinatorBadgeCount: {
-    fontSize: ds(13.55),
-    lineHeight: ds(20),
-  },
   noteDot: {
     position: 'absolute',
     top: ds(15) + LINE_SHIFT,
@@ -969,11 +919,6 @@ const styles = StyleSheet.create({
     height: ds(16),
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  /* status.rs `folded_status_indicator`: a stack of three or four dots is wider than the slot, which it grows to fit. */
-  foldedSlot: {
-    width: undefined,
-    minWidth: ds(19),
   },
   /** The red approval dot (status.rs APPROVAL_COLOR). */
   approvalDot: {

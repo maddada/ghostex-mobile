@@ -59,6 +59,7 @@ import {
   StatusCircleDotGlyph,
 } from './glyphs';
 import CloudBoxBadge from '../CloudBoxBadge';
+import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from './crew';
 
 /** The desktop's done blue (cards.rs `chrome_color(0x95d7f6, …)`). */
 const DONE_COLOR = SidebarPalette.ROW_ATTENTION;
@@ -141,7 +142,7 @@ export function RepoTile({ icon, label, dim = false }: { icon: GhostexProjectIco
   return <View style={dim ? styles.dim : null}>{tile}</View>;
 }
 
-function AgentIcon({ session }: { session: GhostexSession }) {
+export function AgentIcon({ session }: { session: GhostexSession }) {
   const ink = useSidebarInk();
   if (session.isDraft === true) return <PencilGlyph size={ds(15)} color={ink.text} />;
   const iconId = resolveAgentArtId(session.agentIcon, session.agentName.length > 0 ? session.agentName : session.agent);
@@ -228,15 +229,39 @@ export type UnifiedCardProps = {
   swipeActions: readonly UnifiedSwipeAction[];
   /** Under its project's header, which names the project. */
   inGroup?: boolean;
+  /** The crew count's tap on a card with threads under it: folds or unfolds them (contract/unified/tree.ts). */
+  onToggleCrew?: (key: string) => void;
 };
 
 /** A card: always three lines. */
-export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, onPress, onMenu, onSnooze, onPark, onSleep, swipeActions, inGroup = false }: UnifiedCardProps) {
+export function UnifiedCard({
+  row,
+  repoIcon,
+  active: open,
+  nowMs,
+  sidebarBackground,
+  onPress,
+  onMenu,
+  onSnooze,
+  onPark,
+  onSleep,
+  swipeActions,
+  inGroup = false,
+  onToggleCrew = () => {},
+}: UnifiedCardProps) {
   const cardRef = useRef<ViewInstance | null>(null);
   const ink = useSidebarInk();
   const styles = unifiedStyles(ink);
   const session = row.session.source!;
+  // A folded card stands in for the open thread it hides (CDXC:Coordinators 2026-10-22 in gx-core sidebar_view/view.rs).
+  const active = open || row.crew?.containsActive === true;
   const needsYou = row.status === 'Approval' || row.status === 'Question' || row.status === 'Done' || row.status === 'Failed';
+  const ringColor = active ? selectedFill(sidebarBackground, ink) : sidebarBackground;
+  const status = showsFoldedStatus(row) ? (
+    <UnifiedFoldedStatus row={row} ringColor={ringColor} />
+  ) : (
+    <StatusSlot row={row} nowMs={nowMs} />
+  );
   // A card that waits on nobody recedes, so the ones that need you stand out.
   const recede = !active && !needsYou && (row.status === null || row.status === 'Working' || row.status === 'Waiting');
   const project = inGroup
@@ -287,7 +312,7 @@ export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, o
               <Text numberOfLines={1} style={styles.project}>
                 {project}
               </Text>
-              <StatusSlot row={row} nowMs={nowMs} />
+              {status}
             </View>
           )}
           <View style={styles.lineTwo}>
@@ -299,7 +324,9 @@ export function UnifiedCard({ row, repoIcon, active, nowMs, sidebarBackground, o
               {title}
             </Text>
             {session.cloudBox !== undefined ? <CloudBoxBadge cloudBox={session.cloudBox} /> : null}
-            {titleLineOnly ? <StatusSlot row={row} nowMs={nowMs} /> : null}
+            {/* The crew count folds the threads nested under the card (CDXC:Sidebar 2026-11-09 in gx-core unified_sidebar/tree.rs). */}
+            <UnifiedCrewToggle row={row} onToggle={onToggleCrew} />
+            {titleLineOnly ? status : null}
           </View>
           <View style={styles.lineThree}>
             {row.noSourceControl && branch.length === 0 ? (
@@ -346,10 +373,24 @@ export type UnifiedSlimRowProps = {
   onMenu: (anchor: MenuAnchor) => void;
   /** Unsnooze on a snoozed row, Unpark on a parked one. */
   onRestore: () => void;
+  /** The crew count's tap on a parked or snoozed coordinator with threads under it. */
+  onToggleCrew?: (key: string) => void;
 };
 
 /** One line on the Snoozed and Parked shelves: the greyed tile, the title, and when it wakes or was last active. */
-export function UnifiedSlimRow({ row, shelf, repoIcon, active, nowMs, sidebarBackground, onPress, onMenu, onRestore }: UnifiedSlimRowProps) {
+export function UnifiedSlimRow({
+  row,
+  shelf,
+  repoIcon,
+  active: open,
+  nowMs,
+  sidebarBackground,
+  onPress,
+  onMenu,
+  onRestore,
+  onToggleCrew = () => {},
+}: UnifiedSlimRowProps) {
+  const active = open || row.crew?.containsActive === true;
   const rowRef = useRef<ViewInstance | null>(null);
   const ink = useSidebarInk();
   const styles = unifiedStyles(ink);
@@ -389,6 +430,8 @@ export function UnifiedSlimRow({ row, shelf, repoIcon, active, nowMs, sidebarBac
           <Text numberOfLines={1} style={[styles.title, styles.slimTitle]}>
             {title}
           </Text>
+          <UnifiedCrewToggle row={row} onToggle={onToggleCrew} />
+          <UnifiedFoldedStatus row={row} ringColor={active ? selectedFill(sidebarBackground, ink) : sidebarBackground} />
           {wake !== null ? (
             <View style={styles.status}>
               <AlarmGlyph size={ds(13)} color={DONE_COLOR} />
@@ -440,6 +483,7 @@ export function UnifiedGroupHeader({
   open,
   onToggle,
   onNew,
+  urgent = null,
 }: {
   label: string;
   icon: GhostexProjectIcon | null;
@@ -447,6 +491,8 @@ export function UnifiedGroupHeader({
   open: boolean;
   onToggle: () => void;
   onNew: () => void;
+  /** The most urgent status under a folded header, its threads' included: the dot the desktop's header draws (groups.rs `most_urgent`). */
+  urgent?: UnifiedStatus | null;
 }) {
   const Chevron = open ? ChevronDownGlyph : ChevronRightGlyph;
   const ink = useSidebarInk();
@@ -464,11 +510,23 @@ export function UnifiedGroupHeader({
       <Text numberOfLines={1} style={styles.groupLabel}>
         {label}
       </Text>
+      {!open && urgent !== null ? <UrgentGlyph status={urgent} /> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={`New session in ${label}`} hitSlop={8} onPress={onNew} style={styles.groupNew}>
         <PlusGlyph size={ds(14)} color={ink.muted} />
       </Pressable>
       <Text style={styles.shelfCount}>{count}</Text>
     </Pressable>
+  );
+}
+
+/** A folded project header's dot: its most urgent status's icon, in its colour, labelled with the status word. */
+function UrgentGlyph({ status }: { status: UnifiedStatus }) {
+  const ink = useSidebarInk();
+  const { Glyph, color } = statusLook(status, ink);
+  return (
+    <View accessibilityLabel={status}>
+      <Glyph size={ds(13)} color={color} />
+    </View>
   );
 }
 

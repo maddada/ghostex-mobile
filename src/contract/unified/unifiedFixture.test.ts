@@ -26,6 +26,7 @@ import {
 } from './choices';
 import { repoIdentity } from './repo';
 import { groupUnifiedList, moveUnifiedProject } from './grouping';
+import { drawnLines, rowsInTree, type UnifiedCrew } from './tree';
 
 type Json = Record<string, any>;
 
@@ -33,8 +34,23 @@ const fixture = JSON.parse(readFileSync(join(__dirname, 'unifiedFixture.json'), 
   cases: Json[];
 };
 
-function sessionOf(raw: Json): UnifiedSessionInput {
+/**
+ * A fixture session in the builder's terms. A computer's `serverId` gives each session the `globalRef` its gxserver
+ * lists it under, which another computer's coordinator links it by (`coordinatorRemoteThreads`).
+ */
+function sessionOf(raw: Json, serverId?: string): UnifiedSessionInput {
+  const ref = (projectId: string, sessionId: string, server = serverId) =>
+    server === undefined ? undefined : `${server}:${projectId}:${sessionId}`;
   return {
+    isCoordinator: raw.isCoordinator === true,
+    threadState: raw.coordinatorThreadState ?? '',
+    stuck: raw.stuck === true,
+    isFocused: raw.isFocused === true,
+    globalRef: ref(raw.projectId, raw.sessionId),
+    remoteThreads: ((raw.coordinatorRemoteThreads ?? []) as Json[]).map((thread) => ({
+      globalRef: ref(thread.projectId, thread.sessionId, thread.serverId)!,
+      threadState: thread.threadState ?? '',
+    })),
     sessionId: raw.sessionId,
     projectId: raw.projectId,
     title: raw.title ?? '',
@@ -82,11 +98,40 @@ function machinesOf(raw: Json[]): UnifiedMachineInput[] {
       parentProjectId: project.parentProjectId ?? null,
       collectionId: project.collectionId ?? null,
     })),
-    sessions: machine.sessions.map(sessionOf),
+    sessions: (machine.sessions as Json[]).map((session) => sessionOf(session, machine.serverId)),
   }));
 }
 
 const ids = (rows: UnifiedRow[]) => rows.map((row) => row.id);
+
+/** What the fixture records of a row with threads under it (fixture_tests.rs `crew_answer`). */
+function crewAnswer(crew: UnifiedCrew): Json {
+  const folded = crew.foldedStatus;
+  return {
+    key: crew.key,
+    open: crew.open,
+    unfolded: crew.unfolded,
+    total: crew.total,
+    listed: crew.listed,
+    older: crew.older,
+    olderShown: crew.olderShown,
+    olderRow: crew.olderRow,
+    badgeCount: crew.badge.count,
+    badgeTone: crew.badge.tone,
+    folded: (
+      [
+        [folded.working, 'working'],
+        [folded.attention, 'attention'],
+        [folded.backgroundWork, 'backgroundWork'],
+        [folded.question, 'question'],
+        [folded.approval, 'approval'],
+      ] as const
+    )
+      .filter(([on]) => on)
+      .map(([, name]) => name),
+    containsActive: crew.containsActive,
+  };
+}
 
 describe('the Unified list matches the desktop builder', () => {
   assert.ok(fixture.cases.length > 0);
@@ -106,6 +151,7 @@ describe('the Unified list matches the desktop builder', () => {
           query: fixtureCase.filter?.query ?? '',
         },
         fixtureCase.nowMs,
+        { unfolded: fixtureCase.folds?.unfolded ?? [], olderShown: fixtureCase.folds?.olderShown ?? [] },
       );
       const order: string[] = fixtureCase.order ?? [];
       assert.deepEqual(
@@ -212,6 +258,17 @@ describe('the Unified list matches the desktop builder', () => {
         };
       }
       assert.deepEqual(rows, expected.rows);
+      const crews: Record<string, Json> = {};
+      const lines: Record<string, string[]> = {};
+      for (const card of [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked]) {
+        for (const row of rowsInTree(card)) if (row.crew !== null) crews[row.id] = crewAnswer(row.crew);
+        const drawn = drawnLines(card).map((line) =>
+          line.kind === 'thread' ? `${line.row.id}@${line.depth}` : `older:${line.coordinator.id}@${line.depth}`,
+        );
+        if (drawn.length > 0) lines[card.id] = drawn;
+      }
+      assert.deepEqual(crews, expected.crews, 'crews');
+      assert.deepEqual(lines, expected.lines, 'lines');
     });
   }
 });

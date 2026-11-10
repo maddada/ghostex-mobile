@@ -24,6 +24,7 @@ import {
   type UnifiedSettings,
   type UnifiedView,
 } from './build';
+import { NO_UNIFIED_FOLDS, type UnifiedFolds } from './tree';
 
 /** One computer the phone holds a summary for. */
 export type UnifiedComputer = {
@@ -70,6 +71,11 @@ export function unifiedSessionInput(
     isBrowser: isBrowserSession(session),
     coordinatorProjectId: session.coordinatorProjectId,
     coordinatorSessionId: session.coordinatorSessionId,
+    threadState: session.coordinatorThreadState,
+    isCoordinator: session.isCoordinator,
+    stuck: session.stuckSince.length > 0,
+    globalRef: session.globalRef,
+    remoteThreads: session.coordinatorRemoteThreads,
     createdMs: millis(session.createdAt),
     lastInteractionMs: millis(session.lastInteractionAt),
     workingStartedMs: millis(session.workingStartedAt),
@@ -182,14 +188,26 @@ export function unifiedListOf(
   settings: UnifiedSettings,
   filter: UnifiedFilter,
   nowMs: number,
+  folds: UnifiedFolds = NO_UNIFIED_FOLDS,
+  /** The session the phone has open, `machineId` and `sessionId`: never tucked behind an older-threads row. */
+  focused: { machineId: string; sessionId: string } | null = null,
 ): UnifiedView<GhostexSession> & { filter: UnifiedFilter } {
-  const inputs = computers.map((computer) => unifiedMachineInput(computer, computers.length === 1));
+  const inputs = computers.map((computer) => {
+    const input = unifiedMachineInput(computer, computers.length === 1);
+    if (focused === null || focused.machineId !== computer.machineId) return input;
+    return {
+      ...input,
+      sessions: input.sessions.map((session) =>
+        session.sessionId === focused.sessionId ? { ...session, isFocused: true } : session,
+      ),
+    };
+  });
   // The options do not depend on the filter, so a pick they no longer offer is let go first.
-  const everything = buildUnifiedList(inputs, settings, EMPTY_UNIFIED_FILTER, nowMs);
+  const everything = buildUnifiedList(inputs, settings, EMPTY_UNIFIED_FILTER, nowMs, folds);
   const kept = filterWithinOptions(filter, everything.options);
   const view =
     isUnifiedFilterEmpty(kept) && (kept.query ?? '').trim().length === 0
       ? everything
-      : buildUnifiedList(inputs, settings, kept, nowMs);
+      : buildUnifiedList(inputs, settings, kept, nowMs, folds);
   return { ...view, filter: kept };
 }
