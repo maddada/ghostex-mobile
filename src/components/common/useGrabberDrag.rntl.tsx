@@ -112,11 +112,9 @@ function Owner({ Component, onClose, busy }: { Component: SheetUnderTest; onClos
   );
 }
 
-/** Lets the sheet finish opening (the composer's sheet once its panel is measured); its panel sits in place. */
-async function letOpen(Component: SheetUnderTest) {
-  if (Component === Sheet) {
-    await fireEvent(screen.getByTestId('sheet-panel'), 'layout', { nativeEvent: { layout: { height: 300 } } });
-  }
+/** Lets the sheet finish opening (both slide up once their panel is measured); its panel sits in place. */
+async function letOpen() {
+  await fireEvent(screen.getByTestId('sheet-panel'), 'layout', { nativeEvent: { layout: { height: 300 } } });
   await act(() => jest.advanceTimersByTime(1000));
   expect(panelOffset()).toBe(0);
 }
@@ -124,7 +122,7 @@ async function letOpen(Component: SheetUnderTest) {
 async function openSheet(Component: SheetUnderTest, { busy = false } = {}) {
   const onClose = jest.fn();
   await render(<Owner Component={Component} onClose={onClose} busy={busy} />);
-  await letOpen(Component);
+  await letOpen();
   return onClose;
 }
 
@@ -231,6 +229,6 @@ describe.each<[string, SheetUnderTest]>([
     await drag(GRABBER_CLOSE_DISTANCE + 20);
     await act(() => jest.advanceTimersByTime(1000));
     await fireEvent.press(screen.getByText('Open'));
-    await letOpen(Component);
+    await letOpen();
   });
 });
