@@ -153,6 +153,21 @@ export type ProjectHeaderItem = {
    */
   agents: GhostexAgentLauncher[];
   quickActions: GhostexQuickAction[];
+  /**
+   * The folders of one repository this computer's list merged into this entry (`mergeRepositoryCopyBuckets`), the
+   * entry's own first; only when there are two or more. The New Coordinator form's Folder row lists them.
+   */
+  copies?: ProjectCopy[];
+  /** The folder New Coordinator starts on: the one holding the entry's newest session, else the entry's own. */
+  defaultCopyProjectId?: string;
+};
+
+/** One folder of a merged project (`ProjectHeaderItem.copies`). */
+export type ProjectCopy = {
+  projectId: string;
+  path: string;
+  /** The folder's name, or the end of its path that tells it from another copy with the same name. */
+  label: string;
 };
 
 export type ProjectEmptyItem = {
@@ -729,15 +744,16 @@ function foldWorktreeBuckets(
 }
 
 /**
- * CDXC:RemoteMachines 2026-11-09 SEE-ALSO: the DECISIONs in packages/gx-core/src/sidebar_view/merged.rs (Q1352, #461, #518). While the computer's Merge copies of the same repository is on (the default) and Separate by machine is off, the Project list draws two folders of this computer that are copies of one repository (the same origin, opened at the same folder inside it) as one project: the first in the list's order keeps its entry, name and session groups, and the others' sessions are listed with its own. Off, each folder is its own project, as the computer draws it. A worktree and the home project never merge; the Unified list groups by repository itself.
+ * CDXC:RemoteMachines 2026-11-09 SEE-ALSO: the DECISIONs in packages/gx-core/src/sidebar_view/merged.rs (Q1352, #461, #518). While the computer's Merge copies of the same repository is on (the default) and Separate by machine is off, the Project list draws two folders of this computer that are copies of one repository (the same origin, opened at the same folder inside it) as one project: the first in the list's order keeps its entry, name and session groups, and the others' sessions are listed with its own. Off, each folder is its own project, as the computer draws it. A worktree and the home project never merge; the Unified list groups by repository itself. The entry remembers the folders it took in, which the New Coordinator form's Folder row offers.
  */
 function mergeRepositoryCopyBuckets(
   summary: GhostexMobileSummary,
   projectById: ReadonlyMap<string, GhostexProject>,
   sessionsByProjectKey: Map<string, GhostexSession[]>,
-): void {
-  if (summary.mergeRepositoryCopies === false || summary.separateByMachine === true) return;
-  if (summary.sidebarView === 'unified') return;
+): Map<string, GhostexProject[]> {
+  const copiesOf = new Map<string, GhostexProject[]>();
+  if (summary.mergeRepositoryCopies === false || summary.separateByMachine === true) return copiesOf;
+  if (summary.sidebarView === 'unified') return copiesOf;
   const order: string[] = [];
   for (const projectId of [
     ...(summary.workspaceGroups?.projectOrder ?? []),
@@ -761,11 +777,55 @@ function mergeRepositoryCopyBuckets(
     const entry = entryOfKey.get(key);
     if (entry === undefined) {
       entryOfKey.set(key, ownKey);
+      copiesOf.set(ownKey, [project]);
       continue;
     }
     sessionsByProjectKey.get(entry)?.push(...(sessionsByProjectKey.get(ownKey) ?? []));
     sessionsByProjectKey.delete(ownKey);
+    copiesOf.get(entry)?.push(project);
   }
+  for (const [entry, copies] of copiesOf) if (copies.length < 2) copiesOf.delete(entry);
+  return copiesOf;
+}
+
+function pathParts(path: string): string[] {
+  return path.split(/[\\/]/).filter((part) => part.length > 0);
+}
+
+/** The shortest end of `path` (whole folder names) that none of `others` ends with. */
+function distinguishingPath(path: string, others: readonly string[]): string {
+  const parts = pathParts(path);
+  const otherParts = others.map(pathParts);
+  for (let take = 1; take <= parts.length; take += 1) {
+    const tail = parts.slice(parts.length - take);
+    const shared = otherParts.some(
+      (other) => other.length >= take && other.slice(other.length - take).every((part, index) => part === tail[index]),
+    );
+    if (!shared) return tail.join('/');
+  }
+  return parts.join('/');
+}
+
+/**
+ * An entry's folders as the New Coordinator form lists them, and the one it starts on: the folder of the entry's newest
+ * session when that session is in one of them (a worktree session listed here is not), else the entry's own — the
+ * desktop's rule (gx-core merged.rs `last_used_copy`).
+ */
+function projectCopies(
+  copies: readonly GhostexProject[],
+  sessions: readonly GhostexSession[],
+): { copies: ProjectCopy[]; defaultProjectId: string } {
+  const listed = copies.map((project, index) => {
+    const path = project.path ?? '';
+    const others = copies.filter((_, other) => other !== index).map((other) => other.path ?? '');
+    return { projectId: project.projectId, path, label: distinguishingPath(path, others) || projectDisplayName(project) };
+  });
+  let newest: GhostexSession | null = null;
+  for (const session of sessions) {
+    if (newest === null || Date.parse(session.createdAt) > Date.parse(newest.createdAt)) newest = session;
+  }
+  const newestCopy = listed.find((copy) => copy.projectId === newest?.projectId);
+  return { copies: listed, defaultProjectId: (newestCopy ?? listed[0]).projectId };
 }
 
 export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
@@ -808,7 +868,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
   }
 
   const worktreeOf = foldWorktreeBuckets(summary, projectById, sessionsByProjectKey);
-  mergeRepositoryCopyBuckets(summary, projectById, sessionsByProjectKey);
+  const copiesOf = mergeRepositoryCopyBuckets(summary, projectById, sessionsByProjectKey);
 
   // Desktop display layout: the wire order (server sortOrder) is the stable
   // manual base; browser-first/pinned-first/draft-first/activity sorting is applied on top
@@ -898,6 +958,8 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     const shownProjectSessions = projectSessions.filter((session) => !isFolded(session));
 
     const collapsed = !expandedProjectKeys.has(projectKey);
+    const merged = copiesOf.get(projectKey);
+    const folders = merged !== undefined ? projectCopies(merged, allProjectSessions) : null;
     items.push({
       type: 'PROJECT_HEADER',
       key: `project:${projectKey}`,
@@ -924,6 +986,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       themeColor: project !== null ? project.themeColor : '',
       agents: projectId.length > 0 ? summary.agents : [],
       quickActions: projectId.length > 0 ? (summary.quickActionsByProject[projectId] ?? []) : [],
+      ...(folders !== null ? { copies: folders.copies, defaultCopyProjectId: folders.defaultProjectId } : {}),
     });
     if (collapsed) return;
 

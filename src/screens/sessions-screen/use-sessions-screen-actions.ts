@@ -20,7 +20,7 @@ import {
   sessionNoteSaveCommand,
 } from '../../commands/ghostexCli';
 import type { Notice } from '../../components/common/NoticeToast';
-import { createdSessionId, runGhostexCli } from '../../components/sessions/cli';
+import { createdSessionId, GhostexCliFailure, runGhostexCli } from '../../components/sessions/cli';
 import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { claudeCloudPageUrl } from '../../contract/claudeCloud';
 import { projectKeyForSession, type ProjectHeaderItem } from '../../contract/grouping';
@@ -54,6 +54,18 @@ import {
 } from './session-actions';
 
 type SessionsNavigation = NativeStackScreenProps<RootStackParamList, 'Sessions'>['navigation'];
+
+/**
+ * A create the computer refused (`runCreationFlow`): the summarized sentence, the computer's own output (`raw`, read
+ * before summarizing), `open` when its output names a session it made anyway, and `openSession` to open one the caller
+ * finds itself (keepOverlay only).
+ */
+export type CreationRefusal = {
+  reason: string;
+  raw: string;
+  open?: () => Promise<void>;
+  openSession?: (sessionId: string) => Promise<void>;
+};
 
 export type SessionsScreenActionsDeps = {
   navigation: SessionsNavigation;
@@ -268,35 +280,91 @@ export function useSessionsScreenActions({
     [setTransientStatus],
   );
 
-  /** Chat creation opens from the returned identity; inventory and attachment finish in the background. */
+  /**
+   * Runs a create command and opens what it made. Chat creation opens from the returned identity; inventory and
+   * attachment finish in the background. With `keepOverlay` (the New Coordinator form) the form stays open while the
+   * computer answers and closes only once it is created, and only while `stillOpen` says it is the form that asked
+   * (one cancelled meanwhile gets a status line instead, and nothing opens over the newer form); a refusal is returned
+   * for the form to show. When the computer says it made the session but could not start it (`createdSessionIdOf`
+   * finds its id in the refusal), the refusal carries `open`, which opens that session instead of making another.
+   */
   const runCreationFlow = useCallback(
     async (
       target: MachineRecord,
       command: string,
       message: string,
       chatLaunch?: { agentId: string; projectId: string; title: string },
-    ): Promise<void> => {
-      setOverlay(NONE);
-      setProgress(message);
-      try {
-        const result = await runGhostexCli(target, command);
+      options?: {
+        keepOverlay?: boolean;
+        stillOpen?: () => boolean;
+        createdSessionIdOf?: (reason: string) => string | null;
+      },
+    ): Promise<CreationRefusal | null> => {
+      const keepOverlay = options?.keepOverlay === true;
+      const stillOpen = (): boolean => options?.stillOpen?.() ?? true;
+      if (!keepOverlay) {
+        setOverlay(NONE);
+        setProgress(message);
+      }
+      const open = async (sessionId: string): Promise<void> => {
         if (!chatLaunch) await refreshMachine(target);
         setProgress(null);
-        const sessionId = createdSessionId(result);
-        if (sessionId !== null) {
-          await attachCreated(target, sessionId, chatLaunch);
-        } else {
-          // It ran, but the answer names no session to open: say so instead of leaving the list as it was.
-          setTransientStatus(NewSessionCopy.unopened, { title: NewSessionCopy.unopenedTitle });
-        }
+        await attachCreated(target, sessionId, chatLaunch);
         if (chatLaunch)
           void refreshMachine(target).catch((error: unknown) => {
             setTransientStatus(error instanceof Error ? error.message : String(error));
           });
+      };
+      let result: Awaited<ReturnType<typeof runGhostexCli>>;
+      try {
+        result = await runGhostexCli(target, command);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const raw = error instanceof GhostexCliFailure ? error.raw : reason;
+        setProgress(null);
+        const openSession = async (sessionId: string): Promise<void> => {
+          setOverlay(NONE);
+          try {
+            await open(sessionId);
+          } catch (openError) {
+            setTransientStatus(openError instanceof Error ? openError.message : String(openError));
+          }
+        };
+        const createdId = options?.createdSessionIdOf?.(raw) ?? null;
+        const refusal: CreationRefusal = {
+          reason,
+          raw,
+          ...(createdId !== null ? { open: () => openSession(createdId) } : {}),
+          ...(keepOverlay ? { openSession } : {}),
+        };
+        if (!keepOverlay || !stillOpen()) setTransientStatus(reason);
+        return refusal;
+      }
+      if (keepOverlay && !stillOpen()) {
+        void refreshMachine(target).catch(() => undefined);
+        setTransientStatus(`${chatLaunch?.title ?? 'It'} was created.`);
+        return null;
+      }
+      if (keepOverlay) setOverlay(NONE);
+      try {
+        const sessionId = createdSessionId(result);
+        if (sessionId !== null) {
+          await open(sessionId);
+        } else {
+          if (!chatLaunch) await refreshMachine(target);
+          setProgress(null);
+          // It ran, but the answer names no session to open: say so instead of leaving the list as it was.
+          setTransientStatus(NewSessionCopy.unopened, { title: NewSessionCopy.unopenedTitle });
+          if (chatLaunch)
+            void refreshMachine(target).catch((error: unknown) => {
+              setTransientStatus(error instanceof Error ? error.message : String(error));
+            });
+        }
       } catch (error) {
         setProgress(null);
         setTransientStatus(error instanceof Error ? error.message : String(error));
       }
+      return null;
     },
     [attachCreated, refreshMachine, setTransientStatus],
   );
