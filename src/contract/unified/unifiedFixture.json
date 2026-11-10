@@ -6284,13 +6284,14 @@
               "working",
               "question"
             ],
+            "heldOpen": false,
             "key": "local|p|lead",
             "listed": 3,
-            "older": 1,
+            "older": 2,
             "olderRow": false,
             "olderShown": false,
             "open": false,
-            "total": 4,
+            "total": 5,
             "unfolded": false
           },
           "local|sub-lead": {
@@ -6300,6 +6301,7 @@
             "folded": [
               "question"
             ],
+            "heldOpen": false,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -6477,6 +6479,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -6589,13 +6600,14 @@
             "badgeTone": "working",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|lead",
             "listed": 3,
-            "older": 1,
+            "older": 2,
             "olderRow": true,
             "olderShown": false,
             "open": true,
-            "total": 4,
+            "total": 5,
             "unfolded": true
           },
           "local|sub-lead": {
@@ -6605,6 +6617,7 @@
             "folded": [
               "question"
             ],
+            "heldOpen": false,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -6794,6 +6807,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -6906,13 +6928,14 @@
             "badgeTone": "working",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|lead",
             "listed": 4,
-            "older": 0,
-            "olderRow": false,
+            "older": 1,
+            "olderRow": true,
             "olderShown": false,
             "open": true,
-            "total": 4,
+            "total": 5,
             "unfolded": true
           },
           "local|sub-lead": {
@@ -6922,6 +6945,7 @@
             "folded": [
               "question"
             ],
+            "heldOpen": false,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -6954,7 +6978,8 @@
             "local|sub-lead@1",
             "studio|away@1",
             "local|worker@1",
-            "local|old@1"
+            "local|old@1",
+            "older:local|lead@1"
           ]
         },
         "moves": [],
@@ -7112,6 +7137,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -7224,13 +7258,14 @@
             "badgeTone": "working",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|lead",
             "listed": 3,
-            "older": 1,
+            "older": 2,
             "olderRow": true,
             "olderShown": true,
             "open": true,
-            "total": 4,
+            "total": 5,
             "unfolded": true
           },
           "local|sub-lead": {
@@ -7238,6 +7273,7 @@
             "badgeTone": "waiting",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -7272,6 +7308,7 @@
             "studio|away@1",
             "local|worker@1",
             "local|old@1",
+            "local|stale@1",
             "older:local|lead@1"
           ]
         },
@@ -7433,6 +7470,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -7542,13 +7588,14 @@
             "badgeTone": "working",
             "containsActive": false,
             "folded": [],
+            "heldOpen": true,
             "key": "local|p|lead",
             "listed": 3,
-            "older": 1,
+            "older": 2,
             "olderRow": false,
             "olderShown": false,
             "open": true,
-            "total": 4,
+            "total": 5,
             "unfolded": false
           },
           "local|sub-lead": {
@@ -7556,6 +7603,7 @@
             "badgeTone": "waiting",
             "containsActive": false,
             "folded": [],
+            "heldOpen": true,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -7713,6 +7761,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -7800,6 +7857,7 @@
             "badgeTone": "idle",
             "containsActive": false,
             "folded": [],
+            "heldOpen": true,
             "key": "local|p|api-lead",
             "listed": 2,
             "older": 0,
@@ -7953,6 +8011,7 @@
             "badgeTone": "idle",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|c1",
             "listed": 1,
             "older": 0,
@@ -7967,6 +8026,7 @@
             "badgeTone": "idle",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|c2",
             "listed": 1,
             "older": 0,
@@ -7981,6 +8041,7 @@
             "badgeTone": "idle",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|c3",
             "listed": 1,
             "older": 0,
@@ -7995,6 +8056,7 @@
             "badgeTone": "idle",
             "containsActive": false,
             "folded": [],
+            "heldOpen": false,
             "key": "local|p|c4",
             "listed": 1,
             "older": 0,
@@ -8198,13 +8260,14 @@
             "badgeTone": "working",
             "containsActive": false,
             "folded": [],
+            "heldOpen": true,
             "key": "local|p|lead",
             "listed": 3,
-            "older": 1,
+            "older": 2,
             "olderRow": false,
             "olderShown": false,
             "open": true,
-            "total": 4,
+            "total": 5,
             "unfolded": false
           },
           "local|sub-lead": {
@@ -8214,6 +8277,7 @@
             "folded": [
               "question"
             ],
+            "heldOpen": false,
             "key": "local|p|sub-lead",
             "listed": 1,
             "older": 0,
@@ -8381,6 +8445,15 @@
             {
               "activity": "idle",
               "coordinatorProjectId": "p",
+              "coordinatorSessionId": "lead",
+              "createdMs": 10,
+              "lastInteractionMs": 900000,
+              "projectId": "p",
+              "sessionId": "stale"
+            },
+            {
+              "activity": "idle",
+              "coordinatorProjectId": "p",
               "coordinatorSessionId": "closed",
               "createdMs": 10,
               "lastInteractionMs": 4000,
@@ -8472,6 +8545,7 @@
             "folded": [
               "approval"
             ],
+            "heldOpen": false,
             "key": "local|p|boss",
             "listed": 2,
             "older": 0,

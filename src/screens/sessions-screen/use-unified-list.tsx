@@ -293,10 +293,12 @@ export function useUnifiedList(deps: UnifiedListDeps) {
    * project group holding its card open, and a filter or search that leaves it out gives way. The open session is
    * watched rather than each way in, and a reveal completes only once the saved folds are read and every computer's
    * list has answered, so a thread whose coordinator's computer answers later still nests and unfolds. Each open
-   * session is revealed once, so folding its coordinator again afterwards sticks. The open session is listed rather
-   * than its coordinator's older threads (`focusedSession`).
+   * session is revealed once (again only when a computer that answers later gives it coordinators it did not have),
+   * so folding its coordinator again afterwards sticks; a session in no list yet stays pending until it is. The open
+   * session is listed rather than its coordinator's older threads (`focusedSession`).
    */
-  const revealedSession = useRef<string | null>(null);
+  /** The session revealed last and the coordinators above it then (the desktop's `reveal_watch`). */
+  const revealed = useRef<{ key: string; ancestors: string } | null>(null);
   const storeReady = useUnifiedListStore((state) => state.ready);
   const inventoriesReady = useMemo(
     () =>
@@ -306,9 +308,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     [machines, inventoriesByMachineId],
   );
   useEffect(() => {
-    if (!on || selectedSessionKey === null || revealedSession.current === selectedSessionKey) return;
-    if (!storeReady || !inventoriesReady) return;
-    revealedSession.current = selectedSessionKey;
+    if (!on || selectedSessionKey === null || !storeReady || !inventoriesReady) return;
     const isOpen = (row: UnifiedRow<GhostexSession>) =>
       attachSessionKey(row.machine, row.session.sessionId) === selectedSessionKey;
     const findIn = (list: typeof view) => {
@@ -318,25 +318,38 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       }
       return null;
     };
-    let admitted = null;
-    let found = findIn(view);
-    if (found === null) {
-      // Left out by the filter or the search: found in the list with nothing filtering, and let through.
-      found = findIn(unifiedListOf(computers, unifiedSettings, EMPTY_UNIFIED_FILTER, nowMs, folds, focusedSession));
-      if (found === null) return;
-      admitted = admittingFilter(view.filter, found.row);
-    }
+    const narrowed = !isUnifiedFilterEmpty(view.filter) || (view.filter.query ?? '').trim().length > 0;
+    // Left out by the filter or the search: found in the list with nothing filtering.
+    const found =
+      findIn(view) ??
+      (narrowed
+        ? findIn(unifiedListOf(computers, unifiedSettings, EMPTY_UNIFIED_FILTER, nowMs, folds, focusedSession))
+        : null);
+    // Not in any list yet (a session opened before its computer's next answer): stays pending.
+    if (found === null) return;
     const { card, row } = found;
+    const ancestors = ancestorsOf(card, row.id) ?? [];
+    const chain = ancestors.join('\n');
+    const previous = revealed.current;
+    if (previous !== null && previous.key === selectedSessionKey) {
+      // Revealed already: again only when it now has coordinators it did not have (one on a computer that answered
+      // later), so a fold the user makes afterwards sticks.
+      if (previous.ancestors === chain) return;
+      revealed.current = { key: selectedSessionKey, ancestors: chain };
+      if (ancestors.length === 0) return;
+    }
+    revealed.current = { key: selectedSessionKey, ancestors: chain };
     const shelf = card.shelf;
     const inGroup = layout.groupByProject && shelf !== 'drafts';
     const repoKey = inGroup ? card.repo.key : null;
     const foldsShelf = shelf === 'working' || shelf === 'snoozed' || shelf === 'parked' || shelf === 'drafts';
     useUnifiedListStore.getState().revealThread({
-      ancestors: ancestorsOf(card, row.id) ?? [],
+      ancestors,
       shelfKey:
         foldsShelf && !shelfOpen(shelf, toggledShelves, repoKey) ? (repoKey === null ? shelf : `${repoKey}|${shelf}`) : null,
       groupKey: inGroup ? card.repo.key : null,
-      filter: admitted,
+      // Every revealed row is let through: a search can keep its coordinator for a sibling and still hide it.
+      filter: admittingFilter(view.filter, row),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, selectedSessionKey, view, storeReady, inventoriesReady]);

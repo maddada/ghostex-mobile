@@ -42,6 +42,8 @@ export type UnifiedCrew = {
   listed: number;
   older: number;
   olderShown: boolean;
+  /** A search or filter keeps its matching threads drawn whatever the fold says, so folding it only drops the saved preference. */
+  heldOpen: boolean;
   /** Its "N older threads" / "Hide older threads" row is drawn after its threads. */
   olderRow: boolean;
   badge: CoordinatorBadge;
@@ -267,6 +269,7 @@ export function nestUnifiedRows<S>(
       listed,
       older: total - listed,
       olderShown,
+      heldOpen: matchBelow && (narrowed || query),
       olderRow: open && !narrowed && !forced && total > listed,
       badge: badgeOf(tally),
       foldedStatus,

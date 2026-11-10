@@ -115,6 +115,7 @@ function crewAnswer(crew: UnifiedCrew): Json {
     listed: crew.listed,
     older: crew.older,
     olderShown: crew.olderShown,
+    heldOpen: crew.heldOpen,
     olderRow: crew.olderRow,
     badgeCount: crew.badge.count,
     badgeTone: crew.badge.tone,
