@@ -147,6 +147,8 @@ function placeholder(question: JsonRecord | null, draft: JsonRecord | null): str
 /** The form, outlined for a moment when the Previous question pill or a Q-tag link lands on it. */
 export function QuestionForm({ id, source }: { id: string; source: string }) {
   const { theme } = useTranscriptEnv();
+  // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs `card_tags`).
+  if (useQuestionFormState(id)?.coveredByCard === true) return null;
   return (
     <QuestionFlashFrame target={id} light={theme.light}>
       <QuestionFormCard id={id} source={source} />

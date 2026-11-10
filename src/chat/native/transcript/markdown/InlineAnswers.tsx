@@ -9,7 +9,7 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useTranscriptEnv } from '../context';
+import { useTranscriptEnv, useTranscriptFlags } from '../context';
 import { arr, obj, str, type JsonRecord } from '../json';
 import { QuestionFlashFrame } from '../OpenQuestions';
 import { useQuestionFormState } from '../QuestionForm';
@@ -34,6 +34,9 @@ export function InlineAnswers({ mark }: { mark: JsonRecord }) {
   const { theme, dispatch } = useTranscriptEnv();
   const formId = str(mark, 'form');
   const form = useQuestionFormState(formId);
+  // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs `card_tags`).
+  const { workAskTags } = useTranscriptFlags();
+  const covered = form?.coveredByCard === true || workAskTags.has(str(mark, 'tag').toUpperCase());
   const phase = form === null ? 'open' : str(form, 'state') || 'open';
   const changing = form?.changing === true;
   const withdrawn = form?.tagWithdrawn === true || phase === 'withdrawn' || phase === 'canceled';
@@ -59,6 +62,7 @@ export function InlineAnswers({ mark }: { mark: JsonRecord }) {
   else if (phase === 'queued') status = { text: `Queued${words} ·`, link: 'Change' };
   else if (phase === 'answered') status = { text: `Sent${words} ·`, link: 'Change' };
 
+  if (covered) return null;
   return (
     <QuestionFlashFrame target={formId} light={theme.light}>
       <View style={styles.row}>
