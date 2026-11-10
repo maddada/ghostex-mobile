@@ -43,10 +43,14 @@ const REPEAT_REJECT_MS = 4000;
 
 type ScanNavigation = NativeStackNavigationProp<RootStackParamList, 'ScanCode'>;
 
-export function useScanController(navigation: ScanNavigation, rePairMachineId: string | null) {
+export function useScanController(
+  navigation: ScanNavigation,
+  rePairMachineId: string | null,
+  initialSheet: ScanSheet = 'none',
+) {
   const [phase, setPhase] = useState<ScanPhase>({ kind: 'scanning' });
   const [toast, setToast] = useState<ScanToast | null>(null);
-  const [sheet, setSheet] = useState<ScanSheet>('none');
+  const [sheet, setSheet] = useState<ScanSheet>(initialSheet);
   const [tailscaleBusy, setTailscaleBusy] = useState(false);
   const [tailscaleError, setTailscaleError] = useState<string | null>(null);
   const phaseRef = useRef<ScanPhase>(phase);

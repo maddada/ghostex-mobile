@@ -2,7 +2,7 @@
  * Stroke glyphs for the setup flow (Welcome, Choose, Scan, Connected), drawn
  * with react-native-svg from the Tabler outlines the mockup's shared.js uses
  * (terminal, sparkles, folders, qrcode, shield, camera, paste, help-circle,
- * check, alert-triangle, loader, info, lock), so no icon font is needed.
+ * check, alert-triangle, loader, info, lock, download, device-desktop, chevron-right), so no icon font is needed.
  */
 
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -160,6 +160,35 @@ export function LockGlyph(props: SetupGlyphProps) {
       <Path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
       <Circle cx={12} cy={16} r={1} />
       <Path d="M8 11v-4a4 4 0 1 1 8 0v4" />
+    </Glyph>
+  );
+}
+
+export function DownloadGlyph(props: SetupGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <Path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+      <Path d="M7 11l5 5l5 -5" />
+      <Path d="M12 4l0 12" />
+    </Glyph>
+  );
+}
+
+export function DeviceDesktopGlyph(props: SetupGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <Path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" />
+      <Path d="M7 20h10" />
+      <Path d="M9 16v4" />
+      <Path d="M15 16v4" />
+    </Glyph>
+  );
+}
+
+export function ChevronRightGlyph(props: SetupGlyphProps) {
+  return (
+    <Glyph {...props}>
+      <Path d="M9 6l6 6l-6 6" />
     </Glyph>
   );
 }

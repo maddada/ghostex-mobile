@@ -1,6 +1,6 @@
 /**
- * Welcome (docs/2026-09-03/mobile-setup/mobile-01-welcome.html): app mark,
- * headline, the three things the phone can do, and one button. Shown only
+ * The first screen: app mark and headline over the connect steps (ConnectStart), Scan the code, and the small
+ * links (other ways to connect, the demo computer, which App Review needs reachable without a computer). Shown only
  * while no machine is saved (App.tsx), so there is no skip affordance.
  */
 
@@ -10,8 +10,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { FoldersGlyph, SparklesGlyph, TerminalGlyph } from '../components/onboarding/SetupIcons';
-import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
+import { ConnectActions, ConnectSteps } from '../components/onboarding/ConnectStart';
+import { TerminalGlyph } from '../components/onboarding/SetupIcons';
+import { useSetupText } from '../components/onboarding/SetupPrimitives';
 import { WelcomeCopy } from '../copy';
 import { DemoCopy } from '../demo/copy';
 import { useMachinesStore } from '../machines/store';
@@ -19,12 +20,6 @@ import type { RootStackParamList } from '../navigation/types';
 import { GhostexStrokeWidth } from '../theme/palette';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
-
-const FEATURE_GLYPHS = {
-  sessions: SparklesGlyph,
-  terminal: TerminalGlyph,
-  projects: FoldersGlyph,
-} as const;
 
 export default function WelcomeScreen({ navigation }: Props) {
   const appearance = useAppearance();
@@ -43,38 +38,16 @@ export default function WelcomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <View style={styles.features}>
-          {WelcomeCopy.features.map((feature) => {
-            const Glyph = FEATURE_GLYPHS[feature.key];
-            return (
-              <View key={feature.key} style={styles.feature}>
-                <View style={styles.featureIcon}>
-                  <Glyph size={16} color={appearance.accent} />
-                </View>
-                <View style={styles.featureText}>
-                  <Text style={styles.featureTitle}>{feature.title}</Text>
-                  <Text style={styles.featureDescription}>{feature.description}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+        <ConnectSteps />
       </View>
 
       <View style={styles.footer}>
-        <SetupButton
-          variant="primary"
-          large
-          label={WelcomeCopy.connectButton}
-          onPress={() => navigation.navigate('ConnectChoose')}
+        <ConnectActions
+          onScan={() => navigation.navigate('ScanCode')}
+          onPaste={() => navigation.navigate('ScanCode', { startWith: 'paste' })}
+          onTailscale={() => navigation.navigate('TailscaleForm')}
+          extraLink={{ label: DemoCopy.welcomeButton, onPress: () => useMachinesStore.getState().addDemoComputer() }}
         />
-        <SetupButton
-          variant="secondary"
-          large
-          label={DemoCopy.welcomeButton}
-          onPress={() => useMachinesStore.getState().addDemoComputer()}
-        />
-        <Text style={[setupText.small, setupText.center]}>{WelcomeCopy.footnote}</Text>
       </View>
     </SafeAreaView>
   );
@@ -88,9 +61,9 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   body: {
     flex: 1,
     justifyContent: 'center',
-    gap: 28,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    gap: 36,
+    paddingHorizontal: 24,
+    paddingBottom: 12,
   },
   hero: {
     alignItems: 'center',
@@ -122,43 +95,9 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     fontSize: 15,
     marginTop: 8,
   },
-  features: {
-    gap: 14,
-    paddingHorizontal: 6,
-  },
-  feature: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  featureIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: appearance.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: appearance.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureText: {
-    flex: 1,
-    gap: 1,
-  },
-  featureTitle: {
-    color: appearance.foreground,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  featureDescription: {
-    color: appearance.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
   footer: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
-    gap: 10,
   },
 });

@@ -1,112 +1,56 @@
 /**
- * Choose how to connect (docs/2026-09-03/mobile-setup/mobile-02-choose.html):
- * two PathCards described by what the user will do. "Scan code" on either
- * card opens the one scanner (it tells the two codes apart); "Or type the
- * details" opens the Tailscale form.
+ * Add a computer (the sessions screen's + and its menu): the first screen's connect steps without the app's
+ * name and without the demo, Scan the code, and "Other ways to connect" (Paste a code, Use Tailscale). The route
+ * keeps its old name, ConnectChoose: it replaced the "How does your phone reach your computer?" chooser.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { useAppearance, type Appearance } from '../theme/useAppearance';
+import { useMemo } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
-import PathCard from '../components/onboarding/PathCard';
-import { CameraGlyph, QrcodeGlyph, ShieldGlyph, SparklesGlyph } from '../components/onboarding/SetupIcons';
-import { useSetupText } from '../components/onboarding/SetupPrimitives';
-import { ConnectChooseCopy } from '../copy';
-import { DemoCopy } from '../demo/copy';
-import { useMachinesStore } from '../machines/store';
+import { ConnectActions, ConnectSteps } from '../components/onboarding/ConnectStart';
 import type { RootStackParamList } from '../navigation/types';
-
+import { useAppearance, type Appearance } from '../theme/useAppearance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConnectChoose'>;
 
 export default function ConnectChooseScreen({ navigation }: Props) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const setupText = useSetupText();
-  const openScanner = (): void => navigation.navigate('ScanCode');
-  // The first computer, demo or not, registers the Sessions route on the next render (App.tsx), so the demo opens
-  // once it is there: resetting before then left the first "Open demo" tap on this screen (ghostex-mobile#28 review).
-  const hasMachines = useMachinesStore((state) => state.machines.length > 0);
-  const [demoAdded, setDemoAdded] = useState(false);
-  useEffect(() => {
-    if (demoAdded && hasMachines) navigation.reset({ index: 0, routes: [{ name: 'Sessions' }] });
-  }, [demoAdded, hasMachines, navigation]);
-  const openDemo = (): void => {
-    useMachinesStore.getState().addDemoComputer();
-    setDemoAdded(true);
-  };
   // The page reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const edges = useScrollToBarEdges(styles.content);
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={edges.scroll} contentContainerStyle={[styles.content, edges.content]}>
-        <View style={styles.intro}>
-          <Text style={setupText.eyebrow}>{ConnectChooseCopy.eyebrow}</Text>
-          <Text style={setupText.titleLg}>{ConnectChooseCopy.title}</Text>
-          <Text style={setupText.lede}>{ConnectChooseCopy.lede}</Text>
-        </View>
-
-        <View style={styles.cards}>
-          <PathCard
-            icon={<SparklesGlyph size={20} color={appearance.accent} />}
-            title={DemoCopy.entryTitle}
-            subtitle={DemoCopy.entrySubtitle}
-            footNote="On this phone"
-            button={{ label: DemoCopy.entryButton, onPress: openDemo }}
-          />
-          <PathCard
-            recommended
-            icon={<QrcodeGlyph size={20} color={appearance.accent} />}
-            title={ConnectChooseCopy.easyConnect.title}
-            tag={ConnectChooseCopy.easyConnect.tag}
-            subtitle={ConnectChooseCopy.easyConnect.subtitle}
-            steps={ConnectChooseCopy.easyConnect.steps}
-            footNote={ConnectChooseCopy.easyConnect.duration}
-            button={{
-              label: ConnectChooseCopy.easyConnect.button,
-              icon: <CameraGlyph size={14} color={appearance.accentForeground} />,
-              onPress: openScanner,
-            }}
-          />
-          <PathCard
-            icon={<ShieldGlyph size={20} color={appearance.foreground} />}
-            title={ConnectChooseCopy.tailscale.title}
-            subtitle={ConnectChooseCopy.tailscale.subtitle}
-            footLink={{
-              label: ConnectChooseCopy.tailscale.typeDetailsLink,
-              onPress: () => navigation.navigate('TailscaleForm'),
-            }}
-            button={{
-              label: ConnectChooseCopy.tailscale.button,
-              icon: <CameraGlyph size={14} color={appearance.foreground} />,
-              onPress: openScanner,
-            }}
-          />
-        </View>
+        <ConnectSteps />
       </ScrollView>
+      <View style={styles.footer}>
+        <ConnectActions
+          onScan={() => navigation.navigate('ScanCode')}
+          onPaste={() => navigation.navigate('ScanCode', { startWith: 'paste' })}
+          onTailscale={() => navigation.navigate('TailscaleForm')}
+        />
+      </View>
     </SafeAreaView>
   );
 }
 
-const createStyles = (appearance: Appearance) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: appearance.background,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 24,
-  },
-  intro: {
-    gap: 6,
-  },
-  cards: {
-    marginTop: 22,
-    gap: 12,
-  },
-});
+const createStyles = (appearance: Appearance) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: appearance.background,
+    },
+    content: {
+      paddingHorizontal: 24,
+      paddingTop: 20,
+      paddingBottom: 24,
+    },
+    footer: {
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 12,
+    },
+  });

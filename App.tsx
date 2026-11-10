@@ -88,6 +88,7 @@ import {
   AddProjectCopy,
   ApprovalsCopy,
   ChangesCopy,
+  ConnectStartCopy,
   DocsCopy,
   FeedbackCopy,
   FindPromptsCopy,
@@ -238,7 +239,11 @@ export default function App() {
                 component={VoiceScreen}
                 options={{ headerShown: false, animation: 'slide_from_bottom' }}
               />
-              <Stack.Screen name="ConnectChoose" component={ConnectChooseScreen} options={{ title: '' }} />
+              <Stack.Screen
+                name="ConnectChoose"
+                component={ConnectChooseScreen}
+                options={{ title: ConnectStartCopy.addTitle }}
+              />
               <Stack.Screen name="ScanCode" component={ScanCodeScreen} options={{ title: 'Scan code' }} />
               <Stack.Screen
                 name="TailscaleForm"

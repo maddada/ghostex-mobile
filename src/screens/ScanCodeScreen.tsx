@@ -48,6 +48,9 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const askedRef = useRef(false);
   const [cameraDenied, setCameraDenied] = useState(false);
+  // "Paste a code" opens on the paste sheet; the camera is asked for only once that sheet is closed.
+  const pasteFirst = route.params?.startWith === 'paste';
+  const [cameraWanted, setCameraWanted] = useState(!pasteFirst);
   const {
     phase,
     toast,
@@ -60,12 +63,13 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
     saveTailscale,
     dismissTailscale,
     cancelPairing,
-  } = useScanController(navigation, rePairMachineId);
+  } = useScanController(navigation, rePairMachineId, pasteFirst ? 'paste' : 'none');
 
   const granted = permission?.granted === true;
   const pairing = phase.kind === 'pairing';
   const systemScanner = useSystemScanner(handlePayload);
-  const systemScannerOpenedRef = useRef(false);
+  // Apple's scanner does not jump over the screen after the paste sheet it opened on is closed.
+  const systemScannerOpenedRef = useRef(pasteFirst);
 
   // Apple's scanner opens by itself once, when the camera is allowed and nothing else is on screen.
   useEffect(() => {
@@ -86,10 +90,11 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
   // sheet with the explanation line, which is the designed camera-less path.
   // Not while a link is pairing: the camera is only needed if it fails.
   useEffect(() => {
-    if (permission === null || permission.granted || phase.kind !== 'scanning') return;
+    if (permission === null || permission.granted || phase.kind !== 'scanning' || !cameraWanted) return;
+    // Opened on the paste sheet, a refusal does not open it again once the person closed it.
     if (!permission.canAskAgain) {
       setCameraDenied(true);
-      setSheet('paste');
+      if (!pasteFirst) setSheet('paste');
       return;
     }
     if (askedRef.current) return;
@@ -97,9 +102,9 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
     void requestPermission().then((result) => {
       if (result.granted) return;
       setCameraDenied(true);
-      setSheet('paste');
+      if (!pasteFirst) setSheet('paste');
     });
-  }, [permission, requestPermission, setSheet, phase.kind]);
+  }, [permission, requestPermission, setSheet, phase.kind, cameraWanted, pasteFirst]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -254,7 +259,10 @@ export default function ScanCodeScreen({ navigation, route }: Props) {
       <PasteCodeSheet
         visible={sheet === 'paste'}
         cameraDenied={cameraDenied}
-        onClose={() => setSheet('none')}
+        onClose={() => {
+          setSheet('none');
+          setCameraWanted(true);
+        }}
         onCode={routeCode}
       />
       <WhereIsCodeSheet visible={sheet === 'where'} onClose={() => setSheet('none')} />

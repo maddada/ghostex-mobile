@@ -13,7 +13,7 @@ export type MachineFormParams = { machineId?: string; tailcatToken?: string; foc
 export type RootStackParamList = {
   /** First launch: shown only while no machine is saved. */
   Welcome: undefined;
-  /** "How does your phone reach your computer?": Easy Connect vs Tailscale. */
+  /** Add a computer: the connect steps, Scan the code, and the other ways (the old chooser's route). */
   ConnectChoose: undefined;
   /**
    * One scanner for both pairing codes. `rePairMachineId` makes an Easy Connect
@@ -27,6 +27,8 @@ export type RootStackParamList = {
         incomingCode?: { payload: string; at: number };
         /** Opened by the 11.0.1 security notice: the computers to pair again, first one re-paired (src/app/securityNotice.ts). */
         securityNotice?: { computers: string[] };
+        /** "Paste a code" (Other ways to connect): open on the paste sheet; the camera is asked for only after it closes. */
+        startWith?: 'paste';
       }
     | undefined;
   /** The Tailscale (plain SSH over the tailnet) form: the manual "type the details" path. */
