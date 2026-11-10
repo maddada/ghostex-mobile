@@ -1,29 +1,26 @@
 /**
- * Machine form, three shapes on one screen (docs/2026-09-03/mobile-setup/
- * mobile-04-tailscale.html and mobile-08-edit-machine.html):
+ * Machine form (docs/2026-09-03/mobile-setup/mobile-04-tailscale.html and mobile-08-edit-machine.html):
  *
  * - Add over Tailscale (`TailscaleForm`, the manual "type the details" path):
  *   two prechecks, a scan shortcut, name / address / username / password,
  *   Advanced (port, SSH key, Tailscale SSH, host key), Test connection below
- *   Advanced, and Connect = save + select + Connected.
+ *   Advanced, and Connect = save + select + Sessions.
  * - Add over Easy Connect with a bare pairing address (`MachineForm` with
  *   `tailcatToken`, the legacy "paste the address" path from the scanner).
- * - Edit (`machineId`): name, a Connection block per transport (Easy Connect
- *   summary + Re-pair, or the Tailscale fields), Show in Sessions, Advanced,
- *   Test connection, then Remove with a name confirm.
+ * - A saved computer (`machineId`) opens on its page (machine-form/ComputerPage); each of the page's rows
+ *   opens this form on one `section`: name and Sessions tab (with the Tailscale fields), Ghostex updates,
+ *   agents and tools, or Advanced (pair again, ports, keys, Test connection). Name and Advanced save.
  *
  * Sections live in ./machine-form/; this file owns the state and the save.
  */
 
 import { useAppearance } from '../theme/useAppearance';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, Switch, Text, View } from 'react-native';
+import { Keyboard, Pressable, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src';
-import { markManualDisconnect } from '../app/autoReconnect';
-import ConfirmDialog from '../components/common/ConfirmDialog';
 import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from '../components/common/keyboard/KeyboardAwareScrollView';
 import type { RailEntry } from '../components/common/verticalBar/railSlot';
@@ -36,14 +33,10 @@ import {
 import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { CheckIcon } from '../components/terminal/icons';
-import { ApprovalsCopy, EditMachineCopy, MachineCopy, SshPairingCopy, TailscaleFormCopy } from '../copy';
+import { ComputerPageCopy, EditMachineCopy, MachineCopy, TailscaleFormCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
-import DemoMachineForm from '../demo/DemoMachineForm';
-import { isDemoMachine } from '../demo/identity';
 import { refreshMachineTools } from '../machines/machineTools';
-import { signsInOverSsh, startSshPairing, useSshPairings } from '../machines/sshPairing';
-import { approvalMode, setRequirePresence, usePlainApprovals } from '../security/approvals';
 import {
   getPassphrase,
   getPublicKey,
@@ -65,17 +58,14 @@ import {
 } from '../machines/store';
 import { useOpenSessionsAfterPairing } from '../machines/justPaired';
 import type { RootStackParamList } from '../navigation/types';
-import { unregisterBeforeRemoval, useRemovalAsksComputer } from '../notifications/pushStore';
-import { useSpacesStore } from '../spaces/store';
-import { useWorkspacesStore } from '../workspaces/store';
 import { useWebPreviewStore } from '../webPreview/store';
 
 import AdvancedSection from './machine-form/AdvancedSection';
 import AppUpdateSection from './machine-form/AppUpdateSection';
+import ComputerPage from './machine-form/ComputerPage';
 import MachineToolsSection from './machine-form/MachineToolsSection';
 import { FormSection } from './machine-form/SectionBoundary';
 import EasyConnectSummary from './machine-form/EasyConnectSummary';
-import PairedDevicesSection from './machine-form/PairedDevicesSection';
 import { SwitchRow } from '../components/common/SwitchRow';
 import PrecheckList from './machine-form/PrecheckList';
 import { useFormStyles } from './machine-form/styles';
@@ -97,56 +87,37 @@ function parsePort(value: string): number | null {
   return parsed;
 }
 
-export default function MachineFormScreen({ navigation, route }: Props) {
+/** A saved computer without a `section` opens on its page; everything else is the form. */
+export default function MachineFormScreen(props: Props) {
+  const params = props.route.params;
+  if (props.route.name === 'MachineForm' && params?.machineId !== undefined && params.section === undefined && params.focus === undefined) {
+    return <ComputerPage navigation={props.navigation as never} machineId={params.machineId} />;
+  }
+  return <MachineFormBody {...props} />;
+}
+
+function MachineFormBody({ navigation, route }: Props) {
   const appearance = useAppearance();
   const setupText = useSetupText();
   const formStyles = useFormStyles();
   const machineId = route.params?.machineId ?? null;
+  // Can't reach → Wrong password opens the name page, which holds the Tailscale password.
+  const section = route.params?.section ?? (route.params?.focus === 'password' ? 'name' : null);
   // The form reaches under the iPhone Duo's side bar, its content keeps clear of it.
   const scrollEdges = useScrollToBarEdges(formStyles.scroll);
   const scannedToken = route.params?.tailcatToken;
   const machines = useMachinesStore((state) => state.machines);
   const addMachine = useMachinesStore((state) => state.addMachine);
   const updateMachine = useMachinesStore((state) => state.updateMachine);
-  const removeMachine = useMachinesStore((state) => state.removeMachine);
   const setMachineDisabled = useMachinesStore((state) => state.setMachineDisabled);
   const openSessions = useOpenSessionsAfterPairing(navigation);
   const inventory = useInventoryStore((state) =>
     machineId === null ? undefined : state.inventoriesByMachineId[machineId],
   );
-  const clearMachineInventory = useInventoryStore((state) => state.clearMachine);
-  const clearMachineSpace = useSpacesStore((state) => state.clearMachine);
   const webPreviewPort = useWebPreviewStore((state) =>
     machineId === null ? undefined : state.lastPortByMachine[machineId],
   );
-  const removalAsksComputer = useRemovalAsksComputer();
   const existing = machineId === null ? null : (machines.find((m) => m.id === machineId) ?? null);
-  const sshPairing = useSshPairings((state) => (machineId === null ? undefined : state.pairings[machineId]));
-  const plainApprovals = usePlainApprovals((state) => machineId !== null && state.plain[machineId] === true);
-  // The computer's "Require Face ID to approve" switch, read when its page opens (null until read).
-  const [requirePresence, setRequirePresenceShown] = useState<boolean | null>(null);
-  const [requirePresenceError, setRequirePresenceError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!plainApprovals || existing === null) return;
-    let live = true;
-    approvalMode(existing)
-      .then((mode) => {
-        if (live) setRequirePresenceShown(mode.requirePresence);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [plainApprovals, existing?.id]);
-  const changeRequirePresence = (on: boolean) => {
-    if (existing === null) return;
-    setRequirePresenceShown(on);
-    setRequirePresenceError(null);
-    setRequirePresence(existing, on).catch((error: unknown) => {
-      setRequirePresenceShown(!on);
-      setRequirePresenceError(`${ApprovalsCopy.requirePresenceFailed}: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  };
   const editing = existing !== null;
 
   const [transport, setTransport] = useState<MachineTransport>(
@@ -172,18 +143,8 @@ export default function MachineFormScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<MachineValidationErrors | null>(null);
   const [helpOs, setHelpOs] = useState<SshOs | null>(null);
-  const [removeOpen, setRemoveOpen] = useState(false);
-  /**
-   * Set once the machine is gone. Navigation waits for the next commit because
-   * App.tsx swaps the navigator's route set when the last machine is removed
-   * (Welcome replaces Sessions/Machines), so a route named during the same
-   * tick as the store update may not exist yet.
-   */
-  const [removed, setRemoved] = useState<'no' | 'someRemain' | 'noneRemain'>('no');
   /** Set once Save succeeded or the route is being removed: the header is left as it is from then on. */
   const leaving = useRef(false);
-  /** The header title is the name the form opened with; a rename lands with Save, which closes the form. */
-  const [headerName] = useState(existing?.name ?? '');
 
   // The Scan code screen hands a bare pairing address back through this
   // route's params (merge navigate), so a later scan updates the open form.
@@ -343,41 +304,10 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     saveRef.current = save;
   });
 
-  const remove = async (): Promise<void> => {
-    if (existing === null) return;
-    setRemoveOpen(false);
-    clearMachineInventory(existing.id);
-    clearMachineSpace(existing.id);
-    useWorkspacesStore.getState().clearMachine(existing.id);
-    // While its record and link still exist; waits a bounded time, and an unreachable computer is removed anyway.
-    await unregisterBeforeRemoval(existing.id);
-    try {
-      markManualDisconnect(existing.id);
-      await GhostexNative.disconnect(existing.id);
-    } catch {
-      // Not connected is fine.
-    }
-    await removeMachine(existing.id);
-    setRemoved(useMachinesStore.getState().machines.length === 0 ? 'noneRemain' : 'someRemain');
-  };
-
-  useEffect(() => {
-    if (removed === 'no') return;
-    if (removed === 'noneRemain') {
-      // No computer is left, so Welcome is the only home route.
-      navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
-      return;
-    }
-    // Back to wherever the edit was opened from: the Machines list or Sessions.
-    if (navigation.canGoBack()) navigation.goBack();
-    else navigation.reset({ index: 0, routes: [{ name: 'Sessions' }] });
-  }, [navigation, removed]);
-
   // A computer the phone reaches: read the Ghostex version it runs and whether an update is out.
   const reachable =
     existing !== null && isMachineEnabled(existing) && inventory?.lastError === null && inventory.summary !== null;
   useEffect(() => {
-    if (existing !== null && isDemoMachine(existing)) return;
     if (reachable && existing !== null) refreshAppUpdate(existing, { ifOlderThanMs: APP_UPDATE_FRESH_MS });
     // Its agent CLIs, skills and tools, for the sections below the Ghostex row.
     if (reachable && existing !== null) void refreshMachineTools(existing, { ifOlderThanMs: APP_UPDATE_FRESH_MS });
@@ -388,6 +318,18 @@ export default function MachineFormScreen({ navigation, route }: Props) {
    * react-native-screens on Android crashes ("View already has a parent") when views inside a screen's header or content are re-parented while that screen's removal transition runs (react-native-screens #4677, #3249). This header was set again on every render, and Save re-renders right around goBack() (saving, the store update, a renamed title). So it is set only when what it shows changes, never once the form is leaving, and the title stays the name the form opened with.
    */
   const saveDisabled = !canSave || saving;
+  // Only the name and Advanced pages edit something.
+  const saves = editing && (section === 'name' || section === 'advanced');
+  const sectionTitle =
+    section === 'name'
+      ? easyConnect
+        ? ComputerPageCopy.sectionTitles.name
+        : ComputerPageCopy.sectionTitles.nameTailscale
+      : section === 'updates'
+        ? ComputerPageCopy.sectionTitles.updates
+        : section === 'tools'
+          ? ComputerPageCopy.sectionTitles.tools
+          : ComputerPageCopy.sectionTitles.advanced;
   // On the iPhone Duo (band and side bar) Save is a round button with a checkmark;
   // the system header on other iPhones keeps the text.
   const roundSave = useHeaderPlacement().kind !== 'top';
@@ -402,13 +344,17 @@ export default function MachineFormScreen({ navigation, route }: Props) {
     [saveDisabled, appearance],
   );
   useLayoutEffect(() => {
-    if (removed !== 'no' || leaving.current) return;
+    if (leaving.current) return;
     if (!editing) {
       navigation.setOptions({ title: easyConnect ? MachineCopy.editor.addTitle : TailscaleFormCopy.navTitle });
       return;
     }
+    if (!saves) {
+      navigation.setOptions({ title: sectionTitle });
+      return;
+    }
     navigation.setOptions({
-      title: headerName.length > 0 ? headerName : MachineCopy.editor.editTitle,
+      title: sectionTitle,
       headerRight: roundSave
         ? () => <RoundBarButton entry={saveEntry} size={BAND_SAVE_SIZE} glyphSize={BAND_SAVE_GLYPH} />
         : () => (
@@ -419,12 +365,12 @@ export default function MachineFormScreen({ navigation, route }: Props) {
             </Pressable>
           ),
     });
-  }, [navigation, removed, editing, easyConnect, headerName, saveDisabled, roundSave, saveEntry, setupText]);
+  }, [navigation, editing, saves, easyConnect, sectionTitle, saveDisabled, roundSave, saveEntry, setupText]);
   // The side bar shows Save under Back; every field of the form takes the keyboard.
   useStackScreenRail(
     useMemo(
-      () => ({ entries: editing && removed === 'no' ? [saveEntry] : [], reserveKeyboard: true }),
-      [editing, removed, saveEntry],
+      () => ({ entries: saves ? [saveEntry] : [], reserveKeyboard: true }),
+      [saves, saveEntry],
     ),
   );
 
@@ -478,7 +424,7 @@ export default function MachineFormScreen({ navigation, route }: Props) {
         value={isMachineEnabled(existing)}
         onValueChange={(shown) => setMachineDisabled(existing.id, !shown)}
         label={EditMachineCopy.showInSessions}
-        style={[formStyles.row, easyConnect ? null : formStyles.rowFirst]}
+        style={[formStyles.row, formStyles.rowFirst]}
       >
         <View style={formStyles.rowMain}>
           <Text style={formStyles.rowLabel}>{EditMachineCopy.showInSessions}</Text>
@@ -523,21 +469,6 @@ export default function MachineFormScreen({ navigation, route }: Props) {
       </View>
     );
 
-  if (removed !== 'no') {
-    // The record is gone; never re-render its values as an add form while leaving.
-    return <SafeAreaView style={formStyles.page} edges={['bottom']} />;
-  }
-
-  if (existing !== null && isDemoMachine(existing)) {
-    return (
-      <DemoMachineForm
-        onRemoved={() =>
-          setRemoved(useMachinesStore.getState().machines.length === 0 ? 'noneRemain' : 'someRemain')
-        }
-      />
-    );
-  }
-
   return (
     <SafeAreaView style={formStyles.page} edges={['bottom']}>
       {/* The Connect footer rides above the keyboard with the form on devices that do not resize the window. */}
@@ -548,118 +479,39 @@ export default function MachineFormScreen({ navigation, route }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           {existing !== null ? (
-            <>
-              {inventory?.lastError !== undefined && inventory.lastError !== null ? (
-                <View style={formStyles.errorCallout}>
-                  <Text style={formStyles.errorCalloutText}>
-                    {EditMachineCopy.errorPrefix(existing.name.length > 0 ? existing.name : existing.username)}
-                    {inventory.lastError}{' '}
-                    <Text
-                      style={formStyles.link}
-                      onPress={() => navigation.navigate('CantReach', { machineId: existing.id })}
-                    >
-                      {EditMachineCopy.whatCanICheck}
-                    </Text>
-                  </Text>
-                </View>
-              ) : null}
-              <NameField value={name} onChangeText={setName} hint={false} />
-              <Text style={formStyles.sectionLabel}>
-                {easyConnect ? EditMachineCopy.connectionLabel : EditMachineCopy.connectionTailscaleLabel}
-              </Text>
-              {easyConnect ? (
-                <View style={formStyles.rowsCard}>
-                  <FormSection name="machine-form:easy-connect-summary">
-                    <EasyConnectSummary
-                      machine={existing}
-                      connectedNow={connectedNow}
-                      onRePair={() => navigation.navigate('ScanCode', { rePairMachineId: existing.id })}
-                    />
-                  </FormSection>
-                  {showInSessionsRow}
-                </View>
-              ) : (
-                <>
-                  {tailscaleFields}
-                  <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
-                </>
-              )}
-              {/* CDXC:RemotePairing 2026-11-09: where a hidden pairing card comes back. Shown while this
-                  phone isn't approved on this computer (it signs in over SSH and has no device id there);
-                  Show brings the card back and asks again when the last request lapsed. */}
-              {signsInOverSsh(existing) && existing.deviceId === undefined && sshPairing !== undefined && (
-                <View style={formStyles.rowsCard}>
-                  <View style={[formStyles.row, formStyles.rowFirst]}>
-                    <View style={formStyles.rowMain}>
-                      <Text style={formStyles.rowLabel}>{SshPairingCopy.rowLabel}</Text>
-                      <Text style={formStyles.rowDetail}>{SshPairingCopy.rowDetail(sshPairing.computer)}</Text>
-                    </View>
-                    <SetupButton
-                      small
-                      label={SshPairingCopy.rowShow}
-                      onPress={() => void startSshPairing(existing, { auto: false })}
-                    />
-                  </View>
-                </View>
-              )}
+            section === 'name' ? (
+              <>
+                <NameField value={name} onChangeText={setName} hint={false} />
+                {easyConnect ? null : tailscaleFields}
+                <View style={formStyles.rowsCard}>{showInSessionsRow}</View>
+                {errorBanner}
+              </>
+            ) : section === 'updates' ? (
               <FormSection name="machine-form:app-update">
                 <AppUpdateSection machine={existing} />
               </FormSection>
-              {easyConnect ? (
-                <FormSection name="machine-form:paired-devices">
-                  <PairedDevicesSection machine={existing} reachable={reachable} />
-                </FormSection>
-              ) : null}
+            ) : section === 'tools' ? (
               <FormSection name="machine-form:tools">
                 <MachineToolsSection machine={existing} reachable={reachable} />
               </FormSection>
-              {/* GitHub #495: requests on this computer that only its owner may allow. On a computer from
-                  before plain approvals, approving needs a device token of this phone's own (Easy Connect
-                  pairing, or pairing over SSH: `deviceId` set). A computer that approves plainly lets a
-                  phone on its SSH login approve too, and holds the Face ID switch (CDXC:Security 2026-11-10
-                  in `security/approvals.ts`). */}
-              {(existing.transport === 'tailcat' || existing.deviceId !== undefined || plainApprovals) && (
-              <View style={formStyles.rowsCard}>
-                <View style={[formStyles.row, formStyles.rowFirst]}>
-                  <View style={formStyles.rowMain}>
-                    <Text style={formStyles.rowLabel}>{ApprovalsCopy.open}</Text>
-                    <Text style={formStyles.rowDetail}>{ApprovalsCopy.openDetail}</Text>
+            ) : (
+              <>
+                {easyConnect ? (
+                  <View style={formStyles.rowsCard}>
+                    <FormSection name="machine-form:easy-connect-summary">
+                      <EasyConnectSummary
+                        machine={existing}
+                        connectedNow={connectedNow}
+                        onRePair={() => navigation.navigate('ScanCode', { rePairMachineId: existing.id })}
+                      />
+                    </FormSection>
                   </View>
-                  <SetupButton
-                    small
-                    label={ApprovalsCopy.open}
-                    onPress={() => navigation.navigate('Approvals', { machineId: existing.id })}
-                  />
-                </View>
-                {plainApprovals && requirePresence !== null && (
-                  <SwitchRow
-                    value={requirePresence}
-                    onValueChange={changeRequirePresence}
-                    label={ApprovalsCopy.requirePresence(Platform.OS === 'ios')}
-                    style={formStyles.row}
-                  >
-                    <View style={formStyles.rowMain}>
-                      <Text style={formStyles.rowLabel}>{ApprovalsCopy.requirePresence(Platform.OS === 'ios')}</Text>
-                      <Text style={formStyles.rowDetail}>{requirePresenceError ?? ApprovalsCopy.requirePresenceDetail}</Text>
-                    </View>
-                    <Switch
-                      value={requirePresence}
-                      onValueChange={changeRequirePresence}
-                      trackColor={{ false: appearance.cardActive, true: appearance.accent }}
-                      thumbColor={appearance.foreground}
-                    />
-                  </SwitchRow>
-                )}
-              </View>
-              )}
-              {advanced}
-              {test}
-              {errorBanner}
-              <View style={formStyles.divider} />
-              <Pressable accessibilityRole="button" style={styles.removeButton} onPress={() => setRemoveOpen(true)}>
-                <Text style={[styles.removeLabel, formStyles.danger]}>{EditMachineCopy.remove.button}</Text>
-              </Pressable>
-            </>
+                ) : null}
+                {advanced}
+                {test}
+                {errorBanner}
+              </>
+            )
           ) : easyConnect ? (
             <>
               <NameField value={name} onChangeText={setName} />
@@ -716,20 +568,6 @@ export default function MachineFormScreen({ navigation, route }: Props) {
 
       <SshAccessHelpSheet os={helpOs} onClose={() => setHelpOs(null)} />
 
-      {existing !== null ? (
-        <ConfirmDialog
-          visible={removeOpen}
-          title={EditMachineCopy.remove.title}
-          body={EditMachineCopy.remove.body(
-            existing.name.length > 0 ? existing.name : existing.username,
-            removalAsksComputer,
-          )}
-          confirmLabel={EditMachineCopy.remove.confirm}
-          destructive
-          onConfirm={() => void remove()}
-          onCancel={() => setRemoveOpen(false)}
-        />
-      ) : null}
     </SafeAreaView>
   );
 }
@@ -737,6 +575,4 @@ export default function MachineFormScreen({ navigation, route }: Props) {
 const styles = {
   headerAction: { fontSize: 16, fontWeight: '600' as const },
   hero: { gap: 6 },
-  removeButton: { paddingVertical: 12, alignItems: 'center' as const },
-  removeLabel: { fontSize: 14, fontWeight: '600' as const },
 };

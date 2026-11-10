@@ -846,6 +846,59 @@ export const TailscaleFormCopy = {
   connect: 'Connect',
 } as const;
 
+/**
+ * A computer's page (Machines > a computer): its state and Approvals on top, the devices that can reach it next,
+ * and everything else behind four rows, each opening a short page of its own.
+ *
+ * CDXC:RemotePairing 2026-11-10 DECISION:
+ * The user picked the suggested computer page on the pairing page (Q2191): "State, approvals and devices first;
+ * the rest behind rows. Nothing to save." Only the row pages that edit something (name, Advanced) have Save.
+ */
+export const ComputerPageCopy = {
+  status: {
+    connected: 'Connected',
+    failed: "Can't reach it",
+    hidden: 'Not shown in Sessions',
+    notConnected: 'Not connected',
+  },
+  easyConnect: 'Easy Connect',
+  easyConnectDirect: 'Easy Connect, straight to the computer',
+  easyConnectSameNetwork: 'Easy Connect, straight to the computer on this network',
+  easyConnectRelay: 'Easy Connect, through a relay',
+  tailscale: (address: string) => `Tailscale · ${address}`,
+  approvals: 'Approvals',
+  approvalsNone: 'Nothing is waiting',
+  approvalsWaiting: (count: number) => (count === 1 ? '1 request is waiting' : `${count} requests are waiting`),
+  approvalsUnknown: 'Requests that wait for you on this computer',
+  requirePresenceDetail: (ios: boolean) =>
+    `On: Approve asks for ${ios ? 'Face ID' : 'your fingerprint'} first here, and for Touch ID or the password on the computer. It applies to every device that approves for this computer.`,
+  moreLabel: 'More',
+  rows: {
+    name: { easyConnect: 'Name and Sessions tab', tailscale: 'Name, address and password' },
+    shown: 'shown in Sessions',
+    hidden: 'not shown in Sessions',
+    updates: 'Ghostex updates',
+    updatesReading: 'Reading the version…',
+    updatesUnknown: 'Connect to see the version',
+    updatesByItself: 'updates by itself',
+    tools: 'Agents, skills and tools',
+    toolsUpdates: (count: number) => (count === 1 ? '1 update' : `${count} updates`),
+    toolsNone: 'What is installed there',
+    advanced: 'Advanced',
+    advancedEasyConnect: 'Ports, keys, test the connection, pair again',
+    advancedTailscale: 'Port, SSH key, host key, test the connection',
+  },
+  /** Titles of the row pages (MachineForm with a `section`). */
+  sectionTitles: {
+    name: 'Name and Sessions tab',
+    nameTailscale: 'Name, address and password',
+    updates: 'Ghostex updates',
+    tools: 'Agents, skills and tools',
+    advanced: 'Advanced',
+  },
+  pairAgain: 'Pair again',
+} as const;
+
 /** Edit machine (docs/2026-09-03/mobile-setup/mobile-08-edit-machine.html). */
 export const EditMachineCopy = {
   save: 'Save',
@@ -854,7 +907,7 @@ export const EditMachineCopy = {
   connectionTailscaleLabel: 'Connection · Tailscale',
   /** Pairing v2 (GitHub #495): what this computer has paired, with one-tap Remove. */
   pairedDevices: {
-    title: 'Devices paired with this computer',
+    title: 'Devices that can reach this computer',
     waiting: (name: string) => `${name} is waiting for approval`,
     waitingDetail:
       'Approve its request only if that phone or computer shows the same three words. Deny it if nobody is pairing one right now.',
@@ -864,7 +917,7 @@ export const EditMachineCopy = {
     noLongerWaiting: 'This request is no longer waiting.',
     remove: 'Remove',
     cancel: 'Cancel',
-    thisPhone: (name: string) => `${name} (this phone)`,
+    thisPhone: (name: string) => `This phone (${name})`,
     legacy: 'Paired before Ghostex 11.1.0, so it no longer connects. Pair it again, or remove it.',
     removeTitle: (name: string) => `Remove ${name}?`,
     removeDetail: 'It loses its access to this computer at once: its sign-in key and its Ghostex token are removed.',
@@ -886,7 +939,7 @@ export const EditMachineCopy = {
     rePair: 'Re-pair',
   },
   showInSessions: 'Show in Sessions',
-  showInSessionsDetail: 'Adds a tab to the machine strip.',
+  showInSessionsDetail: "Shows this computer's tab at the top of Sessions.",
   /** The computer's Ghostex row; the status wording lives in src/machines/appUpdate.ts with the desktop's. */
   appUpdate: {
     label: 'Ghostex',
@@ -1681,7 +1734,6 @@ export const SshPairingCopy = {
 export const ApprovalsCopy = {
   title: (computer: string) => `Approvals on ${computer}`,
   open: 'Approvals',
-  openDetail: 'Requests that need your Face ID, fingerprint or screen lock',
   empty: 'Nothing is waiting for your approval.',
   askedBy: (label: string) => `Asked by ${label}`,
   approve: 'Approve',
@@ -1693,7 +1745,5 @@ export const ApprovalsCopy = {
   updateApp: 'This version of Ghostex can’t approve. Update the app.',
   /** The computer's "Require … to approve" switch (its Settings > Security), on a computer that approves plainly. */
   requirePresence: (ios: boolean) => (ios ? 'Require Face ID to approve' : 'Require your fingerprint to approve'),
-  requirePresenceDetail:
-    'Off: Approve goes through with one tap. On: this phone asks for Face ID or your fingerprint first, and your computer for Touch ID or its password. It applies to every device that approves for this computer.',
   requirePresenceFailed: 'Could not change it',
 } as const;

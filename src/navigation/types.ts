@@ -6,8 +6,17 @@ import type { SettingsPageId } from '../screens/settings/pages';
  * Add/edit machine form params. `tailcatToken` prefills the Easy Connect
  * address when the scanner read a bare legacy address. `focus` opens the
  * editor with that field focused (Can't reach → Wrong password → Edit machine).
+ * `machineId` alone opens that computer's page; with `section`, one part of its settings.
  */
-export type MachineFormParams = { machineId?: string; tailcatToken?: string; focus?: 'password' } | undefined;
+export type MachineFormParams =
+  | {
+      machineId?: string;
+      tailcatToken?: string;
+      focus?: 'password';
+      /** One part of a saved computer's settings; without it a saved computer opens on its page (ComputerPage). */
+      section?: 'name' | 'updates' | 'tools' | 'advanced';
+    }
+  | undefined;
 
 /** Root native-stack route map. */
 export type RootStackParamList = {

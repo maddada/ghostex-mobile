@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 /**
- * Run with `bun run test:jest`. Removing a computer from Edit machine (Remove this computer from the phone →
+ * Run with `bun run test:jest`. Removing a computer from its page (Remove this computer from the phone →
  * confirm): once the first notification ask was answered, the app first asks the computer over its warm link to
  * remove this phone's push token, while the computer's saved record and link still exist, and only then closes its
  * connection and removes it; a computer that does not answer is removed after the bounded wait. The confirm text
@@ -36,6 +36,7 @@ jest.mock('../../modules/ghostex-native/src', () => ({
   },
 }));
 jest.mock('../chat/rust/machine-link', () => ({
+  ...jest.requireActual('../chat/rust/machine-link'),
   chatMachineLink: (machine: { id: string }) => ({
     route: async () => {
       if (mockLink.routeGate !== null) await mockLink.routeGate;
