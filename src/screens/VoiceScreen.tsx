@@ -58,8 +58,7 @@ import {
   VOICE_SPEEDS,
   type VoiceLine,
   VOICE_CALL_MODES,
-  VOICE_CALL_MODE_NOTE,
-  VOICE_CALL_MODE_NOTE_LIVE,
+  voiceCallModeNote,
 } from '../voice/conversation';
 import { focusBannerDetail } from '../voice/focus';
 import { GbotCallBanner, useGbotCallOpen } from '../voice/GbotCallBanner';
@@ -306,7 +305,7 @@ function VoiceSettingsSheet({ visible, onClose }: { visible: boolean; onClose: (
           </Pressable>
         );
       })}
-      <Text style={styles.sheetNote}>{live ? VOICE_CALL_MODE_NOTE_LIVE : VOICE_CALL_MODE_NOTE}</Text>
+      <Text style={styles.sheetNote}>{voiceCallModeNote(live)}</Text>
     </BottomSheet>
   );
 }

@@ -134,11 +134,24 @@ export const VOICE_CALL_MODES: { mode: VoiceCallMode; label: string; detail: str
   },
 ];
 
-/** Said once under the two modes: GPT Realtime bills by audio either way. */
-export const VOICE_CALL_MODE_NOTE = 'GPT Realtime bills only audio in both modes. A change applies to your next call.';
+/** Computers whose gxserver said `ready.callModeLive` (it switches a running call's mode) since the app started. */
+const liveCallModeComputers = new Set<string>();
 
-/** The gear sheet's note in a call whose gxserver switches a running call (`callModeLive`). */
-export const VOICE_CALL_MODE_NOTE_LIVE = 'GPT Realtime bills only audio in both modes. A change switches this call at once.';
+/**
+ * Said once under the two modes: GPT Realtime bills by audio either way, and when a change applies.
+ * `live`: the computer switches a running call (`ready.callModeLive`); an older one keeps the call's
+ * mode until the next call.
+ */
+export function voiceCallModeNote(live: boolean): string {
+  return live
+    ? 'GPT Realtime bills only audio in both modes. A change switches a running call at once.'
+    : 'GPT Realtime bills only audio in both modes. A change applies to your next call.';
+}
+
+/** Whether `machineId`'s gxserver is known to switch a running call's mode (a call there said so). */
+export function callModeSwitchesLive(machineId: string): boolean {
+  return liveCallModeComputers.has(machineId);
+}
 
 /** A session the agent showed, as gxserver names it on the tool event (`server/src/voice_agent/show.rs`). */
 export type VoiceShownSession = { projectId: string; sessionId: string; title: string };
@@ -404,6 +417,13 @@ function onFrame(json: string): void {
         ? frame.voiceOptions.filter((voice): voice is string => typeof voice === 'string')
         : [];
       const memory = parseMemory(frame.memory);
+      const callModeLive = frame.callModeLive === true;
+      if (callModeLive && target !== null) liveCallModeComputers.add(target.id);
+      /*
+       * A `ready` again in the same call (`resumed`: a reattach, or gxserver's mid-call mode switch,
+       * which sends `memory: null` unless the call continued it) keeps the memory card as it was.
+       */
+      const keepMemory = frame.resumed === true && memory === null;
       set({
         phase: 'live',
         problem: null,
@@ -411,10 +431,16 @@ function onFrame(json: string): void {
         voice: text('voice') || null,
         ...(options.length > 0 ? { voiceOptions: options } : {}),
         pushToTalk: frame.callMode === 'pushToTalk',
-        callModeLive: frame.callModeLive === true,
+        callModeLive,
+        // Such a gxserver switches the call when the mode is saved, so the call's mode is the setting's.
+        ...(callModeLive ? { callMode: frame.callMode === 'pushToTalk' ? ('pushToTalk' as const) : ('regular' as const) } : {}),
         talking: false,
-        memory,
-        memoryState: memory === null ? 'hidden' : frame.memoryContinued === true ? 'continued' : 'offered',
+        ...(keepMemory
+          ? {}
+          : {
+              memory,
+              memoryState: memory === null ? 'hidden' : frame.memoryContinued === true ? 'continued' : 'offered',
+            }),
       });
       return;
     }
@@ -956,7 +982,9 @@ async function sendNativeCallText(text: string): Promise<string | null> {
   try {
     const answer = await chatMachineLink(machine).rpc('voiceAgentText', { conversationId, text }, READ_TIMEOUT_MS);
     if (answer.error === null) return null;
-    if (answer.error.code === 'notFound' && /conversation/i.test(answer.error.message)) return answer.error.message;
+    // The call ended (`notFound` naming the conversation), or the text was refused (`badRequest`).
+    const olderComputer = answer.error.code === 'notFound' && !/conversation/i.test(answer.error.message);
+    if (!olderComputer) return answer.error.message;
     return `Typing to the voice agent needs a newer Ghostex on ${useVoiceStore.getState().machineName || 'your computer'} (${answer.error.message.replace(/\.$/, '')}).`;
   } catch {
     return "Couldn't reach your computer. Try again in a moment.";

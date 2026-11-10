@@ -22,7 +22,8 @@ import { useAppearance } from '../../theme/useAppearance';
 import {
   readComputerCallMode,
   saveComputerCallMode,
-  VOICE_CALL_MODE_NOTE,
+  callModeSwitchesLive,
+  voiceCallModeNote,
   VOICE_CALL_MODES,
   type VoiceCallMode,
 } from '../../voice/conversation';
@@ -313,7 +314,7 @@ function CallModeSection({ machine }: { machine: MachineRecord }) {
           {VOICE_CALL_MODES.map((choice) => (
             <Caption key={choice.mode}>{`${choice.label}: ${choice.detail}`}</Caption>
           ))}
-          <Caption>{VOICE_CALL_MODE_NOTE}</Caption>
+          <Caption>{voiceCallModeNote(callModeSwitchesLive(machine.id))}</Caption>
           <Caption>The voice agent keeps its own provider (OpenAI or xAI), set on the computer; Dictate's engine never changes it.</Caption>
           {mode === null && problem === null ? <Caption>Reading the setting from your computer…</Caption> : null}
           {problem !== null ? <Caption>{problem}</Caption> : null}
