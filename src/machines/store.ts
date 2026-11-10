@@ -25,6 +25,7 @@ import {
   type MachineTransport,
 } from './credentials';
 import { migrateMachineData } from './machineDataMigration';
+import { loadProvenServerKeys } from './provenComputer';
 import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
 
@@ -370,7 +371,13 @@ async function loadTailcatTokens(machines: readonly MachineRecord[]): Promise<Ma
 async function healDuplicateComputers(machines: MachineRecord[]): Promise<MachineRecord[]> {
   try {
     const tokens = await loadTailcatTokens(machines);
-    const { machines: deduped, merges } = dedupeMachineRecords(machines, (id) => tokens.get(id) ?? null);
+    // Records under different addresses are one computer when earlier connects proved it (provenComputer.ts).
+    const proven = await loadProvenServerKeys();
+    const { machines: deduped, merges } = dedupeMachineRecords(
+      machines,
+      (id) => tokens.get(id) ?? null,
+      (id) => proven[id] ?? [],
+    );
     if (merges.length === 0) return machines;
     const renames = new Map<string, string>();
     for (const merge of merges) for (const staleId of merge.staleIds) renames.set(staleId, merge.survivorId);

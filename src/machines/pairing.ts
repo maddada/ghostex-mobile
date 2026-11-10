@@ -23,7 +23,7 @@
 import { Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { machineForSameComputer } from './computerIdentity';
+import { machineToPairAgain } from './computerIdentity';
 import {
   getEasyConnectAddresses,
   getTailcatToken,
@@ -36,10 +36,11 @@ import {
 } from './credentials';
 import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
 import { DEVICE_KEY_ALGORITHM, deviceKeyPublic, deviceKeySign, hasDeviceKey } from './deviceKey';
-import { decodeSavedAddresses } from './easyConnectAddresses';
+import { decodeSavedAddresses, readEasyConnectAddresses } from './easyConnectAddresses';
 import { saveEasyConnectAddresses } from './easyConnectDial';
 import type { EasyConnectCode } from './pairingCodes';
 import { matchWords, pairingStatusPayload, sameWords } from './pairingWords';
+import { loadProvenServerKeys } from './provenComputer';
 import { tailcatSyntheticHost, useMachinesStore, type MachineRecord } from './store';
 import { forgetEasyConnectLinkKey } from './easyConnectLinkKeyState';
 
@@ -314,7 +315,7 @@ async function waitForApproval(
  * again re-pairs this record instead of adding a second one: two records mean two tunnels to one
  * computer, which break each other (CDXC:RemotePairing 2026-11-05 in computerIdentity.ts).
  */
-async function savedMachineForComputer(address: string): Promise<string | null> {
+async function savedMachineForComputer(address: string, answered: unknown): Promise<string | null> {
   const { machines } = useMachinesStore.getState();
   const tailcat = machines.filter((machine) => machine.transport === 'tailcat');
   const tokens = new Map<string, string | null>(
@@ -330,13 +331,17 @@ async function savedMachineForComputer(address: string): Promise<string | null> 
       }),
     ),
   );
+  // Since 11.3.0 the code carries the computer's pairing door, a key of its own: a record is
+  // found by it only under `machineToPairAgain`'s two-way rule (computerIdentity.ts).
+  const proven = await loadProvenServerKeys();
   return (
-    machineForSameComputer(
+    machineToPairAgain(
       tailcat,
       (id) => tokens.get(id) ?? null,
-      address,
-      null,
+      (id) => proven[id] ?? [],
       (id) => lists.get(id) ?? [],
+      address,
+      readEasyConnectAddresses(answered).map((entry) => entry.address),
     )?.id ?? null
   );
 }
@@ -346,7 +351,8 @@ async function saveEasyConnectMachine(
   registration: PairDeviceResponse,
   requestedRePairId: string | null,
 ): Promise<MachineRecord> {
-  const rePairMachineId = requestedRePairId ?? (await savedMachineForComputer(code.address));
+  const rePairMachineId =
+    requestedRePairId ?? (await savedMachineForComputer(code.address, registration.easyConnectAddresses));
   const store = useMachinesStore.getState();
   const existing =
     rePairMachineId === null ? null : (store.machines.find((machine) => machine.id === rePairMachineId) ?? null);

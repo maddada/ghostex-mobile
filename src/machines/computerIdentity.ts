@@ -13,6 +13,18 @@
  * pre-shared key in the address can change between pairings; the key does
  * not), so records with one key are one computer and are merged into one.
  *
+ * CDXC:RemotePairing 2026-11-11 WHY:
+ * Since 11.3.0 a pairing code carries the address of the computer's pairing door, a helper with a
+ * key of its own, so a phone that scanned a new code through "Add a computer" for a computer it
+ * already had saved a second record under a key no other record had. The computer replaces this
+ * phone's earlier pairing, so the old record was dead ("SSH needs a key or password") and both
+ * dialled with the phone's one key: the two tunnels this file exists to prevent. Two records are
+ * therefore one computer when they share a key the phone has PROVEN for each: the key of the
+ * address a record paired with (the pairing itself went through it) and the key of every address
+ * a record connected through with its own credentials (machines/provenComputer.ts). An address a
+ * computer merely names in its list proves nothing, so a computer that listed another computer's
+ * address can never make the phone drop that computer's record: its own login there fails.
+ *
  * No React Native imports: `bun test` runs this file directly.
  */
 
@@ -170,21 +182,40 @@ export type MachineDedupe = {
 export function dedupeMachineRecords(
   machines: readonly MachineRecord[],
   tokenOf: (machineId: string) => string | null,
+  provenOf: (machineId: string) => readonly string[] = () => [],
 ): MachineDedupe {
-  const groups = new Map<string, MachineRecord[]>();
+  // Records that share a proven key are one computer; one record can link two others, so the
+  // groups are what the links join up.
+  const groupOfKey = new Map<string, MachineRecord[]>();
+  const groups: MachineRecord[][] = [];
   for (const machine of machines) {
     if (machine.transport !== 'tailcat') continue;
     const token = tokenOf(machine.id);
-    const serverKey = token === null ? null : tailcatServerKey(token);
-    if (serverKey === null) continue;
-    const group = groups.get(serverKey);
-    if (group === undefined) groups.set(serverKey, [machine]);
-    else group.push(machine);
+    const pairedKey = token === null ? null : tailcatServerKey(token);
+    if (pairedKey === null) continue;
+    const keys = [pairedKey, ...provenOf(machine.id)];
+    const joined: MachineRecord[][] = [];
+    for (const key of keys) {
+      const known = groupOfKey.get(key);
+      if (known !== undefined && !joined.includes(known)) joined.push(known);
+    }
+    let group = joined[0];
+    if (group === undefined) {
+      group = [];
+      groups.push(group);
+    }
+    for (const other of joined.slice(1)) {
+      group.push(...other);
+      groups.splice(groups.indexOf(other), 1);
+      for (const [key, owner] of groupOfKey) if (owner === other) groupOfKey.set(key, group);
+    }
+    group.push(machine);
+    for (const key of keys) groupOfKey.set(key, group);
   }
   const orderOf = (id: string): number => machines.findIndex((machine) => machine.id === id);
   const replacements = new Map<string, MachineRecord | null>();
   const merges: MachineMerge[] = [];
-  for (const group of groups.values()) {
+  for (const group of groups) {
     if (group.length < 2) continue;
     const survivor = survivorOf(group, orderOf);
     const stale = group.filter((machine) => machine.id !== survivor.id);
@@ -203,8 +234,9 @@ export function dedupeMachineRecords(
     };
     if (group.some((machine) => machine.disabled !== true)) delete merged.disabled;
     // The group's first slot in the tab order holds the merged record; the others drop out.
-    replacements.set(group[0]!.id, merged);
-    for (const machine of group.slice(1)) replacements.set(machine.id, null);
+    const inTabOrder = [...group].sort((a, b) => orderOf(a.id) - orderOf(b.id));
+    replacements.set(inTabOrder[0]!.id, merged);
+    for (const machine of inTabOrder.slice(1)) replacements.set(machine.id, null);
     merges.push({ survivorId: survivor.id, staleIds: stale.map((machine) => machine.id) });
   }
   if (merges.length === 0) return { machines: [...machines], merges };
@@ -231,12 +263,73 @@ export function machineForSameComputer(
 ): MachineRecord | null {
   const serverKey = tailcatServerKey(address);
   if (serverKey === null) return null;
+  const candidates = machines.filter((machine) => machine.id !== ignoreId && machine.transport === 'tailcat');
+  const names = (entries: readonly string[]): boolean => entries.some((entry) => tailcatServerKey(entry) === serverKey);
+  // The record that paired through this very key first; one that only has it on its list after.
   return (
-    machines.find((machine) => {
-      if (machine.id === ignoreId || machine.transport !== 'tailcat') return false;
+    candidates.find((machine) => {
       const token = tokenOf(machine.id);
-      const known = [...(token === null ? [] : [token]), ...addressesOf(machine.id)];
-      return known.some((entry) => tailcatServerKey(entry) === serverKey);
-    }) ?? null
+      return token !== null && names([token]);
+    }) ??
+    candidates.find((machine) => names(addressesOf(machine.id))) ??
+    null
   );
+}
+
+/**
+ * The saved record a pairing that was just approved belongs to, so that record is paired again
+ * instead of a second one being added; null when the computer is new to this phone.
+ *
+ * `scanned` is the address the code carried and `answered` the addresses the computer named in its
+ * pairing answer. A record is that computer when
+ * - it has proven the scanned address's key itself (it paired with it or connected through it), or
+ * - its own list names the scanned address (a computer on 11.3.1 names its pairing door there)
+ *   AND the computer that just answered names an address whose key the record has proven.
+ * Both halves of the second rule are needed: a record that only lists another computer's door, or
+ * a computer that only names another record's address in its answer, is one claim against none,
+ * and pairing it "again" would hand one computer's saved record to another.
+ */
+export function machineToPairAgain(
+  machines: readonly MachineRecord[],
+  tokenOf: (machineId: string) => string | null,
+  provenOf: (machineId: string) => readonly string[],
+  listedBy: (machineId: string) => readonly string[],
+  scanned: string,
+  answered: readonly string[],
+): MachineRecord | null {
+  const scannedKey = tailcatServerKey(scanned);
+  if (scannedKey === null) return null;
+  const candidates = machines.filter((machine) => machine.transport === 'tailcat');
+  const provenKeys = (machine: MachineRecord): string[] => {
+    const token = tokenOf(machine.id);
+    const pairedKey = token === null ? null : tailcatServerKey(token);
+    return [...(pairedKey === null ? [] : [pairedKey]), ...provenOf(machine.id)];
+  };
+  const answeredKeys = new Set(answered.map((address) => tailcatServerKey(address)));
+  return (
+    candidates.find((machine) => provenKeys(machine).includes(scannedKey)) ??
+    candidates.find(
+      (machine) =>
+        listedBy(machine.id).some((address) => tailcatServerKey(address) === scannedKey) &&
+        provenKeys(machine).some((key) => answeredKeys.has(key)),
+    ) ??
+    null
+  );
+}
+
+/**
+ * The records to stop using now that `machineId` has shown which computer it reaches: the others
+ * in its group (`dedupeMachineRecords`), when `machineId` is the one that group keeps. Empty when
+ * it has no duplicate, or when the group would keep another record (then nothing is certain yet).
+ */
+export function staleDuplicatesOf(
+  machines: readonly MachineRecord[],
+  tokenOf: (machineId: string) => string | null,
+  provenOf: (machineId: string) => readonly string[],
+  machineId: string,
+): string[] {
+  const merge = dedupeMachineRecords(machines, tokenOf, provenOf).merges.find(
+    (entry) => entry.survivorId === machineId,
+  );
+  return merge?.staleIds ?? [];
 }

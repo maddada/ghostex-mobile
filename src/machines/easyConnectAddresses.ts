@@ -25,6 +25,12 @@ export type EasyConnectAddress = {
   /** The relay the address meets on: a hostname, or `tailcat.dev` for the public relays. */
   relay: string;
   kind: EasyConnectAddressKind;
+  /**
+   * The computer's pairing door (server/src/tailcat/door.rs): the address a pairing code carries.
+   * It answers only while a code is shown, so it is kept to recognise the computer at the next scan
+   * (machines/computerIdentity.ts) and never dialled.
+   */
+  door?: true;
 };
 
 /** What the keychain keeps per machine. */
@@ -50,7 +56,7 @@ export function readEasyConnectAddresses(value: unknown): EasyConnectAddress[] {
     if (!address.startsWith(ADDRESS_PREFIX) || relay.length === 0 || seen.has(address)) continue;
     if (kind !== 'ghostex' && kind !== 'custom' && kind !== 'public') continue;
     seen.add(address);
-    addresses.push({ address, relay, kind });
+    addresses.push(entry.door === true ? { address, relay, kind, door: true } : { address, relay, kind });
   }
   return addresses;
 }
@@ -94,9 +100,20 @@ export type DialOrderInput = {
  * ones moved behind the rest. Nothing is ever dropped, so the last resort is still dialed.
  */
 export function easyConnectDialOrder(input: DialOrderInput): DialCandidate[] {
-  const candidates: DialCandidate[] = (input.saved?.addresses ?? []).map((entry) => ({ ...entry }));
+  const listed = input.saved?.addresses ?? [];
+  /*
+   * CDXC:RemotePairing 2026-11-11 WHY:
+   * A computer on 11.3.1 names its pairing door last in the list, flagged `door`, so the phone can
+   * tell at the next scan that the door is that computer's. The door answers only while a pairing
+   * code is shown: dialling it costs the 20 s the bridge waits for a hello and never connects. So
+   * a flagged address is not a candidate, and neither is the paired address when the list flags
+   * it (a phone paired since 11.3.0 scanned the door), as long as there is another address to dial.
+   */
+  const candidates: DialCandidate[] = listed
+    .filter((entry) => entry.door !== true)
+    .map(({ address, relay, kind }) => ({ address, relay, kind }));
   const paired = input.paired?.trim() ?? '';
-  if (paired.length > 0 && !candidates.some((candidate) => candidate.address === paired)) {
+  if (paired.length > 0 && (candidates.length === 0 || !listed.some((entry) => entry.address === paired))) {
     candidates.push({ address: paired, relay: 'paired', kind: 'paired' });
   }
   const held = (candidate: DialCandidate): boolean =>

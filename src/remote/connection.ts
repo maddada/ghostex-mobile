@@ -8,6 +8,7 @@ import {
   noteEasyConnectDial,
   refreshEasyConnectAddressesSoon,
 } from '../machines/easyConnectDial';
+import { noteConnectedThrough } from '../machines/duplicateComputers';
 import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
 import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 
@@ -129,6 +130,12 @@ async function connectEasyConnect(
     try {
       await GhostexNative.connect(machine.id, { ...config, tailcatToken: candidate.address });
       noteEasyConnectDial(machine.id, candidate, { ok: true, elapsedMs: Date.now() - startedAt });
+      // This record reached the computer behind this address: an older record of the same computer stops now.
+      noteConnectedThrough(machine.id, candidate.address, (staleMachineId) => {
+        cancelConnectionAttempt(staleMachineId);
+        void GhostexNative.disconnect(staleMachineId).catch(() => undefined);
+        void GhostexNative.stopTailcatForward(staleMachineId).catch(() => undefined);
+      });
       return;
     } catch (error) {
       noteEasyConnectDial(machine.id, candidate, { ok: false, elapsedMs: Date.now() - startedAt, next, error });
