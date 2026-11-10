@@ -10,8 +10,8 @@
  * one: the card sits on the chat's glass (the user's standing rule, no black fills on glass).
  */
 
-import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -24,7 +24,7 @@ import { AgentMark } from './agentMark';
 import { toneColor } from './CoordinatorBoard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { useTranscriptFlags } from '../transcript/context';
+import { TranscriptFlagsProvider, transcriptFlags, useTranscriptFlags } from '../transcript/context';
 import { strengthenedText } from '../transcript/textStrength';
 
 type Dispatch = RustChat['dispatch'];
@@ -131,6 +131,110 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
           )}
         </QuestionFlashFrame>
       ))}
+    </View>
+  );
+}
+
+/** The dock's cards stop growing here and scroll inside it (desktop `DOCK_MAX_HEIGHT`). */
+const DOCK_MAX_HEIGHT = 300;
+
+/**
+ * The dock above a coordinator's chat box (gx-chat-core `work_cards::dock`, which holds the user's
+ * pick C; desktop `render_work_dock`): every open ask as its full card, newest first, then the one
+ * status line ("1 needs you · 5 in progress · 1 waiting") that opens the Work panel. The line's
+ * chevron folds the cards. It sits outside the transcript, so it carries the transcript's flags
+ * (Text strength) itself.
+ */
+export function WorkDock({
+  document,
+  dispatch,
+  onOpenWork,
+}: {
+  document: ChatDocument | null;
+  dispatch: Dispatch;
+  onOpenWork: () => void;
+}) {
+  const flags = useMemo(() => transcriptFlags(document), [document]);
+  const dock = obj(document?.workDock);
+  const [folded, setFolded] = useState(false);
+  if (dock === null) return null;
+  const cards = arr(dock.cards)
+    .map(obj)
+    .filter((card): card is JsonRecord => card !== null);
+  const parts = arr(obj(dock.line)?.parts)
+    .map(obj)
+    .filter((part): part is JsonRecord => part !== null);
+  if (cards.length === 0 && parts.length === 0) return null;
+  return (
+    <TranscriptFlagsProvider value={flags}>
+      <DockBody
+        cards={cards}
+        parts={parts}
+        folded={folded}
+        onFold={() => setFolded((was) => !was)}
+        dispatch={dispatch}
+        onOpenWork={onOpenWork}
+      />
+    </TranscriptFlagsProvider>
+  );
+}
+
+function DockBody({
+  cards,
+  parts,
+  folded,
+  onFold,
+  dispatch,
+  onOpenWork,
+}: {
+  cards: JsonRecord[];
+  parts: JsonRecord[];
+  folded: boolean;
+  onFold: () => void;
+  dispatch: Dispatch;
+  onOpenWork: () => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <View style={styles.dock}>
+      {cards.length > 0 && !folded ? (
+        <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockCards}>
+          {cards.map((card) => (
+            <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>
+              <WorkCard card={card} dispatch={dispatch} />
+            </QuestionFlashFrame>
+          ))}
+        </ScrollView>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open the Work panel"
+        onPress={onOpenWork}
+        style={styles.dockLine}
+      >
+        {cards.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={folded ? 'Show the cards' : 'Fold the cards'}
+            hitSlop={8}
+            onPress={onFold}
+            style={styles.dockFold}
+          >
+            <Glyph name={folded ? 'chevron-up' : 'chevron-down'} size={12} color={P.muted} />
+          </Pressable>
+        ) : null}
+        <Glyph name="layout-board-split" size={14} color={P.muted} />
+        <Text numberOfLines={1} style={styles.dockLineText}>
+          {parts.map((part, index) => (
+            <Text key={`part:${index}`}>
+              {index > 0 ? ' · ' : ''}
+              <Text style={{ color: toneColor(str(part, 'tone')) ?? P.cardMuted }}>{str(part, 'text')}</Text>
+            </Text>
+          ))}
+        </Text>
+        <Glyph name="chevron-right" size={12} color={P.muted} />
+      </Pressable>
     </View>
   );
 }
@@ -342,6 +446,21 @@ function WorkFoldLine({ card }: { card: JsonRecord }) {
 
 const useStyles = themedStyles((P) => ({
   stack: { gap: 6, marginTop: 8 },
+  dock: { gap: 6, paddingHorizontal: 12, paddingBottom: 6 },
+  dockCards: { gap: 6 },
+  dockLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.inputBorder,
+    backgroundColor: P.cardPanel,
+  },
+  dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
   card: {
     gap: 4,
     paddingHorizontal: 12,
