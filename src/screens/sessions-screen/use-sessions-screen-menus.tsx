@@ -1760,12 +1760,17 @@ export function useSessionsScreenMenus({
     if (inventory === undefined || inventory.lastError !== null || (inventory.loadedAt ?? 0) < askedAt) {
       return uncertain;
     }
-    const made = (summaryFor(ctx.machine.id)?.sessions ?? []).find(
+    // A coordinator new in the list may be another client's, so it is never offered as this one: only a create that
+    // names its coordinator (above) gets Open coordinator.
+    const appeared = (summaryFor(ctx.machine.id)?.sessions ?? []).some(
       (session) => session.projectId === projectId && session.isCoordinator && !before.has(session.sessionId),
     );
-    if (made !== undefined && refusal.openSession !== undefined) {
-      const openSession = refusal.openSession;
-      return notStarted(() => void openSession(made.sessionId));
+    if (appeared) {
+      return {
+        message: "The coordinator may have been created. Check this project's list before trying again.",
+        details: refusal.raw,
+        uncertain: true,
+      };
     }
     return { message: 'Coordinator not created. Try again, or pick another folder.', details: refusal.raw };
   };
