@@ -4,7 +4,8 @@
  * one computer, the one it starts on (the last used for it) marked. Tapping the row takes the
  * project on that computer; tapping a chip takes that computer; a computer that isn't connected is
  * dimmed and can't be tapped. Recent projects come first; a project with no open session says so.
- * The composer's tray and the Sessions list's agent menu both open it.
+ * The composer's tray and the Sessions list's agent menu both open it. Each opening starts with an
+ * empty search.
  *
  * CDXC:Sidebar 2026-11-04 DECISION:
  * User (Q1224, randomsand: with a project on 3 computers "the computer chips push the project name out of view"; "project name on top, the computers below it"): a row that lists computers, or says which repository it is (`detail`: `owner/repo` or "no remote", when two rows share a name), puts the name on its own line and those under it, so the name always has the row's width. Searching a computer's name next to the project's marks that computer (`filterProjectChoices`).
@@ -40,6 +41,13 @@ export function ProjectPickerSheet({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const [query, setQuery] = useState('');
+  // Each opening starts with an empty search (issue #558: the last search stayed typed in). Reset
+  // while rendering the opening, so the old filter never shows for a frame.
+  const [shownOpen, setShownOpen] = useState(visible);
+  if (visible !== shownOpen) {
+    setShownOpen(visible);
+    if (visible) setQuery('');
+  }
   const rows = useMemo(() => projectPickerRows(choices, query), [choices, query]);
   // Chips only mean something with more than one computer.
   const chips = useMemo(

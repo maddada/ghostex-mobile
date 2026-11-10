@@ -12,6 +12,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
 import { runQuickAction as runQuickActionOnMachine } from '../../actions/runAction';
+import { logAppEvent } from '../../app/appLog';
 import type { QuickActionEntry } from '../../actions/quickActions';
 import {
   answerWorkCleanupCommand,
@@ -175,6 +176,9 @@ export function useSessionsScreenActions({
       // CDXC:SessionChat 2026-09-09 DECISION:
       // User: open chat immediately while the terminal starts in the background. Creation supplies the identity, so inventory and SSH attachment do not gate navigation.
       if (!chatLaunch) await attaching;
+      // Issue #558: once a new session's draft started while the app stayed on the list; this line
+      // in the Logs sheet tells the next report whether the app tried to open it.
+      logAppEvent(`New session: opening its ${chatLaunch ? 'chat' : 'terminal'}`);
       navigation.navigate('Terminal', {
         sessionKey,
         machineId: target.id,
