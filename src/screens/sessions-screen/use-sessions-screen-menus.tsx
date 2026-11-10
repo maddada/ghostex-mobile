@@ -118,7 +118,12 @@ import { useAppearance } from '../../theme/useAppearance';
 import { useUpdateNotice } from '../../updates/updateNotice';
 import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
 import { handoffLastTurns } from '../../contract/handoff/handoff';
-import { stagedHandoffDraft } from '../../chat/native/sessionShell';
+import {
+  createAgentWithFirstInputDraft,
+  machineAgents,
+  opensInChatFor,
+  stagedHandoffDraft,
+} from '../../chat/native/sessionShell';
 import type { ExportedTranscript } from '../terminal-screen/session-lookups';
 import {
   cancelDelayedSendSessionAction,
@@ -185,6 +190,12 @@ export type SessionsScreenMenusDeps = {
   reconnectMachine: (target: MachineRecord) => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshMachine: (machine: MachineRecord) => Promise<void>;
+  /** Opens a session just created, in chat when `chatLaunch` names it (use-sessions-screen-actions.ts). */
+  attachCreated: (
+    target: MachineRecord,
+    sessionId: string,
+    chatLaunch?: { agentId: string; projectId: string; title: string },
+  ) => Promise<void>;
   runBulkSessionActions: (target: MachineRecord, actions: readonly BulkSessionAction[]) => Promise<void>;
   runCreationFlow: (
     target: MachineRecord,
@@ -220,6 +231,7 @@ export function useSessionsScreenMenus({
   reconnectMachine,
   refreshAll,
   refreshMachine,
+  attachCreated,
   runBulkSessionActions,
   runCreationFlow,
   runQuickAction,
@@ -533,20 +545,48 @@ export function useSessionsScreenMenus({
     void runSessionCommand(ctx.machine, setSessionWorkLinksCommand(session.sessionId, session.projectId, links));
   };
 
-  /** The exported transcript's follow-up: the same agent, with the path staged as its first input. */
+  /**
+   * The exported transcript's follow-up: the same agent, with the path staged as its first input,
+   * started the way the chat's own Handoff starts it (`createAgentWithFirstInputDraft`): a chat
+   * agent starts deferred and its composer claims the staged link, instead of the link being typed
+   * into the terminal behind the chat.
+   */
   const startTranscriptConversation = (exported: ExportedTranscript, projectTitle: string): void => {
     if (exported.agentId.length === 0) return;
-    void stagedHandoffDraft(exported.machine, {
-      path: exported.path,
-      sessionTitle: exported.sessionTitle,
-      projectTitle,
-    }).then((draft) =>
-      runCreationFlow(
-        exported.machine,
-        createAgentCommand(exported.agentId, exported.projectId, draft),
-        ProgressCopy.startingAgent(exported.agentLabel, projectTitle),
-      ),
-    );
+    const { machine } = exported;
+    const agent = machineAgents(machine.id).find((entry) => entry.agentId === exported.agentId) ?? {
+      agentId: exported.agentId,
+      name: exported.agentLabel,
+    };
+    setOverlay(NONE);
+    setProgress(ProgressCopy.startingAgent(exported.agentLabel, projectTitle));
+    void (async () => {
+      try {
+        const draft = await stagedHandoffDraft(machine, {
+          path: exported.path,
+          sessionTitle: exported.sessionTitle,
+          projectTitle,
+        });
+        const sessionId = await createAgentWithFirstInputDraft(machine, {
+          projectId: exported.projectId,
+          agent,
+          draft,
+        });
+        setProgress(null);
+        const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+        await attachCreated(
+          machine,
+          sessionId,
+          opensInChatFor(agent)
+            ? { agentId: resolveAgentIconId(agent.icon, agentName), projectId: exported.projectId, title: agentName }
+            : undefined,
+        );
+        void refreshMachine(machine).catch(() => undefined);
+      } catch (error) {
+        setProgress(null);
+        setTransientStatus(error instanceof Error ? error.message : String(error));
+      }
+    })();
   };
 
   /** Close the menu, put `text` on the phone's clipboard and say so. */

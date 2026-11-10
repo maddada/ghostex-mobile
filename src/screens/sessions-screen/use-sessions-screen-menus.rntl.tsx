@@ -5,7 +5,9 @@
  * entry keeps its scope.
  */
 
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
+
+import { takeLaunchDraft } from '../../chat/native/sessionShell';
 
 import { buildDrawerItems, type ProjectHeaderItem } from '../../contract/grouping';
 import { parseMobileSummary, withoutGlobalQuickActions, type GhostexMobileSummary } from '../../contract/mobileSummary';
@@ -24,6 +26,23 @@ jest.mock('../../voice/VoiceButton', () => ({ voiceAgentOnFor: () => false }));
 jest.mock('../../voice/conversation', () => ({ VOICE_SUPPORTED: false }));
 jest.mock('../../voice/callAbout', () => ({ callVoiceAbout: jest.fn() }));
 jest.mock('../../chat/rust/machine-link', () => ({ chatMachineLink: jest.fn() }));
+/** Every command sent to the computer's CLI; a create answers with a session, the version check with a new computer. */
+const mockRun = jest.fn(async (_machine: unknown, command: string) =>
+  command.startsWith('ghostex create-agent ')
+    ? { json: { session: { sessionId: 's-new' } }, stdout: '' }
+    : { json: { health: { version: '99.0.0' } }, stdout: '' },
+);
+jest.mock('../../components/sessions/cli', () => ({
+  ...jest.requireActual('../../components/sessions/cli'),
+  runGhostexCli: (...args: [unknown, string]) => mockRun(...args),
+}));
+const mockRpc = jest.fn(async (_machine: unknown, _method: string, _params: unknown) => ({
+  error: null,
+  result: { content: 'Continue from the exported transcript' },
+}));
+jest.mock('../../chat/rust/transport', () => ({
+  sessionChatRpc: (...args: [unknown, string, unknown]) => mockRpc(...args),
+}));
 
 const machine: MachineRecord = {
   id: 'm1',
@@ -71,6 +90,7 @@ function showSummary(summary: GhostexMobileSummary): void {
 
 async function renderMenus() {
   const runQuickAction = jest.fn();
+  const attachCreated = jest.fn(async () => undefined);
   const deps: SessionsScreenMenusDeps = {
     entries: [],
     collapse: { collapseAllProjects: jest.fn(), expandAllProjects: jest.fn() },
@@ -83,6 +103,7 @@ async function renderMenus() {
     reconnectMachine: jest.fn(),
     refreshAll: jest.fn(),
     refreshMachine: jest.fn(),
+    attachCreated,
     runBulkSessionActions: jest.fn(),
     runCreationFlow: jest.fn(),
     runQuickAction,
@@ -92,7 +113,7 @@ async function renderMenus() {
     setTransientStatus: jest.fn(),
   };
   const view = await renderHook(() => useSessionsScreenMenus(deps));
-  return { ...view, runQuickAction };
+  return { ...view, runQuickAction, attachCreated };
 }
 
 const rowKeys = (items: { key: string }[]) => items.map((item) => item.key);
@@ -169,4 +190,34 @@ test('a project without a stable project id offers no Global Actions', async () 
   expect(projectless.globalQuickActions.map((action) => action.commandId)).toEqual(['same']);
   expect(rowKeys(result.current.projectMenuView(ctx, []).items)).not.toContain('quick-actions');
   expect(result.current.actionsMenuItems(ctx)).toEqual([]);
+});
+
+test("the Sessions list's Handoff starts a chat agent as the chat's Handoff does: deferred, its staged link claimed", async () => {
+  const summary = summaryOf({ agents: [{ agentId: 'claude', name: 'Claude', icon: 'claude' }] });
+  showSummary(summary);
+  const { result, attachCreated } = await renderMenus();
+  mockRun.mockClear();
+  mockRpc.mockClear();
+  await act(async () => {
+    result.current.startTranscriptConversation(
+      {
+        machine,
+        projectId: 'P1',
+        sessionTitle: 'Old chat',
+        agentId: 'claude',
+        agentLabel: 'Claude',
+        path: '/tmp/t.md',
+      },
+      'Project',
+    );
+  });
+  const creates = mockRun.mock.calls
+    .map(([, command]) => command)
+    .filter((command) => command.startsWith('ghostex create-agent '));
+  expect(creates).toHaveLength(1);
+  expect(creates[0]).toContain('--first-input-draft');
+  expect(creates[0]).toContain('--defer-start');
+  expect(mockRpc).toHaveBeenCalledWith(machine, 'claimSessionChatLaunchDraft', { projectId: 'P1', sessionId: 's-new' });
+  expect(attachCreated).toHaveBeenCalledWith(machine, 's-new', { agentId: 'claude', projectId: 'P1', title: 'Claude' });
+  expect(takeLaunchDraft('m1', 'P1', 's-new')).toBe('Continue from the exported transcript');
 });

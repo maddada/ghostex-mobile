@@ -812,6 +812,7 @@ export default function SessionsScreen({ navigation }: Props) {
     reconnectMachine,
     refreshAll,
     refreshMachine,
+    attachCreated,
     runBulkSessionActions,
     runCreationFlow,
     runQuickAction,

@@ -127,6 +127,7 @@ function UnifiedHarness() {
     reconnectMachine: jest.fn(),
     refreshAll: jest.fn(),
     refreshMachine: jest.fn(),
+    attachCreated: jest.fn(),
     runBulkSessionActions: jest.fn(),
     runCreationFlow: jest.fn(),
     runQuickAction,
