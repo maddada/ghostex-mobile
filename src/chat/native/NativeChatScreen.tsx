@@ -50,6 +50,7 @@ import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
 import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettingsSheet';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
+import { WorkDock } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
@@ -427,6 +428,8 @@ export default function NativeChatScreen({
             {/* The working card in its own row above the cards and the composer: the transcript ends above it. */}
             {document === null ? null : <WorkingCard document={document} />}
             <NativeChatCards chat={chat} onHostAction={hostAction} />
+            {/* The dock: what needs the reader, right above the box (`WorkCards.tsx`). */}
+            <WorkDock document={document} dispatch={chat.dispatch} />
             {!composerShown ? null : (
               <View
                 onLayout={(event) => {

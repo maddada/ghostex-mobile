@@ -94,6 +94,7 @@ import {
   MachinesCopy,
   NotificationsCopy,
   PanesCopy,
+  ScanCopy,
   SettingsCopy,
   SshAccessCopy,
   TailscaleFormCopy,
@@ -243,7 +244,7 @@ export default function App() {
                 component={ConnectChooseScreen}
                 options={{ title: ConnectStartCopy.addTitle }}
               />
-              <Stack.Screen name="ScanCode" component={ScanCodeScreen} options={{ title: 'Scan code' }} />
+              <Stack.Screen name="ScanCode" component={ScanCodeScreen} options={{ title: ScanCopy.title }} />
               <Stack.Screen
                 name="TailscaleForm"
                 component={MachineFormScreen}

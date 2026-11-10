@@ -756,6 +756,8 @@ export type ChatDocument = {
   relayedApprovals?: Json;
   /** A coordinator's work item cards (gx-chat-core `extras/work_cards.rs`), drawn under their replies. */
   workCards?: Json;
+  /** The dock above a coordinator's chat box (gx-chat-core `work_cards::dock`): `{cards, line}` or null. */
+  workDock?: Json;
   /** The question tags work items ask (gx-chat-core `card_tags`): such a one-click question is drawn as its ask card only. */
   workAskTags?: Json;
   /** A thread's "Approved from <coordinator>" lines, empty when none. Desktop: `relayed_approval.rs`. */
@@ -964,8 +966,10 @@ export type FilesLinksSection = {
 
 /** The Files and links card: every attachment, file and link the session (and a coordinator's threads) mentioned. */
 export type OpenQuestionsState = {
-  /** Unanswered forms and question pages; the pill shows while this is above zero. */
+  /** Unanswered forms and question pages. */
   count: number;
+  /** What the ? pill counts and shows for: the unanswered questions the dock cannot show. */
+  pillCount?: number;
   /** The pill's text: "❓ 2 · Previous question ↑". */
   text: string;
   accessibilityLabel: string;

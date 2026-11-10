@@ -40,7 +40,7 @@ export type ScanPhase =
 
 export type ScanToast = { tone: 'error' | 'ok'; title: string; detail?: string };
 
-export type ScanSheet = 'none' | 'paste' | 'where';
+export type ScanSheet = 'none' | 'paste' | 'wontScan';
 
 const TOAST_MS = 3500;
 /** The camera re-reads the same foreign QR many times a second; one toast per code. */

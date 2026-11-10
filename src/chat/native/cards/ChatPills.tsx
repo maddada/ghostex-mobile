@@ -497,7 +497,7 @@ export function Pill({
       {label.length > 0 ? <Text style={styles.label}>{label}</Text> : null}
       {/* Autopilot on: a green dot after its label (desktop chat_pills.rs `AUTOPILOT_ON_COLOR`). */}
       {pill.switch === true ? <View style={styles.switchOnDot} /> : null}
-      {(pill.dots ?? []).length > 0 ? (
+      {(pill.dots ?? []).length > 0 && (collapsed || pill.id !== 'board') ? (
         <InlineDots dots={pill.dots ?? []} />
       ) : pill.count.length > 0 ? (
         <Text style={styles.count}>{pill.count}</Text>
@@ -621,7 +621,7 @@ export function PillMenuSheet({
     : (document.chatPills ?? []).find((pill) => pill.id === open);
   // A panel that went away (the subagents finished) takes its sheet with it.
   useEffect(() => {
-    if (open !== null && shown === undefined) onClose();
+    if (open !== null && open !== 'board' && shown === undefined) onClose();
   }, [open, shown, onClose]);
   const close = () => {
     // The Threads list goes back to its first step, as folding the panel did (desktop `pill_menu_closed`).
@@ -663,7 +663,9 @@ export function PillMenuSheet({
   const background = obj(document.backgroundTasksPanel);
   return (
     <Sheet
-      visible={shown !== undefined}
+      // The Work panel also opens from the dock's status line, which stands in for its pill
+      // (`WorkCards.tsx` `WorkDock`).
+      visible={shown !== undefined || open === 'board'}
       onClose={close}
       onDismissed={onDismissed}
       title={
@@ -671,7 +673,7 @@ export function PillMenuSheet({
           ? (coordinatorIntro(document)?.title ?? shown?.label ?? '')
           : open === 'autopilot'
             ? 'Autopilot'
-            : (shown?.label ?? '')
+            : (shown?.label ?? (open === 'board' ? 'Work' : ''))
       }
       accessory={
         questions ? (

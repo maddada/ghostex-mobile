@@ -844,6 +844,9 @@ class ChatMachineLink {
       projectId: follower.projectId,
       sessionId: follower.sessionId,
       limit: follower.limit,
+      // CDXC:SessionChat 2026-11-10: a coordinator's thread list arrives as what changed, which this
+      // build's chat core rebuilds (gx-chat-core session/thread_patch.rs). An older gxserver ignores it.
+      coordinatorThreadsPatch: true,
     });
   }
 

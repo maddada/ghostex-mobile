@@ -64,7 +64,8 @@ export function mixHex(base: string, over: string, alpha: number): string {
 
 /** Whether the question pill shows: a question form or page waits (the core's `openQuestions.count`). */
 function questionWaiting(document: ChatDocument): boolean {
-  return (document.openQuestions?.count ?? 0) > 0;
+  // What the dock above the box cannot show (gx-chat-core `pill_count`): one place per question.
+  return (document.openQuestions?.pillCount ?? 0) > 0;
 }
 
 /** Whether the strip shows: the Saved draft pill, a view chip, a panel pill, the ?, the Links pill or an armed timer calls for it; the ↓ only joins them. */
@@ -243,13 +244,13 @@ export function PillsStrip({
               ))}
               {questions !== undefined && questions !== null && questionWaiting(document) ? (
                 <QuestionPill
-                  count={questions.count}
+                  count={questions.pillCount ?? 0}
                   newest={questions.newest ?? null}
                   accessibilityLabel={questions.accessibilityLabel}
                   onPress={() => chat.dispatch({ type: 'previousQuestion' })}
                 />
               ) : null}
-</PillsFit>
+            </PillsFit>
           </View>
           <View style={styles.hairline} />
         </Animated.View>
@@ -373,10 +374,13 @@ function PillsFit({
     setWidths((was) => (Math.abs((was[key] ?? -1) - width) < 0.5 ? was : { ...was, [key]: width }));
   };
   const hasBefore = Children.toArray(children).length > 0;
-  const fixed = [hasBefore ? widths['fixed:before'] : undefined, after !== null ? widths['fixed:after'] : undefined].filter(
-    (width): width is number => width !== undefined && width > 0,
+  const fixed = [
+    hasBefore ? widths['fixed:before'] : undefined,
+    after !== null ? widths['fixed:after'] : undefined,
+  ].filter((width): width is number => width !== undefined && width > 0);
+  const known = panel.every(
+    (pill) => widths[`full:${pill.id}`] !== undefined && widths[`icon:${pill.id}`] !== undefined,
   );
-  const known = panel.every((pill) => widths[`full:${pill.id}`] !== undefined && widths[`icon:${pill.id}`] !== undefined);
   // Everything drawn whole until the widths are known.
   const plan =
     avail > 0 && known

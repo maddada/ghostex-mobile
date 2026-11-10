@@ -10,8 +10,8 @@
  * one: the card sits on the chat's glass (the user's standing rule, no black fills on glass).
  */
 
-import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -24,7 +24,7 @@ import { AgentMark } from './agentMark';
 import { toneColor } from './CoordinatorBoard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { useTranscriptFlags } from '../transcript/context';
+import { TranscriptFlagsProvider, transcriptFlags, useTranscriptFlags } from '../transcript/context';
 import { strengthenedText } from '../transcript/textStrength';
 
 type Dispatch = RustChat['dispatch'];
@@ -125,12 +125,116 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
           {str(card, 'kind') === 'moving' ? (
             <WorkMovingRow card={card} dispatch={dispatch} />
           ) : isTrue(card, 'folded') ? (
-            <WorkFoldLine card={card} />
+            <WorkFoldLine card={card} dispatch={dispatch} />
           ) : (
             <WorkCard card={card} dispatch={dispatch} />
           )}
         </QuestionFlashFrame>
       ))}
+    </View>
+  );
+}
+
+/** The dock's cards stop growing here and scroll inside it (desktop `DOCK_MAX_HEIGHT`). */
+const DOCK_MAX_HEIGHT = 420;
+
+/**
+ * The dock above a chat box (gx-chat-core `work_cards::dock`, which holds the user's decisions;
+ * desktop `render_work_dock`): every open ask, unanswered form or page, blocked line of work and
+ * what the latest turn finished, as cards; nothing when there are none. The counts are the Work
+ * pill's. It sits outside the transcript, so it carries the transcript's flags (Text strength).
+ */
+export function WorkDock({ document, dispatch }: { document: ChatDocument | null; dispatch: Dispatch }) {
+  const flags = useMemo(() => transcriptFlags(document), [document]);
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const cards = arr(obj(document?.workDock)?.cards)
+    .map(obj)
+    .filter((card): card is JsonRecord => card !== null);
+  if (cards.length === 0) return null;
+  return (
+    <TranscriptFlagsProvider value={flags}>
+      <View style={styles.dock}>
+        <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockCards}>
+          {cards.map((card) => (
+            <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>
+              {str(card, 'kind') === 'questions' ? (
+                <DockQuestionsCard card={card} dispatch={dispatch} />
+              ) : (
+                <WorkCard card={card} dispatch={dispatch} />
+              )}
+            </QuestionFlashFrame>
+          ))}
+        </ScrollView>
+      </View>
+    </TranscriptFlagsProvider>
+  );
+}
+
+/**
+ * Snooze (1 hour, 6 hours or 24 hours, opened from a quiet "Snooze") and Cancel, on a docked ask,
+ * form or page (gx-chat-core `snooze_choices`; desktop `snooze_cancel_row`). Null when neither.
+ */
+function SnoozeCancelRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const [open, setOpen] = useState(false);
+  const choices = arr(card.snooze)
+    .map(obj)
+    .filter((choice): choice is JsonRecord => choice !== null);
+  const cancel = obj(card.cancel);
+  if (choices.length === 0 && cancel === null) return null;
+  return (
+    <View style={styles.snoozeRow}>
+      {choices.length > 0 ? (
+        <Pressable accessibilityRole="button" hitSlop={6} onPress={() => setOpen((was) => !was)}>
+          <Text style={styles.quiet}>{open ? 'Snooze for' : 'Snooze'}</Text>
+        </Pressable>
+      ) : null}
+      {open
+        ? choices.map((choice, index) => (
+            <Pressable
+              key={`snooze:${index}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Snooze for ${str(choice, 'label')}`}
+              onPress={() => {
+                setOpen(false);
+                dispatch(choice.command as never);
+              }}
+              style={styles.snoozeChoice}
+            >
+              <Text style={styles.chipText}>{str(choice, 'label')}</Text>
+            </Pressable>
+          ))
+        : null}
+      {cancel !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel it for good and tell the agent"
+          hitSlop={6}
+          onPress={() => dispatch(cancel as never)}
+        >
+          <Text style={styles.quiet}>Cancel</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/** An unanswered form or page in the dock: its title, how many questions are open, and Open. */
+function DockQuestionsCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const body = useBodyColor();
+  return (
+    <View style={styles.card}>
+      <View style={styles.questionsCard}>
+        <Glyph name="help-circle" size={14} color={SidebarPalette.ROW_QUESTION} />
+        <View style={styles.movingText}>
+          <Text style={[styles.title, { color: body, minWidth: 0 }]}>{str(card, 'title')}</Text>
+          <Text style={styles.chipText}>{str(card, 'line')}</Text>
+        </View>
+        <ToneButton kind="secondary" label="Open" onPress={() => dispatch(card.command as never)} />
+      </View>
+      <SnoozeCancelRow card={card} dispatch={dispatch} />
     </View>
   );
 }
@@ -157,6 +261,18 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
         </View>
         <Text style={[styles.title, { color: body }]}>{str(card, 'title')}</Text>
         {right.length > 0 ? <Text style={styles.right}>{right}</Text> : null}
+        {/* A finished card in the dock goes away with its × (gx-chat-core `dock`). */}
+        {obj(card.dismiss) !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            hitSlop={8}
+            onPress={() => dispatch(card.dismiss as never)}
+            style={styles.dismiss}
+          >
+            <Glyph name="x" size={12} color={P.muted} />
+          </Pressable>
+        ) : null}
       </View>
       {line.length > 0 ? <Text style={styles.line}>{line}</Text> : null}
       {chips.length > 0 || buttons.length > 0 ? (
@@ -184,7 +300,9 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
                 ) : (
                   <Glyph name={CHIP_ICON[kind] ?? 'clock'} size={14} color={P.muted} />
                 )}
-                <Text style={styles.chipText}>{str(chip, 'label')}</Text>
+                {/* A part that opens something wears the faint dotted underline of a link in the chat
+                    (`LinkWords.tsx`): the phone has no hover, so it shows at rest. */}
+                <Text style={[styles.chipText, command !== null ? styles.linkDots : null]}>{str(chip, 'label')}</Text>
                 {state.length > 0 ? (
                   <Text style={[styles.chipText, { color: toneColor(str(chip, 'tone')) ?? P.muted }]}>{state}</Text>
                 ) : null}
@@ -216,6 +334,9 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
           ) : null}
         </View>
       ) : null}
+      <View style={styles.snoozeIndent}>
+        <SnoozeCancelRow card={card} dispatch={dispatch} />
+      </View>
     </View>
   );
 }
@@ -225,10 +346,26 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
  * row of the list goes to that item's newest card (gx-chat-core `moving_row`, desktop
  * `work_moving_row`).
  */
+/**
+ * The In progress lists the reader opened, by card key, kept outside the component: the row moves
+ * to the newest reply (a new parent), and an opened list stays open across live updates, the end
+ * of a turn and a new reply until the reader folds it (the user's "this gets collapsed after the
+ * turn ends and new text comes in, let's not do that").
+ */
+const openedLists = new Set<string>();
+
 function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
-  const [open, setOpen] = useState(false);
+  const listKey = str(card, 'key');
+  const [open, setOpenState] = useState(() => openedLists.has(listKey));
+  const setOpen = (next: (was: boolean) => boolean) =>
+    setOpenState((was) => {
+      const value = next(was);
+      if (value) openedLists.add(listKey);
+      else openedLists.delete(listKey);
+      return value;
+    });
   const rows = arr(card.rows)
     .map(obj)
     .filter((row): row is JsonRecord => row !== null);
@@ -243,53 +380,102 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
         style={styles.movingHead}
       >
         <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
-        <StatusMarker status="moving" size={11} />
+        {/* The same 14 px as the list's who-has-it marks under it. */}
+        <StatusMarker status="moving" size={14} />
         <Text style={[styles.movingTitle, { color: body }]}>{str(card, 'title')}</Text>
+        {/* Closed, it says who has what ("1 with you · 1 on GitHub · 5 threads"), what is with the
+            user in the question colour (gx-chat-core `who_has`, Q2207 B). */}
         <Text numberOfLines={1} style={styles.movingSummary}>
-          {open ? '' : str(card, 'summary')}
+          {open
+            ? ''
+            : arr(card.summaryParts)
+                .map(obj)
+                .filter((part): part is JsonRecord => part !== null)
+                .map((part, index) => (
+                  <Text key={`part:${index}`}>
+                    {index > 0 ? ' · ' : ''}
+                    <Text style={{ color: toneColor(str(part, 'tone')) ?? P.cardMuted }}>{str(part, 'text')}</Text>
+                  </Text>
+                ))}
         </Text>
       </Pressable>
-      {open
-        ? rows.map((row, index) => {
+      {open ? (
+        // Grouped by who has it under quiet labels, the full text wrapping, no hairlines (Q2207 B;
+        // the phone always takes the rows, never the desktop's table).
+        <View style={styles.movingList}>
+          {rows.map((row, index) => {
             const command = obj(row.command);
             const line = str(row, 'line');
+            const who = obj(row.who);
+            const group = str(row, 'group');
+            const first = index === 0 || str(rows[index - 1], 'group') !== group;
+            const count = arr(card.groups)
+              .map(obj)
+              .find((entry) => entry !== null && str(entry, 'key') === group);
             return (
-              <Pressable
-                key={`row:${index}`}
-                accessibilityRole="button"
-                accessibilityLabel={str(row, 'title')}
-                disabled={command === null}
-                onPress={() => (command !== null ? dispatch(command as never) : undefined)}
-                style={styles.movingRow}
-              >
-                <View style={styles.movingMarker}>
-                  <StatusMarker status={str(row, 'status')} size={10} />
-                </View>
-                <View style={styles.movingText}>
-                  <Text numberOfLines={1} style={[styles.movingRowTitle, { color: body }]}>
-                    {str(row, 'title')}
+              <View key={`row:${index}`}>
+                {first ? (
+                  <Text style={styles.movingGroup}>
+                    {str(row, 'groupLabel')} · {count ? String(count.count ?? '') : ''}
                   </Text>
-                  {line.length > 0 ? (
-                    <Text numberOfLines={1} style={styles.movingRowLine}>
-                      {line}
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${str(row, 'title')}, ${who ? str(who, 'label') : ''}`}
+                  disabled={command === null}
+                  onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+                  style={styles.movingRow}
+                >
+                  <View style={styles.movingText}>
+                    <Text style={[styles.movingRowTitle, { color: body }, command !== null ? styles.linkDots : null]}>
+                      {str(row, 'title')}
                     </Text>
-                  ) : null}
-                </View>
-                <Text style={styles.foldTime}>{str(row, 'age')}</Text>
-              </Pressable>
+                    {/* Who has it, as a quiet line under the title (the user's "just put it under Item's title"). */}
+                    <View style={styles.whoLine}>
+                      <WhoMark who={who} />
+                      <Text numberOfLines={1} style={styles.whoText}>
+                        {who ? str(who, 'label') : ''}
+                      </Text>
+                    </View>
+                    {line.length > 0 ? <Text style={styles.movingRowLine}>{line}</Text> : null}
+                  </View>
+                  <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+                </Pressable>
+              </View>
             );
-          })
-        : null}
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
 
+/** Who has a line of work: the thread's agent logo, GitHub's mark, the user, the coordinator's hat. */
+function WhoMark({ who }: { who: JsonRecord | null }) {
+  const P = useTranscriptTheme();
+  const kind = who ? str(who, 'kind') : '';
+  const agent = who ? str(who, 'agentIcon') : '';
+  if (kind === 'thread') return <AgentMark icon={agent || null} size={14} />;
+  if (kind === 'github') return <Glyph name="brand-github" size={14} color={P.muted} />;
+  if (kind === 'you') return <Glyph name="user" size={14} color={SidebarPalette.ROW_QUESTION} />;
+  if (kind === 'coordinator') return <Glyph name="coordinator-captain-hat" size={14} color={P.muted} />;
+  return <Glyph name="clock" size={14} color={P.muted} />;
+}
+
 /** An item's earlier card, or a settled ask: one quiet line, what that turn did, and when. */
-function WorkFoldLine({ card }: { card: JsonRecord }) {
+function WorkFoldLine({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
   const styles = useStyles();
   const status = str(card, 'foldStatus') || str(card, 'status');
+  const command = obj(card.command);
+  // A turn's line opens the Work sheet at the first line of work it names.
   return (
-    <View accessibilityLabel={str(card, 'foldText')} style={styles.fold}>
+    <Pressable
+      accessibilityRole={command !== null ? 'button' : undefined}
+      disabled={command === null}
+      onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+      accessibilityLabel={str(card, 'foldText')}
+      style={styles.fold}
+    >
       <StatusMarker status={status} size={11} dim />
       {/* The question or title gives way; the outcome and time stay whole. */}
       <Text numberOfLines={1} style={styles.foldText}>
@@ -301,12 +487,36 @@ function WorkFoldLine({ card }: { card: JsonRecord }) {
         </Text>
       ) : null}
       <Text style={styles.foldTime}>{str(card, 'time')}</Text>
-    </View>
+    </Pressable>
   );
 }
 
 const useStyles = themedStyles((P) => ({
   stack: { gap: 6, marginTop: 8 },
+  dock: { gap: 6, paddingHorizontal: 12, paddingBottom: 6 },
+  dockCards: { gap: 6 },
+  dockLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.inputBorder,
+    backgroundColor: P.cardPanel,
+  },
+  linkDots: { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: P.muted },
+  questionsCard: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  snoozeIndent: { paddingLeft: 22 },
+  snoozeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4, paddingTop: 2 },
+  snoozeChoice: { paddingHorizontal: 8, borderRadius: 6, backgroundColor: 'rgba(127,127,127,0.12)' },
+  quiet: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
+  whoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  whoText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
+  dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
+  dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
   card: {
     gap: 4,
     paddingHorizontal: 12,
@@ -358,16 +568,17 @@ const useStyles = themedStyles((P) => ({
   movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, paddingHorizontal: 12 },
   movingTitle: { fontSize: PROSE_SIZE, fontWeight: '500', color: P.prose },
   movingSummary: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },
-  movingRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderTopWidth: 1,
-    borderTopColor: P.inputBorder,
+  movingList: { paddingHorizontal: 12, paddingBottom: 8 },
+  movingGroup: {
+    paddingTop: 8,
+    paddingBottom: 2,
+    fontSize: PROSE_SIZE,
+    lineHeight: PROSE_LINE,
+    fontWeight: '500',
+    color: P.muted,
   },
-  movingMarker: { width: 32, height: PROSE_LINE, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 2 },
+  movingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 4 },
+  movingMarker: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   movingText: { flex: 1, minWidth: 0 },
   movingRowTitle: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.prose },
   movingRowLine: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },

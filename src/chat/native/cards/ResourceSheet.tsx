@@ -44,20 +44,8 @@ export function ResourceSheet({ chat, document }: { chat: RustChat; document: Ch
       visible={modal !== null}
       onClose={() => dispatch({ type: 'closeResource' })}
       title={modal?.title && modal.title.length > 0 ? modal.title : 'Resource'}
-      accessory={
-        modal !== null ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go to chat"
-            accessibilityState={{ disabled: modal.going || modal.loading }}
-            disabled={modal.going || modal.loading}
-            onPress={() => dispatch({ type: 'goToResource', id: modal.id })}
-            style={({ pressed }) => [styles.go, (pressed || modal.going) && styles.goBusy]}
-          >
-            <Text style={styles.goLabel}>{modal.going ? 'Loading…' : 'Go to chat'}</Text>
-          </Pressable>
-        ) : undefined
-      }
+      // No "Go to chat": nothing the reader taps scrolls the chat to a question any more
+      // (gx-chat-core questions/open_questions.rs `show`).
     >
       {modal === null ? null : modal.loading ? (
         <Text style={styles.note}>Reading it from the chat…</Text>
