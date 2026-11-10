@@ -10,7 +10,8 @@
  * one: the card sits on the chat's glass (the user's standing rule, no black fills on glass).
  */
 
-import { Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -34,11 +35,12 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const CHIP_ICON: Record<string, GlyphName> = {
-  you: 'user',
   thread: 'robot',
-  coordinator: 'coordinator-captain-hat',
   steps: 'checklist',
   item: 'stack',
+  question: 'help-circle',
+  link: 'link',
+  file: 'note',
   wait: 'clock',
 };
 
@@ -101,7 +103,13 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
       {cards.map((card) => (
         // The ? pill's jump lands on an ask's card and outlines it (`OpenQuestions.tsx`).
         <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>
-          {isTrue(card, 'folded') ? <WorkFoldLine card={card} /> : <WorkCard card={card} dispatch={dispatch} />}
+          {str(card, 'kind') === 'moving' ? (
+            <WorkMovingRow card={card} dispatch={dispatch} />
+          ) : isTrue(card, 'folded') ? (
+            <WorkFoldLine card={card} />
+          ) : (
+            <WorkCard card={card} dispatch={dispatch} />
+          )}
         </QuestionFlashFrame>
       ))}
     </View>
@@ -133,14 +141,26 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
       {line.length > 0 ? <Text style={styles.line}>{line}</Text> : null}
       {chips.length > 0 || buttons.length > 0 ? (
         <View style={styles.meta}>
-          {chips.map((chip, index) => (
-            <View key={`chip:${index}`} style={styles.chip}>
-              <Glyph name={CHIP_ICON[str(chip, 'kind')] ?? 'clock'} size={12} color={P.cardMuted} />
-              <Text numberOfLines={1} style={styles.chipText}>
-                {str(chip, 'label')}
-              </Text>
-            </View>
-          ))}
+          {/* An icon and muted words, no outline or fill (Q2167); a thread, link or file opens. */}
+          {chips.map((chip, index) => {
+            const command = obj(chip.command);
+            return (
+              <Pressable
+                key={`chip:${index}`}
+                accessibilityRole={command !== null ? 'button' : undefined}
+                accessibilityLabel={str(chip, 'label')}
+                disabled={command === null}
+                hitSlop={6}
+                onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+                style={styles.chip}
+              >
+                <Glyph name={CHIP_ICON[str(chip, 'kind')] ?? 'clock'} size={12} color={P.muted} />
+                <Text numberOfLines={1} style={styles.chipText}>
+                  {str(chip, 'label')}
+                </Text>
+              </Pressable>
+            );
+          })}
           {buttons.length > 0 ? (
             <View style={styles.buttons}>
               {buttons.map((button, index) => (
@@ -166,6 +186,71 @@ function WorkCard({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) 
           ) : null}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Everything still running, as one quiet row ("Moving · 7" and their names) that opens to a list; a
+ * row of the list goes to that item's newest card (gx-chat-core `moving_row`, desktop
+ * `work_moving_row`).
+ */
+function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const [open, setOpen] = useState(false);
+  const rows = arr(card.rows)
+    .map(obj)
+    .filter((row): row is JsonRecord => row !== null);
+  const waiting = str(card, 'waiting');
+  return (
+    <View style={styles.moving}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={str(card, 'title')}
+        onPress={() => setOpen((was) => !was)}
+        style={styles.movingHead}
+      >
+        <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
+        <StatusMarker status="moving" size={11} />
+        <Text style={styles.movingTitle}>{str(card, 'title')}</Text>
+        <Text numberOfLines={1} style={styles.movingSummary}>
+          {open ? '' : str(card, 'summary')}
+        </Text>
+        {waiting.length > 0 ? <Text style={styles.foldTime}>{waiting}</Text> : null}
+      </Pressable>
+      {open
+        ? rows.map((row, index) => {
+            const command = obj(row.command);
+            const line = str(row, 'line');
+            return (
+              <Pressable
+                key={`row:${index}`}
+                accessibilityRole="button"
+                accessibilityLabel={str(row, 'title')}
+                disabled={command === null}
+                onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+                style={styles.movingRow}
+              >
+                <View style={styles.movingMarker}>
+                  <StatusMarker status={str(row, 'status')} size={10} />
+                </View>
+                <View style={styles.movingText}>
+                  <Text numberOfLines={1} style={styles.movingRowTitle}>
+                    {str(row, 'title')}
+                  </Text>
+                  {line.length > 0 ? (
+                    <Text numberOfLines={1} style={styles.foldText}>
+                      {line}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+              </Pressable>
+            );
+          })
+        : null}
     </View>
   );
 }
@@ -202,18 +287,16 @@ const useStyles = themedStyles((P) => ({
   title: { flex: 1, minWidth: 140, fontSize: 14, lineHeight: 20, fontWeight: '500', color: P.foreground },
   right: { marginLeft: 'auto', fontSize: 12.5, lineHeight: 20, color: P.cardMuted },
   line: { paddingLeft: 22, fontSize: 13, lineHeight: 19, color: P.cardMuted },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingLeft: 22, paddingTop: 2 },
-  chip: {
+  meta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 5,
-    height: 22,
-    maxWidth: 240,
-    paddingHorizontal: 8,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: P.inputBorder,
+    columnGap: 14,
+    rowGap: 4,
+    paddingLeft: 22,
+    paddingTop: 2,
   },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 22, flexShrink: 1, maxWidth: 260 },
   chipText: { flexShrink: 1, fontSize: 12.5, color: P.cardMuted },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 'auto' },
   fold: {
@@ -228,6 +311,22 @@ const useStyles = themedStyles((P) => ({
   },
   foldText: { flex: 1, minWidth: 0, fontSize: 12.5, color: P.muted },
   foldTime: { fontSize: 12.5, color: P.muted },
+  moving: { borderRadius: 8, borderWidth: 1, borderColor: P.inputBorder, overflow: 'hidden' },
+  movingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 32, paddingHorizontal: 12 },
+  movingTitle: { fontSize: 12.5, fontWeight: '500', color: P.cardMuted },
+  movingSummary: { flex: 1, minWidth: 0, fontSize: 12.5, color: P.muted },
+  movingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderTopWidth: 1,
+    borderTopColor: P.inputBorder,
+  },
+  movingMarker: { width: 32, height: 18, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 2 },
+  movingText: { flex: 1, minWidth: 0 },
+  movingRowTitle: { fontSize: 13, lineHeight: 18, color: P.foreground },
   ring: { borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   ringDot: { width: 4, height: 4, borderRadius: 2 },
   pause: { flexDirection: 'row', justifyContent: 'center', gap: 2.5 },
