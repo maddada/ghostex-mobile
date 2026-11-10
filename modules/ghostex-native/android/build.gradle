@@ -23,10 +23,6 @@ android {
   lintOptions {
     abortOnError false
   }
-  testOptions {
-    // The vendored emulator logs through android.util.Log when it has no session client.
-    unitTests.returnDefaultValues = true
-  }
 }
 
 dependencies {
@@ -65,6 +61,4 @@ dependencies {
   // GhostexSshConnection uses dev.ghostex.tailcatbridge.Tailcatbridge to dial
   // SSH over tailcat.
   implementation files("libs/tailcatbridge.jar")
-
-  testImplementation "junit:junit:4.13.2"
 }

@@ -3,7 +3,7 @@
 //  GhostexNative
 //
 //  The text of the Ghostex mobile terminal's Ghostty config, and its identity.
-//  Pure (no libghostty calls), so GhosttyConfigTests can read what it generates.
+//  Pure (no libghostty calls).
 //
 
 import Foundation

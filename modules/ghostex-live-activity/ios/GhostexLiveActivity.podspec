@@ -16,7 +16,7 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
 
   # The app side only: the module and the attributes it shares with the extension. Extension/ is compiled by
-  # the widget extension target, Tests/ and Package.swift by the Swift test package.
+  # the widget extension target.
   s.source_files = ['GhostexLiveActivityModule.swift', 'Shared/**/*.swift']
   s.frameworks = 'ActivityKit'
 

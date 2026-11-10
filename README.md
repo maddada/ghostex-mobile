@@ -18,7 +18,6 @@ bunx expo prebuild            # generates ios/ + android/ (gitignored, CNG)
 bunx expo run:ios             # or: xcodebuild against ios/Ghostex.xcworkspace
 bunx expo run:android         # or: cd android && ./gradlew :app:assembleDebug
 bunx tsc --noEmit             # typecheck
-(cd ios && xcodebuild test -workspace Ghostex.xcworkspace -scheme GhostexNative-Unit-Tests -destination 'platform=iOS Simulator,name=<iPhone>' ARCHS=arm64)   # native tests (modules/ghostex-native/ios/Tests, GhosttyConfigTests)
 ```
 
 Notes:

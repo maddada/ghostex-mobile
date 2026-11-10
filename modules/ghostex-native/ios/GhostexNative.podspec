@@ -18,8 +18,7 @@ Pod::Spec.new do |s|
   s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"
   # exclude_files is applied to EVERY attribute's globs (including
   # vendored_frameworks), so it must only match source-like files here.
-  # Tests/ belongs to the test spec below, never to the app.
-  s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}', 'Tests/**/*.swift']
+  s.exclude_files = ['Vendor/**/*.{h,m,mm,swift,hpp,cpp}']
   # Fonts/…ttf is a git-tracked symlink into ../../../../assets, so iOS and
   # Android ship a byte-identical copy of the same font. It survives CocoaPods'
   # file enumeration because it is a symlinked FILE inside a real directory;
@@ -83,10 +82,4 @@ Pod::Spec.new do |s|
     'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => "$(inherited) \"#{ghostex_native_vendor}/libssh2/ios-simulator/lib\"",
     'OTHER_LDFLAGS' => '$(inherited) -lssh2 -lssl -lcrypto -lz',
   }
-
-  # The module's XCTest bundle (GhosttyConfigTests). Only the generated Podfile line that
-  # plugins/withGhostexNativeTests.js adds asks CocoaPods for it; the app never links it.
-  s.test_spec 'Tests' do |test_spec|
-    test_spec.source_files = 'Tests/**/*.swift'
-  end
 end

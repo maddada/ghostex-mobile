@@ -3,7 +3,7 @@
 // config plugin that Expo applies on its own to every app that installs it, and that plugin adds `fetch`
 // (background fetch). The app never asks for background fetch, and a background mode an app does not use
 // has no place in the Info.plist of an app sent to App Review, so this plugin takes `fetch` out again and
-// leaves every other mode as it is. `src/notifications/pushConfig.test.ts` checks the resolved config.
+// leaves every other mode as it is.
 const { withInfoPlist } = require('expo/config-plugins');
 
 module.exports = function withoutBackgroundFetch(config) {
