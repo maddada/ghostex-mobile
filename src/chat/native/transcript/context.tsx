@@ -15,6 +15,7 @@ import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
 import { workCardIndex, type WorkCardIndex } from '../cards/WorkCards';
 import { openChatImageViewer } from '../cards/overlayStore';
+import { DictationTargets } from '../composer/dictationTarget';
 import { DisclosureStore, RowDetailDemand } from './state';
 import type { TranscriptTheme } from './theme';
 
@@ -24,6 +25,8 @@ export type ChatImageSource = JsonRecord;
 export type NativeChatUi = {
   disclosures: DisclosureStore;
   demand: RowDetailDemand;
+  /** The question form boxes this chat's Dictate can type into (`composer/dictationTarget.ts`). */
+  dictationTargets: DictationTargets;
   /** Asks the core for a machine image's bytes once (`loadImage`); the answer lands in `state.images`. */
   requestImage(path: string): void;
   /**
@@ -50,6 +53,7 @@ const UiContext = createContext<NativeChatUi | null>(null);
 
 export function NativeChatUiProvider({ chat, children }: { chat: RustChat; children: ReactNode }) {
   const disclosures = useMemo(() => new DisclosureStore(), []);
+  const dictationTargets = useMemo(() => new DictationTargets(), []);
   const dispatchRef = useRef(chat.dispatch);
   dispatchRef.current = chat.dispatch;
   const queryAsyncRef = useRef(chat.queryAsync);
@@ -112,8 +116,17 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
       });
   }, []);
   const value = useMemo<NativeChatUi>(
-    () => ({ disclosures, demand, requestImage, renderVisual, renderVisualAsync, openPicture, toolAppLogo }),
-    [demand, disclosures, requestImage, renderVisual, renderVisualAsync, openPicture, toolAppLogo],
+    () => ({
+      disclosures,
+      demand,
+      dictationTargets,
+      requestImage,
+      renderVisual,
+      renderVisualAsync,
+      openPicture,
+      toolAppLogo,
+    }),
+    [demand, dictationTargets, disclosures, requestImage, renderVisual, renderVisualAsync, openPicture, toolAppLogo],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

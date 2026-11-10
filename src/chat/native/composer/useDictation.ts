@@ -42,6 +42,7 @@ import {
 } from '../../../voice/dictation';
 import type { DictateEngine } from '../../../voice/dictateModel';
 import { readDictateEngine } from '../../../voice/dictateSettings';
+import type { DictationTargets } from './dictationTarget';
 import { chatMachineLink } from '../../rust/machine-link';
 import { setReadAloudDictating } from '../../../voice/readAloud';
 
@@ -97,6 +98,8 @@ export function dictationClock(ms: number): string {
  * Dictate into the draft. `draft()` reads the composer's text and caret when the text arrives;
  * `replace` writes the draft with the dictated text in place; `onError` gets a short message for a
  * problem no row shows (no microphone permission, nothing waiting for Transcribe previous).
+ * `targets` holds the chat's question form boxes: a recording started while one of them has the
+ * keyboard types there instead (`dictationTarget.ts`).
  *
  * CDXC:VoiceMode 2026-11-09 WHY: A user lost recordings while the phone kept reconnecting ("not saving my audio is killer"). A recording the computer could not be reached for waits in the row as "Waiting for your computer" and goes again on its own (when the link comes back, and on a timer); leaving the chat keeps a recording (it is offered again, not dismissed); a recording still on the phone without its words is offered in the chat box ("Recording not transcribed") with Transcribe, Share (iPhone) and ✕ until its words are in a draft.
  */
@@ -105,6 +108,7 @@ export function useDictation(
   draft: () => { text: string; caret: number },
   replace: (text: string) => void,
   onError: (message: string) => void,
+  targets: DictationTargets | null = null,
 ) {
   const [available, setAvailable] = useState(() => DICTATION_ENABLED && dictationSupported(machine));
   const [phase, setPhase] = useState<DictationPhase>('idle');
@@ -174,6 +178,13 @@ export function useDictation(
     return () => setReadAloudDictating(false);
   }, [recording]);
 
+  // The form box a recording was aimed at is its target until its first words are back; whatever
+  // arrives after the row left that run (a failure, ✕, a later Transcribe) is the chat box's.
+  const running = recording || phase === 'transcribing';
+  useEffect(() => {
+    if (!running) targets?.release();
+  }, [running, targets]);
+
   // The recording row's clock.
   useEffect(() => {
     if (phase !== 'recording') return undefined;
@@ -191,16 +202,21 @@ export function useDictation(
     };
   }, []);
 
-  const insert = useCallback((dictated: string) => {
-    const words = dictated.trim();
-    if (words.length === 0) return;
-    const { text, caret } = callbacks.current.draft();
-    const before = text.slice(0, caret);
-    const after = text.slice(caret);
-    const lead = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
-    const trail = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
-    callbacks.current.replace(before + lead + words + trail + after);
-  }, []);
+  const insert = useCallback(
+    (dictated: string) => {
+      const words = dictated.trim();
+      if (words.length === 0) return;
+      // The question form box the recording started in, while it still takes text; else the chat box.
+      const field = targets?.target() ?? callbacks.current;
+      const { text, caret } = field.draft();
+      const before = text.slice(0, caret);
+      const after = text.slice(caret);
+      const lead = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
+      const trail = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
+      field.replace(before + lead + words + trail + after);
+    },
+    [targets],
+  );
 
   const settle = useCallback(
     (current: { cancelled: boolean }, result: Transcription | null) => {
@@ -312,6 +328,8 @@ export function useDictation(
     if (machine === null) return;
     const current = { cancelled: false, serverId: null };
     run.current = current;
+    // Decided now, at the press: a box touched while it records does not move the words.
+    targets?.aimAtFocused();
     setFailure(null);
     setWaiting(null);
     setPhase('starting');
@@ -347,7 +365,7 @@ export function useDictation(
     setStartedAt(Date.now());
     setNow(Date.now());
     setPhase('recording');
-  }, [machine, stop, refreshEngine]);
+  }, [machine, stop, refreshEngine, targets]);
 
   /** The microphone button: start, or stop and transcribe. */
   const toggle = useCallback(async () => {

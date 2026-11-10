@@ -9,7 +9,16 @@
  * packages/gx-chat-core/src/transcript/question_forms.rs. Change them together.
  */
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   Modal,
   Pressable,
@@ -25,7 +34,7 @@ import {
 
 import { useLaptopFold } from '../../../components/common/verticalBar/laptopFold';
 import type { Json } from '../../rust/document';
-import { useTranscriptEnv } from './context';
+import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
 import { useRevealFocusedField } from './fieldReveal';
 import { useEchoedText } from '../cards/useEchoedText';
 import { AskCard, AskHead, AskOption, PrimaryButton, SoftButton, answeredColor, askColor } from '../cards/askCard';
@@ -36,6 +45,8 @@ import { MONO_FONT } from './theme';
 import { LinkWords } from './LinkWords';
 import { QuestionFlashFrame, useQuestionAnchor } from './OpenQuestions';
 import GhostexImageIntakeView from '../../../../modules/ghostex-native/src/GhostexImageIntakeView';
+import type { DictationField } from '../composer/dictationTarget';
+import { Glyph as ComposerGlyph } from '../composer/icons';
 import { imagesFromIntake } from '../composer/imageIntake';
 
 /** The document's `questionForms`, by form id. */
@@ -348,17 +359,21 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
   }
   return (
     <FormBox formId={formId} slot="notes" text={text} setText={setText}>
-      {(onSelectionChange) => (
+      {(box) => (
         <TextInput
           multiline
           value={text}
           placeholder={NOTES_PLACEHOLDER}
           placeholderTextColor={theme.placeholder}
           accessibilityLabel="Notes"
-          onFocus={reveal}
+          onFocus={() => {
+            reveal();
+            box.onFocus();
+          }}
+          onBlur={box.onBlur}
           onContentSizeChange={reveal}
           onChangeText={setText}
-          onSelectionChange={onSelectionChange}
+          onSelectionChange={box.onSelectionChange}
           style={[
             styles.input,
             {
@@ -366,12 +381,34 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
               borderColor: theme.inputBorder,
               backgroundColor: theme.light ? theme.background : theme.cardRow,
             },
+            box.dictatedInto,
           ]}
         />
       )}
     </FormBox>
   );
 }
+
+/**
+ * What a form box's `TextInput` gets from its `FormBox`: where to report its caret and taking or
+ * losing the keyboard, and the style that marks it while a running dictation will type into it.
+ */
+type FormBoxInput = {
+  onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  dictatedInto: TextStyle | null;
+};
+
+/**
+ * What the microphone in a box says while a dictation will type there; desktop (`note_box` in
+ * question_form.rs) says the same, and why the mark sits inside the box instead of under it.
+ */
+const DICTATED_INTO = 'Your dictation goes here';
+const DICTATED_INTO_GLYPH = 13;
+
+/** `useSyncExternalStore`'s subscribe for a box outside a chat screen, where no Dictate types. */
+const neverChanges = (): (() => void) => () => undefined;
 
 /**
  * A form's note or text box that takes an image the keyboard inserts or the long-press Paste puts
@@ -392,14 +429,33 @@ function FormBox({
   slot: number | 'notes';
   text: string;
   setText: (text: string) => void;
-  children: (onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void) => ReactNode;
+  children: (box: FormBoxInput) => ReactNode;
 }) {
   const { theme, uploadFiles, queryAsync } = useTranscriptEnv();
   const forms = useContext(FormsContext);
   const textRef = useRef(text);
   textRef.current = text;
+  const setTextRef = useRef(setText);
+  setTextRef.current = setText;
   const selection = useRef<{ start: number; end: number } | null>(null);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
+  // A recording started while this box has the keyboard types here, at its caret, and the box is
+  // marked until the words are in (`composer/dictationTarget.ts`).
+  const targets = useOptionalNativeChatUi()?.dictationTargets ?? null;
+  const [dictationField] = useState<DictationField>(() => ({
+    draft: () => {
+      const current = textRef.current;
+      return { text: current, caret: Math.min(selection.current?.end ?? current.length, current.length) };
+    },
+    replace: (next) => setTextRef.current(next),
+  }));
+  useEffect(() => () => targets?.remove(dictationField), [targets, dictationField]);
+  const dictatedInto = useSyncExternalStore(
+    targets?.subscribe ?? neverChanges,
+    () => targets?.target() === dictationField,
+  );
+  const onFocus = useCallback(() => targets?.setFocused(dictationField, true), [targets, dictationField]);
+  const onBlur = useCallback(() => targets?.setFocused(dictationField, false), [targets, dictationField]);
   const onSelectionChange = useCallback(
     (event: { nativeEvent: { selection: { start: number; end: number } } }) => {
       selection.current = event.nativeEvent.selection;
@@ -441,9 +497,24 @@ function FormBox({
   );
   return (
     <View>
-      <GhostexImageIntakeView onImages={onImages}>{children(onSelectionChange)}</GhostexImageIntakeView>
+      <GhostexImageIntakeView onImages={onImages}>
+        {children({
+          onSelectionChange,
+          onFocus,
+          onBlur,
+          // The chat box's focus colour (desktop `ChatAppearance::ring`), and room for the microphone.
+          dictatedInto: dictatedInto
+            ? { borderColor: theme.light ? '#9f9fa9' : '#737373', paddingRight: 10 + DICTATED_INTO_GLYPH + 6 }
+            : null,
+        })}
+      </GhostexImageIntakeView>
       {status !== null ? (
         <Text style={[styles.hint, { color: status.error ? '#fb7185' : theme.muted }]}>{status.text}</Text>
+      ) : null}
+      {dictatedInto ? (
+        <View pointerEvents="none" accessible accessibilityLabel={DICTATED_INTO} style={styles.dictatedIntoMark}>
+          <ComposerGlyph name="microphone" size={DICTATED_INTO_GLYPH} color={theme.muted} />
+        </View>
       ) : null}
     </View>
   );
@@ -547,16 +618,20 @@ function FormQuestion({
       ) : null}
       {enabled ? (
         <FormBox formId={formId} slot={index} text={text} setText={setText}>
-          {(onSelectionChange) => (
+          {(box) => (
             <TextInput
               multiline
               value={text}
               placeholder={placeholder(question, draft)}
               placeholderTextColor={theme.placeholder}
-              onFocus={reveal}
+              onFocus={() => {
+                reveal();
+                box.onFocus();
+              }}
+              onBlur={box.onBlur}
               onContentSizeChange={reveal}
               onChangeText={setText}
-              onSelectionChange={onSelectionChange}
+              onSelectionChange={box.onSelectionChange}
               style={[
                 styles.input,
                 {
@@ -565,6 +640,7 @@ function FormQuestion({
                   backgroundColor: theme.light ? theme.background : theme.cardRow,
                 },
                 isText && styles.textAnswer,
+                box.dictatedInto,
               ]}
             />
           )}
@@ -602,6 +678,8 @@ const styles = StyleSheet.create({
   questionTitle: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 22, fontWeight: '500' },
   detail: { fontSize: 13, lineHeight: 19 },
   hint: { fontSize: 12 },
+  // On the box's first line, inside its right edge (`input`'s border and padding).
+  dictatedIntoMark: { position: 'absolute', top: 11, right: 11 },
   input: {
     borderWidth: 1,
     borderRadius: 9,

@@ -59,6 +59,7 @@ import { machineTargetFor } from '../../../screens/terminal-screen/session-looku
 import type { UnifiedProjectChoice } from '../../../contract/unified/choices';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../../machines/store';
 import { WorktreeTray } from './WorktreeTray';
+import { useOptionalNativeChatUi } from '../transcript/context';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
 import { createDraftReferenceParser } from './references';
@@ -242,12 +243,15 @@ export function NativeComposer({
   draftAt.current = { text, caret };
   const fieldFocused = useRef(false);
   fieldFocused.current = focused;
+  // A recording started from one of the chat's question form boxes types there (`dictationTarget.ts`).
+  const dictationTargets = useOptionalNativeChatUi()?.dictationTargets ?? null;
   const dictation = useDictation(
     chat.machine,
     // An unfocused field has no caret the reader chose: dictation goes after the draft.
     () => (fieldFocused.current ? draftAt.current : { text: draftAt.current.text, caret: draftAt.current.text.length }),
     (draft) => input?.replace(draft),
     (message) => onHostAction?.('toast', { message, level: 'error' }),
+    dictationTargets,
   );
 
   useEffect(
