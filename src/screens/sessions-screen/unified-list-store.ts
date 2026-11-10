@@ -58,10 +58,12 @@ type UnifiedListState = {
   noteLastMachine: (repoKey: string, machineId: string) => void;
   /**
    * A session started in `repoKey` on `machineId` (gx-core `remember_new_session` and
-   * `widen_filter_for_new_session`): it becomes that repository's machine and the top of Recent,
-   * and a filter that would hide it gains its project, machine or Space as chips.
+   * `widen_filter_for_new_session`): it becomes that repository's machine (the computer's real id,
+   * as the project rows' chips name it) and the top of Recent, and a filter that would hide it
+   * gains its project, machine or Space as chips, the machine as `filterMachineKey` (`local` while
+   * the list shows one computer; `machineId` when absent).
    */
-  noteNewSession: (repoKey: string, machineId: string, spaceKey: string | null) => void;
+  noteNewSession: (repoKey: string, machineId: string, spaceKey: string | null, filterMachineKey?: string) => void;
 };
 
 export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
@@ -153,10 +155,10 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
       set((state) => ({ lastMachines: { ...state.lastMachines, [repoKey]: machineId } }));
       save();
     },
-    noteNewSession: (repoKey, machineId, spaceKey) => {
+    noteNewSession: (repoKey, machineId, spaceKey, filterMachineKey = machineId) => {
       set((state) => ({
         ...rememberNewSession(state, repoKey, machineId),
-        filter: widenFilterForNewSession(state.filter, repoKey, machineId, spaceKey),
+        filter: widenFilterForNewSession(state.filter, repoKey, filterMachineKey, spaceKey),
       }));
       save();
     },

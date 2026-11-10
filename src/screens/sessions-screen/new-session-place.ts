@@ -113,12 +113,14 @@ export function spaceKeyOfProject(machineId: string, projectId: string): string 
 export function noteNewSessionIn(machineId: string, projectId: string): void {
   const repoKey = repoKeyOfProject(machineId, projectId);
   if (repoKey === null) return;
+  // The last computer is its real id, which the project rows' chips are; only the filter keys a lone computer as local.
   useUnifiedListStore
     .getState()
     .noteNewSession(
       repoKey,
-      unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId,
+      machineId,
       spaceKeyOfProject(machineId, projectId),
+      unifiedListIsAlone() ? LOCAL_MACHINE_KEY : machineId,
     );
 }
 

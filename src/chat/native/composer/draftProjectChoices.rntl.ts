@@ -10,6 +10,7 @@ import { EMPTY_UNIFIED_FILTER } from '../../../contract/unified/build';
 import { repoIdentity } from '../../../contract/unified/repo';
 import { emptyMachineInventory, useInventoryStore, type MachineInventory } from '../../../inventory/store';
 import { useMachinesStore, type MachineRecord } from '../../../machines/store';
+import { projectChoicesNow } from '../../../screens/sessions-screen/new-session-place';
 import { useUnifiedListStore } from '../../../screens/sessions-screen/unified-list-store';
 import { moveDraftToProject } from './draftProjectChoices';
 
@@ -92,11 +93,11 @@ const read = (summary: GhostexMobileSummary, extra: Partial<MachineInventory> = 
   ...extra,
 });
 
-test('a draft moved into a project of another Space joins a Space filter, on the lone computer as local', async () => {
+test('a draft moved into a project of another Space joins a Space filter, keyed local for the lone computer', async () => {
   await moveIntoBeta([MACHINE], { [MACHINE.id]: read(twoSpaces()) });
   const { filter, lastMachines } = useUnifiedListStore.getState();
   expect(filter.spaces).toEqual(['local|sa', 'local|sb']);
-  expect(lastMachines).toEqual({ [repoIdentity(null, '/repo/website', null, 'website').key]: 'local' });
+  expect(lastMachines).toEqual({ [repoIdentity(null, '/repo/website', null, 'website').key]: MACHINE.id });
 });
 
 test("a computer that isn't connected leaves the list, so the connected one is still keyed as local", async () => {
@@ -106,4 +107,18 @@ test("a computer that isn't connected leaves the list, so the connected one is s
     [MINI.id]: read(twoSpaces(), { lastError: 'Connection refused' }),
   });
   expect(useUnifiedListStore.getState().filter.spaces).toEqual(['local|sa', 'local|sb']);
+});
+
+test('the computer a draft moved to stays the last one for that project once another computer reconnects', async () => {
+  const MINI: MachineRecord = { ...MACHINE, id: 'm2', name: 'Mac mini', host: 'mini.local' };
+  await moveIntoBeta([MACHINE, MINI], {
+    [MACHINE.id]: read(twoSpaces()),
+    [MINI.id]: read(twoSpaces(), { lastError: 'Connection refused' }),
+  });
+  // Mac mini answers again, and it is the computer the phone shows.
+  useInventoryStore.setState({
+    inventoriesByMachineId: { [MACHINE.id]: read(twoSpaces()), [MINI.id]: read(twoSpaces()) },
+  });
+  const website = projectChoicesNow(MINI.id).find((choice) => choice.label === 'website');
+  expect(website?.machines[website.selected]?.machineId).toBe(MACHINE.id);
 });
