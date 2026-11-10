@@ -1669,6 +1669,9 @@ export const LiveActivityCopy = {
   // does not have, so it claims only what it does (updates while the app is open).
   freshnessCaption: 'Ghostex updates it while the app is open. Later it can show an older state and then says so.',
   offCaption: 'Off. Ghostex ends the current Live Activity and starts no new one.',
+  sessionNamesToggle: 'Show session names',
+  sessionNamesCaption:
+    'Rows show the session’s name, as in the Sessions list, instead of the agent’s; the icon still tells which agent it is. This also applies to the Home Screen widgets. Anyone who sees your Lock Screen can read the names.',
   /**
    * The Live Activity starts only when every computer with agents sends their start times and whether
    * they finished or wait.
@@ -1680,18 +1683,24 @@ export const LiveActivityCopy = {
   previewTitle: 'Preview',
   previewLabel:
     'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Claude Code in ghostex-mobile has a question, Codex in homeserver is waiting, Codex in ghostex-mobile is working, omp in Ghostex finished.',
+  /** The same preview while "Show session names" is on: each row's session, and the agent its mark shows. */
+  previewLabelWithSessionNames:
+    'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Widget refresh, Claude Code, in ghostex-mobile has a question. Backup script, Codex, in homeserver is waiting. Release notes, Codex, in ghostex-mobile is working. Sidebar search, omp, in Ghostex finished.',
   working: 'working',
   waiting: 'waiting',
   question: 'has a question',
   finished: 'finished',
   count: (count: number, word: string) => `${count} ${word}`,
   more: (count: number) => `+${count} more`,
-  /** Sample rows of the preview: agent, project, state and time, as the design's Lock Screen. */
+  /**
+   * Sample rows of the preview: agent, its artwork, session name, project, state and time, as the design's Lock
+   * Screen. A row leads with `session` and the agent's mark while "Show session names" is on, else with `agent`.
+   */
   previewRows: [
-    { agent: 'Claude Code', project: 'ghostex-mobile', state: 'question', time: '4m' },
-    { agent: 'Codex', project: 'homeserver', state: 'waiting', time: '1m' },
-    { agent: 'Codex', project: 'ghostex-mobile', state: 'working', time: '12m' },
-    { agent: 'omp', project: 'Ghostex', state: 'finished', time: '18m' },
+    { agent: 'Claude Code', icon: 'claude', session: 'Widget refresh', project: 'ghostex-mobile', state: 'question', time: '4m' },
+    { agent: 'Codex', icon: 'codex', session: 'Backup script', project: 'homeserver', state: 'waiting', time: '1m' },
+    { agent: 'Codex', icon: 'codex', session: 'Release notes', project: 'ghostex-mobile', state: 'working', time: '12m' },
+    { agent: 'omp', icon: 'omp', session: 'Sidebar search', project: 'Ghostex', state: 'finished', time: '18m' },
   ],
 } as const;
 

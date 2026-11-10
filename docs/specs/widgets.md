@@ -22,7 +22,12 @@ of `plugins/withWidgets.js` together with the Live Activity.
 - "No agent is working or waiting." (medium and large, in the agents' place) only when both counts are 0. An agent
   counted without a row (a computer that sends no start time, an approval without a time) leaves that place empty;
   the counts still show it.
-- Text level: event and session only. Agent name, project, state and times; no prompt, reply or session title.
+- Text level: event and session only. Leading name, project, state and times; no prompt or reply. The leading name
+  ("name" in the table above) is the session's name as the Sessions list shows it while Settings › Live Activity ›
+  "Show session names" is on (`liveActivitySessionNames`, on by default) and the session has one, else the agent's
+  name; the mark tells the agent either way. The Live Activity's rows follow the same switch and rule (`leadingName`
+  in `src/notifications/contentState.ts`). The snapshot carries that name in `agentName`, the key the widgets draw
+  first, so the format version stays 2 and the widgets need no new build.
 - No data written yet (or a snapshot of another version, or one with an agent neither working nor waiting): the
   Ghostex mark only, no numbers.
 - Colour never carries meaning alone: every state colour comes with its glyph (open arc working, clock waiting, bell
@@ -56,8 +61,20 @@ of `plugins/withWidgets.js` together with the Live Activity.
   format. The app and extension ship together; no name-based identity is reconstructed from an old snapshot.
 - Data time (`writtenAt`): when the oldest summary used was read; the refresh time when every computer answered.
 - A refresh that changes nothing shown, compared with the data time to the minute, writes nothing; while the poll runs
-  an unchanged state is written once a minute, so the shown time stays current.
+  an unchanged state is written once a minute, so the shown time stays current. Switching "Show session names"
+  writes at once, and nothing is written before the stored settings were read.
 - Nothing is written before the first summary was read. Removing the last computer deletes the file.
+- "Show session names" switched off never leaves names in the widgets: with summaries read, the snapshot is written
+  again without them; with none (the computers cannot be reached, every computer is disabled, the app just started),
+  a snapshot that may carry names is deleted and the widgets reloaded, and the next summary writes it again. The app
+  cannot read the file back, so it keeps a record of whether the file may carry names (`widgets.snapshotMayHoldNames.v1`
+  in the app's storage): set before a snapshot with names shown is written, cleared only after one without names was
+  written or the file was deleted, and read before anything is written. A snapshot written without names is not
+  deleted for this, so with the switch off the widgets keep their last state while no summary is there, as before.
+  A record that could not be read is "unknown", which is not the same as stored: it counts as "may carry names"
+  when the switch is off (the file is deleted or rewritten, and the record then stored as clear), and with the
+  switch on the record is stored first, as when it was clear; if it cannot be stored, no names are written. So a
+  file with names always has the record set in storage, and a later launch that reads it finds it.
 - Not written while the app is in the background except in a run iOS grants for a push with content-available.
   The registered task refreshes the session list once, then `updateWidgets()` installs the existing writer if a
   background launch mounted no screen and applies that list. The task awaits the write and reload within its 25 s

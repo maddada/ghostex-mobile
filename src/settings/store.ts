@@ -83,6 +83,13 @@ export type GhostexSettings = ThemeColourSettings & {
    * running one and starts no other. iOS only.
    */
   liveActivityEnabled: boolean;
+  /**
+   * Rows of the Live Activity and of the Home Screen widgets lead with the session's name, as the Sessions list
+   * shows it, instead of the agent's name. iOS only.
+   *
+   * CDXC:Notifications 2026-11-10 WHY: On by default, also for stored settings from before the switch, which have no value for it, so an update shows the names at once: without them the rows of several sessions of one agent in one project read the same ("claude · project · working" four times) and cannot be told apart, and the contributor of this change chose them on by default. It is a switch because both surfaces show on a locked phone, where anyone can read them, and a session's name can come from its first prompt. Off, the rows are the ones from before the names.
+   */
+  liveActivitySessionNames: boolean;
   hideKeyboardOnStartup: boolean;
   openUrlsOnTap: boolean;
   confirmTabClose: boolean;
@@ -276,6 +283,7 @@ export function defaultSettings(): GhostexSettings {
     doneNotificationSound: true,
     settingsSyncThroughPhone: true,
     liveActivityEnabled: true,
+    liveActivitySessionNames: true,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
     confirmTabClose: false,
@@ -520,6 +528,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     doneNotificationSound: bool('doneNotificationSound', defaults.doneNotificationSound),
     settingsSyncThroughPhone: bool('settingsSyncThroughPhone', defaults.settingsSyncThroughPhone),
     liveActivityEnabled: bool('liveActivityEnabled', defaults.liveActivityEnabled),
+    liveActivitySessionNames: bool('liveActivitySessionNames', defaults.liveActivitySessionNames),
     hideKeyboardOnStartup: bool('hideKeyboardOnStartup', defaults.hideKeyboardOnStartup),
     openUrlsOnTap: bool('openUrlsOnTap', defaults.openUrlsOnTap),
     confirmTabClose: bool('confirmTabClose', defaults.confirmTabClose),

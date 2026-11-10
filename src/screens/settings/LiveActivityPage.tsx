@@ -12,9 +12,13 @@ import { Caption, SectionHeader, SettingsScreenLayout, SettingToggle } from './S
  * one switch, on by default (`liveActivityEnabled`). Off ends a running activity at once and starts none.
  * While a computer with agents sends no start times or attention kind, it says which Mac needs an update. iOS only
  * (pages.ts).
+ *
+ * A second switch, on by default (`liveActivitySessionNames`): rows lead with the session's name instead of the
+ * agent's. It stays on the page while the Live Activity is off, because the Home Screen widgets follow it too.
  */
 export default function LiveActivityPage() {
   const enabled = useSettingsStore((state) => state.settings.liveActivityEnabled);
+  const showSessionNames = useSettingsStore((state) => state.settings.liveActivitySessionNames);
   const outdated = useComputersNeedingUpdate();
   const demoOn = useMachinesStore((state) => state.machines.some((machine) => isDemoMachine(machine)));
   return (
@@ -26,12 +30,18 @@ export default function LiveActivityPage() {
           {outdated.length > 0 ? <Caption>{LiveActivityCopy.needsUpdate(outdated)}</Caption> : null}
           <Caption>{LiveActivityCopy.onCaption}</Caption>
           <Caption>{LiveActivityCopy.freshnessCaption}</Caption>
-          <SectionHeader title={LiveActivityCopy.previewTitle} />
-          <LiveActivityPreview />
         </>
       ) : (
         <Caption>{LiveActivityCopy.offCaption}</Caption>
       )}
+      <SettingToggle settingKey="liveActivitySessionNames" label={LiveActivityCopy.sessionNamesToggle} />
+      <Caption>{LiveActivityCopy.sessionNamesCaption}</Caption>
+      {enabled ? (
+        <>
+          <SectionHeader title={LiveActivityCopy.previewTitle} />
+          <LiveActivityPreview showSessionNames={showSessionNames} />
+        </>
+      ) : null}
     </SettingsScreenLayout>
   );
 }

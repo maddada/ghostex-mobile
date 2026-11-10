@@ -38,7 +38,12 @@ let controller: ActivityController | null = null;
 let queue: Promise<void> = Promise.resolve();
 let pendingCalls = 0;
 /** The inputs of the last pass, so the store updates of a poll that changed nothing cost nothing. */
-let lastInputs: { sources: readonly ActivitySource[]; enabled: boolean; inFront: boolean } | null = null;
+let lastInputs: {
+  sources: readonly ActivitySource[];
+  enabled: boolean;
+  showSessionNames: boolean;
+  inFront: boolean;
+} | null = null;
 /** The finished events seen while the app runs (in memory: a restart forgets them). */
 const finishedMemory: FinishedMemory = new Map();
 
@@ -98,10 +103,16 @@ export function useComputersNeedingUpdate(): string[] {
   }, [machines, inventories]);
 }
 
-function sameInputs(sources: readonly ActivitySource[], enabled: boolean, inFront: boolean): boolean {
+function sameInputs(
+  sources: readonly ActivitySource[],
+  enabled: boolean,
+  showSessionNames: boolean,
+  inFront: boolean,
+): boolean {
   if (
     lastInputs === null ||
     lastInputs.enabled !== enabled ||
+    lastInputs.showSessionNames !== showSessionNames ||
     lastInputs.inFront !== inFront ||
     lastInputs.sources.length !== sources.length
   ) {
@@ -118,19 +129,19 @@ function sameInputs(sources: readonly ActivitySource[], enabled: boolean, inFron
   });
 }
 
-/** Brings the activity in line with the latest summaries, the setting and whether the app is in front. */
+/** Brings the activity in line with the latest summaries, the settings and whether the app is in front. */
 function syncLiveActivity(): void {
   const settings = useSettingsStore.getState();
-  // The switch is a stored setting: nothing starts or ends before it is read.
+  // The switches are stored settings: nothing starts or ends before they are read.
   if (controller === null || !settings.hydrated) return;
-  const enabled = settings.settings.liveActivityEnabled;
+  const { liveActivityEnabled: enabled, liveActivitySessionNames: showSessionNames } = settings.settings;
   const sources = currentSources();
   const inFront = AppState.currentState === 'active';
-  if (sameInputs(sources, enabled, inFront)) return;
-  lastInputs = { sources, enabled, inFront };
+  if (sameInputs(sources, enabled, showSessionNames, inFront)) return;
+  lastInputs = { sources, enabled, showSessionNames, inFront };
   const now = Date.now();
   controller.process(
-    buildContentState(sources, now, finishedMemory),
+    buildContentState(sources, now, finishedMemory, showSessionNames),
     workingStints(sources, now),
     enabled,
     computersNeedingUpdate(sources).length === 0,

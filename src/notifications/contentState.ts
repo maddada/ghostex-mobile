@@ -1,7 +1,8 @@
 /**
  * The Live Activity's content state, built from the mobile summaries the app already polls, never from the
- * notification feed. A row carries the agent, the project, the state, when that state began and the session's
- * identifiers; no prompt, reply or title text.
+ * notification feed. A row carries its leading name, the agent's artwork, the project, the state, when that state
+ * began and the session's identifiers; no prompt or reply text. The leading name is the agent's, or the session's
+ * name where Settings › Live Activity › "Show session names" is on and the session has one (`leadingName`).
  *
  * Which host data a row needs: `startedAt` of a working row is the top-level `workingStartedAt`, which means only the
  * current run; of a waiting row `attention.enteredAt`; of a finished row `attention.workingStartedAt`, when the stint
@@ -37,6 +38,11 @@ export type LiveActivityTarget = { machineId: string; sessionId: string };
 
 export type LiveActivityRow = {
   target: LiveActivityTarget;
+  /**
+   * The name the row leads with (`leadingName`): the agent's, or the session's where session names are shown.
+   *
+   * CDXC:Notifications 2026-11-10 WHY: The session's name travels in this key instead of one of its own. The widget extension draws `agentName` as a row's leading text and tells the agent by `agentIcon`, and it is native code: a new key would be drawn only by a new app build, while this key reaches the apps already installed with an over-the-air update.
+   */
   agentName: string;
   /** Artwork identity resolved exactly as the session row, including an explicit icon and the cloud artwork. */
   agentIcon: AgentArtId;
@@ -72,7 +78,7 @@ export type ActivitySource = {
 export const MAX_ACTIVITY_ROWS = 4;
 /** A finished agent stays a row candidate this long. */
 export const FINISHED_ROW_MS = 120_000;
-/** `agentName` and `project` are cut to this many characters. */
+/** `agentName`, the session's name and `project` are cut to this many characters. */
 export const MAX_NAME_CHARACTERS = 64;
 
 /** The pattern for `target.machineId` and `target.sessionId`: printable ASCII, 1 to 64 characters. */
@@ -80,8 +86,11 @@ const TARGET_ID = /^[\x21-\x7e]{1,64}$/;
 
 const STATE_RANK: Record<LiveActivityAgentState, number> = { waiting: 0, working: 1, finished: 2 };
 
-/** A row and the time it sorts by (working, waiting: its start; finished: when it finished). */
-export type Shown = { row: LiveActivityRow; sortTime: number };
+/**
+ * A row under its agent's name, the time it sorts by (working, waiting: its start; finished: when it finished) and
+ * the session's name as the Sessions list shows it ('' for a session without one).
+ */
+export type Shown = { row: LiveActivityRow; sortTime: number; sessionName: string };
 
 /**
  * A working, waiting or recently finished agent; `shown` is null when it cannot have a row (see buildContentState).
@@ -169,6 +178,8 @@ export function candidateFor(
     agentTint: Number.parseInt(agentIconTint(agentIcon).slice(1), 16),
     project: truncateName(session.projectName),
   };
+  // The Sessions list's title of the row (`displayTitle`), without its "Ghostex Session" stand-in for an empty one.
+  const sessionName = truncateName(session.displayTitle);
   const routable = TARGET_ID.test(machineId) && TARGET_ID.test(session.sessionId);
 
   if (attention && session.attentionKind === 'finished' && !waitsOnUser) {
@@ -185,7 +196,7 @@ export function candidateFor(
       finishedAt: isoTime(finishedAt),
       expiresAt: isoTime(finishedAt + FINISHED_ROW_MS),
     };
-    return { state: 'finished', shown: { row, sortTime: finishedAt }, finishedAt };
+    return { state: 'finished', shown: { row, sortTime: finishedAt, sessionName }, finishedAt };
   }
 
   if (attention || session.awaitingApproval) {
@@ -193,7 +204,7 @@ export function candidateFor(
     if (!routable || since === null) return { state: 'waiting', shown: null };
     const row: LiveActivityRow = { ...base, state: 'waiting', startedAt: isoTime(since) };
     if (question) row.hasQuestion = true;
-    return { state: 'waiting', shown: { row, sortTime: since } };
+    return { state: 'waiting', shown: { row, sortTime: since, sessionName } };
   }
 
   if (session.activity === 'working') {
@@ -201,7 +212,7 @@ export function candidateFor(
     if (!routable || since === null) return { state: 'working', shown: null };
     return {
       state: 'working',
-      shown: { row: { ...base, state: 'working', startedAt: isoTime(since) }, sortTime: since },
+      shown: { row: { ...base, state: 'working', startedAt: isoTime(since) }, sortTime: since, sessionName },
     };
   }
 
@@ -225,17 +236,27 @@ export function compareShown(a: Shown, b: Shown): number {
 }
 
 /**
+ * The name a row leads with: the session's name where session names are shown and the session has one, else its
+ * agent's name, as before the names. The Live Activity's rows and the widgets' agents both take it from here.
+ */
+export function leadingName(shown: Shown, showSessionNames: boolean): string {
+  return showSessionNames && shown.sessionName.length > 0 ? shown.sessionName : shown.row.agentName;
+}
+
+/**
  * The content state at `now` (epoch ms) for every working and waiting agent plus every agent that finished
  * less than 2 minutes ago, over all given computers. `counts` hold every working and waiting agent (finished
  * excluded); `moreCount` the candidates without a row, including a candidate whose identifiers cannot be
  * routed (outside the id pattern) or whose start the summary does not give, which is counted but
  * never given a row. The finished agents come from `memory`, which this call updates with what the summaries
- * show; without one, only the finishes the summaries still show count.
+ * show; without one, only the finishes the summaries still show count. `showSessionNames` is the Settings switch
+ * (`liveActivitySessionNames`): off, every row leads with its agent's name.
  */
 export function buildContentState(
   sources: readonly ActivitySource[],
   now: number,
   memory: FinishedMemory = new Map(),
+  showSessionNames = false,
 ): LiveActivityContentState {
   const candidates: Candidate[] = [];
   const counts = { working: 0, waiting: 0 };
@@ -267,7 +288,7 @@ export function buildContentState(
     .flatMap((candidate) => (candidate.shown === null ? [] : [candidate.shown]))
     .sort(compareShown)
     .slice(0, MAX_ACTIVITY_ROWS)
-    .map((shown) => shown.row);
+    .map((shown): LiveActivityRow => ({ ...shown.row, agentName: leadingName(shown, showSessionNames) }));
   return {
     updatedAt: new Date(dataTime ?? now).toISOString(),
     counts,

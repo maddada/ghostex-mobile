@@ -1,8 +1,11 @@
 /**
- * What the Live Activity switch controls, drawn once with sample agents (the
- * design's preview, so that it is clear what the switch controls). A picture of
+ * What the Live Activity switches control, drawn once with sample agents (the
+ * design's preview, so that it is clear what the switches control). A picture of
  * the Lock Screen card, not live data: the real one is rendered by the widget extension
  * (modules/ghostex-live-activity/ios/Extension/GhostexActivityViews.swift), whose colours and words it repeats.
+ * `showSessionNames` is the "Show session names" switch: on, a row leads with its agent's mark and its session's
+ * sample name, since the mark is then what tells the agent, as on the real card; off, it is drawn as before the
+ * switch, with the agent's name and no mark.
  */
 
 import { useMemo } from 'react';
@@ -10,10 +13,14 @@ import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { AGENT_ICONS } from '../../assets/agentIcons.generated';
+import { agentIconTint } from '../../contract/mobileSummary';
 import { LiveActivityCopy } from '../../copy';
 import { GhostexPalette, SidebarPalette } from '../../theme/palette';
+import { readableSecondaryText } from '../../theme/sidebarAppearance';
 
 type PreviewState = (typeof LiveActivityCopy.previewRows)[number]['state'];
+type PreviewIcon = (typeof LiveActivityCopy.previewRows)[number]['icon'];
 
 /** Glyphs of the design (24-unit paths), so colour never carries the state alone. */
 const GLYPHS: Record<PreviewState, { path: string; color: string; word: string }> = {
@@ -49,11 +56,38 @@ function Glyph({ state, size }: { state: PreviewState; size: number }) {
   );
 }
 
-export default function LiveActivityPreview() {
+/** The size of the agent's mark in a row (the real card's is 18 pt in a 29 pt row). */
+const MARK_SIZE = 16;
+
+/**
+ * An agent's mark in its own tint, as the session list and the real card draw it. The real card is always dark;
+ * this one follows the theme, so a tint too light for the card (Codex's white on a light card) moves toward the
+ * text colour as far as the card needs.
+ */
+function markColor(icon: PreviewIcon, appearance: Appearance): string {
+  return readableSecondaryText(agentIconTint(icon), appearance.foreground, [appearance.card]);
+}
+
+export default function LiveActivityPreview({ showSessionNames }: { showSessionNames: boolean }) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
+  const marks = useMemo(
+    () =>
+      LiveActivityCopy.previewRows.map((row) => {
+        const Mark = AGENT_ICONS[row.icon];
+        return Mark === undefined ? null : <Mark size={MARK_SIZE} color={markColor(row.icon, appearance)} />;
+      }),
+    [appearance],
+  );
   return (
-    <View style={styles.frame} accessible accessibilityRole="image" accessibilityLabel={LiveActivityCopy.previewLabel}>
+    <View
+      style={styles.frame}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={
+        showSessionNames ? LiveActivityCopy.previewLabelWithSessionNames : LiveActivityCopy.previewLabel
+      }
+    >
       <View style={styles.card}>
         <View style={styles.head}>
           <View style={styles.count}>
@@ -72,9 +106,10 @@ export default function LiveActivityPreview() {
         </View>
         {LiveActivityCopy.previewRows.map((row, index) => (
           <View key={`${row.agent}:${row.project}`} style={[styles.row, index > 0 && styles.rowDivider]}>
+            {showSessionNames ? <View style={styles.mark}>{marks[index]}</View> : null}
             <View style={styles.identity}>
               <Text style={[styles.agent, row.state === 'finished' && styles.secondary]} numberOfLines={1}>
-                {row.agent}
+                {showSessionNames ? row.session : row.agent}
               </Text>
               <Text style={styles.project} numberOfLines={1}>
                 {row.project}
@@ -142,6 +177,10 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  mark: {
+    width: 18,
+    alignItems: 'center',
   },
   identity: {
     flex: 1,

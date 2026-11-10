@@ -280,6 +280,8 @@ function fakeHost(failWrites = 0) {
     reloadTimelines: () => {
       calls.push('reload');
     },
+    namesRecord: () => 'none',
+    rememberNames: () => Promise.resolve(),
   };
   return { host, calls, written };
 }
@@ -290,6 +292,7 @@ function inputs(overrides: Partial<WidgetInputs> = {}): WidgetInputs {
     sources: sources(twoWorkingOneWaiting),
     selectedMachineId: MACHINE,
     polling: true,
+    showSessionNames: false,
     ...overrides,
   };
 }
