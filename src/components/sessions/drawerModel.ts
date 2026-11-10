@@ -316,9 +316,11 @@ export function hideProjectsWithoutSessions(
       if (hasSessions(block.card)) kept.push(block);
       else emptyProjects += 1;
     } else if (block.kind === 'collection') {
+      // A folded collection draws no cards, so its header knows which members are empty.
       const projects = block.projects.filter(hasSessions);
-      emptyProjects += block.projects.length - projects.length;
-      if (projects.length > 0) kept.push({ ...block, projects });
+      const empty = block.header.projectsWithoutSessions;
+      emptyProjects += empty;
+      if (block.header.projectCount - empty > 0) kept.push({ ...block, projects });
     } else {
       kept.push(block);
     }

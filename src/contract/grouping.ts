@@ -98,6 +98,8 @@ export type CollectionHeaderItem = {
   color: string;
   collapsed: boolean;
   projectCount: number;
+  /** Member projects that draw no session; known while the collection is folded and draws no cards (Hide projects without sessions). */
+  projectsWithoutSessions: number;
   sessionCount: number;
   workingCount: number;
   attentionCount: number;
@@ -1172,6 +1174,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       color: collection.color,
       collapsed: collectionCollapsed,
       projectCount: memberKeys.length,
+      projectsWithoutSessions: memberKeys.filter((key) => (sessionsByProjectKey.get(key) ?? []).length === 0).length,
       sessionCount: collectionSessions.length,
       workingCount: counts.workingCount,
       attentionCount: counts.attentionCount - counts.questionCount,
