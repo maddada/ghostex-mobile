@@ -129,6 +129,12 @@ function sameInputs(
   });
 }
 
+/** A computer's name as the app shows it, for a row while the activity shows more than one computer. */
+function computerName(machineId: string): string {
+  const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
+  return machine === undefined ? '' : machineDisplayLabel(machine);
+}
+
 /** Brings the activity in line with the latest summaries, the settings and whether the app is in front. */
 function syncLiveActivity(): void {
   const settings = useSettingsStore.getState();
@@ -141,7 +147,7 @@ function syncLiveActivity(): void {
   lastInputs = { sources, enabled, showSessionNames, inFront };
   const now = Date.now();
   controller.process(
-    buildContentState(sources, now, finishedMemory, showSessionNames),
+    buildContentState(sources, now, finishedMemory, showSessionNames, computerName),
     workingStints(sources, now),
     enabled,
     computersNeedingUpdate(sources).length === 0,

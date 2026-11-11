@@ -23,6 +23,7 @@ import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/de
 import { initAppLifecycle } from './src/app/lifecycle';
 import { initSettingsSync } from './src/settingsSync/settingsSync';
 import { initLiveActivity } from './src/notifications/liveActivity';
+import { initLiveActivityPush } from './src/notifications/liveActivityPushStore';
 import { initWidgets } from './src/notifications/widgets';
 import { initPersistentNotification } from './src/app/persistentNotification';
 import { securityNoticeTarget } from './src/app/securityNotice';
@@ -128,7 +129,6 @@ function DuoStackNavigator({
   return <Stack.Navigator screenOptions={options}>{children}</Stack.Navigator>;
 }
 
-
 export default function App() {
   const appearance = useAppearance();
   const terminalSurface = useTerminalColours().chrome;
@@ -158,6 +158,7 @@ export default function App() {
     initAlerts();
     initAttentionNotifications();
     initLiveActivity();
+    initLiveActivityPush();
     initWidgets();
     initPushNotifications();
     initAutoReconnect();

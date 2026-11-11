@@ -61,6 +61,13 @@ export type LiveActivityRow = {
   expiresAt?: string;
   /** Only on waiting rows with a pending question. */
   hasQuestion?: true;
+  /**
+   * The computer the session runs on, by its name, only while the content shows more than one computer. A
+   * computer that pushes the banner while the phone is locked fills it the same way (gxserver's
+   * server/src/live_activity/content.rs), so the open app and the pushed banner agree; a build that does not draw
+   * it ignores it.
+   */
+  computer?: string;
 };
 
 export type LiveActivityContentState = {
@@ -287,6 +294,7 @@ export function buildContentState(
   now: number,
   memory: FinishedMemory = new Map(),
   showSessionNames = false,
+  computerName: (machineId: string) => string = () => '',
 ): LiveActivityContentState {
   const candidates: Candidate[] = [];
   const counts = { working: 0, waiting: 0 };
@@ -329,7 +337,12 @@ export function buildContentState(
     .flatMap((candidate) => (candidate.shown === null ? [] : [candidate.shown]))
     .sort(compareShown)
     .slice(0, MAX_ACTIVITY_ROWS)
-    .map((shown): LiveActivityRow => ({ ...shown.row, agentName: leadingName(shown, showSessionNames) }));
+    .map((shown): LiveActivityRow => {
+      const row: LiveActivityRow = { ...shown.row, agentName: leadingName(shown, showSessionNames) };
+      const name = machinesShown.size > 1 ? truncateName(computerName(shown.row.target.machineId)) : '';
+      if (name.length > 0) row.computer = name;
+      return row;
+    });
   return {
     updatedAt: new Date(dataTimeOf(machinesRead, machinesShown, now)).toISOString(),
     counts,

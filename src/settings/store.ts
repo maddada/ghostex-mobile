@@ -90,6 +90,15 @@ export type GhostexSettings = ThemeColourSettings & {
    * CDXC:Notifications 2026-11-10 DECISION: Off by default, also for stored settings from before the switch, which have no value for it, so an update changes nothing on a locked phone until the user turns it on. User (Q2278, on Ghostex PR #545 / ghostex-mobile PR #35): keep the earlier promise that no session title shows on the Lock Screen, the Live Activity or the widgets; both surfaces show on a locked phone, where anyone can read them, and a session's name can come from its first prompt. On, the rows of several sessions of one agent in one project can be told apart; off, they are the rows from before the names.
    */
   liveActivitySessionNames: boolean;
+  /**
+   * While the phone is locked, one computer keeps the Live Activity current through Ghostex's push relay
+   * (`notifications/liveActivityPush.ts`). Off, the Live Activity updates only while the app runs, as before.
+   * iOS only.
+   *
+   * CDXC:Notifications 2026-11-11 DECISION: On by default, with a switch to turn it off, because no iPhone had run
+   * the pushes before this release: the brief for 11.4.0 asked for "Keep it updated while locked", on by default.
+   */
+  liveActivityLockedUpdates: boolean;
   hideKeyboardOnStartup: boolean;
   openUrlsOnTap: boolean;
   confirmTabClose: boolean;
@@ -284,6 +293,7 @@ export function defaultSettings(): GhostexSettings {
     settingsSyncThroughPhone: true,
     liveActivityEnabled: true,
     liveActivitySessionNames: false,
+    liveActivityLockedUpdates: true,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
     confirmTabClose: false,
@@ -529,6 +539,7 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     settingsSyncThroughPhone: bool('settingsSyncThroughPhone', defaults.settingsSyncThroughPhone),
     liveActivityEnabled: bool('liveActivityEnabled', defaults.liveActivityEnabled),
     liveActivitySessionNames: bool('liveActivitySessionNames', defaults.liveActivitySessionNames),
+    liveActivityLockedUpdates: bool('liveActivityLockedUpdates', defaults.liveActivityLockedUpdates),
     hideKeyboardOnStartup: bool('hideKeyboardOnStartup', defaults.hideKeyboardOnStartup),
     openUrlsOnTap: bool('openUrlsOnTap', defaults.openUrlsOnTap),
     confirmTabClose: bool('confirmTabClose', defaults.confirmTabClose),

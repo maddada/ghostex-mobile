@@ -97,7 +97,8 @@ export const ScanCopy = {
       title: 'Still nothing?',
       detail: 'On the computer, click the Copy button under the code, send the text to this phone and paste it.',
     },
-    olderComputer: "No Connect a Device in the computer's menu? On Ghostex 11.3 it is called Connect a phone; on 11.2 or earlier, click Mobile & Remote, then Connect.",
+    olderComputer:
+      "No Connect a Device in the computer's menu? On Ghostex 11.3 it is called Connect a phone; on 11.2 or earlier, click Mobile & Remote, then Connect.",
     paste: 'Paste a code',
   },
   found: (computer: string) => `Found ${computer}`,
@@ -119,8 +120,7 @@ export const ScanCopy = {
     ledeStrong: 'Copy Easy Connect code',
     ledeSuffix: ', and send the text to this phone.',
     placeholder: 'ghostex-ec1:…',
-    validEasyConnect: (user: string, computer: string) =>
-      `Looks like an Easy Connect code for ${user} on ${computer}`,
+    validEasyConnect: (user: string, computer: string) => `Looks like an Easy Connect code for ${user} on ${computer}`,
     validTailscale: (user: string, computer: string) =>
       `Looks like a Ghostex Tailscale code for ${user} on ${computer}`,
     validLegacy: 'Looks like a pairing address. You will be asked for the computer name and user next.',
@@ -147,8 +147,7 @@ export const ScanCopy = {
  */
 export const PairingCopy = {
   checkTitle: 'Check your computer',
-  checkLede: (computer: string) =>
-    `${computer} shows three words. If they are the same as these, click Approve there.`,
+  checkLede: (computer: string) => `${computer} shows three words. If they are the same as these, click Approve there.`,
   waiting: 'Waiting for Approve on the computer…',
   minutesLeft: (minutes: number) => (minutes <= 1 ? 'Less than a minute left' : `${minutes} minutes left`),
   showsNothing: 'The computer shows nothing',
@@ -158,7 +157,8 @@ export const PairingCopy = {
     steps: [
       {
         title: 'Look for the words on the computer',
-        detail: 'They show in its Connect a phone window, or in a window called "Approve this phone?". It can take a few seconds.',
+        detail:
+          'They show in its Connect a phone window, or in a window called "Approve this phone?". It can take a few seconds.',
       },
       {
         title: 'Open Settings > Remote there',
@@ -1682,6 +1682,9 @@ export const LiveActivityCopy = {
   // The design also says "or briefly in the background": that needs silent pushes, which this build
   // does not have, so it claims only what it does (updates while the app is open).
   freshnessCaption: 'Ghostex updates it while the app is open. Later it can show an older state and then says so.',
+  lockedUpdatesToggle: 'Keep it updated while locked',
+  lockedUpdatesCaption:
+    'One of your computers keeps the Live Activity current while your phone is locked, through Ghostex’s push service, also for the computers connected to it. Off, it updates only while Ghostex is open.',
   offCaption: 'Off. Ghostex ends the current Live Activity and starts no new one.',
   sessionNamesToggle: 'Show session names',
   sessionNamesCaption:
@@ -1711,9 +1714,23 @@ export const LiveActivityCopy = {
    * Screen. A row leads with `session` and the agent's mark while "Show session names" is on, else with `agent`.
    */
   previewRows: [
-    { agent: 'Claude Code', icon: 'claude', session: 'Widget refresh', project: 'ghostex-mobile', state: 'question', time: '4m' },
+    {
+      agent: 'Claude Code',
+      icon: 'claude',
+      session: 'Widget refresh',
+      project: 'ghostex-mobile',
+      state: 'question',
+      time: '4m',
+    },
     { agent: 'Codex', icon: 'codex', session: 'Backup script', project: 'homeserver', state: 'waiting', time: '1m' },
-    { agent: 'Codex', icon: 'codex', session: 'Release notes', project: 'ghostex-mobile', state: 'working', time: '12m' },
+    {
+      agent: 'Codex',
+      icon: 'codex',
+      session: 'Release notes',
+      project: 'ghostex-mobile',
+      state: 'working',
+      time: '12m',
+    },
     { agent: 'omp', icon: 'omp', session: 'Sidebar search', project: 'Ghostex', state: 'finished', time: '18m' },
   ],
 } as const;
