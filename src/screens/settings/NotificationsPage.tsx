@@ -13,12 +13,12 @@
  * running app.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { SwitchRow as RowToggle } from '../../components/common/SwitchRow';
-import { NotificationsCopy } from '../../copy';
+import { NotificationChoicesCopy, NotificationsCopy } from '../../copy';
 import { enabledMachines, useMachinesStore } from '../../machines/store';
 import {
   askForNotificationsOnce,
@@ -26,8 +26,13 @@ import {
   useAttentionFeedStore,
 } from '../../notifications/feedStore';
 import { BellOffGlyph } from '../../notifications/icons';
-import { NOTIFICATIONS_SUPPORTED } from '../../notifications/notificationCentre';
-import type { NotificationSettings } from '../../notifications/settings';
+import { NOTIFICATIONS_SUPPORTED, postTestNotification } from '../../notifications/notificationCentre';
+import {
+  type AlertChoice,
+  type AlertKindKey,
+  type NotificationSettings,
+  withAlertChoices,
+} from '../../notifications/settings';
 import { useSettingsStore } from '../../settings/store';
 import { BLOCKED_CARD_WASH, colorOver, neutralButtonFills } from '../../theme/palette';
 import { readableSecondaryText } from '../../theme/sidebarAppearance';
@@ -41,7 +46,80 @@ import {
   useSettingsStyles,
 } from './SettingsControls';
 
-type KindKey = 'finished' | 'waiting' | 'error';
+/** The choice rows, in the page's order: what needs you first, then the turns you wait for, errors, thread reports. */
+const KIND_ROWS: readonly { key: AlertKindKey; label: string; detail: string }[] = [
+  { key: 'needsYou', label: NotificationChoicesCopy.needsYou, detail: NotificationChoicesCopy.needsYouDetail },
+  { key: 'finished', label: NotificationChoicesCopy.finished, detail: NotificationChoicesCopy.finishedDetail },
+  { key: 'errors', label: NotificationChoicesCopy.errors, detail: NotificationChoicesCopy.errorsDetail },
+  {
+    key: 'threadReports',
+    label: NotificationChoicesCopy.threadReports,
+    detail: NotificationChoicesCopy.threadReportsDetail,
+  },
+];
+
+const CHOICE_OPTIONS: readonly { value: AlertChoice; label: string }[] = [
+  { value: 'sound', label: NotificationChoicesCopy.choiceSound },
+  { value: 'silent', label: NotificationChoicesCopy.choiceSilent },
+  { value: 'off', label: NotificationChoicesCopy.choiceOff },
+];
+
+/** One kind: its name and what it covers, over Sound, Silent and Off; dimmed and inert while the master is off. */
+function KindChoice({
+  label,
+  detail,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  detail: string;
+  value: AlertChoice;
+  disabled: boolean;
+  onChange: (value: AlertChoice) => void;
+}) {
+  const styles = useSettingsStyles();
+  const appearance = useAppearance();
+  return (
+    <View
+      style={[styles.card, disabled && styles.rowDisabled]}
+      pointerEvents={disabled ? 'none' : 'auto'}
+      accessibilityState={{ disabled }}
+    >
+      <View style={local.kindText}>
+        <Text style={styles.cardLabel}>{label}</Text>
+        <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text>
+      </View>
+      <SegmentedRow label={label} options={CHOICE_OPTIONS} value={value} onChange={onChange} />
+    </View>
+  );
+}
+
+/** Settings › Notifications › Send a test notification: a local notice in 5 seconds, with Needs you's sound. */
+function TestNotification({ settings }: { settings: NotificationSettings }) {
+  const styles = useSettingsStyles();
+  const [outcome, setOutcome] = useState<'sent' | 'failed' | null>(null);
+  const send = () => {
+    const copy = NotificationChoicesCopy;
+    void postTestNotification(copy.testTitle, copy.testBody, settings.choices.needsYou === 'sound')
+      .then(() => setOutcome('sent'))
+      .catch(() => setOutcome('failed'));
+  };
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        onPress={send}
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      >
+        <Text style={styles.rowLabel}>{NotificationChoicesCopy.test}</Text>
+      </Pressable>
+      {outcome !== null ? (
+        <Caption>{outcome === 'sent' ? NotificationChoicesCopy.testSent : NotificationChoicesCopy.testFailed}</Caption>
+      ) : null}
+    </>
+  );
+}
 
 /** A Settings switch row that dims while disabled, on the shared row so a tap anywhere on it toggles. */
 function SwitchRow({
@@ -135,26 +213,29 @@ function AgentNotifications() {
     if (on && notifications.askedAt === undefined) void askForNotificationsOnce();
     else set({ enabled: on });
   };
-  const kind = (key: KindKey, label: string, detail: string) => (
-    <SwitchRow
-      label={label}
-      detail={detail}
-      value={notifications[key]}
-      disabled={!notifications.enabled}
-      onValueChange={(on) => set({ [key]: on })}
-    />
-  );
+  const choose = (key: AlertKindKey, choice: AlertChoice) =>
+    setSetting('notifications', withAlertChoices(notifications, { ...notifications.choices, [key]: choice }));
 
   return (
     <>
       {permission === 'denied' ? <BlockedCard /> : null}
       <SectionHeader title={copy.sectionAgents} />
       <SwitchRow label={copy.master} value={notifications.enabled} onValueChange={setMaster} />
-      <Caption>{pushing ? copy.limitWithPush : copy.limit}</Caption>
-      {kind('finished', copy.finished, copy.finishedDetail)}
-      {kind('waiting', copy.waiting, copy.waitingDetail)}
-      {kind('error', copy.error, copy.errorDetail)}
-      <Caption>{copy.rules}</Caption>
+      <Caption>{pushing ? NotificationChoicesCopy.pushCaption : copy.limit}</Caption>
+      <SectionHeader title={NotificationChoicesCopy.sectionKinds} />
+      {KIND_ROWS.map((row) => (
+        <KindChoice
+          key={row.key}
+          label={row.label}
+          detail={row.detail}
+          value={notifications.choices[row.key]}
+          disabled={!notifications.enabled}
+          onChange={(choice) => choose(row.key, choice)}
+        />
+      ))}
+      <Caption>{NotificationChoicesCopy.kindsCaption}</Caption>
+      <Caption>{NotificationChoicesCopy.quietHours}</Caption>
+      {notifications.enabled ? <TestNotification settings={notifications} /> : null}
     </>
   );
 }
@@ -195,6 +276,7 @@ export default function NotificationsPage() {
 const local = StyleSheet.create({
   label: { flex: 1, gap: 2, paddingVertical: 4 },
   detail: { fontSize: 12 },
+  kindText: { gap: 2 },
   blocked: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 8 },
   blockedText: { flex: 1, minWidth: 0, gap: 4, alignItems: 'flex-start' },
   blockedTitle: { fontSize: 14, fontWeight: '600' },

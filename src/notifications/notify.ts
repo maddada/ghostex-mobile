@@ -37,7 +37,7 @@ import {
   type SessionFacts,
 } from './events';
 import { provenAttention, type AnnouncedEvents, type Arrival, type EventIdentity } from './eventIdentity';
-import type { NotificationSettings } from './settings';
+import { alertChoiceFor, type NotificationSettings } from './settings';
 
 /** What a notification carries for its tap; never shown. */
 export type NotificationData = {
@@ -52,6 +52,8 @@ export type NotificationData = {
 
 export type NotificationRequest = {
   identifier: string;
+  /** Notifications of one session of one computer stack together (iOS `threadIdentifier`). */
+  threadId?: string;
   title: string;
   /** The event in words, shown under the title (the system notification's body). */
   line: string;
@@ -85,13 +87,11 @@ export type AttentionSoundDeps = Pick<NotifyDeps, 'announced' | 'soundOn' | 'onS
   play(events: readonly EventIdentity[]): void;
 };
 
-/** Whether the switches let an event of `kind` notify; nothing does before the first ask was answered. */
+/** Whether the choices let an event of `kind` notify (not Off); nothing does before the first ask was answered. */
 export function notificationAllowed(kind: AttentionKind, settings: NotificationSettings): boolean {
   if (settings.askedAt === undefined || !settings.enabled) return false;
-  if (kind === 'finished') return settings.finished;
-  if (kind === 'failed') return settings.error;
-  // Waiting and "has a question": one switch (only the wording differs).
-  return settings.waiting;
+  // Waiting and "has a question": one choice, Needs you (only the wording differs).
+  return alertChoiceFor(kind, settings) !== 'off';
 }
 
 /*
@@ -113,6 +113,9 @@ export function notificationRequestFor(
         ? event.agentName
         : NotificationsCopy.unknownAgent;
   return {
+    // One stack per session of a computer, as the computer's pushes are (`threadId`, CDXC:Notifications 2026-11-11 in
+    // server/src/push/message.rs).
+    threadId: `${event.machineId}:${event.sessionId}`,
     identifier:
       event.eventId.length > 0
         ? `ghostex-attention:${event.machineId}:${event.eventId}`
@@ -150,7 +153,9 @@ export function postNotification(event: AttentionEvent, identity: EventIdentity,
     deps.announced.seenOnScreen(identity);
     return false;
   }
-  const announcement = deps.announced.announce(identity, { notification: true, sound: deps.soundOn() });
+  // Silent: shown without the sound; Sound: with it while the attention sound is on.
+  const sound = deps.soundOn() && alertChoiceFor(event.kind, deps.settings()) === 'sound';
+  const announcement = deps.announced.announce(identity, { notification: true, sound });
   if (announcement.rateLimited) {
     deps.log(`Notification held back by the rate limit (${event.kind}); it is in the attention list.`);
   }

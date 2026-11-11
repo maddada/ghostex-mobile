@@ -71,6 +71,16 @@ function offersPush(machineId: string): boolean | null {
 /** gxserver's capability for `sessionNames` in `/api/registerPushToken`. */
 const PUSH_SESSION_NAMES_CAPABILITY = 'pushSessionNames';
 
+/** gxserver's capability for `alerts` (Sound, Silent or Off for each kind) in `/api/registerPushToken`. */
+const PUSH_ALERT_CHOICES_CAPABILITY = 'pushAlertChoices';
+
+/** Whether the computer's endpoint lists `pushAlertChoices`; false while its link has settled no endpoint. */
+function offersAlertChoices(machineId: string): boolean {
+  const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
+  if (machine === undefined) return false;
+  return chatMachineLink(machine).capabilities()?.includes(PUSH_ALERT_CHOICES_CAPABILITY) ?? false;
+}
+
 /** Whether the computer's endpoint lists `pushSessionNames`; false while its link has settled no endpoint. */
 function offersSessionNames(machineId: string): boolean {
   const machine = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
@@ -126,6 +136,7 @@ const registration = new PushTokenRegistration({
     })),
   offersPush,
   offersSessionNames,
+  offersAlertChoices,
   sessionNames: () => useSettingsStore.getState().settings.liveActivitySessionNames,
   send: sendPushToken,
   accepted: pushAccepted,
@@ -204,6 +215,7 @@ export function initPushNotifications(): void {
     const nextNames = state.settings.liveActivitySessionNames;
     if (
       nextNames === sessionNames &&
+      next.choices === switches.choices &&
       next.enabled === switches.enabled &&
       next.finished === switches.finished &&
       next.waiting === switches.waiting &&

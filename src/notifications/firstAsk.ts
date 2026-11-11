@@ -8,7 +8,7 @@
  * The permission and the stored settings are passed in, so the flow is testable under `bun test`.
  */
 
-import type { NotificationSettings } from './settings';
+import { DEFAULT_ALERT_CHOICES, type NotificationSettings, withAlertChoices } from './settings';
 
 /** The system's answer. `undetermined`: nobody answered (the prompt was not shown or was dismissed). */
 export type PermissionState = 'granted' | 'denied' | 'undetermined';
@@ -38,6 +38,9 @@ export async function runFirstAsk(
   // Nobody answered: nothing is stored, so the next launch asks again (the ask has not happened yet).
   if (answer === 'undetermined') return 'unanswered';
   const on = answer === 'granted';
-  settings.set({ enabled: on, finished: on, waiting: on, error: on, askedAt: now().toISOString() });
+  // The default choices either way: refused, the master switch is off, and turning it on later finds them.
+  settings.set(
+    withAlertChoices({ ...settings.get(), enabled: on, askedAt: now().toISOString() }, { ...DEFAULT_ALERT_CHOICES }),
+  );
   return answer;
 }

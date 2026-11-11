@@ -1668,6 +1668,37 @@ export const NotificationsCopy = {
 } as const;
 
 /**
+ * Settings › Notifications, the choice for each kind of notice (CDXC:Notifications 2026-11-11 in
+ * src/notifications/settings.ts): Sound, Silent or Off.
+ */
+export const NotificationChoicesCopy = {
+  sectionKinds: 'What notifies you',
+  choiceSound: 'Sound',
+  choiceSilent: 'Silent',
+  choiceOff: 'Off',
+  needsYou: 'Needs you',
+  needsYouDetail: 'A question, an approval or permission, or an agent waiting for you.',
+  finished: 'Finished',
+  finishedDetail: 'A session you talk to finished its turn. A coordinator’s own turn notifies only when it needs you.',
+  errors: 'Errors',
+  errorsDetail: 'A session stopped on an error, is stuck, or is out of usage on every account.',
+  threadReports: 'Thread reports',
+  threadReportsDetail:
+    'A thread under a coordinator finished a turn. It reports to its coordinator, so this is Off unless you want every report.',
+  kindsCaption:
+    'Silent shows the notification without a sound. Several notices close together come as one sound, and the notices of one session stack together. Nothing notifies for a session open on screen, or for an agent starting or working.',
+  pushCaption:
+    'A computer that accepted this iPhone for push follows these choices too, also while Ghostex is closed. iOS decides when a push arrives, and one can come late or not at all.',
+  quietHours:
+    'For quiet hours, use an iOS Focus (iOS Settings › Focus): it holds Ghostex’s notifications until it ends.',
+  test: 'Send a test notification',
+  testSent: 'Sent. Leave Ghostex or lock the phone: it shows in 5 seconds.',
+  testFailed: 'iOS did not take the test notification. Check iOS Settings › Apps › Ghostex › Notifications.',
+  testTitle: 'Ghostex',
+  testBody: 'Test notification',
+} as const;
+
+/**
  * Settings › Live Activity (approved mockup). The activity's own words (working,
  * waiting, has a question, finished, "+N more", "Updated <time>") are drawn by the widget extension
  * (modules/ghostex-live-activity/ios/Extension); the preview here repeats them.

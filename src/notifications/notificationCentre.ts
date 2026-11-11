@@ -47,11 +47,30 @@ export const expoNotificationCentre: NotificationCentre = {
   post: async (request) => {
     await Notifications.scheduleNotificationAsync({
       identifier: request.identifier,
-      content: { title: request.title, body: request.line, sound: request.sound, data: request.data },
+      content: {
+        title: request.title,
+        body: request.line,
+        sound: request.sound,
+        data: request.data,
+        ...(request.threadId === undefined ? {} : { threadIdentifier: request.threadId }),
+      },
       trigger: null,
     });
   },
 };
+
+/**
+ * Settings › Notifications › Send a test notification: one local notification 5 seconds from now, with the sound when
+ * `sound`, so the person can leave the app or lock the phone and see how a notice looks and sounds. It goes through
+ * iOS only, not through a computer.
+ */
+export async function postTestNotification(title: string, body: string, sound: boolean): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    identifier: 'ghostex-test-notification',
+    content: { title, body, sound, threadIdentifier: 'ghostex-test' },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5 },
+  });
+}
 
 /** The tap target of a notification: its own data, or (a push message without a link) its session and event kind. */
 function tapData(response: Notifications.NotificationResponse): Partial<NotificationData> | null {

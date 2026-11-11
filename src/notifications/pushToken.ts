@@ -61,7 +61,7 @@
  */
 
 import type { PermissionState } from './firstAsk';
-import type { NotificationSettings } from './settings';
+import { ALERT_KIND_KEYS, type AlertChoices, type NotificationSettings } from './settings';
 
 /** The finished, waiting and error switches as a registration carries them: the computer pushes no kind that is off. */
 export type PushKinds = { finished: boolean; waiting: boolean; error: boolean };
@@ -76,6 +76,8 @@ export type PushTokenParams =
       deviceId?: string;
       /** The "Show session names" switch, sent only to a computer that lists `pushSessionNames`. */
       sessionNames?: boolean;
+      /** Sound, Silent or Off for each kind, sent only to a computer that lists `pushAlertChoices`. */
+      alerts?: AlertChoices;
     }
   | { action: 'unregister'; machineId: string };
 
@@ -117,6 +119,8 @@ export type PushTokenDeps = {
   offersSessionNames(machineId: string): boolean;
   /** The "Show session names" switch: on, the computer's pushes lead with the session's title. */
   sessionNames(): boolean;
+  /** Whether the computer's endpoint lists `pushAlertChoices` (it takes `alerts`); false while unknown. */
+  offersAlertChoices(machineId: string): boolean;
   /**
    * One request to a computer's gxserver over the warm link; `current` tells whether the pass still wants it sent,
    * checked right before it is handed to the link.
@@ -143,6 +147,12 @@ export const REMOVAL_WAIT_MS = 2_000;
 /** An Expo push token as the computer accepts it (the registration's schema). */
 const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,64}\]$/u;
 
+/** Whether two registrations carry the same choices (both none, or the same choice for every kind). */
+function sameChoices(a: AlertChoices | undefined, b: AlertChoices | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return ALERT_KIND_KEYS.every((key) => a[key] === b[key]);
+}
+
 /** A pairing device id as the computer accepts it (the registration's schema): 1 to 128 visible ASCII characters. */
 const DEVICE_ID = /^[\x21-\x7e]{1,128}$/u;
 
@@ -153,6 +163,7 @@ function holdsAlready(taken: PushTokenParams, wanted: PushTokenParams): boolean 
     taken.token === wanted.token &&
     taken.deviceId === wanted.deviceId &&
     taken.sessionNames === wanted.sessionNames &&
+    sameChoices(taken.alerts, wanted.alerts) &&
     taken.kinds.finished === wanted.kinds.finished &&
     taken.kinds.waiting === wanted.kinds.waiting &&
     taken.kinds.error === wanted.kinds.error
@@ -394,6 +405,13 @@ export class PushTokenRegistration {
       the field and never puts a session title in a push, so it is not sent there.
       */
       ...(this.deps.offersSessionNames(machine.id) ? { sessionNames: this.deps.sessionNames() } : {}),
+      /*
+      CDXC:Notifications 2026-11-11 DECISION: the computer learns the Sound, Silent or Off choice of each kind with
+      the registration, so it sends nothing the phone would drop and a Silent kind without its sound; a thread's
+      turn under a coordinator reaches the phone only where its choice is not Off. A computer whose endpoint does not
+      list `pushAlertChoices` refuses the field and keeps the finished, waiting and error switches (`kinds`).
+      */
+      ...(this.deps.offersAlertChoices(machine.id) ? { alerts: { ...this.deps.settings().choices } } : {}),
     };
   }
 

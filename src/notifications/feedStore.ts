@@ -72,6 +72,7 @@ import {
 import { announcedEvents, provenAttention, type AnnouncedEventsStorage, type EventIdentity } from './eventIdentity';
 import { processHostEvents, type NotificationData, type NotifyDeps } from './notify';
 import { pushEventFromData, pushMachineId, type PushEvent } from './pushMessage';
+import { alertChoiceFor } from './settings';
 
 const FEED_REQUEST_TIMEOUT_MS = 10_000;
 /** How long new events wait for the computer's fresh session list before they are mapped with what is there. */
@@ -325,6 +326,9 @@ async function notifyHostEvents(
   }, arrival);
 }
 
+/** A push of a thread's turn under a coordinator (`threadReport`, CDXC:Notifications 2026-11-11 in pushToken.ts). */
+const THREAD_REPORT_KIND = 'threadReport';
+
 /** The kinds a push can notify with (a push without alert, when an agent starts, never does). */
 const NOTIFYING_KINDS: ReadonlySet<string> = new Set(HOST_EVENT_KINDS);
 
@@ -356,6 +360,14 @@ function pushHostEvent(push: PushEvent): HostEvent | null {
 function takeForegroundPush(data: unknown): boolean {
   const push = pushEventFromData(data);
   if (push === null) return false;
+  if (push.kind === THREAD_REPORT_KIND) {
+    // A thread's turn under a coordinator: the computer sends it only for a choice that is not Off, and with or without
+    // its sound as chosen, so iOS shows it as it came, unless the choice is Off by now or its session is open here.
+    const settings = useSettingsStore.getState().settings.notifications;
+    const machineId = pushMachineId(push.machineId, enabledMachines(useMachinesStore.getState()));
+    if (alertChoiceFor('threadReport', settings) === 'off' || !settings.enabled) return true;
+    return machineId !== null && sessionOnScreen(machineId, push.sessionId);
+  }
   if (!NOTIFYING_KINDS.has(push.kind)) return true;
   const event = pushHostEvent(push);
   if (event === null) return false;
