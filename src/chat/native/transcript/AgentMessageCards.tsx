@@ -140,7 +140,7 @@ const AgentCard = memo(function AgentCard({
         {pill !== null ? (
           // `Message from` / `Message to`, then the other session's pill (`session_mentions.rs`).
           <View style={[styles.name, styles.pillTitle]}>
-            <Text style={[SINGLE_LINE_TITLE, { color: theme.foreground }]} numberOfLines={1}>
+            <Text style={[SINGLE_LINE_TITLE, styles.fixed, { color: theme.foreground }]} numberOfLines={1}>
               {str(pill, 'prefix')}
             </Text>
             <SessionPill pill={pill} textStyle={[SINGLE_LINE_TITLE, { color: theme.foreground }]} />
@@ -150,8 +150,16 @@ const AgentCard = memo(function AgentCard({
             {str(card, 'name')}
           </Text>
         )}
-        {time.length > 0 ? <Text style={[styles.small, { color: theme.muted }]}>{time}</Text> : null}
-        {status !== null ? <Status status={status} /> : null}
+        {time.length > 0 ? (
+          <Text style={[styles.small, styles.fixed, { color: theme.muted }]} numberOfLines={1}>
+            {time}
+          </Text>
+        ) : null}
+        {status !== null ? (
+          <View style={styles.fixed}>
+            <Status status={status} />
+          </View>
+        ) : null}
       </Pressable>
       {open ? (
         <View style={[styles.opened, { borderTopColor: hairline }]}>
@@ -323,6 +331,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   name: { flex: 1, minWidth: 0 },
+  /**
+   * `Message to` / `Message from`, the time and the status pill keep their whole width; only the
+   * session's name shortens, with an ellipsis (`SessionPill`'s label).
+   */
+  fixed: { flexShrink: 0 },
   // An ordinary word space between `Message to` and the session's name.
   pillTitle: { flexDirection: 'row', alignItems: 'center', gap: Math.round(SINGLE_LINE_CARD.titleSize * 0.27) },
   small: { fontSize: 12, lineHeight: 16 },
