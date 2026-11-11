@@ -161,7 +161,8 @@ struct ActivityRowView: View {
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(row.state == .finished ? ActivityStyle.secondaryText : ActivityStyle.text)
           .layoutPriority(1)
-        Text(row.project)
+        // The computer follows the project while the activity shows more than one computer.
+        Text(row.computer.map { "\(row.project) · \($0)" } ?? row.project)
           .font(.footnote)
           .foregroundStyle(ActivityStyle.secondaryText)
       }

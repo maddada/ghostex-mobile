@@ -40,9 +40,12 @@ public struct GhostexActivityTarget: Codable, Hashable, Sendable {
   private static let unreserved = CharacterSet(
     charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
-  /// `ghostex://session?machineId=…&sessionId=…`, parsed by the app's `src/app/deepLinkHandler.ts`.
+  /// `ghostex://session?machineId=…&sessionId=…`, parsed by the app's `src/app/deepLinkHandler.ts`. None for a
+  /// row of a computer the phone is not paired with (pushed by the computer it is connected to, with no id for
+  /// it): a tap opens the app.
   public var deepLink: URL? {
     guard
+      !machineId.isEmpty, !sessionId.isEmpty,
       let machine = machineId.addingPercentEncoding(withAllowedCharacters: Self.unreserved),
       let session = sessionId.addingPercentEncoding(withAllowedCharacters: Self.unreserved)
     else { return nil }
@@ -72,11 +75,14 @@ public struct GhostexActivityRow: Codable, Hashable, Sendable {
   public var expiresAt: Date?
   /// True on a waiting row with a pending question: it says "has a question".
   public var hasQuestion: Bool?
+  /// The computer the session runs on, by its name, only while the activity shows more than one computer.
+  public var computer: String?
 
   public init(
     target: GhostexActivityTarget, agentName: String, agentIcon: String, agentTint: UInt32,
     project: String, state: GhostexAgentState,
-    startedAt: Date, finishedAt: Date? = nil, expiresAt: Date? = nil, hasQuestion: Bool? = nil
+    startedAt: Date, finishedAt: Date? = nil, expiresAt: Date? = nil, hasQuestion: Bool? = nil,
+    computer: String? = nil
   ) {
     self.target = target
     self.agentName = agentName
@@ -88,10 +94,12 @@ public struct GhostexActivityRow: Codable, Hashable, Sendable {
     self.finishedAt = finishedAt
     self.expiresAt = expiresAt
     self.hasQuestion = hasQuestion
+    self.computer = computer
   }
 
   private enum CodingKeys: String, CodingKey {
     case target, agentName, agentIcon, agentTint, project, state, startedAt, finishedAt, expiresAt, hasQuestion
+    case computer
   }
 
   public init(from decoder: Decoder) throws {
@@ -106,6 +114,7 @@ public struct GhostexActivityRow: Codable, Hashable, Sendable {
     finishedAt = try ActivityTime.decodeIfPresent(container, .finishedAt)
     expiresAt = try ActivityTime.decodeIfPresent(container, .expiresAt)
     hasQuestion = try container.decodeIfPresent(Bool.self, forKey: .hasQuestion)
+    computer = try container.decodeIfPresent(String.self, forKey: .computer).flatMap { $0.isEmpty ? nil : $0 }
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -120,6 +129,7 @@ public struct GhostexActivityRow: Codable, Hashable, Sendable {
     try container.encodeIfPresent(finishedAt.map(ActivityTime.text), forKey: .finishedAt)
     try container.encodeIfPresent(expiresAt.map(ActivityTime.text), forKey: .expiresAt)
     try container.encodeIfPresent(hasQuestion, forKey: .hasQuestion)
+    try container.encodeIfPresent(computer, forKey: .computer)
   }
 
   /// Whether the row says "has a question" instead of "waiting".

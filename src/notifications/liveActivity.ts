@@ -13,10 +13,7 @@
 import { useMemo } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import {
-  GhostexLiveActivity,
-  type LiveActivityPushToken,
-} from '../../modules/ghostex-live-activity/src/GhostexLiveActivity';
+import { GhostexLiveActivity } from '../../modules/ghostex-live-activity/src/GhostexLiveActivity';
 import { logAppEvent } from '../app/appLog';
 import { useInventoryStore, type MachineInventory } from '../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
@@ -47,11 +44,6 @@ let lastInputs: {
   showSessionNames: boolean;
   inFront: boolean;
 } | null = null;
-/**
- * The Live Activity's push tokens iOS issued (hex): `update` for the running activity, `start` to start one by push
- * (iOS 17.2+). In memory only and never logged.
- */
-let pushTokens: Partial<Record<LiveActivityPushToken['kind'], string>> = {};
 /** The finished events seen while the app runs (in memory: a restart forgets them). */
 const finishedMemory: FinishedMemory = new Map();
 
@@ -157,27 +149,6 @@ function syncLiveActivity(): void {
   );
 }
 
-/**
- * The Live Activity's latest push tokens, for the computer's Live Activity pushes through Apple's push service.
- *
- * CDXC:Notifications 2026-11-11 WHY: User: "why does it always say Not current? pls fix both". While the phone is
- * locked iOS keeps the app suspended, so only a push to the activity itself keeps it current. Nothing sends these
- * tokens to a computer yet: that waits for the computer's sender (Apple's service with the push key; Expo's push
- * service does not carry Live Activity pushes), and then goes with the push registration (`pushToken.ts`).
- */
-export function liveActivityPushTokens(): Partial<Record<LiveActivityPushToken['kind'], string>> {
-  return { ...pushTokens };
-}
-
-function takePushTokens(native: NativeLiveActivity): void {
-  if (typeof native.pushTokens !== 'function') return;
-  pushTokens = { ...native.pushTokens() };
-  native.addListener('onPushToken', ({ kind, token }) => {
-    pushTokens = { ...pushTokens, [kind]: token };
-    logAppEvent(`Live Activity: iOS issued a ${kind === 'start' ? 'push-to-start' : 'update'} push token`);
-  });
-}
-
 /** Install once at app startup; subscriptions live for the app's lifetime. */
 export function initLiveActivity(): void {
   if (installed) return;
@@ -192,7 +163,6 @@ export function initLiveActivity(): void {
     },
     onError: logAppEvent,
   });
-  takePushTokens(GhostexLiveActivity);
   useInventoryStore.subscribe(syncLiveActivity);
   useMachinesStore.subscribe(syncLiveActivity);
   useSettingsStore.subscribe(syncLiveActivity);
