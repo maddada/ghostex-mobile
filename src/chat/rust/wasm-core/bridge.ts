@@ -85,9 +85,31 @@ class WasmCoreBridge {
     this.lose('The chat core page was closed.');
   }
 
-  /** The page finished loading; this is the view tag `postToWebView` finds it by. */
-  attach(viewTag: number): void {
-    this.viewTag = viewTag;
+  /**
+   * The page finished loading in the WebView tagged `webViewTag`, inside the wrapper view tagged
+   * `hostTag`. Requests go through the wrapper's tag, after one empty script through each tag so
+   * that the native side forgets any WebView a reload left behind.
+   *
+   * CDXC:SessionChat 2026-11-11 WHY: after an over-the-air update's restart the chat stayed blank
+   * until the app was restarted again. `Updates.reloadAsync()` restarts the JavaScript in the same
+   * process, and React numbers views from the start again (Fabric's first tag is 2 in every
+   * JavaScript runtime), so the new WebView can get the old one's tag. The native `postToWebView` (GhostexWebViewPost, Kotlin and Swift) keeps the last
+   * WebView it found for a tag, for the whole process, and while the old WebView was not yet freed
+   * it sent every request to the old page, whose answers reached the old JavaScript: the new page
+   * had said `ready`, so the chat waited for answers that never came. The cache holds one tag, so
+   * it can match at most one of the two tags here: an empty script through the WebView's tag, then
+   * one through the wrapper's, leaves the wrapper's tag naming the new WebView (each lookup that
+   * misses the cache searches the tagged view for its WebView, and posts run in order). Done in
+   * JavaScript so it ships over the air; the native cache stays as it is.
+   */
+  attach(webViewTag: number, hostTag: number | null): void {
+    if (hostTag !== null && hostTag !== webViewTag) {
+      GhostexNative.postToWebView(webViewTag, 'void 0');
+      GhostexNative.postToWebView(hostTag, 'void 0');
+      this.viewTag = hostTag;
+    } else {
+      this.viewTag = webViewTag;
+    }
     this.becomeReady();
   }
 

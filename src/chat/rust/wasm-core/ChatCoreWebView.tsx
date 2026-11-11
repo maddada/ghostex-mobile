@@ -7,8 +7,8 @@
 import { Asset } from 'expo-asset';
 import { Paths } from 'expo-file-system';
 import * as Updates from 'expo-updates';
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { findNodeHandle, StyleSheet, View, type HostInstance } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { logAppEvent } from '../../../app/appLog';
@@ -52,6 +52,7 @@ function pagePathKind(uri: string): PagePathKind {
 export function ChatCoreWebViewHost() {
   const reloadKey = useSyncExternalStore(wasmCoreBridge.subscribeView, wasmCoreBridge.reloadKey);
   const [uri, setUri] = useState<string | null>(null);
+  const hostRef = useRef<HostInstance>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,9 +91,17 @@ export function ChatCoreWebViewHost() {
 
   if (uri === null) return null;
   return (
-    <View style={styles.host} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+    // Keyed with the page, so a reload gives the wrapper a fresh tag too; never flattened, as the
+    // bridge posts to the page through the wrapper's tag (bridge.ts `attach`).
+    <View
+      key={reloadKey}
+      ref={hostRef}
+      collapsable={false}
+      style={styles.host}
+      pointerEvents="none"
+      importantForAccessibility="no-hide-descendants"
+    >
       <WebView
-        key={reloadKey}
         source={{ uri }}
         originWhitelist={['*']}
         allowFileAccess
@@ -100,7 +109,7 @@ export function ChatCoreWebViewHost() {
         javaScriptEnabled
         onLoadEnd={(event) => {
           const target = (event.nativeEvent as unknown as { target?: unknown }).target;
-          if (typeof target === 'number') wasmCoreBridge.attach(target);
+          if (typeof target === 'number') wasmCoreBridge.attach(target, findNodeHandle(hostRef.current) ?? null);
         }}
         onMessage={(event) => wasmCoreBridge.receive(event.nativeEvent.data)}
         onRenderProcessGone={() => wasmCoreBridge.died('The chat core page stopped.')}
