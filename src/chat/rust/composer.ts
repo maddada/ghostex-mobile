@@ -84,6 +84,9 @@ export class ComposerModel {
 
   private selectionSent: { text: string; caret: number } | null = null;
 
+  /** The field has the keyboard (`focused`, `blurred`). */
+  private hasKeyboard = false;
+
   constructor(private readonly hooks: ComposerHooks) {}
 
   private set(next: Partial<ComposerModelState>): void {
@@ -128,12 +131,23 @@ export class ComposerModel {
   }
 
   focused(): void {
+    this.hasKeyboard = true;
     this.hooks.dispatch({ type: 'composerExpand', editor: true });
   }
 
   /** Blur pushes the draft to gxserver, as desktop's `InputEvent::Blur` does. */
   blurred(): void {
+    this.hasKeyboard = false;
     this.save();
+  }
+
+  /**
+   * Where Dictate's words go in the field as it is now: at the caret, or after the text when the
+   * field has no keyboard (it has no caret the reader chose then).
+   */
+  dictationPoint(): { text: string; caret: number } {
+    const { text, selection } = this.state;
+    return { text, caret: this.hasKeyboard ? Math.min(selection.end, text.length) : text.length };
   }
 
   /**

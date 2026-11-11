@@ -1,119 +1,147 @@
 /**
- * Which question form box Dictate types into: the form's boxes (a question's note or text answer,
- * the note under "Other / none of these", "Anything else?") say here when they have the caret, and
- * the composer's Dictate asks which one has it when a recording starts (`useDictation`). The chat
- * core places the words (`insertDictation`) and answers with the box's text now
- * (`dictationInserted`), which the box's drawn copies show from here (`showDictated`).
+ * Where Dictate types its words besides the chat box: the question form box that has the keyboard
+ * when a recording starts (`useDictation.ts` aims and asks the core to type; `transcript/QuestionForm.tsx`'s
+ * boxes report themselves). One per chat screen (`NativeChatUi.dictationTargets`), so a chat's
+ * microphone only ever types into that chat's own boxes.
  *
- * CDXC:Dictate 2026-11-11 DECISION:
- * Issue #552, the phone half of the computer's pull request #553: the box that has the caret when
- * the recording starts gets the words at its caret, as the chat box does. The box is chosen at the
- * start and does not change while recording or transcribing; it carries a ring until the words are
- * in. With the caret anywhere else the chat box takes them as before, and so do Transcribe again and
- * Transcribe previous. A chat core that does not name itself in the form (`core`, an older core
- * page) gets no `insertDictation`: the chat box takes the words.
- * SEE-ALSO: packages/gx-chat-core/src/questions/dictation.rs (the placing, the revisions);
- * apps/desktop/src/app/native_chat/dictation.rs (`aim_dictation`, `show_dictated`).
+ * CDXC:Dictate 2026-11-10 WHY: Dictate typed into the chat box even when the caret was in a question form's note, text answer or "Anything else?" box, so the words had to be cut from the draft and pasted into the box. The box that has the keyboard when the recording starts gets them, at its caret with the chat box's spacing; touching another box meanwhile does not move them, and if its form was sent or answered when they arrive they go to the chat box, so a dictation is never lost. A recording transcribed later (Transcribe again, Transcribe previous, a recording still waiting, a send that goes again on its own) keeps the chat box. This widens "typed into the draft" of the SessionChat 2026-10-08 DECISION in `useDictation.ts`. The target is the box's form and slot, never the view that draws it: a view is reused for another form when the transcript changes above it, and goes away when its row scrolls out of the list, so aimed at the view the words followed it into the other form, or went to the chat box though the form was still open. The core types the words into the box's draft (`insertDictation`), drawn or not, decides whether it still takes them, and keeps them there when a copy that has not shown them yet writes its text; a copy only ever shows what the core says the draft is, and never writes that back.
+ * CDXC:Dictate 2026-11-10 SEE-ALSO: the core's rule is `insert` in `packages/gx-chat-core/src/questions/dictation.rs`; the desktop's is `aim_dictation` and `dictation_inserted` in `apps/desktop/src/app/native_chat/dictation.rs`.
  */
 
-import { useSyncExternalStore } from 'react';
+/** A question form's text box: a question's (by its index) or the form's own notes box. */
+export type DictationBox = { form: string; slot: number | 'notes' };
 
-/** A question's index in its form, or the form's own notes box. */
-export type FormSlot = number | 'notes';
-
-/** The core's `dictationInserted` for a form box. */
-export type DictatedAnswer = {
-  form: string;
-  slot: FormSlot;
+/**
+ * The core's `dictationInserted` host action (`insert` and `keep` in gx-chat-core's
+ * questions/dictation.rs): Dictate's words are in a draft, whose text is now `content`.
+ */
+export type DictationInserted = {
+  /** The recording the words came from, as `insertDictation` named it; null when a copy's edit moved the words. */
+  id: string | null;
+  /** The form box whose draft has the words; null is the chat box. */
+  box: DictationBox | null;
+  /** The texts a copy of the target may show to take `content` in their place. */
+  supersedes: readonly string[];
+  /** The target's text now, and the offset after the words in it. */
+  content: string;
+  caret: number;
+  /**
+   * What a copy of the form box that shows `content` sends with its edits (`formText`): the core
+   * that holds the draft, and how many dictations it typed into the box.
+   */
   core: string;
   rev: number;
-  /** Texts a copy may show to take `content`: any other means it was typed in since. */
-  supersedes: string[];
-  content: string;
-  /** UTF-16 offset after the words. */
-  caret: number;
+  /** What was asked with, for a chat box that has to ask again; null when no recording was heard. */
+  text: string | null;
+  spacing: boolean;
 };
 
-/** One drawn copy of a form box. */
-export type DictationBox = {
-  form: string;
-  slot: FormSlot;
-  /** What the box shows now, with its selection (UTF-16 offsets). */
-  read(): { text: string; start: number; end: number };
-  /** The core's answer for this box. */
-  show(answer: DictatedAnswer): void;
-};
-
-/** The box a recording started in. */
-export type AimedBox = { form: string; slot: FormSlot };
-
-export function formBoxKey(form: string, slot: FormSlot): string {
-  return `${form}:${slot}`;
-}
-
-const boxes = new Set<DictationBox>();
-let focused: DictationBox | null = null;
-
-/** A drawn box: `focus` and `blur` as its field gains and loses the caret, `remove` when it goes. */
-export function registerDictationBox(box: DictationBox): { focus(): void; blur(): void; remove(): void } {
-  boxes.add(box);
+export function dictationInserted(params: unknown): DictationInserted | null {
+  if (typeof params !== 'object' || params === null) return null;
+  const fields = params as Record<string, unknown>;
+  const { form, slot, supersedes, content, caret } = fields;
+  if (typeof content !== 'string' || typeof caret !== 'number' || !Array.isArray(supersedes)) return null;
+  const box: DictationBox | null =
+    typeof form === 'string' && (typeof slot === 'number' || slot === 'notes') ? { form, slot } : null;
   return {
-    focus: () => {
-      focused = box;
-    },
-    blur: () => {
-      if (focused === box) focused = null;
-    },
-    remove: () => {
-      boxes.delete(box);
-      if (focused === box) focused = null;
-    },
+    id: typeof fields.id === 'string' ? fields.id : null,
+    box,
+    supersedes: supersedes.filter((text): text is string => typeof text === 'string'),
+    content,
+    caret,
+    core: typeof fields.core === 'string' ? fields.core : '',
+    rev: typeof fields.rev === 'number' ? fields.rev : 0,
+    text: typeof fields.text === 'string' ? fields.text : null,
+    spacing: fields.spacing !== false,
   };
 }
 
-/** The form box with the caret now, or null (the chat box, or nothing). */
-export function focusedDictationBox(): DictationBox | null {
-  return focused;
-}
+/**
+ * One drawn copy of a form box. A box can be drawn twice (the transcript's and the Resources
+ * sheet's) or not at all (its row is outside the list's window).
+ */
+export type DrawnBox = {
+  /** Its text and caret now. */
+  shown(): { text: string; caret: number };
+  /**
+   * The core says the box's draft is now `result.content`. A copy showing one of the texts that
+   * supersedes takes it, without reporting it as an edit; a copy showing anything else holds an
+   * edit the core has not answered yet, whose own answer brings its text.
+   */
+  show(result: DictationInserted): void;
+};
 
-/** A drawn copy of `aimed`, the focused one first, to read what it shows. */
-export function drawnDictationBox(aimed: AimedBox): DictationBox | null {
-  const key = formBoxKey(aimed.form, aimed.slot);
-  if (focused !== null && formBoxKey(focused.form, focused.slot) === key) return focused;
-  for (const box of boxes) if (formBoxKey(box.form, box.slot) === key) return box;
-  return null;
-}
+const keyOf = (box: DictationBox): string => `${box.form}:${box.slot}`;
 
-/** Hands the core's answer to every drawn copy of its box. */
-export function showDictated(answer: DictatedAnswer): void {
-  const key = formBoxKey(answer.form, answer.slot);
-  for (const box of [...boxes]) if (formBoxKey(box.form, box.slot) === key) box.show(answer);
-}
+export class DictationTargets {
+  private focused: { box: DictationBox; copy: DrawnBox } | null = null;
+  private aimed: DictationBox | null = null;
+  private readonly drawn = new Map<string, Set<DrawnBox>>();
+  private readonly listeners = new Set<() => void>();
 
-/** The box a recording or transcription is aimed at, which shows a ring meanwhile. */
-let aimedKey: string | null = null;
-const aimedListeners = new Set<() => void>();
+  /** `copy` draws `box` from now on; the answer takes it away again. */
+  draw(box: DictationBox, copy: DrawnBox): () => void {
+    const key = keyOf(box);
+    const copies = this.drawn.get(key) ?? new Set<DrawnBox>();
+    copies.add(copy);
+    this.drawn.set(key, copies);
+    return () => {
+      copies.delete(copy);
+      if (copies.size === 0 && this.drawn.get(key) === copies) this.drawn.delete(key);
+      // A copy that leaves with the keyboard reports no blur.
+      if (this.focused?.copy === copy) this.focused = null;
+    };
+  }
 
-export function setDictationAim(aimed: AimedBox | null): void {
-  const next = aimed === null ? null : formBoxKey(aimed.form, aimed.slot);
-  if (next === aimedKey) return;
-  aimedKey = next;
-  for (const listener of [...aimedListeners]) listener();
-}
+  /** `copy` of `box` took the keyboard, or lost it. */
+  setFocused(box: DictationBox, copy: DrawnBox, focused: boolean): void {
+    if (focused) this.focused = { box: { ...box }, copy };
+    else if (this.focused?.copy === copy) this.focused = null;
+  }
 
-function subscribeAim(listener: () => void): () => void {
-  aimedListeners.add(listener);
-  return () => {
-    aimedListeners.delete(listener);
+  /** A recording starts: its words go to the box that has the keyboard now, or to the chat box. */
+  aimAtFocused(): void {
+    this.aim(this.focused?.box ?? null);
+  }
+
+  /** The run is over, or its words come later: the chat box takes what still arrives. */
+  release(): void {
+    this.aim(null);
+  }
+
+  /** The box the running dictation types into; null is the chat box. */
+  target(): DictationBox | null {
+    return this.aimed;
+  }
+
+  isTarget(box: DictationBox): boolean {
+    return this.aimed !== null && keyOf(this.aimed) === keyOf(box);
+  }
+
+  /** `box` as a drawn copy shows it now (the one with the keyboard first); null when none is drawn. */
+  shownBy(box: DictationBox): { text: string; caret: number } | null {
+    const copies = this.drawn.get(keyOf(box));
+    const focused = this.focused?.copy;
+    const copy = focused !== undefined && copies?.has(focused) ? focused : copies?.values().next().value;
+    return copy?.shown() ?? null;
+  }
+
+  /** The core says `result.box`'s draft has Dictate's words: its drawn copies are told. */
+  inserted(result: DictationInserted): void {
+    if (result.box === null) return;
+    this.drawn.get(keyOf(result.box))?.forEach((copy) => copy.show(result));
+  }
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
-}
 
-/** True while Dictate is aimed at this box. */
-export function useDictationAimed(form: string, slot: FormSlot): boolean {
-  const key = formBoxKey(form, slot);
-  return useSyncExternalStore(
-    subscribeAim,
-    () => aimedKey === key,
-    () => false,
-  );
+  private aim(box: DictationBox | null): void {
+    if (this.aimed === box || (this.aimed !== null && box !== null && keyOf(this.aimed) === keyOf(box))) return;
+    this.aimed = box;
+    this.listeners.forEach((listener) => listener());
+  }
 }

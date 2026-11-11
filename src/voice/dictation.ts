@@ -54,6 +54,46 @@ const handling = new Set<string>();
 /** Recordings whose words are in or that were dismissed, while the phone's copy is still being put away. */
 const settled = new Set<string>();
 
+/**
+ * The recordings whose words a chat's core is asked to type right now: its `insertDictation` is
+ * on its way through that chat's host (`chat/rust/host.ts`) and the answer has not been taken.
+ * There is one request per recording, on the whole phone: the recording is not offered as waiting
+ * meanwhile and no second request is made for it, so its words go into one draft. The request
+ * ends when the words are in a draft (`forgetRecording`), when the reader dismissed the recording,
+ * or when its chat can take no answer any more (`requestEnded`), and only then is the recording
+ * offered again.
+ *
+ * CDXC:Dictate 2026-11-10 WHY: The words reach a draft through the chat's core, a moment after they are back, where the released phone wrote them into the chat box at once; a recording was offered again in that moment, and one whose words a form had already taken was transcribed and typed a second time into another chat. A wait that offered the recording after five seconds did the same whenever the first request was only slow. The chat's host knows when its request is over (answered, or its core gone), so the request itself holds the recording back; one that stays open too long is ended by the host together with its core (`watchDictations` in host.ts), never by offering the recording beside it.
+ */
+const asked = new Set<string>();
+
+const waitingListeners = new Set<() => void>();
+
+/** Hears when the recordings offered as waiting may have changed (a request ended without its words in a draft). */
+export function onWaitingChanged(listener: () => void): () => void {
+  waitingListeners.add(listener);
+  return () => {
+    waitingListeners.delete(listener);
+  };
+}
+
+/** A chat's core is about to be asked for recording `id`'s words; false when a request for it is already on its way. */
+export function wordsAsked(id: string): boolean {
+  if (asked.has(id)) return false;
+  asked.add(id);
+  return true;
+}
+
+/** Whether an answer for recording `id` still counts: it is asked for, and not dismissed since. */
+export function wordsAwaited(id: string): boolean {
+  return asked.has(id);
+}
+
+/** The request for recording `id` ended without its words in a draft: the recording waits again. */
+export function requestEnded(id: string): void {
+  if (asked.delete(id)) waitingListeners.forEach((listener) => listener());
+}
+
 /** Whether the computer's gxserver can dictate (it lists the `voiceAgent` capability). */
 export function dictationSupported(machine: MachineConnectionTarget | null): boolean {
   if (!VOICE_SUPPORTED || machine === null) return false;
@@ -168,9 +208,10 @@ export async function localRecording(id: string): Promise<LocalDictation | null>
   }
 }
 
-/** The words are in the chat box (or nothing was heard): the phone's copy of `id` goes; the computer keeps its own. */
+/** The words are in a draft (or nothing was heard): the phone's copy of `id` goes; the computer keeps its own. */
 export async function forgetRecording(id: string): Promise<void> {
   settled.add(id);
+  asked.delete(id);
   const recording = await localRecording(id);
   if (recording !== null) await GhostexNative.dictationForget(recording.path).catch(() => undefined);
 }
@@ -203,7 +244,10 @@ export async function waitingRecordings(): Promise<LocalDictation[]> {
   try {
     const all = await GhostexNative.dictationUnsent();
     return all
-      .filter((recording) => !recording.dismissed && !handling.has(recording.id) && !settled.has(recording.id))
+      .filter(
+        (recording) =>
+          !recording.dismissed && !handling.has(recording.id) && !settled.has(recording.id) && !asked.has(recording.id),
+      )
       .reverse();
   } catch {
     return [];
@@ -299,6 +343,7 @@ export async function dismissDictation(machine: MachineConnectionTarget, id: str
 /** Marks a phone recording dismissed before it reaches the computer. */
 export async function dismissLocal(recording: LocalDictation): Promise<LocalDictation> {
   settled.add(recording.id);
+  asked.delete(recording.id);
   await GhostexNative.dictationDismissLocal(recording.path).catch(() => undefined);
   return { ...recording, dismissed: true };
 }

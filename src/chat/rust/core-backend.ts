@@ -20,6 +20,11 @@ export interface ChatCoreBackend {
   query(name: ChatCoreQuery, args: readonly unknown[]): Promise<unknown>;
   /** Every core in the WebView is gone (a crash or a reload): rebuild the chat. */
   onLost(listener: () => void): () => void;
+  /**
+   * The core owes an answer for too long: its page counts as stopped, as when it crashed, so
+   * every core in it is lost (`onLost`) and the page starts again.
+   */
+  stalled(): void;
   dispose(): void;
 }
 

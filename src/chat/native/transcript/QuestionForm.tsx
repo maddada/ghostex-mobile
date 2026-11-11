@@ -9,7 +9,17 @@
  * packages/gx-chat-core/src/transcript/question_forms.rs. Change them together.
  */
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   Modal,
   Pressable,
@@ -19,14 +29,14 @@ import {
   useWindowDimensions,
   View,
   type StyleProp,
-  type TextInputInstance,
+  type TextInputChangeEvent,
   type TextStyle,
   type ViewInstance,
 } from 'react-native';
 
 import { useLaptopFold } from '../../../components/common/verticalBar/laptopFold';
 import type { Json } from '../../rust/document';
-import { useTranscriptEnv } from './context';
+import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
 import { useRevealFocusedField } from './fieldReveal';
 import { useEchoedText } from '../cards/useEchoedText';
 import { AskCard, AskHead, AskOption, PrimaryButton, SoftButton, answeredColor, askColor } from '../cards/askCard';
@@ -37,14 +47,9 @@ import { MONO_FONT } from './theme';
 import { LinkWords } from './LinkWords';
 import { QuestionFlashFrame, useQuestionAnchor } from './OpenQuestions';
 import GhostexImageIntakeView from '../../../../modules/ghostex-native/src/GhostexImageIntakeView';
-import { imagesFromIntake } from '../composer/imageIntake';
+import type { DrawnBox } from '../composer/dictationTarget';
 import { Glyph as ComposerGlyph } from '../composer/icons';
-import {
-  formBoxKey,
-  registerDictationBox,
-  useDictationAimed,
-  type FormSlot,
-} from '../composer/dictationTarget';
+import { imagesFromIntake } from '../composer/imageIntake';
 
 /** The document's `questionForms`, by form id. */
 const FormsContext = createContext<{ [id: string]: Json }>({});
@@ -212,13 +217,30 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
       />
     );
   const drafts = arr(form.drafts);
+  // The core that holds the form's drafts, and how many dictations it typed into each box
+  // (`core` and `dictated` in the core's form document; 0 for a box that took none).
+  const core = str(form, 'core');
+  const dictated = obj(form.dictated);
+  const revOf = (slot: number | 'notes'): number => {
+    const rev = dictated?.[String(slot)];
+    return typeof rev === 'number' ? rev : 0;
+  };
+  // A box's field belongs to its form and question, as one core holds them: this card is drawn for
+  // another form when the transcript changes above it or the Resources sheet opens another one,
+  // and a core that started again restored the drafts without what the old one had not saved. A
+  // field kept across either would report edits of a text the box's draft is not (`FormBox`).
   const questionViews = questions.map((question, index) => (
-    <View key={index} style={index > 0 ? [styles.later, { borderTopColor: theme.ink(0.06) }] : undefined}>
+    <View
+      key={`${core}:${id}:${index}`}
+      style={index > 0 ? [styles.later, { borderTopColor: theme.ink(0.06) }] : undefined}
+    >
       <FormQuestion
         formId={id}
         index={index}
         question={obj(question)}
         draft={obj(drafts[index])}
+        core={core}
+        rev={revOf(index)}
         otherLabel={str(form, 'otherLabel')}
         enabled={enabled}
         answered={phase === 'answered'}
@@ -232,8 +254,8 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
     form.takesNotes === true && (enabled || notes.trim().length > 0) ? (
       <>
         {questionViews}
-        <View style={[styles.later, { borderTopColor: theme.ink(0.06) }]}>
-          <FormNotes formId={id} notes={notes} enabled={enabled} />
+        <View key={`${core}:${id}:notes`} style={[styles.later, { borderTopColor: theme.ink(0.06) }]}>
+          <FormNotes formId={id} notes={notes} core={core} rev={revOf('notes')} enabled={enabled} />
         </View>
       </>
     ) : (
@@ -342,9 +364,26 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
   );
 }
 
-function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; enabled: boolean }) {
-  const { theme } = useTranscriptEnv();
-  const box = useFormBoxText(formId, 'notes', notes);
+function FormNotes({
+  formId,
+  notes,
+  core,
+  rev,
+  enabled,
+}: {
+  formId: string;
+  notes: string;
+  core: string;
+  rev: number;
+  enabled: boolean;
+}) {
+  const { theme, dispatch } = useTranscriptEnv();
+  const edit = useRef<BoxEdit>({ core, rev, caret: notes.length });
+  const report = useCallback(
+    (text: string) => dispatch({ type: 'formNotes', form: formId, text, ...edit.current }),
+    [dispatch, formId],
+  );
+  const [text, setText, expect, adopt] = useEchoedText(`${formId}:notes`, notes, report);
   const reveal = useRevealFocusedField();
   if (!enabled) {
     return (
@@ -354,35 +393,81 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
     );
   }
   return (
-    <FormBox formId={formId} slot="notes" box={box}>
-      <TextInput
-        ref={box.field}
-        multiline
-        value={box.text}
-        placeholder={NOTES_PLACEHOLDER}
-        placeholderTextColor={theme.placeholder}
-        accessibilityLabel="Notes"
-        onFocus={() => {
-          box.onFocus();
-          reveal();
-        }}
-        onBlur={box.onBlur}
-        onContentSizeChange={reveal}
-        onChangeText={box.change}
-        onSelectionChange={box.onSelectionChange}
-        style={[
-          styles.input,
-          {
-            color: theme.foreground,
-            borderColor: box.aimed ? theme.ring : theme.inputBorder,
-            backgroundColor: theme.light ? theme.background : theme.cardRow,
-          },
-          box.aimed && styles.aimedInput,
-        ]}
-      />
+    <FormBox
+      formId={formId}
+      slot="notes"
+      text={text}
+      setText={setText}
+      core={core}
+      rev={rev}
+      edit={edit}
+      expect={expect}
+      adopt={adopt}
+    >
+      {(box) => (
+        <TextInput
+          multiline
+          value={text}
+          placeholder={NOTES_PLACEHOLDER}
+          placeholderTextColor={theme.placeholder}
+          accessibilityLabel="Notes"
+          onFocus={() => {
+            reveal();
+            box.onFocus();
+          }}
+          onBlur={box.onBlur}
+          onContentSizeChange={reveal}
+          onChange={box.onChange}
+          onSelectionChange={box.onSelectionChange}
+          {...box.placed}
+          style={[
+            styles.input,
+            {
+              color: theme.foreground,
+              borderColor: theme.inputBorder,
+              backgroundColor: theme.light ? theme.background : theme.cardRow,
+            },
+            box.dictatedInto,
+          ]}
+        />
+      )}
     </FormBox>
   );
 }
+
+/**
+ * What a box's edit says besides its text (`formText`, `formNotes`): the draft the copy showed
+ * before it, by the core that holds it (`core`) and the dictations it had (`rev`), and where the
+ * copy's caret is after it. The core uses them to keep a dictation this copy had not shown yet,
+ * and to refuse an edit of a draft it does not hold (`edited` in gx-chat-core's
+ * questions/dictation.rs).
+ */
+type BoxEdit = { core: string; rev: number; caret: number };
+
+/**
+ * What a form box's `TextInput` gets from its `FormBox`: where to report its edits, its caret and
+ * taking or losing the keyboard, the caret to show after a text the field did not type (spread it:
+ * it is there for one render only), and the style that marks it while a running dictation will
+ * type into it.
+ */
+type FormBoxInput = {
+  onChange: (event: TextInputChangeEvent) => void;
+  onSelectionChange: (event: { nativeEvent: { selection: { start: number; end: number } } }) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  placed: { selection: { start: number; end: number } } | null;
+  dictatedInto: TextStyle | null;
+};
+
+/**
+ * What the microphone in a box says while a dictation will type there; desktop (`note_box` in
+ * question_form.rs) says the same, and why the mark sits inside the box instead of under it.
+ */
+const DICTATED_INTO = 'Your dictation goes here';
+const DICTATED_INTO_GLYPH = 13;
+
+/** `useSyncExternalStore`'s subscribe for a box outside a chat screen, where no Dictate types. */
+const neverChanges = (): (() => void) => () => undefined;
 
 /**
  * A form's note or text box that takes an image the keyboard inserts or the long-press Paste puts
@@ -392,139 +477,146 @@ function FormNotes({ formId, notes, enabled }: { formId: string; notes: string; 
  *
  * CDXC:Clipboard 2026-11-02 SEE-ALSO: the user's DECISION on pasting images into question notes is in apps/desktop/src/app/native_chat/form_attachments.rs. A React Native `TextInput` cannot draw a pill inside its text without the composer's hidden-glyph projection, so the box shows the reference as text.
  */
-type SelectionEvent = { nativeEvent: { selection: { start: number; end: number } } };
-
-/**
- * A form box's text: the reader's edits go to the core stamped with the draft they were made from
- * (`core` and `rev`, the form's `core` and `dictated` in the document, or a `dictationInserted`
- * answer's) and the caret after them, so the core keeps a dictation this copy has not shown yet
- * (gx-chat-core `questions/dictation.rs`, `edited`). The box tells Dictate when it has the caret
- * (`../composer/dictationTarget.ts`) and shows the words the core typed into it, caret after them.
- */
-function useFormBoxText(formId: string, slot: FormSlot, written: string) {
-  const { dispatch } = useTranscriptEnv();
-  const form = obj(useContext(FormsContext)[formId]);
-  // A core that does not name itself here (an older core page) takes edits whole, unstamped.
-  const documentCore = typeof form?.core === 'string' ? form.core : null;
-  const dictated = obj(form?.dictated)?.[String(slot)];
-  const latest = useRef({ core: documentCore, rev: typeof dictated === 'number' ? dictated : 0 });
-  latest.current = { core: documentCore, rev: typeof dictated === 'number' ? dictated : 0 };
-  /** The draft the text the box shows was made from. */
-  const stamp = useRef(latest.current);
-  const selection = useRef<{ start: number; end: number } | null>(null);
-  const caretAfter = useRef<number | null>(null);
-  const report = useCallback(
-    (text: string) => {
-      const { core, rev } = stamp.current;
-      const caret = caretAfter.current ?? text.length;
-      if (slot === 'notes') {
-        dispatch(
-          core === null
-            ? { type: 'formNotes', form: formId, text }
-            : { type: 'formNotes', form: formId, text, core, rev, caret },
-        );
-      } else {
-        dispatch(
-          core === null
-            ? { type: 'formText', form: formId, question: slot, text }
-            : { type: 'formText', form: formId, question: slot, text, core, rev, caret },
-        );
-      }
-    },
-    [dispatch, formId, slot],
-  );
-  const [text, setEcho, adopt] = useEchoedText(formBoxKey(formId, slot), written, report, () => {
-    stamp.current = latest.current;
-  });
-  const textRef = useRef(text);
-  textRef.current = text;
-  // A chat core that started again names itself anew; a box that shows the draft as the document
-  // has it takes the new name, so its next edit is not refused as another core's.
-  useEffect(() => {
-    if (documentCore !== null && stamp.current.core !== documentCore && textRef.current === written) {
-      stamp.current = latest.current;
-    }
-  }, [documentCore, written]);
-  /** An edit, with the caret it leaves: the selection's start plus what took the selection's place. */
-  const change = useCallback(
-    (next: string, caret?: number) => {
-      const before = textRef.current;
-      const at = selection.current ?? { start: before.length, end: before.length };
-      caretAfter.current = Math.max(
-        0,
-        Math.min(next.length, caret ?? at.start + next.length - before.length + (at.end - at.start)),
-      );
-      setEcho(next);
-    },
-    [setEcho],
-  );
-  const field = useRef<TextInputInstance>(null);
-  const registered = useRef<ReturnType<typeof registerDictationBox> | null>(null);
-  useEffect(() => {
-    const handle = registerDictationBox({
-      form: formId,
-      slot,
-      read: () => {
-        const shown = textRef.current;
-        const at = selection.current ?? { start: shown.length, end: shown.length };
-        return { text: shown, start: at.start, end: at.end };
-      },
-      show: (answer) => {
-        const shown = textRef.current;
-        // Typed in since the text the core placed the words in: the next edit carries them.
-        if (shown !== answer.content && !answer.supersedes.includes(shown)) return;
-        stamp.current = { core: answer.core, rev: answer.rev };
-        adopt(answer.content);
-        textRef.current = answer.content;
-        selection.current = { start: answer.caret, end: answer.caret };
-        // The caret after the words, once the field shows them.
-        requestAnimationFrame(() => {
-          if (field.current?.isFocused()) field.current.setSelection(answer.caret, answer.caret);
-        });
-      },
-    });
-    registered.current = handle;
-    if (field.current?.isFocused()) handle.focus();
-    return () => {
-      handle.remove();
-      registered.current = null;
-    };
-  }, [adopt, formId, slot]);
-  const onFocus = useCallback(() => registered.current?.focus(), []);
-  const onBlur = useCallback(() => registered.current?.blur(), []);
-  const onSelectionChange = useCallback((event: SelectionEvent) => {
-    selection.current = event.nativeEvent.selection;
-  }, []);
-  const aimed = useDictationAimed(formId, slot);
-  return { text, textRef, change, selection, field, onFocus, onBlur, onSelectionChange, aimed };
-}
-
-type FormBoxText = ReturnType<typeof useFormBoxText>;
-
-/**
- * A form's note or text box that takes an image the keyboard inserts or the long-press Paste puts
- * in (`GhostexImageIntakeView`, Android), the composer's own intake: it is uploaded like an attached
- * photo and written into the box as the composer's `[Image #N](path)` reference, numbered on from the
- * form's other boxes (gx-chat-core `insert_answer_attachments`), so the answers carry it. While
- * Dictate is aimed at the box (`useDictationAimed`), a small microphone sits at its corner.
- *
- * CDXC:Clipboard 2026-11-02 SEE-ALSO: the user's DECISION on pasting images into question notes is in apps/desktop/src/app/native_chat/form_attachments.rs. A React Native `TextInput` cannot draw a pill inside its text without the composer's hidden-glyph projection, so the box shows the reference as text.
- */
 function FormBox({
   formId,
   slot,
-  box,
+  text,
+  setText,
+  core,
+  rev,
+  edit,
+  expect,
+  adopt,
   children,
 }: {
   formId: string;
-  slot: FormSlot;
-  box: FormBoxText;
-  children: ReactNode;
+  slot: number | 'notes';
+  text: string;
+  setText: (text: string) => void;
+  /** The core that holds the box's draft (the form's `core`); a field is made for one. */
+  core: string;
+  /** How many dictations the box's draft holds in the document (the form's `dictated`). */
+  rev: number;
+  /** What the box's next report says besides its text (`BoxEdit`). */
+  edit: { current: BoxEdit };
+  /** `useEchoedText`'s third and fourth answers: a text of the core's to let pass, or to take. */
+  expect: (value: string) => void;
+  adopt: (value: string) => void;
+  children: (box: FormBoxInput) => ReactNode;
 }) {
   const { theme, uploadFiles, queryAsync } = useTranscriptEnv();
   const forms = useContext(FormsContext);
-  const { textRef, selection, change, aimed } = box;
+  const textRef = useRef(text);
+  textRef.current = text;
+  const setTextRef = useRef(setText);
+  setTextRef.current = setText;
+  const expectRef = useRef(expect);
+  expectRef.current = expect;
+  const adoptRef = useRef(adopt);
+  adoptRef.current = adopt;
+  /** How many dictations the text this copy shows holds; the document's when the text is from it. */
+  const shownRev = useRef(rev);
+  const documentRev = useRef(rev);
+  documentRev.current = rev;
+  edit.current.rev = shownRev.current;
+  const selection = useRef<{ start: number; end: number } | null>(null);
+  /**
+   * The text the field is about to be handed without having typed it (`hand`): where its caret
+   * belongs. Null when the next such text is the document's, which ends with the caret and brings
+   * its own `rev`.
+   */
+  const handed = useRef<{ caret: number } | null>(null);
+  /** The box's text from here on is `content`, before it is drawn, with its caret at `caret`. */
+  const hand = useCallback((content: string, caret: number): void => {
+    handed.current = { caret };
+    textRef.current = content;
+  }, []);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
+  // A recording started while this box has the keyboard is typed into its draft by the core, and
+  // the box is marked until the words are in (`composer/dictationTarget.ts`). The box is known
+  // there by its form and slot; this view is one drawn copy of it.
+  const targets = useOptionalNativeChatUi()?.dictationTargets ?? null;
+  const [drawn] = useState<DrawnBox>(() => {
+    const caret = (current: string) => Math.min(selection.current?.end ?? current.length, current.length);
+    return {
+      shown: () => ({ text: textRef.current, caret: caret(textRef.current) }),
+      show: (result) => {
+        // Another core's draft: this field goes with the document that brings it.
+        if (result.core !== core) return;
+        const current = textRef.current;
+        if (current === result.content) {
+          shownRev.current = result.rev;
+        } else if (result.supersedes.includes(current)) {
+          shownRev.current = result.rev;
+          // The caret belongs after the words, where a second dictation goes on. The text is the
+          // box's at once: an answer that follows in the same moment (another copy's edit that
+          // moved the words) names it in its `supersedes`.
+          hand(result.content, result.caret);
+          adoptRef.current(result.content);
+        } else {
+          // Typed in after the words were asked for: that edit is on its way to the core with this
+          // copy's older `rev`, the core puts the words into it and answers again. The draft it
+          // made without those keystrokes must not come back over them meanwhile.
+          expectRef.current(result.content);
+        }
+      },
+    };
+  });
+  useEffect(() => targets?.draw({ form: formId, slot }, drawn), [targets, formId, slot, drawn]);
+  const dictatedInto = useSyncExternalStore(
+    targets?.subscribe ?? neverChanges,
+    () => targets?.isTarget({ form: formId, slot }) === true,
+  );
+  const onFocus = useCallback(
+    () => targets?.setFocused({ form: formId, slot }, drawn, true),
+    [targets, formId, slot, drawn],
+  );
+  const onBlur = useCallback(
+    () => targets?.setFocused({ form: formId, slot }, drawn, false),
+    [targets, formId, slot, drawn],
+  );
+  /** What the field itself typed last, or was made with: any other `text` came from outside it. */
+  const typed = useRef(text);
+  const [placed, setPlaced] = useState<{ start: number; end: number } | null>(null);
+  const onChange = useCallback(
+    (event: TextInputChangeEvent) => {
+      // The field's own report of an edit: its text and its caret after it, from one event. Key
+      // repeats (a held Backspace) arrive before the next render, so both are the box's at once.
+      // The caret is never worked out from the two texts: Backspace and forward Delete inside a
+      // run of one letter leave the same text and different carets.
+      const next = event.nativeEvent.text;
+      if (next === textRef.current) return;
+      const at = Math.min(event.nativeEvent.selection?.end ?? next.length, next.length);
+      textRef.current = next;
+      selection.current = { start: at, end: at };
+      edit.current = { core, rev: shownRev.current, caret: at };
+      typed.current = next;
+      setTextRef.current(next);
+    },
+    [core, edit],
+  );
+  /**
+   * A text the field did not type itself is followed by its caret, for one render.
+   *
+   * CDXC:Dictate 2026-11-10 WHY: React Native measures a text input from the text its native side last reported, and takes the text React handed it only after that measuring. So a box given a longer text from outside (a dictation, a pasted image's reference, a saved answer read after the box was made) kept its old height, with the new line cut off, until the next edit. An input is measured again when its own props change, and the caret (`selection`) is one: given right after the text, it makes the box take the text's height. The chat box places its caret the same way after a text it is handed (`force` in composer/ComposerInput.tsx). The caret is released with the next render, so the reader's own is never held.
+   */
+  useLayoutEffect(() => {
+    if (text === typed.current) return;
+    typed.current = text;
+    // A text the box was handed keeps the `rev` this copy shows; any other is the document's.
+    if (handed.current === null) shownRev.current = documentRev.current;
+    // The field reports no caret for a text it is given (iOS), so it is kept here too.
+    const at = Math.min(handed.current?.caret ?? text.length, text.length);
+    handed.current = null;
+    selection.current = { start: at, end: at };
+    setPlaced({ start: at, end: at });
+  }, [text]);
+  useEffect(() => {
+    if (placed !== null) setPlaced(null);
+  }, [placed]);
+  const onSelectionChange = useCallback((event: { nativeEvent: { selection: { start: number; end: number } } }) => {
+    selection.current = event.nativeEvent.selection;
+  }, []);
   const onImages = useCallback(
     (event: { nativeEvent: unknown }) => {
       if (uploadFiles === undefined || queryAsync === undefined) return;
@@ -538,42 +630,65 @@ function FormBox({
       setStatus({ text: files.length > 1 ? 'Saving the pasted images…' : 'Saving the pasted image…', error: false });
       uploadFiles(files)
         .then(async (paths) => {
-          const edit = obj(
-            await queryAsync('insertAnswerAttachments', [
-              textRef.current,
-              paths,
-              original,
-              start,
-              end,
-              otherBoxes(forms[formId], slot),
-            ]),
-          );
-          if (typeof edit?.text !== 'string') throw new Error('The image reference could not be inserted. Please paste it again.');
-          change(edit.text, typeof edit.caret === 'number' ? edit.caret : undefined);
+          // The core answers on a later turn. An answer for a text the box no longer shows (typed
+          // into, or given a dictation, meanwhile) is asked for again: written as it came it
+          // would undo that, under the `rev` of a text it was not made from.
+          let asked: string;
+          let inserted: JsonRecord | null;
+          do {
+            asked = textRef.current;
+            inserted = obj(
+              await queryAsync('insertAnswerAttachments', [
+                asked,
+                paths,
+                original,
+                start,
+                end,
+                otherBoxes(forms[formId], slot),
+              ]),
+            );
+          } while (textRef.current !== asked);
+          if (typeof inserted?.text !== 'string') throw new Error('The image reference could not be inserted. Please paste it again.');
+          // The box's own edit, made here: reported with its caret like a typed one (`onChange`).
+          const at = typeof inserted.caret === 'number' ? inserted.caret : inserted.text.length;
+          hand(inserted.text, at);
+          edit.current = { core, rev: shownRev.current, caret: at };
+          setText(inserted.text);
           setStatus(null);
         })
         .catch((error: unknown) =>
           setStatus({ text: error instanceof Error ? error.message : 'The pasted image could not be saved.', error: true }),
         );
     },
-    [change, formId, forms, queryAsync, selection, slot, textRef, uploadFiles],
+    [core, edit, formId, forms, hand, queryAsync, setText, slot, uploadFiles],
   );
   return (
     <View>
-      <GhostexImageIntakeView onImages={onImages}>{children}</GhostexImageIntakeView>
-      {aimed ? (
-        <View pointerEvents="none" style={styles.aimedMark}>
-          <ComposerGlyph name="microphone" size={13} color={theme.ring} />
-        </View>
-      ) : null}
+      <GhostexImageIntakeView onImages={onImages}>
+        {children({
+          onChange,
+          onSelectionChange,
+          onFocus,
+          onBlur,
+          placed: placed === null ? null : { selection: placed },
+          // The chat box's focus colour (desktop `ChatAppearance::ring`); the microphone's room is the box's own (`styles.input`).
+          dictatedInto: dictatedInto ? { borderColor: theme.ring } : null,
+        })}
+      </GhostexImageIntakeView>
       {status !== null ? (
         <Text style={[styles.hint, { color: status.error ? '#fb7185' : theme.muted }]}>{status.text}</Text>
+      ) : null}
+      {dictatedInto ? (
+        <View pointerEvents="none" accessible accessibilityLabel={DICTATED_INTO} style={styles.dictatedIntoMark}>
+          <ComposerGlyph name="microphone" size={DICTATED_INTO_GLYPH} color={theme.muted} />
+        </View>
       ) : null}
     </View>
   );
 }
+
 /** The text of form `form`'s boxes other than `slot`, which go to the agent in the same message. */
-function otherBoxes(form: Json | undefined, slot: FormSlot): string {
+function otherBoxes(form: Json | undefined, slot: number | 'notes'): string {
   const record = obj(form);
   const texts = arr(record?.drafts)
     .map((draft, index) => (index === slot ? '' : str(draft, 'other')))
@@ -587,6 +702,8 @@ function FormQuestion({
   index,
   question,
   draft,
+  core,
+  rev,
   otherLabel,
   enabled,
   answered,
@@ -595,6 +712,9 @@ function FormQuestion({
   index: number;
   question: JsonRecord | null;
   draft: JsonRecord | null;
+  /** The core that holds the question's box, and how many dictations it holds in the document (the form's `core` and `dictated`). */
+  core: string;
+  rev: number;
   otherLabel: string;
   enabled: boolean;
   answered: boolean;
@@ -608,7 +728,12 @@ function FormQuestion({
   const choices = arr(question?.choices);
   const written = str(draft, 'other');
   const pick = (choice: number) => dispatch({ type: 'formChoice', form: formId, question: index, choice });
-  const box = useFormBoxText(formId, index, written);
+  const edit = useRef<BoxEdit>({ core, rev, caret: written.length });
+  const report = useCallback(
+    (text: string) => dispatch({ type: 'formText', form: formId, question: index, text, ...edit.current }),
+    [dispatch, formId, index],
+  );
+  const [text, setText, expect, adopt] = useEchoedText(`${formId}:${index}`, written, report);
   const reveal = useRevealFocusedField();
   const skipped = draft?.skipped === true;
   const anchor = useQuestionAnchor(formId, tag);
@@ -665,32 +790,44 @@ function FormQuestion({
         />
       ) : null}
       {enabled ? (
-        <FormBox formId={formId} slot={index} box={box}>
-          <TextInput
-            ref={box.field}
-            multiline
-            value={box.text}
-            placeholder={placeholder(question, draft)}
-            placeholderTextColor={theme.placeholder}
-            onFocus={() => {
-              box.onFocus();
-              reveal();
-            }}
-            onBlur={box.onBlur}
-            onContentSizeChange={reveal}
-            onChangeText={box.change}
-            onSelectionChange={box.onSelectionChange}
-            style={[
-              styles.input,
-              {
-                color: theme.foreground,
-                borderColor: box.aimed ? theme.ring : theme.inputBorder,
-                backgroundColor: theme.light ? theme.background : theme.cardRow,
-              },
-              isText && styles.textAnswer,
-              box.aimed && styles.aimedInput,
-            ]}
-          />
+        <FormBox
+          formId={formId}
+          slot={index}
+          text={text}
+          setText={setText}
+          core={core}
+          rev={rev}
+          edit={edit}
+          expect={expect}
+          adopt={adopt}
+        >
+          {(box) => (
+            <TextInput
+              multiline
+              value={text}
+              placeholder={placeholder(question, draft)}
+              placeholderTextColor={theme.placeholder}
+              onFocus={() => {
+                reveal();
+                box.onFocus();
+              }}
+              onBlur={box.onBlur}
+              onContentSizeChange={reveal}
+              onChange={box.onChange}
+              onSelectionChange={box.onSelectionChange}
+              {...box.placed}
+              style={[
+                styles.input,
+                {
+                  color: theme.foreground,
+                  borderColor: theme.inputBorder,
+                  backgroundColor: theme.light ? theme.background : theme.cardRow,
+                },
+                isText && styles.textAnswer,
+                box.dictatedInto,
+              ]}
+            />
+          )}
         </FormBox>
       ) : written.trim().length > 0 ? (
         <Text selectable style={[styles.detail, { color: theme.cardMuted }]}>
@@ -725,19 +862,21 @@ const styles = StyleSheet.create({
   questionTitle: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 22, fontWeight: '500' },
   detail: { fontSize: 13, lineHeight: 19 },
   hint: { fontSize: 12 },
+  // On the box's first line, inside its right edge (`input`'s border and padding).
+  dictatedIntoMark: { position: 'absolute', top: 11, right: 11 },
+  // The right side keeps the dictation microphone's room whether it shows or not, so a recording
+  // starting or ending never moves a long note's line breaks (desktop `note_box`).
   input: {
     borderWidth: 1,
     borderRadius: 9,
-    paddingHorizontal: 10,
+    paddingLeft: 10,
+    paddingRight: 10 + DICTATED_INTO_GLYPH + 6,
     paddingVertical: 8,
     fontSize: 13.5,
     minHeight: 38,
     textAlignVertical: 'top',
   },
   textAnswer: { minHeight: 70 },
-  // Dictate is aimed at the box: a ring, and room for the microphone at its corner.
-  aimedInput: { borderWidth: 1.5, paddingRight: 26 },
-  aimedMark: { position: 'absolute', top: 10, right: 9 },
   status: { flex: 1, minWidth: 0, fontSize: 12.5 },
   info: { alignSelf: 'flex-start', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   bubble: {

@@ -208,30 +208,41 @@ export type ActionFields = {
   questionNext: {};
   questionCancel: {};
   formChoice: { form: string; question: number; choice: number };
-  /** `core`, `rev` and `caret`: the draft the box's text was made from and its caret after the
-   * edit, so the core keeps a dictation this copy has not shown yet (gx-chat-core
-   * `questions/dictation.rs`, `edited`). Left out by a core that does not name itself. */
+  /**
+   * A box's whole text after an edit. `core` and `rev` say which draft the copy that sends it
+   * showed before the edit: the core that gave it and how many dictations it held (the form's
+   * `core` and `dictated` in the document, or a `dictationInserted` answer's), and `caret` is the
+   * copy's caret after the edit. The core puts a dictation the copy had not shown yet back into
+   * the text there, and refuses a text another core's draft was edited into (`edited` in
+   * `questions/dictation.rs`). Without `rev` the text is taken as it is.
+   */
   formText: { form: string; question: number; text: string; core?: string; rev?: number; caret?: number };
   formNotes: { form: string; text: string; core?: string; rev?: number; caret?: number };
-  /** Dictate's words into the form box the recording started in (`form`, `slot`, and `shown*`, the
-   * box as drawn), or into the chat box (`draft`, `start`, `end`, always sent). Answered by the host
-   * action `dictationInserted` (gx-chat-core `questions/dictation.rs`, `insert`). */
+  formSend: { form: string };
+  formSkipAll: { form: string };
+  formToggle: { form: string };
+  /**
+   * Dictate's words, for the core to type into a draft (`questions/dictation.rs`): the question
+   * form box the recording started in (`form`, `slot`) while it still takes text, else the chat
+   * box (`draft`, `start`, `end`). `shown*` is that form box as this screen draws it now, left out
+   * when it is not drawn. `spacing` is on when absent. The chat box's text is the host's: the
+   * screen leaves `draft`, `start` and `end` out and the host puts them in (`dictate` in host.ts).
+   * Answered by the `dictationInserted` host action with the same `id`, which the host takes too:
+   * a chat box that changed meanwhile sends the action again, as it is then and with no `form`.
+   */
   insertDictation: {
     text: string;
-    id?: string;
     spacing?: boolean;
-    draft: string;
-    start: number;
-    end: number;
+    id?: string;
+    draft?: string;
+    start?: number;
+    end?: number;
     form?: string;
     slot?: number | 'notes';
     shown?: string;
     shownStart?: number;
     shownEnd?: number;
   };
-  formSend: { form: string };
-  formSkipAll: { form: string };
-  formToggle: { form: string };
   inlineAnswer: { form: string; choice: number };
   inlineAnswerChange: { form: string };
   /** The reader's own words as a one-click question's answer: by its form, or its tag alone. */

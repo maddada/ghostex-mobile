@@ -59,6 +59,7 @@ import { machineTargetFor } from '../../../screens/terminal-screen/session-looku
 import type { UnifiedProjectChoice } from '../../../contract/unified/choices';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../../machines/store';
 import { WorktreeTray } from './WorktreeTray';
+import { useOptionalNativeChatUi } from '../transcript/context';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { QueueList } from './QueueList';
 import { createDraftReferenceParser } from './references';
@@ -68,7 +69,6 @@ import { Suggestions } from './Suggestions';
 import { useComposerMotion } from './useComposerMotion';
 import { DictationBar } from './DictationBar';
 import { dictationClock, useDictation } from './useDictation';
-import { focusedDictationBox } from './dictationTarget';
 import { engineStatusLine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
@@ -238,42 +238,25 @@ export function NativeComposer({
   const [menu, setMenu] = useState<OpenMenu>(null);
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
-  // Dictated text goes into the draft at the caret it started from, a space apart from the text around it.
+  // The draft as it is drawn now, for a press that acts on it later (moving it to another project).
   const draftAt = useRef({ text, caret });
   draftAt.current = { text, caret };
-  const fieldFocused = useRef(false);
-  fieldFocused.current = focused;
-  // The forms as the core draws them now, for Dictate's aim when a recording starts.
-  const questionForms = useRef(document?.questionForms);
-  questionForms.current = document?.questionForms;
+  // A dictation is typed into the question form box its recording started from
+  // (`dictationTarget.ts`), else into this field as the chat's host holds it (`dictate` in host.ts).
+  const dictationTargets = useOptionalNativeChatUi()?.dictationTargets ?? null;
+  const dictationChat = useMemo(() => ({ dispatch, targets: dictationTargets }), [dispatch, dictationTargets]);
   const dictation = useDictation(
     chat.machine,
-    // An unfocused field has no caret the reader chose: dictation goes after the draft.
-    () => (fieldFocused.current ? draftAt.current : { text: draftAt.current.text, caret: draftAt.current.text.length }),
-    (draft) => input?.replace(draft),
     (message) => onHostAction?.('toast', { message, level: 'error' }),
-    {
-      // A question form's box with the caret, in this chat, whose core places dictated words
-      // (it names itself in the form, `core`; an older core page does not, and the chat box takes them).
-      aim: () => {
-        const box = focusedDictationBox();
-        if (box === null) return null;
-        const form = questionForms.current?.[box.form];
-        const named = typeof form === 'object' && form !== null && !Array.isArray(form) && typeof form.core === 'string';
-        return named ? { form: box.form, slot: box.slot } : null;
-      },
-      dispatch,
-    },
+    dictationChat,
   );
-  const dictationAnswered = dictation.answered;
 
   useEffect(
     () =>
       chat.onViewRequest((request) => {
         if (request.kind === 'focusComposer') field.current?.focus();
-        else if (request.kind === 'hostAction' && request.action === 'dictationInserted') dictationAnswered(request.params);
       }),
-    [chat.onViewRequest, dictationAnswered],
+    [chat.onViewRequest],
   );
   const handledFocusRequest = useRef(focusRequestId);
   useEffect(() => {
