@@ -53,7 +53,7 @@ import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, question
 import { WorkDock } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
-import { SessionDetailsSheet, sessionDetailsRingOf, type SessionDetailsRing } from './cards/SessionDetailsSheet';
+import { SessionDetailsSheet } from './cards/SessionDetailsSheet';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
 import { ComputerCard } from './cards/ComputerCard';
 import type { BoardFocus } from './cards/CoordinatorBoard';
@@ -102,13 +102,6 @@ export type NativeChatScreenProps = {
   openSearchRequestId?: number;
   /** Bumped by the header's Session Note; each new value opens the note. */
   openSessionNoteRequestId?: number;
-  /** Bumped by the header's ring button; each new value opens the Session details sheet. */
-  openSessionDetailsRequestId?: number;
-  /**
-   * The header's ring button for this chat: the core's ring while the chat has a Session details
-   * panel, null while it has none (an older computer, the extension off, no agent yet).
-   */
-  onSessionDetailsChange?: (ring: SessionDetailsRing | null) => void;
   /** The Ghostex queue's length, for the terminal view's "Queued: N" button. Never called before
    * the machine reports a queue at all. */
   onQueueCountChange?: (count: number) => void;
@@ -134,8 +127,6 @@ export default function NativeChatScreen({
   visible,
   openSearchRequestId = 0,
   openSessionNoteRequestId = 0,
-  openSessionDetailsRequestId = 0,
-  onSessionDetailsChange,
   onQueueCountChange,
   links = null,
   inPane = false,
@@ -329,29 +320,14 @@ export default function NativeChatScreen({
     }
   }, [chat, document?.note.open, openSessionNoteRequestId, sessionNotesOn]);
 
-  // The Session details sheet (cards/SessionDetailsSheet.tsx), opened by the header's ring button.
+  // The Session details sheet (cards/SessionDetailsSheet.tsx), opened by the ring in the pill strip.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const openDetails = useCallback(() => setDetailsOpen(true), []);
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
-  const handledDetails = useRef(openSessionDetailsRequestId);
-  useEffect(() => {
-    if (openSessionDetailsRequestId === handledDetails.current) return;
-    handledDetails.current = openSessionDetailsRequestId;
-    if (openSessionDetailsRequestId > 0 && visible) setDetailsOpen(true);
-  }, [openSessionDetailsRequestId, visible]);
   // Switching to the terminal takes the sheet away with the chat.
   useEffect(() => {
     if (!visible) setDetailsOpen(false);
   }, [visible]);
-  const detailsRing = sessionDetailsRingOf(document);
-  const ringPercent = detailsRing?.percent ?? null;
-  const ringLabel = detailsRing?.label ?? '';
-  const hasDetails = detailsRing !== null;
-  const reportDetails = useRef(onSessionDetailsChange);
-  reportDetails.current = onSessionDetailsChange;
-  useEffect(() => {
-    reportDetails.current?.(hasDetails ? { percent: ringPercent, label: ringLabel } : null);
-  }, [hasDetails, ringLabel, ringPercent]);
-  useEffect(() => () => reportDetails.current?.(null), []);
 
   const queueSupported = document?.queue.capabilities.supported === true;
   const queueCount = document?.queue.prompts.length ?? 0;
@@ -496,6 +472,7 @@ export default function NativeChatScreen({
                             onMenuChange={setPillMenu}
                             armed={armed}
                             links={links}
+                            onSessionDetailsPress={openDetails}
                             {...(sessionId.length > 0 && projectId.length > 0
                               ? { onStashedPress: () => hostAction('stashedPrompts') }
                               : {})}

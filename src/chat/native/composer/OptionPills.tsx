@@ -15,6 +15,7 @@ import { agentAccent } from './agentColors';
 import { Glyph, ModeGlyph } from './icons';
 import { arr, isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { sessionDetailsRingOf } from '../cards/SessionDetailsSheet';
 
 export type PillKind = 'model' | 'options' | 'mode' | 'context';
 
@@ -72,7 +73,9 @@ export function OptionPills({
   const modeValue = str(labels, 'modeValue');
   const [modeGlyph, modeColor] = MODE_COLORS[modeValue] ?? ['pause', '#d2d4dc'];
   const optionsLabel = str(labels, 'options');
-  const context = obj(document.contextMeter);
+  // While the chat has the Session details panel its ring in the pill strip is the context meter
+  // (`PillsStrip.tsx`), so this one steps aside; a computer that cannot serve the panel keeps it.
+  const context = sessionDetailsRingOf(document) === null ? obj(document.contextMeter) : null;
   const badges = (
     <>
       {isTrue(labels, 'fast') ? <Glyph name="bolt" size={13} color={P.primary} /> : null}

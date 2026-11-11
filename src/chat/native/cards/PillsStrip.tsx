@@ -28,6 +28,7 @@ import type { RustChat } from '../../rust/useRustChat';
 import type { GhostexSessionLinks } from '../../../contract/mobileSummary';
 import { Glyph as ComposerGlyph } from '../composer/icons';
 import { sessionLinksChatPill } from '../sessionLinks';
+import { SessionDetailsPill, sessionDetailsRingOf } from './SessionDetailsSheet';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { IconPill, LinksPill, OverflowPill, OverflowPillRow, Pill, QuestionPill } from './ChatPills';
@@ -81,7 +82,9 @@ export function pillsStripShown(
     (document.viewChips?.length ?? 0) > 0 ||
     questionWaiting(document) ||
     (document.workingCard?.pills.length ?? 0) > 0 ||
-    (links !== null && sessionLinksChatPill(links.links, muted) !== null)
+    (links !== null && sessionLinksChatPill(links.links, muted) !== null) ||
+    // The Session details ring lives in the strip, so a chat with the panel always has one.
+    sessionDetailsRingOf(document) !== null
   );
 }
 
@@ -92,6 +95,7 @@ export function PillsStrip({
   onArmedPress,
   links,
   onStashedPress,
+  onSessionDetailsPress,
   menu,
   onMenuChange,
 }: {
@@ -105,6 +109,8 @@ export function PillsStrip({
   links: PillsStripLinks | null;
   /** Opens Saved prompts: the Stashed pill opens that list rather than a sheet of its own (desktop `chat_pills.rs`). */
   onStashedPress?: () => void;
+  /** Opens the Session details sheet: the ring at the strip's right end, while the chat has the panel. */
+  onSessionDetailsPress?: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -173,6 +179,25 @@ export function PillsStrip({
   // The Links pill is the last one (desktop `links_pill.rs` has the user's words).
   const linksNode =
     links && linksPill !== null ? <LinksPill key="links" pill={linksPill} onPress={links.onOpen} /> : null;
+  /*
+   * CDXC:SessionDetails 2026-11-11 DECISION:
+   * User, of the ring button in the phone's chat header: "Please move the new session details button
+   * to the pills bar above the composer on mobile (keep in header on desktop)". The ring and its
+   * percentage close the strip, after Links, among the pills that always show, so it never goes
+   * into "+N". It stands for the context meter too: while the chat has the panel the meter's ring
+   * under the box steps aside (`OptionPills.tsx`), and the sheet's Context card carries Compact
+   * context; a computer that cannot serve the panel keeps the meter and its Context sheet.
+   */
+  const ring = onSessionDetailsPress !== undefined ? sessionDetailsRingOf(document) : null;
+  const afterNode =
+    ring !== null ? (
+      <View style={styles.after}>
+        {linksNode}
+        <SessionDetailsPill ring={ring} onPress={onSessionDetailsPress!} />
+      </View>
+    ) : (
+      linksNode
+    );
   const hiddenPills = pills.filter((pill) => hiddenIds.includes(pill.id));
   useEffect(() => {
     if (hiddenPills.length === 0) setOverflowOpen(false);
@@ -209,7 +234,7 @@ export function PillsStrip({
             ) : null}
             <PillsFit
               panel={panel}
-              after={linksNode}
+              after={afterNode}
               overflow={(count) => (
                 <OverflowPill count={count} open={overflowOpen} onPress={() => setOverflowOpen(true)} />
               )}
@@ -533,6 +558,8 @@ const useStyles = themedStyles((P) => ({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
+  /** Links and the Session details ring, together at the strip's right end. */
+  after: { flexDirection: 'row', alignItems: 'center', gap: PILL_GAP },
   pills: {
     flexDirection: 'row',
     alignItems: 'center',

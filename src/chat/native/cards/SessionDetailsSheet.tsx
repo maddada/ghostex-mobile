@@ -1,7 +1,7 @@
 /**
  * The Session details sheet: the phone form of the desktop's Session details panel
- * (`apps/desktop/src/app/native_chat/session_details/`), opened from the ring button in the chat's
- * header. The chat core words every card (`packages/gx-chat-core/src/extras/session_details/`,
+ * (`apps/desktop/src/app/native_chat/session_details/`), opened from the ring pill at the end of the
+ * chat's pill strip (`PillsStrip.tsx`). The chat core words every card (`packages/gx-chat-core/src/extras/session_details/`,
  * the document's `sessionDetails`): Environment, Context, Tasks, Connectors, Skills, Memory files,
  * Changes and Background tasks, in its order, each with its rows, folds, skeletons and the actions
  * its rows send back. This file only lays them out and tells the core when the sheet is on screen
@@ -14,7 +14,15 @@
  * `sessionDetails` leaves the document's value null, and the phone shows no ring button. The phone's
  * Changes view is read-only (CDXC:Changes 2026-10-25), so the card's Commit and Create PR buttons,
  * which open the desktop's Git menu, are not drawn; View PR is.
- * SEE-ALSO: src/chat/native/NativeChatScreen.tsx (what the rows open), src/screens/TerminalScreen.tsx (the button).
+ *
+ * CDXC:SessionDetails 2026-11-11 DECISION:
+ * User: "Please move the new session details button to the pills bar above the composer on mobile
+ * (keep in header on desktop)". The ring left the phone's header (and the iPhone Duo's side bar and
+ * status band) for the pill strip, and stands for the context meter there: the meter's own ring
+ * steps aside while the chat has the panel, and the Context card carries the meter's Compact
+ * context. Supersedes the header button of the decision above.
+ * SEE-ALSO: src/chat/native/NativeChatScreen.tsx (what the rows open), src/chat/native/cards/PillsStrip.tsx (the ring),
+ * src/chat/native/composer/OptionPills.tsx (the context meter).
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -63,10 +71,7 @@ function send(chat: RustChat, action: unknown): void {
   chat.dispatch(action as UserAction);
 }
 
-/**
- * The header's ring: the context use as a ring and its percentage (desktop
- * `session_details/ring.rs`), in the header's ink.
- */
+/** The ring: the context use as an arc over its track (desktop `session_details/ring.rs`), in `color`. */
 export function SessionDetailsRingIcon({
   percent,
   size,
@@ -101,49 +106,33 @@ export function SessionDetailsRingIcon({
   );
 }
 
-/** The ring button of the header: the ring and the core's label ("42%"), the desktop's button. */
-export function SessionDetailsButton({
-  ring,
-  color,
-  onPress,
-}: {
-  ring: SessionDetailsRing;
-  color: string;
-  onPress: () => void;
-}) {
+/**
+ * The ring pill closing the chat's pill strip (`PillsStrip.tsx`): the context use as a ring and the
+ * core's label ("42%"), the desktop header's button in the strip's pill shape. It is the phone's
+ * context meter as well while the chat has the panel.
+ */
+export function SessionDetailsPill({ ring, onPress }: { ring: SessionDetailsRing; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={
         ring.label.length > 0 ? `${SESSION_DETAILS_TITLE}, ${ring.label} context used` : SESSION_DETAILS_TITLE
       }
-      hitSlop={8}
+      hitSlop={4}
       onPress={onPress}
-      style={({ pressed }) => [buttonStyles.button, pressed ? buttonStyles.pressed : null]}
+      style={({ pressed }) => [styles.ringPill, pressed ? styles.ringPillPressed : null]}
     >
-      <SessionDetailsRingIcon percent={ring.percent} size={18} color={color} />
+      <SessionDetailsRingIcon percent={ring.percent} size={15} color={P.primary} />
       {ring.label.length > 0 ? (
-        <Text style={[buttonStyles.label, { color }]} numberOfLines={1}>
+        <Text style={styles.ringLabel} numberOfLines={1}>
           {ring.label}
         </Text>
       ) : null}
     </Pressable>
   );
 }
-
-const buttonStyles = StyleSheet.create({
-  button: {
-    height: 44,
-    minWidth: 44,
-    paddingHorizontal: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  pressed: { opacity: 0.6 },
-  label: { fontSize: 12, fontVariant: ['tabular-nums'] },
-});
 
 /**
  * The sheet. While `visible` the core is told the panel is on screen, and told again when it
@@ -182,6 +171,13 @@ export function SessionDetailsSheet({
     send(chat, action);
   };
   const error = str(details, 'error');
+  // The context meter's Compact context, which the Context sheet held (`ContextPanel.tsx`): the
+  // strip's ring opens this sheet in its place.
+  const meter = obj(document?.contextMeter);
+  const compact = () => {
+    onClose();
+    send(chat, { type: 'contextCompact' });
+  };
   return (
     <Sheet visible={shown} onClose={onClose} title={SESSION_DETAILS_TITLE} maxHeight="85%">
       <ScrollView style={styles.scroll} contentContainerStyle={styles.cards}>
@@ -193,6 +189,8 @@ export function SessionDetailsSheet({
             section={section}
             details={details}
             act={act}
+            meter={meter}
+            onCompact={compact}
           />
         ))}
       </ScrollView>
@@ -216,11 +214,15 @@ function SectionCard({
   section,
   details,
   act,
+  meter,
+  onCompact,
 }: {
   chat: RustChat;
   section: unknown;
   details: JsonRecord | null;
   act: Act;
+  meter: JsonRecord | null;
+  onCompact: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -256,7 +258,9 @@ function SectionCard({
         </Pressable>
         {trailing}
       </View>
-      {collapsed ? null : <SectionBody id={id} section={fields} details={details} act={act} />}
+      {collapsed ? null : (
+        <SectionBody id={id} section={fields} details={details} act={act} meter={meter} onCompact={onCompact} />
+      )}
     </View>
   );
 }
@@ -266,16 +270,20 @@ function SectionBody({
   section,
   details,
   act,
+  meter,
+  onCompact,
 }: {
   id: string;
   section: JsonRecord;
   details: JsonRecord | null;
   act: Act;
+  meter: JsonRecord | null;
+  onCompact: () => void;
 }) {
   if (isTrue(section, 'loading')) return <Skeleton rows={num(section, 'skeletonRows') ?? 2} />;
   switch (id) {
     case 'context':
-      return <ContextBody section={section} details={details} act={act} />;
+      return <ContextBody section={section} details={details} act={act} meter={meter} onCompact={onCompact} />;
     case 'tasks':
       return <TasksBody section={section} act={act} />;
     case 'connectors':
@@ -371,7 +379,19 @@ function swatch(key: string, P: TranscriptTheme): string {
   }
 }
 
-function ContextBody({ section, details, act }: { section: JsonRecord; details: JsonRecord | null; act: Act }) {
+function ContextBody({
+  section,
+  details,
+  act,
+  meter,
+  onCompact,
+}: {
+  section: JsonRecord;
+  details: JsonRecord | null;
+  act: Act;
+  meter: JsonRecord | null;
+  onCompact: () => void;
+}) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const percentLabel = str(section, 'percentLabel');
@@ -463,7 +483,33 @@ function ContextBody({ section, details, act }: { section: JsonRecord; details: 
       {status.length > 0 ? (
         <Text style={[styles.status, isTrue(section, 'statusError') ? { color: P.error } : null]}>{status}</Text>
       ) : null}
+      {meter !== null ? <CompactButton meter={meter} onCompact={onCompact} /> : null}
     </View>
+  );
+}
+
+/** The context meter's Compact context (`ContextPanel.tsx`), with why it cannot run when it cannot. */
+function CompactButton({ meter, onCompact }: { meter: JsonRecord; onCompact: () => void }) {
+  const styles = useStyles();
+  const disabled = isTrue(meter, 'compactDisabled');
+  const reason = str(meter, 'compactDisabledReason');
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Compact context"
+        disabled={disabled}
+        onPress={onCompact}
+        style={({ pressed }) => [
+          styles.button,
+          pressed ? styles.buttonPressed : null,
+          disabled ? styles.disabled : null,
+        ]}
+      >
+        <Text style={styles.buttonText}>Compact context</Text>
+      </Pressable>
+      {disabled && reason.length > 0 ? <Text style={styles.status}>{reason}</Text> : null}
+    </>
   );
 }
 
@@ -816,6 +862,20 @@ const useStyles = themedStyles((P) => ({
   },
   buttonPressed: { backgroundColor: P.neutralFillPressed },
   buttonText: { color: P.primary, fontSize: 13 },
+  disabled: { opacity: 0.5 },
+  ringPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: P.ink(0.1),
+  },
+  ringPillPressed: { backgroundColor: P.ink(0.08) },
+  ringLabel: { color: P.cardMuted, fontSize: 13, lineHeight: 19, fontVariant: ['tabular-nums'] },
   skeletonRow: { height: ROW_HEIGHT, justifyContent: 'center' },
   skeletonBar: { height: 10, borderRadius: 5, backgroundColor: P.ink(0.12) },
 }));
