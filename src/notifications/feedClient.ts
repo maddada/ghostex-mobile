@@ -49,6 +49,14 @@ export async function updateFeed(rpc: FeedRpc, update: FeedUpdate): Promise<Feed
 }
 
 /**
+ * Mark all read or Clear all on one computer (the desktop panel's header actions); the computer keeps an open
+ * approval's row unread and in the list. Answers with the whole feed after it.
+ */
+export async function updateWholeFeed(rpc: FeedRpc, action: 'markAllRead' | 'clearAll'): Promise<FeedSnapshot> {
+  return snapshotOf(await rpc(UPDATE_FEED_METHOD, { action }));
+}
+
+/**
  * Marks each of `notificationIds` read, one `markRead` per row (the computer's update takes one row), in order; the
  * feed after the last, or null when there was none to mark. The first refusal stops the rest and throws.
  */

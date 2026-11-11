@@ -1,23 +1,26 @@
 /**
- * The attention list (the notifications design, as a state inbox): what needs the user now, one row per session by
- * its live state, in the sections Needs you, Done and Failed, with account notices last (`attentionRows.ts`). A row
- * is the desktop bell's card: the agent's icon in a square tile, the session's title with the time at its right, the
- * row's message as a two-line body, and "project · state" as its footer in the desktop's words; an unread row has the
- * accent wash (blue, red for an approval or a failure), a read one is dimmed. A tap opens the session (a question at its question card) and marks the session's unread rows read on the
- * computer, as the read state is shared with its bell, except its failure rows (`readOnOpen`): opening answers no
- * question and fixes no failure, so a Failed session stays under Failed. An account row
- * is only marked read. An ended session's row opens the "Session ended" sheet (Restore, Remove) instead of a dead
- * terminal. A long press opens the row's menu at the row: Open Session, and Mark as Done on a Failed row; an account
- * row keeps Mark as Read/Unread and Clear.
- * Half folded like a laptop the list ends above the fold, so no row, section title, notice or empty state is drawn on
- * the knick, at rest or while scrolling, and the lower half stays empty, as the Settings pages do: it is a section list
- * the fold frame keeps above the fold (`components/common/foldGap.tsx` runs only plain `FlatList`s across it).
+ * The Notifications list, drawn as the desktop's Notifications panel (`titlebar_notifications_panel.rs` in the Ghostex
+ * repo; the rules in `feedPanel.ts`, CDXC:Notifications 2026-11-12): the header actions Next unread, Mark all read and
+ * Clear all; then the computer's feed rows in two groups, Unread and Read, newest first. A row is the desktop's card:
+ * the agent's icon (or the kind's) in a square tile, the bold title with the computer's chip (with several computers)
+ * and the time, a two-line body, and "project · kind" as its footer, with the blue accent wash while unread (red for an
+ * approval, a failure, a message not sent and an expiring reset), dimmed once read.
  *
- * One component for the full screen (`AttentionListScreen`) and the attention-list pane (`src/panes/`): the
- * caller decides what opening a session means (`onOpenSession`: navigate to it, or open it in the pane beside). In a
- * pane (`pane`) the list reaches no side bar and keeps no laptop fold gap (the panes stand above that fold), and its
- * rows keep off a book fold by the pane's `controlInset`. Its body paints the appearance's page colour itself, so in a
- * pane (whose card is the terminal's black) its text stands on the colour its ink is made for, as on the full screen.
+ * Touch stands in for the desktop's hover and right click: the card's check is always shown (the desktop shows it on
+ * hover): on an unread card it marks the card read, on a read card it clears it; an open approval has none, as on the
+ * desktop. The card's ⋯, or a long press, opens its menu: Open Session, Mark as Read or Unread (the desktop's right
+ * click) and Clear. A tap opens the session and marks the card read, as a click does; an account or security row is
+ * only marked read, as a remote computer's is on the desktop; an ended session's card opens the "Session ended" sheet
+ * (Restore) instead of a dead terminal. Every change goes to the computer that owns the row, so it is the same on every
+ * device.
+ *
+ * Half folded like a laptop the list ends above the fold, so no row, section title, notice or empty state is drawn on
+ * the knick, as the Settings pages do (`components/common/foldGap.tsx` runs only plain `FlatList`s across it).
+ *
+ * One component for the full screen (`AttentionListScreen`) and the attention-list pane (`src/panes/`): the caller
+ * decides what opening a session means (`onOpenSession`). In a pane (`pane`) the list reaches no side bar and keeps no
+ * laptop fold gap, and its rows keep off a book fold by the pane's `controlInset`. Its body paints the appearance's
+ * page colour itself, so in a pane its text stands on the colour its ink is made for.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -38,18 +41,19 @@ import BottomSheet from '../components/common/BottomSheet';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../components/sessions/ContextMenu';
 import { FoldListFrame } from '../components/common/foldGap';
 import { measureInWindow } from '../components/common/measureInWindow';
+import { MoreGlyph } from '../components/sessions/icons';
 import { useLaptopFold } from '../components/common/verticalBar/laptopFold';
 import { NO_BAR_INSETS } from '../components/common/verticalBar/layout';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
-import { agentIconTint, formatLastActive } from '../contract/mobileSummary';
+import { agentIconTint, resolveAgentIconId } from '../contract/mobileSummary';
 import { NotificationsCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { PaneBarInset } from '../panes/geometry';
+import type { ClosedSession } from '../sessions/sessionSearch';
 import { useSettingsStore } from '../settings/store';
 import {
   ATTENTION_ROW_WASH,
-  GhostexPalette,
   GhostexRadii,
   GhostexStrokeWidth,
   SidebarPalette,
@@ -59,22 +63,27 @@ import {
 } from '../theme/palette';
 import { readableSecondaryText } from '../theme/sidebarAppearance';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
+import { sessionKey, type AttentionInbox } from './attentionRows';
+import { attentionInboxOf, currentAttentionInbox, type Notice } from './attentionInbox';
 import {
-  type AttentionInbox,
-  type AttentionRow,
-  type InboxSection,
-  type ListKind,
-} from './attentionRows';
-import { attentionInboxOf, type Notice } from './attentionInbox';
+  feedRelativeTime,
+  feedRowCanBeDone,
+  feedRowMeta,
+  feedRowOpensNothing,
+  feedRowTitle,
+  feedRowUrgent,
+  type PanelRow,
+} from './feedPanel';
 import {
-  markAttentionRowsRead,
+  changeEveryFeed,
+  changeFeedRow,
+  readFeedsForNextUnread,
   refreshAttentionFeeds,
-  removeEndedRow,
   restoreEndedSession,
-  updateAttentionFeed,
   useAttentionFeedStore,
 } from './feedStore';
-import { CloudOffGlyph, KindGlyph } from './icons';
+import { CloudOffGlyph, feedKindGlyph, PanelGlyph, type PanelGlyphName } from './icons';
+import { currentFeedPanel, useFeedPanel } from './useFeedPanel';
 
 /** What opening a row's session asks for. */
 export type OpenSessionTarget = { machineId: string; sessionId: string; question: boolean };
@@ -82,35 +91,21 @@ export type OpenSessionTarget = { machineId: string; sessionId: string; question
 /** The unread card's accent wash, as strong as the list's attention wash (`ATTENTION_ROW_WASH`). */
 const ROW_WASH_OPACITY = 9;
 
-/** How often the rows' "5m ago" moves on while the list is on screen. */
+/** How often the cards' "5m" moves on while the list is on screen. */
 const CLOCK_TICK_MS = 30_000;
 
-type StatusColors = { waiting: string; question: string; danger: string };
-const STATUS_COLORS: StatusColors = {
-  waiting: SidebarPalette.ROW_ATTENTION,
-  question: SidebarPalette.ROW_QUESTION,
-  danger: SidebarPalette.MENU_DANGER,
-};
+/** The card's check and ⋯: the desktop's 22pt check, grown to a comfortable touch size. */
+const CARD_BUTTON_SIZE = 28;
+const CARD_BUTTON_GAP = 6;
 
-type RowInk = {
-  light: boolean;
-  foreground: string;
-  muted: string;
-  mutedGlyph: string;
-  status: StatusColors;
-};
+type RowInk = { foreground: string; muted: string; attention: string; danger: string };
 
 function rowInks(appearance: Appearance): { plain: RowInk; emphasis: RowInk } {
   const make = (surfaces: readonly string[]): RowInk => ({
-    light: appearance.light,
     foreground: appearance.foreground,
     muted: readableSecondaryText(appearance.muted, appearance.foreground, surfaces),
-    mutedGlyph: appearance.mutedGlyph,
-    status: {
-      waiting: readableSecondaryText(STATUS_COLORS.waiting, appearance.foreground, surfaces),
-      question: readableSecondaryText(STATUS_COLORS.question, appearance.foreground, surfaces),
-      danger: readableSecondaryText(STATUS_COLORS.danger, appearance.foreground, surfaces),
-    },
+    attention: readableSecondaryText(SidebarPalette.ROW_ATTENTION, appearance.foreground, surfaces),
+    danger: readableSecondaryText(SidebarPalette.MENU_DANGER, appearance.foreground, surfaces),
   });
   return {
     plain: make([appearance.card, appearance.cardActive]),
@@ -122,31 +117,14 @@ function rowInks(appearance: Appearance): { plain: RowInk; emphasis: RowInk } {
   };
 }
 
-/**
- * Drawn with the accent wash, as the desktop bell draws an unread card: every session row (what waits, and the unread
- * rows that hold a session under Done or Failed) and an account notice not read yet.
- */
-function emphasized(row: AttentionRow): boolean {
-  return !row.read;
-}
-
-/** The desktop card's accent: red for an approval, a failure, a message not sent and an expiring reset, else blue. */
-function urgent(row: AttentionRow): boolean {
-  return (
-    row.kind === 'approval' ||
-    row.kind === 'failed' ||
-    row.kind === 'sendFailed' ||
-    row.kind === 'resetExpiring'
-  );
-}
-
-function accentOf(row: AttentionRow): string {
-  return urgent(row) ? SidebarPalette.ROW_APPROVAL : SidebarPalette.ROW_ATTENTION;
+function accentOf(row: PanelRow): string {
+  return feedRowUrgent(row) ? SidebarPalette.ROW_APPROVAL : SidebarPalette.ROW_ATTENTION;
 }
 
 /**
- * The inbox of every enabled computer, a notice for each one whose feed cannot be read, and whether the list still
- * loads or no computer can be read at all.
+ * The enabled computers' notices (one too old to share its notifications), whether the list still loads, and the
+ * computer named when none can be read; with the inbox, which says which waiting sessions have a question (a tap on
+ * such a card opens the question card).
  */
 export function useAttentionInbox(): {
   inbox: AttentionInbox;
@@ -172,60 +150,119 @@ export function useAttentionInbox(): {
     const enabled = enabledMachines({ machines });
     const notices: Notice[] = [];
     for (const machine of enabled) {
-      const label = machineDisplayLabel(machine);
-      if (legacyIds.includes(machine.id)) notices.push({ key: machine.id, text: NotificationsCopy.tooOld(label) });
-      else if (unreachableIds.includes(machine.id)) {
-        notices.push({ key: machine.id, text: NotificationsCopy.offline(label) });
+      if (legacyIds.includes(machine.id)) {
+        notices.push({ key: machine.id, text: NotificationsCopy.tooOld(machineDisplayLabel(machine)) });
       }
     }
     const failing = enabled.find((machine) => unreachableIds.includes(machine.id));
     const unreachable =
-      failing !== undefined && notices.length === enabled.length ? machineDisplayLabel(failing) : null;
+      failing !== undefined && legacyIds.length + unreachableIds.length === enabled.length
+        ? machineDisplayLabel(failing)
+        : null;
     return { inbox, notices, loading: loadingIds.length > 0, unreachable };
   }, [feeds, closed, machines, inventories, settingsLoaded, removedKeys]);
 }
 
-function rowTime(row: AttentionRow, now: Date): string | null {
-  return row.at.length > 0 ? formatLastActive(row.at, now) : null;
+/** The sessions whose wait is a question, by `sessionKey`: opening their card opens the question card. */
+function questionKeys(inbox: AttentionInbox): Set<string> {
+  return new Set(inbox.needsYou.filter((row) => row.kind === 'question').map((row) => row.key));
 }
 
-function RowContent({ row, now, ink }: { row: AttentionRow; now: Date; ink: RowInk }) {
-  const Icon = AGENT_ICONS[row.agentIconId] ?? AGENT_ICONS.terminal;
-  const unread = emphasized(row);
+/** The agent's own logo when the row names one the phone draws, else the kind's icon (as the desktop's tile). */
+function TileIcon({ row, appearance }: { row: PanelRow; appearance: Appearance }) {
+  const iconId = row.agentName.length > 0 ? resolveAgentIconId(undefined, row.agentName) : null;
+  const Icon = iconId !== null && (iconId !== 'terminal' || row.agentName === 'terminal') ? AGENT_ICONS[iconId] : null;
+  if (Icon !== undefined && Icon !== null && iconId !== null) {
+    return <Icon size={18} color={agentIconTint(iconId)} />;
+  }
+  return <PanelGlyph name={feedKindGlyph(row.kind)} size={18} color={colorWithOpacity(appearance.foreground, 84)} />;
+}
+
+function MachineChip({ label, appearance }: { label: string; appearance: Appearance }) {
+  return (
+    <View
+      style={[
+        styles.chip,
+        {
+          borderColor: colorWithOpacity(appearance.foreground, 16),
+          backgroundColor: colorWithOpacity(appearance.foreground, 7),
+        },
+      ]}
+    >
+      <PanelGlyph name="deviceDesktop" size={12} color={colorWithOpacity(appearance.foreground, 80)} />
+      <Text style={[styles.chipText, { color: colorWithOpacity(appearance.foreground, 80) }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function RowContent({
+  row,
+  now,
+  ink,
+  appearance,
+  trailing,
+}: {
+  row: PanelRow;
+  now: number;
+  ink: RowInk;
+  appearance: Appearance;
+  /** The card's ⋯ and check, at the end of the footer's line. */
+  trailing?: ReactNode;
+}) {
+  const unread = !row.read;
   const accent = accentOf(row);
-  const time = rowTime(row, now);
-  const footer = rowFooter(row);
+  const time = feedRelativeTime(row.createdAt, now);
   // The footer takes the card's accent while unread, as on the desktop, moved toward the text colour until it reads.
-  const footerColor = !unread ? ink.muted : urgent(row) ? ink.status.danger : ink.status.waiting;
+  const footerColor = !unread ? ink.muted : feedRowUrgent(row) ? ink.danger : ink.attention;
   return (
     <>
       <View
-        style={[styles.tile, { backgroundColor: unread ? colorWithOpacity(accent, 16) : GhostexPalette.NEUTRAL_FILL }]}
+        style={[
+          styles.tile,
+          { backgroundColor: unread ? colorWithOpacity(accent, 16) : colorWithOpacity(appearance.foreground, 10) },
+        ]}
       >
-        <Icon size={18} color={agentIconTint(row.agentIconId)} />
+        <TileIcon row={row} appearance={appearance} />
       </View>
       <View style={styles.text}>
         <View style={styles.firstLine}>
           <Text testID="attention-card-title" style={[styles.title, { color: ink.foreground }]} numberOfLines={1}>
-            {row.title}
+            {feedRowTitle(row)}
           </Text>
-          {time !== null ? (
+          {row.machineLabel !== null ? <MachineChip label={row.machineLabel} appearance={appearance} /> : null}
+          {time.length > 0 ? (
             <Text testID="attention-card-time" style={[styles.time, { color: ink.muted }]}>
               {time}
             </Text>
           ) : null}
         </View>
-        {row.body.length > 0 ? (
+        {(row.body ?? '').length > 0 ? (
           <Text testID="attention-card-body" style={[styles.body, { color: ink.muted }]} numberOfLines={2}>
             {row.body}
           </Text>
         ) : null}
-        <Text testID="attention-card-footer" style={[styles.footer, { color: footerColor }]} numberOfLines={1}>
-          {footer}
-        </Text>
+        <View style={styles.footerLine}>
+          <Text testID="attention-card-footer" style={[styles.footer, { color: footerColor }]} numberOfLines={1}>
+            {feedRowMeta(row)}
+          </Text>
+          {trailing}
+        </View>
       </View>
     </>
   );
+}
+
+/** What the card shows, in its order, with the read state in words (VoiceOver hears no colour). */
+function rowLabel(row: PanelRow, now: number): string {
+  const parts = [row.read ? null : NotificationsCopy.rowUnread, `${feedRowTitle(row)}.`];
+  if (row.machineLabel !== null) parts.push(`${row.machineLabel}.`);
+  if ((row.body ?? '').length > 0) parts.push(sentence(row.body ?? ''));
+  parts.push(sentence(feedRowMeta(row)));
+  const time = feedRelativeTime(row.createdAt, now);
+  if (time.length > 0) parts.push(`${time}.`);
+  return parts.filter((part) => part !== null).join(' ');
 }
 
 /** A sentence of the spoken label: the text with a full stop, unless it ends in its own punctuation. */
@@ -233,24 +270,41 @@ function sentence(text: string): string {
   return /[.?!…]$/.test(text) ? text : `${text}.`;
 }
 
-/** The card's footer: "project · state", then the computer's name and "last known" where they apply. */
-function rowFooter(row: AttentionRow): string {
-  return [row.footer, row.machineLabel, row.lastKnown ? NotificationsCopy.lastKnown : null]
-    .filter((part): part is string => part !== null && part.length > 0)
-    .join(' · ');
+function CardButton({
+  label,
+  testID,
+  fill,
+  border,
+  pressedFill,
+  onPress,
+  children,
+}: {
+  label: string;
+  testID: string;
+  fill: string;
+  border: string;
+  pressedFill: string;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.cardButton,
+        { borderColor: border, backgroundColor: pressed ? pressedFill : fill },
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
 }
 
-/** What the card shows, in its order, with the state in words (VoiceOver hears no colour): "title, state. body." */
-function rowLabel(row: AttentionRow, now: Date): string {
-  const parts = [row.account && !row.read ? NotificationsCopy.rowUnread : null, `${row.title}, ${row.label}.`];
-  if (row.body.length > 0) parts.push(sentence(row.body));
-  parts.push(sentence(rowFooter(row)));
-  const time = rowTime(row, now);
-  if (time !== null) parts.push(`${time}.`);
-  return parts.filter((part) => part !== null).join(' ');
-}
-
-/** Memoized: the list re-renders on every feed or session-list read, a row only when its own data changes. */
+/** Memoized: the list re-renders on every feed read, a card only when its own data changes. */
 const Row = memo(function Row({
   row,
   now,
@@ -258,39 +312,74 @@ const Row = memo(function Row({
   ink,
   held,
   onOpen,
-  onHold,
+  onCheck,
+  onMenu,
 }: {
-  row: AttentionRow;
-  now: Date;
+  row: PanelRow;
+  now: number;
   appearance: Appearance;
   ink: RowInk;
   held: boolean;
-  onOpen: (row: AttentionRow) => void;
-  onHold: (row: AttentionRow, frame: MenuAnchor) => void;
+  onOpen: (row: PanelRow) => void;
+  onCheck: (row: PanelRow) => void;
+  onMenu: (row: PanelRow, frame: MenuAnchor) => void;
 }) {
   const ref = useRef<ViewInstance | null>(null);
+  const unread = !row.read;
+  const accent = accentOf(row);
+  const check = feedRowCanBeDone(row);
   return (
     <Pressable
       ref={ref}
       accessibilityRole="button"
       accessibilityLabel={rowLabel(row, now)}
-      accessibilityHint={row.account ? undefined : NotificationsCopy.openSession}
+      accessibilityHint={feedRowOpensNothing(row) ? undefined : NotificationsCopy.openSession}
       testID={`attention-row-${row.id}`}
       onPress={() => onOpen(row)}
-      onLongPress={() => measureInWindow(ref, (frame) => onHold(row, frame))}
+      onLongPress={() => measureInWindow(ref, (frame) => onMenu(row, frame))}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: appearance.card, borderColor: appearance.border },
-        emphasized(row)
+        unread
           ? {
-              backgroundColor: colorWithOpacity(accentOf(row), ROW_WASH_OPACITY),
-              borderColor: colorWithOpacity(accentOf(row), 30),
+              backgroundColor: colorWithOpacity(accent, ROW_WASH_OPACITY),
+              borderColor: colorWithOpacity(accent, 30),
             }
-          : styles.rowRead,
+          : [styles.rowRead, { backgroundColor: appearance.card, borderColor: appearance.border }],
         (pressed || held) && { backgroundColor: appearance.cardActive, opacity: 1 },
       ]}
     >
-      <RowContent row={row} now={now} ink={ink} />
+      <RowContent
+        row={row}
+        now={now}
+        ink={ink}
+        appearance={appearance}
+        trailing={
+      <View style={styles.cardButtons}>
+        <CardButton
+          label={NotificationsCopy.feed.rowMenu}
+          testID={`attention-row-menu-${row.id}`}
+          fill={colorWithOpacity(appearance.foreground, 8)}
+          border={colorWithOpacity(appearance.foreground, 14)}
+          pressedFill={colorWithOpacity(appearance.foreground, 20)}
+          onPress={() => measureInWindow(ref, (frame) => onMenu(row, frame))}
+        >
+          <MoreGlyph size={15} color={colorWithOpacity(appearance.foreground, 85)} />
+        </CardButton>
+        {check ? (
+          <CardButton
+            label={unread ? NotificationsCopy.feed.checkRead : NotificationsCopy.feed.checkClear}
+            testID={`attention-row-check-${row.id}`}
+            fill={unread ? colorWithOpacity(accent, 18) : colorWithOpacity(appearance.foreground, 12)}
+            border={unread ? colorWithOpacity(accent, 45) : colorWithOpacity(appearance.foreground, 16)}
+            pressedFill={unread ? colorWithOpacity(accent, 32) : colorWithOpacity(appearance.foreground, 22)}
+            onPress={() => onCheck(row)}
+          >
+            <PanelGlyph name="check" size={15} color={colorWithOpacity(appearance.foreground, 92)} />
+          </CardButton>
+        ) : null}
+      </View>
+        }
+      />
     </Pressable>
   );
 });
@@ -300,17 +389,14 @@ function EmptyState({
   title,
   text,
   appearance,
-  fill,
 }: {
   icon: ReactNode;
   title: string;
   text: string;
   appearance: Appearance;
-  /** The whole list's empty state fills the page; Needs you's own stands in its section. */
-  fill: boolean;
 }) {
   return (
-    <View style={[styles.empty, fill && styles.emptyFill]}>
+    <View style={styles.empty}>
       {icon}
       <Text style={[styles.emptyTitle, { color: appearance.foreground }]}>{title}</Text>
       <Text style={[styles.emptyText, { color: appearance.muted }]}>{text}</Text>
@@ -318,7 +404,47 @@ function EmptyState({
   );
 }
 
-type Section = { key: InboxSection; title: string; data: AttentionRow[] };
+/**
+ * The panel's header actions (the desktop's "Next unread", "Mark all read", "Clear all"): equal shares of the row,
+ * unfilled, divided by thin lines, an icon beside each label, dimmed while there is nothing to act on.
+ */
+function HeaderActions({
+  appearance,
+  actions,
+}: {
+  appearance: Appearance;
+  actions: { key: string; label: string; glyph: PanelGlyphName; enabled: boolean; onPress: () => void }[];
+}) {
+  const line = colorWithOpacity(appearance.foreground, 12);
+  return (
+    <View style={[styles.actions, { borderColor: line }]}>
+      {actions.map((action, index) => {
+        const ink = colorWithOpacity(appearance.foreground, action.enabled ? 78 : 38);
+        return (
+          <Pressable
+            key={action.key}
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            accessibilityState={{ disabled: !action.enabled }}
+            disabled={!action.enabled}
+            testID={`notifications-${action.key}`}
+            onPress={action.onPress}
+            style={({ pressed }) => [
+              styles.action,
+              index > 0 && { borderLeftWidth: GhostexStrokeWidth, borderLeftColor: line },
+              pressed && { backgroundColor: colorWithOpacity(appearance.foreground, 14) },
+            ]}
+          >
+            <PanelGlyph name={action.glyph} size={15} color={ink} />
+            <Text style={[styles.actionText, { color: ink }]} numberOfLines={1}>
+              {action.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function SheetButton({
   label,
@@ -342,75 +468,47 @@ function SheetButton({
   );
 }
 
+/** The ended session a card opened: the computer lists it as closed. */
+type EndedTarget = { machineId: string; sessionId: string; title: string; ended: ClosedSession };
+
 /**
- * The "Session ended" sheet of an ended session's row: Restore (when the computer can restore it) and Remove, which
- * asks first. While the restore runs it says so and offers Close, not Cancel: the phone cannot stop a restore the
- * computer started, so closing only hides the sheet and the result still applies. A failed restore offers Try Again.
+ * The "Session ended" sheet of an ended session's card: Restore (when the computer can restore it) and Close. While
+ * the restore runs it says so and offers Close, not Cancel: the phone cannot stop a restore the computer started, so
+ * closing only hides the sheet and the result still applies. A failed restore offers Try Again. The card itself is
+ * cleared with its check, as any other.
  */
 function EndedSheet({
-  row,
+  target,
   onClose,
   appearance,
 }: {
-  row: AttentionRow | null;
+  target: EndedTarget | null;
   onClose: () => void;
   appearance: Appearance;
 }) {
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const restore = useAttentionFeedStore((state) => (row === null ? undefined : state.restores[row.key]));
-  const ended = row?.ended ?? null;
-  const danger = { rest: appearance.dangerFill, pressed: appearance.dangerFillPressed };
+  const restore = useAttentionFeedStore((state) =>
+    target === null ? undefined : state.restores[sessionKey(target.machineId, target.sessionId)],
+  );
   const neutral = neutralButtonFills(appearance.light);
-  const close = useCallback(() => {
-    setConfirmRemove(false);
-    onClose();
-  }, [onClose]);
   const startRestore = useCallback(() => {
-    if (row === null || ended === null) return;
-    void restoreEndedSession(row.machineId, ended).then((restored) => {
-      if (restored) close();
+    if (target === null) return;
+    void restoreEndedSession(target.machineId, target.ended).then((restored) => {
+      if (restored) onClose();
     });
-  }, [row, ended, close]);
+  }, [target, onClose]);
 
-  let title: string;
+  let title = '';
   let body: ReactNode = null;
-  let buttons: ReactNode;
-  if (row === null || ended === null) {
-    title = '';
-    buttons = null;
-  } else if (confirmRemove) {
-    title = NotificationsCopy.ended.removeTitle;
-    body = <Text style={[styles.sheetText, { color: appearance.muted }]}>{NotificationsCopy.ended.removeText}</Text>;
-    buttons = (
-      <>
-        <SheetButton
-          label={NotificationsCopy.ended.remove}
-          fills={danger}
-          ink={appearance.danger}
-          onPress={() => {
-            removeEndedRow(row.machineId, row.sessionId);
-            close();
-          }}
-        />
-        <SheetButton
-          label={NotificationsCopy.cancel}
-          fills={neutral}
-          ink={appearance.foreground}
-          onPress={() => setConfirmRemove(false)}
-        />
-      </>
-    );
-  } else if (restore === 'running') {
+  let buttons: ReactNode = null;
+  if (target !== null && restore === 'running') {
     title = NotificationsCopy.ended.restoringTitle;
     body = (
       <Text accessibilityLiveRegion="polite" style={[styles.sheetText, { color: appearance.muted }]}>
         {NotificationsCopy.ended.restoringText}
       </Text>
     );
-    buttons = (
-      <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={close} />
-    );
-  } else if (restore === 'failed') {
+    buttons = <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={onClose} />;
+  } else if (target !== null && restore === 'failed') {
     title = NotificationsCopy.ended.failedTitle;
     body = (
       <Text accessibilityRole="alert" style={[styles.sheetText, { color: appearance.muted }]}>
@@ -425,16 +523,17 @@ function EndedSheet({
           ink={appearance.foreground}
           onPress={startRestore}
         />
-        <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={close} />
+        <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={onClose} />
       </>
     );
-  } else {
+  } else if (target !== null) {
+    const { ended } = target;
     title = NotificationsCopy.ended.title;
     body = (
       <>
-        {row.detail.length > 0 ? (
+        {target.title.length > 0 ? (
           <Text style={[styles.sheetText, { color: appearance.foreground }]} numberOfLines={2}>
-            {row.detail}
+            {target.title}
           </Text>
         ) : null}
         <Text style={[styles.sheetText, { color: appearance.muted }]}>
@@ -454,19 +553,13 @@ function EndedSheet({
             onPress={startRestore}
           />
         ) : null}
-        <SheetButton
-          label={NotificationsCopy.ended.remove}
-          fills={danger}
-          ink={appearance.danger}
-          onPress={() => setConfirmRemove(true)}
-        />
-        <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={close} />
+        <SheetButton label={NotificationsCopy.close} fills={neutral} ink={appearance.foreground} onPress={onClose} />
       </>
     );
   }
 
   return (
-    <BottomSheet visible={row !== null && ended !== null} onClose={close}>
+    <BottomSheet visible={target !== null} onClose={onClose}>
       <View style={styles.sheet}>
         <Text accessibilityRole="header" style={[styles.sheetTitle, { color: appearance.foreground }]}>
           {title}
@@ -477,6 +570,8 @@ function EndedSheet({
     </BottomSheet>
   );
 }
+
+type Section = { key: 'unread' | 'read'; title: string; data: PanelRow[] };
 
 export default function AttentionList({
   onOpenSession,
@@ -496,15 +591,18 @@ export default function AttentionList({
   // The list reaches under the iPhone Duo's side bar, its rows keep clear of it; not in a pane.
   const edges = useScrollToBarEdges(styles.content, pane === undefined ? null : NO_BAR_INSETS);
   const laptopFold = useLaptopFold();
+  const panel = useFeedPanel();
   const { inbox, notices, loading, unreachable } = useAttentionInbox();
-  const [now, setNow] = useState(() => new Date());
-  const [menu, setMenu] = useState<{ row: AttentionRow; frame: MenuAnchor } | null>(null);
-  const [endedRow, setEndedRow] = useState<AttentionRow | null>(null);
+  const closed = useAttentionFeedStore((state) => state.closed);
+  const questions = useMemo(() => questionKeys(inbox), [inbox]);
+  const [now, setNow] = useState(() => Date.now());
+  const [menu, setMenu] = useState<{ row: PanelRow; frame: MenuAnchor } | null>(null);
+  const [endedTarget, setEndedTarget] = useState<EndedTarget | null>(null);
   const [failed, setFailed] = useState(false);
   const [pulling, setPulling] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
   }, []);
 
@@ -512,29 +610,54 @@ export default function AttentionList({
     void done.then((ok) => setFailed(!ok));
   }, []);
 
-  const open = useCallback(
-    (row: AttentionRow) => {
-      setMenu(null);
-      if (row.account) {
-        if (!row.read) report(updateAttentionFeed(row.machineId, { action: 'markRead', notificationId: row.id }));
-        return;
-      }
-      if (row.ended !== null) {
-        setEndedRow(row);
-        return;
-      }
-      if (row.unreadIds.length > 0) report(markAttentionRowsRead(row.machineId, row.unreadIds));
-      onOpenSession({ machineId: row.machineId, sessionId: row.sessionId, question: row.kind === 'question' });
-    },
-    [onOpenSession, report],
+  const change = useCallback(
+    (row: PanelRow, action: 'markRead' | 'markUnread' | 'dismiss') =>
+      report(changeFeedRow(row.machineId, { action, notificationId: row.id })),
+    [report],
   );
 
-  const hold = useCallback((row: AttentionRow, frame: MenuAnchor) => setMenu({ row, frame }), []);
+  /** A tap: the card is marked read on its computer, then its session opens (as a click on the desktop). */
+  const open = useCallback(
+    (row: PanelRow, questionSessions: Set<string> = questions) => {
+      setMenu(null);
+      if (!row.read && feedRowCanBeDone(row)) change(row, 'markRead');
+      if (feedRowOpensNothing(row)) return;
+      const ended = closed[row.machineId]?.find((session) => session.sessionId === row.sessionId);
+      if (ended !== undefined) {
+        setEndedTarget({ machineId: row.machineId, sessionId: row.sessionId, title: feedRowTitle(row), ended });
+        return;
+      }
+      onOpenSession({
+        machineId: row.machineId,
+        sessionId: row.sessionId,
+        question: questionSessions.has(sessionKey(row.machineId, row.sessionId)),
+      });
+    },
+    [questions, closed, change, onOpenSession],
+  );
+
+  /** The card's check: an unread card is marked read, a read card is cleared from the list. */
+  const check = useCallback((row: PanelRow) => change(row, row.read ? 'dismiss' : 'markRead'), [change]);
+
+  const showMenu = useCallback((row: PanelRow, frame: MenuAnchor) => setMenu({ row, frame }), []);
 
   const pull = useCallback(() => {
     setPulling(true);
     void refreshAttentionFeeds().finally(() => setPulling(false));
   }, []);
+
+  /** Next unread: every computer's feed read anew, then its merged next card opened (and marked read). */
+  const nextUnread = useCallback(() => {
+    void readFeedsForNextUnread().then(() => {
+      const next = currentFeedPanel().next;
+      if (next !== null) open(next, questionKeys(currentAttentionInbox()));
+    });
+  }, [open]);
+
+  const onlineMachines = useMemo(
+    () => [...new Set([...panel.unread, ...panel.read].map((row) => row.machineId))],
+    [panel],
+  );
 
   const menuItems = useMemo((): ContextMenuItem[] => {
     if (menu === null) return [];
@@ -549,83 +672,55 @@ export default function AttentionList({
         run();
       },
     });
-    if (row.account) {
-      const update = (action: 'markRead' | 'markUnread' | 'dismiss') =>
-        report(updateAttentionFeed(row.machineId, { action, notificationId: row.id }));
-      return [
-        row.read
-          ? item('unread', NotificationsCopy.markUnread, () => update('markUnread'))
-          : item('read', NotificationsCopy.markRead, () => update('markRead')),
-        item('clear', NotificationsCopy.clear, () => update('dismiss'), true),
-      ];
-    }
-    const items = [item('open', NotificationsCopy.openSession, () => open(row))];
-    if (row.section === 'failed') {
+    const items: ContextMenuItem[] = [];
+    if (!feedRowOpensNothing(row)) items.push(item('open', NotificationsCopy.openSession, () => open(row)));
+    if (feedRowCanBeDone(row)) {
       items.push(
-        item('done', NotificationsCopy.markDone, () => report(markAttentionRowsRead(row.machineId, row.stateIds))),
+        row.read
+          ? item('unread', NotificationsCopy.markUnread, () => change(row, 'markUnread'))
+          : item('read', NotificationsCopy.markRead, () => change(row, 'markRead')),
+        item('clear', NotificationsCopy.clear, () => change(row, 'dismiss'), true),
       );
     }
     return items;
-  }, [menu, open, report]);
+  }, [menu, open, change]);
 
-  const nothing =
-    inbox.needsYou.length + inbox.done.length + inbox.failed.length + inbox.accounts.length === 0;
-  // Needs you always stands first, saying "Nothing needs you" while it is empty; the other sections only with rows.
-  // Its title says "last known" while one of its waits comes from a computer that cannot be reached now, as the
-  // bell's number does. With nothing at all while the list loads or no computer can be read, the list's own state
-  // shows instead.
-  const ordered: Section[] = [
-    {
-      key: 'needsYou',
-      title: inbox.needsYou.some((row) => row.lastKnown)
-        ? NotificationsCopy.section.needsYouLastKnown
-        : NotificationsCopy.section.needsYou,
-      data: inbox.needsYou,
-    },
-    { key: 'done', title: NotificationsCopy.section.done, data: inbox.done },
-    { key: 'failed', title: NotificationsCopy.section.failed, data: inbox.failed },
-    { key: 'accounts', title: NotificationsCopy.section.accounts, data: inbox.accounts },
-  ];
-  const sections =
-    nothing && (unreachable !== null || loading)
-      ? []
-      : ordered.filter((section) => section.key === 'needsYou' || section.data.length > 0);
+  const nothing = panel.unread.length + panel.read.length === 0;
+  const sections: Section[] = [
+    { key: 'unread' as const, title: NotificationsCopy.feed.unread, data: panel.unread },
+    { key: 'read' as const, title: NotificationsCopy.feed.read, data: panel.read },
+  ].filter((section) => section.data.length > 0);
 
   const heldKey = menu?.row.key ?? null;
   const renderItem = useCallback(
-    ({ item }: SectionListRenderItemInfo<AttentionRow, Section>) => (
+    ({ item }: SectionListRenderItemInfo<PanelRow, Section>) => (
       <Row
         row={item}
         now={now}
         appearance={appearance}
-        ink={emphasized(item) ? inks.emphasis : inks.plain}
+        ink={item.read ? inks.plain : inks.emphasis}
         held={heldKey === item.key}
         onOpen={open}
-        onHold={hold}
+        onCheck={check}
+        onMenu={showMenu}
       />
     ),
-    [now, appearance, inks, heldKey, open, hold],
+    [now, appearance, inks, heldKey, open, check, showMenu],
   );
   const renderSectionHeader = useCallback(
-    ({ section }: { section: SectionListData<AttentionRow, Section> }) => (
-      <Text accessibilityRole="header" style={[styles.sectionTitle, { color: appearance.muted }]}>
+    ({ section }: { section: SectionListData<PanelRow, Section> }) => (
+      <Text
+        accessibilityRole="header"
+        style={[
+          styles.sectionTitle,
+          { color: colorWithOpacity(appearance.foreground, 62) },
+          section.key === 'read' && panel.unread.length > 0 && styles.sectionTitleAfter,
+        ]}
+      >
         {section.title}
       </Text>
     ),
-    [appearance],
-  );
-  const renderSectionFooter = useCallback(
-    ({ section }: { section: SectionListData<AttentionRow, Section> }) =>
-      section.key === 'needsYou' && section.data.length === 0 ? (
-        <EmptyState
-          icon={<KindGlyph kind="finished" size={24} color={appearance.mutedGlyph} />}
-          title={NotificationsCopy.emptyTitle}
-          text={NotificationsCopy.emptyText}
-          appearance={appearance}
-          fill={false}
-        />
-      ) : null,
-    [appearance],
+    [appearance, panel.unread.length],
   );
 
   const header = (
@@ -636,6 +731,11 @@ export default function AttentionList({
           <Text style={[styles.noticeText, { color: appearance.muted }]}>{notice.text}</Text>
         </View>
       ))}
+      {panel.offlineNotice !== null ? (
+        <Text style={[styles.offline, { color: colorWithOpacity(appearance.foreground, 50) }]}>
+          {panel.offlineNotice}
+        </Text>
+      ) : null}
       {failed ? (
         <Text accessibilityRole="alert" style={[styles.failed, { color: failedInk }]}>
           {NotificationsCopy.actionFailed}
@@ -644,27 +744,72 @@ export default function AttentionList({
     </>
   );
   const empty =
-    unreachable !== null ? (
+    nothing && unreachable !== null ? (
       <EmptyState
         icon={<CloudOffGlyph size={32} color={appearance.mutedGlyph} />}
         title={NotificationsCopy.cantLoadTitle}
         text={NotificationsCopy.cantLoadText(unreachable)}
         appearance={appearance}
-        fill
       />
-    ) : (
+    ) : nothing && loading ? (
       <Text style={[styles.loading, { color: appearance.muted }]}>{NotificationsCopy.loading}</Text>
+    ) : (
+      <EmptyState
+        icon={<PanelGlyph name="bell" size={32} color={colorWithOpacity(appearance.foreground, 35)} />}
+        title={NotificationsCopy.feed.emptyTitle}
+        text={NotificationsCopy.feed.emptyText}
+        appearance={appearance}
+      />
     );
 
   return (
-    <>
+    <View style={[styles.scroll, { backgroundColor: appearance.background }]}>
+      <View
+        style={
+          pane === undefined
+            ? styles.actionsFrame
+            : [
+                styles.actionsFrame,
+                {
+                  paddingLeft: styles.actionsFrame.paddingHorizontal + pane.controlInset.left,
+                  paddingRight: styles.actionsFrame.paddingHorizontal + pane.controlInset.right,
+                },
+              ]
+        }
+      >
+        <HeaderActions
+          appearance={appearance}
+          actions={[
+            {
+              key: 'next-unread',
+              label: NotificationsCopy.feed.nextUnread,
+              glyph: 'chevronRight',
+              enabled: panel.next !== null,
+              onPress: nextUnread,
+            },
+            {
+              key: 'mark-all-read',
+              label: NotificationsCopy.feed.markAllRead,
+              glyph: 'check',
+              enabled: panel.unreadCount > 0,
+              onPress: () => report(changeEveryFeed(onlineMachines, 'markAllRead')),
+            },
+            {
+              key: 'clear-all',
+              label: NotificationsCopy.feed.clearAll,
+              glyph: 'xmark',
+              enabled: !nothing,
+              onPress: () => report(changeEveryFeed(onlineMachines, 'clearAll')),
+            },
+          ]}
+        />
+      </View>
       <FoldListFrame fold={pane === undefined ? laptopFold : null}>
         <SectionList
           sections={sections}
           keyExtractor={(row) => row.key}
           renderItem={renderItem}
           renderSectionHeader={renderSectionHeader}
-          renderSectionFooter={renderSectionFooter}
           stickySectionHeadersEnabled={false}
           // The first batch fills the tallest window the app runs in (the unfolded Duo, about 13 rows plus the
           // section titles), so the list never opens with an empty lower part that fills a frame later.
@@ -686,8 +831,8 @@ export default function AttentionList({
       </FoldListFrame>
       <ContextMenu
         visible={menu !== null}
-        title={menu?.row.who ?? ''}
-        subtitle={menu?.row.detail}
+        title={menu === null ? '' : feedRowTitle(menu.row)}
+        subtitle={menu === null ? undefined : feedRowMeta(menu.row)}
         items={menuItems}
         onClose={() => setMenu(null)}
         rowAnchor={menu?.frame}
@@ -697,7 +842,7 @@ export default function AttentionList({
             : {
                 content: (
                   <View style={styles.liftedRow}>
-                    <RowContent row={menu.row} now={now} ink={inks.plain} />
+                    <RowContent row={menu.row} now={now} ink={inks.plain} appearance={appearance} />
                   </View>
                 ),
                 accessibilityLabel: rowLabel(menu.row, now),
@@ -705,8 +850,8 @@ export default function AttentionList({
               }
         }
       />
-      <EndedSheet row={endedRow} onClose={() => setEndedRow(null)} appearance={appearance} />
-    </>
+      <EndedSheet target={endedTarget} onClose={() => setEndedTarget(null)} appearance={appearance} />
+    </View>
   );
 }
 
@@ -717,15 +862,28 @@ function RowGap() {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 12, paddingBottom: 28, flexGrow: 1 },
+  actionsFrame: { paddingHorizontal: 12, paddingTop: 4 },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: 40,
+    borderRadius: GhostexRadii.card,
+    borderWidth: GhostexStrokeWidth,
+    overflow: 'hidden',
+  },
+  action: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 4 },
+  actionText: { fontSize: 13, flexShrink: 1 },
+  // The desktop's UNREAD / READ headings: small, bold, capitals.
   sectionTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 6,
+    marginBottom: 9,
     paddingHorizontal: 4,
   },
+  sectionTitleAfter: { marginTop: 16 },
   rowGap: { height: 8 },
   row: {
     flexDirection: 'row',
@@ -736,7 +894,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: GhostexStrokeWidth,
   },
-  // The desktop bell dims a read card.
+  // The desktop panel dims a read card.
   rowRead: { opacity: 0.72 },
   liftedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 12 },
   tile: {
@@ -745,16 +903,37 @@ const styles = StyleSheet.create({
     borderRadius: GhostexRadii.card,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GhostexPalette.NEUTRAL_FILL,
   },
   text: { flex: 1, minWidth: 0, gap: 6 },
-  firstLine: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  firstLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   time: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  chip: {
+    flexShrink: 1,
+    maxWidth: 140,
+    height: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    borderWidth: GhostexStrokeWidth,
+  },
+  chipText: { flexShrink: 1, fontSize: 11, fontWeight: '600' },
   body: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  footer: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
-  empty: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 20 },
-  emptyFill: { flex: 1, minHeight: 260 },
+  footerLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 16 },
+  footer: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  // The check and the ⋯ end the footer's line, in the card's bottom-right corner where the desktop's check floats.
+  cardButtons: { flexDirection: 'row', gap: CARD_BUTTON_GAP, marginVertical: -4 },
+  cardButton: {
+    width: CARD_BUTTON_SIZE,
+    height: CARD_BUTTON_SIZE,
+    borderRadius: 7,
+    borderWidth: GhostexStrokeWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  empty: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 24 },
   emptyTitle: { marginTop: 4, fontSize: 15, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 13, textAlign: 'center' },
   loading: { marginTop: 24, fontSize: 13, textAlign: 'center' },
@@ -767,6 +946,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   noticeText: { flex: 1, fontSize: 13 },
+  offline: { fontSize: 12.5, paddingHorizontal: 4, marginBottom: 8 },
   failed: { fontSize: 13, paddingHorizontal: 4, marginBottom: 8 },
   sheet: { gap: 10, paddingHorizontal: 4 },
   sheetTitle: { fontSize: 17, fontWeight: '600', textAlign: 'center' },

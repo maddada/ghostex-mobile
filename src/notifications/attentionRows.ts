@@ -40,7 +40,7 @@ import {
 import { longestWaitFirst, waitsForUser } from '../screens/triage/model';
 import type { ClosedSession } from '../sessions/sessionSearch';
 import { sessionFacts, type SessionFacts } from './events';
-import { isAccountRow, type FeedRow } from './feedContract';
+import { isAccountRow, isSessionlessRow, type FeedRow } from './feedContract';
 
 export type InboxSection = 'needsYou' | 'failed' | 'done' | 'accounts';
 
@@ -182,7 +182,7 @@ function waitKind(session: GhostexSession, capabilities: GhostexSummaryCapabilit
 function unreadBySession(rows: readonly FeedRow[]): Map<string, FeedRow[]> {
   const sessions = new Map<string, FeedRow[]>();
   for (const row of rows) {
-    if (row.read || isAccountRow(row)) continue;
+    if (row.read || isSessionlessRow(row)) continue;
     const list = sessions.get(row.sessionId);
     if (list === undefined) sessions.set(row.sessionId, [row]);
     else list.push(row);

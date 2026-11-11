@@ -1580,6 +1580,38 @@ export const NotificationsCopy = {
   },
   /** A row's title when the session has none (the desktop bell's "Session"). */
   untitledSession: 'Session',
+  /** The Notifications list in the desktop panel's words (`titlebar_notifications_panel.rs`). */
+  feed: {
+    /** The footer's kind word (`GpuiNotificationFeedKind::label`). */
+    kind: {
+      finished: 'Finished',
+      needsInput: 'Needs input',
+      bell: 'Bell',
+      custom: 'Notification',
+      sendFailed: 'Not sent',
+      failed: 'Failed',
+      resetExpiring: 'Reset expiring',
+      resetRedeemed: 'Reset used',
+      security: 'Security',
+    },
+    unread: 'Unread',
+    read: 'Read',
+    nextUnread: 'Next unread',
+    markAllRead: 'Mark all read',
+    clearAll: 'Clear all',
+    emptyTitle: 'No notifications yet',
+    emptyText: 'Agents that finish or need you will show up here.',
+    offlineOne: (machine: string) => `${machine} is offline. Its notifications show again when it reconnects.`,
+    offlineMany: (machines: string, last: string) =>
+      `${machines} and ${last} are offline. Their notifications show again when they reconnect.`,
+    justNow: 'just now',
+    yesterday: 'yesterday',
+    /** The card's check, by what it does: an unread row is marked read, a read one is cleared from the list. */
+    checkRead: 'Mark as read',
+    checkClear: 'Clear',
+    rowMenu: 'More actions',
+    unreadBell: (count: number) => `Notifications, ${count} unread`,
+  },
   /** The attention list's sections, in their order. */
   section: {
     needsYou: 'Needs you',

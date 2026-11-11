@@ -145,3 +145,57 @@ export function KindGlyph({ kind, size, color }: GlyphProps & { kind: ListKind |
       return <AlertGlyph size={size} color={color} />;
   }
 }
+
+/**
+ * The desktop panel's glyphs (`apps/desktop/assets/titlebar/*.svg` in the Ghostex repo, Tabler outlines): a card's
+ * kind icon when its session has no agent logo, the card's check, the header actions and the computer chip.
+ */
+const PANEL_GLYPH_PATHS = {
+  messageCircle: [
+    'M3 20l1.3 -3.9c-2.324 -3.437 -1.426 -7.872 2.1 -10.374c3.526 -2.501 8.59 -2.296 11.845 .48c3.255 2.777 3.695 7.266 1.029 10.501c-2.666 3.235 -7.615 4.215 -11.574 2.293l-4.7 1',
+  ],
+  helpCircle: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M12 16v.01', 'M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483'],
+  bell: ['M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6', 'M9 17v1a3 3 0 0 0 6 0v-1'],
+  alertCircle: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M12 8v4', 'M12 16h.01'],
+  shieldCheck: ['M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06', 'M15 19l2 2l4 -4'],
+  infoCircle: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M12 9h.01', 'M11 12h1v4h1'],
+  check: ['m5 12 4 4L19 6'],
+  chevronRight: ['M9 6l6 6l-6 6'],
+  xmark: ['M7 7l10 10', 'M17 7l-10 10'],
+  deviceDesktop: [
+    'M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10',
+    'M7 20h10',
+    'M9 16v4',
+    'M15 16v4',
+  ],
+} as const;
+
+export type PanelGlyphName = keyof typeof PANEL_GLYPH_PATHS;
+
+export function PanelGlyph({ name, size, color }: GlyphProps & { name: PanelGlyphName }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {PANEL_GLYPH_PATHS[name].map((d) => (
+        <Path key={d} d={d} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </Svg>
+  );
+}
+
+/** The card's tile icon for a kind, when its session has no agent logo (`GpuiNotificationFeedKind::icon_path`). */
+export function feedKindGlyph(kind: string): PanelGlyphName {
+  switch (kind) {
+    case 'finished':
+      return 'messageCircle';
+    case 'needsInput':
+      return 'helpCircle';
+    case 'bell':
+      return 'bell';
+    case 'failed':
+      return 'alertCircle';
+    case 'security':
+      return 'shieldCheck';
+    default:
+      return 'infoCircle';
+  }
+}

@@ -58,8 +58,8 @@ import {
 } from './attentionRows';
 import { HOST_EVENT_KINDS, hostEventFromFeedRow, sessionFacts, type HostEvent } from './events';
 import { FeedEventSource, FeedUnavailableError, type FeedReadFailure } from './eventSource';
-import { FeedRequestError, markRowsRead, readFeed, updateFeed, type FeedRpc, type FeedUpdate } from './feedClient';
-import { isAccountRow, type FeedRow, type FeedSnapshot } from './feedContract';
+import { FeedRequestError, markRowsRead, readFeed, updateFeed, updateWholeFeed, type FeedRpc, type FeedUpdate } from './feedClient';
+import { isAccountRow, isSessionlessRow, type FeedRow, type FeedSnapshot } from './feedContract';
 import { NOTIFICATION_STREAM_CAPABILITY, openFeedStream } from './feedStream';
 import { redialAfterServerStop } from '../app/autoReconnect';
 import { installAskAfterPairing } from './askAfterPairing';
@@ -81,7 +81,13 @@ const SESSION_LIST_WAIT_MS = 5_000;
 
 export type MachineFeedStatus = 'loading' | 'ready' | FeedReadFailure;
 
-export type MachineFeedState = { status: MachineFeedStatus; rows: readonly FeedRow[] };
+export type MachineFeedState = {
+  status: MachineFeedStatus;
+  rows: readonly FeedRow[];
+  /** The computer's own next unread row and when it was pushed back (`FeedSnapshot`); kept with the rows. */
+  nextUnreadId?: string;
+  nextUnreadDeferredAt?: string;
+};
 
 type AttentionFeedState = {
   /** Per enabled computer; a computer appears once its first read finished. */
@@ -146,7 +152,12 @@ function setFeed(machineId: string, feed: MachineFeedState): void {
 
 /** The computer's feed as just read or changed: the list shows it, the event record keeps its rows. */
 function applySnapshot(machineId: string, snapshot: FeedSnapshot): void {
-  setFeed(machineId, { status: 'ready', rows: snapshot.rows });
+  setFeed(machineId, {
+    status: 'ready',
+    rows: snapshot.rows,
+    ...(snapshot.nextUnreadId !== undefined ? { nextUnreadId: snapshot.nextUnreadId } : {}),
+    ...(snapshot.nextUnreadDeferredAt !== undefined ? { nextUnreadDeferredAt: snapshot.nextUnreadDeferredAt } : {}),
+  });
   announcedEvents.retainFeed(machineId, snapshot.rows);
 }
 
@@ -283,7 +294,7 @@ function startSessionListRead(machine: MachineRecord): Promise<void> {
 /** Whether `rows` hold a session's row that `before` did not have as it is now (a new row, or a new kind). */
 function hasRowsToJoin(before: readonly FeedRow[], rows: readonly FeedRow[]): boolean {
   const kinds = new Map(before.map((row) => [row.id, row.kind]));
-  return rows.some((row) => !isAccountRow(row) && kinds.get(row.id) !== row.kind);
+  return rows.some((row) => !isSessionlessRow(row) && kinds.get(row.id) !== row.kind);
 }
 
 /** Counts the times the app left the front (inactive or background): a stretch in front ends at each. */
@@ -427,7 +438,7 @@ const source = new FeedEventSource({
     }
     const previous = useAttentionFeedStore.getState().feeds[machineId];
     // Rows already read stay visible under the notice that the computer cannot be reached now.
-    setFeed(machineId, { status: outcome.reason, rows: previous?.rows ?? [] });
+    setFeed(machineId, { ...previous, status: outcome.reason, rows: previous?.rows ?? [] });
   },
   onNewRows: (machineId, rows) => {
     const events = rows
@@ -571,6 +582,69 @@ export async function updateAttentionFeed(machineId: string, update: FeedUpdate)
     logAppEvent(`${machineDisplayLabel(machine)}: notification ${update.action} failed (${failureCategory(error)})`);
     return false;
   }
+}
+
+/**
+ * One row's change from the Notifications list, as the desktop's panel sends it (`titlebar_notifications_panel.rs`):
+ * the phone's copy of the feed changes at once, so the tap feels instant, then the computer's answer replaces it. When
+ * the computer did not take it, its feed is read again so the row comes back as it is there; false then.
+ */
+export async function changeFeedRow(machineId: string, update: FeedUpdate): Promise<boolean> {
+  editFeed(machineId, (rows) =>
+    update.action === 'dismiss'
+      ? rows.filter((row) => row.id !== update.notificationId || row.awaitingApproval === true)
+      : rows.map((row) =>
+          row.id !== update.notificationId || row.awaitingApproval === true
+            ? row
+            : { ...row, read: update.action === 'markRead' },
+        ),
+  );
+  const ok = await updateAttentionFeed(machineId, update);
+  if (!ok) void source.refresh(machineId);
+  return ok;
+}
+
+/**
+ * Mark all read or Clear all on every computer the list shows (the desktop panel's header actions, on its All tab):
+ * each one's copy changes at once and its answer replaces it. An open approval stays unread and stays in the list, as
+ * the computer keeps it. False when a computer did not take it (its feed is read again).
+ */
+export async function changeEveryFeed(machineIds: readonly string[], action: 'markAllRead' | 'clearAll'): Promise<boolean> {
+  const results = await Promise.all(
+    machineIds.map(async (machineId) => {
+      editFeed(machineId, (rows) =>
+        action === 'clearAll'
+          ? rows.filter((row) => row.awaitingApproval === true)
+          : rows.map((row) => (row.awaitingApproval === true ? row : { ...row, read: true })),
+      );
+      const machine = machineById(machineId);
+      if (machine === undefined) return false;
+      try {
+        applySnapshot(machineId, await updateWholeFeed(await feedRpc(machine), action));
+        return true;
+      } catch (error) {
+        logAppEvent(`${machineDisplayLabel(machine)}: notification ${action} failed (${failureCategory(error)})`);
+        void source.refresh(machineId);
+        return false;
+      }
+    }),
+  );
+  return results.every(Boolean);
+}
+
+/** Changes the phone's copy of one computer's rows, ahead of the computer's answer. */
+function editFeed(machineId: string, edit: (rows: readonly FeedRow[]) => readonly FeedRow[]): void {
+  const feed = useAttentionFeedStore.getState().feeds[machineId];
+  if (feed === undefined) return;
+  setFeed(machineId, { ...feed, rows: edit(feed.rows) });
+}
+
+/**
+ * Next unread, as the desktop's: every computer's feed is read anew first, so the jump goes to what is unread now,
+ * then the merged next row (`nextUnreadRow` in `feedPanel.ts`) is returned for the caller to open.
+ */
+export async function readFeedsForNextUnread(): Promise<void> {
+  await Promise.all(feedMachines().map((machine) => source.refresh(machine.id)));
 }
 
 /** Marks rows of a computer's feed read, one `markRead` each; false (and a log line) when it did not take them all. */

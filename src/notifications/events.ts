@@ -22,7 +22,7 @@ import {
   type GhostexMobileSummary,
 } from '../contract/mobileSummary';
 import { attentionAlerts } from './attentionAlerts';
-import { isAccountRow, type FeedRow } from './feedContract';
+import { isSessionlessRow, type FeedRow } from './feedContract';
 
 export type AttentionKind = 'finished' | 'waiting' | 'question' | 'failed';
 
@@ -120,7 +120,7 @@ export function sessionFacts(
  * was seen already.
  */
 export function hostEventFromFeedRow(machineId: string, row: FeedRow): HostEvent | null {
-  if (isAccountRow(row) || row.read) return null;
+  if (isSessionlessRow(row) || row.read) return null;
   return {
     machineId,
     sessionId: row.sessionId,

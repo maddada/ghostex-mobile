@@ -31,6 +31,10 @@ export const FEED_KINDS = [
   // list only: no notification, as on the desktop, and the computer pushes none. An unread one stays beside the
   // session's newer rows and goes read when the failure is dealt with. A computer that predates it never sends it.
   'sendFailed',
+  // A security log entry the computer recorded (`server/src/audit/notify.rs`): a row of the Notifications list only,
+  // with no session behind it (`securityEntry`, `sessionId` "security:<n>"); never notified. A computer that predates
+  // it never sends it.
+  'security',
 ] as const;
 
 export type FeedKind = (typeof FEED_KINDS)[number];
@@ -44,6 +48,9 @@ export const FEED_RETENTION_ROWS = 40;
 
 /** Account rows (banked usage resets) belong to no session: their `sessionId` is this prefix plus the account id. */
 export const ACCOUNT_SESSION_PREFIX = 'account:';
+
+/** Security rows belong to no session: their `sessionId` is this prefix plus the security log entry. */
+export const SECURITY_SESSION_PREFIX = 'security:';
 
 export type FeedRow = {
   /**
@@ -68,9 +75,21 @@ export type FeedRow = {
   read: boolean;
   /** Present on account rows only. */
   accountId?: string;
+  /**
+   * The session's newest row while its approval is open: the computer sends it unread whatever its read state, and
+   * Mark as Read, Clear and Clear all leave it, until the approval is answered (CDXC:Notifications 2026-11-02 in
+   * `server/src/notification_feed/store.rs`).
+   */
+  awaitingApproval?: boolean;
 };
 
-export type FeedSnapshot = { readonly rows: readonly FeedRow[] };
+export type FeedSnapshot = {
+  readonly rows: readonly FeedRow[];
+  /** The row the computer's own "Next unread" opens: newest undeferred unread first, then deferred ones. */
+  readonly nextUnreadId?: string;
+  /** Set when that row was pushed back ("come back to it last"): such a target ranks after every undeferred one. */
+  readonly nextUnreadDeferredAt?: string;
+};
 
 function text(raw: Record<string, unknown>, key: string): string | undefined {
   const value = raw[key];
@@ -103,6 +122,7 @@ export function parseFeedRow(value: unknown): FeedRow | null {
     createdAt,
     read: raw.read === true,
     ...(accountId !== undefined && accountId.length > 0 ? { accountId } : {}),
+    ...(raw.awaitingApproval === true ? { awaitingApproval: true } : {}),
   };
 }
 
@@ -117,10 +137,28 @@ export function parseFeedState(value: unknown): FeedSnapshot | null {
     const row = parseFeedRow(item);
     if (row !== null) rows.push(row);
   }
-  return { rows };
+  // The cast holds: `value` is a non-null object that is no array (checked above).
+  const state = value as Record<string, unknown>;
+  const nextUnreadId = text(state, 'nextUnreadId');
+  const nextUnreadDeferredAt = text(state, 'nextUnreadDeferredAt');
+  return {
+    rows,
+    ...(nextUnreadId ? { nextUnreadId } : {}),
+    ...(nextUnreadId && nextUnreadDeferredAt ? { nextUnreadDeferredAt } : {}),
+  };
 }
 
 /** An account row: no session behind it, never an OS notification, a tap only marks it read. */
 export function isAccountRow(row: FeedRow): boolean {
   return row.accountId !== undefined || row.sessionId.startsWith(ACCOUNT_SESSION_PREFIX);
+}
+
+/** A security log row: no session behind it, never an OS notification, a tap only marks it read. */
+export function isSecurityRow(row: FeedRow): boolean {
+  return row.kind === 'security' || row.sessionId.startsWith(SECURITY_SESSION_PREFIX);
+}
+
+/** A row with no session behind it (an account or a security row). */
+export function isSessionlessRow(row: FeedRow): boolean {
+  return isAccountRow(row) || isSecurityRow(row);
 }
