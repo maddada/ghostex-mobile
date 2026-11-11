@@ -19,6 +19,8 @@ export function ReplySheet({
   question,
   onClose,
   onReply,
+  initialText = '',
+  onChangeText,
 }: {
   /** The Reply row's `quote` (Add to Chat's text); null closes the sheet. */
   quote: string | null;
@@ -26,13 +28,19 @@ export function ReplySheet({
   question?: string;
   onClose: () => void;
   onReply: (quote: string, reply: string, action: ReplyAction) => void;
+  /** The words it opens with: a work item Reply's kept draft (`replyDrafts.ts`). */
+  initialText?: string;
+  /** Every edit, so a work item Reply keeps its draft however the sheet closes. */
+  onChangeText?: (text: string) => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const [text, setText] = useState('');
-  // Every Reply starts with an empty field.
+  // Every Reply starts with an empty field, or with the draft its row kept.
   useEffect(() => {
-    if (quote !== null) setText('');
+    if (quote !== null) setText(initialText);
+    // Only a new opening resets the field; the draft follows the typing, not the other way round.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quote]);
   // The quoted words as the reader selected them, without the `> ` markers.
   const preview = (quote ?? '')
@@ -67,7 +75,10 @@ export function ReplySheet({
         ) : null}
         <TextInput
           value={text}
-          onChangeText={setText}
+          onChangeText={(next) => {
+            setText(next);
+            onChangeText?.(next);
+          }}
           multiline
           autoFocus
           placeholder={question !== undefined ? `Your answer to ${question}…` : 'Reply…'}

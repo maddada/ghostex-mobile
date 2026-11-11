@@ -10,8 +10,8 @@
  * one: the card sits on the chat's glass (the user's standing rule, no black fills on glass).
  */
 
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -24,9 +24,19 @@ import { AgentMark } from './agentMark';
 import { toneColor } from './CoordinatorBoard';
 import { QuestionFlashFrame } from '../transcript/OpenQuestions';
 import { PROSE_LINE, PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { TranscriptFlagsProvider, transcriptFlags, useTranscriptFlags } from '../transcript/context';
+import {
+  TranscriptEnvProvider,
+  TranscriptFlagsProvider,
+  transcriptFlags,
+  useTranscriptFlags,
+  type TranscriptEnv,
+} from '../transcript/context';
 import { strengthenedText } from '../transcript/textStrength';
-import { openQuestionReply } from '../transcript/QuestionReply';
+import { LinkWords } from '../transcript/LinkWords';
+import { Markdown } from '../transcript/markdown/Markdown';
+import { Sheet } from '../composer/Sheet';
+import { WorkAnswerLine, WorkMenuButton, WorkMenuList, workMenuRows } from './workItemParts';
+import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 
 type Dispatch = RustChat['dispatch'];
 
@@ -136,216 +146,469 @@ export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispat
   );
 }
 
-/**
- * Every dock button's touch area: 8 points above and below its 28-point pill make 44, Apple's
- * least, and 3 at the sides keep neighbours apart; how the button looks does not change.
- */
-const DOCK_BUTTON_SLOP = { top: 8, bottom: 8, left: 3, right: 3 };
-
-/** The dock's cards stop growing here and scroll inside it (desktop `DOCK_MAX_HEIGHT`). */
+/** The dock's rows stop growing here and scroll inside it (desktop `DOCK_MAX_HEIGHT`). */
 const DOCK_MAX_HEIGHT = 420;
+/** A row's lead (its mark and the gap after it) and the dock's insets, for the answers' room. */
+const DOCK_LEAD = 23;
+const DOCK_INSETS = 12 * 2 + 4 * 2 + 8 * 2 + 2;
+
+/** Which dock row is open, per chat, kept outside the component so a new document keeps it. */
+const openRows = new WeakMap<object, string>();
 
 /**
  * The dock directly on the chat box (gx-chat-core `work_cards::dock`, which holds the user's
- * decisions; desktop `render_work_dock`): one surface of compact rows, what needs him first, then
- * blocked work and what the newest turn finished; at most `phoneLimit` rows, then "N more need
- * you". A row shows its answer buttons; a tap expands it in place to its full text, links and
- * actions (Reply, Open, Mention, Show in chat, Dismiss, Snooze), and a tap again folds it. Its x
- * hides the whole dock; the Work pill brings it back. It sits outside the transcript, so it
- * carries the transcript's flags (Text strength).
+ * decisions; desktop `render_work_dock`): one surface with a header bar, then compact rows, what
+ * needs him first, then blocked work and what the newest turn finished. The header counts what
+ * needs him, what is blocked and what is in progress, opens the Work sheet, and collapses the dock to
+ * itself; a collapsed dock opens by itself when something new needs him (the core's `hidden`). At
+ * most `phoneLimit` rows show, then "N more need you", which opens the rest in place. A tap opens a
+ * row into its own card, one at a time. It sits outside the transcript, so it carries the
+ * transcript's flags (Text strength) and an env for the description's Markdown.
+ *
+ * CDXC:Coordinators 2026-11-11 DECISION:
+ * User, of the phone's dock: "make how the work items list shows up matches please!!" The phone takes
+ * the desktop's header (marks and counts, the Work items button, the chevron) in place of its round
+ * x, and the desktop's opened row. Unlike the desktop it shows no bar while nothing is docked: the
+ * phone keeps its Work pill for that, and its screen has no room to spare.
  */
-export function WorkDock({ document, chat }: { document: ChatDocument | null; chat: RustChat }) {
+export function WorkDock({
+  document,
+  chat,
+  projectId,
+  sessionId,
+}: {
+  document: ChatDocument | null;
+  chat: RustChat;
+  projectId?: string;
+  sessionId?: string;
+}) {
   const flags = useMemo(() => transcriptFlags(document), [document]);
   const styles = useStyles();
   const P = useTranscriptTheme();
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const dock = obj(document?.workDock);
+  const dispatch = chat.dispatch;
+  const [openKey, setOpenKey] = useState<string | null>(() => openRows.get(dispatch) ?? null);
+  const [all, setAll] = useState(false);
+  const env = useMemo<TranscriptEnv>(
+    () => ({
+      dispatch,
+      theme: P,
+      simple: false,
+      workOpen: false,
+      filePreviews: false,
+      mutedThinking: false,
+      main: false,
+    }),
+    [dispatch, P],
+  );
+  const machine = chat.machine;
+  const scope = useMemo<ReplyDraftScope | null>(
+    () =>
+      machine !== null && (projectId ?? '').length > 0 && (sessionId ?? '').length > 0
+        ? { machine, projectId: projectId ?? '', sessionId: sessionId ?? '' }
+        : null,
+    // The machine object changes identity on every store update; only the chat's identity matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [machine?.id, projectId, sessionId],
+  );
+  // The chat's Reply drafts: read once, and the Work sheet's Reply finds this chat's scope.
+  useEffect(() => {
+    if (scope === null) return;
+    registerReplyDraftScope(dispatch, scope);
+    loadReplyDrafts(scope);
+  }, [dispatch, scope]);
+  const dockValue = document?.workDock;
+  const boardValue = document?.coordinatorBoard;
+  useEffect(() => {
+    if (scope !== null && (dockValue != null || boardValue != null)) pruneReplyDrafts(scope, dockValue, boardValue);
+  }, [scope, dockValue, boardValue]);
+  const dock = obj(dockValue);
   const rows = arr(dock?.rows)
     .map(obj)
     .filter((row): row is JsonRecord => row !== null);
-  if (dock === null || rows.length === 0 || isTrue(dock, 'hidden')) return null;
+  if (dock === null || rows.length === 0) return null;
+  const collapsed = isTrue(dock, 'hidden');
   const limit = typeof dock.phoneLimit === 'number' ? dock.phoneLimit : 3;
   const hidden = Math.max(0, rows.length - limit);
+  const shown = all && hidden > 0 ? rows : rows.slice(0, limit);
   const toggle = (key: string) =>
-    setOpen((was) => {
-      const next = new Set(was);
-      if (!next.delete(key)) next.add(key);
+    setOpenKey((was) => {
+      // One row open at a time: opening this one shuts the one that was open.
+      const next = was === key ? null : key;
+      if (next === null) openRows.delete(dispatch);
+      else openRows.set(dispatch, next);
       return next;
     });
   return (
     <TranscriptFlagsProvider value={flags}>
-      <View style={styles.dockSurface}>
-        <ScrollView style={{ maxHeight: DOCK_MAX_HEIGHT }} contentContainerStyle={styles.dockRows}>
-          {rows.slice(0, limit).map((row) => (
-            <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
-              <DockRow
-                row={row}
-                chat={chat}
-                open={open.has(str(row, 'key'))}
-                onToggle={() => toggle(str(row, 'key'))}
-              />
-            </QuestionFlashFrame>
-          ))}
-          {hidden > 0 ? (
-            <Pressable accessibilityRole="button" onPress={() => chat.dispatch(dock.more as never)}>
-              <Text style={styles.dockMore}>{hidden} more need you</Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Hide until something new needs you"
-          hitSlop={13}
-          onPress={() => chat.dispatch({ type: 'hideWorkDock' } as never)}
-          style={styles.dockHide}
-        >
-          <Glyph name="x" size={10} color={P.muted} />
-        </Pressable>
-      </View>
+      <TranscriptEnvProvider value={env}>
+        <View style={styles.dockSurface}>
+          <DockHeader rows={rows} board={obj(boardValue)} open={!collapsed} dispatch={dispatch} />
+          {collapsed ? null : (
+            <ScrollView
+              style={{ maxHeight: DOCK_MAX_HEIGHT }}
+              contentContainerStyle={styles.dockRows}
+              nestedScrollEnabled
+            >
+              {shown.map((row) => (
+                <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
+                  <DockRow
+                    row={row}
+                    chat={chat}
+                    scope={scope}
+                    open={openKey === str(row, 'key')}
+                    onToggle={() => toggle(str(row, 'key'))}
+                  />
+                </QuestionFlashFrame>
+              ))}
+              {hidden > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: all }}
+                  hitSlop={8}
+                  onPress={() => setAll((was) => !was)}
+                >
+                  <Text style={styles.dockMore}>
+                    {all ? 'Show fewer' : hidden === 1 ? '1 more needs you' : `${hidden} more need you`}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+          )}
+        </View>
+      </TranscriptEnvProvider>
     </TranscriptFlagsProvider>
   );
 }
 
+/** The header's counts and their marks, with their words (desktop `work_dock_header`). */
+const HEADER_GROUPS: { id: string; status: string; one: string; many: string }[] = [
+  { id: 'needs', status: 'needs', one: 'needs you', many: 'need you' },
+  { id: 'blocked', status: 'blocked', one: 'blocked', many: 'blocked' },
+  { id: 'moving', status: 'moving', one: 'in progress', many: 'in progress' },
+];
+
+/**
+ * The dock's header: what needs him, what is blocked and what is in progress as marks and counts
+ * (the Work panel's own numbers, `pillCounts`), named when they all fit; then the Work items button
+ * that opens the Work sheet and the chevron that collapses the dock to this bar. A tap anywhere on
+ * it collapses or opens the dock.
+ */
+function DockHeader({
+  rows,
+  board,
+  open,
+  dispatch,
+}: {
+  rows: JsonRecord[];
+  board: JsonRecord | null;
+  open: boolean;
+  dispatch: Dispatch;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const { width } = useWindowDimensions();
+  const counts = HEADER_GROUPS.map((group) => {
+    if (board !== null) {
+      const pair = arr(board.pillCounts).find((entry) => Array.isArray(entry) && entry[0] === group.id);
+      return { group, count: Array.isArray(pair) && typeof pair[1] === 'number' ? pair[1] : 0 };
+    }
+    const count =
+      group.id === 'needs'
+        ? rows.filter((row) => isTrue(row, 'needs')).length
+        : group.id === 'blocked'
+          ? rows.filter((row) => str(row, 'status') === 'blocked').length
+          : 0;
+    return { group, count };
+  }).filter((entry) => entry.count > 0);
+  // Every mark takes its name when the bar has room for all of them, and none does when it has not.
+  const room = width - 24 - 12 - 5 - (board !== null ? 32 : 0) - 30 - 16;
+  const named =
+    counts.reduce(
+      (sum, entry) =>
+        sum +
+        19 +
+        String(entry.count).length * 8 +
+        4 +
+        (entry.count === 1 ? entry.group.one : entry.group.many).length * 7.4,
+      0,
+    ) +
+      12 * Math.max(0, counts.length - 1) <=
+    room;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={open ? 'Collapse' : 'Expand'}
+      accessibilityState={{ expanded: open }}
+      onPress={() => dispatch({ type: open ? 'hideWorkDock' : 'showWorkDock' } as never)}
+      style={({ pressed }) => [
+        styles.dockHead,
+        open ? styles.dockHeadOpen : styles.dockHeadShut,
+        pressed && { backgroundColor: P.ink(0.055) },
+      ]}
+    >
+      <View style={styles.dockCounts}>
+        {counts.map(({ group, count }) => (
+          <View
+            key={group.id}
+            accessibilityLabel={`${count} ${count === 1 ? group.one : group.many}`}
+            style={styles.dockCount}
+          >
+            <StatusMarker status={group.status} size={13} />
+            <Text style={styles.dockCountNumber}>{count}</Text>
+            {named ? <Text style={styles.dockCountName}>{count === 1 ? group.one : group.many}</Text> : null}
+          </View>
+        ))}
+      </View>
+      {board !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Work items"
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 4 }}
+          onPress={() => dispatch({ type: 'showCoordinatorBoardGroup', group: 'needs' } as never)}
+          style={({ pressed }) => [styles.dockHeadButton, pressed && { backgroundColor: P.neutralFillPressed }]}
+        >
+          <Glyph name="layout-board-split" size={14} color={P.cardMuted} />
+        </Pressable>
+      ) : null}
+      <View style={styles.dockHeadButton}>
+        <Glyph name={open ? 'chevron-down' : 'chevron-up'} size={14} color={P.muted} />
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * One dock row (desktop `dock_row`). Closed: its mark, its question (two lines at most), its age and
+ * the ⋯ that opens its menu, then its answers and Reply on one line. Opened: its own card, a little
+ * lighter than the dock, with the title whole, the work it belongs to, its whole description, where
+ * it stands, its links, then its answers with Reply after a divider. A page's row never opens: a
+ * tap opens the page.
+ */
 function DockRow({
   row,
   chat,
+  scope,
   open,
   onToggle,
 }: {
   row: JsonRecord;
   chat: RustChat;
+  scope: ReplyDraftScope | null;
   open: boolean;
   onToggle: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const body = useBodyColor();
-  const [snoozing, setSnoozing] = useState(false);
+  const [menu, setMenu] = useState(false);
   const dispatch = chat.dispatch;
+  const page = isTrue(row, 'page') && obj(row.open) !== null;
+  const opened = open && !page;
   const busy = isTrue(row, 'busy');
-  const buttons = arr(row.buttons)
+  const answers = arr(row.buttons)
     .map(obj)
     .filter((button): button is JsonRecord => button !== null);
   const reply = obj(row.reply);
-  const openCommand = obj(row.open);
-  const show = obj(row.showInChat);
-  const dismiss = obj(row.dismiss);
-  const mention = str(row, 'mention');
-  const snooze = arr(row.snooze)
+  const needs = isTrue(row, 'needs');
+  const menuRows = workMenuRows(row, str(row, 'mention'), chat.state?.composer.text ?? '');
+  const chips = arr(row.chips)
     .map(obj)
-    .filter((choice): choice is JsonRecord => choice !== null);
-  const action = (label: string, onPress: () => void) => (
-    <ToneButton key={label} kind="secondary" label={label} onPress={onPress} hitSlop={DOCK_BUTTON_SLOP} />
-  );
+    .filter((chip): chip is JsonRecord => chip !== null);
+  const description = str(row, 'body');
+  const count = str(row, 'count');
+  const markStatus = page && str(row, 'status') === 'needs' ? 'page' : str(row, 'status');
+  const answerLine =
+    answers.length > 0 || (needs && (reply !== null || obj(row.open) !== null)) ? (
+      <View style={opened ? styles.dockAnswersOpen : styles.dockAnswers}>
+        <WorkAnswerLine
+          answers={answers}
+          reply={reply}
+          replied={str(row, 'replied')}
+          open={answers.length === 0 ? obj(row.open) : null}
+          busy={busy}
+          divider={opened}
+          room={-(DOCK_INSETS + DOCK_LEAD)}
+          scope={scope}
+          dispatch={dispatch as never}
+        />
+      </View>
+    ) : null;
   return (
-    <View style={open ? styles.dockRowOpen : null}>
+    <View style={opened ? styles.dockRowOpen : null}>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={onToggle}
-        style={styles.dockRow}
+        accessibilityState={page ? undefined : { expanded: opened }}
+        onPress={page ? () => dispatch(row.open as never) : onToggle}
+        style={({ pressed }) => [styles.dockRow, pressed && !opened && { backgroundColor: P.ink(0.04) }]}
       >
         <View style={styles.dockIcon}>
-          <StatusMarker status={str(row, 'status')} size={13} />
+          {markStatus === 'page' ? (
+            <Glyph name="note" size={14} color={STATUS_COLOR.needs} />
+          ) : (
+            <StatusMarker status={markStatus} size={13} />
+          )}
         </View>
-        <Text numberOfLines={open ? undefined : 2} style={[styles.dockTitle, { color: body }]}>
-          {str(row, 'title')}
-        </Text>
-        <Text style={styles.foldTime}>{str(row, 'age')}</Text>
-      </Pressable>
-      {buttons.length > 0 ? (
-        <View style={styles.dockButtons}>
-          {buttons.map((button, index) => (
-            <ToneButton
-              key={`answer:${index}`}
-              kind="secondary"
-              label={str(button, 'label')}
-              trailing={
-                isTrue(button, 'recommended') ? (
-                  <Glyph name="star" size={10} color={tint(askColor(P.light), 0.75)} />
-                ) : undefined
-              }
-              icon={isTrue(button, 'picked') ? 'check' : undefined}
-              disabled={busy}
-              hitSlop={DOCK_BUTTON_SLOP}
-              onPress={() => dispatch(button.command as never)}
-            />
-          ))}
-        </View>
-      ) : null}
-      {open ? (
-        <View style={styles.dockDetail}>
-          {arr(row.detail)
-            .map((line) => (typeof line === 'string' ? line : ''))
-            .filter((line) => line.length > 0)
-            .map((line, index) => (
-              <Text key={`line:${index}`} style={styles.movingRowLine}>
-                {line}
+        <View style={styles.dockMain}>
+          {page && count.length > 0 ? (
+            <View style={styles.pageTitle}>
+              <Text numberOfLines={1} style={[styles.dockTitle, styles.pageName, { color: body }]}>
+                {str(row, 'title')}
               </Text>
-            ))}
-          {/* Its links (the work it belongs to, its thread, a PR or issue, a file), as on the desktop row. */}
-          {arr(row.chips).length > 0 ? (
-            <View style={styles.dockLinks}>
-              {arr(row.chips)
-                .map(obj)
-                .filter((chip): chip is JsonRecord => chip !== null)
-                .map((chip, index) => {
-                  const command = obj(chip.command);
-                  const kind = str(chip, 'kind');
-                  return (
-                    <Pressable
-                      key={`link:${index}`}
-                      accessibilityRole={command !== null ? 'button' : undefined}
-                      disabled={command === null}
-                      hitSlop={6}
-                      onPress={() => (command !== null ? dispatch(command as never) : undefined)}
-                      style={styles.chip}
-                    >
-                      {kind === 'thread' && str(chip, 'agentIcon').length > 0 ? (
-                        <AgentMark icon={str(chip, 'agentIcon')} size={14} />
-                      ) : (
-                        <Glyph name={CHIP_ICON[kind] ?? 'link'} size={14} color={P.muted} />
-                      )}
-                      <Text style={[styles.chipText, command !== null ? styles.linkDots : null]}>
-                        {str(chip, 'label')}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <Text style={styles.pageCount}>{count}</Text>
+            </View>
+          ) : opened ? (
+            // Opened, its references (`#562`, a Markdown link) open on a tap, as a question's do.
+            <LinkWords text={str(row, 'title')} runs={row.titleRuns} color={body} style={styles.dockTitle} />
+          ) : (
+            <Text numberOfLines={2} style={[styles.dockTitle, { color: body }]}>
+              {str(row, 'title')}
+            </Text>
+          )}
+          {opened ? (
+            <View style={styles.dockDetail}>
+              {Array.isArray(row.waitedBy) ? (
+                <ItemLine row={row} chips={chips} dispatch={dispatch} />
+              ) : chips.length > 0 ? (
+                <View style={styles.dockLinks}>
+                  {chips.map((chip, index) => (
+                    <ItemChip key={`link:${index}`} chip={chip} dispatch={dispatch} />
+                  ))}
+                </View>
+              ) : null}
+              {description.length > 0 ? (
+                <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
+              ) : null}
+              {arr(row.detail)
+                .map((line) => (typeof line === 'string' ? line : ''))
+                .filter((line) => line.length > 0)
+                .map((line, index) => (
+                  <Text key={`line:${index}`} style={styles.movingRowLine}>
+                    {line}
+                  </Text>
+                ))}
             </View>
           ) : null}
-          <View style={styles.dockActions}>
-            {reply !== null
-              ? action('Reply', () =>
-                  openQuestionReply({
-                    form: typeof reply.form === 'string' ? reply.form : null,
-                    tag: str(reply, 'tag'),
-                    ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
-                  }),
-                )
-              : null}
-            {openCommand !== null ? action('Open', () => dispatch(openCommand as never)) : null}
-            {mention.length > 0
-              ? action('Mention', () =>
-                  dispatch({
-                    type: 'insertBoardReference',
-                    reference: mention,
-                    text: chat.state?.composer.text ?? '',
-                  } as never),
-                )
-              : null}
-            {show !== null ? action('Show in chat', () => dispatch(show as never)) : null}
-            {dismiss !== null ? action('Dismiss', () => dispatch(dismiss as never)) : null}
-            {snooze.length > 0 ? action(snoozing ? 'Snooze for' : 'Snooze', () => setSnoozing((was) => !was)) : null}
-            {snoozing
-              ? snooze.map((choice) =>
-                  action(str(choice, 'label'), () => {
-                    setSnoozing(false);
-                    dispatch(choice.command as never);
-                  }),
-                )
-              : null}
-          </View>
+        </View>
+        <View style={styles.ageSlot}>
+          <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+          {menuRows.length > 0 ? <WorkMenuButton active={menu} onPress={() => setMenu(true)} /> : null}
+        </View>
+      </Pressable>
+      {answerLine}
+      {menuRows.length > 0 ? (
+        <Sheet visible={menu} onClose={() => setMenu(false)} title={str(row, 'title')}>
+          <WorkMenuList
+            rows={menuRows}
+            onPick={(command) => {
+              setMenu(false);
+              dispatch(command as never);
+            }}
+          />
+        </Sheet>
+      ) : null}
+    </View>
+  );
+}
+
+/** A link of a line of work: its thread with its agent's logo, a PR or issue, a file, its steps. */
+function ItemChip({ chip, dispatch }: { chip: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const command = obj(chip.command);
+  const kind = str(chip, 'kind');
+  const state = str(chip, 'state');
+  return (
+    <Pressable
+      accessibilityRole={command !== null ? 'button' : undefined}
+      disabled={command === null}
+      hitSlop={6}
+      onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+      style={styles.chip}
+    >
+      {kind === 'thread' && str(chip, 'agentIcon').length > 0 ? (
+        <AgentMark icon={str(chip, 'agentIcon')} size={14} />
+      ) : (
+        <Glyph name={CHIP_ICON[kind] ?? 'link'} size={14} color={P.muted} />
+      )}
+      <Text style={[styles.chipText, command !== null ? styles.linkDots : null]}>{str(chip, 'label')}</Text>
+      {state.length > 0 ? (
+        <Text style={[styles.chipText, { color: toneColor(str(chip, 'tone')) ?? P.muted }]}>{state}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/**
+ * An opened ask row's line (desktop `item_line`): its own work item's name, then "· <item> waits on
+ * this" when one other item waits on its answer, or "· N others wait", which lists them; its other
+ * parts (the steps) after. The desktop keeps it one line; on a phone it wraps between its parts.
+ */
+function ItemLine({ row, chips, dispatch }: { row: JsonRecord; chips: JsonRecord[]; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const [listing, setListing] = useState(false);
+  const waited = arr(row.waitedBy)
+    .map(obj)
+    .filter((other): other is JsonRecord => other !== null);
+  const name = (label: string, command: JsonRecord | null, shrink: number, floor: number, keyName: string) => (
+    <Pressable
+      key={keyName}
+      accessibilityRole={command !== null ? 'button' : undefined}
+      disabled={command === null}
+      hitSlop={6}
+      onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+      style={[styles.itemName, { flexShrink: shrink, minWidth: floor }]}
+    >
+      <Glyph name="stack" size={14} color={P.muted} />
+      <Text numberOfLines={1} style={[styles.itemNameText, command !== null ? styles.linkDots : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+  const dot = (keyName: string) => (
+    <Text key={keyName} style={styles.itemDot}>
+      {'·'}
+    </Text>
+  );
+  const parts: ReactNode[] = [];
+  for (const [index, chip] of chips.entries()) {
+    if (str(chip, 'kind') === 'item') parts.push(name(str(chip, 'label'), obj(chip.command), 1, 60, `item:${index}`));
+  }
+  const first = waited[0];
+  if (waited.length === 1 && first !== undefined) {
+    if (parts.length > 0) parts.push(dot('dot'));
+    parts.push(name(str(first, 'title'), obj(first.command), 8, 110, 'waits'));
+    parts.push(
+      <Text key="waits-words" style={styles.itemWords}>
+        waits on this
+      </Text>,
+    );
+  } else if (waited.length > 1) {
+    if (parts.length > 0) parts.push(dot('dot'));
+    parts.push(
+      <Pressable
+        key="others"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: listing }}
+        hitSlop={6}
+        onPress={() => setListing((was) => !was)}
+      >
+        <Text style={[styles.itemWords, styles.linkDots]}>{waited.length} others wait</Text>
+      </Pressable>,
+    );
+  }
+  const rest = chips.filter((chip) => str(chip, 'kind') !== 'item');
+  return (
+    <View style={styles.itemLineColumn}>
+      {parts.length > 0 ? <View style={styles.itemLine}>{parts}</View> : null}
+      {listing
+        ? waited.map((other, index) => name(str(other, 'title'), obj(other.command), 1, 0, `other:${index}`))
+        : null}
+      {rest.length > 0 ? (
+        <View style={styles.dockLinks}>
+          {rest.map((chip, index) => (
+            <ItemChip key={`rest:${index}`} chip={chip} dispatch={dispatch} />
+          ))}
         </View>
       ) : null}
     </View>
@@ -704,28 +967,57 @@ const useStyles = themedStyles((P) => ({
     backgroundColor: P.cardPanel,
   },
   dockRows: { padding: 4 },
-  dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 6, paddingHorizontal: 8 },
-  dockRowOpen: { borderRadius: 8, backgroundColor: 'rgba(127,127,127,0.06)' },
-  dockIcon: { height: PROSE_LINE, justifyContent: 'center' },
-  dockTitle: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
-  dockButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 31, paddingRight: 8, paddingBottom: 6 },
-  dockDetail: { gap: 4, paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
-  dockLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
-  dockActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 2 },
-  dockMore: { paddingLeft: 31, paddingRight: 8, paddingTop: 2, paddingBottom: 6, fontSize: PROSE_SIZE, color: P.muted },
-  dockHide: {
-    position: 'absolute',
-    top: -9,
-    right: -9,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: P.inputBorder,
-    backgroundColor: P.cardPanel,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // The header: the band over the rows while open, as the desktop's (`work_dock_header`).
+  dockHead: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingLeft: 12, paddingRight: 6 },
+  dockHeadOpen: {
+    borderBottomWidth: 1,
+    borderBottomColor: P.inputBorder,
+    backgroundColor: P.ink(0.035),
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 11,
   },
+  dockHeadShut: { borderRadius: 11 },
+  dockCounts: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, overflow: 'hidden' },
+  dockCount: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
+  dockCountNumber: { fontSize: 13, fontWeight: '500', color: P.foreground, fontVariant: ['tabular-nums'] },
+  dockCountName: { marginLeft: -1, fontSize: 13, color: P.cardMuted },
+  dockHeadButton: { width: 28, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  dockRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  // An opened row is its own card, a little lighter than the dock (desktop `dock_row`).
+  dockRowOpen: {
+    marginVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.ink(0.1),
+    backgroundColor: P.light ? 'rgba(255,255,255,0.6)' : P.ink(0.055),
+  },
+  dockIcon: { height: PROSE_LINE, justifyContent: 'center' },
+  dockMain: { flex: 1, minWidth: 0, gap: 2 },
+  dockTitle: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
+  pageTitle: { flexDirection: 'row', gap: 6, minWidth: 0 },
+  pageName: { flexShrink: 1 },
+  pageCount: { flexShrink: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.cardMuted },
+  ageSlot: { flexDirection: 'row', alignItems: 'center', gap: 4, height: PROSE_LINE },
+  dockAnswers: { paddingLeft: 31, paddingRight: 8, paddingBottom: 6 },
+  dockAnswersOpen: { paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
+  dockDetail: { gap: 4 },
+  dockLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
+  itemLineColumn: { gap: 4 },
+  // On a phone's width the names and "waits on this" wrap rather than cut each other to a few
+  // letters (the desktop keeps one line); a name longer than the line is still cut at its end.
+  itemLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2, minWidth: 0 },
+  itemName: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  itemNameText: { flexShrink: 1, fontSize: 12.5, lineHeight: 18, color: P.cardMuted },
+  itemDot: { flexShrink: 0, fontSize: 12.5, color: P.muted, opacity: 0.6 },
+  itemWords: { flexShrink: 0, fontSize: 12.5, lineHeight: 18, color: P.cardMuted },
+  dockMore: { paddingLeft: 31, paddingRight: 8, paddingTop: 2, paddingBottom: 6, fontSize: PROSE_SIZE, color: P.muted },
   dismiss: { width: 20, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   dockFold: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   dockLineText: { flex: 1, minWidth: 0, fontSize: PROSE_SIZE, color: P.cardMuted },

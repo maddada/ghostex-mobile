@@ -432,7 +432,7 @@ export default function NativeChatScreen({
             {document === null ? null : <WorkingCard document={document} />}
             <NativeChatCards chat={chat} onHostAction={hostAction} />
             {/* The dock: what needs the reader, right above the box (`WorkCards.tsx`). */}
-            <WorkDock document={document} chat={chat} />
+            <WorkDock document={document} chat={chat} projectId={projectId} sessionId={sessionId} />
             {!composerShown ? null : (
               <View
                 onLayout={(event) => {

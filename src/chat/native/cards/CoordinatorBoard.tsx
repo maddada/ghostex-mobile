@@ -8,7 +8,7 @@
  * (`apps/desktop/src/app/native_chat/coordinator_board.rs`).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
@@ -21,56 +21,16 @@ import { TagGlyph } from '../../../components/sessions/icons';
 import { customSessionTagIcon, sessionTagIcon } from '../../../contract/sessionTags';
 import { arr, asJson, isTrue, num, obj, str } from './json';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { TranscriptEnvProvider, type TranscriptEnv } from '../transcript/context';
+import { LinkWords } from '../transcript/LinkWords';
+import { Markdown } from '../transcript/markdown/Markdown';
+import { askColor, tint } from './askCard';
+import { WorkAnswerLine, WorkMenuButton, openWorkReply, workMenuRows, type WorkMenuRow } from './workItemParts';
+import { replyDraftRow, replyDraftScopeOf, useReplyDraft, type ReplyDraftScope } from './replyDrafts';
 import { remoteWorkerNotice } from './remoteWorker';
 import { AgentMark } from './agentMark';
 import { BoardRelayButtons } from './RelayedApprovalCard';
 import { openRelayedCardForThread } from './relayedApprovals';
-import { openQuestionReply } from '../transcript/QuestionReply';
-
-/** An opened card's Reply, Open, Show in chat, Dismiss and Snooze (desktop `board_card_buttons`). */
-function BoardCardActions({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone: () => void }) {
-  const styles = useStyles();
-  const [snoozing, setSnoozing] = useState(false);
-  const actions = obj(obj(row)?.actions);
-  if (actions === null) return null;
-  const reply = obj(actions.reply);
-  const snooze = arr(actions.snooze)
-    .map(obj)
-    .filter((choice): choice is Record<string, unknown> => choice !== null);
-  const button = (label: string, onPress: () => void) => (
-    <Pressable
-      key={label}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.cardButton, pressed && styles.cardButtonPressed]}
-    >
-      <Text style={styles.cardButtonText}>{label}</Text>
-    </Pressable>
-  );
-  const run = (command: unknown) => {
-    chat.dispatch(command as unknown as UserAction);
-    onDone();
-  };
-  return (
-    <>
-      {reply !== null
-        ? button('Reply', () => {
-            onDone();
-            openQuestionReply({
-              form: typeof reply.form === 'string' ? reply.form : null,
-              tag: str(reply, 'tag'),
-              ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
-            });
-          })
-        : null}
-      {obj(actions.open) !== null ? button('Open', () => run(actions.open)) : null}
-      {obj(actions.showInChat) !== null ? button('Show in chat', () => run(actions.showInChat)) : null}
-      {obj(actions.dismiss) !== null ? button('Dismiss', () => run(actions.dismiss)) : null}
-      {snooze.length > 0 ? button(snoozing ? 'Snooze for' : 'Snooze', () => setSnoozing((was) => !was)) : null}
-      {snoozing ? snooze.map((choice) => button(str(choice, 'label'), () => run(choice.command))) : null}
-    </>
-  );
-}
 
 /** Each group's colour: the sidebar's question pink, approval red and working amber. */
 const GROUP_COLOR: Record<string, string | null> = {
@@ -210,12 +170,15 @@ function menuGlyph(icon: string): GlyphName {
  */
 function CardMenu({
   row,
+  workRows,
   tagOptions,
   tagsPage,
   onTags,
   onPick,
 }: {
   row: unknown;
+  /** The dock's own rows for this item first: Show in chat, Dismiss, Snooze (`workItemParts.tsx`). */
+  workRows: WorkMenuRow[];
   tagOptions: unknown[];
   tagsPage: boolean;
   onTags: (open: boolean) => void;
@@ -223,8 +186,35 @@ function CardMenu({
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
+  const [snoozing, setSnoozing] = useState<Record<string, unknown>[] | null>(null);
   const setTag = obj(obj(row)?.setTag);
   const current = str(row, 'tag');
+  if (snoozing !== null) {
+    return (
+      <View style={styles.cardMenu}>
+        <Pressable accessibilityRole="button" onPress={() => setSnoozing(null)} style={styles.cardMenuRow}>
+          <Glyph name="chevron-left" size={15} color={P.cardMuted} />
+          <Text style={[styles.cardMenuText, { color: P.cardMuted }]}>Snooze for</Text>
+        </Pressable>
+        {snoozing.map((choice, index) => (
+          <Pressable
+            key={`snooze:${index}`}
+            accessibilityRole="button"
+            accessibilityLabel={`Snooze for ${str(choice, 'label')}`}
+            onPress={() => {
+              const command = obj(choice.command);
+              setSnoozing(null);
+              if (command !== null) onPick(command);
+            }}
+            style={styles.cardMenuRow}
+          >
+            <Glyph name="clock" size={15} color={P.cardMuted} />
+            <Text style={styles.cardMenuText}>{str(choice, 'label')}</Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
   if (tagsPage && setTag !== null) {
     return (
       <View style={styles.cardMenu}>
@@ -264,6 +254,20 @@ function CardMenu({
   }
   return (
     <View style={styles.cardMenu}>
+      {workRows.map((item) => (
+        <Pressable
+          key={`work:${item.label}`}
+          accessibilityRole="button"
+          onPress={() =>
+            item.snooze !== undefined ? setSnoozing(item.snooze) : item.command ? onPick(item.command) : undefined
+          }
+          style={styles.cardMenuRow}
+        >
+          <Glyph name={item.icon} size={15} color={P.foreground} />
+          <Text style={[styles.cardMenuText, styles.flex]}>{item.label}</Text>
+          {item.snooze !== undefined ? <Glyph name="chevron-right" size={14} color={P.cardMuted} /> : null}
+        </Pressable>
+      ))}
       {arr(obj(row)?.menu).map((item, index) => {
         const destructive = isTrue(item, 'destructive');
         const color = destructive ? SidebarPalette.ROW_APPROVAL : P.foreground;
@@ -290,21 +294,121 @@ function CardMenu({
   );
 }
 
+/**
+ * A closed card's answers as one segmented pill (desktop `board_answers`): the recommended one
+ * starred, the one given checked, then Reply, which shows the words sent from here or "Draft" while
+ * it keeps unsent words (`replyDrafts.ts`).
+ */
+function ClosedAnswers({
+  answers,
+  reply,
+  replied,
+  scope,
+  dispatch,
+  onReply,
+}: {
+  answers: Record<string, unknown>[];
+  reply: Record<string, unknown> | null;
+  replied: string;
+  scope: ReplyDraftScope | null;
+  dispatch: RustChat['dispatch'];
+  onReply: (reply: Record<string, unknown>) => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const draft = useReplyDraft(scope, reply !== null ? replyDraftRow(reply as never) : null).length > 0;
+  const locked = answers.some((answer) => isTrue(answer, 'locked') || isTrue(answer, 'picked'));
+  const replyWords = replied.length > 32 ? `${replied.slice(0, 31).trimEnd()}…` : replied;
+  return (
+    <View style={styles.answers}>
+      {answers.map((answer, answerIndex) => (
+        <Pressable
+          key={`answer:${answerIndex}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Answer ${str(answer, 'label')}${isTrue(answer, 'recommended') ? ', Recommended' : ''}`}
+          disabled={isTrue(answer, 'locked')}
+          hitSlop={{ top: 10, bottom: 10 }}
+          onPress={() => {
+            const answerCommand = obj(answer.command);
+            if (answerCommand !== null) dispatch(asJson(answerCommand) as unknown as UserAction);
+          }}
+          style={[
+            styles.answer,
+            answerIndex > 0 && styles.answerDivider,
+            isTrue(answer, 'picked') && styles.answerPicked,
+            isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
+          ]}
+        >
+          {isTrue(answer, 'picked') ? <Glyph name="check" size={11} color={P.foreground} /> : null}
+          <Text
+            style={[styles.tagText, (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) && styles.answerStrong]}
+            numberOfLines={1}
+          >
+            {str(answer, 'label')}
+          </Text>
+          {isTrue(answer, 'recommended') ? <Glyph name="star" size={9} color={tint(askColor(P.light), 0.75)} /> : null}
+        </Pressable>
+      ))}
+      {reply !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={draft ? 'Reply, draft kept' : 'Reply'}
+          disabled={(locked && replied.length === 0) || replied.length > 0}
+          hitSlop={{ top: 10, bottom: 10 }}
+          onPress={() => onReply(reply)}
+          style={[
+            styles.answer,
+            answers.length > 0 && styles.answerDivider,
+            replied.length > 0 && styles.answerPicked,
+            locked && replied.length === 0 && styles.answerFaded,
+          ]}
+        >
+          <Glyph name={replied.length > 0 ? 'check' : 'arrow-back-up'} size={11} color={P.cardMuted} />
+          <Text style={[styles.tagText, replied.length > 0 && styles.answerStrong]} numberOfLines={1}>
+            {replyWords.length > 0 ? replyWords : 'Reply'}
+          </Text>
+          {draft && replied.length === 0 ? <Text style={[styles.tagText, { color: P.muted }]}>Draft</Text> : null}
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 /** A board pill's tap (gx-chat-core `show_item`): the card to show, once per `seq`. */
 export type BoardFocus = { key: string; seq: number };
 
-export function CoordinatorBoardMenu({
-  chat,
-  document,
-  onDone,
-  focus = null,
-}: {
+type BoardMenuProps = {
   chat: RustChat;
   document: ChatDocument;
   onDone: () => void;
   /** The card to scroll to and ring for a moment (desktop `scroll_into_view`). */
   focus?: BoardFocus | null;
-}) {
+};
+
+/** The Work sheet; it sits outside the transcript, so it brings an env for an ask's description and title links. */
+export function CoordinatorBoardMenu(props: BoardMenuProps) {
+  const P = useTranscriptTheme();
+  const dispatch = props.chat.dispatch;
+  const env = useMemo<TranscriptEnv>(
+    () => ({
+      dispatch,
+      theme: P,
+      simple: false,
+      workOpen: false,
+      filePreviews: false,
+      mutedThinking: false,
+      main: false,
+    }),
+    [dispatch, P],
+  );
+  return (
+    <TranscriptEnvProvider value={env}>
+      <CoordinatorBoardList {...props} />
+    </TranscriptEnvProvider>
+  );
+}
+
+function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMenuProps) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   // Where each group sits in the list and each card in its group, so a board pill's card can be
@@ -335,6 +439,8 @@ export function CoordinatorBoardMenu({
   // its rows (the phone's long-press rule: a card's actions open on a hold).
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuTags, setMenuTags] = useState(false);
+  // The chat the dock registered, so a Reply from here keeps its draft (`replyDrafts.ts`).
+  const scope = replyDraftScopeOf(chat.dispatch);
   const board = obj(document.coordinatorBoard);
   if (board === null) return null;
   // Puts a card's reference in the chat box so the user can comment on it, and closes the sheet.
@@ -398,8 +504,18 @@ export function CoordinatorBoardMenu({
                 const restore = obj(obj(row)?.restore);
                 const tags = arr(obj(row)?.tags);
                 const answers = arr(obj(row)?.answers);
-                const menuRows = arr(obj(row)?.menu);
+                // The dock's actions for it (gx-chat-core `panel_actions`): Reply among its answers,
+                // Show in chat, Dismiss and Snooze at the top of its menu, which also holds the
+                // board's own rows (Open, Mention in chat, Tags, Mark done, Drop).
+                const actions = obj(obj(row)?.actions);
+                const reply = obj(actions?.reply);
+                const workRows = workMenuRows(actions, '', '');
+                const menuRows = [...workRows, ...arr(obj(row)?.menu)];
                 const expanded = isTrue(row, 'expanded');
+                const description = str(row, 'body');
+                const answerRecords = answers
+                  .map(obj)
+                  .filter((answer): answer is Record<string, unknown> => answer !== null);
                 // A thread waiting on a relayed approval shows that card's buttons in place of its
                 // chips (desktop `board_relay_buttons`; the user's Q1297).
                 const relayed = openRelayedCardForThread(document, str(openThread, 'sessionId'));
@@ -448,9 +564,18 @@ export function CoordinatorBoardMenu({
                     ]}
                   >
                     <View style={styles.cardTitleLine}>
-                      <Text style={styles.rowTitle} numberOfLines={expanded ? undefined : 1}>
-                        {str(row, 'title')}
-                      </Text>
+                      {expanded ? (
+                        <LinkWords
+                          text={str(row, 'title')}
+                          runs={obj(row)?.titleRuns}
+                          color={P.foreground}
+                          style={styles.rowTitleOpen}
+                        />
+                      ) : (
+                        <Text style={styles.rowTitle} numberOfLines={1}>
+                          {str(row, 'title')}
+                        </Text>
+                      )}
                       {openThread !== null ? (
                         <Pressable
                           accessibilityRole="button"
@@ -473,93 +598,79 @@ export function CoordinatorBoardMenu({
                         </Text>
                       ) : null}
                     </View>
+                    {/* A work ask's longer explanation under its short title, whole (desktop `ask_markdown`). */}
+                    {expanded && description.length > 0 ? (
+                      <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
+                    ) : null}
                     {expanded && line.length > 0 ? <Text style={styles.cardLine}>{line}</Text> : null}
-                    <View style={[styles.chipLine, expanded && styles.chipLineOpen]}>
-                      <View style={[styles.chips, expanded && styles.chipsOpen]}>
-                        {relayed !== null ? (
-                          <BoardRelayButtons card={relayed} dispatch={chat.dispatch} />
-                        ) : answers.length > 0 ? (
-                          <>
-                            {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
-                            {str(row, 'lead').length > 0 ? (
-                              <Text numberOfLines={1} style={styles.lead}>
-                                {str(row, 'lead')}
-                              </Text>
-                            ) : null}
-                            <View style={styles.answers}>
-                              {answers.map((answer, answerIndex) => (
-                                <Pressable
-                                  key={`answer:${answerIndex}`}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Answer ${str(answer, 'label')}`}
-                                  disabled={isTrue(answer, 'locked')}
-                                  onPress={() => {
-                                    const answerCommand = obj(obj(answer)?.command);
-                                    if (answerCommand !== null)
-                                      chat.dispatch(asJson(answerCommand) as unknown as UserAction);
-                                  }}
-                                  style={[
-                                    styles.answer,
-                                    answerIndex > 0 && styles.answerDivider,
-                                    isTrue(answer, 'picked') && styles.answerPicked,
-                                    isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.tagText,
-                                      (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) &&
-                                        styles.answerStrong,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {isTrue(answer, 'picked') ? `✓ ${str(answer, 'label')}` : str(answer, 'label')}
-                                  </Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          </>
-                        ) : tags.length === 0 && !expanded ? (
-                          <Text style={note.length > 0 ? styles.note : styles.noLinks} numberOfLines={1}>
-                            {note.length > 0 ? note : 'No links yet'}
-                          </Text>
-                        ) : null}
-                        {(answers.length > 0 || relayed !== null ? [] : shownTags).map((tag, tagIndex) => {
-                          if (str(tag, 'kind') === 'userTag') {
-                            return <UserTagChip key={`userTag:${tagIndex}`} tag={tag} />;
-                          }
-                          const tint = toneColor(str(tag, 'tone'));
-                          const open = obj(obj(tag)?.command);
-                          const coloured = str(tag, 'kind') === 'release' || str(tag, 'kind') === 'question';
-                          return (
-                            <Pressable
-                              key={`${str(tag, 'kind')}:${tagIndex}`}
-                              accessibilityRole={open !== null ? 'link' : 'text'}
-                              accessibilityLabel={str(tag, 'title') || str(tag, 'label')}
-                              onPress={open !== null ? () => run(open) : undefined}
-                              style={[styles.tag, coloured && tint !== null && { borderColor: tint }]}
-                            >
-                              {!coloured ? (
-                                <View style={[styles.tagDot, { backgroundColor: tint ?? P.cardMuted }]} />
+                    {/* An opened ask draws its answers below, so its chip line would be empty. */}
+                    {expanded && answers.length > 0 && relayed === null ? null : (
+                      <View style={[styles.chipLine, expanded && styles.chipLineOpen]}>
+                        <View style={[styles.chips, expanded && styles.chipsOpen]}>
+                          {relayed !== null ? (
+                            <BoardRelayButtons card={relayed} dispatch={chat.dispatch} />
+                          ) : answers.length > 0 && expanded ? null : answers.length > 0 ? (
+                            <>
+                              {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
+                              {str(row, 'lead').length > 0 ? (
+                                <Text numberOfLines={1} style={styles.lead}>
+                                  {str(row, 'lead')}
+                                </Text>
                               ) : null}
-                              <Text
-                                style={[styles.tagText, coloured && tint !== null && { color: tint }]}
-                                numberOfLines={1}
-                                ellipsizeMode="tail"
+                              <ClosedAnswers
+                                answers={answerRecords}
+                                reply={reply}
+                                replied={str(row, 'replied')}
+                                scope={scope}
+                                dispatch={chat.dispatch}
+                                onReply={(target) => {
+                                  onDone();
+                                  openWorkReply(target, scope);
+                                }}
+                              />
+                            </>
+                          ) : tags.length === 0 && !expanded ? (
+                            <Text style={note.length > 0 ? styles.note : styles.noLinks} numberOfLines={1}>
+                              {note.length > 0 ? note : 'No links yet'}
+                            </Text>
+                          ) : null}
+                          {(answers.length > 0 || relayed !== null ? [] : shownTags).map((tag, tagIndex) => {
+                            if (str(tag, 'kind') === 'userTag') {
+                              return <UserTagChip key={`userTag:${tagIndex}`} tag={tag} />;
+                            }
+                            const tint = toneColor(str(tag, 'tone'));
+                            const open = obj(obj(tag)?.command);
+                            const coloured = str(tag, 'kind') === 'release' || str(tag, 'kind') === 'question';
+                            return (
+                              <Pressable
+                                key={`${str(tag, 'kind')}:${tagIndex}`}
+                                accessibilityRole={open !== null ? 'link' : 'text'}
+                                accessibilityLabel={str(tag, 'title') || str(tag, 'label')}
+                                onPress={open !== null ? () => run(open) : undefined}
+                                style={[styles.tag, coloured && tint !== null && { borderColor: tint }]}
                               >
-                                {chipLabel(str(tag, 'kind'), str(tag, 'label'))}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                        {answers.length === 0 && relayed === null && hiddenTags > 0 ? (
-                          <View style={styles.tag}>
-                            <Text style={styles.tagText}>{`+${hiddenTags}`}</Text>
-                          </View>
-                        ) : null}
+                                {!coloured ? (
+                                  <View style={[styles.tagDot, { backgroundColor: tint ?? P.cardMuted }]} />
+                                ) : null}
+                                <Text
+                                  style={[styles.tagText, coloured && tint !== null && { color: tint }]}
+                                  numberOfLines={1}
+                                  ellipsizeMode="tail"
+                                >
+                                  {chipLabel(str(tag, 'kind'), str(tag, 'label'))}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                          {answers.length === 0 && relayed === null && hiddenTags > 0 ? (
+                            <View style={styles.tag}>
+                              <Text style={styles.tagText}>{`+${hiddenTags}`}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {expanded ? null : <Text style={styles.age}>{str(row, 'age')}</Text>}
                       </View>
-                      {expanded ? null : <Text style={styles.age}>{str(row, 'age')}</Text>}
-                    </View>
+                    )}
                     {relayed !== null ? (
                       <Text style={styles.note} numberOfLines={2}>
                         {[str(relayed, 'title'), str(relayed, 'codePreview') || str(relayed, 'code')]
@@ -568,30 +679,40 @@ export function CoordinatorBoardMenu({
                       </Text>
                     ) : null}
                     {expanded ? (
-                      <View style={styles.cardButtons}>
-                        {/* No Open button: the link chip opens the link and the agent button the
-                            thread, each thing once (the user's 2026-11-06 words on the desktop's
-                            `board_card_buttons`). Open stays in the long-press menu. */}
-                        {/* The dock's actions (gx-chat-core `panel_actions`): Reply, Open, Show in
-                            chat, Dismiss, Snooze, so an opened card offers the same everywhere. */}
-                        <BoardCardActions row={row} chat={chat} onDone={onDone} />
-                        {reference.length > 0 ? (
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => mention(reference)}
-                            style={({ pressed }) => [styles.cardButton, pressed && styles.cardButtonPressed]}
-                          >
-                            <Glyph name="message-plus" size={14} color={P.foreground} />
-                            <Text style={styles.cardButtonText}>Mention</Text>
-                          </Pressable>
-                        ) : null}
-                        <View style={styles.flex} />
-                        <Text style={styles.age}>{str(row, 'age')}</Text>
+                      <View style={styles.cardOpenFoot}>
+                        {/* Its answers with Reply after a divider, or Reply or Open alone, drawn by
+                            the dock's own code (desktop `board_card_buttons`). */}
+                        <WorkAnswerLine
+                          answers={answerRecords}
+                          reply={reply}
+                          replied={str(row, 'replied')}
+                          open={obj(actions?.open)}
+                          busy={false}
+                          divider
+                          room={-80}
+                          scope={scope}
+                          dispatch={chat.dispatch as never}
+                          before={(kind) => (kind === 'reply' ? onDone() : undefined)}
+                        />
+                        <View style={styles.cardButtons}>
+                          {menuRows.length > 0 ? (
+                            <WorkMenuButton
+                              active={menuFor === key}
+                              onPress={() => {
+                                setMenuTags(false);
+                                setMenuFor(menuFor === key ? null : key);
+                              }}
+                            />
+                          ) : null}
+                          <View style={styles.flex} />
+                          <Text style={styles.age}>{str(row, 'age')}</Text>
+                        </View>
                       </View>
                     ) : null}
                     {menuFor === key ? (
                       <CardMenu
                         row={row}
+                        workRows={workRows}
                         tagOptions={arr(board.tagOptions)}
                         tagsPage={menuTags}
                         onTags={setMenuTags}
@@ -600,7 +721,11 @@ export function CoordinatorBoardMenu({
                           setMenuTags(false);
                           if (str(picked, 'type') === 'insertBoardReference') {
                             mention(str(picked, 'reference'));
-                          } else if (str(picked, 'type') === 'coordinatorBoardChange') {
+                          } else if (
+                            str(picked, 'type') === 'coordinatorBoardChange' ||
+                            // Dismiss and Snooze settle the item here; the sheet stays open.
+                            str(picked, 'type') === 'coordinatorBoardAnswer'
+                          ) {
                             chat.dispatch(asJson(picked) as unknown as UserAction);
                           } else {
                             run(picked);
@@ -774,6 +899,15 @@ const useStyles = themedStyles((P) => ({
     color: P.foreground,
     fontSize: PROSE_SIZE,
   },
+  rowTitleOpen: {
+    flex: 1,
+    fontSize: PROSE_SIZE,
+    lineHeight: Math.round(PROSE_SIZE * 1.45),
+  },
+  /** An open card's answers, then its ⋯ and age. */
+  cardOpenFoot: {
+    gap: 8,
+  },
   age: {
     color: P.cardMuted,
     fontSize: PROSE_SIZE - 2,
@@ -823,7 +957,9 @@ const useStyles = themedStyles((P) => ({
     overflow: 'hidden',
   },
   answer: {
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
   },
   answerDivider: {
