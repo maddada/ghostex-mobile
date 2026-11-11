@@ -272,6 +272,13 @@ export class RustChatHost {
     };
     this.poll = new SessionChatStream(machine, projectId, sessionId, {
       onFrame: (frame) => {
+        // Not a frame: the chat's view pick, which another device changed (`machine-link.ts`).
+        if (frame.type === 'sessionChatViewChanged') {
+          if (typeof frame.chatView === 'object' && frame.chatView !== null) {
+            this.enqueue({ type: 'chatViewChanged', chatView: frame.chatView as Record<string, unknown> });
+          }
+          return;
+        }
         this.liveReadArrived = true;
         this.enqueue({ type: 'frame', frame });
       },

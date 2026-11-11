@@ -88,7 +88,10 @@ export type ChatCoreEvent =
    * older than this event refuses it (`badEvent`) and keeps its old wording. */
   | { type: 'computerChanged'; computer: import('./computer').ChatSessionComputer | null }
   /** The project's `origin` remote (`projectOrigin.ts`), where the transcript's `#123` links go. */
-  | { type: 'projectOriginChanged'; origin: string | null };
+  | { type: 'projectOriginChanged'; origin: string | null }
+  /** The chat's view pick as its computer keeps it, pushed when another device changed it
+   * (gx-chat-core `transcript/view_sync.rs`). */
+  | { type: 'chatViewChanged'; chatView: Record<string, unknown> };
 
 /** One Read aloud input (`ReadAloudEvent` in `packages/gx-chat-core/src/read_aloud/events.rs`). */
 export type ChatReadAloudEvent =

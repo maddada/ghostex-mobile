@@ -1040,6 +1040,14 @@ class ChatMachineLink {
       for (const listener of this.catalogListeners) listener(frame.catalog);
       return;
     }
+    // The chat's view pick, pushed when another device changed it (gxserver session_chat_view.rs):
+    // no stream position, handed to the chat that follows the conversation like a frame.
+    if (frame.type === 'sessionChatViewChanged') {
+      if (typeof frame.projectId === 'string' && typeof frame.sessionId === 'string') {
+        this.followers.get(followerKey(frame.projectId, frame.sessionId))?.onFrame(frame);
+      }
+      return;
+    }
     if (
       typeof frame.type !== 'string' ||
       !FRAME_TYPES.has(frame.type) ||
