@@ -86,7 +86,9 @@ export type ChatCoreEvent =
   | { type: 'visibility'; shown: boolean }
   /** The computer the session runs on (`computer.ts`): the offline card and held messages. A core
    * older than this event refuses it (`badEvent`) and keeps its old wording. */
-  | { type: 'computerChanged'; computer: import('./computer').ChatSessionComputer | null };
+  | { type: 'computerChanged'; computer: import('./computer').ChatSessionComputer | null }
+  /** The project's `origin` remote (`projectOrigin.ts`), where the transcript's `#123` links go. */
+  | { type: 'projectOriginChanged'; origin: string | null };
 
 /** One Read aloud input (`ReadAloudEvent` in `packages/gx-chat-core/src/read_aloud/events.rs`). */
 export type ChatReadAloudEvent =

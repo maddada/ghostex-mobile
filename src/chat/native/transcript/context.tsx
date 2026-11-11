@@ -47,6 +47,11 @@ export type NativeChatUi = {
    * `transcript/tool_apps.rs`), as SVG text; null until the core answers or for an unknown app.
    */
   toolAppLogo(key: string): string | null;
+  /**
+   * Where a `ghostex-issue:<n>` link goes: the project's GitHub issues address, its number
+   * appended (the document's `issueLinkBase`); null without a GitHub remote, whose links stay text.
+   */
+  issueLinkBase: string | null;
 };
 
 const UiContext = createContext<NativeChatUi | null>(null);
@@ -115,8 +120,10 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
         else openChatImageViewer(fallback, index);
       });
   }, []);
+  const issueLinkBase = chat.state?.document?.issueLinkBase ?? null;
   const value = useMemo<NativeChatUi>(
     () => ({
+      issueLinkBase,
       disclosures,
       demand,
       dictationTargets,
@@ -126,7 +133,17 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
       openPicture,
       toolAppLogo,
     }),
-    [demand, dictationTargets, disclosures, requestImage, renderVisual, renderVisualAsync, openPicture, toolAppLogo],
+    [
+      demand,
+      dictationTargets,
+      disclosures,
+      issueLinkBase,
+      requestImage,
+      renderVisual,
+      renderVisualAsync,
+      openPicture,
+      toolAppLogo,
+    ],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }
@@ -157,6 +174,11 @@ export function useOptionalNativeChatUi(): NativeChatUi | null {
 }
 
 /** The chat screen's shared drawing state. Throws outside `NativeChatScreen`. */
+/** The chat's `issueLinkBase`, or null outside a chat screen (a sheet drawn on its own). */
+export function useIssueLinkBase(): string | null {
+  return useContext(UiContext)?.issueLinkBase ?? null;
+}
+
 export function useNativeChatUi(): NativeChatUi {
   const value = useContext(UiContext);
   if (value === null) throw new Error('useNativeChatUi outside NativeChatUiProvider');

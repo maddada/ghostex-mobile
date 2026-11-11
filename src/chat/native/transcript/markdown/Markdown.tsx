@@ -11,7 +11,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from 'r
 
 import { openChatTablePreview, tableCsv } from '../../cards';
 import { useChatViewSize } from '../../chatPlacement';
-import { useTranscriptEnv } from '../context';
+import { useIssueLinkBase, useTranscriptEnv } from '../context';
 import { Glyph, type GlyphName } from '../icons';
 import { arr, obj, str, type JsonRecord } from '../json';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from '../theme';
@@ -51,7 +51,16 @@ type InlineContext = {
   inlineCode: string;
   /** A table's body text: the row's running text colour. */
   body: string;
+  /** Where a `ghostex-issue:<n>` link goes, its number appended; null keeps it the `#<n>` text. */
+  issueLinkBase: string | null;
 };
+
+/**
+ * The core writes each `#123` in prose as a link to `ghostex-issue:123` (gx-chat-core
+ * `transcript/issue_links.rs`, the rule desktop draws by too); the document's `issueLinkBase` says
+ * where it goes, the project's GitHub issues, which GitHub forwards to a pull request.
+ */
+const ISSUE_LINK_SCHEME = 'ghostex-issue:';
 
 function referenceMap(references: unknown): Map<string, Reference> {
   const map = new Map<string, Reference>();
@@ -139,6 +148,31 @@ function renderInlines(
         // Pictures are split out of their paragraph before this runs (`FlowParagraph`).
         return str(inline.image, 'label');
       case 'link': {
+        // `#123`: a link to the project's GitHub issue, opened in the browser as any web link is;
+        // without a GitHub remote it stays the text it was written as.
+        if (inline.href.startsWith(ISSUE_LINK_SCHEME)) {
+          if (context.issueLinkBase === null)
+            return (
+              <Text key={key} style={style}>
+                {renderInlines(inline.c, context, key)}
+              </Text>
+            );
+          const href = `${context.issueLinkBase}${inline.href.slice(ISSUE_LINK_SCHEME.length)}`;
+          return (
+            <Text
+              key={key}
+              style={[style, { color: linkColor(context.theme, 'url') }]}
+              suppressHighlighting={false}
+              onPress={() => context.openLink(href)}
+              {...(context.longPressLink !== undefined
+                ? { onLongPress: () => context.longPressLink?.(href) }
+                : {})}
+              accessibilityRole="link"
+            >
+              {renderInlines(inline.c, context, key)}
+            </Text>
+          );
+        }
         // An inline command stays the code it was written as; the phone runs it from the message's
         // long-press menu (`runCommands.ts`), never from a button on the message.
         if (isRunCommandHref(inline.href)) {
@@ -1012,6 +1046,7 @@ export const Markdown = memo(function Markdown({
 }: MarkdownProps) {
   const { theme, dispatch } = useTranscriptEnv();
   const find = useRowFind();
+  const issueLinkBase = useIssueLinkBase();
   const blocks = useMemo(() => parseMarkdown(text, { breaks }), [breaks, text]);
   const referencesMap = useMemo(() => referenceMap(references), [references]);
   const openLink = useCallback(
@@ -1030,8 +1065,9 @@ export const Markdown = memo(function Markdown({
       heading: headingColor ?? theme.primary,
       inlineCode: codeColor ?? theme.primary,
       body: color ?? theme.prose,
+      issueLinkBase,
     }),
-    [codeColor, color, find, headingColor, openLink, referencesMap, selectable, strips, theme],
+    [codeColor, color, find, headingColor, issueLinkBase, openLink, referencesMap, selectable, strips, theme],
   );
   return (
     <View style={styles.root}>

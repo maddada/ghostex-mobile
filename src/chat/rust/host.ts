@@ -54,6 +54,7 @@ import {
   type ParkResult,
 } from './host-records';
 import { currentSessionDirectory, subscribeSessionDirectory } from './sessionDirectory';
+import { projectOrigin, subscribeProjectOrigin } from './projectOrigin';
 import { readRecord, readRetainedSnapshot, writeRecord, writeRetainedSnapshot } from './storage';
 import { chatMachineLink } from './machine-link';
 import { checkComputer, HELD_SEND_METHODS, heldSendRpc, sessionComputer, subscribeSessionComputer } from './computer';
@@ -234,6 +235,7 @@ export class RustChatHost {
   private appStateSubscription: NativeEventSubscription | null = null;
   private unsubscribeSessionDirectory: (() => void) | null = null;
   private unsubscribeComputer: (() => void) | null = null;
+  private unsubscribeProjectOrigin: (() => void) | null = null;
   private unsubscribeModelCatalog: (() => void) | null = null;
   private unsubscribeToolCards: (() => void) | null = null;
   private unregisterReadAloud: (() => void) | null = null;
@@ -308,6 +310,11 @@ export class RustChatHost {
       this.target.projectId,
       this.target.sessionId,
       (computer) => this.enqueue({ type: 'computerChanged', computer }),
+    );
+    // Where the transcript's `#123` links go: the project's GitHub repository (`projectOrigin.ts`).
+    this.enqueue({ type: 'projectOriginChanged', origin: projectOrigin(machineId, this.target.projectId) });
+    this.unsubscribeProjectOrigin = subscribeProjectOrigin(machineId, this.target.projectId, (origin) =>
+      this.enqueue({ type: 'projectOriginChanged', origin }),
     );
     // The other session on a message between agents is named from the inventory's session list.
     this.enqueue({ type: 'sessionDirectoryChanged', sessions: currentSessionDirectory() });
@@ -390,6 +397,8 @@ export class RustChatHost {
     this.unsubscribeSessionDirectory = null;
     this.unsubscribeComputer?.();
     this.unsubscribeComputer = null;
+    this.unsubscribeProjectOrigin?.();
+    this.unsubscribeProjectOrigin = null;
     this.unsubscribeModelCatalog?.();
     this.unsubscribeModelCatalog = null;
     this.unsubscribeToolCards?.();

@@ -667,6 +667,10 @@ export type ChatDocument = {
    * `session/computer.rs`): "Windows PC is offline · last seen 2h ago" and Retry, or
    * "… isn't answering · checking…" with a spinner. */
   computerNotice?: { title: string; detail?: string; checking?: boolean };
+  /** The project's GitHub issues address (`https://github.com/<owner>/<repo>/issues/`) a
+   * `ghostex-issue:<n>` link in the Markdown points at; absent without a GitHub remote, whose
+   * links draw as plain `#<n>` (gx-chat-core `transcript/issue_links.rs`). */
+  issueLinkBase?: string;
   /** With an `unreachable` refusal of a send: the mode (`send`, `queue`, `compact`) Retry submits the box with,
    * under the failed call's own `sendRequestId`. Desktop: `composer.rs` `unreachable_retry`. */
   operationErrorResend?: string | null;
