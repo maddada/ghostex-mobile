@@ -36,6 +36,7 @@ import { isCloudBoxMachineId } from '../../cloudBoxes/types';
 import { isDemoMachine } from '../../demo/identity';
 import type { RpcAnswer } from './transport';
 import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress } from '../../remote/linkActivity';
+import { onPairingChanged, pairingEpoch, samePairing } from '../../machines/pairingEpoch';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
 const PROTOCOL_VERSION = 1;
@@ -517,8 +518,12 @@ class ChatMachineLink {
 
   private async handshake(): Promise<{ route: 'socket'; endpoint: Endpoint } | { route: 'legacy' | 'unavailable' }> {
     if (isCloudBoxMachineId(this.machine.id)) return this.boxHandshake();
+    // An answer read over the connection of a pairing the entry no longer has is that computer's
+    // endpoint and token, not this entry's (machines/pairingEpoch.ts).
+    const epoch = pairingEpoch(this.machine.id);
     try {
       const answer = await readServerEndpoint(this.machine);
+      if (!samePairing(this.machine.id, epoch)) return { route: 'unavailable' };
       if (answer.kind === 'unsupported') return { route: 'legacy' };
       if (answer.kind === 'failed') return { route: 'unavailable' };
       // A computer on another wire protocol keeps the exec path, whose CLI speaks its own daemon's.
@@ -1054,6 +1059,9 @@ class ChatMachineLink {
 }
 
 const links = new Map<string, ChatMachineLink>();
+
+// An entry paired again asks its computer for the endpoint again (machines/pairingEpoch.ts).
+onPairingChanged((machineId) => links.get(machineId)?.forgetEndpoint());
 
 /** The one chat link for a computer, created on first use and kept for the life of the app. */
 export function chatMachineLink(machine: MachineConnectionTarget): ChatMachineLink {

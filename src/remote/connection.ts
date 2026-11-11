@@ -11,6 +11,7 @@ import {
 import { noteConnectedThrough } from '../machines/duplicateComputers';
 import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
 import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
+import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -21,6 +22,23 @@ export function cancelConnectionAttempt(machineId: string): void {
   attempts.delete(machineId);
   forgetRemoteEnvironment(machineId);
 }
+
+/** Ends a computer's connection and its Easy Connect tunnel; never throws. */
+async function dropConnection(machineId: string): Promise<void> {
+  await GhostexNative.disconnect(machineId).catch(() => undefined);
+  await GhostexNative.stopTailcatForward(machineId).catch(() => undefined);
+}
+
+/*
+ * CDXC:RemotePairing 2026-11-11 WHY:
+ * An entry paired again or given another address is another pairing, maybe another computer: the
+ * connect running under the address before is ended with its connection and tunnel, so nothing of
+ * the computer before is dialled, reused or saved under the entry (machines/pairingEpoch.ts).
+ */
+onPairingChanged((machineId) => {
+  cancelConnectionAttempt(machineId);
+  void dropConnection(machineId);
+});
 
 /**
  * CDXC:RemoteMachines 2026-09-14 WHY:
@@ -42,9 +60,23 @@ export function ensureConnected(
   }
   const revision = (revisions.get(machine.id) ?? 0) + 1;
   revisions.set(machine.id, revision);
+  const epoch = pairingEpoch(machine.id);
   const assertCurrent = (): void => {
     if (revisions.get(machine.id) !== revision) {
       throw new Error('Connection attempt was replaced by a newer retry.');
+    }
+    if (!samePairing(machine.id, epoch)) {
+      throw new Error('The computer was paired again while this connection attempt ran.');
+    }
+  };
+  // A connection that came up after its attempt was replaced or the entry paired again is not kept:
+  // the next ensureConnected would otherwise find it connected and use it (pairingEpoch.ts).
+  const assertKept = async (): Promise<void> => {
+    try {
+      assertCurrent();
+    } catch (error) {
+      await dropConnection(machine.id);
+      throw error;
     }
   };
   const promise = (async () => {
@@ -88,12 +120,13 @@ export function ensureConnected(
     assertCurrent();
     forgetRemoteEnvironment(machine.id);
     if (machine.transport === 'tailcat') {
-      await connectEasyConnect(machine, config, assertCurrent);
-      refreshEasyConnectAddressesSoon(machine);
+      const pairedAddress = await connectEasyConnect(machine, config, assertCurrent, assertKept);
+      await assertKept();
+      refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress });
     } else {
       await GhostexNative.connect(machine.id, config);
     }
-    assertCurrent();
+    await assertKept();
   })();
   const attempt = { promise, reset: options.reset === true, verify: options.verify === true };
   attempts.set(machine.id, attempt);
@@ -113,7 +146,8 @@ async function connectEasyConnect(
   machine: MachineConnectionTarget,
   config: SshConfig,
   assertCurrent: () => void,
-): Promise<void> {
+  assertKept: () => Promise<void>,
+): Promise<string | null> {
   // What a connect proves counts for the pairing it began under (machines/provenComputer.ts).
   const pairedAddress = await getTailcatToken(machine.id);
   const candidates = await easyConnectDialCandidates(machine.id);
@@ -123,7 +157,7 @@ async function connectEasyConnect(
   assertCurrent();
   if (candidates.length === 0) {
     await GhostexNative.connect(machine.id, config);
-    return;
+    return pairedAddress;
   }
   for (let index = 0; ; index += 1) {
     const candidate = candidates[index]!;
@@ -131,21 +165,24 @@ async function connectEasyConnect(
     const startedAt = Date.now();
     try {
       await GhostexNative.connect(machine.id, { ...config, tailcatToken: candidate.address });
-      noteEasyConnectDial(machine.id, candidate, { ok: true, elapsedMs: Date.now() - startedAt });
-      // This record reached the computer behind this address: an older record of the same computer stops now.
-      noteConnectedThrough(machine.id, pairedAddress, candidate.address, (staleMachineId) => {
-        cancelConnectionAttempt(staleMachineId);
-        void GhostexNative.disconnect(staleMachineId).catch(() => undefined);
-        void GhostexNative.stopTailcatForward(staleMachineId).catch(() => undefined);
-      });
-      return;
     } catch (error) {
       noteEasyConnectDial(machine.id, candidate, { ok: false, elapsedMs: Date.now() - startedAt, next, error });
       if (next === null) throw error;
       assertCurrent();
       // A half-built connection must not be what the next address's connect finds.
       await GhostexNative.disconnect(machine.id).catch(() => undefined);
+      continue;
     }
+    // Paired again while it dialled: this connection is the computer's before, and is not kept.
+    await assertKept();
+    noteEasyConnectDial(machine.id, candidate, { ok: true, elapsedMs: Date.now() - startedAt });
+    // This record reached the computer behind this address: an older record of the same computer stops now.
+    noteConnectedThrough(machine.id, pairedAddress, candidate.address, (staleMachineId) => {
+      cancelConnectionAttempt(staleMachineId);
+      void GhostexNative.disconnect(staleMachineId).catch(() => undefined);
+      void GhostexNative.stopTailcatForward(staleMachineId).catch(() => undefined);
+    });
+    return pairedAddress;
   }
 }
 

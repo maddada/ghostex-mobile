@@ -18,6 +18,7 @@ import { restoreAttachTabs } from '../terminal/sessions';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { FailureCopy } from '../copy';
 import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
+import { pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { refreshCloudBoxes } from '../cloudBoxes/sync';
 import {
   applyOptimisticMutations,
@@ -184,12 +185,21 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
 
       const refreshRevision = (refreshRevisions.get(machine.id) ?? 0) + 1;
       refreshRevisions.set(machine.id, refreshRevision);
+      // An answer from the computer the entry was paired with before a re-pair is not this entry's
+      // (machines/pairingEpoch.ts): neither its sessions nor "connected" are kept.
+      const epoch = pairingEpoch(machine.id);
+      const pairedAgain = (): boolean => {
+        if (samePairing(machine.id, epoch)) return false;
+        patchMachine(machine.id, { refreshing: false });
+        return true;
+      };
       patchMachine(machine.id, { refreshing: true });
 
       const refresh = (async (): Promise<void> => {
         try {
           const { summary: serverSummary, fingerprint } = await fetchInventory(machine);
           if (refreshRevisions.get(machine.id) !== refreshRevision) return;
+          if (pairedAgain()) return;
           const previous = get().inventoriesByMachineId[machine.id];
           const previousPending = get().pendingMutationsByMachineId[machine.id] ?? [];
           const reconciled = reconcileOptimisticMutations(serverSummary, previousPending, refreshRevision);
@@ -246,6 +256,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
             // Credential lookup failure must not leave inventory refreshing.
           }
           if (refreshRevisions.get(machine.id) !== refreshRevision) return;
+          if (pairedAgain()) return;
           const failure = summarizeFailureDetailed(error, machineHasPassword);
           if (failure.reasonCode === 'ghostexNotAnswering') {
             const since = notAnsweringSince.get(machine.id) ?? Date.now();

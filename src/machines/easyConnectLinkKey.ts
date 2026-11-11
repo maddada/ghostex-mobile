@@ -9,6 +9,7 @@ import { logAppEvent } from '../app/appLog';
 import { chatMachineLink, onChatLinkHandshake } from '../chat/rust/machine-link';
 import type { MachineConnectionTarget } from './credentials';
 import { loadRegistered, nativeHasMachineKeys, saveRegistered } from './easyConnectLinkKeyState';
+import { pairingEpoch, samePairing } from './pairingEpoch';
 import { enabledMachines, useMachinesStore } from './store';
 
 /** gxserver's capability for `/api/registerEasyConnectClientKey`. */
@@ -26,12 +27,19 @@ async function registerLinkKey(
   if (machine.transport !== 'tailcat' || !nativeHasMachineKeys()) return;
   if (!capabilities.includes(EASY_CONNECT_CLIENT_KEYS_CAPABILITY) || registering.has(machine.id)) return;
   registering.add(machine.id);
+  // The computer that takes the key is the one the entry is paired with now; one it was paired
+  // with before must not mark the key as accepted here (machines/pairingEpoch.ts).
+  const epoch = pairingEpoch(machine.id);
   try {
     const publicKey = await GhostexNative.tailcatMachineClientKey!(machine.id);
     if ((await loadRegistered())[machine.id] === publicKey) return;
     const answer = await chatMachineLink(machine).rpc(REGISTER_ENDPOINT, { clientKey: publicKey }, REGISTER_TIMEOUT_MS);
     if (answer.error !== null && answer.error !== undefined) {
       logAppEvent(`Easy Connect: ${machine.id} kept its shared key (${answer.error.code ?? 'error'})`);
+      return;
+    }
+    if (!samePairing(machine.id, epoch)) {
+      logAppEvent(`Easy Connect: ${machine.id} was paired again while its own key was registered; not kept`);
       return;
     }
     await saveRegistered((current) => ({ ...current, [machine.id]: publicKey }));

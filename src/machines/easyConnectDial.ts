@@ -14,6 +14,8 @@ import {
   setEasyConnectAddresses,
   type MachineConnectionTarget,
 } from './credentials';
+import { tailcatServerKey } from './computerIdentity';
+import { samePairing } from './pairingEpoch';
 import {
   addressesNeedRefresh,
   decodeSavedAddresses,
@@ -67,7 +69,7 @@ async function relayAnswers(relay: string): Promise<boolean> {
 /** The addresses to dial for an Easy Connect machine, best first; empty when none is saved. */
 export async function easyConnectDialCandidates(machineId: string): Promise<DialCandidate[]> {
   const [paired, savedText] = await Promise.all([getTailcatToken(machineId), getEasyConnectAddresses(machineId)]);
-  const saved = decodeSavedAddresses(savedText);
+  const saved = decodeSavedAddresses(savedText, paired);
   const relays = [
     ...new Set((saved?.addresses ?? []).filter((entry) => entry.kind !== 'public').map((entry) => entry.relay)),
   ];
@@ -119,11 +121,23 @@ export function noteEasyConnectDial(
   );
 }
 
-/** Saves a computer's address list; returns false (and keeps the old one) when it names none. */
-export async function saveEasyConnectAddresses(machineId: string, value: unknown): Promise<boolean> {
+/**
+ * Saves a computer's address list, asked for while the entry was paired with `pairedAddress` (the
+ * list is read only while it still is, `decodeSavedAddresses`); returns false (and keeps the old
+ * one) when it names none.
+ */
+export async function saveEasyConnectAddresses(
+  machineId: string,
+  value: unknown,
+  pairedAddress: string | null,
+): Promise<boolean> {
   const addresses = readEasyConnectAddresses(value);
   if (addresses.length === 0) return false;
-  await setEasyConnectAddresses(machineId, encodeSavedAddresses({ fetchedAt: Date.now(), addresses }));
+  const pairedKey = pairedAddress === null ? null : tailcatServerKey(pairedAddress);
+  await setEasyConnectAddresses(
+    machineId,
+    encodeSavedAddresses({ fetchedAt: Date.now(), addresses, ...(pairedKey === null ? {} : { pairedKey }) }),
+  );
   console.info(
     `[easy-connect] ${machineId} saved ${addresses.length} address(es): ${addresses
       .map((entry) => `${entry.relay} (${entry.kind})`)
@@ -139,8 +153,14 @@ export async function saveEasyConnectAddresses(machineId: string, value: unknown
  * request then carries why (`failedDial`), for the computer's log. Fire and forget: a computer that cannot answer (an older Ghostex) is asked
  * again an hour later, and the phone keeps dialing what it has.
  */
-export function refreshEasyConnectAddressesSoon(machine: MachineConnectionTarget): void {
+export function refreshEasyConnectAddressesSoon(
+  machine: MachineConnectionTarget,
+  begun: { epoch: number; pairedAddress: string | null },
+): void {
   if (machine.transport !== 'tailcat' || refreshing.has(machine.id)) return;
+  // The connect that asks began under a pairing the entry no longer has: its computer's list is
+  // not this entry's (machines/pairingEpoch.ts).
+  if (!samePairing(machine.id, begun.epoch)) return;
   // A dial that gave up on another address is reported now, whatever the list's age.
   const failure = unreportedFailures.get(machine.id);
   const lastAttempt = lastRefreshAttempt.get(machine.id) ?? 0;
@@ -149,7 +169,7 @@ export function refreshEasyConnectAddressesSoon(machine: MachineConnectionTarget
   setTimeout(() => {
     void (async () => {
       try {
-        const saved = decodeSavedAddresses(await getEasyConnectAddresses(machine.id));
+        const saved = decodeSavedAddresses(await getEasyConnectAddresses(machine.id), begun.pairedAddress);
         const report = failure === undefined ? null : failedDialParams(failure, Date.now());
         if (report === null && failure !== undefined) unreportedFailures.delete(machine.id);
         if (report === null && !addressesNeedRefresh(saved, Date.now())) return;
@@ -168,7 +188,9 @@ export function refreshEasyConnectAddressesSoon(machine: MachineConnectionTarget
           return;
         }
         const result = answer.result as { addresses?: unknown } | null;
-        await saveEasyConnectAddresses(machine.id, result?.addresses);
+        // Paired again (or edited, or removed) while it asked: the answer is the computer's before.
+        if (!samePairing(machine.id, begun.epoch)) return;
+        await saveEasyConnectAddresses(machine.id, result?.addresses, begun.pairedAddress);
       } catch (error) {
         console.info(
           `[easy-connect] ${machine.id} address list fetch failed: ${error instanceof Error ? error.message : String(error)}`,

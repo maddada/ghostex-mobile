@@ -28,6 +28,7 @@ import {
 } from './credentials';
 import { migrateMachineData } from './machineDataMigration';
 import { noteDuplicateEntries } from './duplicateNotice';
+import { notePairingChanged } from './pairingEpoch';
 import { forgetProvenServerKeys, loadMachineProofs, PROVEN_SERVER_KEYS_STORAGE_KEY } from './provenComputer';
 import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
@@ -507,6 +508,9 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
           : addressBefore;
     const keyOf = (address: string | null): string | null => (address === null ? null : tailcatServerKey(address));
     const computerMayDiffer = keyOf(addressBefore) !== keyOf(addressAfter);
+    // First of all: a connect still running under the address before is ended, and nothing it
+    // brings back is saved onto this entry any more (machines/pairingEpoch.ts).
+    if (computerMayDiffer) notePairingChanged(machine.id);
     if (computerMayDiffer) await setEasyConnectAddresses(machine.id, '');
     await persistTailcatToken(machine.id, normalized.transport, normalized.tailcatToken);
     if (computerMayDiffer) await forgetProvenServerKeys([machine.id]);
@@ -540,6 +544,7 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     if (id === DEMO_MACHINE_ID || isDemoMachine(get().machines.find((machine) => machine.id === id))) {
       resetDemoWorld();
     }
+    notePairingChanged(id);
     await deleteAllCredentials(id);
     await forgetProvenServerKeys([id]);
     const nextMachines = get().machines.filter((machine) => machine.id !== id);

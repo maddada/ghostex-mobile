@@ -326,7 +326,7 @@ async function savedMachineForComputer(address: string, answered: unknown): Prom
   const lists = new Map<string, string[]>(
     await Promise.all(
       tailcat.map(async (machine) => {
-        const saved = decodeSavedAddresses(await getEasyConnectAddresses(machine.id));
+        const saved = decodeSavedAddresses(await getEasyConnectAddresses(machine.id), tokens.get(machine.id) ?? null);
         return [machine.id, (saved?.addresses ?? []).map((entry) => entry.address)] as const;
       }),
     ),
@@ -490,7 +490,7 @@ export async function pairEasyConnect(
       ]);
       // The QR carries one address; the reply names the fallback too. A computer that sends no list
       // leaves the phone dialing the scanned address alone, as before.
-      if (!(await saveEasyConnectAddresses(machine.id, registration.easyConnectAddresses))) {
+      if (!(await saveEasyConnectAddresses(machine.id, registration.easyConnectAddresses, code.address))) {
         await setEasyConnectAddresses(machine.id, '');
       }
       return { ok: true, machine };

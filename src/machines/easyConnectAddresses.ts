@@ -14,6 +14,7 @@
  *
  * No React Native imports: `bun test` runs this file directly.
  */
+import { tailcatServerKey } from './computerIdentity';
 
 /** Tailcat addresses start with this (`tailcat.Addr`). */
 const ADDRESS_PREFIX = 'tc';
@@ -37,6 +38,12 @@ export type EasyConnectAddress = {
 export type SavedEasyConnectAddresses = {
   fetchedAt: number;
   addresses: EasyConnectAddress[];
+  /**
+   * The server key of the address the entry was paired with when the list was asked for. A list
+   * saved under another pairing (a late answer from the computer before a re-pair) is not this
+   * entry's and is read as no list (`decodeSavedAddresses`). Absent in lists saved before 2026-11-11.
+   */
+  pairedKey?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -65,13 +72,27 @@ export function encodeSavedAddresses(saved: SavedEasyConnectAddresses): string {
   return JSON.stringify(saved);
 }
 
-export function decodeSavedAddresses(text: string | null): SavedEasyConnectAddresses | null {
+/**
+ * A saved list, or null. `pairedAddress` is the address the entry is paired with now: a list saved
+ * under another pairing is not read (CDXC:RemotePairing 2026-11-11 in machines/pairingEpoch.ts).
+ */
+export function decodeSavedAddresses(
+  text: string | null,
+  pairedAddress: string | null,
+): SavedEasyConnectAddresses | null {
   if (text === null || text.length === 0) return null;
   try {
     const parsed: unknown = JSON.parse(text);
     if (!isRecord(parsed) || typeof parsed.fetchedAt !== 'number') return null;
+    if (typeof parsed.pairedKey === 'string') {
+      const pairedKey = pairedAddress === null ? null : tailcatServerKey(pairedAddress);
+      if (pairedKey !== parsed.pairedKey) return null;
+    }
     const addresses = readEasyConnectAddresses(parsed.addresses);
-    return addresses.length > 0 ? { fetchedAt: parsed.fetchedAt, addresses } : null;
+    if (addresses.length === 0) return null;
+    return typeof parsed.pairedKey === 'string'
+      ? { fetchedAt: parsed.fetchedAt, addresses, pairedKey: parsed.pairedKey }
+      : { fetchedAt: parsed.fetchedAt, addresses };
   } catch {
     return null;
   }
