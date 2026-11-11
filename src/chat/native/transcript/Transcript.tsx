@@ -63,6 +63,8 @@ import { REPLY_FADE_MS, useReplyArrival } from './replyArrival';
 import { chatLookOf } from './context';
 import { rowGapOf, useRowGap } from './messageSpacing';
 import { StatusTail, statusTailShown } from '../cards/WorkingCard';
+import { quietLinesOf } from './quietLines';
+import { QuietItem, QuietLinesContext, QuietRow, useQuietRow } from './quietView';
 
 /**
  * `scroll-bottom.json`: the pill's look and how far from the bottom it appears.
@@ -246,6 +248,13 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
   const look = chatLookOf(document);
   // Message spacing: the space every row ends with (`messageSpacing.ts`).
   const rowGap = rowGapOf(look);
+  // Quiet View's lines (`quietView.tsx`), in the main transcript only.
+  const quietView = document?.quietView;
+  const workCards = document?.workCards;
+  const quietLines = useMemo(
+    () => (main && document !== null ? quietLinesOf(document) : null),
+    [main, quietView, workCards], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const data = useMemo(() => {
     const reversed: Row[] = [];
     for (let index = rows.length - 1; index >= 0; index -= 1) reversed.push({ item: rows[index]!, index });
@@ -448,6 +457,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
     ({ item: row }: ListRenderItemInfo<Row>) => (
       <TranscriptRowFrame
         item={row.item}
+        index={row.index}
         fadeIn={fadeKey !== null && transcriptItemKey(row.item) === fadeKey}
         newest={main && transcriptItemKey(row.item) === newestKey ? { ref: newestRowRef, onLayout: onNewestLayout } : null}
         first={row.index === 0}
@@ -597,7 +607,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
               style={[styles.root, { backgroundColor: theme.background }]}
               accessibilityLabel="Conversation"
             >
-              {body}
+              <QuietLinesContext.Provider value={quietLines}>{body}</QuietLinesContext.Provider>
               {interruptToast ? (
                 /*
                  * CDXC:SessionChat 2026-10-15 DECISION:
@@ -664,6 +674,7 @@ function SearchFoldsReport({ dispatch }: { dispatch: RustChat['dispatch'] }) {
 
 const TranscriptRowFrame = memo(function TranscriptRowFrame({
   item,
+  index,
   fadeIn,
   newest,
   first,
@@ -675,6 +686,8 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   rowGap,
 }: {
   item: TranscriptItem;
+  /** The row's place in the transcript list, which Quiet View's lines name (`quietView.tsx`). */
+  index: number;
   /** The agent's reply that just arrived: it fades in as it mounts (`replyArrival.ts`). */
   fadeIn: boolean;
   /** The transcript's newest row, measured while a reply that arrived is held (`replyArrival.ts`). */
@@ -693,6 +706,8 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
   rowGap: number;
 }) {
   const theme = useTranscriptTheme();
+  // Quiet View: a shut line draws nothing for the rows under it, not even their gap.
+  const quiet = useQuietRow(index);
   // A fresh counter each time the row renders: its text numbers the occurrences in reading order
   // (`searchHighlight.tsx`).
   const find: RowFind | null =
@@ -707,6 +722,8 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
             findActiveLabel === null ? null : { key: findActiveLabel, occurrence: findActiveLabelOccurrence },
           counter: { next: 0 },
         };
+  if (quiet?.hidden === true) return null;
+  const bottom = quiet?.bottom ?? rowGap;
   return (
     <Animated.View
       ref={newest?.ref}
@@ -717,12 +734,16 @@ const TranscriptRowFrame = memo(function TranscriptRowFrame({
       <View
         style={[
           styles.rowInner,
-          rowGap !== ROW_GAP && { paddingBottom: rowGap },
+          bottom !== ROW_GAP && { paddingBottom: bottom },
           widthPercent !== null && { width: `${widthPercent}%`, maxWidth: '100%' },
         ]}
       >
         <RowFindContext.Provider value={find}>
-          <TranscriptItemView item={item} />
+          {quiet !== null ? (
+            <QuietRow item={item} index={index} state={quiet} rowGap={rowGap} />
+          ) : (
+            <QuietItem item={item} />
+          )}
         </RowFindContext.Provider>
       </View>
     </Animated.View>

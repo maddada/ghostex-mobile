@@ -13,6 +13,7 @@ import type { RustChat } from '../../rust/useRustChat';
 import type { ChatDocument, ChatLook, Json } from '../../rust/document';
 import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
+import { withoutHeldCards } from './quietLines';
 import { workCardIndex, type WorkCardIndex } from '../cards/WorkCards';
 import { openChatImageViewer } from '../cards/overlayStore';
 import { dictationInserted, DictationTargets } from '../composer/dictationTarget';
@@ -425,7 +426,8 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     readAloudAvailable: document.readAloud?.available === true,
     readAloudSpeakingId: typeof document.readAloud?.speakingId === 'string' ? document.readAloud.speakingId : null,
     relayedApprovals: relayedByReport(document),
-    workCards: workCardIndex(document),
+    // Under Quiet View the line after a reply holds its work item lines (`quietLines.ts`).
+    workCards: withoutHeldCards(workCardIndex(document), document),
     workAskTags: new Set(
       arr(document.workAskTags)
         .filter((tag): tag is string => typeof tag === 'string')

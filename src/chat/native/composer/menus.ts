@@ -96,6 +96,21 @@ function viewModesRow(document: ChatDocument, summaryAvailable: boolean): MenuRo
       checked: level === row.value,
       command: { type: 'setDetailLevel', level: row.value },
     }));
+  // Quiet View, for any chat, under the three levels (desktop `actions.rs`; gx-chat-core
+  // `transcript/quiet_view.rs` has the user's words): the chat remembers its own choice. Absent on
+  // an older computer, which sends no Quiet View settings.
+  const quiet = document.quietView;
+  if (quiet !== undefined && quiet !== null) {
+    const on = quiet.on === true;
+    modes.push({ separator: true });
+    modes.push({
+      label: 'Quiet View',
+      iconPath: 'titlebar/eye-off.svg',
+      checked: on,
+      command: { type: 'setQuietView', on: !on },
+      ...(level === 'summary' ? { description: 'Summary view folds more, so it wins while it is on' } : {}),
+    });
+  }
   return {
     label: 'View',
     iconPath: 'titlebar/eye.svg',

@@ -343,6 +343,55 @@ export type GroupedTurn = {
   final?: ProjectedMessage;
 };
 
+/** Quiet View (gx-chat-core `transcript/quiet_view.rs`): what of a stretch's last row stays in
+ * view after its line, per turn (`turn` is its place in a `grouped-work` row's `turns`, 0 for a
+ * `completed-work` row). */
+export type QuietTurnTail = {
+  turn: number;
+  /** The ids of its `artifacts` that stay in view. */
+  artifacts?: string[];
+  /** Its answered questions stay in view. */
+  questions?: boolean;
+  /** The places in its `sentMessages` of the messages that were not sent. */
+  sends?: number[];
+  /** Its reply stays in view. */
+  reply?: boolean;
+};
+
+/** One quiet line and the rows it holds, `start..end` of the transcript list. */
+export type QuietStretch = {
+  /** The line's disclosure key, `quiet:<first row's id>`. */
+  key: string;
+  start: number;
+  end: number;
+  /** A line that holds only the work item lines under a reply and no row: drawn after this row. */
+  after?: number;
+  /** "3 reports · 1 message sent · 3 tool calls · 1 item updated". */
+  text: string;
+  /** "1:08 to 1:09 AM" on a line reports came in on. */
+  time?: string;
+  /** The turn still runs: the line counts up. */
+  running?: boolean;
+  /** Starts open (Expand the last turn). */
+  open?: boolean;
+  tail?: { row: number; turns: QuietTurnTail[] };
+  /** The keys of the work item lines the line holds, drawn at the top of the opened line. */
+  cards?: string[];
+};
+
+/** An answers card drawn shut as its own small line: a row's id, or `<turn id>#questions`. */
+export type QuietAnswers = { id: string; key: string; text: string; count?: string; open?: boolean };
+
+/** The document's `quietView`: absent where the chat has no Quiet View settings (an older computer). */
+export type QuietViewDocument = {
+  /** The chat's choice: its own from the View menu, else its default. */
+  on: boolean;
+  /** What the chat would be in without a choice of its own. */
+  defaultOn: boolean;
+  stretches?: QuietStretch[];
+  answers?: QuietAnswers[];
+};
+
 /** A kind this build does not know, kept verbatim so one new row cannot drop the list. Draw
  * nothing for it. */
 export type UnknownItem = { kind: string } & JsonObject;
@@ -772,6 +821,8 @@ export type ChatDocument = {
   chatPills: ChatPill[];
   /** The view level as a status chip at the left of the pill strip, unless it is Normal (gx-chat-core `view_chips`). */
   viewChips?: ViewChip[];
+  /** Quiet View's lines (gx-chat-core `transcript/quiet_view.rs`; `native/transcript/quietView.tsx`). */
+  quietView?: QuietViewDocument;
   /** The working card right above the composer. Desktop: `working_card.rs`. */
   workingCard?: WorkingCard;
   /** The subagent viewer header state, or null when closed (its rows come in `subagentSplice`).

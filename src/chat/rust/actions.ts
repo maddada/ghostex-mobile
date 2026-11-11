@@ -341,6 +341,8 @@ export type ActionFields = {
   setVerbose: { enabled: boolean };
   /** More actions > View: the chat's one level (gx-chat-core `transcript/view_level.rs`). */
   setDetailLevel: { level: 'summary' | 'normal' | 'detailed' };
+  /** Quiet View's choice from the View menu, or `null` (the chip) to go back to the default (gx-chat-core `transcript/quiet_view.rs`). */
+  setQuietView: { on: boolean | null };
   retry: {};
   /** Retry on the card of a session whose computer is offline (gx-chat-core `session/computer.rs`). */
   computerRetry: {};

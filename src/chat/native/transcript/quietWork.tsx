@@ -140,9 +140,9 @@ export function QuietStatusMark({ mark }: { mark: QuietMark | 'stopped' }) {
 /**
  * One quiet line: its icons, its text cut to the column, and the chevron while it is open. The line
  * is as wide as what it says; pressing it lights it to the muted colour, as hovering does on the
- * desktop.
+ * desktop. Quiet View's lines are drawn with it too (`quietView.tsx`).
  */
-function QuietLine({
+export function QuietLine({
   icons,
   segments,
   open,
