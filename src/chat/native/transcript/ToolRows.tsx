@@ -4,7 +4,7 @@
  * and each row's arguments and result, which the core ships only while the row is open.
  */
 
-import { memo, useState } from 'react';
+import { memo, useContext, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
@@ -20,7 +20,8 @@ import {
 import { DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { ToolBody } from './ToolBody';
-import { LINE_OUTPUT_LINES, Shimmer, ShowAllLines, ToolCard } from './ToolCard';
+import { BoxedToolCards, LINE_OUTPUT_LINES, Shimmer, ShowAllLines, ToolCard } from './ToolCard';
+import { SINGLE_LINE_CARD, singleLineShell } from './singleLineCard';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { FOLDED_CALLS_INSET, ReadImageStrip, ReadImages } from './Images';
 import { highlightLabel, useRowFind } from './searchHighlight';
@@ -63,11 +64,23 @@ function dimmed(hex: string, alpha: number): string {
  * behind one "N tool calls" heading (desktop `tool_run.rs`).
  */
 export function ToolRows({ message }: { message: ProjectedMessage }) {
-  const { toolLines } = useTranscriptEnv();
+  const { toolLines, theme } = useTranscriptEnv();
+  const boxed = useContext(BoxedToolCards);
+  const { inWorkFold, quietSteps } = useFoldPlace();
+  const { workflowCards } = useTranscriptFlags();
   const card = obj(message.toolCard);
   // Settings > Chat > Tool call cards: the calls and edits are one card (`ToolCard.tsx`). Tool call
   // lines leave a background task's run as these rows (the core's `background`).
   if (card !== null && !(toolLines === true && card.background === true)) return <ToolCard message={message} />;
+  // Inside an opened Quiet View line the plain rows sit in the "Message to" card's shell too
+  // (`BoxedToolCards`, CDXC:SessionChat 2026-11-12), whatever Tool call cards says.
+  if (boxed && quietSteps !== true && hasVisibleTools(message, inWorkFold, workflowCards)) {
+    return (
+      <View style={[styles.boxed, singleLineShell(theme)]}>
+        <ToolRunRows message={message} />
+      </View>
+    );
+  }
   return <ToolRunRows message={message} />;
 }
 
@@ -644,6 +657,9 @@ function errorWash(error: string): string {
 
 const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
+  // The rows' own 8pt inset plus 4 puts their words 12pt in, the "Message to" card's padding; a
+  // single row in it is that card's 44pt.
+  boxed: { paddingHorizontal: SINGLE_LINE_CARD.paddingX - ROW_PAD_X, paddingVertical: 5.5, minWidth: 0 },
   quietSteps: { minWidth: 0 },
   quietStep: { minWidth: 0 },
   quietStepTrigger: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },

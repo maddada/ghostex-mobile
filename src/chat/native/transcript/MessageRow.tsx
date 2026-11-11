@@ -4,7 +4,7 @@
  * a system or harness turn becomes. What each row is and says comes from the core's projection.
  */
 
-import { memo, useRef } from 'react';
+import { memo, useContext, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
@@ -40,6 +40,7 @@ import { GbotCards, shownGbotCards } from './GbotCard';
 import { estimatedLines, StartupDelivery, SuppressedRow, SystemCard } from './SystemRows';
 import { MESSAGE_PART_GAP, MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { SideQuestionRow } from './SideQuestionRow';
+import { BoxedToolCards } from './ToolCard';
 import { hasVisibleTools, ShellCommandCard, ToolRows } from './ToolRows';
 import { fileNames, QuietEditLine } from './quietWork';
 import { LeftUserMessage, userStyleProse } from './userMessageLook';
@@ -217,6 +218,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const rowGap = useRowGap();
   const strengthened = (color: string) => strengthenedText(color, flags.chatTextStrength, theme.light);
   const { inWorkFold, hideFileChanges, quietSteps } = useFoldPlace();
+  const boxedTools = useContext(BoxedToolCards);
   const id = message.id;
   const body = typeof message.text === 'string' ? message.text : '';
   const reasoning = message.role === 'reasoning';
@@ -344,7 +346,9 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   }
   // Which of the row's parts are one-line cards, for the gap between two of them (`cardSpacing.ts`).
   const filesCard = !hideFileChanges && !toolCard && arr(message.files).length > 0;
-  const callsCard = filesCard || (!toolsRendered && toolCard);
+  // Inside an opened Quiet View line the plain tool rows are a card too (`ToolRows`, `BoxedToolCards`).
+  const boxedRows = boxedTools && quietSteps !== true && hasVisibleTools(message, inWorkFold, flags.workflowCards);
+  const callsCard = filesCard || (!toolsRendered && (toolCard || boxedRows));
   const questionCards = !inWorkFold && arr(message.questions).length > 0;
   const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;
   const gbotCards = !inWorkFold && shownGbotCards(message.gbotCards, flags.gbotCardStates).length > 0;
