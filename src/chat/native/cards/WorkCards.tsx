@@ -159,12 +159,12 @@ const DOCK_MIN_ROWS = 44;
 
 /**
  * The most height the dock may take, from the space between what sits above the transcript and the
- * chat box: half of it with the keyboard down, 60% with it up (the transcript keeps the rest, at
- * least about a third of it once the working card is counted), and never more than
- * `DOCK_MAX_HEIGHT`. Past the cap the rows scroll inside the dock, as on the desktop. On a small
- * phone (about 640 points tall) that is about 225 with the keyboard down and 110 with it up; on a
- * large one or a foldable unfolded it reaches the 420 ceiling's neighbourhood (about 350) only with
- * the keyboard down.
+ * chat box: 45% of it with the keyboard down, half with it up, and never more than
+ * `DOCK_MAX_HEIGHT`; the transcript keeps the rest, at least about a third once the working card
+ * is counted. Past the cap the rows scroll inside the dock, as on the desktop. With the keyboard up
+ * that is about 100 points on a small phone (360 by 640) and 210 on a large one (411 by 915), so
+ * the bar and a row or two show; with it down, about 210 and 330, and a foldable unfolded (673 by
+ * 841) gets about 300.
  *
  * CDXC:Coordinators 2026-11-12 DECISION:
  * User, of an opened docked row that filled the screen above the keyboard and pushed the chat box
@@ -172,7 +172,7 @@ const DOCK_MIN_ROWS = 44;
  * type on the phone app."
  */
 export function dockHeightCap(space: number, keyboardUp: boolean): number {
-  return Math.min(DOCK_MAX_HEIGHT, Math.max(0, space) * (keyboardUp ? 0.6 : 0.5));
+  return Math.min(DOCK_MAX_HEIGHT, Math.max(0, space) * (keyboardUp ? 0.5 : 0.45));
 }
 
 /** Which dock row is open, per chat, kept outside the component so a new document keeps it. */
