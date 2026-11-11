@@ -15,6 +15,7 @@ import {
   summaryOfProjectWorkspace,
 } from './sessions-screen/new-session-place';
 import { NewSessionButton, newSessionEmptyList } from './sessions-screen/new-session-button';
+import { UpdateButton } from './sessions-screen/UpdateButton';
 import {
   AppState,
   BackHandler,
@@ -1315,6 +1316,8 @@ export default function SessionsScreen({ navigation }: Props) {
         {wallOffered && !inRail ? (
           <WallSwitch view={sessionListView} appearance={sidebarAppearance} onChange={chooseListView} />
         ) : null}
+        {/* Shown only while there is an update to take, in the side bar's poses too (CDXC:Updates 2026-11-12). */}
+        <UpdateButton />
         {inRail ? null : newSessionButton}
         {inRail ? null : bellButton}
         {inRail ? null : moreButton}

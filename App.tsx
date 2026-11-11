@@ -39,7 +39,7 @@ import { initChatGridClaim } from './src/terminal/chatGridClaim';
 import { initTerminalKeepAwake } from './src/terminal/keepAwake';
 import { initTerminalEvents, useTerminalStore } from './src/terminal/sessions';
 import { initZmxDisplayPolicy } from './src/terminal/zmxDisplay';
-import { initAndroidSelfUpdate } from './src/updates/androidSelfUpdateStore';
+import { initAppUpdates } from './src/updates/appUpdateStore';
 import { initOverTheAirUpdates } from './src/updates/overTheAir';
 import { addProjectSourceLabel } from './src/addProject/sources';
 
@@ -168,7 +168,7 @@ export default function App() {
     initTerminalKeepAwake();
     initChatGridClaim();
     initPaneLayouts();
-    initAndroidSelfUpdate();
+    initAppUpdates();
     initOverTheAirUpdates();
     initVoice();
     void checkForCrashReport().catch(() => undefined);

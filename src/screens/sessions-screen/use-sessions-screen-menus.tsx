@@ -115,7 +115,6 @@ import { useSettingsStore } from '../../settings/store';
 import type { RootStackParamList } from '../../navigation/types';
 
 import { useAppearance } from '../../theme/useAppearance';
-import { useUpdateNotice } from '../../updates/updateNotice';
 import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
 import { handoffLastTurns } from '../../contract/handoff/handoff';
 import {
@@ -264,10 +263,6 @@ export function useSessionsScreenMenus({
   snoozeSession,
 }: SessionsScreenMenusDeps) {
   // Desktop-parity context menus ---------------------------------------------
-
-  // A newer APK to install or a downloaded update waiting for a restart; the
-  // Settings menu item carries it as a one-line notice.
-  const updateNotice = useUpdateNotice();
 
   const summaryFor = (machineId: string) =>
     useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary ?? null;
@@ -1559,7 +1554,7 @@ export function useSessionsScreenMenus({
     items.push({
       kind: 'item',
       key: 'settings',
-      label: updateNotice === null ? 'Settings' : `Settings · ${updateNotice}`,
+      label: 'Settings',
       icon: <SettingsGlyph size={14} color={menuIconColor} />,
       onPress: () => {
         setOverlay(NONE);

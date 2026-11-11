@@ -9,8 +9,8 @@
  * Turn it off before a Play Store submission: run every build step with
  * `GHOSTEX_ANDROID_SELF_UPDATE=0`. app.config.js then omits the
  * REQUEST_INSTALL_PACKAGES permission from the generated manifest and this flag
- * becomes false, which removes the update check, the Settings section, the
- * Sessions menu notice, and the installer prompt entirely.
+ * becomes false, which removes the APK download and the installer prompt: the
+ * build reports itself as the Google Play app, and a newer app opens Google Play.
  */
 
 import Constants from 'expo-constants';

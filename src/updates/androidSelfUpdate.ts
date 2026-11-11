@@ -1,11 +1,12 @@
 /**
- * Android self-update: release lookup and version comparison.
+ * Newer app releases: release lookup and version comparison.
  *
- * The Android app is distributed as the `ghostex-android.apk` asset on every
- * GitHub release of maddada/Ghostex (tags look like `v8.6.0`, and the
+ * Every GitHub release of maddada/Ghostex names the newest app version (the
+ * iPhone on TestFlight and the Play build read it too), and carries the
+ * Android app as its `ghostex-android.apk` asset (tags look like `v8.6.0`, and the
  * installed app reports `8.6.0` through expo-application, which is the
  * `version` field app.config.js writes into the APK). This module fetches the
- * latest release, finds that asset, and decides whether it is newer than the
+ * latest release, finds that asset, and decides whether a version is newer than the
  * running build. Errors from GitHub (offline, rate limit, missing asset) are
  * thrown with a user-readable message so the Settings page can show them.
  */
@@ -26,8 +27,8 @@ export type LatestRelease = {
   /** Tag without the `v` prefix, e.g. `8.6.0`. */
   version: string;
   publishedAt: string;
-  apkUrl: string;
-  apkSize: number;
+  /** The `ghostex-android.apk` asset; only the GitHub APK's updater needs it. */
+  apk: { url: string; size: number } | null;
 };
 
 type GitHubReleaseAsset = {
@@ -110,7 +111,7 @@ function assertGitHubRelease(body: unknown): GitHubRelease {
   };
 }
 
-/** GET the latest GitHub release and locate the Android APK asset. */
+/** GET the latest GitHub release and, when it has one, its Android APK asset. */
 export async function fetchLatestRelease(signal?: AbortSignal): Promise<LatestRelease> {
   let response: Response;
   try {
@@ -133,19 +134,16 @@ export async function fetchLatestRelease(signal?: AbortSignal): Promise<LatestRe
   // later in the comparison.
   const [major, minor, patch] = parseSemanticVersion(release.tag_name);
   const asset = release.assets.find((candidate) => candidate.name === APK_ASSET_NAME);
-  if (asset === undefined) {
-    throw new Error(`Release ${release.tag_name} has no ${APK_ASSET_NAME} asset.`);
-  }
-  if (typeof asset.browser_download_url !== 'string' || typeof asset.size !== 'number') {
-    throw new Error(`Release ${release.tag_name} lists ${APK_ASSET_NAME} without a download URL or size.`);
-  }
+  const apk =
+    asset !== undefined && typeof asset.browser_download_url === 'string' && typeof asset.size === 'number'
+      ? { url: asset.browser_download_url, size: asset.size }
+      : null;
 
   return {
     tag: release.tag_name,
     version: `${major}.${minor}.${patch}`,
     publishedAt: release.published_at,
-    apkUrl: asset.browser_download_url,
-    apkSize: asset.size,
+    apk,
   };
 }
 

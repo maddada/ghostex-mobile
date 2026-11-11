@@ -2,7 +2,8 @@
  * Over-the-air updates of the app's JavaScript (expo-updates), from Ghostex's own update server.
  *
  * expo-updates checks at every launch and downloads in the background; the update runs from the
- * next launch, or at once when the reader taps Restart in Settings › Updates. A phone keeps the app
+ * next launch, or at once when the reader taps Restart (Settings › Updates, or the Update button on
+ * the Sessions screen). A phone keeps the app
  * alive for days, so `initOverTheAirUpdates` also checks when the app comes back to the
  * foreground, at most every CHECK_INTERVAL_MS. Release builds turn updates on (app.config.js);
  * development builds and Metro leave `OTA_ENABLED` false and everything here does nothing.
@@ -43,19 +44,37 @@ export function manifestAppVersion(manifest: Partial<Updates.Manifest> | undefin
 }
 
 let lastCheckAt = Date.now();
-let checkInFlight: Promise<void> | null = null;
 
-/** Ask the server for an update and download it when there is one. Errors land in useUpdates(). */
-export function checkForAppUpdate(): Promise<void> {
-  if (!OTA_ENABLED) return Promise.resolve();
+/** What one over-the-air check found. */
+export type OverTheAirCheckOutcome =
+  | { kind: 'off' }
+  | { kind: 'none' }
+  | { kind: 'downloaded' }
+  | { kind: 'rollback' }
+  | { kind: 'error'; message: string };
+
+let checkInFlight: Promise<OverTheAirCheckOutcome> | null = null;
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' ? message : String(error);
+}
+
+/** Ask the server for an update and download it when there is one. Errors also land in useUpdates(). */
+export function checkForAppUpdate(): Promise<OverTheAirCheckOutcome> {
+  if (!OTA_ENABLED) return Promise.resolve({ kind: 'off' });
   if (checkInFlight !== null) return checkInFlight;
   lastCheckAt = Date.now();
-  checkInFlight = (async () => {
+  checkInFlight = (async (): Promise<OverTheAirCheckOutcome> => {
     try {
       const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) await Updates.fetchUpdateAsync();
-    } catch {
-      // useUpdates() reports checkError/downloadError to Settings › Updates.
+      if (result.isRollBackToEmbedded) return { kind: 'rollback' };
+      if (!result.isAvailable) return { kind: 'none' };
+      await Updates.fetchUpdateAsync();
+      return { kind: 'downloaded' };
+    } catch (error) {
+      return { kind: 'error', message: errorText(error) };
     } finally {
       checkInFlight = null;
     }
@@ -79,20 +98,14 @@ export function initOverTheAirUpdates(): void {
   });
 }
 
-/** A downloaded update waiting for a restart (with the release it came from), or null. */
-export function useReadyUpdate(): { version: string | null } | null {
-  const { isUpdatePending, downloadedUpdate } = useUpdates();
-  if (!isUpdatePending) return null;
-  return { version: manifestAppVersion(downloadedUpdate?.manifest) };
-}
-
 /**
- * Whether release `version` has been published over the air for this binary, so it arrives
- * without installing anything. The server keeps the newest release per runtime version.
+ * The release the update server serves this binary over the air (it keeps the newest one per
+ * runtime version), or null when it serves none. A newer release at or below it needs no new app:
+ * its JavaScript arrives over the air.
  */
-export async function releaseArrivesOverTheAir(version: string): Promise<boolean> {
+export async function overTheAirReleaseVersion(): Promise<string | null> {
   const runtimeVersion = Updates.runtimeVersion;
-  if (!OTA_ENABLED || runtimeVersion === null) return false;
+  if (!OTA_ENABLED || runtimeVersion === null) return null;
   const url = statusUrl(runtimeVersion);
   if (url === null) throw new Error('This build has no update server address.');
   let response: Response;
@@ -103,8 +116,62 @@ export async function releaseArrivesOverTheAir(version: string): Promise<boolean
       `Could not reach the Ghostex update server (${error instanceof Error ? error.message : String(error)}).`,
     );
   }
-  if (response.status === 404) return false;
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`The Ghostex update server responded with HTTP ${response.status}.`);
   const body = (await response.json()) as { version?: unknown };
-  return body.version === version;
+  return typeof body.version === 'string' ? body.version : null;
+}
+
+/**
+ * What an update carries about itself: `extra.ghostex` of the manifest ota-publish.mjs signs
+ * (tooling/release-mobile/ota-publish.mjs). `version` and `gitSha` (the main repo commit) are in
+ * every update; `mobileSha` (the phone app commit) and `whatsNew` (one short line per phone change
+ * since the update before) only in updates published after 2026-11-12.
+ */
+export type UpdateDetails = {
+  id: string | null;
+  createdAt: Date | null;
+  version: string | null;
+  mainSha: string | null;
+  phoneSha: string | null;
+  whatsNew: string[];
+};
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+export function updateDetails(
+  manifest: Partial<Updates.Manifest> | undefined,
+  id: string | undefined | null,
+  createdAt: Date | undefined | null,
+): UpdateDetails {
+  const ghostex = (manifest as { extra?: { ghostex?: Record<string, unknown> } } | undefined)?.extra?.ghostex ?? {};
+  const whatsNew = Array.isArray(ghostex.whatsNew)
+    ? ghostex.whatsNew.filter((line): line is string => typeof line === 'string' && line.length > 0)
+    : [];
+  return {
+    id: id ?? null,
+    createdAt: createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) ? createdAt : null,
+    version: stringOrNull(ghostex.version) ?? manifestAppVersion(manifest),
+    mainSha: stringOrNull(ghostex.gitSha),
+    phoneSha: stringOrNull(ghostex.mobileSha),
+    whatsNew,
+  };
+}
+
+/** The JavaScript running now: the app's own (`builtIn`), or a downloaded update and what it carries. */
+export function useRunningUpdate(): { builtIn: boolean; details: UpdateDetails } {
+  const { currentlyRunning } = useUpdates();
+  return {
+    builtIn: currentlyRunning.isEmbeddedLaunch,
+    details: updateDetails(currentlyRunning.manifest, currentlyRunning.updateId, currentlyRunning.createdAt),
+  };
+}
+
+/** A downloaded update waiting for a restart, with what it carries, or null. */
+export function useDownloadedUpdate(): UpdateDetails | null {
+  const { isUpdatePending, downloadedUpdate } = useUpdates();
+  if (!isUpdatePending) return null;
+  return updateDetails(downloadedUpdate?.manifest, downloadedUpdate?.updateId, downloadedUpdate?.createdAt);
 }
