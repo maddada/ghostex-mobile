@@ -121,13 +121,25 @@ const registration = new LiveActivityPushRegistration({
   log: logAppEvent,
 });
 
+/** How long after a clear or a register that did not get through the pass runs again. */
+const RETRY_MS = 30_000;
+
+function retry(): void {
+  timer = null;
+  schedule();
+}
+
 /** A pass after changes settle. */
 function schedule(): void {
   if (!useSettingsStore.getState().hydrated) return;
   if (timer !== null) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    void registration.sync();
+    void registration.sync().then(() => {
+      // A computer did not take a clear or the register: ask again a little later (no other computer is
+      // registered meanwhile).
+      if (registration.needsRetry() && timer === null) timer = setTimeout(retry, RETRY_MS);
+    });
   }, SETTLE_MS);
 }
 

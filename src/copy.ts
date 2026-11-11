@@ -1684,7 +1684,7 @@ export const LiveActivityCopy = {
   freshnessCaption: 'Ghostex updates it while the app is open. Later it can show an older state and then says so.',
   lockedUpdatesToggle: 'Keep it updated while locked',
   lockedUpdatesCaption:
-    'One of your computers keeps the Live Activity current while your phone is locked, through Ghostex’s push service, also for the computers connected to it. Off, it updates only while Ghostex is open.',
+    'New. While your phone is locked, one of your computers keeps this Live Activity up to date through Ghostex’s push service, for itself and the computers connected to it. Off, it updates only while Ghostex is open, as before.',
   offCaption: 'Off. Ghostex ends the current Live Activity and starts no new one.',
   sessionNamesToggle: 'Show session names',
   sessionNamesCaption:

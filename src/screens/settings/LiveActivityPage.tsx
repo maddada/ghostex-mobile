@@ -14,7 +14,7 @@ import { Caption, SectionHeader, SettingsScreenLayout, SettingToggle } from './S
  * While a computer with agents sends no start times or attention kind, it says which Mac needs an update. iOS only
  * (pages.ts).
  *
- * Under it while it is on, "Keep it updated while locked", on by default (`liveActivityLockedUpdates`): one computer
+ * Under it while it is on, "Keep it updated while locked", off by default (`liveActivityLockedUpdates`): one computer
  * keeps the activity current through Ghostex's push relay while the phone is locked (`liveActivityPush.ts`).
  *
  * A second switch, off by default (`liveActivitySessionNames`): rows lead with the session's name instead of the
@@ -23,7 +23,6 @@ import { Caption, SectionHeader, SettingsScreenLayout, SettingToggle } from './S
 export default function LiveActivityPage() {
   const enabled = useSettingsStore((state) => state.settings.liveActivityEnabled);
   const showSessionNames = useSettingsStore((state) => state.settings.liveActivitySessionNames);
-  const lockedUpdates = useSettingsStore((state) => state.settings.liveActivityLockedUpdates);
   const outdated = useComputersNeedingUpdate();
   const demoOn = useMachinesStore((state) => state.machines.some((machine) => isDemoMachine(machine)));
   return (
@@ -38,9 +37,7 @@ export default function LiveActivityPage() {
             <SettingToggle settingKey="liveActivityLockedUpdates" label={LiveActivityCopy.lockedUpdatesToggle} />
           ) : null}
           <Caption>
-            {LIVE_ACTIVITY_PUSH_SUPPORTED && lockedUpdates
-              ? LiveActivityCopy.lockedUpdatesCaption
-              : LiveActivityCopy.freshnessCaption}
+            {LIVE_ACTIVITY_PUSH_SUPPORTED ? LiveActivityCopy.lockedUpdatesCaption : LiveActivityCopy.freshnessCaption}
           </Caption>
         </>
       ) : (

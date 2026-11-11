@@ -7,11 +7,17 @@
  *    (`registerLiveActivity {action: 'status'}`: its server id, the computers it can read, whether it holds this
  *    phone's tokens and pushes with them), at most once a minute per computer unless a pass needs it now.
  * 2. Picks the banner computer.
- * 3. Clears the tokens on every other computer that holds them or that this launch registered with, first,
- *    so no two computers ever push this phone's banner.
- * 4. Registers with the pick when it does not hold exactly what is wanted now (the tokens, the build's push
- *    environment, "Show session names", the phone's ids for its other computers), or holds it without
- *    pushing (a computer that restarted or slept waits for the phone to confirm it).
+ * 3. Clears the tokens on every other computer that holds them, and registers with the pick only once every one of
+ *    them confirmed the clear, so no two computers ever push this phone's banner. A clear that does not get
+ *    through is tried again (`needsRetry`), and until then the pick waits; a holder that cannot be reached
+ *    counts as stopped only once its registration has certainly run out on gxserver (`HOLDER_EXPIRY_MS`).
+ * 4. Registers with the pick when it does not hold exactly what is wanted now (the activity's update token, the
+ *    build's push environment, "Show session names", the phone's ids for its other computers), holds it without
+ *    pushing (a computer that restarted or slept waits for the phone to confirm it), or was registered more than
+ *    `REFRESH_MS` ago (gxserver lets a registration run out after an hour).
+ *
+ * Only the update token of an activity the app itself started is sent: no push-to-start token
+ * (`SEND_PUSH_TO_START`), so a computer only ever updates and ends a banner the app started.
  *
  * Off (the Live Activity switch, its "Keep it updated while locked" switch, or no token from iOS yet): the pass
  * clears the tokens everywhere they are and registers nowhere. The app's own updates of its activity, while it
@@ -71,6 +77,19 @@ export type LiveActivityPushDeps = {
 
 /** A computer's status is read again after this long, or at once when a pass needs it. */
 export const STATUS_MAX_AGE_MS = 60_000;
+/** The banner computer is registered again after this long, well within gxserver's one-hour confirmation. */
+export const REFRESH_MS = 30 * 60_000;
+/**
+ * A holder the phone could not ask to stop has stopped on its own once this long has passed since it last confirmed
+ * (gxserver drops a confirmation after an hour, and then pushes nothing and ends nothing).
+ */
+export const HOLDER_EXPIRY_MS = 70 * 60_000;
+/**
+ * Whether the phone hands over its push-to-start token. Off: a banner started by push could never get an update
+ * token back to its computer, so it never updated and the next working stint started another, each with an alert.
+ * Only the update token of an activity the app itself started is sent.
+ */
+export const SEND_PUSH_TO_START = false;
 
 type Status = { serverId: string; speaksFor: string[]; holds: boolean; confirmed: boolean; at: number };
 
@@ -79,8 +98,12 @@ export class LiveActivityPushRegistration {
   private readonly statuses = new Map<string, Status>();
   /** Computers this launch registered with (a clear must reach them even if their status was not read). */
   private readonly registeredWith = new Set<string>();
-  /** What the holder took last, to tell a change. */
-  private sent: { machineId: string; signature: string } | null = null;
+  /** What the holder took last and when, to tell a change and to renew it in time. */
+  private sent: { machineId: string; signature: string; at: number } | null = null;
+  /** The computers known to hold this phone's tokens, with when each last confirmed them. */
+  private readonly holding = new Map<string, number>();
+  /** A clear or a register did not get through: a pass is wanted again soon. */
+  private retryWanted = false;
   private running: Promise<void> | null = null;
   private again = false;
   private lastLog = '';
@@ -110,14 +133,31 @@ export class LiveActivityPushRegistration {
 
   /**
    * The computer is being removed from the phone: it is asked to stop pushing and forget the tokens (its answer is
-   * not waited for longer than `waitMs`), and the next pass picks among the others.
+   * not waited for longer than `waitMs`), and the next pass picks among the others. It runs between passes, never
+   * during one, so a pass cannot register with it while it is being cleared.
    */
   async removing(machineId: string, waitMs: number): Promise<void> {
-    const cleared = this.deps.send(machineId, { action: 'clear', machineId }).catch(() => null);
-    await Promise.race([cleared, new Promise((resolve) => setTimeout(resolve, waitMs))]);
-    this.statuses.delete(machineId);
-    this.registeredWith.delete(machineId);
-    if (this.sent?.machineId === machineId) this.sent = null;
+    while (this.running !== null) await this.running;
+    this.running = (async () => {
+      const cleared = this.deps.send(machineId, { action: 'clear', machineId }).catch(() => null);
+      await Promise.race([cleared, new Promise((resolve) => setTimeout(resolve, waitMs))]);
+      // Gone from the phone: if it did not hear the clear, its confirmation runs out on its own.
+      this.statuses.delete(machineId);
+      this.registeredWith.delete(machineId);
+      this.holding.delete(machineId);
+      if (this.sent?.machineId === machineId) this.sent = null;
+    })();
+    try {
+      await this.running;
+    } finally {
+      this.running = null;
+    }
+    if (this.again) void this.sync();
+  }
+
+  /** A clear or a register did not get through in the last pass: run one again a little later. */
+  needsRetry(): boolean {
+    return this.retryWanted;
   }
 
   /** The computer that holds the tokens as far as the phone knows (for Settings and the logs). */
@@ -133,9 +173,12 @@ export class LiveActivityPushRegistration {
 
   private remember(machineId: string, answer: LiveActivityAnswer): boolean {
     if (!answer.ok) {
+      // What it holds is unknown now: `holding` keeps what it last said.
       this.statuses.delete(machineId);
       return false;
     }
+    if (answer.holds && answer.confirmed) this.holding.set(machineId, this.deps.now());
+    else if (!answer.holds) this.holding.delete(machineId);
     this.statuses.set(machineId, {
       serverId: answer.serverId,
       speaksFor: answer.speaksFor,
@@ -161,27 +204,48 @@ export class LiveActivityPushRegistration {
     );
   }
 
+  /**
+   * Asks a holder to stop. True once it stopped: it confirmed the clear, or it last confirmed so long ago that its
+   * confirmation ran out on gxserver (`HOLDER_EXPIRY_MS`). A clear that did not get through is tried again at the
+   * next pass, and until then no other computer is registered.
+   */
   private async clear(machineId: string): Promise<boolean> {
     const answer = await this.deps.send(machineId, { action: 'clear', machineId });
     if (answer.ok) {
       this.remember(machineId, answer);
+      this.holding.delete(machineId);
       this.registeredWith.delete(machineId);
       if (this.sent?.machineId === machineId) this.sent = null;
       return true;
     }
-    this.log(`Live Activity: ${machineId} could not be asked to stop pushing (${answer.reason})`);
+    const confirmedAt = this.holding.get(machineId);
+    if (confirmedAt === undefined || this.deps.now() - confirmedAt >= HOLDER_EXPIRY_MS) {
+      this.holding.delete(machineId);
+      this.registeredWith.delete(machineId);
+      if (this.sent?.machineId === machineId) this.sent = null;
+      this.log(`Live Activity: ${machineId} did not answer, and its registration has run out`);
+      return true;
+    }
+    this.retryWanted = true;
+    this.log(`Live Activity: ${machineId} could not be asked to stop pushing yet (${answer.reason})`);
     return false;
   }
 
   private async pass(): Promise<void> {
+    this.retryWanted = false;
     const machines = this.deps.machines().map((machine) => machine.id);
     const capable = machines.filter((machineId) => this.deps.capable(machineId) === true);
-    const tokens = this.deps.tokens();
+    const all = this.deps.tokens();
+    const tokens: LiveActivityTokens = {
+      ...(all.update === undefined ? {} : { update: all.update }),
+      ...(SEND_PUSH_TO_START && all.start !== undefined ? { start: all.start } : {}),
+    };
     const on = this.deps.enabled() && (tokens.update !== undefined || tokens.start !== undefined);
     // Off, each computer is asked once per launch, to find tokens an earlier launch left there.
     await this.readStatuses(capable, on ? STATUS_MAX_AGE_MS : Number.POSITIVE_INFINITY);
     const holders = new Set<string>([
       ...this.registeredWith,
+      ...this.holding.keys(),
       ...[...this.statuses].filter(([, status]) => status.holds).map(([machineId]) => machineId),
     ]);
     if (!on) {
@@ -207,10 +271,12 @@ export class LiveActivityPushRegistration {
     const pick = pickBannerComputer(computers, current);
     if (pick === null) return;
 
-    // Never two: every other holder stops first.
+    // Never two: every other holder stops first, and the pick is registered only once all of them did.
+    let othersStopped = true;
     for (const machineId of holders) {
-      if (machineId !== pick) await this.clear(machineId);
+      if (machineId !== pick && !(await this.clear(machineId))) othersStopped = false;
     }
+    if (!othersStopped) return;
 
     const params: LiveActivityParams = {
       action: 'register',
@@ -226,14 +292,19 @@ export class LiveActivityPushRegistration {
     const signature = JSON.stringify(params);
     const status = this.statuses.get(pick);
     const holdsWanted =
-      this.sent?.machineId === pick && this.sent.signature === signature && status?.holds === true && status.confirmed;
+      this.sent?.machineId === pick &&
+      this.sent.signature === signature &&
+      this.deps.now() - this.sent.at < REFRESH_MS &&
+      status?.holds === true &&
+      status.confirmed;
     if (holdsWanted) return;
     const answer = await this.deps.send(pick, params);
     if (this.remember(pick, answer)) {
       this.registeredWith.add(pick);
-      this.sent = { machineId: pick, signature };
+      this.sent = { machineId: pick, signature, at: this.deps.now() };
       this.log(`Live Activity: ${pick} keeps the Live Activity updated while the phone is locked`);
     } else if (!answer.ok) {
+      this.retryWanted = true;
       this.log(`Live Activity: ${pick} did not take the Live Activity (${answer.reason})`);
     }
   }

@@ -95,8 +95,9 @@ export type GhostexSettings = ThemeColourSettings & {
    * (`notifications/liveActivityPush.ts`). Off, the Live Activity updates only while the app runs, as before.
    * iOS only.
    *
-   * CDXC:Notifications 2026-11-11 DECISION: On by default, with a switch to turn it off, because no iPhone had run
-   * the pushes before this release: the brief for 11.4.0 asked for "Keep it updated while locked", on by default.
+   * CDXC:Notifications 2026-11-11 DECISION: Off by default. An independent review of the push path before 11.4.0:
+   * "do not ship it switched on by default; switched off by default is safe." No iPhone had run the pushes before
+   * this release; off, nothing is registered with any computer and the Live Activity behaves as before.
    */
   liveActivityLockedUpdates: boolean;
   hideKeyboardOnStartup: boolean;
@@ -293,7 +294,7 @@ export function defaultSettings(): GhostexSettings {
     settingsSyncThroughPhone: true,
     liveActivityEnabled: true,
     liveActivitySessionNames: false,
-    liveActivityLockedUpdates: true,
+    liveActivityLockedUpdates: false,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
     confirmTabClose: false,
