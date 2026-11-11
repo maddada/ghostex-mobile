@@ -143,20 +143,38 @@ function timeOf(iso: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
-/**
- * The record to keep among several for one computer: a shown one over a
- * hidden one, then the newest pairing (its key and device token are the
- * computer's latest grant), then the latest connection, then the later one in
- * the saved order (which is the one added last).
+/*
+ * CDXC:RemotePairing 2026-11-11 WHY:
+ * Review of the first version (finding 2): the record kept was "a shown one over a hidden one, then
+ * the newest pairing". A user who showed the old dead record again and hid the working one before
+ * the next start had the dead one kept and the only working login deleted. The record kept is now
+ * the one whose own login worked last: the latest connect it made with its own credentials under
+ * the pairing it has now (`connectedAtOf`, machines/provenComputer.ts), whether it is shown or
+ * hidden. The computer retires a phone's earlier pairing when that phone pairs again, so the record
+ * that connected last is the one the computer still accepts. When no record of the group has such a
+ * connect, or two have the same time, nothing says which login works and the group is left alone
+ * until one connects.
  */
-function survivorOf(group: readonly MachineRecord[], orderOf: (id: string) => number): MachineRecord {
-  return [...group].sort(
-    (a, b) =>
-      Number(b.disabled !== true) - Number(a.disabled !== true) ||
-      timeOf(b.pairedAt) - timeOf(a.pairedAt) ||
-      timeOf(b.lastConnectedAt) - timeOf(a.lastConnectedAt) ||
-      orderOf(b.id) - orderOf(a.id),
-  )[0]!;
+/** The record to keep among several for one computer (see above), or null when none can be told. */
+function survivorOf(
+  group: readonly MachineRecord[],
+  connectedAtOf: (machineId: string) => number | null,
+): MachineRecord | null {
+  let best: MachineRecord | null = null;
+  let bestAt = Number.NEGATIVE_INFINITY;
+  let tied = false;
+  for (const machine of group) {
+    const at = connectedAtOf(machine.id);
+    if (at === null || !Number.isFinite(at)) continue;
+    if (at > bestAt) {
+      best = machine;
+      bestAt = at;
+      tied = false;
+    } else if (at === bestAt) {
+      tied = true;
+    }
+  }
+  return tied ? null : best;
 }
 
 export type MachineMerge = {
@@ -175,14 +193,17 @@ export type MachineDedupe = {
 /**
  * Collapse Easy Connect records whose addresses name the same computer into
  * one. `tokenOf` returns a record's saved address (null when it has none, which
- * leaves the record alone). The kept record takes the place of the first of its
- * group in the tab order, stays shown when any of the group was, keeps a name
- * the user typed on any of them, and remembers the latest connection.
+ * leaves the record alone). The record kept is the one whose own login worked
+ * last (`connectedAtOf`, see `survivorOf`); a group where that cannot be told is
+ * left as it is. The kept record takes the place of the first of its group in
+ * the tab order, stays shown when any of the group was, keeps a name the user
+ * typed on any of them, and remembers the latest connection.
  */
 export function dedupeMachineRecords(
   machines: readonly MachineRecord[],
   tokenOf: (machineId: string) => string | null,
   provenOf: (machineId: string) => readonly string[] = () => [],
+  connectedAtOf: (machineId: string) => number | null = () => null,
 ): MachineDedupe {
   // Records that share a proven key are one computer; one record can link two others, so the
   // groups are what the links join up.
@@ -217,7 +238,8 @@ export function dedupeMachineRecords(
   const merges: MachineMerge[] = [];
   for (const group of groups) {
     if (group.length < 2) continue;
-    const survivor = survivorOf(group, orderOf);
+    const survivor = survivorOf(group, connectedAtOf);
+    if (survivor === null) continue;
     const stale = group.filter((machine) => machine.id !== survivor.id);
     const customName = [survivor, ...stale].find(
       (machine) =>
@@ -327,8 +349,9 @@ export function staleDuplicatesOf(
   tokenOf: (machineId: string) => string | null,
   provenOf: (machineId: string) => readonly string[],
   machineId: string,
+  connectedAtOf: (machineId: string) => number | null = () => null,
 ): string[] {
-  const merge = dedupeMachineRecords(machines, tokenOf, provenOf).merges.find(
+  const merge = dedupeMachineRecords(machines, tokenOf, provenOf, connectedAtOf).merges.find(
     (entry) => entry.survivorId === machineId,
   );
   return merge?.staleIds ?? [];

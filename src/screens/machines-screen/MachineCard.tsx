@@ -53,6 +53,7 @@ export default function MachineCard({
   detail,
   status,
   update,
+  note,
   onPress,
   onRemove,
 }: {
@@ -60,6 +61,8 @@ export default function MachineCard({
   detail: string;
   status: MachineCardStatus;
   update?: MachineCardUpdate | null;
+  /** A one-time line about this computer (older entries hidden or merged), in the detail style. */
+  note?: string | null;
   onPress: () => void;
   onRemove: () => void;
 }) {
@@ -112,6 +115,11 @@ export default function MachineCard({
           {update != null ? (
             <Text numberOfLines={1} style={[styles.detail, { color: readableSecondaryText(UPDATE_TONE_COLOR[update.view.tone], appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]) }]}>
               {update.line}
+            </Text>
+          ) : null}
+          {note != null ? (
+            <Text numberOfLines={2} style={styles.detail}>
+              {note}
             </Text>
           ) : null}
         </View>

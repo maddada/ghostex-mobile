@@ -36,6 +36,7 @@ import {
   runAppUpdateOp,
   useAppUpdateStore,
 } from '../machines/appUpdate';
+import { clearDuplicateNotices, hydrateDuplicateNotices, useDuplicateNoticeStore } from '../machines/duplicateNotice';
 import { useMachinesStore, type MachineRecord } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useRemovalAsksComputer } from '../notifications/pushStore';
@@ -61,6 +62,22 @@ export default function MachinesScreen({ navigation }: Props) {
   const removalAsksComputer = useRemovalAsksComputer();
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
+
+  // A line on the entry kept when older entries for its computer were hidden or merged: shown while
+  // the list is open, gone once the user leaves it (machines/duplicateNotice.ts).
+  const duplicateNotices = useDuplicateNoticeStore((state) => state.notices);
+  useFocusEffect(
+    useCallback(() => {
+      void hydrateDuplicateNotices();
+      return () => {
+        const shown = useMachinesStore
+          .getState()
+          .machines.map((machine) => machine.id)
+          .filter((id) => id in useDuplicateNoticeStore.getState().notices);
+        void clearDuplicateNotices(shown);
+      };
+    }, []),
+  );
 
   // Every computer the phone reaches is read again when the list opens, if its answer is old.
   useFocusEffect(
@@ -97,6 +114,7 @@ export default function MachinesScreen({ navigation }: Props) {
                 const appUpdate = appUpdates[machine.id];
                 const view = appUpdate === undefined ? null : appUpdateView(appUpdate);
                 const line = view === null ? null : appUpdateCardLine(view);
+                const duplicate = duplicateNotices[machine.id];
                 return (
                   <MachineCard
                     key={machine.id}
@@ -108,6 +126,7 @@ export default function MachinesScreen({ navigation }: Props) {
                         ? { line, view, onUpdate: () => runAppUpdateOp(machine, 'install') }
                         : null
                     }
+                    note={duplicate === undefined ? null : MachinesCopy.duplicate[duplicate.kind](duplicate.ids.length)}
                     onPress={() => editMachine(machine)}
                     onRemove={() => setOverlay({ kind: 'remove', machine })}
                   />

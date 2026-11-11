@@ -736,6 +736,20 @@ export const MachinesCopy = {
   },
   /** The card's Update button (its long label is "Update to <version>"). */
   update: 'Update',
+  /**
+   * The line on the entry kept when older entries for the same computer were hidden or merged
+   * (machines/duplicateNotice.ts), shown the first time the list opens after it happened.
+   */
+  duplicate: {
+    hidden: (count: number) =>
+      count === 1
+        ? 'An older entry for this computer stopped working and is hidden. It goes when the app next opens.'
+        : `${count} older entries for this computer stopped working and are hidden. They go when the app next opens.`,
+    merged: (count: number) =>
+      count === 1
+        ? 'An older entry for this computer was removed. Its saved data is now here.'
+        : `${count} older entries for this computer were removed. Their saved data is now here.`,
+  },
   remove: {
     title: 'Remove this computer?',
     /** `asksComputer`: the removal first asks the computer to stop its push notifications. */

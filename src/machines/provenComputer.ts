@@ -27,17 +27,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { tailcatServerKey } from './computerIdentity';
 
-/** `{ [machineId]: { paired: serverKey, keys: serverKey[] } }`, the keys newest first. */
+/** `{ [machineId]: { paired: serverKey, keys: serverKey[], connectedAt?: ms } }`, the keys newest first. */
 export const PROVEN_SERVER_KEYS_STORAGE_KEY = 'machines.provenServerKeys.v1';
 /** A computer has two addresses and a door; a few more leave room for a relay that changed. */
 const KEYS_PER_MACHINE = 6;
 
-/** What a record proved while it was paired with the address whose key is `paired`. */
-type StoredProof = { paired: string; keys: string[] };
+/**
+ * What a record proved while it was paired with the address whose key is `paired`, and when it last
+ * connected with its own login under that pairing (`connectedAt`, epoch ms; absent in proofs saved
+ * before 2026-11-11's second review fix).
+ */
+type StoredProof = { paired: string; keys: string[]; connectedAt?: number };
 type StoredProofs = Record<string, StoredProof>;
 
 /** The proven keys that count now, by machine id. */
 export type ProvenServerKeys = Record<string, string[]>;
+
+/** What counts now for one record: its proven keys and its latest connect with its own login. */
+export type MachineProof = { keys: string[]; connectedAt: number | null };
 
 async function loadStoredProofs(): Promise<StoredProofs> {
   try {
@@ -48,9 +55,10 @@ async function loadStoredProofs(): Promise<StoredProofs> {
     const stored: StoredProofs = {};
     for (const [machineId, value] of Object.entries(parsed)) {
       if (typeof value !== 'object' || value === null) continue;
-      const { paired, keys } = value as { paired?: unknown; keys?: unknown };
+      const { paired, keys, connectedAt } = value as { paired?: unknown; keys?: unknown; connectedAt?: unknown };
       if (typeof paired !== 'string' || !Array.isArray(keys)) continue;
       stored[machineId] = { paired, keys: keys.filter((key): key is string => typeof key === 'string') };
+      if (typeof connectedAt === 'number' && Number.isFinite(connectedAt)) stored[machineId].connectedAt = connectedAt;
     }
     return stored;
   } catch {
@@ -59,17 +67,28 @@ async function loadStoredProofs(): Promise<StoredProofs> {
 }
 
 /**
- * Every record's proven keys that still count: those proven under the address the record is paired
- * with now (`pairedAddressOf`, null when it has none).
+ * Every record's proof that still counts: what it proved under the address it is paired with now
+ * (`pairedAddressOf`, null when it has none).
  */
+export async function loadMachineProofs(
+  pairedAddressOf: (machineId: string) => string | null,
+): Promise<Record<string, MachineProof>> {
+  const proofs: Record<string, MachineProof> = {};
+  for (const [machineId, proof] of Object.entries(await loadStoredProofs())) {
+    const pairedAddress = pairedAddressOf(machineId);
+    if (pairedAddress !== null && tailcatServerKey(pairedAddress) === proof.paired) {
+      proofs[machineId] = { keys: proof.keys, connectedAt: proof.connectedAt ?? null };
+    }
+  }
+  return proofs;
+}
+
+/** Every record's proven keys that still count (`loadMachineProofs`). */
 export async function loadProvenServerKeys(
   pairedAddressOf: (machineId: string) => string | null,
 ): Promise<ProvenServerKeys> {
   const proven: ProvenServerKeys = {};
-  for (const [machineId, proof] of Object.entries(await loadStoredProofs())) {
-    const pairedAddress = pairedAddressOf(machineId);
-    if (pairedAddress !== null && tailcatServerKey(pairedAddress) === proof.paired) proven[machineId] = proof.keys;
-  }
+  for (const [machineId, proof] of Object.entries(await loadMachineProofs(pairedAddressOf))) proven[machineId] = proof.keys;
   return proven;
 }
 
@@ -86,23 +105,25 @@ function changeStoredProofs(change: (stored: StoredProofs) => boolean): Promise<
 }
 
 /**
- * Records that `machineId` connected through `address` in an attempt that began while it was paired
- * with `pairedAddress`. Resolves once it is saved; nothing is recorded for an address without a key
- * this app can read.
+ * Records that `machineId` connected through `address`, with its own login, in an attempt that began
+ * while it was paired with `pairedAddress`, and when (`connectedAt`, the record's latest working
+ * connect: which of two records for one computer still works, computerIdentity.ts). Resolves once
+ * it is saved; nothing is recorded for an address without a key this app can read.
  */
 export function recordProvenAddress(machineId: string, pairedAddress: string | null, address: string): Promise<void> {
   const paired = pairedAddress === null ? null : tailcatServerKey(pairedAddress);
   const key = tailcatServerKey(address);
   if (paired === null || key === null) return Promise.resolve();
+  const connectedAt = Date.now();
   return changeStoredProofs((stored) => {
     const known = stored[machineId];
     if (known !== undefined && known.paired === paired) {
-      if (known.keys.includes(key)) return false;
-      known.keys = [key, ...known.keys].slice(0, KEYS_PER_MACHINE);
+      if (!known.keys.includes(key)) known.keys = [key, ...known.keys].slice(0, KEYS_PER_MACHINE);
+      known.connectedAt = Math.max(known.connectedAt ?? 0, connectedAt);
       return true;
     }
     // The first proof of this pairing; what an earlier pairing proved goes.
-    stored[machineId] = { paired, keys: [key] };
+    stored[machineId] = { paired, keys: [key], connectedAt };
     return true;
   });
 }

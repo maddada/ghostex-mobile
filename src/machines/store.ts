@@ -11,6 +11,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
+import { logAppEvent } from '../app/appLog';
 import { MachineCopy } from '../copy';
 import { dedupeMachineRecords, machineForSameComputer, tailcatServerKey } from './computerIdentity';
 import {
@@ -26,7 +27,8 @@ import {
   type MachineTransport,
 } from './credentials';
 import { migrateMachineData } from './machineDataMigration';
-import { forgetProvenServerKeys, loadProvenServerKeys, PROVEN_SERVER_KEYS_STORAGE_KEY } from './provenComputer';
+import { noteDuplicateEntries } from './duplicateNotice';
+import { forgetProvenServerKeys, loadMachineProofs, PROVEN_SERVER_KEYS_STORAGE_KEY } from './provenComputer';
 import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
 
@@ -372,12 +374,15 @@ async function loadTailcatTokens(machines: readonly MachineRecord[]): Promise<Ma
 async function healDuplicateComputers(machines: MachineRecord[]): Promise<MachineRecord[]> {
   try {
     const tokens = await loadTailcatTokens(machines);
-    // Records under different addresses are one computer when earlier connects proved it (provenComputer.ts).
-    const proven = await loadProvenServerKeys((id) => tokens.get(id) ?? null);
+    // Records under different addresses are one computer when earlier connects proved it, and the
+    // one kept is the one whose own login worked last; a group where nothing says so is left alone
+    // (provenComputer.ts, computerIdentity.ts `survivorOf`).
+    const proofs = await loadMachineProofs((id) => tokens.get(id) ?? null);
     const { machines: deduped, merges } = dedupeMachineRecords(
       machines,
       (id) => tokens.get(id) ?? null,
-      (id) => proven[id] ?? [],
+      (id) => proofs[id]?.keys ?? [],
+      (id) => proofs[id]?.connectedAt ?? null,
     );
     if (merges.length === 0) return machines;
     const renames = new Map<string, string>();
@@ -388,6 +393,12 @@ async function healDuplicateComputers(machines: MachineRecord[]): Promise<Machin
     await AsyncStorage.setItem(MACHINES_STORAGE_KEY, JSON.stringify(deduped));
     await Promise.all([...renames.keys()].map((staleId) => deleteAllCredentials(staleId)));
     await forgetProvenServerKeys([...renames.keys()]);
+    for (const merge of merges) {
+      logAppEvent(
+        `Easy Connect: merged ${merge.staleIds.join(', ')} into ${merge.survivorId}, the entry for that computer whose own login worked last`,
+      );
+      await noteDuplicateEntries(merge.survivorId, 'merged', merge.staleIds);
+    }
     return deduped;
   } catch {
     // A failed heal leaves the records as they were; the next launch tries again.

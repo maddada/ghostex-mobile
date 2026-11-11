@@ -9,15 +9,16 @@
  * connects, so it can only use what earlier connects proved. A phone that just took this update
  * has proved nothing yet, and a pairing made a moment ago has not connected either. So each
  * successful connect records the key it went through and looks again: when the record that just
- * connected is the one its group keeps (the newest pairing, which is the one the computer still
- * accepts), the others are hidden and disconnected at once, which ends the two tunnels on one key
+ * connected is the one its group keeps (the one whose own login worked last, which is the one the
+ * computer still accepts; computerIdentity.ts `survivorOf`), the others are hidden and disconnected at once, which ends the two tunnels on one key
  * straight away, and the next start merges them into it with their saved data. Hiding is the
  * app's own switch for a computer, so nothing is deleted while the app runs.
  */
 import { logAppEvent } from '../app/appLog';
-import { staleDuplicatesOf } from './computerIdentity';
+import { staleDuplicatesOf, tailcatServerKey } from './computerIdentity';
 import { getTailcatToken } from './credentials';
-import { loadProvenServerKeys, recordProvenAddress } from './provenComputer';
+import { noteDuplicateEntries } from './duplicateNotice';
+import { loadMachineProofs, recordProvenAddress } from './provenComputer';
 import { useMachinesStore } from './store';
 
 /**
@@ -32,6 +33,11 @@ export function noteConnectedThrough(
   disconnect: (staleMachineId: string) => void,
 ): void {
   void (async () => {
+    // A connect that began under a pairing the record no longer has (it was paired again or edited
+    // meanwhile) proves nothing about the login it has now, and must not stand in for it.
+    const pairedNow = await getTailcatToken(machineId);
+    const keyOf = (value: string | null): string | null => (value === null ? null : tailcatServerKey(value));
+    if (keyOf(pairedNow) === null || keyOf(pairedNow) !== keyOf(pairedAddress)) return;
     await recordProvenAddress(machineId, pairedAddress, address);
     const { machines } = useMachinesStore.getState();
     const tailcat = machines.filter((machine) => machine.transport === 'tailcat');
@@ -39,13 +45,15 @@ export function noteConnectedThrough(
     const tokens = new Map<string, string | null>(
       await Promise.all(tailcat.map(async (machine) => [machine.id, await getTailcatToken(machine.id)] as const)),
     );
-    const proven = await loadProvenServerKeys((id) => tokens.get(id) ?? null);
+    const proofs = await loadMachineProofs((id) => tokens.get(id) ?? null);
     const stale = staleDuplicatesOf(
       machines,
       (id) => tokens.get(id) ?? null,
-      (id) => proven[id] ?? [],
+      (id) => proofs[id]?.keys ?? [],
       machineId,
+      (id) => proofs[id]?.connectedAt ?? null,
     );
+    const hidden: string[] = [];
     for (const staleId of stale) {
       const record = useMachinesStore.getState().machines.find((machine) => machine.id === staleId);
       if (record === undefined || record.disabled === true) continue;
@@ -54,6 +62,8 @@ export function noteConnectedThrough(
       );
       useMachinesStore.getState().setMachineDisabled(staleId, true);
       disconnect(staleId);
+      hidden.push(staleId);
     }
+    await noteDuplicateEntries(machineId, 'hidden', hidden);
   })().catch(() => undefined);
 }
