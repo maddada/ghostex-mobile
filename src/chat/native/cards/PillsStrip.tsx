@@ -287,8 +287,18 @@ export function PillsStrip({
 }
 
 /** A view chip's icon, the one its View menu row shows (`composer/menus.ts`; desktop `view_chip_icon`). */
-function viewChipGlyph(id: string): 'list-check' | 'list-details' {
-  return id === 'summary' ? 'list-check' : 'list-details';
+function viewChipGlyph(id: string): 'list-check' | 'list-details' | 'eye-off' | 'eye' {
+  switch (id) {
+    case 'summary':
+      return 'list-check';
+    // Quiet View's chip (gx-chat-core `transcript/quiet_view.rs` `view_chip`).
+    case 'quiet':
+      return 'eye-off';
+    case 'full':
+      return 'eye';
+    default:
+      return 'list-details';
+  }
 }
 
 /**
