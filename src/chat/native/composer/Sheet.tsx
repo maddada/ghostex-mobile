@@ -26,7 +26,7 @@ import { useVerticalBarSpace } from '../../../components/common/verticalBar/Vert
 import { useGrabberDrag } from '../../../components/common/useGrabberDrag';
 import { useSheetPresence } from '../../../components/common/useSheetPresence';
 import { Glyph } from './icons';
-import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 export type SheetProps = {
   visible: boolean;
@@ -36,6 +36,12 @@ export type SheetProps = {
   onBack?: () => void;
   /** Controls on the right of the title row. */
   accessory?: ReactNode;
+  /**
+   * A muted line under the title, as a pill menu's header has its detail beside its title on the
+   * desktop (`pill_menu_header` in chat_pills.rs): "2 threads waiting for you", "3 hidden". Only a
+   * sheet that passes one draws it.
+   */
+  subtitle?: string;
   children: ReactNode;
   /** Fraction of the screen the panel may take. */
   maxHeight?: `${number}%`;
@@ -57,7 +63,7 @@ export function Sheet(props: SheetProps) {
   // What the panel shows: the live props, then the last ones while it slides away.
   const lastProps = useRef(props);
   if (visible) lastProps.current = props;
-  const { title, onBack, accessory, children, maxHeight = '80%' } = lastProps.current;
+  const { title, onBack, accessory, subtitle, children, maxHeight = '80%' } = lastProps.current;
   const drag = useGrabberDrag(visible, onClose);
   return (
     <Modal
@@ -112,6 +118,11 @@ export function Sheet(props: SheetProps) {
               {accessory}
             </View>
           ) : null}
+          {subtitle !== undefined && subtitle.length > 0 ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
           {children}
         </Animated.View>
       </KeyboardAvoidingContainer>
@@ -142,4 +153,6 @@ const useStyles = themedStyles((P) => ({
   },
   back: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: P.foreground, fontSize: 15, fontWeight: '600' },
+  /** The pill sheets' muted detail line (`AgentPanels.tsx` `MenuMeta`'s look), tucked under the title. */
+  subtitle: { color: P.cardMuted, fontSize: PROSE_SIZE, paddingHorizontal: 16, marginTop: -4, paddingBottom: 8 },
 }));

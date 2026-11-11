@@ -262,6 +262,8 @@ export function PillsStrip({
       <Sheet
         visible={overflowOpen && hiddenPills.length > 0}
         title="More pills"
+        // The desktop menu's detail (`strip_overflow.rs`).
+        subtitle={`${hiddenPills.length} hidden`}
         onClose={() => setOverflowOpen(false)}
         // A sheet picked from this one opens only after this one has gone (iOS drops a modal presented over a closing one).
         onDismissed={() => {

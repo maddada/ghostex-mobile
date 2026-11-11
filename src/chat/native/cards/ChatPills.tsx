@@ -62,6 +62,7 @@ import { Glyph } from './icons';
 import { obj } from './json';
 import { BackgroundTasksMenu } from './WorkingStrip';
 import { RelayedApprovalsMenu } from './RelayedApprovalCard';
+import { approvalsWaitingLine } from './relayedApprovals';
 import { SidebarPalette } from '../../../theme/palette';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
@@ -677,6 +678,7 @@ export function PillMenuSheet({
             ? 'Autopilot'
             : (shown?.label ?? (open === 'board' ? 'Work' : ''))
       }
+      subtitle={open === 'approvals' && shown !== undefined ? approvalsWaitingLine(document) : undefined}
       accessory={
         questions ? (
           <QuestionsFilterTrigger document={document} onPress={() => setFiltersOpen((was) => !was)} />

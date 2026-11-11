@@ -29,3 +29,12 @@ export function relayedByReport(document: ChatDocument | null): { [messageId: st
   }
   return byReport;
 }
+
+/**
+ * The Approvals sheet's detail under its title: how many threads wait for the user, in the desktop
+ * menu's words (`relayed_approval.rs`, "1 thread waiting for you").
+ */
+export function approvalsWaitingLine(document: ChatDocument | null): string {
+  const count = relayedCards(document).filter((card) => isTrue(card, 'open')).length;
+  return `${count} ${count === 1 ? 'thread' : 'threads'} waiting for you`;
+}
