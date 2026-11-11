@@ -21,6 +21,7 @@ bunx tsc --noEmit             # typecheck
 ```
 
 Notes:
+
 - iOS simulator builds are **arm64-only** (`ARCHS=arm64`); the vendored GhosttyKit xcframework has no x86_64 slice.
 - Build iOS with Xcode 27.1 (iOS 27.1 SDK) for the iPhone Duo. Per Apple ([Prepare your app for iPhone Duo](https://developer.apple.com/iphone-duo/prepare)), an app built with the iOS 26 SDK or earlier runs in a centred phone-sized window on the unfolded inner display, one built with the iOS 27 SDK fills most of the inner display clear of the status bar, and one built with the iOS 27.1 SDK or later reaches the edges. The app's root view controller (`GhostexRootViewController`, registered as an Expo react delegate handler) turns the system's vertical bar off, so the status items stay in one row along the top in every pose and the app's header stands in the status band beside them, its buttons that do not fit moving into the screen's … menu (`src/components/common/verticalBar/`). Check a build with `plutil -extract DTSDKName raw <Ghostex.app>/Info.plist` (`iphoneos27.1`).
 - `plugins/withPodfileMinDeploymentTarget.js` clamps pod deployment targets to 15.0 for new Xcode versions.
@@ -63,6 +64,33 @@ for k in EXDevMenuIsOnboardingFinished; do xcrun simctl --set $SET spawn $U defa
 for k in EXDevMenuShowFloatingActionButton EXDevMenuShowsAtLaunch; do xcrun simctl --set $SET spawn $U defaults write com.maddada.ghostex.ios $k -bool NO; done
 xcrun simctl --set $SET launch --terminate-running-process $U com.maddada.ghostex.ios --initialUrl http://localhost:8081
 ```
+
+### Android emulators (x86_64)
+
+The release APK ships **arm64-v8a only** (`GHOSTEX_ANDROID_ABIS` in the main repo's `.github/workflows/release-gpui-android.yml`), so on an x86_64 emulator Android runs it through its ARM translator (`libndk_translation`/berberis). That crashes at launch with `Fatal signal 4 (SIGILL)` in `lib/arm64/libgojni.so` (thread `mqt_v_js`, log line `berberis: Undefined instruction 0xd5380600`): the tailcat bridge's `golang.org/x/sys/cpu` cannot read the auxiliary vector inside an Android app, so on a 4.11+ kernel it reads the CPU feature registers directly (`MRS ID_AA64ISAR0_EL1`). A real arm64 kernel traps and emulates that instruction; the translator does not. Nothing in our code can avoid it short of patching `x/sys`, so emulators need a build that carries the x86_64 libraries and runs natively.
+
+Builds made outside the release script already do: `expo prebuild` writes `reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64` and `../tailcat-bridge/build.sh --target android` stages all four ABIs, so `bunx expo run:android` (debug, against Metro) works on an emulator as is. For a standalone build with the bundled JavaScript (no Metro), build the release variant with the ABIs you want and any keystore (an emulator build can't update a GitHub install, which is signed with the release key, so uninstall that first):
+
+```sh
+bun install
+(cd ../../.. && cargo xtask build-mobile-chat-wasm)
+../tailcat-bridge/build.sh --target android
+CI=1 bunx expo prebuild --platform android --no-install
+keytool -genkeypair -keystore ~/emu-test.jks -storepass emutest -keypass emutest -alias emu -keyalg RSA -dname CN=emulator
+(cd android && ./gradlew -PreactNativeArchitectures=arm64-v8a,x86_64 \
+  -PghostexReleaseStoreFile=$HOME/emu-test.jks -PghostexReleaseStorePassword=emutest \
+  -PghostexReleaseKeyAlias=emu -PghostexReleaseKeyPassword=emutest :app:assembleRelease)
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
+Without `GHOSTEX_RELEASE_VERSION` the build has over-the-air updates off (runtime `dev`), so it always runs the JavaScript it was built with.
+
+On Windows (Git Bash for the `.sh` scripts):
+
+- Check the submodule out with LF line endings (`git -c core.autocrlf=false checkout`). CRLF files break the shell scripts and change what `scripts/ota-runtime-version.js` prints.
+- Git for Windows' `unzip` doesn't match the `'jni/*'` pattern in `build.sh`, so its staging step stops after the AAR is built. Unzip `build/tailcatbridge.aar` whole and copy `classes.jar` to `modules/ghostex-native/android/libs/tailcatbridge.jar` and `jni/<abi>/libgojni.so` to `modules/ghostex-native/android/src/main/jniLibs/<abi>/` by hand. Don't fix it in `build.sh` in passing: every tracked file in `apps/mobile/tailcat-bridge` is an input of the over-the-air runtime version, so any edit there takes installed phones off over-the-air updates.
+- `cargo xtask build-mobile-chat-wasm` needs `wasm-opt` from binaryen 133 on PATH (the release asset `binaryen-version_133-x86_64-windows.tar.gz`), and it reads the wasm from `packages/gx-chat-wasm/target/`, so leave `CARGO_TARGET_DIR` unset.
+- A short checkout path (for example `D:\gx86`) keeps the React Native CMake builds clear of Windows' path length limit.
 
 ### Keeping the simulator dev client current
 
