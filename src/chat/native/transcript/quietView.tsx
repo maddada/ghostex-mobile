@@ -194,8 +194,13 @@ function KeptTail({ item, tail }: { item: TranscriptItem; tail: NonNullable<Quie
 
 /**
  * The quiet line itself: an icon (the messages icon on a line reports came in on, else the clock)
- * and the green check (the turning loader while the turn runs), its counts, then its time
- * (desktop `quiet_view_line`).
+ * and the green check, its counts, then its time (desktop `quiet_view_line`). While the turn runs
+ * the turning loader stands alone in their place.
+ *
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User, of "Working · 1 message sent · 3 tool calls so far" on the phone: "Show just the spinner
+ * not spinner + icon." A running line shows the loader only; a finished one keeps its icon and
+ * check. The desktop still draws the clock beside its loader.
  */
 function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolean; onPress(): void }) {
   const time = line.time ?? '';
@@ -203,12 +208,16 @@ function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolea
   if (time.length > 0) segments.push({ text: ` ${time}` });
   return (
     <QuietLine
-      icons={(tone) => (
-        <>
-          <Glyph name={time.length > 0 ? 'messages' : 'clock'} size={13} color={tone} />
-          <QuietStatusMark mark={line.running === true ? 'running' : 'done'} />
-        </>
-      )}
+      icons={(tone) =>
+        line.running === true ? (
+          <QuietStatusMark mark="running" />
+        ) : (
+          <>
+            <Glyph name={time.length > 0 ? 'messages' : 'clock'} size={13} color={tone} />
+            <QuietStatusMark mark="done" />
+          </>
+        )
+      }
       segments={segments}
       open={open}
       expandable
