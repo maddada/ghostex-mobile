@@ -31,6 +31,45 @@ export function passingLinesBelow(passingLines: number, depth: number, last: boo
   return depth > 0 && !last ? passingLines | (1 << depth) : passingLines;
 }
 
+/** Where one row of a coordinator tree is drawn (gx-core `TreeSpot`). */
+export type TreeSpot = { depth: number; last: boolean; passingLines: number; linesBelow: number };
+
+/** What `layOutTree` reads about a row: its threads in order, how many of the first are drawn, and whether it shows them. */
+export type TreeChildren<N> = { list: readonly N[]; drawn: number; open: boolean };
+
+/** One step of `layOutTree`'s walk: a row, and later the end of its threads (where its older row goes). */
+export type TreeStep<N> = { kind: 'row' | 'done'; node: N; spot: TreeSpot };
+
+export const TREE_ROOT: TreeSpot = { depth: 0, last: false, passingLines: 0, linesBelow: 0 };
+
+/**
+ * The coordinator tree's layout, shared by the project list (`nestCoordinatorThreads`) and the Unified list
+ * (unified/tree.ts `drawnLines`), as gx-core `lay_out_tree` is: walks `node` and its threads depth first.
+ */
+export function layOutTree<N>(
+  node: N,
+  spot: TreeSpot,
+  children: (node: N) => TreeChildren<N>,
+  visit: (step: TreeStep<N>) => void,
+): void {
+  const threads = children(node);
+  const linesBelow = passingLinesBelow(spot.passingLines, spot.depth, spot.last);
+  // Past the depth limit the row's threads are drawn at its own level, so the line it would end runs on to them;
+  // the line the threads take is still the one handed down in `linesBelow`.
+  const last = spot.depth === MAX_THREAD_DEPTH && threads.open && threads.drawn > 0 ? false : spot.last;
+  const placed: TreeSpot = { depth: spot.depth, last, passingLines: spot.passingLines, linesBelow };
+  visit({ kind: 'row', node, spot: placed });
+  threads.list.forEach((child, position) =>
+    layOutTree(
+      child,
+      { depth: Math.min(spot.depth + 1, MAX_THREAD_DEPTH), last: position + 1 === threads.drawn, passingLines: linesBelow, linesBelow: 0 },
+      children,
+      visit,
+    ),
+  );
+  visit({ kind: 'done', node, spot: placed });
+}
+
 /** Where a row sits in its coordinator's tree. */
 export type RowNesting = {
   /** How deep under a coordinator the row is drawn; 0 for a top-level row. */
@@ -312,52 +351,43 @@ export function nestCoordinatorThreads<S>(
   };
   const result: NestedSessions<S> = { sessions: [], sections: new Map(), nesting: new Map() };
   const foldedOf = sessions.map(() => false);
-  const emit = (
-    index: number,
-    depth: number,
-    last: boolean,
-    passingLines: number,
-    section: S,
-    folded: boolean,
-  ): void => {
+  const sectionOfRow = [...baseSections];
+  const hidden = (parent: number, child: number): boolean => !olderShown.has(keys[parent]) && isOlder[child];
+  const threadsOf = (index: number): TreeChildren<number> => {
     const list = children.get(index) ?? [];
-    const showsOlder = olderShown.has(keys[index]);
-    const hidden = (child: number): boolean => !showsOlder && isOlder[child];
-    const drawn = list.filter((child) => !hidden(child)).length;
-    const below = passingLinesBelow(passingLines, depth, last);
-    foldedOf[index] = folded;
+    return { list, drawn: list.filter((child) => !hidden(index, child)).length, open: !isCollapsed[index] };
+  };
+  const place = (step: TreeStep<number>): void => {
+    if (step.kind !== 'row') return;
+    const { node: index, spot } = step;
+    const parent = parentOf[index];
+    // A thread takes its coordinator's section, and is folded when a coordinator above it is folded or it waits
+    // behind its coordinator's "N older threads" row.
+    if (parent !== null) {
+      sectionOfRow[index] = sectionOfRow[parent];
+      foldedOf[index] = foldedOf[parent] || isCollapsed[parent] || hidden(parent, index);
+    }
+    const list = children.get(index) ?? [];
     result.sessions.push(sessions[index]);
-    result.sections.set(keys[index], section);
-    if (depth > 0 || list.length > 0) {
+    result.sections.set(keys[index], sectionOfRow[index]);
+    if (spot.depth > 0 || list.length > 0) {
       result.nesting.set(keys[index], {
-        depth,
-        // Past the depth limit the row's threads are drawn at its own level, so the line it would end runs on to
-        // them; the line the threads take is still the one handed down in `below`.
-        lastChild: depth > 0 && last && !(depth === MAX_THREAD_DEPTH && !isCollapsed[index] && drawn > 0),
-        passingLines,
-        passingLinesBelow: below,
+        depth: spot.depth,
+        lastChild: spot.depth > 0 && spot.last,
+        passingLines: spot.passingLines,
+        passingLinesBelow: spot.linesBelow,
         threadCount: list.length,
         collapsed: isCollapsed[index],
-        folded,
+        folded: foldedOf[index],
         olderThreads: list.filter((child) => isOlder[child]).length,
-        olderShown: showsOlder,
+        olderShown: olderShown.has(keys[index]),
         containsActive: false,
         foldedStatus: foldedStatus(index),
       });
     }
-    list.forEach((child, position) =>
-      emit(
-        child,
-        Math.min(depth + 1, MAX_THREAD_DEPTH),
-        position + 1 === drawn,
-        below,
-        section,
-        folded || isCollapsed[index] || hidden(child),
-      ),
-    );
   };
   for (let index = 0; index < sessions.length; index += 1) {
-    if (parentOf[index] === null) emit(index, 0, false, 0, baseSections[index], false);
+    if (parentOf[index] === null) layOutTree(index, TREE_ROOT, threadsOf, place);
   }
   // The drawn row that stands for the selected thread when a folded coordinator hides it: its nearest drawn ancestor.
   const focused = sessions.findIndex(isActive);

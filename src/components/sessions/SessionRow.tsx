@@ -53,12 +53,12 @@ import {
   useSidebarInk,
 } from './rows';
 import CloudBoxBadge from './CloudBoxBadge';
+import { CoordinatorFold } from './CoordinatorFold';
 import { BranchGlyph } from './unified/glyphs';
 import StatusDotStack from './StatusDotStack';
 import { CoordinatorBadgeView, FoldedStatusIndicator } from './CoordinatorBadgeView';
 import {
   BoxGlyph,
-  ChevronRightGlyph,
   ClockGlyph,
   CloudGlyph,
   CoordinatorGlyph,
@@ -226,17 +226,20 @@ function ThreadConnector({
   last,
   passingLines,
   rowHeight,
+  anchor = TOUCH_ROW_HEIGHT / 2 + ROW_SPACING,
 }: {
   iconLeft: number;
   depth: number;
   last: boolean;
   passingLines: number;
   rowHeight: number;
+  /** From the centre of the icon above down to this row's top (the rest of that row below its icon, and the gap). */
+  anchor?: number;
 }) {
   const inkStyle = inkStyles(useSidebarInk());
   const mid = TOUCH_ROW_HEIGHT / 2;
-  // From under the icon of the row above: the rest of that row below its icon, and the gap between.
-  const rise = mid - ds(7.5) + ROW_SPACING;
+  // From under the icon above.
+  const rise = anchor - ds(7.5);
   const left = iconLeft - ds(THREAD_INDENT) + ds(7);
   // Past the depth limit a row is drawn at its parent's level, so a line passing it at that level
   // is its own line, drawn on through the row.
@@ -341,6 +344,31 @@ function QuestionIndicator({ activity, ringColor }: { activity: string; ringColo
 }
 
 
+/** A row's height: one line, or two while it draws its chip line (`sessionRowHasChipLine`). */
+function sessionRowHeight(chipLine: boolean): number {
+  return TOUCH_ROW_HEIGHT + (chipLine ? ds(WORK_SESSION_ROW_HEIGHT - 34) : 0);
+}
+
+/**
+ * Whether a row draws its second line: a merged PR's Clean up / Keep offer, or its links under "Session links in the
+ * sidebar: Line", once its caller wires the chips' actions. SessionRow draws it from the same facts.
+ */
+export function sessionRowHasChipLine(session: GhostexSession, display: SessionLinksDisplay, hasActions: boolean): boolean {
+  if (!hasActions) return false;
+  if (session.work?.offerCleanup === true) {
+    return workChips(session.work).some((chip) => chip.key === 'pr' || chip.key === 'cleanup' || chip.key === 'keep');
+  }
+  return sessionLinksRow(session.links, display, session.isFocused).line.length > 0;
+}
+
+/**
+ * The `treeAnchor` of a thread drawn right under a row: from the centre of that row's icon (in its first line) down
+ * to the thread's top, so the tree line meets a two-line row's icon too.
+ */
+export function treeAnchorBelowRow(session: GhostexSession, display: SessionLinksDisplay, hasActions: boolean): number {
+  return sessionRowHeight(sessionRowHasChipLine(session, display, hasActions)) - TOUCH_ROW_HEIGHT / 2 + ROW_SPACING;
+}
+
 export type SessionRowProps = {
   session: GhostexSession;
   /** The capabilities of the session's computer, which the question indicator reads (`hasQuestion`). */
@@ -366,6 +394,11 @@ export type SessionRowProps = {
   coordinatorBadge?: CoordinatorBadge;
   /** Folds or unfolds a coordinator's threads; the chevron shows while threads are drawn under it. */
   onToggleThreads?: () => void;
+  /**
+   * Where the icon sits that this thread's tree line rises to: from its centre down to this row's top, in dp. Absent
+   * under a session row (half a row and the gap); the first thread under a Unified card passes the card's hat.
+   */
+  treeAnchor?: number;
   /** What a card's chips do (its links line and a Work mode card's Clean up / Keep offer). */
   workActions?: WorkChipActions;
   /** The computer's "Session links in the sidebar" setting (sessionLinks.ts). */
@@ -398,6 +431,7 @@ export default function SessionRow({
   nesting,
   coordinatorBadge,
   onToggleThreads,
+  treeAnchor,
   workActions,
   sessionLinksDisplay = 'badge',
   dimSleeping = false,
@@ -503,7 +537,7 @@ export default function SessionRow({
   const linksBadge = offerCleanup ? null : linksRow.badge;
   // An idle coordinator draws no crew badge (threads.rs `coordinator_badge`).
   const shownCoordinatorBadge = coordinatorBadge?.tone === 'idle' ? undefined : coordinatorBadge;
-  const rowHeight = TOUCH_ROW_HEIGHT + (showLinkLine ? ds(WORK_SESSION_ROW_HEIGHT - 34) : 0);
+  const rowHeight = sessionRowHeight(showLinkLine);
   const linePaddingLeft = (inCard ? ds(26) : ds(47)) + titleIndent;
 
   const openMenuFromRow = (): void => {
@@ -534,6 +568,7 @@ export default function SessionRow({
             last={nesting?.lastChild === true}
             passingLines={nesting?.passingLines ?? 0}
             rowHeight={rowHeight}
+            anchor={treeAnchor}
           />
         ) : null}
         {/* Line 1: the row as it always was. A work card adds its chip line under it. */}
@@ -572,20 +607,12 @@ export default function SessionRow({
               <Icon size={iconSize} color={agentIconTint(iconId)} />
             )}
           </View>
-          {showChevron ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={nesting?.collapsed === true ? 'Show threads' : 'Hide threads'}
-              hitSlop={ds(10)}
-              onPress={onToggleThreads}
+          {showChevron && onToggleThreads !== undefined ? (
+            <CoordinatorFold
+              collapsed={nesting?.collapsed === true}
+              onToggle={onToggleThreads}
               style={[styles.threadChevron, { left: iconLeft + ds(18) }]}
-            >
-              <ChevronRightGlyph
-                size={ds(14)}
-                color={ink.light ? ink.muted : SidebarPalette.MUTED}
-                rotated={nesting?.collapsed !== true}
-              />
-            </Pressable>
+            />
           ) : null}
           {/*
             The row's decorations, placed as the desktop row places them

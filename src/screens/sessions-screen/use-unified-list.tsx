@@ -54,13 +54,27 @@ import { unifiedSwipeActions } from '../../contract/unified/strip';
 import { SNOOZE_PRESETS, snoozeWakeAt } from '../../contract/unified/snooze';
 import { chatMachineLink } from '../../chat/rust/machine-link';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../../components/sessions/ContextMenu';
-import { ds, inkStyleSheets, inkWash, sidebarInk, useSidebarInk } from '../../components/sessions/rows';
+import { ds, inkStyleSheets, inkWash, SessionListToggleRow, sidebarInk, useSidebarInk } from '../../components/sessions/rows';
 import { lastInteractionLabel } from '../../components/sessions/sessionStatus';
 import { FilterGlyph, FolderPlusGlyph, AlarmGlyph } from '../../components/sessions/unified/glyphs';
 import { PlusGlyph } from '../../components/sessions/icons';
-import { StatusSlot, statusLook, UnifiedCard, UnifiedGroupHeader, UnifiedShelfHeader, UnifiedSlimRow } from '../../components/sessions/unified/UnifiedCard';
-import { UnifiedOlderRow, UnifiedThreadRow } from '../../components/sessions/unified/UnifiedThreadRow';
-import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
+import {
+  CARD_HAT_ANCHOR,
+  SLIM_HAT_ANCHOR,
+  StatusSlot,
+  statusLook,
+  UnifiedCard,
+  UnifiedGroupHeader,
+  UnifiedShelfHeader,
+  UnifiedSlimRow,
+} from '../../components/sessions/unified/UnifiedCard';
+import SessionRow, { treeAnchorBelowRow } from '../../components/sessions/SessionRow';
+import type { WorkChipActions } from '../../components/sessions/WorkChips';
+import { CoordinatorFold } from '../../components/sessions/CoordinatorFold';
+import { showsFoldedStatus, UnifiedCrewCount, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
+import { sessionLinksDisplay } from '../../chat/native/sessionLinks';
+import { SessionCopy } from '../../copy';
+import type { RowNesting } from '../../contract/coordinatorTree';
 import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
 import { agentMenuNotice, type NewSessionNotice } from './new-session-button';
@@ -115,9 +129,12 @@ type UnifiedListItem =
   | { kind: 'shelf'; key: string; shelf: UnifiedShelf; repoKey: string | null; count: number; open: boolean }
   | { kind: 'card'; key: string; row: UnifiedRow<GhostexSession>; inGroup?: boolean }
   | { kind: 'slim'; key: string; shelf: UnifiedShelf; row: UnifiedRow<GhostexSession> }
-  /** A thread drawn under its card (contract/unified/tree.ts `drawnLines`): its own item, so a card draws only itself. */
-  | { kind: 'thread'; key: string; row: UnifiedRow<GhostexSession>; card: UnifiedRow<GhostexSession>; depth: number }
-  | { kind: 'older'; key: string; coordinatorKey: string; older: number; shown: boolean; depth: number }
+  /**
+   * A thread drawn under its card (contract/unified/tree.ts `drawnLines`), as the project list's `SessionRow`: its own
+   * item, so a card draws only itself. `anchor` is set on the first one, whose tree line rises to the card's hat.
+   */
+  | { kind: 'thread'; key: string; row: UnifiedRow<GhostexSession>; nesting: RowNesting; anchor?: number }
+  | { kind: 'older'; key: string; coordinatorKey: string; label: string; nesting: RowNesting }
   | { kind: 'gap'; key: string }
   | { kind: 'divider'; key: string }
   | { kind: 'empty'; key: string; text: string }
@@ -148,6 +165,8 @@ export type UnifiedListDeps = {
   openAddProject: (machineId: string) => void;
   /** The screen's toast. */
   notify: (notice: NewSessionNotice) => void;
+  /** What a thread row's chips do (its links line, a merged PR's Clean up / Keep), as the Project list wires them. */
+  workChipActions: (target: MachineRecord | null, session: GhostexSession) => WorkChipActions | undefined;
   /** The session wall: tiles this many side by side, drawn in `appearance`; absent or null, the list's cards. */
   wall?: { columns: number; appearance: SidebarAppearance } | null;
 };
@@ -200,6 +219,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     snoozeSession,
     openAddProject,
     notify,
+    workChipActions,
     wall = null,
   } = deps;
   const selectedSummary = selectedMachine === null ? null : (inventoriesByMachineId[selectedMachine.id]?.summary ?? null);
@@ -411,12 +431,26 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     // A card, then the threads drawn under it, each its own item (tiles on the wall).
     const pushCard = (item: Extract<UnifiedListItem, { kind: 'card' | 'slim' }>): void => {
       list.push(item);
+      // The first thread's tree line rises to the card's hat; each later one to the row above it, one line or two.
+      let anchor: number | undefined = item.kind === 'slim' ? SLIM_HAT_ANCHOR : CARD_HAT_ANCHOR;
       for (const line of drawnLines(item.row)) {
         if (line.kind === 'thread') {
-          list.push({ kind: 'thread', key: `thread:${line.row.id}`, row: line.row, card: item.row, depth: line.depth });
-        } else if (line.coordinator.crew !== null) {
-          const crew = line.coordinator.crew;
-          list.push({ kind: 'older', key: `older:${crew.key}`, coordinatorKey: crew.key, older: crew.older, shown: crew.olderShown, depth: line.depth });
+          list.push({ kind: 'thread', key: `thread:${line.row.id}`, row: line.row, nesting: line.nesting, anchor });
+          const session = line.row.session.source!;
+          const summary = inventoriesByMachineId[line.row.machine]?.summary ?? null;
+          anchor = treeAnchorBelowRow(
+            session,
+            sessionLinksDisplay(summary?.sidebarSessionLinks),
+            workChipActions(machines.find((machine) => machine.id === line.row.machine) ?? null, session) !== undefined,
+          );
+        } else {
+          if (line.coordinator.crew !== null) {
+            const crew = line.coordinator.crew;
+            const label = crew.olderShown ? SessionCopy.hideOlderThreads : SessionCopy.olderThreads(crew.older);
+            list.push({ kind: 'older', key: `older:${crew.key}`, coordinatorKey: crew.key, label, nesting: line.nesting });
+          }
+          // As the project list starts the rows after an older-threads row.
+          anchor = undefined;
         }
       }
     };
@@ -470,7 +504,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       });
     }
     return list;
-  }, [view, toggledShelves, computers, groups, foldedGroups, layout.groupByProject]);
+  }, [view, toggledShelves, computers, groups, foldedGroups, layout.groupByProject, machines, inventoriesByMachineId, workChipActions]);
 
   // The session wall: each run of cards and shelf rows as rows of tiles; every other item keeps its place.
   const wallColumns = wall?.columns ?? null;
@@ -595,7 +629,10 @@ export function useUnifiedList(deps: UnifiedListDeps) {
                 appearance={wall.appearance}
                 slot={
                   <View style={styles.tileSlot}>
-                    <UnifiedCrewToggle row={row} onToggle={toggleCoordinator} />
+                    {row.crew !== null ? (
+                      <CoordinatorFold collapsed={!row.crew.open} onToggle={() => toggleCoordinator(row.crew!.key)} />
+                    ) : null}
+                    <UnifiedCrewCount row={row} />
                     {folded ? (
                       <UnifiedFoldedStatus row={row} ringColor={wall.appearance.card} />
                     ) : (
@@ -616,12 +653,14 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     }
     if (item.kind === 'older') {
       return (
-        <UnifiedOlderRow
-          depth={item.depth}
-          older={item.older}
-          shown={item.shown}
-          onPress={() => toggleOlderThreads(item.coordinatorKey)}
-        />
+        <View style={styles.threadInset}>
+          <SessionListToggleRow
+            label={item.label}
+            threadDepth={item.nesting.depth + 1}
+            passingLines={item.nesting.passingLinesBelow}
+            onPress={() => toggleOlderThreads(item.coordinatorKey)}
+          />
+        </View>
       );
     }
     const { row } = item;
@@ -630,18 +669,30 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     const active = selectedSessionKey === attachSessionKey(row.machine, session.sessionId);
     const repoIcon = repoIcons.get(row.repo.key) ?? null;
     if (item.kind === 'thread') {
+      const summary = inventoriesByMachineId[row.machine]?.summary ?? null;
+      const crew = row.crew;
       return (
-        <UnifiedThreadRow
-          row={row}
-          depth={item.depth}
-          card={item.card}
-          active={active}
-          nowMs={nowMs}
-          sidebarBackground={sidebarBackground}
-          onPress={() => target !== null && void attach(target, session)}
-          onMenu={() => openMenu(row)}
-          onToggleCrew={toggleCoordinator}
-        />
+        <View style={styles.threadInset}>
+          <SessionRow
+            session={session}
+            capabilities={summary?.capabilities ?? NO_SUMMARY_CAPABILITIES}
+            active={active || crew?.containsActive === true}
+            expandedGroupSurface={sidebarBackground}
+            sidebarBackground={sidebarBackground}
+            sidebarForeground={ink.text}
+            inCard
+            customSessionTags={summary?.customSessionTags}
+            nesting={item.nesting}
+            coordinatorBadge={crew?.badge}
+            onToggleThreads={crew !== null ? () => toggleCoordinator(crew.key) : undefined}
+            treeAnchor={item.anchor}
+            workActions={workChipActions(target, session)}
+            sessionLinksDisplay={sessionLinksDisplay(summary?.sidebarSessionLinks)}
+            dimSleeping={summary?.dimSleepingSessions === true}
+            onPress={() => target !== null && void attach(target, session)}
+            onMenu={() => openMenu(row)}
+          />
+        </View>
       );
     }
     if (item.kind === 'slim') {
@@ -845,6 +896,11 @@ const unifiedListStyles = inkStyleSheets((ink) =>
     /* A row of tiles keeps the cards' side inset. */
     tiles: { paddingHorizontal: ds(3) },
     tileSlot: { flexDirection: 'row', alignItems: 'center', gap: ds(4) },
+    /**
+     * A thread's row under a card: inset so its tree line falls under the card's hat (the card's 3dp gap and 8dp
+     * padding against SessionRow's 5dp icon inset), with the card's 3dp on the right.
+     */
+    threadInset: { paddingLeft: ds(6), paddingRight: ds(3) },
     empty: {
       paddingVertical: ds(26),
       textAlign: 'center',
