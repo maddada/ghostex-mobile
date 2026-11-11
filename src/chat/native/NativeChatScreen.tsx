@@ -545,7 +545,8 @@ export default function NativeChatScreen({
               document={document}
               visible={detailsOpen}
               onClose={closeDetails}
-              onMoreDetails={openContextDetails}
+              // The Context sheet's host is the composer, which a question replaces: no row then.
+              {...(composerShown ? { onMoreDetails: openContextDetails } : {})}
               onDismissed={detailsDismissed}
             />
             {gbotSettings !== null ? (
