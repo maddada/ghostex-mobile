@@ -599,6 +599,22 @@ export function StartupDelivery({
               <Text style={[styles.small, { color: theme.primary }]}>Retry</Text>
             </Pressable>
           )}
+          {/* A message the chat itself could not send (gx-chat-core `composer/delivery.rs`, its
+              promptId starts "unsent:"): Edit moves its words back to the chat box, which nothing
+              else does unasked (desktop: startup_delivery.rs). */}
+          {delivery.promptId.startsWith('unsent:') ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit"
+              style={({ pressed }) => [
+                styles.deliveryAction,
+                { backgroundColor: pressed ? theme.neutralFillPressed : theme.neutralFill },
+              ]}
+              onPress={() => dispatch({ type: 'removeQueue', promptId: delivery.promptId, edit: true })}
+            >
+              <Text style={[styles.small, { color: theme.primary }]}>Edit</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={({ pressed }) => [
               styles.deliveryAction,
