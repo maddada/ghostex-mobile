@@ -6,7 +6,10 @@
  * (CDXC:SessionChat 2026-10-28 on `card_pill`) and reads as part of the card's title: no frame,
  * the line's own type and colour (`textStyle`), a fill only while pressed (CDXC:SessionChat
  * 2026-10-29 DECISION on desktop `session_pill` in inter_agent_message.rs). A tap switches to that session; a session that is gone
- * draws muted and does nothing.
+ * draws muted and does nothing. A card's name that opens its session has a faint dotted underline in
+ * its own colour, so it reads as something to tap (desktop `session_name_underline` in
+ * inter_agent_message.rs, whose decision has the user's words); the phone has no hover, so the dots
+ * stay at the strength the phone's question links use (`LinkWords.tsx`).
  *
  * A board card's mention (`[title](board:B4)`, gx-chat-core `board_reference`) is the same pill in
  * the board's own tint (`reference.board`, desktop `board_mention_link`) with the Board pill's icon
@@ -20,6 +23,7 @@ import { colorWithOpacity, SidebarPalette } from '../../../theme/palette';
 import { AgentMark } from '../cards/agentMark';
 import { Glyph } from '../cards/icons';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
+import { dottedUnderline } from './LinkWords';
 import { obj, str, type JsonRecord } from './json';
 
 /** How far a card name's pressed fill reaches past the name (desktop `CARD_PILL_PAD`). */
@@ -64,6 +68,12 @@ export function SessionPill({
           })
       : undefined);
   const icon = str(pill, 'agentIcon');
+  // The name's own colour, which its underline takes (the line's `textStyle`, else the theme's).
+  const nameColor = StyleSheet.flatten(textStyle)?.color;
+  const underline =
+    !showsLogo && !missing && open !== undefined
+      ? dottedUnderline(typeof nameColor === 'string' ? nameColor : theme.foreground)
+      : null;
   return (
     <Pressable
       disabled={missing || open === undefined}
@@ -97,7 +107,7 @@ export function SessionPill({
         style={
           showsLogo
             ? [styles.label, { color: missing ? theme.cardMuted : theme.foreground }]
-            : [styles.cardLabel, textStyle, missing ? { color: theme.cardMuted } : null]
+            : [styles.cardLabel, textStyle, missing ? { color: theme.cardMuted } : null, underline]
         }
         numberOfLines={1}
       >

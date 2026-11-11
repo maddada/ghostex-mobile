@@ -23,6 +23,15 @@ function faint(color: string): string {
     .padStart(2, '0')}`;
 }
 
+/**
+ * The faint dotted underline that marks words a tap opens, in `color` (the words' own): a link here,
+ * and the session's name on a "Message from" / "Message to" card (`SessionPill`, desktop
+ * `session_name_underline`). Android draws it solid, as it draws no dotted line.
+ */
+export function dottedUnderline(color: string): TextStyle {
+  return { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: faint(color) };
+}
+
 export function LinkWords({
   text,
   runs,
@@ -50,7 +59,7 @@ export function LinkWords({
             accessibilityRole="link"
             suppressHighlighting={false}
             onPress={() => dispatch({ type: 'openMarkdownLink', href, external: false })}
-            style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: faint(color) }}
+            style={dottedUnderline(color)}
           >
             {words}
           </Text>

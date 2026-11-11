@@ -22,6 +22,7 @@ import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context
 import { RelayedApprovalCard } from '../cards/RelayedApprovalCard';
 import { Glyph, type GlyphName } from './icons';
 import { arr, obj, str, type JsonRecord } from './json';
+import { dottedUnderline } from './LinkWords';
 import { Markdown } from './markdown/Markdown';
 import { SessionPill } from './SessionPill';
 import {
@@ -188,7 +189,14 @@ const AgentCard = memo(function AgentCard({
                         />
                       </View>
                     ) : (
-                      <Text style={[styles.recipientName, { color: theme.foreground }]} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.recipientName,
+                          { color: theme.foreground },
+                          target !== null ? dottedUnderline(theme.foreground) : null,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {str(recipient, 'name')}
                       </Text>
                     )}
