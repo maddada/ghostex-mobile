@@ -4,12 +4,13 @@
  *
  * threads.rs `coordinator_badge`: the crew icon and one number (sessions waiting for approval, else
  * threads waiting, else working), tinted to match: red for approval, light blue for waiting, orange
- * for working, grey while idle. The drawer draws no badge for an idle coordinator; on a Unified card
- * with threads the count is the fold toggle and always shows (CDXC:Coordinators 2026-11-09 in
- * apps/desktop/src/app/native_sidebar/threads.rs).
+ * for working, grey while idle. The drawer draws no badge for an idle coordinator; a Unified card with
+ * threads always shows it, as information: its hat's chevron folds them (CDXC:Coordinators 2026-11-11
+ * in apps/desktop/src/app/native_sidebar/threads.rs; the phone's chevron sits beside the hat, so a
+ * clock in the hat's place never hides it and the count is never a toggle here).
  */
 
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import type { CoordinatorBadge, FoldedStatus } from '../../contract/coordinatorTree';
 import { SidebarPalette } from '../../theme/palette';
@@ -27,40 +28,14 @@ export function crewTint(tone: CoordinatorBadge['tone']): string {
         : SidebarPalette.MUTED;
 }
 
-/**
- * The crew icon and its number (none at zero). With `onPress` it is a button (the Unified card's
- * fold toggle, labelled by `accessibilityLabel`); its press is the toggle's, not the card's.
- */
-export function CoordinatorBadgeView({
-  badge,
-  onPress,
-  accessibilityLabel,
-  expanded,
-}: {
-  badge: CoordinatorBadge;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-  expanded?: boolean;
-}) {
+/** The crew icon and its number (none at zero). */
+export function CoordinatorBadgeView({ badge }: { badge: CoordinatorBadge }) {
   const tint = crewTint(badge.tone);
-  const body = (
-    <>
+  return (
+    <View style={styles.badge}>
       <CrewGlyph size={ds(13.55)} color={tint} />
       {badge.count > 0 ? <Text style={[styles.count, { color: tint }]}>{badge.count}</Text> : null}
-    </>
-  );
-  if (onPress === undefined) return <View style={styles.badge}>{body}</View>;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ expanded: expanded === true }}
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [styles.badge, styles.toggle, pressed ? styles.pressed : null]}
-    >
-      {body}
-    </Pressable>
+    </View>
   );
 }
 
@@ -89,13 +64,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: ds(2),
-  },
-  toggle: {
-    paddingHorizontal: ds(3),
-    borderRadius: ds(4),
-  },
-  pressed: {
-    opacity: 0.6,
   },
   count: {
     fontSize: ds(13.55),

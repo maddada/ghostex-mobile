@@ -59,7 +59,33 @@ import {
   StatusCircleDotGlyph,
 } from './glyphs';
 import CloudBoxBadge from '../CloudBoxBadge';
-import { showsFoldedStatus, UnifiedCrewToggle, UnifiedFoldedStatus } from './crew';
+import { CoordinatorFold, CoordinatorHat } from '../CoordinatorFold';
+import { showsFoldedStatus, UnifiedCrewCount, UnifiedFoldedStatus } from './crew';
+
+/**
+ * From the centre of a card's hat down to the top of the first thread under it, which that thread's tree line rises
+ * to (SessionRow `treeAnchor`): the rest of the title line, the gap, the branch line, the card's padding and the gap
+ * under it. Only what is below the hat counts, so a card with or without its project line is the same.
+ */
+export const CARD_HAT_ANCHOR = ds(20 / 2 + 3 + 17 + 7 + 2);
+/** The same for a slim row: half its 34dp and the 1dp under it. */
+export const SLIM_HAT_ANCHOR = ds(34 / 2 + 1);
+
+/**
+ * A coordinator's hat at the start of its card or slim row, and the chevron beside it that folds its threads
+ * (CDXC:Sidebar 2026-11-11 in packages/gx-core/src/unified_sidebar/tree.rs). Nothing for any other session.
+ */
+function CardHat({ row, onToggleCrew }: { row: UnifiedRow<GhostexSession>; onToggleCrew: (key: string) => void }) {
+  const session = row.session.source!;
+  const crew = row.crew;
+  if (session.isCoordinator !== true) return null;
+  return (
+    <>
+      <CoordinatorHat chief={session.isChief === true} containsActive={crew !== null && !crew.open && crew.containsActive} />
+      {crew !== null ? <CoordinatorFold collapsed={!crew.open} onToggle={() => onToggleCrew(crew.key)} /> : null}
+    </>
+  );
+}
 
 /** The desktop's done blue (cards.rs `chrome_color(0x95d7f6, …)`). */
 const DONE_COLOR = SidebarPalette.ROW_ATTENTION;
@@ -229,7 +255,7 @@ export type UnifiedCardProps = {
   swipeActions: readonly UnifiedSwipeAction[];
   /** Under its project's header, which names the project. */
   inGroup?: boolean;
-  /** The crew count's tap on a card with threads under it: folds or unfolds them (contract/unified/tree.ts). */
+  /** The hat's chevron on a card with threads under it: folds or unfolds them (contract/unified/tree.ts). */
   onToggleCrew?: (key: string) => void;
 };
 
@@ -316,6 +342,7 @@ export function UnifiedCard({
             </View>
           )}
           <View style={styles.lineTwo}>
+            <CardHat row={row} onToggleCrew={onToggleCrew} />
             {titleLineOnly && session.isPinned ? <PinFilledGlyph size={ds(13)} color={ink.muted} /> : null}
             <Text
               numberOfLines={1}
@@ -324,8 +351,8 @@ export function UnifiedCard({
               {title}
             </Text>
             {session.cloudBox !== undefined ? <CloudBoxBadge cloudBox={session.cloudBox} /> : null}
-            {/* The crew count folds the threads nested under the card (CDXC:Sidebar 2026-11-09 in gx-core unified_sidebar/tree.rs). */}
-            <UnifiedCrewToggle row={row} onToggle={onToggleCrew} />
+            {/* What the card holds (CDXC:Coordinators 2026-11-11 in the desktop's native_sidebar/threads.rs). */}
+            <UnifiedCrewCount row={row} />
             {titleLineOnly ? status : null}
           </View>
           <View style={styles.lineThree}>
@@ -373,7 +400,7 @@ export type UnifiedSlimRowProps = {
   onMenu: (anchor: MenuAnchor) => void;
   /** Unsnooze on a snoozed row, Unpark on a parked one. */
   onRestore: () => void;
-  /** The crew count's tap on a parked or snoozed coordinator with threads under it. */
+  /** The hat's chevron on a parked or snoozed coordinator with threads under it. */
   onToggleCrew?: (key: string) => void;
 };
 
@@ -426,11 +453,12 @@ export function UnifiedSlimRow({
           ]}
         >
           {active ? <SelectedCardOutline /> : null}
+          <CardHat row={row} onToggleCrew={onToggleCrew} />
           <RepoTile icon={repoIcon} label={row.repo.label} dim />
           <Text numberOfLines={1} style={[styles.title, styles.slimTitle]}>
             {title}
           </Text>
-          <UnifiedCrewToggle row={row} onToggle={onToggleCrew} />
+          <UnifiedCrewCount row={row} />
           <UnifiedFoldedStatus row={row} ringColor={active ? selectedFill(sidebarBackground, ink) : sidebarBackground} />
           {wake !== null ? (
             <View style={styles.status}>
