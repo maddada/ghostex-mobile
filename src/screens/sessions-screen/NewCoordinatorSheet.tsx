@@ -76,6 +76,48 @@ function searchedModels(models: CoordinatorModel[], query: string, picked: strin
   return shown;
 }
 
+/** Claude's model families, in the order every list of Claude's models shows them. */
+const CLAUDE_FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku'];
+
+/** A Claude model name's place in CLAUDE_FAMILY_ORDER (-1 for another family) and its version numbers. */
+function claudeFamilyAndVersion(label: string): { rank: number; version: number[] } {
+  const words = label.toLowerCase().split(/[\s-]+/);
+  const rank = CLAUDE_FAMILY_ORDER.findIndex((family) => words.includes(family));
+  const versionWord = words.find((word) => /^\d+(\.\d+)*$/.test(word));
+  return { rank, version: versionWord === undefined ? [] : versionWord.split('.').map(Number) };
+}
+
+function compareVersions(left: number[], right: number[]): number {
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const difference = (left[index] ?? -1) - (right[index] ?? -1);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+/**
+ * CDXC:AgentModelCatalog 2026-11-11 DECISION:
+ * User: "on desktorp and mobile switch order so fable is always top then opus then sonnet then haiku". Claude's models by family (Fable, Opus, Sonnet, Haiku, then any other in the computer's order), newest version first, with each family's older versions (the Legacy models) after the current ones, as the chat core orders them. Sorted here too so the form keeps the order against a computer built before gxserver sorted the lineup it serves (11.4.0 and older); the options carry no group, so a row is legacy when its family has a newer one.
+ * SEE-ALSO: packages/gx-chat-core/src/menus/catalog.rs in the Ghostex main repo (`order_claude_models`).
+ */
+function orderClaudeModels(models: CoordinatorModel[]): CoordinatorModel[] {
+  const keyed = models.map((model, index) => ({ model, index, ...claudeFamilyAndVersion(model.label) }));
+  const older = (entry: (typeof keyed)[number]) =>
+    entry.rank >= 0 &&
+    keyed.some((other) => other.rank === entry.rank && compareVersions(other.version, entry.version) > 0);
+  const rank = (entry: (typeof keyed)[number]) => (entry.rank < 0 ? CLAUDE_FAMILY_ORDER.length : entry.rank);
+  return keyed
+    .map((entry) => ({ ...entry, older: older(entry) }))
+    .sort(
+      (left, right) =>
+        Number(left.older) - Number(right.older) ||
+        rank(left) - rank(right) ||
+        (left.rank < 0 ? 0 : compareVersions(right.version, left.version)) ||
+        left.index - right.index,
+    )
+    .map((entry) => entry.model);
+}
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -97,6 +139,7 @@ export function parseCoordinatorOptions(json: unknown): CoordinatorOptions {
   const root = typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : {};
   const agents = records(root.agents)
     .map((agent) => ({
+      family: text(agent.family),
       agentId: text(agent.agentId),
       name: text(agent.name) || text(agent.agentId),
       defaultModel: text(agent.defaultModel),
@@ -111,6 +154,7 @@ export function parseCoordinatorOptions(json: unknown): CoordinatorOptions {
         // OpenCode's first row ("OpenCode's default") has no value: it keeps OpenCode's own model.
         .filter((model) => model.value.length > 0 || model.label.length > 0),
     }))
+    .map(({ family, ...agent }) => (family === 'claude' ? { ...agent, models: orderClaudeModels(agent.models) } : agent))
     .filter((agent) => agent.agentId.length > 0);
   return { agents, defaultEffort: text(root.defaultEffort) };
 }
