@@ -697,6 +697,7 @@ export default function SessionsScreen({ navigation }: Props) {
     snoozeSession,
     openAddProject,
     notify: (notice) => setTransientStatus(notice.message, { title: notice.title }),
+    workChipActions,
     wall: tileColumns === null ? null : { columns: tileColumns, appearance: sidebarAppearance },
   });
   useOpenProjectDraftsOnArrival(inventoriesByMachineId, !unified.on);

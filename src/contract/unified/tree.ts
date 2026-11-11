@@ -2,22 +2,20 @@
  * A coordinator's threads under its Unified card: which sessions nest under which, in what order,
  * which of them an unfolded card lists, and what a folded card says about the ones it hides.
  *
- * A port of packages/gx-core/src/unified_sidebar/tree.rs, rule for rule (CDXC:Sidebar 2026-11-09
- * DECISION there: the maintainer's "Let's nest the threads under the coordinator's card, folded by
- * default for everyone, with the crew count as the fold toggle. No setting needed."), held to it by
- * `unifiedFixture.json`. A thread on another computer is linked by its coordinator's
+ * A port of packages/gx-core/src/unified_sidebar/tree.rs, rule for rule (CDXC:Sidebar 2026-11-11
+ * DECISION there: Sebastian's "the hat at the card's start folds, the count is just a number", folded
+ * by default as the maintainer's #528 decision asked), held to it by `unifiedFixture.json`. The lines
+ * under a card are laid out by the project list's own tree (coordinatorTree.ts `layOutTree`), so the
+ * threads draw with `SessionRow`. A thread on another computer is linked by its coordinator's
  * `coordinatorRemoteThreads`, by the `globalRef` its own computer lists it under; a computer whose
  * gxserver predates the field links same-computer threads only.
  */
 
-import type { CoordinatorBadge, FoldedStatus } from '../coordinatorTree';
+import { layOutTree, TREE_ROOT, type CoordinatorBadge, type FoldedStatus, type RowNesting, type TreeChildren, type TreeSpot } from '../coordinatorTree';
 import type { UnifiedFilter, UnifiedRow, UnifiedSessionInput, UnifiedSettings } from './build';
 
 /** How long after its last activity a thread that neither works nor waits is still listed. */
 const RECENT_THREAD_MS = 2 * 60 * 60 * 1000;
-
-/** Threads are drawn no deeper than the Project sidebar's tree (gx-core `MAX_DEPTH`, coordinatorTree.ts). */
-const MAX_DRAWN_DEPTH = 3;
 
 /** What the user unfolded and listed, by `unifiedCoordinatorKey`. */
 export type UnifiedFolds = {
@@ -53,10 +51,13 @@ export type UnifiedCrew = {
   containsActive: boolean;
 };
 
-/** One line under a card. */
+/**
+ * One line under a card: a thread with the `RowNesting` its `SessionRow` draws its tree line and fold from, or a
+ * coordinator's "N older threads" row with the coordinator's own nesting (its `passingLinesBelow`).
+ */
 export type UnifiedTreeLine<S> =
-  | { kind: 'thread'; row: UnifiedRow<S>; depth: number }
-  | { kind: 'older'; coordinator: UnifiedRow<S>; depth: number };
+  | { kind: 'thread'; row: UnifiedRow<S>; nesting: RowNesting }
+  | { kind: 'older'; coordinator: UnifiedRow<S>; nesting: RowNesting };
 
 /** The name a coordinator's fold and older-threads state are saved under: computer, project and session. */
 export function unifiedCoordinatorKey(machineKey: string, projectId: string, sessionId: string): string {
@@ -313,19 +314,42 @@ function lift<S>(top: UnifiedRow<S>): void {
   if (top.shelf === 'working') top.shelf = 'active';
 }
 
-/** The lines drawn under a card now, in order (gx-core `UnifiedRow::drawn_lines`). */
+/** The `RowNesting` a project-list row in this place carries: its tree place and, for a row with threads, its crew (gx-core `UnifiedRow::nesting_at`). */
+export function nestingAt<S>(row: UnifiedRow<S>, spot: TreeSpot = TREE_ROOT): RowNesting {
+  const crew = row.crew;
+  const folded = crew === null || crew.open ? undefined : crew.foldedStatus;
+  const anyDot =
+    folded !== undefined && (folded.working || folded.attention || folded.backgroundWork || folded.question || folded.approval);
+  return {
+    depth: spot.depth,
+    lastChild: spot.depth > 0 && spot.last,
+    passingLines: spot.passingLines,
+    passingLinesBelow: spot.linesBelow,
+    threadCount: crew?.total ?? 0,
+    collapsed: crew !== null && !crew.open,
+    folded: false,
+    olderThreads: crew !== null && crew.olderRow ? crew.older : 0,
+    olderShown: crew?.olderShown ?? false,
+    containsActive: crew?.containsActive ?? false,
+    foldedStatus: anyDot ? folded : undefined,
+  };
+}
+
+/** The lines drawn under a card now, in order (gx-core `UnifiedRow::drawn_lines`), laid out as the project list's tree. */
 export function drawnLines<S>(card: UnifiedRow<S>): UnifiedTreeLine<S>[] {
   const lines: UnifiedTreeLine<S>[] = [];
-  const into = (row: UnifiedRow<S>, depth: number) => {
-    if (row.crew === null || !row.crew.open) return;
-    for (const child of row.threads) {
-      if (!child.shown) continue;
-      lines.push({ kind: 'thread', row: child, depth: Math.min(depth, MAX_DRAWN_DEPTH) });
-      into(child, depth + 1);
-    }
-    if (row.crew.olderRow) lines.push({ kind: 'older', coordinator: row, depth: Math.min(depth, MAX_DRAWN_DEPTH) });
+  const threadsOf = (row: UnifiedRow<S>): TreeChildren<UnifiedRow<S>> => {
+    const open = row.crew?.open === true;
+    const list = open ? row.threads.filter((child) => child.shown) : [];
+    return { list, drawn: list.length, open };
   };
-  into(card, 1);
+  layOutTree(card, TREE_ROOT, threadsOf, (step) => {
+    if (step.kind === 'row' && step.node !== card) {
+      lines.push({ kind: 'thread', row: step.node, nesting: nestingAt(step.node, step.spot) });
+    } else if (step.kind === 'done' && step.node.crew?.olderRow === true) {
+      lines.push({ kind: 'older', coordinator: step.node, nesting: nestingAt(step.node, step.spot) });
+    }
+  });
   return lines;
 }
 
