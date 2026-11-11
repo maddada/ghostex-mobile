@@ -9,7 +9,7 @@
  *
  * The band's left holds the view status chip ("Summary view" or "Detailed view"), pinned there while
  * the pills fit beside it. With no hover on a phone the chip's X always shows; a tap anywhere on the chip
- * goes back to Normal view (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
+ * goes back to Normal view, and its view's icon sits at its left as on the desktop (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
  * Before it, while a draft saved elsewhere is offered, the Saved draft pill (`SavedDraftPill.tsx`),
  * which alone is enough to show the strip and opens its own sheet.
  *
@@ -285,7 +285,21 @@ export function PillsStrip({
   );
 }
 
-/** One view status chip: quieter than the pills (a faint fill, no outline) at their height, with its X. */
+/** A view chip's icon, the one its View menu row shows (`composer/menus.ts`; desktop `view_chip_icon`). */
+function viewChipGlyph(id: string): 'list-check' | 'list-details' {
+  return id === 'summary' ? 'list-check' : 'list-details';
+}
+
+/**
+ * One view status chip: quieter than the pills (a faint fill, no outline) at their height, with its
+ * view's icon at the left and its X at the right.
+ *
+ * CDXC:SessionChat 2026-11-11 DECISION:
+ * The desktop chip shows its view's icon at the left, which turns into the X on hover (gx-chat-core
+ * extras/chat_pills.rs `view_chips` has the user's words). A phone has no hover, so the user picked
+ * "icon at the left, X kept at the right": the icon tells the two views apart at a glance, the X says
+ * a tap turns the view off.
+ */
 function ViewChipButton({ chip, onPress }: { chip: ViewChip; onPress: () => void }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -297,6 +311,7 @@ function ViewChipButton({ chip, onPress }: { chip: ViewChip; onPress: () => void
       hitSlop={6}
       style={({ pressed }) => [styles.chip, pressed ? styles.chipPressed : null]}
     >
+      <ComposerGlyph name={viewChipGlyph(chip.id)} size={12} color={P.cardMuted} />
       <Text style={styles.chipLabel} numberOfLines={1}>
         {chip.label}
       </Text>
@@ -461,7 +476,7 @@ const useStyles = themedStyles((P) => ({
     height: 25,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingLeft: 8,
     paddingRight: 6,
     borderRadius: 13,

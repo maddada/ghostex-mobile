@@ -304,6 +304,13 @@ const GLYPHS = {
   },
   'circle-check': { paths: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M9 12l2 2l4 -4'] },
   'circle-minus': { paths: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M9 12l6 0'] },
+  /** The Blocked pill's icon (desktop `titlebar/circle-minus-filled.svg`). */
+  'circle-minus-filled': {
+    paths: [
+      'M17 3.34a10 10 0 1 1 -14.995 8.984l-.005 -.324l.005 -.324a10 10 0 0 1 14.995 -8.336zm-2 7.66h-6l-.117 .007a1 1 0 0 0 0 1.986l.117 .007h6l.117 -.007a1 1 0 0 0 0 -1.986l-.117 -.007z',
+    ],
+    filled: true,
+  },
   tag: {
     paths: [
       'M6.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',

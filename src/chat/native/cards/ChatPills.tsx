@@ -451,14 +451,16 @@ function pillGlyph(id: string) {
             : id === 'board'
               ? 'layout-board-split'
               : id === BLOCKED_PILL
-                ? 'circle-minus'
+                ? 'circle-minus-filled'
                 : id === 'approvals'
                   ? 'shield-check'
                   : id === INTRO_PILL
                     ? 'bulb'
                     : id === 'autopilot'
                       ? 'plane'
-                      : 'users';
+                      : id === 'threads'
+                        ? 'users-group'
+                        : 'users';
 }
 
 /**
@@ -544,7 +546,7 @@ export function OverflowPillRow({ pill, onPress }: { pill: ChatPill; onPress: ()
       {(pill.dots ?? []).length > 0 ? (
         <InlineDots dots={pill.dots ?? []} />
       ) : pill.count.length > 0 ? (
-        <Text style={styles.count}>{pill.count}</Text>
+        <Text style={[styles.count, styles.overflowCount]}>{pill.count}</Text>
       ) : null}
     </Pressable>
   );
@@ -552,7 +554,7 @@ export function OverflowPillRow({ pill, onPress }: { pill: ChatPill; onPress: ()
 
 /**
  * The Links pill, the strip's last: the sidebar badge's text and colours, much fainter (one link's ID
- * and "+N" for the others in the most pressing link's colour at 60%, its edge at 18%; muted and
+ * and "+N" for the others in the most pressing link's colour, its edge at 45% of it; muted and
  * dashed, "3 suggested", while the session only has suggestions). A tap opens the session's links sheet. Desktop: `links_pill.rs`;
  * the user's words are on gx-core `SessionLinks::chat_pill`.
  */
@@ -570,12 +572,12 @@ export function LinksPill({ pill, onPress }: { pill: SessionLinksChatPill; onPre
       style={({ pressed }) => [
         styles.pill,
         styles.linksPill,
-        { borderColor: withAlpha(pill.color.slice(0, 7), pill.suggested ? 0.45 : 0.32) },
+        { borderColor: withAlpha(pill.color.slice(0, 7), 0.45) },
         pill.suggested && styles.linksPillSuggested,
         pressed && styles.pillPressed,
       ]}
     >
-      <TranscriptGlyph name="link" size={12} color={color} />
+      <TranscriptGlyph name="link" size={14} color={color} />
       <Text style={[styles.label, !pill.suggested && styles.linksId, { color }]}>
         {pill.more > 0 ? `${pill.label}+` : pill.label}
       </Text>
@@ -803,6 +805,10 @@ const useStyles = themedStyles((P) => ({
     fontSize: 13,
     lineHeight: 19,
     fontVariant: ['tabular-nums'],
+  },
+  /** A "+N" sheet row's count, muted beside the pill's name (desktop `strip_overflow.rs`). */
+  overflowCount: {
+    color: P.cardMuted,
   },
   /** A pill's status dots, after its label (`InlineDots`). */
   inlineDots: {
