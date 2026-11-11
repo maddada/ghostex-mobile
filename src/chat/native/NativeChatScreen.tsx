@@ -63,7 +63,8 @@ import { remoteWorkerNotice, remoteWorkerOfAction } from './cards/remoteWorker';
 import { PillsStrip, type PillsStripLinks } from './cards/PillsStrip';
 import { SideChatBar } from './cards/SideChats';
 import { useTerminalStore } from '../../terminal/sessions';
-import { LoneScrollBottom, WorkingCard } from './cards/WorkingCard';
+import { LoneScrollBottom, WorkingCard, workingCardShown } from './cards/WorkingCard';
+import { COMPOSER_TOP_PADDING, STACK_GAP, chatCardsShown } from './cards/NativeChatCards';
 import { NativeComposer } from './composer';
 import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
 import { ModelMenuSheet } from './composer/ModelMenuSheet';
@@ -468,10 +469,14 @@ export default function NativeChatScreen({
             {document?.computerNotice != null ? null : (
               <ConnectionLostNotice machine={machine} active={visible} document={document} />
             )}
-            {/* The working card in its own row above the cards and the composer: the transcript ends above it. */}
-            {document === null ? null : <WorkingCard document={document} />}
-            <NativeChatCards chat={chat} onHostAction={hostAction} />
-            {/* The dock: what needs the reader, right above the box (`WorkCards.tsx`). */}
+            {/* The dock: what needs the reader, under the transcript and over the working card
+                (`WorkCards.tsx`).
+
+                CDXC:Coordinators 2026-11-12 DECISION:
+                User, of the phone's stack over the chat box: "Worked for 24s: that card needs to be
+                below. That bar needs to be right above the composer. The Needs You part needs to be
+                above it." The gaps are the desktop's stack (`composer.rs` footer: 8 between members,
+                8 above the dock; `WORKING_CARD_GAP` 9 from the working card to the box). */}
             <WorkDock
               document={document}
               chat={chat}
@@ -479,7 +484,19 @@ export default function NativeChatScreen({
               sessionId={sessionId}
               typing={composerShown && composerFocused && keyboardUp}
               {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
+              gapBelow={
+                document === null
+                  ? STACK_GAP - COMPOSER_TOP_PADDING
+                  : workingCardShown(document)
+                    ? STACK_GAP
+                    : chatCardsShown(document)
+                      ? 0
+                      : STACK_GAP - COMPOSER_TOP_PADDING
+              }
             />
+            {/* The working card in its own row right above the cards and the composer. */}
+            {document === null ? null : <WorkingCard document={document} />}
+            <NativeChatCards chat={chat} onHostAction={hostAction} />
             {!composerShown ? null : (
               <View
                 onLayout={(event) => {
@@ -638,7 +655,6 @@ function QuestionModelSheet({
     />
   );
 }
-
 
 /**
  * Performs what the core asks of the screen (`ChatViewRequest`): the clipboard, a toast, opening a

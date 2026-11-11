@@ -36,6 +36,7 @@ import { LinkWords } from '../transcript/LinkWords';
 import { Markdown } from '../transcript/markdown/Markdown';
 import { Sheet } from '../composer/Sheet';
 import { WorkAnswerLine, WorkMenuButton, WorkMenuList, workMenuRows } from './workItemParts';
+import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 
 type Dispatch = RustChat['dispatch'];
@@ -201,6 +202,7 @@ export function WorkDock({
   sessionId,
   typing = false,
   maxHeight,
+  gapBelow = 6,
 }: {
   document: ChatDocument | null;
   chat: RustChat;
@@ -210,6 +212,8 @@ export function WorkDock({
   typing?: boolean;
   /** The most height the whole dock may take (`dockHeightCap`); its rows scroll inside past it. */
   maxHeight?: number;
+  /** The space under it: the stack's gap to the working card, or its share of the gap to the box. */
+  gapBelow?: number;
 }) {
   const flags = useMemo(() => transcriptFlags(document), [document]);
   // While he types, the dock is folded here, not in the core: the keyboard going down gives back
@@ -277,58 +281,60 @@ export function WorkDock({
   return (
     <TranscriptFlagsProvider value={flags}>
       <TranscriptEnvProvider value={env}>
-        <View style={styles.dockSurface}>
-          <DockHeader
-            rows={rows}
-            board={obj(boardValue)}
-            open={!collapsed}
-            dispatch={dispatch}
-            onToggle={() => {
-              if (!collapsed) {
-                dispatch({ type: 'hideWorkDock' } as never);
-                return;
-              }
-              // Folded for typing: open it for this typing only; folded by him: open it for good.
-              if (typing) setPeek(true);
-              if (hiddenInCore) dispatch({ type: 'showWorkDock' } as never);
-            }}
-          />
-          {collapsed ? null : (
-            <ScrollView
-              style={{
-                maxHeight:
-                  maxHeight === undefined
-                    ? DOCK_MAX_HEIGHT
-                    : Math.max(DOCK_MIN_ROWS, Math.min(DOCK_MAX_HEIGHT, maxHeight - DOCK_HEAD_HEIGHT)),
+        <View style={[styles.dockColumn, { paddingBottom: gapBelow }]}>
+          <View style={styles.dockSurface}>
+            <DockHeader
+              rows={rows}
+              board={obj(boardValue)}
+              open={!collapsed}
+              dispatch={dispatch}
+              onToggle={() => {
+                if (!collapsed) {
+                  dispatch({ type: 'hideWorkDock' } as never);
+                  return;
+                }
+                // Folded for typing: open it for this typing only; folded by him: open it for good.
+                if (typing) setPeek(true);
+                if (hiddenInCore) dispatch({ type: 'showWorkDock' } as never);
               }}
-              contentContainerStyle={styles.dockRows}
-              nestedScrollEnabled
-            >
-              {shown.map((row) => (
-                <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
-                  <DockRow
-                    row={row}
-                    chat={chat}
-                    scope={scope}
-                    open={openKey === str(row, 'key')}
-                    onToggle={() => toggle(str(row, 'key'))}
-                  />
-                </QuestionFlashFrame>
-              ))}
-              {hidden > 0 ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: all }}
-                  hitSlop={8}
-                  onPress={() => setAll((was) => !was)}
-                >
-                  <Text style={styles.dockMore}>
-                    {all ? 'Show fewer' : hidden === 1 ? '1 more needs you' : `${hidden} more need you`}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </ScrollView>
-          )}
+            />
+            {collapsed ? null : (
+              <ScrollView
+                style={{
+                  maxHeight:
+                    maxHeight === undefined
+                      ? DOCK_MAX_HEIGHT
+                      : Math.max(DOCK_MIN_ROWS, Math.min(DOCK_MAX_HEIGHT, maxHeight - DOCK_HEAD_HEIGHT)),
+                }}
+                contentContainerStyle={styles.dockRows}
+                nestedScrollEnabled
+              >
+                {shown.map((row) => (
+                  <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
+                    <DockRow
+                      row={row}
+                      chat={chat}
+                      scope={scope}
+                      open={openKey === str(row, 'key')}
+                      onToggle={() => toggle(str(row, 'key'))}
+                    />
+                  </QuestionFlashFrame>
+                ))}
+                {hidden > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: all }}
+                    hitSlop={8}
+                    onPress={() => setAll((was) => !was)}
+                  >
+                    <Text style={styles.dockMore}>
+                      {all ? 'Show fewer' : hidden === 1 ? '1 more needs you' : `${hidden} more need you`}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </ScrollView>
+            )}
+          </View>
         </View>
       </TranscriptEnvProvider>
     </TranscriptFlagsProvider>
@@ -532,30 +538,30 @@ function DockRow({
         {/* Opened, only the title line shares its width with the age and the ⋯; the work item line,
             the description and the lines under them run to the card's right edge, from the title's
             left edge (user, 2026-11-12: "It should take up the full width of this card when I expand"). */}
-          {opened ? (
-            <View style={styles.dockDetail}>
-              {Array.isArray(row.waitedBy) ? (
-                <ItemLine row={row} chips={chips} dispatch={dispatch} />
-              ) : chips.length > 0 ? (
-                <View style={styles.dockLinks}>
-                  {chips.map((chip, index) => (
-                    <ItemChip key={`link:${index}`} chip={chip} dispatch={dispatch} />
-                  ))}
-                </View>
-              ) : null}
-              {description.length > 0 ? (
-                <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
-              ) : null}
-              {arr(row.detail)
-                .map((line) => (typeof line === 'string' ? line : ''))
-                .filter((line) => line.length > 0)
-                .map((line, index) => (
-                  <Text key={`line:${index}`} style={styles.movingRowLine}>
-                    {line}
-                  </Text>
+        {opened ? (
+          <View style={styles.dockDetail}>
+            {Array.isArray(row.waitedBy) ? (
+              <ItemLine row={row} chips={chips} dispatch={dispatch} />
+            ) : chips.length > 0 ? (
+              <View style={styles.dockLinks}>
+                {chips.map((chip, index) => (
+                  <ItemChip key={`link:${index}`} chip={chip} dispatch={dispatch} />
                 ))}
-            </View>
-          ) : null}
+              </View>
+            ) : null}
+            {description.length > 0 ? (
+              <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
+            ) : null}
+            {arr(row.detail)
+              .map((line) => (typeof line === 'string' ? line : ''))
+              .filter((line) => line.length > 0)
+              .map((line, index) => (
+                <Text key={`line:${index}`} style={styles.movingRowLine}>
+                  {line}
+                </Text>
+              ))}
+          </View>
+        ) : null}
       </Pressable>
       {answerLine}
       {menuRows.length > 0 ? (
@@ -1026,9 +1032,10 @@ const useStyles = themedStyles((P) => ({
   quiet: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
   whoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   whoText: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.muted },
+  // In the rows' column, as the working card under it (the desktop stack's 768), 8 under the
+  // transcript (the desktop stack's own gap, `composer.rs` footer `pt`).
+  dockColumn: { width: '100%', maxWidth: 768, alignSelf: 'center', paddingHorizontal: 12, paddingTop: STACK_GAP },
   dockSurface: {
-    marginHorizontal: 12,
-    marginBottom: 6,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: P.inputBorder,
