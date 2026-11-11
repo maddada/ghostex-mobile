@@ -48,9 +48,10 @@ import { useVoiceCapability } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
 import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettingsSheet';
+import { useKeyboardTop } from '../../components/common/keyboard/keyboardFrame';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
-import { WorkDock } from './cards/WorkCards';
+import { WorkDock, dockHeightCap } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
 import { SessionDetailsSheet } from './cards/SessionDetailsSheet';
@@ -394,6 +395,7 @@ export default function NativeChatScreen({
     transcriptTop: -1,
     transcriptBottom: -1,
     composerTop: -1,
+    composerHeight: -1,
   });
   // In a pane, the chat's own size stands for the window's (`chatPlacement`).
   const [paneSize, setPaneSize] = useState<{ width: number; height: number } | null>(null);
@@ -406,6 +408,19 @@ export default function NativeChatScreen({
             composerFrame.transcriptTop -
             TRANSCRIPT_KEPT_IN_VIEW -
             (composerFrame.composerTop - composerFrame.transcriptBottom),
+        );
+
+  // The dock's height cap: a share of the space between what sits above the transcript and the
+  // chat box (`dockHeightCap`), and whether the chat box has the caret with the keyboard up, which
+  // folds the dock to its bar.
+  const keyboardUp = useKeyboardTop() !== null;
+  const [composerFocused, setComposerFocused] = useState(false);
+  const dockCap =
+    composerFrame.height < 0 || composerFrame.transcriptTop < 0
+      ? undefined
+      : dockHeightCap(
+          composerFrame.height - composerFrame.transcriptTop - Math.max(0, composerFrame.composerHeight),
+          keyboardUp,
         );
 
   const renderSubagentRow = useSubagentRowRenderer(chat);
@@ -457,12 +472,19 @@ export default function NativeChatScreen({
             {document === null ? null : <WorkingCard document={document} />}
             <NativeChatCards chat={chat} onHostAction={hostAction} />
             {/* The dock: what needs the reader, right above the box (`WorkCards.tsx`). */}
-            <WorkDock document={document} chat={chat} projectId={projectId} sessionId={sessionId} />
+            <WorkDock
+              document={document}
+              chat={chat}
+              projectId={projectId}
+              sessionId={sessionId}
+              typing={composerShown && composerFocused && keyboardUp}
+              {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
+            />
             {!composerShown ? null : (
               <View
                 onLayout={(event) => {
-                  const composerTop = event.nativeEvent.layout.y;
-                  setComposerFrame((now) => ({ ...now, composerTop }));
+                  const { y: composerTop, height: composerHeight } = event.nativeEvent.layout;
+                  setComposerFrame((now) => ({ ...now, composerTop, composerHeight }));
                 }}
               >
                 <NativeComposer
@@ -475,6 +497,7 @@ export default function NativeChatScreen({
                   openModelRequestId={modelRequestId}
                   openContextRequestId={contextRequestId}
                   focusRequestId={focusRequestId}
+                  onFocusChange={setComposerFocused}
                   voiceCallTitle={title}
                   voiceCallGbotName={chatGbot?.name}
                   {...(composerRoom !== undefined ? { room: composerRoom } : {})}

@@ -152,6 +152,29 @@ const DOCK_MAX_HEIGHT = 420;
 const DOCK_LEAD = 23;
 const DOCK_INSETS = 12 * 2 + 4 * 2 + 8 * 2 + 2;
 
+/** The header bar's height with the surface's borders: what the cap leaves the rows is the rest. */
+const DOCK_HEAD_HEIGHT = 36 + 3;
+/** The least room the rows keep under the bar when the cap is tight: about one closed row. */
+const DOCK_MIN_ROWS = 44;
+
+/**
+ * The most height the dock may take, from the space between what sits above the transcript and the
+ * chat box: half of it with the keyboard down, 60% with it up (the transcript keeps the rest, at
+ * least about a third of it once the working card is counted), and never more than
+ * `DOCK_MAX_HEIGHT`. Past the cap the rows scroll inside the dock, as on the desktop. On a small
+ * phone (about 640 points tall) that is about 225 with the keyboard down and 110 with it up; on a
+ * large one or a foldable unfolded it reaches the 420 ceiling's neighbourhood (about 350) only with
+ * the keyboard down.
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of an opened docked row that filled the screen above the keyboard and pushed the chat box
+ * off it: "The composer should always be visible whenever I have my caret focused on it, so I can
+ * type on the phone app."
+ */
+export function dockHeightCap(space: number, keyboardUp: boolean): number {
+  return Math.min(DOCK_MAX_HEIGHT, Math.max(0, space) * (keyboardUp ? 0.6 : 0.5));
+}
+
 /** Which dock row is open, per chat, kept outside the component so a new document keeps it. */
 const openRows = new WeakMap<object, string>();
 
@@ -176,13 +199,25 @@ export function WorkDock({
   chat,
   projectId,
   sessionId,
+  typing = false,
+  maxHeight,
 }: {
   document: ChatDocument | null;
   chat: RustChat;
   projectId?: string;
   sessionId?: string;
+  /** The chat box has the caret with the keyboard up: the dock folds to its bar until a tap opens it. */
+  typing?: boolean;
+  /** The most height the whole dock may take (`dockHeightCap`); its rows scroll inside past it. */
+  maxHeight?: number;
 }) {
   const flags = useMemo(() => transcriptFlags(document), [document]);
+  // While he types, the dock is folded here, not in the core: the keyboard going down gives back
+  // the dock as it was (its opened row still opened). A tap on the bar opens it for this typing.
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (!typing) setPeek(false);
+  }, [typing]);
   const styles = useStyles();
   const P = useTranscriptTheme();
   const dispatch = chat.dispatch;
@@ -226,7 +261,8 @@ export function WorkDock({
     .map(obj)
     .filter((row): row is JsonRecord => row !== null);
   if (dock === null || rows.length === 0) return null;
-  const collapsed = isTrue(dock, 'hidden');
+  const hiddenInCore = isTrue(dock, 'hidden');
+  const collapsed = hiddenInCore || (typing && !peek);
   const limit = typeof dock.phoneLimit === 'number' ? dock.phoneLimit : 3;
   const hidden = Math.max(0, rows.length - limit);
   const shown = all && hidden > 0 ? rows : rows.slice(0, limit);
@@ -242,10 +278,29 @@ export function WorkDock({
     <TranscriptFlagsProvider value={flags}>
       <TranscriptEnvProvider value={env}>
         <View style={styles.dockSurface}>
-          <DockHeader rows={rows} board={obj(boardValue)} open={!collapsed} dispatch={dispatch} />
+          <DockHeader
+            rows={rows}
+            board={obj(boardValue)}
+            open={!collapsed}
+            dispatch={dispatch}
+            onToggle={() => {
+              if (!collapsed) {
+                dispatch({ type: 'hideWorkDock' } as never);
+                return;
+              }
+              // Folded for typing: open it for this typing only; folded by him: open it for good.
+              if (typing) setPeek(true);
+              if (hiddenInCore) dispatch({ type: 'showWorkDock' } as never);
+            }}
+          />
           {collapsed ? null : (
             <ScrollView
-              style={{ maxHeight: DOCK_MAX_HEIGHT }}
+              style={{
+                maxHeight:
+                  maxHeight === undefined
+                    ? DOCK_MAX_HEIGHT
+                    : Math.max(DOCK_MIN_ROWS, Math.min(DOCK_MAX_HEIGHT, maxHeight - DOCK_HEAD_HEIGHT)),
+              }}
               contentContainerStyle={styles.dockRows}
               nestedScrollEnabled
             >
@@ -298,11 +353,13 @@ function DockHeader({
   board,
   open,
   dispatch,
+  onToggle,
 }: {
   rows: JsonRecord[];
   board: JsonRecord | null;
   open: boolean;
   dispatch: Dispatch;
+  onToggle: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -339,7 +396,7 @@ function DockHeader({
       accessibilityRole="button"
       accessibilityLabel={open ? 'Collapse' : 'Expand'}
       accessibilityState={{ expanded: open }}
-      onPress={() => dispatch({ type: open ? 'hideWorkDock' : 'showWorkDock' } as never)}
+      onPress={onToggle}
       style={({ pressed }) => [
         styles.dockHead,
         open ? styles.dockHeadOpen : styles.dockHeadShut,

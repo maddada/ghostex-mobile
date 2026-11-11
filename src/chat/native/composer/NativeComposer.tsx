@@ -98,6 +98,8 @@ export type NativeComposerProps = {
   openAccountsRequestId?: number;
   /** Bumped by the screen when the field is to take the keyboard (its pane became the active one); 0 asks nothing. */
   focusRequestId?: number;
+  /** Called when the chat box takes or loses the caret (the dock folds while it has it, `WorkDock`). */
+  onFocusChange?: (focused: boolean) => void;
   /**
    * Bumped by the screen when something outside the composer asks for the model sheet (the
    * held-messages card's Pick model). Each new value opens what a tap on the model pill opens; 0 opens nothing.
@@ -171,6 +173,7 @@ export function NativeComposer({
   hostActions = DEFAULT_HOST_ACTIONS,
   openAccountsRequestId = 0,
   focusRequestId = 0,
+  onFocusChange,
   openModelRequestId = 0,
   openContextRequestId = 0,
   voiceCallTitle = '',
@@ -837,11 +840,13 @@ export function NativeComposer({
                         ...input,
                         focused: () => {
                           setFocused(true);
+                          onFocusChange?.(true);
                           input.focused();
                           readTerminalTail();
                         },
                         blurred: () => {
                           setFocused(false);
+                          onFocusChange?.(false);
                           input.blurred();
                         },
                       }}
