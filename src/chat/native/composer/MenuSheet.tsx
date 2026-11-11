@@ -78,6 +78,7 @@ const KNOWN_GLYPHS = new Set<string>([
   'bolt',
   'map',
   'brain',
+  'book',
   'arrow-back-up',
   'sparkles',
   'blockquote',

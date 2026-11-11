@@ -151,6 +151,8 @@ import { useTerminalAgentActions } from './terminal-screen/use-agent-actions';
 import { boxMachineRecord, useCloudBoxesStore } from '../cloudBoxes/store';
 import { boxIdOfMachine } from '../cloudBoxes/types';
 import CloudBoxPill from '../components/terminal/CloudBoxPill';
+import CoordinatorPlaybookSheet, { loadCoordinatorPlaybook } from './sessions-screen/CoordinatorPlaybookSheet';
+import type { MachineConnectionTarget } from '../machines/credentials';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
@@ -168,6 +170,8 @@ const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
   'exportTranscript',
 ];
 const NO_NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [];
+/** A coordinator's chat also serves View playbook (the sheet its long-press menu opens). */
+const COORDINATOR_CHAT_HOST_ACTIONS: readonly string[] = [...NATIVE_CHAT_HOST_ACTIONS, 'viewPlaybook'];
 
 export default function TerminalScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -196,6 +200,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [chatSearchRequestId, setChatSearchRequestId] = useState(0);
   const [chatSessionNoteRequestId, setChatSessionNoteRequestId] = useState(0);
   const [agentOverlay, setAgentOverlay] = useState<AgentOverlay>(AGENT_OVERLAY_NONE);
+  // The coordinator playbook a chat's More sheet opened (`CoordinatorPlaybookSheet`), or null.
+  const [playbook, setPlaybook] = useState<{ machine: MachineConnectionTarget; projectId: string } | null>(null);
   const [agentProgress, setAgentProgress] = useState<string | null>(null);
   const [exportedTranscript, setExportedTranscript] = useState<ExportedTranscript | null>(null);
   const [startingTranscriptConversation, setStartingTranscriptConversation] = useState(false);
@@ -1270,6 +1276,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
     if (action === 'closeAfterDone') void toggleCloseAfterDone();
     else handleTerminalMenuAction(action as TerminalMenuActionId);
   };
+  // A chat's own View playbook: the coordinator's project on the chat's computer, not the selected session's.
+  const chatHostActionFor =
+    (machine: MachineConnectionTarget | null, projectId: string) =>
+    (action: string): void => {
+      if (action !== 'viewPlaybook') chatHostAction(action);
+      else if (machine !== null && projectId.length > 0) setPlaybook({ machine, projectId });
+    };
   // The chat in a pane: today's chat view at the size of the pane's body, which ends at
   // the keyboard or above the fold, so its composer lifts nothing itself (`inPane`). Its Terminal View turns only this
   // pane back to the terminal. Its sheets and dialogs stay the chat's own, over the whole window.
@@ -1286,8 +1299,14 @@ export default function TerminalScreen({ navigation, route }: Props) {
               projectId={chatProjectId}
               sessionId={chatTab.ghostexSessionId ?? ''}
               onSwitchToTerminal={() => setPaneChat(null)}
-              hostActions={chatSession !== null ? NATIVE_CHAT_HOST_ACTIONS : NO_NATIVE_CHAT_HOST_ACTIONS}
-              onHostAction={chatHostAction}
+              hostActions={
+                chatSession === null
+                  ? NO_NATIVE_CHAT_HOST_ACTIONS
+                  : chatSession.isCoordinator
+                    ? COORDINATOR_CHAT_HOST_ACTIONS
+                    : NATIVE_CHAT_HOST_ACTIONS
+              }
+              onHostAction={chatHostActionFor(paneChatTarget, chatProjectId)}
               visible
               inPane
               focusRequestId={composerFocusRequestId}
@@ -1448,9 +1467,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
               if (chatModeActive) toggleChatView();
             }}
             hostActions={
-              agentActionsCapable && activeSession !== null ? NATIVE_CHAT_HOST_ACTIONS : NO_NATIVE_CHAT_HOST_ACTIONS
+              !agentActionsCapable || activeSession === null
+                ? NO_NATIVE_CHAT_HOST_ACTIONS
+                : activeSession.isCoordinator
+                  ? COORDINATOR_CHAT_HOST_ACTIONS
+                  : NATIVE_CHAT_HOST_ACTIONS
             }
-            onHostAction={chatHostAction}
+            onHostAction={chatHostActionFor(chatMachineTarget, activeProjectId)}
             visible={chatModeActive && twoPanes === null}
             openSearchRequestId={chatSearchRequestId}
             openSessionNoteRequestId={chatSessionNoteRequestId}
@@ -1644,6 +1667,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
         anchor={menuAnchor}
       />
 
+      {playbook !== null ? (
+        <CoordinatorPlaybookSheet
+          load={() => loadCoordinatorPlaybook(playbook.machine, playbook.projectId)}
+          onClose={() => setPlaybook(null)}
+        />
+      ) : null}
       {activeSession !== null ? (
         <>
           {agentOverlay.kind === 'rename' ? (

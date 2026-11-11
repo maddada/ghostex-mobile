@@ -31,9 +31,16 @@ const HOST_ACTION_ICONS: Record<string, string> = {
   rename: 'titlebar/pencil.svg',
   sleep: 'titlebar/moon.svg',
   switchAccount: 'titlebar/switch-horizontal.svg',
+  viewPlaybook: 'titlebar/book.svg',
 };
 
-const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone']);
+/**
+ * The computer's actions that sit in the Chat group, after Side chat, in the core's order (desktop
+ * `actions.rs`). View playbook comes only on a coordinator's chat (gx-chat-core `composer/document.rs`)
+ * and shows only where the screen serves it (`TerminalScreen`), opening the sheet the coordinator's
+ * long-press menu opens (CDXC:Coordinators 2026-11-09 on gx-chat-core `composer/host_actions.rs`).
+ */
+const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone', 'viewPlaybook']);
 
 export function overflowed(document: ChatDocument, id: string): boolean {
   return document.composerOverflow?.overflowed?.includes(id) === true;

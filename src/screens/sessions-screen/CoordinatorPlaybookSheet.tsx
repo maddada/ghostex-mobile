@@ -1,6 +1,6 @@
 /**
  * The phone's View playbook: the playbook an orchestrator reads, read-only, opened from its row's
- * long-press menu. The text is what `ghostex coordinator guide` prints for its project: Ghostex's
+ * long-press menu or its chat's More sheet. The text is what `ghostex coordinator guide` prints for its project: Ghostex's
  * playbook, the reply format the user chose, then the user's overrides. The desktop shows the same
  * page from the same row (apps/desktop/src/app/window/coordinator_details_modal.rs).
  *
@@ -13,8 +13,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { useFoldCardPlacement } from '../../components/common/foldAvoidance';
+import { runGhostexCli } from '../../components/sessions/cli';
+import { coordinatorGuideCommand } from '../../commands/ghostexCli';
 import { GhostexStrokeWidth } from '../../theme/palette';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
+
+/**
+ * The playbook a project's coordinators read (`ghostex coordinator guide --project-id`, which every
+ * computer from 11.2.1 answers), for this sheet wherever it opens: a coordinator's long-press menu
+ * and its chat's More sheet.
+ */
+export async function loadCoordinatorPlaybook(
+  machine: Parameters<typeof runGhostexCli>[0],
+  projectId: string,
+): Promise<string> {
+  const { stdout } = await runGhostexCli(machine, coordinatorGuideCommand(projectId));
+  return stdout.trim();
+}
 
 export type CoordinatorPlaybookSheetProps = {
   /** The guide's text; a rejection shows its message in the sheet. */

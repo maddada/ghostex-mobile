@@ -20,6 +20,7 @@ import type { ActionSheetItem } from '../../components/common/ActionSheet';
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import { isSessionChatSupportedAgent } from '../../chat/session-chat-helpers';
 import { runGhostexCli } from '../../components/sessions/cli';
+import { loadCoordinatorPlaybook as loadPlaybook } from './CoordinatorPlaybookSheet';
 import { type ContextMenuItem } from '../../components/sessions/ContextMenu';
 import { NewSessionProjectRow } from '../../components/sessions/NewSessionPlace';
 import { blockedDetail } from '../../components/sessions/sessionStatus';
@@ -69,7 +70,6 @@ import {
   makeMainCoordinatorCommand,
   coordinatorEditCommand,
   coordinatorResolveCommand,
-  coordinatorGuideCommand,
   coordinatorStatusCommand,
   sleepInactiveCoordinatorThreadsCommand,
   moveProjectCommand,
@@ -523,10 +523,8 @@ export function useSessionsScreenMenus({
   };
 
   /** The playbook the coordinator reads (`ghostex coordinator guide`), for its View playbook sheet. */
-  const loadCoordinatorPlaybook = async (ctx: SessionContext): Promise<string> => {
-    const { stdout } = await runGhostexCli(ctx.machine, coordinatorGuideCommand(ctx.item.session.projectId));
-    return stdout.trim();
-  };
+  const loadCoordinatorPlaybook = (ctx: SessionContext): Promise<string> =>
+    loadPlaybook(ctx.machine, ctx.item.session.projectId);
 
   /** Saves an editor's copy in one `ghostex coordinator edit`; a failure stays in the open sheet. */
   const saveCoordinatorDetails = async (ctx: SessionContext, edit: CoordinatorDetailsEdit): Promise<void> => {

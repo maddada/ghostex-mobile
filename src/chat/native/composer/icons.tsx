@@ -249,6 +249,16 @@ const GLYPHS = {
       'M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0',
     ],
   },
+  /** View playbook (desktop `titlebar/book.svg`). */
+  book: {
+    paths: [
+      'M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0',
+      'M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0',
+      'M3 6l0 13',
+      'M12 6l0 13',
+      'M21 6l0 13',
+    ],
+  },
   brain: {
     paths: [
       'M15.5 13a3.5 3.5 0 0 0 -3.5 3.5v1a3.5 3.5 0 0 0 7 0v-1.8',
