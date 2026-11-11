@@ -1,10 +1,10 @@
 /**
  * Send / Stop / Queue (`send_control.rs`, React's `session-chat-composer.tsx` send button).
  *
- * - With text: tap sends; a hold of `interaction.queueLongPressMs` queues instead (the only queue
- *   gesture a phone has), or, while the agent works, opens the Interrupt & Send / Queue choice
- *   (`onHoldWhileWorking`). A blocked Send stays pressable and dimmed; pressing it raises the core's
- *   toast rather than locking the composer.
+ * - With text: tap sends. A hold of `interaction.queueLongPressMs` opens the send menu (`onHold`:
+ *   the `/` `@` `+` pickers, then Queue, and Interrupt & Send while the agent works), with or without
+ *   text: the chat box's placeholder says "Hold ↑ for options". A blocked Send stays pressable
+ *   and dimmed; pressing it raises the core's toast rather than locking the composer.
  * - Without text while the agent works: Stop (`interrupt`), then held for
  *   `interaction.stopButtonCooldownMs` so a second tap cannot land on the next turn.
  */
@@ -25,15 +25,15 @@ export function SendControl({
   ready,
   submit,
   dispatch,
-  onHoldWhileWorking,
+  onHold,
 }: {
   document: ChatDocument | null;
   hasDraft: boolean;
   ready: boolean;
   submit: NonNullable<RustChat['composer']>['submit'];
   dispatch: (action: UserAction) => void;
-  /** A hold on Send while the agent works: the screen offers Interrupt & Send and Queue. */
-  onHoldWhileWorking?: () => void;
+  /** A hold on Send: the screen opens the send menu. */
+  onHold?: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -57,6 +57,7 @@ export function SendControl({
   const pendingAttachments = document?.pendingAttachments ?? 0;
   const sendable = hasDraft || pendingAttachments > 0;
   const stop = (working || cooling) && !sendable;
+  // Dimmed, and a tap does nothing; a hold still opens the send menu (the pickers need no draft).
   const disabled = stop ? cooling : !sendable || !ready;
   const blocked = !stop && typeof document?.sendBlockedReason === 'string';
   const canQueue = sendable && document?.queue.capabilities.canQueue === true;
@@ -75,37 +76,31 @@ export function SendControl({
     dispatch({ type: 'interrupt' });
   };
 
-  const choosesOnHold = working && sendable && onHoldWhileWorking !== undefined;
-  const label = stop
-    ? 'Stop the agent'
-    : choosesOnHold
-      ? 'Send (hold for Interrupt & Send or Queue)'
-      : canQueue
-        ? 'Send (hold to queue)'
-        : 'Send';
+  const opensMenu = !stop && onHold !== undefined;
+  const label = stop ? 'Stop the agent' : opensMenu ? 'Send (hold for options)' : canQueue ? 'Send (hold to queue)' : 'Send';
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
+      accessibilityState={{ disabled: stop ? cooling : opensMenu ? false : disabled }}
+      disabled={stop ? cooling : opensMenu ? false : disabled}
       delayLongPress={holdMs}
       hitSlop={6}
       onPressIn={() => {
         heldThisPress.current = false;
       }}
       onPress={() => {
-        if (heldThisPress.current) return;
+        if (heldThisPress.current || disabled) return;
         if (stop) onStop();
         else submit('send');
       }}
       onLongPress={() => {
         heldThisPress.current = true;
-        // A hold is the queue gesture; where there is nothing to queue it does what a tap does.
+        // A hold opens the send menu; without one it queues, or where there is nothing to queue does what a tap does.
         if (stop) onStop();
-        else if (choosesOnHold) {
+        else if (opensMenu) {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onHoldWhileWorking();
+          onHold();
         } else if (canQueue) {
           if (submit('queue')) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } else submit('send');

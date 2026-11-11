@@ -40,13 +40,14 @@ import {
   moreActionsRows,
   optionMenuRows,
   overflowed,
-  sendChoiceRows,
+  sendMenuRows,
   type ComposerActionId,
   type ComposerControlId,
 } from './menus';
 import { MenuSheet, type MenuRow } from './MenuSheet';
 import { ModelMenuSheet } from './ModelMenuSheet';
 import { NotePanel } from './NotePanel';
+import { phonePlaceholder } from './placeholder';
 import { CatchUpCard } from '../cards/CatchUpCard';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
 import { OptionPills, type PillKind } from './OptionPills';
@@ -244,6 +245,8 @@ export function NativeComposer({
   const [menu, setMenu] = useState<OpenMenu>(null);
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
+  /** A `/`, `@` or `+` the send menu chose, typed into the draft when the menu has closed. */
+  const pendingTrigger = useRef<string | null>(null);
   // The draft as it is drawn now, for a press that acts on it later (moving it to another project).
   const draftAt = useRef({ text, caret });
   draftAt.current = { text, caret };
@@ -450,6 +453,10 @@ export function NativeComposer({
               'Open Ghostex on your computer and go to Settings > Accounts to sign in to another account.',
             );
           return false;
+        case 'insertTrigger':
+          // Typed into the draft once the sheet is gone (`closeMenu`), where the keyboard can take the focus.
+          pendingTrigger.current = str(command, 'character');
+          return false;
         case 'insertSkill':
           if (model !== null) {
             dispatch({
@@ -516,21 +523,31 @@ export function NativeComposer({
   );
   /** A source picked in the sheet, launched once the sheet's modal is gone (iOS). */
   const pickAfterDismiss = useRef<AttachSource | null>(null);
+  const typeTrigger = useCallback(() => {
+    const character = pendingTrigger.current;
+    pendingTrigger.current = null;
+    if (character !== null) field.current?.insertAtCaret(character);
+  }, []);
   const closeMenu = useCallback(() => {
     setMenu(null);
     const source = pendingPick.current;
     pendingPick.current = null;
-    if (source === null) return;
+    if (source === null) {
+      // iOS cannot focus the field while the sheet's modal is still sliding away: `onMenuDismissed` types it then.
+      if (Platform.OS !== 'ios') typeTrigger();
+      return;
+    }
     // iOS cannot present the picker while the sheet's modal is still sliding away; a fixed delay
     // raced that animation and the picker silently never showed. Android's modal is a dialog.
     if (Platform.OS === 'ios') pickAfterDismiss.current = source;
     else launchPick(source);
   }, [launchPick]);
   const onMenuDismissed = useCallback(() => {
+    typeTrigger();
     const source = pickAfterDismiss.current;
     pickAfterDismiss.current = null;
     if (source !== null) launchPick(source);
-  }, [launchPick]);
+  }, [launchPick, typeTrigger]);
 
   const openPill = useCallback(
     (kind: PillKind) => {
@@ -642,12 +659,17 @@ export function NativeComposer({
     });
   }, [available, compact, document, model, serves, voiceCallGbotName, voiceCallTitle]);
 
-  /** Send held while the agent works: Interrupt & Send or Queue. */
-  const openSendChoices = useCallback(() => {
+  /** Send held: the `/` `@` `+` pickers, then Queue (and Interrupt & Send while the agent works) once there is a draft. */
+  const openSendMenu = useCallback(() => {
     if (document === null || model === null) return;
     setMenu({
       kind: 'rows',
-      rows: sendChoiceRows({ ready: model.ready, canQueue: document.queue.capabilities.canQueue === true }),
+      rows: sendMenuRows({
+        ready: model.ready,
+        canQueue: document.queue.capabilities.canQueue === true,
+        hasDraft: model.text.trim().length > 0 || (document.pendingAttachments ?? 0) > 0,
+        working: document.working === true,
+      }),
     });
   }, [document, model]);
 
@@ -670,7 +692,7 @@ export function NativeComposer({
   if (state === null || input === null || model === null) return null;
   const collapsed = motion.collapsed;
   const hasDraft = text.trim().length > 0;
-  const placeholder = document?.composerPlaceholder ?? '';
+  const placeholder = phonePlaceholder(document?.composerPlaceholder ?? '');
   const statusLine = document !== null && statusLineReserved(document);
   /*
    * CDXC:SessionChat 2026-10-28 DECISION:
@@ -845,7 +867,7 @@ export function NativeComposer({
                       ready={model.ready}
                       submit={input.submit}
                       dispatch={dispatch}
-                      onHoldWhileWorking={openSendChoices}
+                      onHold={openSendMenu}
                     />
                   ) : null}
                 </View>
@@ -914,7 +936,7 @@ export function NativeComposer({
                         ready={model.ready}
                         submit={input.submit}
                         dispatch={dispatch}
-                        onHoldWhileWorking={openSendChoices}
+                        onHold={openSendMenu}
                       />
                     </View>
                     {document !== null && !compact ? (

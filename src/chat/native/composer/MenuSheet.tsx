@@ -187,6 +187,8 @@ export function MenuRowView({
   const detail = typeof row.detail === 'string' ? row.detail : '';
   const badge = str(row, 'badge');
   const glyph = glyphForIconPath(row.iconPath);
+  // A trigger character (`/`, `@`, `+`) in the icon's place: the key that opens the picker.
+  const character = str(row, 'character');
   const AgentIcon = typeof row.icon === 'string' ? AGENT_ICONS[row.icon] : undefined;
   // A lifecycle dot instead of a glyph (the fork branch list), tinted as `branch_dot_color` does.
   const dot = typeof row.dot === 'string' ? row.dot : null;
@@ -202,7 +204,11 @@ export function MenuRowView({
       }}
       style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null, disabled ? styles.rowDisabled : null]}
     >
-      {glyph !== null ? (
+      {character.length > 0 ? (
+        <Text style={styles.character} accessibilityElementsHidden importantForAccessibility="no">
+          {character}
+        </Text>
+      ) : glyph !== null ? (
         <Glyph name={glyph} size={17} color={P.primary} />
       ) : AgentIcon !== undefined ? (
         <AgentIcon size={17} color={P.primary} />
@@ -288,4 +294,5 @@ const useStyles = themedStyles((P) => ({
   description: { color: P.muted, fontSize: 12.5, lineHeight: 17 },
   detail: { color: P.muted, fontSize: 13, maxWidth: 140 },
   dot: { width: 7, height: 7, borderRadius: 3.5 },
+  character: { width: 17, color: P.primary, fontSize: 18, lineHeight: 20, fontWeight: '600', textAlign: 'center' },
 }));

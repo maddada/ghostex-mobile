@@ -27,7 +27,12 @@ import {
 } from './chipText';
 import type { ComposerReference } from './references';
 
-export type ComposerInputHandle = { focus(): void; blur(): void };
+export type ComposerInputHandle = {
+  focus(): void;
+  blur(): void;
+  /** Types a character at the caret (replacing a selection), as the keyboard would: the picker its key opens follows. */
+  insertAtCaret(character: string): void;
+};
 
 /**
  * The collapsed field: exactly one line (`lineHeight` plus the vertical padding in `input`). The
@@ -103,6 +108,19 @@ export const ComposerInput = forwardRef<
   useImperativeHandle(ref, () => ({
     focus: () => field.current?.focus(),
     blur: () => field.current?.blur(),
+    insertAtCaret: (character) => {
+      const current = textRef.current.draft;
+      const { start, end } = draftSelection.current;
+      const next = current.slice(0, start) + character + current.slice(end);
+      const caret = { start: start + character.length, end: start + character.length };
+      draftSelection.current = caret;
+      caretRequested.current = true;
+      setDraft(next);
+      onTextChange(next);
+      input.edited(next, caret);
+      onCaret(caret.end);
+      field.current?.focus();
+    },
   }));
 
   const live = parsedFor === draft ? references : parse(draft);
@@ -210,9 +228,10 @@ export const ComposerInput = forwardRef<
     return parts;
   }, [P, styles, text]);
 
-  // A TextInput wraps its placeholder and cannot truncate it, so the collapsed field draws the
-  // placeholder's first line itself, cut to one line with an ellipsis.
-  const collapsedHint = collapsed && draft.length === 0 ? (placeholder.split('\n')[0] ?? '') : null;
+  // A TextInput wraps its placeholder and cannot truncate it, so the field draws the placeholder's
+  // first line itself, cut to one line with an ellipsis, over the empty field: at a large text size
+  // the hint shortens instead of wrapping or growing the box (the phone's "Hold ↑ for options").
+  const collapsedHint = draft.length === 0 ? (placeholder.split('\n')[0] ?? '') : null;
   const field_ = (
     <GhostexImageIntakeView onImages={onImages}>
       <TextInput
@@ -226,7 +245,7 @@ export const ComposerInput = forwardRef<
         onSelectionChange={onSelectionChange}
         onFocus={() => input.focused()}
         onBlur={() => input.blurred()}
-        placeholder={collapsed ? '' : placeholder}
+        placeholder=""
         placeholderTextColor={P.placeholder}
         keyboardAppearance={P.light ? 'light' : 'dark'}
         autoCapitalize="sentences"
@@ -238,13 +257,15 @@ export const ComposerInput = forwardRef<
       </TextInput>
     </GhostexImageIntakeView>
   );
-  if (collapsedHint === null) return field_;
+  // The wrapper stays whether or not the hint shows, so typing the first character never remounts the field.
   return (
     <View>
       {field_}
-      <Text style={[styles.hint, { color: P.placeholder }]} numberOfLines={1} pointerEvents="none">
-        {collapsedHint}
-      </Text>
+      {collapsedHint !== null ? (
+        <Text style={[styles.hint, { color: P.placeholder }]} numberOfLines={1} pointerEvents="none">
+          {collapsedHint}
+        </Text>
+      ) : null}
     </View>
   );
 });

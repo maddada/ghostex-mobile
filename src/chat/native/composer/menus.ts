@@ -202,6 +202,52 @@ export function sendChoiceRows({ ready, canQueue }: { ready: boolean; canQueue: 
   ];
 }
 
+/**
+ * CDXC:SessionChat 2026-11-11 DECISION:
+ * User: "Pls shorten the placeholder text on mobile app so it fits in 1 line: 'Hold (up arrow glyph) for options' and add + @ / and what they do there at the top as 3 new items".
+ * The chat box's placeholder is now "Hold ↑ for options", so a hold on Send always opens this menu: the three
+ * characters that open a picker (the words are the desktop's: the placeholder's "skills and commands", the
+ * `/mention` command's "Mention a file", the `+` list's agents), then, after a divider, what a hold did before
+ * (Interrupt & Send and Queue while the agent works, Queue while it is idle) once there is a draft to send.
+ */
+export const TRIGGER_ROWS: readonly MenuRow[] = [
+  {
+    character: '/',
+    label: 'Skills and commands',
+    description: 'Use a skill or run a command',
+    command: { type: 'insertTrigger', character: '/' },
+  },
+  {
+    character: '@',
+    label: 'Mention a file',
+    description: 'Pick a file from this project',
+    command: { type: 'insertTrigger', character: '@' },
+  },
+  {
+    character: '+',
+    label: 'Add an agent',
+    description: 'Mention another agent in this project',
+    command: { type: 'insertTrigger', character: '+' },
+  },
+];
+
+export function sendMenuRows({
+  ready,
+  canQueue,
+  hasDraft,
+  working,
+}: {
+  ready: boolean;
+  canQueue: boolean;
+  hasDraft: boolean;
+  working: boolean;
+}): MenuRow[] {
+  const rows: MenuRow[] = TRIGGER_ROWS.map((row) => ({ ...row, disabled: !ready }));
+  if (!hasDraft) return rows;
+  const choices = sendChoiceRows({ ready, canQueue });
+  return [...rows, { separator: true }, ...(working ? choices : choices.slice(1))];
+}
+
 export function moreActionsRows({
   document,
   available,
