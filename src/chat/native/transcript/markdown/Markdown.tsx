@@ -62,6 +62,37 @@ type InlineContext = {
  */
 const ISSUE_LINK_SCHEME = 'ghostex-issue:';
 
+/**
+ * The core writes each hex colour in prose (`#ff8800`), and each code span that names one and
+ * nothing else, as a link to `ghostex-color:<hex>` (gx-chat-core `transcript/hex_colors.rs`, the
+ * rule desktop draws by too); the phone draws the colour's swatch before its words, which stay as
+ * they were written. A colour in a fenced block or among other words in a code span is not marked.
+ */
+const COLOR_LINK_SCHEME = 'ghostex-color:';
+
+/** A swatch's side: about 0.78 of the text's height, as the desktop sizes it (`swatch_side`). */
+const SWATCH_SIDE = 12;
+
+/**
+ * A colour's swatch: a small rounded square in that colour with the desktop's grey hairline ring,
+ * the same in both themes, so a very light colour on a light background (or a dark one on dark)
+ * still shows its edge (desktop `markdown_style.rs`, `swatch_ring`).
+ */
+function ColorSwatch({ hex }: { hex: string }) {
+  return (
+    <View style={styles.swatchBox}>
+      <View style={[styles.swatch, { backgroundColor: `#${hex}` }]} />
+    </View>
+  );
+}
+
+/** The hex digits of a `ghostex-color:` link, or null for anything a swatch cannot draw. */
+function colorOfHref(href: string): string | null {
+  if (!href.startsWith(COLOR_LINK_SCHEME)) return null;
+  const hex = href.slice(COLOR_LINK_SCHEME.length);
+  return /^(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(hex) ? hex : null;
+}
+
 function referenceMap(references: unknown): Map<string, Reference> {
   const map = new Map<string, Reference>();
   for (const entry of arr(references)) {
@@ -148,6 +179,18 @@ function renderInlines(
         // Pictures are split out of their paragraph before this runs (`FlowParagraph`).
         return str(inline.image, 'label');
       case 'link': {
+        // A hex colour: its swatch before its words. The desktop draws a code span's swatch inside
+        // its chip; a React Native text's background does not run under a view inside it, so the
+        // chip would split around the swatch, and the phone draws it just before the chip instead.
+        const swatch = colorOfHref(inline.href);
+        if (swatch !== null) {
+          return (
+            <Text key={key} style={style}>
+              <ColorSwatch hex={swatch} />
+              {renderInlines(inline.c, context, key)}
+            </Text>
+          );
+        }
         // `#123`: a link to the project's GitHub issue, opened in the browser as any web link is;
         // without a GitHub remote it stays the text it was written as.
         if (inline.href.startsWith(ISSUE_LINK_SCHEME)) {
@@ -1090,6 +1133,15 @@ const styles = StyleSheet.create({
   del: { textDecorationLine: 'line-through' },
   inlineCode: { fontFamily: MONO_FONT, fontSize: CODE_SIZE },
   referenceIcon: { width: 13, height: 13, transform: [{ translateY: 2 }] },
+  /** The swatch and the room after it (desktop `chip_edges`: the side and 45% more). */
+  swatchBox: { width: SWATCH_SIDE + 5, height: SWATCH_SIDE, transform: [{ translateY: 1.5 }] },
+  swatch: {
+    width: SWATCH_SIDE,
+    height: SWATCH_SIDE,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.45)',
+  },
   questionTag: {
     flexDirection: 'row',
     alignItems: 'center',
