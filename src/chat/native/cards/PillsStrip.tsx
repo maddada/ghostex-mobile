@@ -18,7 +18,7 @@
  */
 
 import { Children, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import type { ChatDocument, ChatPill, ViewChip } from '../../rust/document';
@@ -276,8 +276,15 @@ export function PillsStrip({
             key={pill.id}
             pill={pill}
             onPress={() => {
-              afterDismiss.current = pill;
+              // A row does what its pill does in the strip. iOS waits for this sheet to go first
+              // (`onDismissed`); Android never reports that (React Native's Modal sends `onDismiss`
+              // on iOS only), and its sheets are dialogs that open over a closing one, so it goes now.
+              // CDXC:SessionChat 2026-11-11 WHY: the user, on Android: "When i click on share here
+              // in my phone nothing happens"; every row of this sheet did nothing there since
+              // 2026-11-10 (2d2dd229).
               setOverflowOpen(false);
+              if (Platform.OS === 'ios') afterDismiss.current = pill;
+              else pressPill(pill);
             }}
           />
         ))}
