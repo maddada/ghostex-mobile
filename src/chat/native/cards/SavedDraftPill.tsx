@@ -12,6 +12,7 @@ import type { SavedDraftPill as SavedDraftPillState } from '../../rust/document'
 import type { UserAction } from '../../rust/actions';
 import { Glyph } from '../composer/icons';
 import { Sheet } from '../composer/Sheet';
+import { RIGHT_TO_LEFT_TEXT, startsRightToLeft } from '../transcript/markdown/textDirection';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { savedDraftLabel } from './savedDraft';
 
@@ -82,9 +83,16 @@ export function SavedDraftSheet({
       {pill ? (
         <View style={styles.body}>
           <ScrollView style={styles.preview} contentContainerStyle={styles.previewContent}>
-            <Text style={styles.previewText} selectable>
-              {pill.preview}
-            </Text>
+            {/* One Text per line: each line that starts right to left sits against the right edge, as in the chat box. */}
+            {pill.preview.split('\n').map((line, index) => (
+              <Text
+                key={index}
+                style={[styles.previewText, startsRightToLeft(line) && RIGHT_TO_LEFT_TEXT]}
+                selectable
+              >
+                {line.length > 0 ? line : ' '}
+              </Text>
+            ))}
           </ScrollView>
           {pill.hint.length > 0 ? <Text style={styles.hint}>{pill.hint}</Text> : null}
           <View style={styles.actions}>

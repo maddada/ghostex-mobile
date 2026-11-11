@@ -26,6 +26,7 @@ import { inlineText, parseMarkdown, type Block, type FenceHeader, type Inline } 
 import { BlockLongPress } from './blockLongPress';
 import { isRunCommandHref } from './runCommands';
 import { fitTableColumns } from './tableLayout';
+import { RIGHT_TO_LEFT_TEXT, startsRightToLeft } from './textDirection';
 import { MarkedSection, useMarkedEmoji, useMarkedStyle } from './MarkedSections';
 import { SessionPill } from '../SessionPill';
 import { openQuestionReply } from '../QuestionReply';
@@ -768,6 +769,19 @@ const ALERTS: { [kind: string]: { label: string; glyph: GlyphName } } = {
 
 const BULLETS = ['•', '◦', '▪'];
 
+/**
+ * Whether a list item (or the blocks of a quote) starts right to left: its first paragraph, heading or nested
+ * list's first item says, as the web's `dir="auto"` does. An item that opens with code, a table or a picture
+ * strip stays left to right.
+ */
+function blocksStartRightToLeft(blocks: readonly Block[]): boolean {
+  const first = blocks[0];
+  if (first === undefined) return false;
+  if (first.t === 'p' || first.t === 'h') return startsRightToLeft(inlineText(first.c));
+  if (first.t === 'list') return blocksStartRightToLeft(first.items[0]?.c ?? []);
+  return false;
+}
+
 function orderedLabel(value: number, depth: number): string {
   if (depth % 3 === 1) {
     let label = '';
@@ -844,7 +858,11 @@ function Blocks({ blocks, context, color, depth, listDepth, lead }: BlockProps) 
               );
             }
             return (
-              <Text key={key} selectable={context.selectable} style={[styles.prose, { color }, spacing]}>
+              <Text
+                key={key}
+                selectable={context.selectable}
+                style={[styles.prose, { color }, spacing, startsRightToLeft(inlineText(block.c)) && RIGHT_TO_LEFT_TEXT]}
+              >
                 {renderInlines(block.c, context, key)}
               </Text>
             );
@@ -863,6 +881,7 @@ function Blocks({ blocks, context, color, depth, listDepth, lead }: BlockProps) 
                   { color: block.level === 6 ? theme.muted : context.heading },
                   spacing,
                   styles.headingBottom,
+                  startsRightToLeft(inlineText(block.c)) && RIGHT_TO_LEFT_TEXT,
                 ]}
               >
                 {renderInlines(block.c, context, key)}
@@ -979,8 +998,11 @@ function Blocks({ blocks, context, color, depth, listDepth, lead }: BlockProps) 
             return (
               <View key={key} style={spacing}>
                 {block.items.map((item, itemIndex) => {
+                  // An item that starts right to left keeps its bullet or number on the right (its words read
+                  // right to left, desktop `dir="auto"`), unless it opens with a picture flow, which stays left.
+                  const rtl = !leadsFlow(item.c[0], context.strips) && blocksStartRightToLeft(item.c);
                   const marker = (
-                    <View style={[styles.listMarker, { width: gutter }]}>
+                    <View style={[styles.listMarker, { width: gutter }, rtl && styles.listMarkerRtl]}>
                       {item.checked !== null ? (
                         <View
                           style={[
@@ -1036,7 +1058,10 @@ function Blocks({ blocks, context, color, depth, listDepth, lead }: BlockProps) 
                     );
                   }
                   return (
-                    <View key={itemIndex} style={[styles.listItem, itemIndex > 0 && styles.listItemGap]}>
+                    <View
+                      key={itemIndex}
+                      style={[styles.listItem, rtl && styles.listItemRtl, itemIndex > 0 && styles.listItemGap]}
+                    >
                       {marker}
                       <View style={styles.listBody}>
                         <Blocks
@@ -1169,6 +1194,9 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: 'row' },
   listItemGap: { marginTop: 4 },
   listMarker: { alignItems: 'flex-start' },
+  // A right-to-left item: the marker first from the right edge, and the item's own text reads from there.
+  listItemRtl: { flexDirection: 'row-reverse' },
+  listMarkerRtl: { alignItems: 'flex-end' },
   // A content-sized user bubble needs the body's intrinsic width, not `flex: 1`'s zero basis.
   // Grow still fills an answer's row; shrink keeps long prompts inside their bubble.
   listBody: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
