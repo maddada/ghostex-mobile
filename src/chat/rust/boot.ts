@@ -30,6 +30,10 @@ export type ComposerBootRead = {
   summaryMode: boolean;
   verboseOverride: boolean | null;
   simpleOverride: boolean | null;
+  /** The chat's own Quiet View choice (gx-chat-core `transcript/quiet_view.rs`). */
+  quietView: boolean | null;
+  /** When each view record was picked and whether the computer has it (`transcript/view_sync.rs`). */
+  viewSync: unknown;
 };
 
 /** Reads that refused, and reads attempted: all refused means storage itself is unavailable. */
@@ -222,6 +226,8 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
         { store: 'summary', suffix: sessionKey },
         { store: 'verbose', suffix: sessionKey },
         { store: 'simple', suffix: sessionKey },
+        { store: 'quietView', suffix: sessionKey },
+        { store: 'viewSync', suffix: sessionKey },
       ],
       nowMs,
       reads,
@@ -243,6 +249,8 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
     summaryRaw,
     verboseRaw,
     simpleRaw,
+    quietViewRaw,
+    viewSyncRaw,
   ] = records;
   const id = await clientId(storedClientId, nowMs, reads);
   const entry = entryWithVersion(storedRaw === null ? null : decodeStoredDraft(storedRaw));
@@ -259,6 +267,8 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
   // The chat's Normal or Detailed record (gx-chat-core `transcript/view_level.rs`), the same
   // encoding as `verbose`.
   const simpleOverride = decodeVerbose(simpleRaw);
+  const quietView = decodeVerbose(quietViewRaw);
+  const viewSync = parse(viewSyncRaw);
   if (reads.attempts > 0 && reads.errors === reads.attempts) return null;
   return {
     sessionKey,
@@ -288,5 +298,7 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
     summaryMode,
     verboseOverride,
     simpleOverride,
+    quietView,
+    viewSync,
   };
 }

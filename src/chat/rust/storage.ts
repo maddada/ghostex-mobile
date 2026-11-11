@@ -59,6 +59,10 @@ const STORES: readonly CatalogStore[] = [
   { id: 'verbose', prefix: 'ghostex.sessionChat.verbose.', collection: true, backend: disk() },
   { id: 'summary', prefix: 'ghostex.sessionChat.summary.', collection: true, backend: disk() },
   { id: 'simple', prefix: 'ghostex.sessionChat.simple.', collection: true, backend: disk() },
+  { id: 'quietView', prefix: 'ghostex.sessionChat.quietView.', collection: true, backend: disk() },
+  // When each of the four view records above was picked, and whether the session's computer has the
+  // pick (gx-chat-core `transcript/view_sync.rs`), so every device opens a chat in the same view.
+  { id: 'viewSync', prefix: 'ghostex.sessionChat.viewSync.', collection: true, backend: disk() },
   { id: 'tasksCollapsed', prefix: 'ghostex.chat.agentTasks.collapsed', collection: false, backend: LOCAL },
   { id: 'threadsCollapsed', prefix: 'ghostex.chat.coordinatorThreads.collapsed', collection: false, backend: LOCAL },
   { id: 'claudeContext', prefix: 'ghostex.chat.context-details.v1', collection: false, backend: LOCAL },
