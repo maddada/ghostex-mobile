@@ -29,6 +29,7 @@ import { foldPart, keptParts, lineCards, type QuietLines } from './quietLines';
 import { QuietLine, QuietStatusMark, type QuietSegment } from './quietWork';
 import { useRowGap } from './messageSpacing';
 import { useDisclosure } from './state';
+import { BoxedToolCards } from './ToolCard';
 import { TranscriptItemView } from './TranscriptItemRow';
 
 /** The space between a shut line and the reply that ends it (desktop `LINE_TO_REPLY`). */
@@ -120,7 +121,10 @@ export function QuietRow({
         node: (
           <DisclosureBody onCollapse={state.toggle} label="Collapse" rail="work">
             {cards.length > 0 ? <WorkCardStack cards={cards} dispatch={dispatch} /> : null}
-            <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
+            {/* Its tool calls are cards, as its "Message to …" cards are (`ToolCard.tsx`). */}
+            <BoxedToolCards.Provider value>
+              <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
+            </BoxedToolCards.Provider>
             {/* The rail runs on through the row gap to the line's next row. */}
             {continues ? <View style={{ height: Math.max(rowGap - 8, 0) }} /> : null}
           </DisclosureBody>

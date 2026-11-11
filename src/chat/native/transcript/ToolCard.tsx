@@ -9,7 +9,7 @@
  * card out and moves it.
  */
 
-import { memo, useEffect, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   Easing,
@@ -32,7 +32,7 @@ import { ReadImages } from './Images';
 import { arr, num, obj, str, type JsonRecord } from './json';
 import { useDisclosure } from './state';
 import type { TranscriptTheme } from './theme';
-import { SINGLE_LINE_HEADER_HEIGHT } from './singleLineCard';
+import { SINGLE_LINE_CARD, SINGLE_LINE_HEADER_HEIGHT, singleLineShell } from './singleLineCard';
 import { ToolBody } from './ToolBody';
 
 /** How long a row takes to grow in and the header's words to settle (desktop `ENTER`). */
@@ -64,10 +64,13 @@ function successTone(light: boolean): string {
   return light ? '#059669' : '#34d399';
 }
 
-/** The card's surface, its border, and the opaque fill of the header's round tiles. */
-function cardColors(theme: TranscriptTheme) {
+/**
+ * The card's surface, its border, and the opaque fill of the header's round tiles. A boxed card's
+ * surface is the one-line cards' faint wash over the chat, made opaque for the tiles' rings.
+ */
+function cardColors(theme: TranscriptTheme, boxed = false) {
   const colors = palette(theme);
-  const surface = theme.input;
+  const surface = boxed ? mix(theme.background, theme.foreground, 0.025) : theme.input;
   return {
     surface,
     border: colors.border,
@@ -103,17 +106,29 @@ function ToolIcon({ icon, size, round }: { icon: JsonRecord; size: number; round
   );
 }
 
+/**
+ * Inside an opened Quiet View line (`quietView.tsx`): the card wears the "Message to …" card's
+ * shell (`singleLineShell`), Tool call lines or not.
+ *
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User, of the tool call row in an opened Quiet View line above a "Message to" card: "for the tool
+ * calls, make it a card, not without a card, like this, just like we have for the message to card
+ * there." The desktop still draws Tool call lines without a card there.
+ */
+export const BoxedToolCards = createContext(false);
+
 /** The card for `message.toolCard`. */
 export function ToolCard({ message }: { message: ProjectedMessage }) {
   const { theme, workOpen, toolLines } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
+  const boxed = useContext(BoxedToolCards);
   const card = obj(message.toolCard);
   const running = card?.running === true;
   const live = message.toolCardLive === true;
   // Tool call lines (`chatToolCallLines`): the card's header without its box, and its calls as rows
   // on the rail under it; they open in Detailed view and stay shut in Simple (gx-chat-core
   // `tool_card.rs`, CDXC:SessionChat 2026-11-09).
-  const line = toolLines === true;
+  const line = toolLines === true && !boxed;
   // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
   // While calls run the header carries the newest one's words (the core's `liveLabel`).
   const [open, toggle] = useDisclosure(
@@ -123,7 +138,7 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
   );
   if (card === null) return null;
   const animate = running || live;
-  const colors = cardColors(theme);
+  const colors = cardColors(theme, boxed);
   const entries = arr(card.entries)
     .map((entry) => obj(entry))
     .filter((entry): entry is JsonRecord => entry !== null);
@@ -141,14 +156,24 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
   return (
     <Animated.View
       layout={LinearTransition.duration(ENTER_MS)}
-      style={line ? styles.line : [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={
+        line
+          ? styles.line
+          : boxed
+            ? [styles.card, singleLineShell(theme)]
+            : [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]
+      }
     >
       <Pressable
         onPress={toggle}
         accessibilityRole="button"
         accessibilityLabel={[title, liveMore, failed, time].filter((part) => part.length > 0).join(', ')}
         accessibilityState={{ expanded: open }}
-        style={({ pressed }) => [line ? styles.lineHeader : styles.header, pressed && { backgroundColor: theme.pressed }]}
+        style={({ pressed }) => [
+          line ? styles.lineHeader : styles.header,
+          boxed && styles.boxedHeader,
+          pressed && { backgroundColor: theme.pressed },
+        ]}
       >
         <View style={styles.stack}>
           {icons.map((icon, index) => (
@@ -464,6 +489,8 @@ const styles = StyleSheet.create({
   lineRows: { marginTop: 2, marginLeft: 18, paddingLeft: 8, borderLeftWidth: StyleSheet.hairlineWidth, gap: 1 },
   showAll: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
   showAllText: { fontSize: 12 },
+  // The "Message to …" card's side padding (`SINGLE_LINE_CARD.paddingX`).
+  boxedHeader: { paddingHorizontal: SINGLE_LINE_CARD.paddingX },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
