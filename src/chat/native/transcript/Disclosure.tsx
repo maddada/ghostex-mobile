@@ -105,6 +105,28 @@ export function DisclosureBody({
   // The line is centred under the chevron or glyph that opens the body, at every depth
   // (`SLOT_CENTRE` in desktop's `disclosure_body.rs`); the content keeps its own column.
   const contentX = rail === 'marker' ? 17 : rail === 'work' ? 23 : 29.5;
+  if (rail === 'work') {
+    // CDXC:SessionChat 2026-11-12 DECISION: user, of the line down an opened Quiet View fold:
+    // "please make clicking on the line there collapse". As on the desktop (`closing_rail` in
+    // `disclosure_body.rs`), the whole strip from the column's edge to the content shuts the fold,
+    // and a few points more to the left so the target is 26pt wide, centred on the line.
+    return (
+      <View style={styles.body}>
+        <Pressable
+          onPress={onCollapse}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          hitSlop={{ left: WORK_RAIL_SLOP }}
+          style={[styles.workRailBox, { width: contentX, paddingLeft: SLOT_CENTRE - 0.5 }]}
+        >
+          {({ pressed }) => (
+            <View style={[styles.rail, { backgroundColor: pressed ? theme.foreground : theme.ink(RAIL_LINE_OPACITY) }]} />
+          )}
+        </Pressable>
+        <View style={[styles.bodyColumn, { gap }]}>{children}</View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.body, { marginLeft: SLOT_CENTRE - RAIL_BOX / 2, gap: contentX - SLOT_CENTRE - RAIL_BOX / 2 }]}>
       <Pressable onPress={onCollapse} accessibilityRole="button" accessibilityLabel={label} style={styles.railBox}>
@@ -119,6 +141,8 @@ export function DisclosureBody({
 
 const SLOT_CENTRE = MARKER_INSET + MARKER_SLOT / 2;
 const RAIL_BOX = 14;
+/** How far a fold's rail target reaches left of the column, so it runs as far left of the line as right of it. */
+const WORK_RAIL_SLOP = 3;
 /**
  * CDXC:SessionChat 2026-10-12 DECISION: the user pointed at the thin, subtle line down an opened
  * "Worked" fold and the thicker, brighter line beside a tool group's rows and said "make the line
@@ -143,6 +167,7 @@ const styles = StyleSheet.create({
   medium: { fontWeight: '500' },
   body: { flexDirection: 'row', minWidth: 0 },
   railBox: { width: RAIL_BOX, alignItems: 'center', flexShrink: 0 },
+  workRailBox: { flexShrink: 0 },
   rail: { width: 1, flex: 1, borderRadius: 0.5 },
   bodyColumn: { flex: 1, minWidth: 0 },
 });
