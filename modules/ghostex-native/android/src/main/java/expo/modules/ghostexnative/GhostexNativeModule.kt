@@ -106,12 +106,13 @@ class GhostexNativeModule : Module() {
   /** Where `machineId`'s own Easy Connect key lives, beside the shared one. */
   private fun tailcatMachineKeyPath(machineId: String): String {
     val safe = machineId.map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")
-    return File(File(File(requireAndroidContext().filesDir, "tailcat"), "machines"), "$safe.key").absolutePath
+    return File(File(GhostexTailcatKeyDir.dir(requireAndroidContext()), "machines"), "$safe.key").absolutePath
   }
 
   /** Loads (or creates) this phone's Easy Connect client key; see `tailcatClientPublicKey`. */
   private fun useTailcatClientKey(): String {
-    val dir = File(requireAndroidContext().filesDir, "tailcat")
+    // Out of Android backup (GhostexTailcatKeyDir), so a restored phone never brings the old key.
+    val dir = GhostexTailcatKeyDir.dir(requireAndroidContext())
     return Tailcatbridge.useClientKeyFile(File(dir, "client.key").absolutePath)
   }
 

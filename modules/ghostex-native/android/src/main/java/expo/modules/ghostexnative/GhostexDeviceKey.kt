@@ -28,6 +28,18 @@ object GhostexDeviceKey {
   private const val KEYSTORE = "AndroidKeyStore"
   private const val SPKI_P256_HEADER_BYTES = 26
 
+  /**
+   * Whether this install already made its device key. The Keystore never restores one from a
+   * backup, so Easy Connect keys found without it came from a backup (GhostexTailcatKeyDir).
+   */
+  @Synchronized
+  fun exists(): Boolean =
+    try {
+      KeyStore.getInstance(KEYSTORE).apply { load(null) }.containsAlias(ALIAS)
+    } catch (_: Exception) {
+      false
+    }
+
   /** The device key's public half, base64 (standard, padded), creating the key on first use. */
   @Synchronized
   fun publicKey(context: Context): String {
