@@ -440,31 +440,41 @@ function DockRow({
         accessibilityRole="button"
         accessibilityState={page ? undefined : { expanded: opened }}
         onPress={page ? () => dispatch(row.open as never) : onToggle}
-        style={({ pressed }) => [styles.dockRow, pressed && !opened && { backgroundColor: P.ink(0.04) }]}
+        style={({ pressed }) => [styles.dockPress, pressed && !opened && { backgroundColor: P.ink(0.04) }]}
       >
-        <View style={styles.dockIcon}>
-          {markStatus === 'page' ? (
-            <Glyph name="note" size={14} color={STATUS_COLOR.needs} />
-          ) : (
-            <StatusMarker status={markStatus} size={13} />
-          )}
-        </View>
-        <View style={styles.dockMain}>
-          {page && count.length > 0 ? (
-            <View style={styles.pageTitle}>
-              <Text numberOfLines={1} style={[styles.dockTitle, styles.pageName, { color: body }]}>
+        <View style={styles.dockRow}>
+          <View style={styles.dockIcon}>
+            {markStatus === 'page' ? (
+              <Glyph name="note" size={14} color={STATUS_COLOR.needs} />
+            ) : (
+              <StatusMarker status={markStatus} size={13} />
+            )}
+          </View>
+          <View style={styles.dockMain}>
+            {page && count.length > 0 ? (
+              <View style={styles.pageTitle}>
+                <Text numberOfLines={1} style={[styles.dockTitle, styles.pageName, { color: body }]}>
+                  {str(row, 'title')}
+                </Text>
+                <Text style={styles.pageCount}>{count}</Text>
+              </View>
+            ) : opened ? (
+              // Opened, its references (`#562`, a Markdown link) open on a tap, as a question's do.
+              <LinkWords text={str(row, 'title')} runs={row.titleRuns} color={body} style={styles.dockTitle} />
+            ) : (
+              <Text numberOfLines={2} style={[styles.dockTitle, { color: body }]}>
                 {str(row, 'title')}
               </Text>
-              <Text style={styles.pageCount}>{count}</Text>
-            </View>
-          ) : opened ? (
-            // Opened, its references (`#562`, a Markdown link) open on a tap, as a question's do.
-            <LinkWords text={str(row, 'title')} runs={row.titleRuns} color={body} style={styles.dockTitle} />
-          ) : (
-            <Text numberOfLines={2} style={[styles.dockTitle, { color: body }]}>
-              {str(row, 'title')}
-            </Text>
-          )}
+            )}
+          </View>
+          <View style={styles.ageSlot}>
+            <Text style={styles.foldTime}>{str(row, 'age')}</Text>
+            {menuRows.length > 0 ? <WorkMenuButton active={menu} onPress={() => setMenu(true)} /> : null}
+          </View>
+        </View>
+        {/* Opened, only the title line shares its width with the age and the ⋯; the work item line,
+            the description and the lines under them run to the card's right edge, from the title's
+            left edge (user, 2026-11-12: "It should take up the full width of this card when I expand"). */}
           {opened ? (
             <View style={styles.dockDetail}>
               {Array.isArray(row.waitedBy) ? (
@@ -489,11 +499,6 @@ function DockRow({
                 ))}
             </View>
           ) : null}
-        </View>
-        <View style={styles.ageSlot}>
-          <Text style={styles.foldTime}>{str(row, 'age')}</Text>
-          {menuRows.length > 0 ? <WorkMenuButton active={menu} onPress={() => setMenu(true)} /> : null}
-        </View>
       </Pressable>
       {answerLine}
       {menuRows.length > 0 ? (
@@ -988,14 +993,8 @@ const useStyles = themedStyles((P) => ({
   dockCountNumber: { fontSize: 13, fontWeight: '500', color: P.foreground, fontVariant: ['tabular-nums'] },
   dockCountName: { marginLeft: -1, fontSize: 13, color: P.cardMuted },
   dockHeadButton: { width: 28, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  dockRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
+  dockPress: { gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
+  dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   // An opened row is its own card, a little lighter than the dock (desktop `dock_row`).
   dockRowOpen: {
     marginVertical: 4,
@@ -1013,7 +1012,8 @@ const useStyles = themedStyles((P) => ({
   ageSlot: { flexDirection: 'row', alignItems: 'center', gap: 4, height: PROSE_LINE },
   dockAnswers: { paddingLeft: 31, paddingRight: 8, paddingBottom: 6 },
   dockAnswersOpen: { paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
-  dockDetail: { gap: 4 },
+  // Under the title's text, not the mark: the mark and its gap (DOCK_LEAD).
+  dockDetail: { gap: 4, marginLeft: DOCK_LEAD },
   dockLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
   itemLineColumn: { gap: 4 },
   // On a phone's width the names and "waits on this" wrap rather than cut each other to a few
