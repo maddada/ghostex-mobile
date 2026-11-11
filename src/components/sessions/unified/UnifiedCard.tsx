@@ -79,12 +79,9 @@ function CardHat({ row, onToggleCrew }: { row: UnifiedRow<GhostexSession>; onTog
   const session = row.session.source!;
   const crew = row.crew;
   if (session.isCoordinator !== true) return null;
-  return (
-    <>
-      <CoordinatorHat chief={session.isChief === true} containsActive={crew !== null && !crew.open && crew.containsActive} />
-      {crew !== null ? <CoordinatorFold collapsed={!crew.open} onToggle={() => onToggleCrew(crew.key)} /> : null}
-    </>
-  );
+  const hat = <CoordinatorHat chief={session.isChief === true} containsActive={crew !== null && !crew.open && crew.containsActive} />;
+  // The hat and its chevron are one button, so a tap on the hat folds and never opens the card.
+  return crew === null ? hat : <CoordinatorFold collapsed={!crew.open} onToggle={() => onToggleCrew(crew.key)} hat={hat} />;
 }
 
 /** The desktop's done blue (cards.rs `chrome_color(0x95d7f6, …)`). */

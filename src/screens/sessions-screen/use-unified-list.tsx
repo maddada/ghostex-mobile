@@ -68,7 +68,8 @@ import {
   UnifiedShelfHeader,
   UnifiedSlimRow,
 } from '../../components/sessions/unified/UnifiedCard';
-import SessionRow from '../../components/sessions/SessionRow';
+import SessionRow, { treeAnchorBelowRow } from '../../components/sessions/SessionRow';
+import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { CoordinatorFold } from '../../components/sessions/CoordinatorFold';
 import { showsFoldedStatus, UnifiedCrewCount, UnifiedFoldedStatus } from '../../components/sessions/unified/crew';
 import { sessionLinksDisplay } from '../../chat/native/sessionLinks';
@@ -164,6 +165,8 @@ export type UnifiedListDeps = {
   openAddProject: (machineId: string) => void;
   /** The screen's toast. */
   notify: (notice: NewSessionNotice) => void;
+  /** What a thread row's chips do (its links line, a merged PR's Clean up / Keep), as the Project list wires them. */
+  workChipActions: (target: MachineRecord | null, session: GhostexSession) => WorkChipActions | undefined;
   /** The session wall: tiles this many side by side, drawn in `appearance`; absent or null, the list's cards. */
   wall?: { columns: number; appearance: SidebarAppearance } | null;
 };
@@ -216,6 +219,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     snoozeSession,
     openAddProject,
     notify,
+    workChipActions,
     wall = null,
   } = deps;
   const selectedSummary = selectedMachine === null ? null : (inventoriesByMachineId[selectedMachine.id]?.summary ?? null);
@@ -427,16 +431,27 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     // A card, then the threads drawn under it, each its own item (tiles on the wall).
     const pushCard = (item: Extract<UnifiedListItem, { kind: 'card' | 'slim' }>): void => {
       list.push(item);
+      // The first thread's tree line rises to the card's hat; each later one to the row above it, one line or two.
       let anchor: number | undefined = item.kind === 'slim' ? SLIM_HAT_ANCHOR : CARD_HAT_ANCHOR;
       for (const line of drawnLines(item.row)) {
         if (line.kind === 'thread') {
           list.push({ kind: 'thread', key: `thread:${line.row.id}`, row: line.row, nesting: line.nesting, anchor });
-        } else if (line.coordinator.crew !== null) {
-          const crew = line.coordinator.crew;
-          const label = crew.olderShown ? SessionCopy.hideOlderThreads : SessionCopy.olderThreads(crew.older);
-          list.push({ kind: 'older', key: `older:${crew.key}`, coordinatorKey: crew.key, label, nesting: line.nesting });
+          const session = line.row.session.source!;
+          const summary = inventoriesByMachineId[line.row.machine]?.summary ?? null;
+          anchor = treeAnchorBelowRow(
+            session,
+            sessionLinksDisplay(summary?.sidebarSessionLinks),
+            workChipActions(machines.find((machine) => machine.id === line.row.machine) ?? null, session) !== undefined,
+          );
+        } else {
+          if (line.coordinator.crew !== null) {
+            const crew = line.coordinator.crew;
+            const label = crew.olderShown ? SessionCopy.hideOlderThreads : SessionCopy.olderThreads(crew.older);
+            list.push({ kind: 'older', key: `older:${crew.key}`, coordinatorKey: crew.key, label, nesting: line.nesting });
+          }
+          // As the project list starts the rows after an older-threads row.
+          anchor = undefined;
         }
-        anchor = undefined;
       }
     };
     if (view.drafts.length > 0) {
@@ -489,7 +504,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       });
     }
     return list;
-  }, [view, toggledShelves, computers, groups, foldedGroups, layout.groupByProject]);
+  }, [view, toggledShelves, computers, groups, foldedGroups, layout.groupByProject, machines, inventoriesByMachineId, workChipActions]);
 
   // The session wall: each run of cards and shelf rows as rows of tiles; every other item keeps its place.
   const wallColumns = wall?.columns ?? null;
@@ -671,6 +686,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
             coordinatorBadge={crew?.badge}
             onToggleThreads={crew !== null ? () => toggleCoordinator(crew.key) : undefined}
             treeAnchor={item.anchor}
+            workActions={workChipActions(target, session)}
             sessionLinksDisplay={sessionLinksDisplay(summary?.sidebarSessionLinks)}
             dimSleeping={summary?.dimSleepingSessions === true}
             onPress={() => target !== null && void attach(target, session)}

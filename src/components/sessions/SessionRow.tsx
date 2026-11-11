@@ -344,6 +344,31 @@ function QuestionIndicator({ activity, ringColor }: { activity: string; ringColo
 }
 
 
+/** A row's height: one line, or two while it draws its chip line (`sessionRowHasChipLine`). */
+function sessionRowHeight(chipLine: boolean): number {
+  return TOUCH_ROW_HEIGHT + (chipLine ? ds(WORK_SESSION_ROW_HEIGHT - 34) : 0);
+}
+
+/**
+ * Whether a row draws its second line: a merged PR's Clean up / Keep offer, or its links under "Session links in the
+ * sidebar: Line", once its caller wires the chips' actions. SessionRow draws it from the same facts.
+ */
+export function sessionRowHasChipLine(session: GhostexSession, display: SessionLinksDisplay, hasActions: boolean): boolean {
+  if (!hasActions) return false;
+  if (session.work?.offerCleanup === true) {
+    return workChips(session.work).some((chip) => chip.key === 'pr' || chip.key === 'cleanup' || chip.key === 'keep');
+  }
+  return sessionLinksRow(session.links, display, session.isFocused).line.length > 0;
+}
+
+/**
+ * The `treeAnchor` of a thread drawn right under a row: from the centre of that row's icon (in its first line) down
+ * to the thread's top, so the tree line meets a two-line row's icon too.
+ */
+export function treeAnchorBelowRow(session: GhostexSession, display: SessionLinksDisplay, hasActions: boolean): number {
+  return sessionRowHeight(sessionRowHasChipLine(session, display, hasActions)) - TOUCH_ROW_HEIGHT / 2 + ROW_SPACING;
+}
+
 export type SessionRowProps = {
   session: GhostexSession;
   /** The capabilities of the session's computer, which the question indicator reads (`hasQuestion`). */
@@ -512,7 +537,7 @@ export default function SessionRow({
   const linksBadge = offerCleanup ? null : linksRow.badge;
   // An idle coordinator draws no crew badge (threads.rs `coordinator_badge`).
   const shownCoordinatorBadge = coordinatorBadge?.tone === 'idle' ? undefined : coordinatorBadge;
-  const rowHeight = TOUCH_ROW_HEIGHT + (showLinkLine ? ds(WORK_SESSION_ROW_HEIGHT - 34) : 0);
+  const rowHeight = sessionRowHeight(showLinkLine);
   const linePaddingLeft = (inCard ? ds(26) : ds(47)) + titleIndent;
 
   const openMenuFromRow = (): void => {

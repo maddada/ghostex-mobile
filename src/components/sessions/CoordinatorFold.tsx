@@ -7,6 +7,7 @@
  * It is its own Pressable, so a tap folds and never reaches the row or card under it.
  */
 
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { SidebarPalette } from '../../theme/palette';
@@ -16,10 +17,16 @@ import { ds, useSidebarInk } from './rows';
 export function CoordinatorFold({
   collapsed,
   onToggle,
+  hat,
   style,
 }: {
   collapsed: boolean;
   onToggle: () => void;
+  /**
+   * The hat drawn before the chevron, inside the same button, so a tap anywhere on the hat folds too (a Unified card
+   * and slim row). SessionRow leaves it out: its icon slot draws the hat, or a clock that keeps its own meaning.
+   */
+  hat?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   const ink = useSidebarInk();
@@ -30,9 +37,12 @@ export function CoordinatorFold({
       accessibilityState={{ expanded: !collapsed }}
       hitSlop={ds(10)}
       onPress={onToggle}
-      style={[styles.chevron, style]}
+      style={[hat === undefined ? styles.chevron : styles.withHat, style]}
     >
-      <ChevronRightGlyph size={ds(14)} color={ink.light ? ink.muted : SidebarPalette.MUTED} rotated={!collapsed} />
+      {hat}
+      <View style={styles.chevron}>
+        <ChevronRightGlyph size={ds(14)} color={ink.light ? ink.muted : SidebarPalette.MUTED} rotated={!collapsed} />
+      </View>
     </Pressable>
   );
 }
@@ -62,6 +72,11 @@ const styles = StyleSheet.create({
     height: ds(14),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  withHat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ds(6),
   },
   hat: {
     width: ds(15),
