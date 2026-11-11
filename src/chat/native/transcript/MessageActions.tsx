@@ -103,7 +103,7 @@ function useReplyActionItems(message: ProjectedMessage): ActionItem[] {
   const items: ActionItem[] = [];
   if (obj(message.actionContent)?.canSaveMarkdown === true) {
     items.push({
-      label: 'Save message to Markdown',
+      label: 'Save to Markdown',
       icon: 'file-export',
       run: () => {
         rememberSaveMarkdown(markdown);
