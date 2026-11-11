@@ -160,6 +160,13 @@ export class LiveActivityPushRegistration {
     return this.retryWanted;
   }
 
+  /** Whether the banner computer holds this phone's token and confirmed it, as far as the phone knows. */
+  holdsConfirmed(): boolean {
+    if (this.sent === null) return false;
+    const status = this.statuses.get(this.sent.machineId);
+    return status?.holds === true && status.confirmed;
+  }
+
   /** The computer that holds the tokens as far as the phone knows (for Settings and the logs). */
   holder(): string | null {
     return this.sent?.machineId ?? null;

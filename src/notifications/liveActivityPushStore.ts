@@ -16,6 +16,7 @@ import { enabledMachines, useMachinesStore } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
 import { buildContentState } from './contentState';
 import { currentSources } from './liveActivity';
+import { setLockedPushes } from './liveActivityPushState';
 import {
   LiveActivityPushRegistration,
   type LiveActivityAnswer,
@@ -136,6 +137,7 @@ function schedule(): void {
   timer = setTimeout(() => {
     timer = null;
     void registration.sync().then(() => {
+      setLockedPushes(registration.holdsConfirmed());
       // A computer did not take a clear or the register: ask again a little later (no other computer is
       // registered meanwhile).
       if (registration.needsRetry() && timer === null) timer = setTimeout(retry, RETRY_MS);

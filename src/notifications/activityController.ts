@@ -48,6 +48,11 @@ export type ActivityControllerDeps<Handle> = {
   readonly timers: ActivityTimers<Handle>;
   /** A failed ActivityKit call, for the app log. */
   readonly onError: (message: string) => void;
+  /**
+   * How long after its data time the content counts as outdated; `STALE_AFTER_MS` when not given. Longer while a
+   * computer keeps the activity updated while the phone is locked (`liveActivityPushState.ts`).
+   */
+  readonly staleAfterMs?: () => number;
 };
 
 export type ActivityController = {
@@ -122,7 +127,7 @@ export function createActivityController<Handle>(deps: ActivityControllerDeps<Ha
 
   const contentFor = (state: LiveActivityContentState): ActivityContent => ({
     state,
-    staleDate: Date.parse(state.updatedAt) + STALE_AFTER_MS,
+    staleDate: Date.parse(state.updatedAt) + (deps.staleAfterMs?.() ?? STALE_AFTER_MS),
   });
 
   const remember = (state: LiveActivityContentState, shape: string): void => {

@@ -18,7 +18,13 @@ import { logAppEvent } from '../app/appLog';
 import { useInventoryStore, type MachineInventory } from '../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
-import { createActivityController, type ActivityController, type LiveActivityAdapter } from './activityController';
+import {
+  createActivityController,
+  STALE_AFTER_MS,
+  type ActivityController,
+  type LiveActivityAdapter,
+} from './activityController';
+import { LOCKED_STALE_AFTER_MS, lockedPushesOn } from './liveActivityPushState';
 import {
   buildContentState,
   computersNeedingUpdate,
@@ -168,6 +174,8 @@ export function initLiveActivity(): void {
       clearTimeout: (handle) => clearTimeout(handle),
     },
     onError: logAppEvent,
+    // While a computer keeps it updated while locked, the app's own updates give it the computer's stale date.
+    staleAfterMs: () => (lockedPushesOn() ? LOCKED_STALE_AFTER_MS : STALE_AFTER_MS),
   });
   useInventoryStore.subscribe(syncLiveActivity);
   useMachinesStore.subscribe(syncLiveActivity);
