@@ -324,6 +324,21 @@ export default function NativeChatScreen({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const openDetails = useCallback(() => setDetailsOpen(true), []);
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  // Its Context card's More details opens the context meter's own sheet once this one has gone: iOS
+  // waits for it to go (`onDismissed`); Android never reports that, and its sheets are dialogs that
+  // open over a closing one, so it opens at once (the More pills sheet's way, `PillsStrip.tsx`).
+  const [contextRequestId, setContextRequestId] = useState(0);
+  const contextAfterDismiss = useRef(false);
+  const openContextDetails = useCallback(() => {
+    setDetailsOpen(false);
+    if (Platform.OS === 'ios') contextAfterDismiss.current = true;
+    else setContextRequestId((current) => current + 1);
+  }, []);
+  const detailsDismissed = useCallback(() => {
+    if (!contextAfterDismiss.current) return;
+    contextAfterDismiss.current = false;
+    setContextRequestId((current) => current + 1);
+  }, []);
   // Switching to the terminal takes the sheet away with the chat.
   useEffect(() => {
     if (!visible) setDetailsOpen(false);
@@ -458,6 +473,7 @@ export default function NativeChatScreen({
                   hostActions={composerHostActions}
                   openAccountsRequestId={accountsRequestId}
                   openModelRequestId={modelRequestId}
+                  openContextRequestId={contextRequestId}
                   focusRequestId={focusRequestId}
                   voiceCallTitle={title}
                   voiceCallGbotName={chatGbot?.name}
@@ -524,7 +540,14 @@ export default function NativeChatScreen({
             />
             <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
             <ResourceSheet chat={chat} document={document} />
-            <SessionDetailsSheet chat={chat} document={document} visible={detailsOpen} onClose={closeDetails} />
+            <SessionDetailsSheet
+              chat={chat}
+              document={document}
+              visible={detailsOpen}
+              onClose={closeDetails}
+              onMoreDetails={openContextDetails}
+              onDismissed={detailsDismissed}
+            />
             {gbotSettings !== null ? (
               <GbotSettingsHost
                 target={machine}

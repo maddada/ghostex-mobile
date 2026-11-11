@@ -102,6 +102,11 @@ export type NativeComposerProps = {
    * held-messages card's Pick model). Each new value opens what a tap on the model pill opens; 0 opens nothing.
    */
   openModelRequestId?: number;
+  /**
+   * Bumped by the screen for the context meter's sheet (the Session details sheet's More details row,
+   * while the meter's own ring steps aside for the strip's). Each new value opens it; 0 opens nothing.
+   */
+  openContextRequestId?: number;
   /** The session's title, for the More actions row "Voice call about this chat" (shown when `voiceCall` is served). */
   voiceCallTitle?: string;
   /** A GBot's chat: the GBot's name, that row then being "Call <GBot>". */
@@ -166,6 +171,7 @@ export function NativeComposer({
   openAccountsRequestId = 0,
   focusRequestId = 0,
   openModelRequestId = 0,
+  openContextRequestId = 0,
   voiceCallTitle = '',
   voiceCallGbotName = '',
   room,
@@ -558,6 +564,13 @@ export function NativeComposer({
     handledModelRequest.current = openModelRequestId;
     if (openModelRequestId > 0) openPill('model');
   }, [openModelRequestId, openPill]);
+
+  const handledContextRequest = useRef(openContextRequestId);
+  useEffect(() => {
+    if (openContextRequestId === handledContextRequest.current) return;
+    handledContextRequest.current = openContextRequestId;
+    if (openContextRequestId > 0) openPill('context');
+  }, [openContextRequestId, openPill]);
 
   // The chat's computer by name, for the Dictate menu ("Transcribes on MacBook Pro").
   const machineLabel = useMachinesStore((state) => {

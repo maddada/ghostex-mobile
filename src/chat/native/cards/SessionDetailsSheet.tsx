@@ -144,11 +144,17 @@ export function SessionDetailsSheet({
   document,
   visible,
   onClose,
+  onMoreDetails,
+  onDismissed,
 }: {
   chat: RustChat;
   document: ChatDocument | null;
   visible: boolean;
   onClose: () => void;
+  /** The Context card's More details row: the context meter's own sheet, with its details and pencil. */
+  onMoreDetails?: () => void;
+  /** iOS: the sheet finished going away (`Sheet`). */
+  onDismissed?: () => void;
 }) {
   const styles = useStyles();
   const details = sessionDetailsOf(document);
@@ -179,7 +185,13 @@ export function SessionDetailsSheet({
     send(chat, { type: 'contextCompact' });
   };
   return (
-    <Sheet visible={shown} onClose={onClose} title={SESSION_DETAILS_TITLE} maxHeight="85%">
+    <Sheet
+      visible={shown}
+      onClose={onClose}
+      title={SESSION_DETAILS_TITLE}
+      maxHeight="85%"
+      {...(onDismissed !== undefined ? { onDismissed } : {})}
+    >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.cards}>
         {error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
         {arr(details?.sections).map((section, index) => (
@@ -191,6 +203,7 @@ export function SessionDetailsSheet({
             act={act}
             meter={meter}
             onCompact={compact}
+            onMoreDetails={onMoreDetails}
           />
         ))}
       </ScrollView>
@@ -216,6 +229,7 @@ function SectionCard({
   act,
   meter,
   onCompact,
+  onMoreDetails,
 }: {
   chat: RustChat;
   section: unknown;
@@ -223,6 +237,7 @@ function SectionCard({
   act: Act;
   meter: JsonRecord | null;
   onCompact: () => void;
+  onMoreDetails: (() => void) | undefined;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -259,7 +274,15 @@ function SectionCard({
         {trailing}
       </View>
       {collapsed ? null : (
-        <SectionBody id={id} section={fields} details={details} act={act} meter={meter} onCompact={onCompact} />
+        <SectionBody
+          id={id}
+          section={fields}
+          details={details}
+          act={act}
+          meter={meter}
+          onCompact={onCompact}
+          onMoreDetails={onMoreDetails}
+        />
       )}
     </View>
   );
@@ -272,6 +295,7 @@ function SectionBody({
   act,
   meter,
   onCompact,
+  onMoreDetails,
 }: {
   id: string;
   section: JsonRecord;
@@ -279,11 +303,21 @@ function SectionBody({
   act: Act;
   meter: JsonRecord | null;
   onCompact: () => void;
+  onMoreDetails: (() => void) | undefined;
 }) {
   if (isTrue(section, 'loading')) return <Skeleton rows={num(section, 'skeletonRows') ?? 2} />;
   switch (id) {
     case 'context':
-      return <ContextBody section={section} details={details} act={act} meter={meter} onCompact={onCompact} />;
+      return (
+        <ContextBody
+          section={section}
+          details={details}
+          act={act}
+          meter={meter}
+          onCompact={onCompact}
+          onMoreDetails={onMoreDetails}
+        />
+      );
     case 'tasks':
       return <TasksBody section={section} act={act} />;
     case 'connectors':
@@ -385,12 +419,14 @@ function ContextBody({
   act,
   meter,
   onCompact,
+  onMoreDetails,
 }: {
   section: JsonRecord;
   details: JsonRecord | null;
   act: Act;
   meter: JsonRecord | null;
   onCompact: () => void;
+  onMoreDetails: (() => void) | undefined;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -484,6 +520,17 @@ function ContextBody({
         <Text style={[styles.status, isTrue(section, 'statusError') ? { color: P.error } : null]}>{status}</Text>
       ) : null}
       {meter !== null ? <CompactButton meter={meter} onCompact={onCompact} /> : null}
+      {/* The context meter's More details (`ContextPanel.tsx`), which lists the details picked with its pencil. */}
+      {meter !== null && Array.isArray(meter.details) && onMoreDetails !== undefined ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onMoreDetails}
+          style={({ pressed }) => [styles.row, styles.moreDetails, pressed ? styles.rowPressed : null]}
+        >
+          <Text style={styles.rowText}>More details</Text>
+          <Glyph name="chevron-right" size={13} color={P.cardMuted} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -863,6 +910,7 @@ const useStyles = themedStyles((P) => ({
   buttonPressed: { backgroundColor: P.neutralFillPressed },
   buttonText: { color: P.primary, fontSize: 13 },
   disabled: { opacity: 0.5 },
+  moreDetails: { marginTop: 6 },
   ringPill: {
     flexDirection: 'row',
     alignItems: 'center',
