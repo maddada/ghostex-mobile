@@ -22,7 +22,7 @@ import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
-import { ToneButton } from './ToneCard';
+import { Sheet } from '../composer/Sheet';
 import { askColor, tint } from './askCard';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { openQuestionReply } from '../transcript/QuestionReply';
@@ -32,11 +32,15 @@ import { replyDraftRow, useReplyDraft, type ReplyDraftScope } from './replyDraft
 export const WORK_BUTTON_SLOP = { top: 8, bottom: 8, left: 3, right: 3 };
 
 /** The button the answers fold into when they do not fit one line (desktop `CHOOSE_ANSWER`). */
-const CHOOSE_ANSWER = 'Choose an answer';
+export const CHOOSE_ANSWER = 'Choose an answer';
 
-/** A button's width, roughly as `ToneButton` draws it: its label, sides, and an icon or mark. */
-function buttonWidth(label: string, icon: boolean, mark: boolean): number {
-  return label.length * 7.4 + 24 + (icon ? 20 : 0) + (mark ? 16 : 0);
+/**
+ * A button's width, roughly as `WorkButton` draws it on one line: its label at 13 points grown by
+ * the phone's text size (`fontScale`: Android's and iOS's larger text), its sides, and an icon or
+ * mark. Generous, so an estimate never lets a row cut an answer.
+ */
+function buttonWidth(label: string, icon: boolean, mark: boolean, fontScale: number): number {
+  return label.length * 8 * fontScale + 24 + (icon ? 20 : 0) + (mark ? 16 : 0);
 }
 
 /** A Reply's label: the words it sent, cut short so the button stays a button (desktop `reply_answer`). */
@@ -68,10 +72,107 @@ function Star() {
 }
 
 /**
- * An item's answers and its Reply on one line, never wrapped: past `room` the answers fold into
- * "Choose an answer", which opens them one per line. A row with no answers shows what it asks for
- * in their place: Open for a page or form (`open`), else Reply. `divider`: an opened row, whose Reply
- * stands apart after a thin line.
+ * A work item's button: the tone card's neutral filled button (`ToneButton`, never the dark primary
+ * fill on glass), but it grows to a second line instead of having a fixed height, so a long label
+ * wraps and is never clipped.
+ *
+ * CDXC:Coordinators 2026-11-11 WHY:
+ * User, of a docked ask on Ghostex 11.4.0 for Android whose first answer ("Release 11.4.1 once the
+ * running fixes land") lost its second line to the 28-point button: "Bug with the q choices in work
+ * items text cut off ... if we make choices show as dropdown like in desktop would be fixed".
+ */
+function WorkButton({
+  label,
+  icon,
+  trailing,
+  disabled,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  icon?: GlyphName;
+  trailing?: ReactNode;
+  disabled?: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: disabled === true }}
+      disabled={disabled === true}
+      hitSlop={WORK_BUTTON_SLOP}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        { backgroundColor: pressed ? P.neutralFillPressed : P.neutralFill },
+        disabled === true && styles.disabled,
+      ]}
+    >
+      {icon !== undefined ? <Glyph name={icon} size={14} color={P.foreground} /> : null}
+      <Text style={[styles.buttonLabel, { color: P.foreground }]}>{label}</Text>
+      {trailing}
+    </Pressable>
+  );
+}
+
+/**
+ * The answers of a folded ask, one a row, each whole: a long one wraps to more lines, never cut; the
+ * recommended one keeps its star and the one given its check (desktop `answer_menu_rows`).
+ */
+function AnswerChoices({
+  answers,
+  disabled,
+  onPick,
+}: {
+  answers: JsonRecord[];
+  disabled: boolean;
+  onPick: (command: JsonRecord) => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <View>
+      {answers.map((answer, index) => {
+        const command = obj(answer.command);
+        const picked = isTrue(answer, 'picked');
+        const recommended = isTrue(answer, 'recommended');
+        const off = disabled || command === null || isTrue(answer, 'locked');
+        return (
+          <Pressable
+            key={`choice:${index}`}
+            accessibilityRole="button"
+            accessibilityLabel={`${str(answer, 'label')}${recommended ? ', Recommended' : ''}`}
+            accessibilityState={{ disabled: off && !picked, selected: picked }}
+            disabled={off}
+            onPress={() => (command !== null ? onPick(command) : undefined)}
+            style={({ pressed }) => [
+              styles.choice,
+              pressed && styles.menuRowPressed,
+              off && !picked && styles.disabled,
+            ]}
+          >
+            {picked ? <Glyph name="check" size={15} color={P.foreground} /> : null}
+            <Text style={styles.choiceText}>{str(answer, 'label')}</Text>
+            {recommended ? <Star /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * An item's answers and its Reply on one line, never wrapped: when they do not all fit the line,
+ * the answers fold into "Choose an answer" (desktop `answers_dropdown`), which opens them one a
+ * row, each whole: a sheet on the dock, a list in place on the Work sheet (`chooser`), as iOS shows
+ * no sheet over a sheet. Once one is given, only that one stays when they do not fit. A row with no
+ * answers shows what it asks for in their place: Open for a page or form (`open`), else Reply.
+ * `divider`: an opened row, whose Reply stands apart after a thin line. Every button grows to more
+ * lines rather than cut its words (`WorkButton`).
  */
 export function WorkAnswerLine({
   answers,
@@ -84,6 +185,9 @@ export function WorkAnswerLine({
   scope,
   dispatch,
   before,
+  question = '',
+  chooser = 'sheet',
+  initialChoosing = false,
 }: {
   answers: JsonRecord[];
   reply: JsonRecord | null;
@@ -97,10 +201,16 @@ export function WorkAnswerLine({
   dispatch: (action: never) => void;
   /** Runs before a Reply or an answer goes (the Work sheet closes for the Reply sheet). */
   before?: (kind: 'reply' | 'answer') => void;
+  /** The ask, over the answers in the Choose an answer sheet. */
+  question?: string;
+  chooser?: 'sheet' | 'inline';
+  /** The folded answers start open (the Work sheet's closed card asked for them). */
+  initialChoosing?: boolean;
 }) {
   const styles = useStyles();
-  const { width } = useWindowDimensions();
-  const [choosing, setChoosing] = useState(false);
+  const P = useTranscriptTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const [choosing, setChoosing] = useState(initialChoosing);
   const row = reply !== null ? replyDraftRow(reply as never) : null;
   const draft = useReplyDraft(scope, row).length > 0;
   const given = answers.some((answer) => isTrue(answer, 'picked'));
@@ -108,15 +218,13 @@ export function WorkAnswerLine({
   const lineRoom = room > 0 ? room : width + room;
   const replyButton =
     reply !== null ? (
-      <ToneButton
+      <WorkButton
         key="reply"
-        kind="secondary"
         label={replyLabel(replied)}
         icon={replied.length > 0 ? 'check' : 'arrow-back-up'}
         trailing={draft && replied.length === 0 ? <DraftSign /> : undefined}
         accessibilityLabel={draft ? 'Reply, draft kept' : undefined}
         disabled={(busy || locked) && replied.length === 0}
-        hitSlop={WORK_BUTTON_SLOP}
         onPress={() => {
           if (replied.length > 0) return;
           before?.('reply');
@@ -128,71 +236,68 @@ export function WorkAnswerLine({
     if (open != null) {
       return (
         <View style={styles.line}>
-          <ToneButton
-            kind="secondary"
-            label="Open"
-            icon="external-link"
-            hitSlop={WORK_BUTTON_SLOP}
-            onPress={() => dispatch(open as never)}
-          />
+          <WorkButton label="Open" icon="external-link" onPress={() => dispatch(open as never)} />
         </View>
       );
     }
     return replyButton !== null ? <View style={styles.line}>{replyButton}</View> : null;
   }
-  const answerButton = (answer: JsonRecord, index: number) => {
-    const picked = isTrue(answer, 'picked');
-    const recommended = isTrue(answer, 'recommended');
-    const command = obj(answer.command);
+  const answer = (command: JsonRecord) => {
+    if (busy || locked) return;
+    setChoosing(false);
+    before?.('answer');
+    dispatch(command as never);
+  };
+  const answerButton = (choice: JsonRecord, index: number) => {
+    const picked = isTrue(choice, 'picked');
+    const recommended = isTrue(choice, 'recommended');
+    const command = obj(choice.command);
     return (
-      <ToneButton
+      <WorkButton
         key={`answer:${index}`}
-        kind="secondary"
-        label={str(answer, 'label')}
+        label={str(choice, 'label')}
         icon={picked ? 'check' : undefined}
         trailing={recommended ? <Star /> : undefined}
-        accessibilityLabel={recommended ? `${str(answer, 'label')}, Recommended` : undefined}
+        accessibilityLabel={recommended ? `${str(choice, 'label')}, Recommended` : undefined}
         disabled={(busy || locked) && !picked}
-        hitSlop={WORK_BUTTON_SLOP}
-        onPress={() => {
-          if (busy || locked || command === null) return;
-          setChoosing(false);
-          before?.('answer');
-          dispatch(command as never);
-        }}
+        onPress={() => (command !== null ? answer(command) : undefined)}
       />
     );
   };
-  const widths = answers.map((answer) =>
-    buttonWidth(str(answer, 'label'), isTrue(answer, 'picked'), isTrue(answer, 'recommended')),
+  const widths = answers.map((choice) =>
+    buttonWidth(str(choice, 'label'), isTrue(choice, 'picked'), isTrue(choice, 'recommended'), fontScale),
   );
-  const replyWidth = reply !== null ? buttonWidth(replyLabel(replied), true, draft) + 6 + (divider ? 13 : 0) : 0;
-  const need = widths.reduce((sum, value) => sum + value, 0) + 6 * Math.max(0, widths.length - 1) + replyWidth;
-  const fold =
-    !given &&
-    need > lineRoom &&
-    widths.reduce((sum, value) => sum + value, 0) > buttonWidth(CHOOSE_ANSWER, true, false);
+  const replyWidth =
+    reply !== null ? buttonWidth(replyLabel(replied), true, draft, fontScale) + 6 + (divider ? 13 : 0) : 0;
+  const answersWidth = widths.reduce((sum, value) => sum + value, 0) + 6 * Math.max(0, widths.length - 1);
+  const fits = answersWidth + replyWidth <= lineRoom;
+  // Answers no wider than the dropdown stay as they are: folding them would gain nothing.
+  const fold = !given && !fits && answersWidth > buttonWidth(CHOOSE_ANSWER, true, false, fontScale);
+  const shown = fits || !given ? answers : answers.filter((choice) => isTrue(choice, 'picked'));
+  const list = <AnswerChoices answers={answers} disabled={busy || locked} onPick={answer} />;
   return (
     <View style={styles.column}>
       <View style={styles.line}>
         {fold ? (
-          <ToneButton
-            kind="secondary"
+          <WorkButton
             label={CHOOSE_ANSWER}
-            icon={choosing ? 'chevron-up' : 'chevron-down'}
-            accessibilityLabel={CHOOSE_ANSWER}
+            icon={chooser === 'inline' && choosing ? 'chevron-up' : 'chevron-down'}
+            accessibilityLabel={`${CHOOSE_ANSWER}, ${answers.length} answers`}
             disabled={busy}
-            hitSlop={WORK_BUTTON_SLOP}
             onPress={() => setChoosing((was) => !was)}
           />
         ) : (
-          answers.map((answer, index) => answerButton(answer, index))
+          shown.map((choice) => answerButton(choice, answers.indexOf(choice)))
         )}
         {replyButton !== null && divider ? <View style={styles.divider} /> : null}
         {replyButton}
       </View>
-      {fold && choosing ? (
-        <View style={styles.choices}>{answers.map((answer, index) => answerButton(answer, index))}</View>
+      {fold && chooser === 'inline' && choosing ? <View style={styles.choicesBox}>{list}</View> : null}
+      {fold && chooser === 'sheet' ? (
+        <Sheet visible={choosing} onClose={() => setChoosing(false)} title={CHOOSE_ANSWER}>
+          {question.length > 0 ? <Text style={[styles.choiceQuestion, { color: P.cardMuted }]}>{question}</Text> : null}
+          {list}
+        </Sheet>
       ) : null}
     </View>
   );
@@ -315,8 +420,41 @@ export function WorkMenuButton({ onPress, active }: { onPress: () => void; activ
 
 const useStyles = themedStyles((P) => ({
   column: { gap: 6 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  choices: { alignItems: 'flex-start', gap: 6 },
+  // One line: its buttons shrink and wrap their words rather than run past it or wrap below.
+  line: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  button: {
+    minHeight: 28,
+    flexShrink: 1,
+    maxWidth: '100%',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  buttonLabel: { flexShrink: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  disabled: { opacity: 0.5 },
+  choicesBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.ink(0.1),
+    backgroundColor: P.ink(0.04),
+    paddingVertical: 2,
+  },
+  choice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  choiceText: { flexShrink: 1, color: P.foreground, fontSize: PROSE_SIZE + 1, lineHeight: 21 },
+  choiceQuestion: { paddingHorizontal: 16, paddingBottom: 8, fontSize: PROSE_SIZE, lineHeight: 20 },
   divider: { width: 1, height: 16, marginHorizontal: 3, backgroundColor: P.ink(0.1) },
   draft: { fontSize: 13, color: P.muted },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16 },

@@ -428,6 +428,7 @@ function DockRow({
           busy={busy}
           divider={opened}
           room={-(DOCK_INSETS + DOCK_LEAD)}
+          question={str(row, 'title')}
           scope={scope}
           dispatch={dispatch as never}
         />
@@ -550,7 +551,15 @@ function ItemLine({ row, chips, dispatch }: { row: JsonRecord; chips: JsonRecord
   const waited = arr(row.waitedBy)
     .map(obj)
     .filter((other): other is JsonRecord => other !== null);
-  const name = (label: string, command: JsonRecord | null, shrink: number, floor: number, keyName: string) => (
+  // `dot`: the "·" that leads it, kept with it so a wrapped line never starts with a lone dot.
+  const name = (
+    label: string,
+    command: JsonRecord | null,
+    shrink: number,
+    floor: number,
+    keyName: string,
+    lead = false,
+  ) => (
     <Pressable
       key={keyName}
       accessibilityRole={command !== null ? 'button' : undefined}
@@ -559,16 +568,12 @@ function ItemLine({ row, chips, dispatch }: { row: JsonRecord; chips: JsonRecord
       onPress={() => (command !== null ? dispatch(command as never) : undefined)}
       style={[styles.itemName, { flexShrink: shrink, minWidth: floor }]}
     >
+      {lead ? <Text style={styles.itemDot}>{'\u00b7'}</Text> : null}
       <Glyph name="stack" size={14} color={P.muted} />
       <Text numberOfLines={1} style={[styles.itemNameText, command !== null ? styles.linkDots : null]}>
         {label}
       </Text>
     </Pressable>
-  );
-  const dot = (keyName: string) => (
-    <Text key={keyName} style={styles.itemDot}>
-      {'·'}
-    </Text>
   );
   const parts: ReactNode[] = [];
   for (const [index, chip] of chips.entries()) {
@@ -576,25 +581,26 @@ function ItemLine({ row, chips, dispatch }: { row: JsonRecord; chips: JsonRecord
   }
   const first = waited[0];
   if (waited.length === 1 && first !== undefined) {
-    if (parts.length > 0) parts.push(dot('dot'));
-    parts.push(name(str(first, 'title'), obj(first.command), 8, 110, 'waits'));
+    parts.push(name(str(first, 'title'), obj(first.command), 8, 110, 'waits', parts.length > 0));
     parts.push(
       <Text key="waits-words" style={styles.itemWords}>
         waits on this
       </Text>,
     );
   } else if (waited.length > 1) {
-    if (parts.length > 0) parts.push(dot('dot'));
+    const lead = parts.length > 0;
     parts.push(
-      <Pressable
-        key="others"
-        accessibilityRole="button"
-        accessibilityState={{ expanded: listing }}
-        hitSlop={6}
-        onPress={() => setListing((was) => !was)}
-      >
-        <Text style={[styles.itemWords, styles.linkDots]}>{waited.length} others wait</Text>
-      </Pressable>,
+      <View key="others" style={styles.itemName}>
+        {lead ? <Text style={styles.itemDot}>{'\u00b7'}</Text> : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: listing }}
+          hitSlop={6}
+          onPress={() => setListing((was) => !was)}
+        >
+          <Text style={[styles.itemWords, styles.linkDots]}>{waited.length} others wait</Text>
+        </Pressable>
+      </View>,
     );
   }
   const rest = chips.filter((chip) => str(chip, 'kind') !== 'item');

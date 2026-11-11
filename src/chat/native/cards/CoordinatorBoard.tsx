@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { UserAction } from '../../rust/actions';
@@ -25,7 +25,14 @@ import { TranscriptEnvProvider, type TranscriptEnv } from '../transcript/context
 import { LinkWords } from '../transcript/LinkWords';
 import { Markdown } from '../transcript/markdown/Markdown';
 import { askColor, tint } from './askCard';
-import { WorkAnswerLine, WorkMenuButton, openWorkReply, workMenuRows, type WorkMenuRow } from './workItemParts';
+import {
+  CHOOSE_ANSWER,
+  WorkAnswerLine,
+  WorkMenuButton,
+  openWorkReply,
+  workMenuRows,
+  type WorkMenuRow,
+} from './workItemParts';
 import { replyDraftRow, replyDraftScopeOf, useReplyDraft, type ReplyDraftScope } from './replyDrafts';
 import { remoteWorkerNotice } from './remoteWorker';
 import { AgentMark } from './agentMark';
@@ -294,10 +301,17 @@ function CardMenu({
   );
 }
 
+/** A closed card's answer segment's width, roughly: its label grown by the phone's text size, sides and marks. */
+function segmentWidth(label: string, marks: number, fontScale: number): number {
+  return label.length * 7.6 * fontScale + 24 + marks;
+}
+
 /**
- * A closed card's answers as one segmented pill (desktop `board_answers`): the recommended one
- * starred, the one given checked, then Reply, which shows the words sent from here or "Draft" while
- * it keeps unsent words (`replyDrafts.ts`).
+ * A closed card's answers as one segmented pill (desktop `board_answers` and `work_compact_answers`):
+ * the recommended one starred, the one given checked, then Reply, which shows the words sent from
+ * here or "Draft" while it keeps unsent words (`replyDrafts.ts`). When they do not fit the card's
+ * line the answers fold into "Choose an answer", which opens the card with them listed whole
+ * (`onChoose`), so none is cut; once one is given only that one shows. `room` is the line's width.
  */
 function ClosedAnswers({
   answers,
@@ -306,6 +320,9 @@ function ClosedAnswers({
   scope,
   dispatch,
   onReply,
+  onChoose,
+  room,
+  lead,
 }: {
   answers: Record<string, unknown>[];
   reply: Record<string, unknown> | null;
@@ -313,64 +330,119 @@ function ClosedAnswers({
   scope: ReplyDraftScope | null;
   dispatch: RustChat['dispatch'];
   onReply: (reply: Record<string, unknown>) => void;
+  onChoose: () => void;
+  room: number;
+  /** The work it belongs to, before the answers while they leave it room (gx-chat-core work_panel.rs). */
+  lead: string;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
+  const { fontScale } = useWindowDimensions();
   const draft = useReplyDraft(scope, reply !== null ? replyDraftRow(reply as never) : null).length > 0;
+  const given = answers.some((answer) => isTrue(answer, 'picked'));
   const locked = answers.some((answer) => isTrue(answer, 'locked') || isTrue(answer, 'picked'));
   const replyWords = replied.length > 32 ? `${replied.slice(0, 31).trimEnd()}…` : replied;
+  const answersWidth = answers.reduce(
+    (sum, answer) =>
+      sum +
+      segmentWidth(
+        str(answer, 'label'),
+        (isTrue(answer, 'recommended') ? 13 : 0) + (isTrue(answer, 'picked') ? 15 : 0),
+        fontScale,
+      ),
+    0,
+  );
+  const replyWidth =
+    reply !== null ? segmentWidth(replyWords.length > 0 ? replyWords : 'Reply', 15 + (draft ? 40 : 0), fontScale) : 0;
+  const fits = answersWidth + replyWidth <= room;
+  const fold = !fits && !given && answersWidth > segmentWidth(CHOOSE_ANSWER, 15, fontScale);
+  const shown = fits || !given ? answers : answers.filter((answer) => isTrue(answer, 'picked'));
+  const chooseWidth = fold ? segmentWidth(CHOOSE_ANSWER, 15, fontScale) : answersWidth;
+  // On a card too narrow for Choose an answer and Reply both, the closed pill leaves Reply out:
+  // Choose an answer opens the card, where Reply stands beside the answers.
+  const showReply = reply !== null && (!fold || chooseWidth + replyWidth <= room);
+  const pillWidth = chooseWidth + (showReply ? replyWidth : 0);
+  // The work's name gives way first: it shows only while the answers keep their room beside it, as
+  // a narrow desktop column shows the answers alone.
+  const showLead = lead.length > 0 && (reply === null || showReply) && pillWidth + 46 <= room;
+  // While it fits, the pill keeps its width and the work's name gives way; a pill wider than the
+  // line (a given answer, or a very large text size) shrinks, wrapping its words, and is never cut.
   return (
-    <View style={styles.answers}>
-      {answers.map((answer, answerIndex) => (
-        <Pressable
-          key={`answer:${answerIndex}`}
-          accessibilityRole="button"
-          accessibilityLabel={`Answer ${str(answer, 'label')}${isTrue(answer, 'recommended') ? ', Recommended' : ''}`}
-          disabled={isTrue(answer, 'locked')}
-          hitSlop={{ top: 10, bottom: 10 }}
-          onPress={() => {
-            const answerCommand = obj(answer.command);
-            if (answerCommand !== null) dispatch(asJson(answerCommand) as unknown as UserAction);
-          }}
-          style={[
-            styles.answer,
-            answerIndex > 0 && styles.answerDivider,
-            isTrue(answer, 'picked') && styles.answerPicked,
-            isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
-          ]}
-        >
-          {isTrue(answer, 'picked') ? <Glyph name="check" size={11} color={P.foreground} /> : null}
-          <Text
-            style={[styles.tagText, (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) && styles.answerStrong]}
-            numberOfLines={1}
-          >
-            {str(answer, 'label')}
-          </Text>
-          {isTrue(answer, 'recommended') ? <Glyph name="star" size={9} color={tint(askColor(P.light), 0.75)} /> : null}
-        </Pressable>
-      ))}
-      {reply !== null ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={draft ? 'Reply, draft kept' : 'Reply'}
-          disabled={(locked && replied.length === 0) || replied.length > 0}
-          hitSlop={{ top: 10, bottom: 10 }}
-          onPress={() => onReply(reply)}
-          style={[
-            styles.answer,
-            answers.length > 0 && styles.answerDivider,
-            replied.length > 0 && styles.answerPicked,
-            locked && replied.length === 0 && styles.answerFaded,
-          ]}
-        >
-          <Glyph name={replied.length > 0 ? 'check' : 'arrow-back-up'} size={11} color={P.cardMuted} />
-          <Text style={[styles.tagText, replied.length > 0 && styles.answerStrong]} numberOfLines={1}>
-            {replyWords.length > 0 ? replyWords : 'Reply'}
-          </Text>
-          {draft && replied.length === 0 ? <Text style={[styles.tagText, { color: P.muted }]}>Draft</Text> : null}
-        </Pressable>
+    <>
+      {showLead ? (
+        <Text numberOfLines={1} style={styles.lead}>
+          {lead}
+        </Text>
       ) : null}
-    </View>
+      <View style={[styles.answers, pillWidth <= room ? styles.answersWhole : null]}>
+        {fold ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${CHOOSE_ANSWER}, ${answers.length} answers`}
+            hitSlop={{ top: 10, bottom: 10 }}
+            onPress={onChoose}
+            style={styles.answer}
+          >
+            <Text style={[styles.tagText, styles.answerStrong]}>{CHOOSE_ANSWER}</Text>
+            <Glyph name="chevron-down" size={11} color={P.cardMuted} />
+          </Pressable>
+        ) : null}
+        {(fold ? [] : shown).map((answer, answerIndex) => (
+          <Pressable
+            key={`answer:${answerIndex}`}
+            accessibilityRole="button"
+            accessibilityLabel={`Answer ${str(answer, 'label')}${isTrue(answer, 'recommended') ? ', Recommended' : ''}`}
+            disabled={isTrue(answer, 'locked')}
+            hitSlop={{ top: 10, bottom: 10 }}
+            onPress={() => {
+              const answerCommand = obj(answer.command);
+              if (answerCommand !== null) dispatch(asJson(answerCommand) as unknown as UserAction);
+            }}
+            style={[
+              styles.answer,
+              answerIndex > 0 && styles.answerDivider,
+              isTrue(answer, 'picked') && styles.answerPicked,
+              isTrue(answer, 'locked') && !isTrue(answer, 'picked') && styles.answerFaded,
+            ]}
+          >
+            {isTrue(answer, 'picked') ? <Glyph name="check" size={11} color={P.foreground} /> : null}
+            {/* Never cut: past the line the answers fold, and a given one wraps. */}
+            <Text
+              style={[
+                styles.tagText,
+                (isTrue(answer, 'picked') || isTrue(answer, 'recommended')) && styles.answerStrong,
+              ]}
+            >
+              {str(answer, 'label')}
+            </Text>
+            {isTrue(answer, 'recommended') ? (
+              <Glyph name="star" size={9} color={tint(askColor(P.light), 0.75)} />
+            ) : null}
+          </Pressable>
+        ))}
+        {showReply && reply !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={draft ? 'Reply, draft kept' : 'Reply'}
+            disabled={(locked && replied.length === 0) || replied.length > 0}
+            hitSlop={{ top: 10, bottom: 10 }}
+            onPress={() => onReply(reply)}
+            style={[
+              styles.answer,
+              (answers.length > 0 || fold) && styles.answerDivider,
+              replied.length > 0 && styles.answerPicked,
+              locked && replied.length === 0 && styles.answerFaded,
+            ]}
+          >
+            <Glyph name={replied.length > 0 ? 'check' : 'arrow-back-up'} size={11} color={P.cardMuted} />
+            <Text style={[styles.tagText, replied.length > 0 && styles.answerStrong]} numberOfLines={1}>
+              {replyWords.length > 0 ? replyWords : 'Reply'}
+            </Text>
+            {draft && replied.length === 0 ? <Text style={[styles.tagText, { color: P.muted }]}>Draft</Text> : null}
+          </Pressable>
+        ) : null}
+      </View>
+    </>
   );
 }
 
@@ -439,6 +511,9 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
   // its rows (the phone's long-press rule: a card's actions open on a hold).
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuTags, setMenuTags] = useState(false);
+  // The card whose closed "Choose an answer" opened it: its answers start listed.
+  const [chooseFor, setChooseFor] = useState<string | null>(null);
+  const { width: screenWidth, fontScale } = useWindowDimensions();
   // The chat the dock registered, so a Reply from here keeps its draft (`replyDrafts.ts`).
   const scope = replyDraftScopeOf(chat.dispatch);
   const board = obj(document.coordinatorBoard);
@@ -527,6 +602,7 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                   toggle !== null
                     ? () => {
                         setMenuFor(null);
+                        setChooseFor(null);
                         chat.dispatch(asJson(toggle) as unknown as UserAction);
                       }
                     : command !== null
@@ -612,17 +688,21 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                           ) : answers.length > 0 && expanded ? null : answers.length > 0 ? (
                             <>
                               {/* A Work panel ask names the work it belongs to before its answers (gx-chat-core work_panel.rs). */}
-                              {str(row, 'lead').length > 0 ? (
-                                <Text numberOfLines={1} style={styles.lead}>
-                                  {str(row, 'lead')}
-                                </Text>
-                              ) : null}
                               <ClosedAnswers
+                                lead={str(row, 'lead')}
                                 answers={answerRecords}
                                 reply={reply}
                                 replied={str(row, 'replied')}
                                 scope={scope}
                                 dispatch={chat.dispatch}
+                                // The sheet's and card's sides, the age, and the lead at its least.
+                                room={screenWidth - 58 - (6 + 30 * fontScale)}
+                                onChoose={() => {
+                                  if (toggle === null) return;
+                                  setMenuFor(null);
+                                  setChooseFor(key);
+                                  chat.dispatch(asJson(toggle) as unknown as UserAction);
+                                }}
                                 onReply={(target) => {
                                   onDone();
                                   openWorkReply(target, scope);
@@ -690,6 +770,8 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                           busy={false}
                           divider
                           room={-80}
+                          chooser="inline"
+                          initialChoosing={chooseFor === key}
                           scope={scope}
                           dispatch={chat.dispatch as never}
                           before={(kind) => (kind === 'reply' ? onDone() : undefined)}
@@ -926,7 +1008,8 @@ const useStyles = themedStyles((P) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 24,
+    // At least the chips' height: a given answer too long for the line wraps rather than is cut.
+    minHeight: 24,
   },
   chips: {
     flex: 1,
@@ -948,9 +1031,12 @@ const useStyles = themedStyles((P) => ({
     fontSize: PROSE_SIZE - 2,
   },
   /** An item's one-click answers, one segmented pill (desktop `board_answers`). */
+  answersWhole: { flexShrink: 0 },
   answers: {
     flexDirection: 'row',
-    height: 24,
+    flexShrink: 1,
+    maxWidth: '100%',
+    minHeight: 24,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: P.ink(0.14),
@@ -958,9 +1044,11 @@ const useStyles = themedStyles((P) => ({
   },
   answer: {
     flexDirection: 'row',
+    flexShrink: 1,
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   answerDivider: {
     borderLeftWidth: 1,
