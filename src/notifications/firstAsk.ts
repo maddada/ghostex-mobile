@@ -1,7 +1,7 @@
 /**
- * The one-time ask: at the first launch of a version that has
- * notifications (a new install and an update alike) the app asks once whether it may notify. The ask
- * is the iOS permission prompt itself, without a screen of the app's own before it.
+ * The one-time ask of the system's notifications permission. Since 2026-11-11 it runs once the first computer is
+ * paired, after the app's own one-line reason (`askAfterPairing.ts`), and when Settings > Notifications' switch is
+ * turned on before it ever ran; it used to run at the first launch with no screen of the app's own before it.
  * Allowed: the master, finished, waiting and error switches turn on; not allowed: all four stay off.
  * Either way `askedAt` is stored and the prompt is never requested again; later changes happen in
  * Settings > Notifications (and, after a denial, in iOS Settings, because iOS shows its prompt once).

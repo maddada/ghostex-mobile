@@ -55,7 +55,8 @@ function sync(): void {
 export function initPersistentNotification(): void {
   if (installed || Platform.OS !== 'android') return;
   installed = true;
-  void GhostexNative.requestNotificationPermission().catch(() => {});
+  // Android 13's notifications permission is asked once the first computer is paired, with a reason
+  // (src/notifications/askAfterPairing.ts), not at startup.
   useInventoryStore.subscribe(() => sync());
   useMachinesStore.subscribe(() => sync());
   // The bell's inbox also reads the feeds, the closed lists and the sessions removed from the list.

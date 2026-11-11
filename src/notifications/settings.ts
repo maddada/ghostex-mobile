@@ -48,6 +48,11 @@ export type NotificationSettings = {
   choices: AlertChoices;
   /** When the first-launch ask was answered (ISO time); absent until then. */
   askedAt?: string;
+  /**
+   * When the app's own "Get a ping when an agent needs you" question, shown once the first computer is paired,
+   * was answered (ISO time), either way; absent until then (`askAfterPairing.ts`).
+   */
+  pairingAskAt?: string;
 };
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -100,7 +105,12 @@ export function sanitizeNotificationSettings(value: unknown): NotificationSettin
   const record = value as Record<string, unknown>;
   const askedAt =
     typeof record.askedAt === 'string' && !Number.isNaN(Date.parse(record.askedAt)) ? record.askedAt : undefined;
-  if (askedAt === undefined) return { ...DEFAULT_NOTIFICATION_SETTINGS };
+  const pairingAskAt =
+    typeof record.pairingAskAt === 'string' && !Number.isNaN(Date.parse(record.pairingAskAt))
+      ? record.pairingAskAt
+      : undefined;
+  const asked = pairingAskAt === undefined ? {} : { pairingAskAt };
+  if (askedAt === undefined) return { ...DEFAULT_NOTIFICATION_SETTINGS, ...asked };
   const bool = (key: 'enabled' | 'finished' | 'waiting' | 'error'): boolean => record[key] === true;
   const stored =
     typeof record.choices === 'object' && record.choices !== null ? (record.choices as Record<string, unknown>) : null;
@@ -117,5 +127,5 @@ export function sanitizeNotificationSettings(value: unknown): NotificationSettin
       return [key, isAlertChoice(value) ? value : before[key]];
     }),
   ) as AlertChoices;
-  return withAlertChoices({ ...DEFAULT_NOTIFICATION_SETTINGS, enabled: bool('enabled'), askedAt }, choices);
+  return withAlertChoices({ ...DEFAULT_NOTIFICATION_SETTINGS, enabled: bool('enabled'), askedAt, ...asked }, choices);
 }

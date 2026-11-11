@@ -106,7 +106,7 @@ export const ScanCopy = {
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
   rejected: {
     title: "That's not a Ghostex code",
-    detail: "Point at the code in the computer's Connect a phone window.",
+    detail: "Point at the code in the computer's Connect a Device window.",
   },
   outdated: {
     title: 'This code needs a newer Ghostex app',
@@ -158,7 +158,7 @@ export const PairingCopy = {
       {
         title: 'Look for the words on the computer',
         detail:
-          'They show in its Connect a phone window, or in a window called "Approve this phone?". It can take a few seconds.',
+          'They show in its Connect a Device window, or in a window called "Approve this phone?". It can take a few seconds.',
       },
       {
         title: 'Open Settings > Remote there',
@@ -197,7 +197,7 @@ export const PairingCopy = {
     },
     noSecret: {
       title: 'That code is not complete',
-      body: 'It was copied while the Connect a phone window was closed. Open that window on the computer and scan the code it shows.',
+      body: 'It was copied while the Connect a Device window was closed. Open that window on the computer and scan the code it shows.',
     },
     wordsMismatch: {
       title: 'The words did not match',

@@ -62,6 +62,7 @@ import { FeedRequestError, markRowsRead, readFeed, updateFeed, type FeedRpc, typ
 import { isAccountRow, type FeedRow, type FeedSnapshot } from './feedContract';
 import { NOTIFICATION_STREAM_CAPABILITY, openFeedStream } from './feedStream';
 import { redialAfterServerStop } from '../app/autoReconnect';
+import { installAskAfterPairing } from './askAfterPairing';
 import { runFirstAsk, type PermissionState } from './firstAsk';
 import {
   expoNotificationCentre,
@@ -858,14 +859,8 @@ export function initAttentionNotifications(): void {
         showPushComputers();
       });
   });
-  if (useSettingsStore.getState().hydrated) void askForNotificationsOnce();
-  else {
-    const unsubscribe = useSettingsStore.subscribe((state) => {
-      if (!state.hydrated) return;
-      unsubscribe();
-      void askForNotificationsOnce();
-    });
-  }
+  // The notifications question waits for the first paired computer and says why first (askAfterPairing.ts).
+  installAskAfterPairing(askForNotificationsOnce);
   // A removed or hidden computer leaves the list and closes its channel; the event record keeps a hidden one's
   // record and a removed one's events of the last two hours (`eventIdentity.ts`, rule 4).
   useMachinesStore.subscribe(() => {
