@@ -153,6 +153,12 @@ import { boxIdOfMachine } from '../cloudBoxes/types';
 import CloudBoxPill from '../components/terminal/CloudBoxPill';
 import CoordinatorPlaybookSheet, { loadCoordinatorPlaybook } from './sessions-screen/CoordinatorPlaybookSheet';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import {
+  SESSION_DETAILS_TITLE,
+  SessionDetailsButton,
+  SessionDetailsRingIcon,
+  type SessionDetailsRing,
+} from '../chat/native/cards/SessionDetailsSheet';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
@@ -444,6 +450,25 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [chatQueueCounts, setChatQueueCounts] = useState<Record<string, number>>({});
   const chatQueueSessionKey = activeTab?.sessionKey ?? null;
   const activeQueuedPromptCount = chatQueueSessionKey === null ? 0 : (chatQueueCounts[chatQueueSessionKey] ?? 0);
+  /*
+   * CDXC:SessionDetails 2026-11-11 DECISION:
+   * The Session details ring button stands in this header, as the desktop's stands in its chat
+   * header, while the chat on screen has a panel: each chat reports its ring by session key
+   * (`onSessionDetailsChange`), and a press bumps the request of that chat only. A chat whose
+   * computer cannot serve the panel reports none, so no button shows.
+   */
+  const [sessionDetailsRings, setSessionDetailsRings] = useState<Record<string, SessionDetailsRing | null>>({});
+  const [sessionDetailsRequest, setSessionDetailsRequest] = useState({ sessionKey: '', id: 0 });
+  const reportSessionDetails = useCallback((sessionKey: string, ring: SessionDetailsRing | null): void => {
+    setSessionDetailsRings((current) => {
+      const now = current[sessionKey] ?? null;
+      if (now === ring || (now !== null && ring !== null && now.percent === ring.percent && now.label === ring.label))
+        return current;
+      return { ...current, [sessionKey]: ring };
+    });
+  }, []);
+  const sessionDetailsRequestFor = (sessionKey: string): number =>
+    sessionDetailsRequest.sessionKey === sessionKey ? sessionDetailsRequest.id : 0;
   const handleChatQueueCount = useCallback(
     (count: number): void => {
       if (chatQueueSessionKey === null) return;
@@ -1089,6 +1114,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const terminalSurface = useTerminalColours().chrome;
   const surfaceBackground = chatModeActive ? chatBackground : terminalSurface.background;
   const headerChrome = chatModeActive ? terminalChrome(chatBackground) : terminalSurface;
+  // The chat on screen's Session details ring (null: no button), and its press.
+  const sessionDetailsKey = chatModeActive && activeTab !== null ? activeTab.sessionKey : null;
+  const sessionDetailsRing = sessionDetailsKey === null ? null : (sessionDetailsRings[sessionDetailsKey] ?? null);
+  const openSessionDetails = useCallback(() => {
+    if (sessionDetailsKey !== null)
+      setSessionDetailsRequest((current) => ({ sessionKey: sessionDetailsKey, id: current.id + 1 }));
+  }, [sessionDetailsKey]);
   const ink = headerChrome.foreground;
   useStatusBarStyle(headerChrome.light);
 
@@ -1096,6 +1128,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
   // `railButtons` below.
   const headerButtons = (buttonStyle: StyleProp<ViewStyle>) => (
     <>
+      {sessionDetailsRing !== null && bandOverflow.shows('sessionDetails') && (
+        <SessionDetailsButton ring={sessionDetailsRing} color={ink} onPress={openSessionDetails} />
+      )}
       <VoiceButton
         machine={activeMachine}
         style={buttonStyle}
@@ -1180,6 +1215,22 @@ export default function TerminalScreen({ navigation, route }: Props) {
           icon: (size) => <ChevronLeftIcon size={size} color={appearance.foreground} />,
           onPress: goBack,
         },
+        ...(sessionDetailsRing !== null
+          ? [
+              {
+                key: 'sessionDetails',
+                label: SESSION_DETAILS_TITLE,
+                icon: (size: number) => (
+                  <SessionDetailsRingIcon
+                    percent={sessionDetailsRing.percent}
+                    size={size - 2}
+                    color={appearance.foreground}
+                  />
+                ),
+                onPress: openSessionDetails,
+              },
+            ]
+          : []),
         ...(panesAvailable
           ? [
               {
@@ -1231,6 +1282,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
       panesLabel,
       panesUpright,
       pressPanes,
+      sessionDetailsRing,
+      openSessionDetails,
     ],
   );
   useRailButtons(railButtons, surfaceBackground, inRail && isFocused);
@@ -1312,6 +1365,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
               focusRequestId={composerFocusRequestId}
               openSearchRequestId={chatSearchRequestId}
               openSessionNoteRequestId={chatSessionNoteRequestId}
+              openSessionDetailsRequestId={sessionDetailsRequestFor(paneChatKey)}
+              onSessionDetailsChange={(ring) => reportSessionDetails(paneChatKey, ring)}
               links={{ links: chatSession?.links, onOpen: () => setLinksSheetVisible(true) }}
               style={styles.terminal}
             />
@@ -1477,6 +1532,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
             visible={chatModeActive && twoPanes === null}
             openSearchRequestId={chatSearchRequestId}
             openSessionNoteRequestId={chatSessionNoteRequestId}
+            openSessionDetailsRequestId={sessionDetailsRequestFor(activeTab.sessionKey)}
+            onSessionDetailsChange={(ring) => reportSessionDetails(activeTab.sessionKey, ring)}
             onQueueCountChange={handleChatQueueCount}
             links={{ links: activeSession?.links, onOpen: () => setLinksSheetVisible(true) }}
             style={chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal}

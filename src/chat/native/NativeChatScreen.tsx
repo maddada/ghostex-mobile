@@ -53,6 +53,7 @@ import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, question
 import { WorkDock } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
+import { SessionDetailsSheet, sessionDetailsRingOf, type SessionDetailsRing } from './cards/SessionDetailsSheet';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
 import { ComputerCard } from './cards/ComputerCard';
 import type { BoardFocus } from './cards/CoordinatorBoard';
@@ -101,6 +102,13 @@ export type NativeChatScreenProps = {
   openSearchRequestId?: number;
   /** Bumped by the header's Session Note; each new value opens the note. */
   openSessionNoteRequestId?: number;
+  /** Bumped by the header's ring button; each new value opens the Session details sheet. */
+  openSessionDetailsRequestId?: number;
+  /**
+   * The header's ring button for this chat: the core's ring while the chat has a Session details
+   * panel, null while it has none (an older computer, the extension off, no agent yet).
+   */
+  onSessionDetailsChange?: (ring: SessionDetailsRing | null) => void;
   /** The Ghostex queue's length, for the terminal view's "Queued: N" button. Never called before
    * the machine reports a queue at all. */
   onQueueCountChange?: (count: number) => void;
@@ -126,6 +134,8 @@ export default function NativeChatScreen({
   visible,
   openSearchRequestId = 0,
   openSessionNoteRequestId = 0,
+  openSessionDetailsRequestId = 0,
+  onSessionDetailsChange,
   onQueueCountChange,
   links = null,
   inPane = false,
@@ -318,6 +328,30 @@ export default function NativeChatScreen({
       chat.dispatch({ type: 'toggleNote' });
     }
   }, [chat, document?.note.open, openSessionNoteRequestId, sessionNotesOn]);
+
+  // The Session details sheet (cards/SessionDetailsSheet.tsx), opened by the header's ring button.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const handledDetails = useRef(openSessionDetailsRequestId);
+  useEffect(() => {
+    if (openSessionDetailsRequestId === handledDetails.current) return;
+    handledDetails.current = openSessionDetailsRequestId;
+    if (openSessionDetailsRequestId > 0 && visible) setDetailsOpen(true);
+  }, [openSessionDetailsRequestId, visible]);
+  // Switching to the terminal takes the sheet away with the chat.
+  useEffect(() => {
+    if (!visible) setDetailsOpen(false);
+  }, [visible]);
+  const detailsRing = sessionDetailsRingOf(document);
+  const ringPercent = detailsRing?.percent ?? null;
+  const ringLabel = detailsRing?.label ?? '';
+  const hasDetails = detailsRing !== null;
+  const reportDetails = useRef(onSessionDetailsChange);
+  reportDetails.current = onSessionDetailsChange;
+  useEffect(() => {
+    reportDetails.current?.(hasDetails ? { percent: ringPercent, label: ringLabel } : null);
+  }, [hasDetails, ringLabel, ringPercent]);
+  useEffect(() => () => reportDetails.current?.(null), []);
 
   const queueSupported = document?.queue.capabilities.supported === true;
   const queueCount = document?.queue.prompts.length ?? 0;
@@ -513,6 +547,7 @@ export default function NativeChatScreen({
             />
             <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
             <ResourceSheet chat={chat} document={document} />
+            <SessionDetailsSheet chat={chat} document={document} visible={detailsOpen} onClose={closeDetails} />
             {gbotSettings !== null ? (
               <GbotSettingsHost
                 target={machine}
@@ -692,9 +727,30 @@ function useChatViewRequests(
                 if (!done)
                   show('The chat now runs on its cloud box. Open it from the sessions list.', false, 'Cloud box ready');
               });
+            } else if (request.action === 'openSettingsPage' && pageOf(request.params) === 'connectors') {
+              // The Session details panel's Connectors Manage: the phone has no Connectors settings.
+              show('Open Settings › Connectors in Ghostex on your computer.', false, 'Connectors');
             } else if (request.action === 'openSettingsPage') {
               // Connecting a provider and managing snapshots stay on the computer (D7).
               show('Open Settings › Cloud Boxes in Ghostex on your computer.', false, 'Cloud Boxes');
+            } else if (request.action === 'openAgentsHubSkill') {
+              // A skill in the Session details sheet opens at its SKILL.md, as the phone opens any
+              // other document of the computer; the phone has no Agents Hub.
+              const path = (request.params as { path?: unknown } | null)?.path;
+              if (typeof path === 'string' && path.length > 0) {
+                openComputerFile(navigation, machineId, path, { projectId, notify: show, openPage: onOpenPage });
+              } else {
+                show('Open it in Agents Hub in Ghostex on your computer.', false, 'Skill');
+              }
+            } else if (request.action === 'reviewChanges') {
+              // The Session details sheet's Changes: the phone's Changes view of this project, which
+              // lists the changed files and opens each one's diff.
+              const project = useInventoryStore
+                .getState()
+                .inventoriesByMachineId[machineId]?.summary?.projects.find((entry) => entry.projectId === projectId);
+              if (projectId.length > 0) {
+                navigation.navigate('Changes', { machineId, projectId, projectName: project?.name ?? '' });
+              }
             } else if (request.action === 'openAgentSession') {
               // An agent message card's Go to session: the other session, as its tab. A mention of a
               // session on another computer (`serverId`, a `+` pick) opens on that computer when the
@@ -831,6 +887,12 @@ function gbotNameOn(machineId: string, botId: string): string {
 }
 
 /** The project's folder on the machine, which a relative chat file path is under. */
+/** The `page` a host action names (`openSettingsPage`), or ''. */
+function pageOf(params: unknown): string {
+  const page = (params as { page?: unknown } | null)?.page;
+  return typeof page === 'string' ? page : '';
+}
+
 function projectPathFor(machineId: string, projectId: string): string {
   return (
     useInventoryStore

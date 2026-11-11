@@ -69,7 +69,7 @@ export function AgentTasksMenu({ chat, document }: { chat: RustChat; document: C
   );
 }
 
-function TaskRow({ row }: { row: unknown }) {
+export function TaskRow({ row }: { row: unknown }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const group = str(row, 'group') || 'pending';
