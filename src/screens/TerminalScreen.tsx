@@ -180,6 +180,8 @@ const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
   'forkFromMessage',
   'fullReload',
   'exportTranscript',
+  // The Accounts & limits panel's Reconnect and Add account: the Accounts screen on the chat's computer.
+  'openAccountsSettings',
 ];
 const NO_NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [];
 /** A coordinator's chat also serves View playbook (the sheet its long-press menu opens). */
@@ -1486,10 +1488,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const chatHostActionFor = useCallback(
     (machine: MachineConnectionTarget | null, projectId: string) =>
       (action: string, params: Record<string, unknown> = {}): void => {
-        if (action !== 'viewPlaybook') chatHostActionRef.current(action, params);
+        if (action === 'openAccountsSettings') {
+          // The session's own computer keeps its logins, so its Accounts screen signs them in (src/accounts/).
+          if (machine === null) return;
+          const accountId = typeof params.accountId === 'string' && params.accountId.length > 0 ? params.accountId : undefined;
+          navigation.navigate('Accounts', { machineId: machine.id, ...(accountId !== undefined ? { reconnectAccountId: accountId } : {}) });
+        } else if (action !== 'viewPlaybook') chatHostActionRef.current(action, params);
         else if (machine !== null && projectId.length > 0) setPlaybook({ machine, projectId });
       },
-    [],
+    [navigation],
   );
   /*
    * The selected tab's chat gets props that keep their identity while nothing in them changed, and its surface is

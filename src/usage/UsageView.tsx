@@ -17,6 +17,8 @@
  * `foldGap.tsx`), as the Settings pages and the app's other scroll view pages do.
  */
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 
@@ -34,6 +36,7 @@ import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBa
 import { agentIconTint } from '../contract/mobileSummary';
 import { UsageCopy } from '../copy';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';
+import type { RootStackParamList } from '../navigation/types';
 import type { PaneBarInset } from '../panes/geometry';
 import { machineTargetFor } from '../screens/terminal-screen/session-lookups';
 import { GhostexRadii } from '../theme/palette';
@@ -61,6 +64,7 @@ export default function UsageView({ machineId, placement }: { machineId: string;
   const record = useMachinesStore((state) => state.machines.find((machine) => machine.id === machineId) ?? null);
   const computer = record === null ? machineId : machineDisplayLabel(record);
   const known = record !== null;
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [reading, setReading] = useState<Reading>({ accounts: null, error: null, busy: known });
   // Only a read of this view's current computer may change what is shown; none after the view is gone.
   const latest = useRef(0);
@@ -152,6 +156,15 @@ export default function UsageView({ machineId, placement }: { machineId: string;
         {accounts?.map((account) => (
           <AccountSection key={`${account.provider}:${account.id}`} account={account} />
         ))}
+        {known ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('Accounts', { machineId })}
+            style={({ pressed }) => [styles.manage, pressed && styles.pressed]}
+          >
+            <Text style={styles.manageLabel}>{UsageCopy.manageAccounts}</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </FoldListFrame>
   );
@@ -205,4 +218,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 20 },
   name: { color: appearance.foreground, fontSize: 14, fontWeight: '600', flexShrink: 1 },
   email: { flex: 1, minWidth: 0, color: appearance.muted, fontSize: 12 },
+  manage: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: GhostexRadii.control, backgroundColor: appearance.neutralFill },
+  manageLabel: { color: appearance.foreground, fontSize: 13, fontWeight: '600' },
 });

@@ -128,6 +128,12 @@ export type RootStackParamList = {
    * Duo folds).
    */
   Usage: { machineId: string };
+  /**
+   * Accounts: a computer's saved Claude and Codex accounts and their sign-ins, with a computer switch at the top
+   * (src/accounts/). `reconnectAccountId`: the account whose sign-in starts once the accounts are read (the chat
+   * panel's Reconnect).
+   */
+  Accounts: { machineId: string; reconnectAccountId?: string };
   /** Approvals (GitHub #495): the requests waiting on a computer for its owner, approved with Face ID / fingerprint. */
   Approvals: { machineId: string };
   ExtraKeysEditor: undefined;

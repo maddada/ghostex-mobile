@@ -476,7 +476,7 @@ export function NativeComposer({
           performComposerAction(str(command, 'action'));
           return false;
         case 'openAccountsSettings':
-          if (serves('openAccountsSettings')) host('openAccountsSettings');
+          if (serves('openAccountsSettings')) host('openAccountsSettings', { accountId: str(command, 'accountId') });
           // Signing in to an account runs the agent's login on the computer, where desktop's Add
           // account leads (Settings > Accounts); the phone says where instead of doing nothing.
           else

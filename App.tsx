@@ -81,6 +81,7 @@ import DocsScreen from './src/screens/DocsScreen';
 import DocViewerScreen from './src/screens/DocViewerScreen';
 import SshAccessHelpScreen from './src/screens/SshAccessHelpScreen';
 import UsageScreen from './src/screens/UsageScreen';
+import AccountsScreen from './src/accounts/AccountsScreen';
 import ApprovalsScreen from './src/screens/ApprovalsScreen';
 import SshPairingNotices from './src/components/security/SshPairingNotices';
 import { useWebPreviewStore } from './src/webPreview/store';
@@ -95,6 +96,7 @@ import {
   MachineCopy,
   MachinesCopy,
   NotificationsCopy,
+  AccountsCopy,
   PanesCopy,
   ScanCopy,
   SettingsCopy,
@@ -306,6 +308,7 @@ export default function App() {
                     options={{ title: NotificationsCopy.title }}
                   />
                   <Stack.Screen name="Usage" component={UsageScreen} options={{ title: PanesCopy.usageType }} />
+                  <Stack.Screen name="Accounts" component={AccountsScreen} options={{ title: AccountsCopy.title }} />
                   <Stack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: ApprovalsCopy.open }} />
                   <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: SettingsCopy.title }} />
                   <Stack.Screen

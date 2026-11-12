@@ -152,7 +152,7 @@ function SessionBlocks({
             accessibilityRole="button"
             accessibilityLabel={problem.action}
             hitSlop={8}
-            onPress={() => onCommand({ type: 'openAccountsSettings' }, false)}
+            onPress={() => onCommand({ type: 'openAccountsSettings', accountId: str(session, 'accountId') }, false)}
           >
             <Text style={styles.accountAction}>{problem.action}</Text>
           </Pressable>
@@ -179,7 +179,7 @@ function SessionBlocks({
               onCommand(
                 ready
                   ? { type: 'accounts', request: { operation: 'select', accountId: record.id ?? null } }
-                  : { type: 'openAccountsSettings' },
+                  : { type: 'openAccountsSettings', accountId: record.id ?? null },
                 false,
               )
             }

@@ -1490,6 +1490,8 @@ export const UsageCopy = {
   refresh: 'Refresh accounts and usage',
   loading: 'Reading accounts and usage…',
   unavailable: 'Usage is unavailable for this login.',
+  /** Opens the Accounts screen on this computer: sign-ins and Reconnect (src/accounts/). */
+  manageAccounts: 'Manage accounts',
   /** No saved and enabled account to show: none saved, or every saved one turned off on the computer. */
   noAccounts: (computer: string) =>
     `No Claude or Codex account is enabled in Ghostex on ${computer}. Enable or add one there to see its usage and reset times here.`,
@@ -1502,6 +1504,46 @@ export const UsageCopy = {
   provider: { claude: 'Claude', codex: 'Codex' },
   /** A Home Screen widget bar: the provider's or, with several accounts of one provider, the account's name. */
   widgetBar: (owner: string, window: string) => `${owner} ${window}`,
+} as const;
+
+/** The Accounts screen: one computer's Claude and Codex accounts and their sign-ins (src/accounts/). */
+export const AccountsCopy = {
+  title: 'Accounts',
+  computerLabel: (computer: string) => `Accounts on ${computer}`,
+  computerDescription: 'Logins stay on each computer. Sign-ins here run there.',
+  pickComputer: 'Show accounts on',
+  pickComputerHint: 'Picks another computer',
+  pickSubtitle: 'Each computer keeps its own saved logins.',
+  asking: 'Asking…',
+  reachable: (count: number) => (count === 1 ? '1 account' : `${count} accounts`),
+  cantReachShort: "Couldn't reach it",
+  loading: (computer: string) => `Reading the accounts on ${computer}…`,
+  /** Q2781: the honest line in place of buttons that can't work. */
+  unreachable: (computer: string) =>
+    `Can't reach ${computer} right now. Its accounts sign in on ${computer}: reconnect there in Ghostex, or come back when it's connected.`,
+  tryAgain: 'Try again',
+  noAccounts: (computer: string) => `No Claude or Codex account is saved in Ghostex on ${computer} yet.`,
+  provider: { claude: 'Claude', codex: 'Codex' },
+  addAccount: (provider: string) => `Add ${provider} account`,
+  reconnect: 'Reconnect',
+  turnedOff: 'Turned off',
+  needsSignIn: 'Sign in needed',
+  signingInOn: (computer: string) => `Signing in on ${computer}`,
+  finishInBrowser: 'Finish in your browser with the account you want. If it shows a code, paste it here.',
+  finishCodex: 'Open the page, sign in, then enter this code there.',
+  openPage: 'Open the sign-in page',
+  waitingForPage: 'Waiting for the sign-in page…',
+  codeLabel: 'Enter this code on the page',
+  copy: 'Copy',
+  copied: 'Copied',
+  pasteCode: 'Paste the code',
+  send: 'Send',
+  cancel: 'Cancel',
+  saving: 'Saving the login…',
+  connected: 'Connected',
+  done: 'Done',
+  failed: 'The sign-in did not finish.',
+  close: 'Close',
 } as const;
 
 /** Titles of the Settings screens that are not pages of their own (the pages' are in screens/settings/pages.ts). */
