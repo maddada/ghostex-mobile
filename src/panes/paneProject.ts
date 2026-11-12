@@ -81,8 +81,12 @@ export function usePaneProject(origin: string): PaneProjectState {
 
 /** Whether Files and Git changes can be opened for this session now: it has a project with a folder. */
 export function usePaneProjectOffered(sessionKey: string | null): boolean {
-  const summary = useSummary(sessionKey);
-  return sessionKey !== null && summary !== null && paneProjectFor(sessionKey, summary) !== null;
+  // The answer itself is selected, not the session list: a change to another session re-renders nothing.
+  return useInventoryStore((state) => {
+    if (sessionKey === null) return false;
+    const summary = state.inventoriesByMachineId[sessionKey.slice(0, sessionKey.indexOf(':'))]?.summary;
+    return summary !== undefined && summary !== null && paneProjectFor(sessionKey, summary) !== null;
+  });
 }
 
 /** The project of `origin` now, outside a render: from its computer's session list, or as seen this run. */

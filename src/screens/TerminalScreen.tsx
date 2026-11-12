@@ -167,6 +167,8 @@ const TERMINAL_BAND_BUTTONS = { size: 44, gap: 0 } as const;
 
 /** The tab strip's margin from a screen edge with no header button beside it (the chat box's own side margin). */
 const TABS_EDGE_MARGIN = 10;
+/** A parked chat's Terminal View, which it cannot be asked for (it takes no touches). */
+const NO_CHAT_SWITCH = (): void => undefined;
 
 /** The native chat's More actions rows this screen performs (the terminal menu's own actions). */
 const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
@@ -498,9 +500,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const [chatQueueCounts, setChatQueueCounts] = useState<Record<string, number>>({});
   const chatQueueSessionKey = activeTab?.sessionKey ?? null;
   const activeQueuedPromptCount = chatQueueSessionKey === null ? 0 : (chatQueueCounts[chatQueueSessionKey] ?? 0);
+  // A chat reports its count each time it is shown: an unchanged count sets no state, as even an update that ends up
+  // unchanged runs the whole screen again to find that out.
+  const chatQueueCountsRef = useRef(chatQueueCounts);
+  chatQueueCountsRef.current = chatQueueCounts;
   const handleChatQueueCount = useCallback(
     (count: number): void => {
-      if (chatQueueSessionKey === null) return;
+      if (chatQueueSessionKey === null || (chatQueueCountsRef.current[chatQueueSessionKey] ?? 0) === count) return;
       setChatQueueCounts((current) =>
         current[chatQueueSessionKey] === count ? current : { ...current, [chatQueueSessionKey]: count },
       );
@@ -1473,13 +1479,40 @@ export default function TerminalScreen({ navigation, route }: Props) {
       if (typeof params.messageId === 'string' && params.messageId.length > 0) void runAgentFork(params.messageId);
     } else handleTerminalMenuAction(action as TerminalMenuActionId);
   };
+  // Read through a ref by the chats' host action callbacks below, which keep their identity across renders.
+  const chatHostActionRef = useRef(chatHostAction);
+  chatHostActionRef.current = chatHostAction;
   // A chat's own View playbook: the coordinator's project on the chat's computer, not the selected session's.
-  const chatHostActionFor =
+  const chatHostActionFor = useCallback(
     (machine: MachineConnectionTarget | null, projectId: string) =>
-    (action: string, params: Record<string, unknown> = {}): void => {
-      if (action !== 'viewPlaybook') chatHostAction(action, params);
-      else if (machine !== null && projectId.length > 0) setPlaybook({ machine, projectId });
-    };
+      (action: string, params: Record<string, unknown> = {}): void => {
+        if (action !== 'viewPlaybook') chatHostActionRef.current(action, params);
+        else if (machine !== null && projectId.length > 0) setPlaybook({ machine, projectId });
+      },
+    [],
+  );
+  /*
+   * The selected tab's chat gets props that keep their identity while nothing in them changed, and its surface is
+   * memoized (`SessionChatSurface`): the screen's renders (a tab change, a session list read, the keyboard) then
+   * redraw the chat only when what it is given changed. The parked chats are drawn once anyway (`WarmChats.tsx`).
+   */
+  const activeChatHostAction = useMemo(
+    () => chatHostActionFor(chatMachineTarget, activeProjectId),
+    [chatHostActionFor, chatMachineTarget, activeProjectId],
+  );
+  const activeChatSwitchToTerminal = useCallback((): void => {
+    if (chatModeActive) toggleChatView();
+  }, [chatModeActive, toggleChatView]);
+  const openLinksSheet = useCallback((): void => setLinksSheetVisible(true), []);
+  const activeSessionLinks = activeSession?.links;
+  const activeChatLinks = useMemo(
+    () => ({ links: activeSessionLinks, onOpen: openLinksSheet }),
+    [activeSessionLinks, openLinksSheet],
+  );
+  const activeChatStyle = useMemo(
+    () => (chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal),
+    [chatFoldInset],
+  );
   // The chat in a pane: today's chat view at the size of the pane's body, which ends at
   // the keyboard or above the fold, so its composer lifts nothing itself (`inPane`). Its Terminal View turns only this
   // pane back to the terminal. Its sheets and dialogs stay the chat's own, over the whole window.
@@ -1720,7 +1753,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
                   machine={chat.machine}
                   projectId={chat.projectId}
                   sessionId={chat.sessionId}
-                  onSwitchToTerminal={() => undefined}
+                  onSwitchToTerminal={NO_CHAT_SWITCH}
                   visible={false}
                   parked
                   style={styles.terminal}
@@ -1730,18 +1763,16 @@ export default function TerminalScreen({ navigation, route }: Props) {
                   machine={chat.machine}
                   projectId={chat.projectId}
                   sessionId={chat.sessionId}
-                  onSwitchToTerminal={() => {
-                    if (chatModeActive) toggleChatView();
-                  }}
+                  onSwitchToTerminal={activeChatSwitchToTerminal}
                   hostActions={activeChatHostActions}
-                  onHostAction={chatHostActionFor(chat.machine, chat.projectId)}
+                  onHostAction={activeChatHostAction}
                   visible={chatModeActive && twoPanes === null}
                   openSearchRequestId={chatSearchRequestId}
                   openSessionNoteRequestId={chatSessionNoteRequestId}
                   onQueueCountChange={handleChatQueueCount}
                   tabSwipe={chatTabSwipe}
-                  links={{ links: activeSession?.links, onOpen: () => setLinksSheetVisible(true) }}
-                  style={chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal}
+                  links={activeChatLinks}
+                  style={activeChatStyle}
                 />
               )
             }

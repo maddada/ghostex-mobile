@@ -35,6 +35,8 @@ import { forgetProvenServerKeys, loadMachineProofs, PROVEN_SERVER_KEYS_STORAGE_K
 import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
 
+/** How old a machine's `lastConnectedAt` gets before a read that answered writes a new one (`markConnected`). */
+const CONNECTED_REFRESH_MS = 30_000;
 export type { MachineTransport };
 
 /** Tailcat tokens are opaque peer tokens; every one starts with this prefix. */
@@ -626,6 +628,13 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
   },
 
   markConnected: (id) => {
+    // Every inventory read that answers lands here, a few times a minute and on each tab change. The time is read by
+    // the minute (a 3-minute "connected now" window, "last reached" recency, a chat's offline "last seen"), so a time
+    // under `CONNECTED_REFRESH_MS` old stays: no new machine record, no write to storage, no re-render of every screen
+    // that reads the machine.
+    const current = get().machines.find((machine) => machine.id === id);
+    const stamped = current?.lastConnectedAt == null ? Number.NaN : Date.parse(current.lastConnectedAt);
+    if (Number.isFinite(stamped) && Date.now() - stamped < CONNECTED_REFRESH_MS) return;
     const nextMachines = get().machines.map((machine) =>
       machine.id === id ? { ...machine, lastConnectedAt: new Date().toISOString() } : machine,
     );

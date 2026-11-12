@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { machineTargetFor, tabChatCapable } from '../screens/terminal-screen/session-lookups';
 import { useInventoryStore } from '../inventory/store';
@@ -87,7 +88,9 @@ type SessionContent = Extract<PaneContent, { kind: 'session' }>;
 export function usePaneHost({ offered, arrangement }: PaneHostInput): PaneHost {
   const tabs = useTerminalStore((state) => state.tabs);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
-  const machines = useMachinesStore((state) => state.machines);
+  // Only what the panes read of the computers and their session lists: which computers are saved, and which open tab
+  // has a chat view. Compared by value, so a poll's write (a refresh flag, a new connection time) re-renders nothing.
+  const machineIds = useMachinesStore(useShallow((state) => state.machines.map((machine) => machine.id)));
   const document = usePaneStore((state) => state.document);
   const chooser = usePaneStore((state) => state.chooser);
   const activeSlot = usePaneStore((state) => state.activeSlot);
@@ -98,7 +101,9 @@ export function usePaneHost({ offered, arrangement }: PaneHostInput): PaneHost {
   // Whether a session pane comes with its chat view: the session's saved view and whether it has one.
   const sessionViewModes = useTerminalStore((state) => state.sessionViewModeBySessionKey);
   const preferredInterface = useSettingsStore((state) => state.settings.preferredAgentInterface);
-  const inventories = useInventoryStore((state) => state.inventoriesByMachineId);
+  const chatViews = useInventoryStore(
+    useShallow((state) => tabs.map((tab) => tabChatCapable(tab, state.inventoriesByMachineId[tab.machineId]?.summary))),
+  );
   // Nothing while the panes are closed; else the stored layout, whether panes were on screen in the other shape when
   // the window turned, and those panes (they come along where nothing is stored for this one).
   const { layout, turned, carried } = panesFrom(document, shown, arrangement);
@@ -115,9 +120,21 @@ export function usePaneHost({ offered, arrangement }: PaneHostInput): PaneHost {
         carried,
         activeSlot,
         isOpen: (key) => tabs.some((tab) => tab.sessionKey === key),
-        isKnown: (key) => machines.some((machine) => machine.id === machineOfSessionKey(key)),
+        isKnown: (key) => machineIds.includes(machineOfSessionKey(key)),
       }),
-    [offered, hydrated, arrangement, selectedSessionKey, layout, chooser, turned, carried, activeSlot, tabs, machines],
+    [
+      offered,
+      hydrated,
+      arrangement,
+      selectedSessionKey,
+      layout,
+      chooser,
+      turned,
+      carried,
+      activeSlot,
+      tabs,
+      machineIds,
+    ],
   );
   const { display, store } = resolution;
   const active = display.kind === 'panes' ? display.active : null;
@@ -132,8 +149,7 @@ export function usePaneHost({ offered, arrangement }: PaneHostInput): PaneHost {
 
   // Which session pane shows its chat view (`paneChatAfter`), from the session panes on screen at the last look.
   const hasChatView = (sessionKey: string): boolean => {
-    const tab = tabs.find((entry) => entry.sessionKey === sessionKey) ?? null;
-    return tabChatCapable(tab, tab === null ? undefined : inventories[tab.machineId]?.summary);
+    return chatViews[tabs.findIndex((entry) => entry.sessionKey === sessionKey)] ?? false;
   };
   const savedViews =
     display.kind === 'panes'

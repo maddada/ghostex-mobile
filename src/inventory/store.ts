@@ -138,6 +138,46 @@ function applyOptimisticMutations(
   return organizeSummary(applyMutations(serverSummary, pending));
 }
 
+/**
+ * `next`, a computer's newly rendered list, with every session and project that is the same as in `previous` (the list
+ * the store holds now) kept as the object held before, and `previous` itself when nothing at all changed. A read, a
+ * pushed change or a re-laid list rebuilds every record from scratch; without this, a screen that shows one session
+ * (the terminal screen, its chat's links) re-renders for any change to any other session, and for none at all.
+ */
+export function keepUnchanged(
+  previous: GhostexMobileSummary | null | undefined,
+  next: GhostexMobileSummary,
+): GhostexMobileSummary {
+  if (previous === null || previous === undefined || previous === next) return next;
+  const reuse = <T>(before: readonly T[], after: T[], key: (item: T) => string): { items: T[]; all: boolean } => {
+    const held = new Map(before.map((item) => [key(item), item]));
+    let all = before.length === after.length;
+    const items = after.map((item, index) => {
+      const old = held.get(key(item));
+      if (old !== undefined && JSON.stringify(old) === JSON.stringify(item)) {
+        if (before[index] !== old) all = false;
+        return old;
+      }
+      all = false;
+      return item;
+    });
+    return { items, all };
+  };
+  const sessions = reuse(
+    previous.sessions,
+    next.sessions,
+    (session) => session.globalRef || `${session.projectId}:${session.sessionId}`,
+  );
+  const projects = reuse(previous.projects, next.projects, (project) => project.projectId);
+  const kept = { ...next, sessions: sessions.items, projects: projects.items };
+  if (sessions.all && projects.all) {
+    const rest = (summary: GhostexMobileSummary): string =>
+      JSON.stringify({ ...summary, sessions: null, projects: null });
+    if (rest(previous) === rest(next)) return previous;
+  }
+  return kept;
+}
+
 let nextMutationNumber = 1;
 const inFlightRefreshes = new Map<string, Promise<void>>();
 const refreshRevisions = new Map<string, number>();
@@ -254,7 +294,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
               ...get().inventoriesByMachineId,
               [machine.id]: {
                 ...(previous ?? emptyMachineInventory()),
-                summary: organizeSummary(reconciled.summary),
+                summary: keepUnchanged(previous?.summary, organizeSummary(reconciled.summary)),
                 serverSummary,
                 fingerprint,
                 refreshing: false,
@@ -441,7 +481,10 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           ...get().inventoriesByMachineId,
           [machineId]: {
             ...inventory,
-            summary: applyOptimisticMutations(serverSummary, pending),
+            summary: keepUnchanged(
+              get().inventoriesByMachineId[machineId]?.summary,
+              applyOptimisticMutations(serverSummary, pending),
+            ),
             serverSummary,
           },
         },
@@ -487,7 +530,10 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           ...get().inventoriesByMachineId,
           [machineId]: {
             ...inventory,
-            summary: applyOptimisticMutations(serverSummary, pending),
+            summary: keepUnchanged(
+              get().inventoriesByMachineId[machineId]?.summary,
+              applyOptimisticMutations(serverSummary, pending),
+            ),
             serverSummary,
           },
         },
@@ -519,7 +565,10 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           [machineId]: {
             ...inventory,
             serverSummary: nextServerSummary,
-            summary: applyOptimisticMutations(nextServerSummary, pending),
+            summary: keepUnchanged(
+              get().inventoriesByMachineId[machineId]?.summary,
+              applyOptimisticMutations(nextServerSummary, pending),
+            ),
             fingerprint: null,
           },
         },
@@ -538,11 +587,16 @@ function reorganizeAll(): void {
       next[machineId] = inventory;
       continue;
     }
+    const summary = keepUnchanged(
+      inventory.summary,
+      applyOptimisticMutations(inventory.serverSummary, pendingMutationsByMachineId[machineId] ?? []),
+    );
+    if (summary === inventory.summary) {
+      next[machineId] = inventory;
+      continue;
+    }
     changed = true;
-    next[machineId] = {
-      ...inventory,
-      summary: applyOptimisticMutations(inventory.serverSummary, pendingMutationsByMachineId[machineId] ?? []),
-    };
+    next[machineId] = { ...inventory, summary };
   }
   if (changed) useInventoryStore.setState({ inventoriesByMachineId: next });
 }
