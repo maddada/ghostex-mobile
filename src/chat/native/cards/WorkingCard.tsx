@@ -12,7 +12,7 @@
  * above it, as hovering does on the desktop.
  */
 
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
@@ -87,19 +87,92 @@ export function statusTailShown(document: ChatDocument, rowCount: number): boole
   );
 }
 
-export function WorkingCard({ document }: { document: ChatDocument }) {
+/** How long a finished turn's "Worked for" line stays (desktop working_card.rs `WORKED_LINE_MS`). */
+const WORKED_LINE_MS = 60_000;
+
+/**
+ * The turn ended more than a minute ago, so its "Worked for" line has gone (the time stays on the
+ * turn's own row in the chat); the caller draws again when the minute is up. False while the agent
+ * works, and with an older core that sends no `workedAtMs`. Desktop: `worked_line_spent` and
+ * `wake_when_worked_line_ends` in apps/desktop/src/app/native_chat/working_card.rs.
+ *
+ * CDXC:Coordinators 2026-11-11 DECISION:
+ * User, picking on the chat box bars page: "Worked for 28s" and what changed stay for one minute
+ * after the turn ends, then go; an idle chat with a dock shows only the count, and a chat with no
+ * dock loses its status bar the same minute later.
+ */
+export function useWorkedLineSpent(card: WorkingCardValue | undefined): boolean {
+  const at = card?.phase === 'worked' && typeof card.workedAtMs === 'number' ? card.workedAtMs : null;
+  const [, wake] = useState(0);
+  useEffect(() => {
+    if (at === null) return undefined;
+    const left = at + WORKED_LINE_MS - Date.now();
+    if (left <= 0) return undefined;
+    const timer = setTimeout(() => wake((n) => n + 1), left + 50);
+    return () => clearTimeout(timer);
+  }, [at]);
+  return at !== null && Date.now() - at >= WORKED_LINE_MS;
+}
+
+/**
+ * The status the dock's bar carries at its left instead of the card (`WorkCards.tsx` `WorkDock`):
+ * the card's value when it would show above the chat box, null when it would not, the transcript
+ * draws it as its last row, or its Worked line's minute is up (desktop `dock_status_card`).
+ */
+export function dockStatusCard(document: ChatDocument, spent: boolean): WorkingCardValue | null {
+  const card = document.workingCard;
+  if (card === undefined || card.visible !== true || card.label === null) return null;
+  if (card.inTranscript === true || spent) return null;
+  return card;
+}
+
+/**
+ * The card's line: the lead glyph and the label, cut with an ellipsis at its end, then a live
+ * activity's numbers. The card draws it in its capsule and the dock's bar at its left (desktop
+ * `working_line_in_bar`).
+ */
+export function WorkingLine({ card }: { card: WorkingCardValue }) {
+  const styles = useStyles();
+  const label = card.label ?? '';
+  const strong = card.labelKind === 'tool' || card.labelKind === 'activity';
+  const parts = card.labelParts ?? [];
+  return (
+    <>
+      <Lead card={card} />
+      <View style={styles.labelSlot}>
+        <Text style={strong ? styles.labelStrong : styles.label} numberOfLines={1} ellipsizeMode="tail">
+          {parts.length > 0
+            ? parts.map((part, index) => (
+                <Text key={index} style={part.dim === true ? styles.dim : null}>
+                  {part.text}
+                </Text>
+              ))
+            : label}
+        </Text>
+        {card.labelKind === 'activity' ? <ActivityTrailing activity={obj(card.activity)} /> : null}
+      </View>
+    </>
+  );
+}
+
+export function WorkingCard({
+  document,
+  hidden = false,
+}: {
+  document: ChatDocument;
+  /** The dock's bar carries the status instead, or the Worked line's minute is up. */
+  hidden?: boolean;
+}) {
   const styles = useStyles();
   const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
   const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
   const [held, setHeld] = useState(false);
   const card = document.workingCard;
-  if (card === undefined || card.visible !== true || card.label === null) return null;
+  if (hidden || card === undefined || card.visible !== true || card.label === null) return null;
   // Status line in the chat: the line is the transcript's last row instead (`StatusTail`).
   if (card.inTranscript === true) return null;
   const showJump = awayFromBottom && jumpToBottom !== null;
   const label = card.label;
-  const strong = card.labelKind === 'tool' || card.labelKind === 'activity';
-  const parts = card.labelParts ?? [];
   return (
     <View style={styles.row}>
       <View style={[styles.column, { paddingBottom: cardGap(document) }]}>
@@ -111,19 +184,7 @@ export function WorkingCard({ document }: { document: ChatDocument }) {
           accessibilityLabel={card.ariaLabel}
           style={styles.card}
         >
-          <Lead card={card} />
-          <View style={styles.labelSlot}>
-            <Text style={strong ? styles.labelStrong : styles.label} numberOfLines={1} ellipsizeMode="tail">
-              {parts.length > 0
-                ? parts.map((part, index) => (
-                    <Text key={index} style={part.dim === true ? styles.dim : null}>
-                      {part.text}
-                    </Text>
-                  ))
-                : label}
-            </Text>
-            {card.labelKind === 'activity' ? <ActivityTrailing activity={obj(card.activity)} /> : null}
-          </View>
+          <WorkingLine card={card} />
         </Pressable>
         {held ? (
           <View pointerEvents="none" style={styles.bubble}>

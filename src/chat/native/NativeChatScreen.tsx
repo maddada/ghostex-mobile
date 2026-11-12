@@ -52,7 +52,7 @@ import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettings
 import { useKeyboardTop } from '../../components/common/keyboard/keyboardFrame';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
-import { WorkDock, dockHeightCap } from './cards/WorkCards';
+import { WorkDock, dockHeightCap, workDockShown } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
 import { SessionDetailsSheet } from './cards/SessionDetailsSheet';
@@ -64,7 +64,7 @@ import { remoteWorkerNotice, remoteWorkerOfAction } from './cards/remoteWorker';
 import { PillsStrip, type PillsStripLinks } from './cards/PillsStrip';
 import { SideChatBar } from './cards/SideChats';
 import { useTerminalStore } from '../../terminal/sessions';
-import { LoneScrollBottom, WorkingCard, workingCardShown } from './cards/WorkingCard';
+import { LoneScrollBottom, WorkingCard, cardGap, dockStatusCard, useWorkedLineSpent } from './cards/WorkingCard';
 import { COMPOSER_TOP_PADDING, STACK_GAP, chatCardsShown } from './cards/NativeChatCards';
 import { NativeComposer } from './composer';
 import { HandoffSheet, type HandoffRequest } from './composer/HandoffSheet';
@@ -490,6 +490,11 @@ export default function NativeChatScreen({
           composerFrame.height - composerFrame.transcriptTop - Math.max(0, composerFrame.composerHeight),
           keyboardUp,
         );
+  // The working status rides on the dock's bar while the dock shows (desktop `composer.rs`: with a
+  // dock the status has no bar of its own); a finished turn's Worked line goes after its minute.
+  const workedLineSpent = useWorkedLineSpent(document?.workingCard);
+  const dockStatus = document === null ? null : dockStatusCard(document, workedLineSpent);
+  const dockShown = document !== null && workDockShown(document, dockStatus);
 
   // A prompt's or a reply's Fork from here, where this screen forks (More actions' Fork).
   const forkFromMessage = useMemo(
@@ -569,20 +574,22 @@ export default function NativeChatScreen({
                 chat={chat}
                 projectId={projectId}
                 sessionId={sessionId}
+                status={dockStatus}
                 typing={composerShown && composerFocused && keyboardUp}
                 {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
                 gapBelow={
                   document === null
                     ? STACK_GAP - COMPOSER_TOP_PADDING
-                    : workingCardShown(document)
-                      ? STACK_GAP
+                    : dockStatus !== null
+                      ? // In the working card's place: its gap to what is under it.
+                        cardGap(document)
                       : chatCardsShown(document)
                         ? 0
                         : STACK_GAP - COMPOSER_TOP_PADDING
                 }
               />
               {/* The working card in its own row right above the cards and the composer. */}
-              {document === null ? null : <WorkingCard document={document} />}
+              {document === null ? null : <WorkingCard document={document} hidden={dockShown || workedLineSpent} />}
               <NativeChatCards chat={chat} onHostAction={hostAction} />
               {!composerShown ? null : (
                 <View

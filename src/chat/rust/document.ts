@@ -1274,6 +1274,9 @@ export type WorkingCard = {
   labelParts?: { text: string; dim?: boolean }[];
   /** Status line in the chat draws this line as the transcript's last row (the transcript has rows); absent, the capsule shows. */
   inTranscript?: boolean;
+  /** When the finished turn's last message came (epoch ms), while the Worked line shows: the line
+   * goes a minute after it (desktop working_card.rs `worked_line_spent`). Absent from an older core. */
+  workedAtMs?: number;
 };
 
 export type WorkingStrip = {

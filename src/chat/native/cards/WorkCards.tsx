@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 
-import type { ChatDocument } from '../../rust/document';
+import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { SidebarPalette } from '../../../theme/palette';
 import { Glyph, type GlyphName } from './icons';
@@ -47,6 +47,8 @@ import {
 import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 import { FoldChevron } from '../transcript/foldChevron';
+import { useTranscriptBottomStore } from '../transcript/bottomStore';
+import { WorkingLine } from './WorkingCard';
 
 type Dispatch = RustChat['dispatch'];
 
@@ -192,20 +194,34 @@ const openRows = new WeakMap<object, string>();
  * CDXC:Coordinators 2026-11-11 DECISION:
  * User, of the phone's dock: "make how the work items list shows up matches please!!" The phone takes
  * the desktop's header (marks and counts, the Work items button, the chevron) in place of its round
- * x, and the desktop's opened row. Unlike the desktop it shows no bar while nothing is docked: the
- * phone keeps its Work pill for that, and its screen has no room to spare.
+ * x, and the desktop's opened row.
+ *
+ * The bar also carries the agent's working status at its left, the work summary at its right
+ * (desktop `work_dock_header` with `dock_status_card`): while the bar shows, the working card above
+ * the chat box does not. With nothing docked the bar still shows while there is something to count
+ * or a status to carry, as one line with no chevron (`workDockShown`); with nothing counted and the
+ * agent idle it goes, unlike the desktop's "Nothing in progress", since the phone keeps its Work pill.
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of the desktop's bar ("✦ Manifesting…" at the left, "◐ 2 in progress" and the Work panel
+ * button at the right): make the phone's chat match, one bar above the chat box, opening to the
+ * docked rows as before; idle, it shows only the work summary; with no work items it is just the
+ * working status. The phone's limits stay (45% of the space, folded while typing).
  */
 export function WorkDock({
   document,
   chat,
   projectId,
   sessionId,
+  status = null,
   typing = false,
   maxHeight,
   gapBelow = 6,
 }: {
   document: ChatDocument | null;
   chat: RustChat;
+  /** The working status the bar carries at its left (`dockStatusCard`), or null for none. */
+  status?: WorkingCardValue | null;
   projectId?: string;
   sessionId?: string;
   /** The chat box has the caret with the keyboard up: the dock folds to its bar until a tap opens it. */
@@ -261,13 +277,14 @@ export function WorkDock({
     if (scope !== null && (dockValue != null || boardValue != null)) pruneReplyDrafts(scope, dockValue, boardValue);
   }, [scope, dockValue, boardValue]);
   const dock = obj(dockValue);
-  const rows = arr(dock?.rows)
-    .map(obj)
-    .filter((row): row is JsonRecord => row !== null);
-  if (dock === null || rows.length === 0) return null;
+  const rows = dockRows(document);
+  const board = obj(boardValue);
+  if (document === null || !workDockShown(document, status)) return null;
+  // With nothing docked the bar is one line: no chevron, nothing to open.
+  const collapsible = rows.length > 0;
   const hiddenInCore = isTrue(dock, 'hidden');
-  const collapsed = hiddenInCore || (typing && !peek);
-  const limit = typeof dock.phoneLimit === 'number' ? dock.phoneLimit : 3;
+  const collapsed = !collapsible || hiddenInCore || (typing && !peek);
+  const limit = typeof dock?.phoneLimit === 'number' ? dock.phoneLimit : 3;
   const hidden = Math.max(0, rows.length - limit);
   const shown = all && hidden > 0 ? rows : rows.slice(0, limit);
   const toggle = (key: string) =>
@@ -285,7 +302,9 @@ export function WorkDock({
           <View style={styles.dockSurface}>
             <DockHeader
               rows={rows}
-              board={obj(boardValue)}
+              board={board}
+              status={status}
+              collapsible={collapsible}
               open={!collapsed}
               dispatch={dispatch}
               onToggle={() => {
@@ -348,29 +367,22 @@ const HEADER_GROUPS: { id: string; status: string; one: string; many: string }[]
   { id: 'moving', status: 'moving', one: 'in progress', many: 'in progress' },
 ];
 
+/** The dock's rows (gx-chat-core `workDock.rows`). */
+function dockRows(document: ChatDocument | null): JsonRecord[] {
+  return arr(obj(document?.workDock)?.rows)
+    .map(obj)
+    .filter((row): row is JsonRecord => row !== null);
+}
+
 /**
- * The dock's header: what needs him, what is blocked and what is in progress as marks and counts
- * (the Work panel's own numbers, `pillCounts`), named when they all fit; then the Work items button
- * that opens the Work sheet and the chevron that collapses the dock to this bar. A tap anywhere on
- * it collapses or opens the dock.
+ * The bar's counts: the Work panel's own numbers (`pillCounts`) when the chat has one, else the
+ * rows' own (questions need him, a stuck line of work is blocked); only those above zero.
  */
-function DockHeader({
-  rows,
-  board,
-  open,
-  dispatch,
-  onToggle,
-}: {
-  rows: JsonRecord[];
-  board: JsonRecord | null;
-  open: boolean;
-  dispatch: Dispatch;
-  onToggle: () => void;
-}) {
-  const styles = useStyles();
-  const P = useTranscriptTheme();
-  const { width } = useWindowDimensions();
-  const counts = HEADER_GROUPS.map((group) => {
+function dockCounts(
+  rows: JsonRecord[],
+  board: JsonRecord | null,
+): { group: (typeof HEADER_GROUPS)[number]; count: number }[] {
+  return HEADER_GROUPS.map((group) => {
     if (board !== null) {
       const pair = arr(board.pillCounts).find((entry) => Array.isArray(entry) && entry[0] === group.id);
       return { group, count: Array.isArray(pair) && typeof pair[1] === 'number' ? pair[1] : 0 };
@@ -383,8 +395,59 @@ function DockHeader({
           : 0;
     return { group, count };
   }).filter((entry) => entry.count > 0);
+}
+
+/**
+ * Whether the dock draws its bar: something is docked, or the chat has a Work panel and there is
+ * something to count or a working status to carry (`status`, `dockStatusCard`). While it draws, the
+ * bar carries the status and the working card does not show.
+ */
+export function workDockShown(document: ChatDocument, status: WorkingCardValue | null): boolean {
+  if (dockRows(document).length > 0) return true;
+  const board = obj(document.coordinatorBoard);
+  if (board === null) return false;
+  return status !== null || dockCounts([], board).length > 0;
+}
+
+/**
+ * The dock's header: the agent's working status at the left when it carries one; then what needs him, what is blocked and what is in progress as marks and counts
+ * (the Work panel's own numbers, `pillCounts`), named when they all fit; then the Work items button
+ * that opens the Work sheet and the chevron that collapses the dock to this bar. A tap anywhere on
+ * it collapses or opens the dock.
+ */
+function DockHeader({
+  rows,
+  board,
+  status,
+  collapsible,
+  open,
+  dispatch,
+  onToggle,
+}: {
+  rows: JsonRecord[];
+  board: JsonRecord | null;
+  status: WorkingCardValue | null;
+  collapsible: boolean;
+  open: boolean;
+  dispatch: Dispatch;
+  onToggle: () => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const { width } = useWindowDimensions();
+  const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
+  const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
+  const counts = dockCounts(rows, board);
+  // The status's width, its spark, words and the gap after them: the marks give up their names
+  // before it is cut, and it is cut at its end before anything overlaps (desktop `work_dock_header`).
+  const statusWidth =
+    status === null
+      ? 0
+      : 24 +
+        (status.label ?? '').length * (status.labelKind === 'tool' || status.labelKind === 'activity' ? 7.4 : 6.9) +
+        12;
   // Every mark takes its name when the bar has room for all of them, and none does when it has not.
-  const room = width - 24 - 12 - 5 - (board !== null ? 32 : 0) - 30 - 16;
+  const room = width - 24 - 12 - 5 - (board !== null ? 32 : 0) - (collapsible ? 30 : 0) - 16 - statusWidth;
   const named =
     counts.reduce(
       (sum, entry) =>
@@ -397,19 +460,32 @@ function DockHeader({
     ) +
       12 * Math.max(0, counts.length - 1) <=
     room;
+  // With nothing to open, a tap scrolls to the bottom while the pill shows, as the working card's
+  // does (`WorkingCard.tsx`), and does nothing otherwise.
+  const jump = !collapsible && awayFromBottom && jumpToBottom !== null ? () => jumpToBottom() : undefined;
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={open ? 'Collapse' : 'Expand'}
-      accessibilityState={{ expanded: open }}
-      onPress={onToggle}
+      {...(collapsible
+        ? {
+            accessibilityRole: 'button' as const,
+            accessibilityLabel: open ? 'Collapse' : 'Expand',
+            accessibilityState: { expanded: open },
+          }
+        : { accessibilityRole: 'summary' as const })}
+      onPress={collapsible ? onToggle : jump}
       style={({ pressed }) => [
         styles.dockHead,
         open ? styles.dockHeadOpen : styles.dockHeadShut,
-        pressed && { backgroundColor: P.ink(0.055) },
+        pressed && (collapsible || jump !== undefined) && { backgroundColor: P.ink(0.055) },
       ]}
     >
-      <View style={styles.dockCounts}>
+      {status === null ? null : (
+        <View accessibilityLabel={status.ariaLabel} style={styles.dockStatus}>
+          <WorkingLine card={status} />
+        </View>
+      )}
+      {status === null ? null : <View style={styles.dockSpacer} />}
+      <View style={status === null ? styles.dockCounts : styles.dockCountsBeside}>
         {counts.map(({ group, count }) => (
           <View
             key={group.id}
@@ -433,9 +509,11 @@ function DockHeader({
           <Glyph name="layout-board-split" size={14} color={P.cardMuted} />
         </Pressable>
       ) : null}
-      <View style={styles.dockHeadButton}>
-        <Glyph name={open ? 'chevron-down' : 'chevron-up'} size={14} color={P.muted} />
-      </View>
+      {collapsible ? (
+        <View style={styles.dockHeadButton}>
+          <Glyph name={open ? 'chevron-down' : 'chevron-up'} size={14} color={P.muted} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -1081,6 +1159,10 @@ const useStyles = themedStyles((P) => ({
   },
   dockHeadShut: { borderRadius: 11 },
   dockCounts: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, overflow: 'hidden' },
+  // Beside the status the summary keeps its width and the status gives way (desktop `work_dock_header`).
+  dockCountsBeside: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dockStatus: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
+  dockSpacer: { flexGrow: 1, minWidth: 8 },
   dockCount: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
   dockCountNumber: { fontSize: 13, fontWeight: '500', color: P.foreground, fontVariant: ['tabular-nums'] },
   dockCountName: { marginLeft: -1, fontSize: 13, color: P.cardMuted },
