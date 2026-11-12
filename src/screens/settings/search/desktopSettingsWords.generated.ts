@@ -84,12 +84,6 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     "options": [],
     "keywords": []
   },
-  "chatToolCallCards": {
-    "title": "Tool call cards (preview)",
-    "subtitle": "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.",
-    "options": [],
-    "keywords": []
-  },
   "chatToolCallLines": {
     "title": "Tool call lines",
     "subtitle": "Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.",
@@ -397,7 +391,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "sessionChatDetailedView": {
     "title": "Default to Detailed view",
-    "subtitle": "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
+    "subtitle": "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
     "options": [],
     "keywords": []
   },

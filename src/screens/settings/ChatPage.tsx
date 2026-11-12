@@ -59,12 +59,6 @@ export default function ChatPage() {
         <Caption>
           Show the agent's thinking in grey, so it reads apart from the agent's replies.
         </Caption>
-        <SettingToggle settingKey="chatToolCallCards" label="Tool call cards (preview)" />
-        <Caption>
-          Show each run of tool calls as one line that says which call is running now; tap it to see every call with its
-          result, time and the reason for any failure. When the computer's Agent work is Reduced or Quiet, that look
-          replaces these cards here too.
-        </Caption>
         <SettingToggle settingKey="chatToolCallLines" label="Tool call lines (experimental)" />
         <Caption>
           Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as

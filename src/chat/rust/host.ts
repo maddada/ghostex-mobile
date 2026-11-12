@@ -335,12 +335,10 @@ export class RustChatHost {
     this.unsubscribeSessionDirectory = subscribeSessionDirectory((sessions) =>
       this.enqueue({ type: 'sessionDirectoryChanged', sessions }),
     );
-    // Settings > Chat > Tool call cards is a phone setting: the boot read carries it in
-    // (`boot.ts`), and a change while the chat is open goes in here (gx-chat-core `tool_card.rs`).
-    // Default to Detailed view rides along: the level a chat with no level of its own opens in.
-    // Tool call lines draws the same card as one quiet line, so the core builds it for either.
-    const wantsCards = (settings: { chatToolCallCards: boolean; chatToolCallLines: boolean }) =>
-      settings.chatToolCallCards || settings.chatToolCallLines;
+    // Tool call lines is a phone setting: the boot read carries it in (`boot.ts`), and a change
+    // while the chat is open goes in here (gx-chat-core `tool_card.rs`). Default to Detailed view
+    // rides along: the level a chat with no level of its own opens in.
+    const wantsCards = (settings: { chatToolCallLines: boolean }) => settings.chatToolCallLines;
     let toolCards = wantsCards(useSettingsStore.getState().settings);
     let detailedDefault = useSettingsStore.getState().settings.sessionChatDetailedView;
     this.unsubscribeToolCards = useSettingsStore.subscribe((store) => {

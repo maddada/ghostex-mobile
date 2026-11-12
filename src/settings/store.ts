@@ -173,8 +173,6 @@ export type GhostexSettings = ThemeColourSettings & {
   sessionChatFileEditPreviews: boolean;
   /** Grey thinking: the agent's thinking in the muted tone, its replies in the full foreground. */
   sessionChatMutedThinking: boolean;
-  /** Tool call cards (preview): a message's tool calls drawn as one card (desktop `chatToolCallCards`). */
-  chatToolCallCards: boolean;
   /** Tool call lines (experimental): each run of tool calls as one quiet line with its calls as rows under it (desktop `chatToolCallLines`). */
   chatToolCallLines: boolean;
   markedHandoversStyle: MarkedHandoversStyle;
@@ -336,7 +334,6 @@ export function defaultSettings(): GhostexSettings {
     sessionLinksFoldedGroups: ['finished', 'removed'],
     sessionChatFileEditPreviews: false,
     sessionChatMutedThinking: false,
-    chatToolCallCards: false,
     chatToolCallLines: false,
     markedHandoversStyle: 'labels',
     markedHandoversEmoji: false,
@@ -575,7 +572,6 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     sessionChatTranscriptWidthPercent,
     sessionChatFileEditPreviews: bool('sessionChatFileEditPreviews', defaults.sessionChatFileEditPreviews),
     sessionChatMutedThinking: bool('sessionChatMutedThinking', defaults.sessionChatMutedThinking),
-    chatToolCallCards: bool('chatToolCallCards', defaults.chatToolCallCards),
     chatToolCallLines: bool('chatToolCallLines', defaults.chatToolCallLines),
     // The retired Simple mode off or Verbose Mode on opened chats in more detail, which is Detailed
     // now (desktop settings catalog `migrate_chat_view_default`).

@@ -288,15 +288,12 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
     // The phone has no "Hide account emails" setting and no session title lookup, which is the
     // same pair of answers the desktop brain reached through its boot read before that setting
     // existed; both stay the boot read's so a future phone setting lands in one place.
-    // Settings > Chat > Tool call cards (`chatToolCallCards`) is the phone's own switch, and so is
-    // Tool call lines (`chatToolCallLines`), which draws the same card as one quiet line: the core
-    // builds the card when either is on.
+    // Tool call lines (`chatToolCallLines`) is the phone's own switch, which draws the tool call
+    // card as one quiet line. Tool call cards is retired (gx-chat-core chat_look.rs, 2026-11-13).
     chatSettings: {
       hideAccountEmails: false,
       title: null,
-      toolCards:
-        useSettingsStore.getState().settings.chatToolCallCards ||
-        useSettingsStore.getState().settings.chatToolCallLines,
+      toolCards: useSettingsStore.getState().settings.chatToolCallLines,
       detailedDefault: useSettingsStore.getState().settings.sessionChatDetailedView,
       // The status line under the chat box is the one the chat's computer shows, which its reads
       // carry; this phone's own pins stay for a computer that sends none (gx-chat-core
