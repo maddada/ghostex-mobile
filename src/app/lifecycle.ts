@@ -19,6 +19,7 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import { INVENTORY_POLL_INTERVAL_MS, useInventoryStore } from '../inventory/store';
 import { startSummaryRefresh } from '../inventory/summaryRefresh';
 import { selectedMachine, useMachinesStore } from '../machines/store';
+import { startConnectionHealth } from '../machines/connectionHealth';
 import { recoverConnections } from './autoReconnect';
 import { networkChangesHeard } from './networkChanges';
 
@@ -62,4 +63,5 @@ export function initAppLifecycle(): void {
       clearInterval: (handle) => clearInterval(handle),
     },
   });
+  startConnectionHealth();
 }
