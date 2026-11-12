@@ -247,6 +247,9 @@ export type ActionFields = {
   inlineAnswerChange: { form: string };
   /** The reader's own words as a one-click question's answer: by its form, or its tag alone. */
   inlineAnswerText: { form?: string; tag?: string; text: string };
+  /** The reader's own words on a whole form or page (its dock row's Reply), sent as one message
+   * already tagged with the questions it still asks ("Q12 Q13: words"). Desktop: `reply_popover.rs`. */
+  questionsReply: { id: string; text: string };
   asyncQuestionToggle: {};
   asyncQuestionNavigate: { direction: string };
   asyncQuestionText: { key: string; text: string };

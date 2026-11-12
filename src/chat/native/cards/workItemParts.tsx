@@ -170,6 +170,7 @@ export function openWorkReply(reply: JsonRecord, scope: ReplyDraftScope | null):
     form: typeof reply.form === 'string' ? reply.form : null,
     tag: str(reply, 'tag'),
     ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
+    ...(typeof reply.questions === 'string' ? { questions: reply.questions, to: str(reply, 'to') } : {}),
     scope,
   });
 }
@@ -460,7 +461,12 @@ export function WorkAnswerLine({
     ) : null;
   const pillRoom = pillWidths(pills, fontScale);
   if (answers.length === 0) {
-    const alone = open != null ? buttonWidth('Open', true, false, fontScale) : replyWidthOf(replied, draft, fontScale);
+    // A form or page offers Reply after its Open (gx-chat-core `questionsReply`).
+    const alone =
+      open != null
+        ? buttonWidth('Open', true, false, fontScale) +
+          (replyButton !== null ? 6 + replyWidthOf(replied, draft, fontScale) : 0)
+        : replyWidthOf(replied, draft, fontScale);
     const lead = (
       <>
         <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone - logosWidth)} dispatch={dispatch} />
@@ -473,6 +479,7 @@ export function WorkAnswerLine({
         <View style={styles.line}>
           {lead}
           <WorkButton label="Open" icon="external-link" onPress={() => dispatch(open as never)} />
+          {replyButton}
         </View>
       );
     }
@@ -564,7 +571,7 @@ export type WorkMenuRow = {
 
 /**
  * An item's menu rows from its actions (desktop `row_menu`): Show in chat, Dismiss, Snooze with its
- * lengths, then Mention, which puts the item in the chat box.
+ * lengths, then Mention in chat box, which puts the item, form or page in the chat box.
  */
 export function workMenuRows(actions: JsonRecord | null, mention: string, composerText: string): WorkMenuRow[] {
   if (actions === null) return [];
@@ -579,7 +586,7 @@ export function workMenuRows(actions: JsonRecord | null, mention: string, compos
   if (snooze.length > 0) rows.push({ label: 'Snooze', icon: 'clock', snooze });
   if (mention.length > 0) {
     rows.push({
-      label: 'Mention',
+      label: 'Mention in chat box',
       icon: 'message-plus',
       command: { type: 'insertBoardReference', reference: mention, text: composerText },
     });
