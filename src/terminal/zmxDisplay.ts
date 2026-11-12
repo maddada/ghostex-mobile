@@ -15,6 +15,8 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { TerminalGrid } from '../../modules/ghostex-native/src';
 import { ATTACH_VIEWPORT_REFRESH_DELAY_MS, useTerminalStore } from './sessions';
+import { chatMachineLink } from '../chat/rust/machine-link';
+import { useMachinesStore } from '../machines/store';
 
 /** Width a hidden client rests at, matching zmx's resting width. */
 export const ZMX_HIDDEN_COLUMNS = 200;
@@ -56,13 +58,35 @@ function isForeground(state: AppStateStatus): boolean {
   return state === 'active' || state === 'unknown';
 }
 
-function visibleSequence(grid: TerminalGrid): string {
-  return `\x1b]1337;ZMX_VISIBLE=${grid.rows},${grid.cols}\x07`;
+/**
+ * CDXC:Zmx 2026-11-12 DECISION:
+ * The user chose to quiet the terminals the phone cannot see (Q2720): a warm tab kept receiving all of a working agent's
+ * output (151 KiB a minute, 36 writes a second measured). On a computer that lists `terminalPause`, a hidden or chat-showing
+ * tab also sends `ZMX_PAUSE=1`, so its attach client sends nothing over the link, and a shown one `ZMX_PAUSE=0`, which
+ * repaints it; every announcement asks the client to gather output for `BATCH_MS` into fewer writes. Older computers get
+ * exactly today's sequences.
+ * SEE-ALSO: .dependencies/zmx/src/loop.zig (`ClientDisplay`), server/src/cli.rs (`terminalPause`).
+ */
+const TERMINAL_PAUSE_CAPABILITY = 'terminalPause';
+/** How long the attach client may gather an agent's output before writing it; output right after a keystroke is written at once. */
+const BATCH_MS = 100;
+
+function pauses(sessionKey: string): boolean {
+  const tab = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === sessionKey);
+  if (tab === undefined) return false;
+  const machine = useMachinesStore.getState().machines.find((entry) => entry.id === tab.machineId);
+  return machine !== undefined && chatMachineLink(machine).capabilities()?.includes(TERMINAL_PAUSE_CAPABILITY) === true;
 }
 
-function parkedSequence(state: 'chat' | 'parked', grid: TerminalGrid): string {
+function visibleSequence(grid: TerminalGrid, pause: boolean): string {
+  const quiet = pause ? `\x1b]1337;ZMX_PAUSE=0\x07\x1b]1337;ZMX_BATCH=${BATCH_MS}\x07` : '';
+  return `${quiet}\x1b]1337;ZMX_VISIBLE=${grid.rows},${grid.cols}\x07`;
+}
+
+function parkedSequence(state: 'chat' | 'parked', grid: TerminalGrid, pause: boolean): string {
   const body = state === 'chat' ? 'ZMX_CHAT' : 'ZMX_HIDDEN';
-  return `\x1b]1337;${body}=${grid.rows},${grid.cols}\x07`;
+  const quiet = pause ? `\x1b]1337;ZMX_BATCH=${BATCH_MS}\x07\x1b]1337;ZMX_PAUSE=1\x07` : '';
+  return `\x1b]1337;${body}=${grid.rows},${grid.cols}\x07${quiet}`;
 }
 
 /** Desired state for an entry, or null when it must not be announced to at all. */
@@ -89,7 +113,7 @@ async function announceVisible(sessionKey: string, grid: TerminalGrid): Promise<
   const last = announced.get(sessionKey);
   if (last?.state === 'visible' && last.cols === grid.cols && last.rows === grid.rows) return;
   const opened = generation.get(sessionKey);
-  await GhostexNative.sendRawInput(sessionKey, visibleSequence(grid));
+  await GhostexNative.sendRawInput(sessionKey, visibleSequence(grid, pauses(sessionKey)));
   if (generation.get(sessionKey) !== opened) return;
   announced.set(sessionKey, { state: 'visible', cols: grid.cols, rows: grid.rows });
 }
@@ -112,7 +136,7 @@ async function transition(sessionKey: string): Promise<void> {
     if (stale()) return;
     pinned.set(sessionKey, grid);
     if (last?.state === desired && last.cols === grid.cols && last.rows === grid.rows) return;
-    await GhostexNative.sendRawInput(sessionKey, parkedSequence(desired, grid));
+    await GhostexNative.sendRawInput(sessionKey, parkedSequence(desired, grid, pauses(sessionKey)));
     if (stale()) return;
     announced.set(sessionKey, { state: desired, cols: grid.cols, rows: grid.rows });
     return;
