@@ -18,7 +18,7 @@
  * scroll" rule; a gesture-handler pan at the root would win against those native scroll views instead.
  */
 
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
   Animated,
   PanResponder,
@@ -64,7 +64,7 @@ function touchPoint(event: GestureResponderEvent): { x: number; y: number; at: n
   };
 }
 
-/** The page a swipe just left: the next chat mounted within this time slides in from the other side. */
+/** The page a swipe just left: the next chat shown within this time slides in from the other side. */
 let entrance: { from: 1 | -1; at: number } | null = null;
 const ENTRANCE_WINDOW_MS = 1200;
 
@@ -75,7 +75,19 @@ export type TabSwipe = {
   onSwipe: (delta: -1 | 1) => void;
 };
 
-export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; children: ReactNode }) {
+export function TabSwipeView({
+  swipe,
+  shown = true,
+  children,
+}: {
+  swipe: TabSwipe | null;
+  /**
+   * Whether this chat is the selected tab's. A chat kept warm for a recent tab (`WarmChats.tsx`) stays mounted while
+   * another is shown, so it slides in when it is shown again rather than when it mounts.
+   */
+  shown?: boolean;
+  children: ReactNode;
+}) {
   const { width } = useWindowDimensions();
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -89,11 +101,22 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
   swipeRef.current = swipe;
   const widthRef = useRef(width);
   widthRef.current = width;
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
   const heldInPlace = (timestamp: number): boolean =>
     !touch.current.travelled && timestamp - touch.current.at >= HOLD_MS;
 
-  // The chat a swipe brought here slides in from the side the swipe came from.
-  useEffect(() => {
+  // The page this swipe slid out; it is put back when this chat is shown again, or at once if the tab did not change.
+  const pagedOut = useRef(false);
+  // The chat a swipe brought here slides in from the side the swipe came from. In the commit that shows it, not after:
+  // a warm chat slid out on an earlier visit would otherwise stay blank until the screen's next render is done.
+  useLayoutEffect(() => {
+    if (!shown) return;
+    if (pagedOut.current) {
+      pagedOut.current = false;
+      translateX.setValue(0);
+      opacity.setValue(1);
+    }
     const coming = entrance;
     entrance = null;
     if (coming === null || Date.now() - coming.at > ENTRANCE_WINDOW_MS) return;
@@ -103,7 +126,7 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
       Animated.timing(translateX, { toValue: 0, duration: PAGE_IN_MS, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: PAGE_IN_MS, useNativeDriver: true }),
     ]).start();
-  }, [opacity, translateX]);
+  }, [opacity, translateX, shown]);
 
   const handlers = useMemo(() => {
     const settle = (): void => {
@@ -138,7 +161,9 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
           settle();
           return;
         }
-        // Out the way the finger went, then the tab; the next chat slides in from the other side.
+        // Out the way the finger went while the next chat comes; it slides in from the other side.
+        entrance = { from: delta, at: Date.now() };
+        pagedOut.current = true;
         Animated.parallel([
           Animated.timing(translateX, {
             toValue: -delta * widthRef.current * PAGE_SHIFT,
@@ -147,12 +172,17 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
           }),
           Animated.timing(opacity, { toValue: 0, duration: PAGE_OUT_MS, useNativeDriver: true }),
         ]).start(() => {
-          entrance = { from: delta, at: Date.now() };
-          swipeRef.current?.onSwipe(delta);
-          // Still here (the tab did not change): back in place.
+          // Still the selected tab (the tab did not change): back in place. A chat kept warm stays slid out until it
+          // is shown again (above), so it never flashes back before the next one covers it.
+          if (!pagedOut.current || !shownRef.current) return;
+          pagedOut.current = false;
           translateX.setValue(0);
           opacity.setValue(1);
         });
+        // The tab changes as the page starts to go, not after: the slide runs on the native side meanwhile, so the
+        // screen's render of the next chat overlaps it instead of following it (CDXC:SessionChat 2026-11-12, warm
+        // tabs: switching is to be instant).
+        swipeRef.current?.onSwipe(delta);
       },
       onPanResponderTerminate: () => {
         target.current = null;

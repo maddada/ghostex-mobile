@@ -368,17 +368,20 @@ export class RustChatHost {
     // The core also holds the chat's clocks, context meter and accounts poll while nothing shows
     // the chat, as the desktop does for a chat off screen; Android keeps running them in the
     // background otherwise.
-    if (AppState.currentState === 'background') {
-      this.poll.pause();
-      this.enqueue({ type: 'visibility', shown: false });
-    }
+    // A fresh core counts itself shown; it hears otherwise when the app or the screen hides it.
+    this.coreHidden = false;
+    this.appHidden = AppState.currentState === 'background';
+    if (this.appHidden) this.poll.pause();
+    this.syncVisibility();
     this.appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'background') {
         this.poll.pause();
-        this.enqueue({ type: 'visibility', shown: false });
+        this.appHidden = true;
+        this.syncVisibility();
       } else if (next === 'active') {
         this.poll.resume();
-        this.enqueue({ type: 'visibility', shown: true });
+        this.appHidden = false;
+        this.syncVisibility();
       }
       // The page is held back with the app, so its silence in the background says nothing: the
       // open requests' wait stops there and begins again in front.
@@ -494,6 +497,32 @@ export class RustChatHost {
   }
 
   private title: string | null = null;
+
+  /**
+   * Whether a screen shows this chat. A chat kept mounted for a tab that is not the selected one
+   * (`WarmChats.tsx`) is hidden: the core holds its redraw clocks and its accounts poll and
+   * assembles its document at most once a second (gx-chat-core `Event::Visibility`), while its
+   * events keep arriving and applying, so showing it again needs no reload. Shown by default.
+   */
+  setShown(shown: boolean): void {
+    if (this.viewHidden === !shown) return;
+    this.viewHidden = !shown;
+    this.syncVisibility();
+  }
+
+  /** The app is in the background (`start`'s AppState listener). */
+  private appHidden = false;
+  /** The screen holding this chat keeps it out of sight (`setShown`). */
+  private viewHidden = false;
+  /** What the core was last told; a fresh core starts shown. */
+  private coreHidden = false;
+
+  private syncVisibility(): void {
+    const hidden = this.appHidden || this.viewHidden;
+    if (hidden === this.coreHidden || this.core === null) return;
+    this.coreHidden = hidden;
+    this.enqueue({ type: 'visibility', shown: !hidden });
+  }
 
   /**
    * One of the core's pure helpers (`composerReferences`, `referenceMenu`, `composerKeyIntent`,

@@ -30,6 +30,8 @@ export type RustChat = {
   measure(measurement: ChatMeasurement): void;
   /** Pushes the session's display title into the core (see `RustChatHost.setTitle`). */
   setTitle(title: string | null): void;
+  /** Whether a screen shows this chat; a parked one tells the core it is hidden (`RustChatHost.setShown`). */
+  setShown(shown: boolean): void;
   composer: RustChatHost['composerInput'] | null;
   attachFiles(files: readonly { uri: string; name?: string }[]): Promise<void>;
   /** Uploads files to the machine and answers their paths (see `RustChatHost.uploadFiles`). */
@@ -81,6 +83,7 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
   const dispatch = useCallback((action: UserAction) => host?.dispatch(action), [host]);
   const measure = useCallback((measurement: ChatMeasurement) => host?.measure(measurement), [host]);
   const setTitle = useCallback((title: string | null) => host?.setTitle(title), [host]);
+  const setShown = useCallback((shown: boolean) => host?.setShown(shown), [host]);
   const attachFiles = useCallback(
     (files: readonly { uri: string; name?: string }[]) => host?.attachFiles(files) ?? Promise.resolve(),
     [host],
@@ -110,6 +113,7 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
       dispatch,
       measure,
       setTitle,
+      setShown,
       composer: host?.composerInput ?? null,
       attachFiles,
       uploadFiles,
@@ -118,6 +122,19 @@ export function useRustChat(target: RustChatTarget | null): RustChat {
       onViewRequest,
       machine,
     }),
-    [host, state, dispatch, measure, setTitle, attachFiles, uploadFiles, query, queryAsync, onViewRequest, machine],
+    [
+      host,
+      state,
+      dispatch,
+      measure,
+      setTitle,
+      setShown,
+      attachFiles,
+      uploadFiles,
+      query,
+      queryAsync,
+      onViewRequest,
+      machine,
+    ],
   );
 }

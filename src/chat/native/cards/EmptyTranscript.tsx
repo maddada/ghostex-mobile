@@ -21,6 +21,7 @@ import { AgentMark } from './agentMark';
 import { chatLookOf } from '../transcript/context';
 import { themedStyles } from '../transcript/theme';
 import { ChatButton } from './primitives';
+import { useChatShown } from '../chatShown';
 
 export function EmptyTranscript({ chat, document }: { chat: RustChat; document: ChatDocument | null }) {
   const styles = useStyles();
@@ -109,7 +110,10 @@ function TranscriptSkeleton({ document }: { document: ChatDocument }) {
         ? styles.skeletonBubbleLeft
         : null;
   const pulse = useRef(new Animated.Value(1)).current;
+  // Only while the chat is on screen (`chatShown.ts`).
+  const shown = useChatShown();
   useEffect(() => {
+    if (!shown) return undefined;
     const half = SKELETON.pulseMs / 2;
     const easing = Easing.inOut(Easing.quad);
     const loop = Animated.loop(
@@ -120,7 +124,7 @@ function TranscriptSkeleton({ document }: { document: ChatDocument }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+  }, [pulse, shown]);
   return (
     <Animated.View
       accessibilityLabel="Loading chat…"

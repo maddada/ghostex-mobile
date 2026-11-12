@@ -24,7 +24,17 @@ import { chooseVoiceComputer } from '../../voice/dictateSettings';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Keyboard,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { DocsCopy } from '../../copy';
 import { openComputerFile, phoneOpensFile } from '../../docs/openComputerFile';
@@ -111,6 +121,12 @@ export type NativeChatScreenProps = {
   onHostAction?: (action: string, params: Record<string, unknown>) => void;
   /** Keeps the chat loading offscreen until chat mode is selected. */
   visible: boolean;
+  /**
+   * Kept mounted for a recent tab that is not the selected one (`WarmChats.tsx`), with `visible` false: the chat keeps
+   * its full size, so its rows and its scroll position are there the moment its tab is selected again, but draws
+   * nothing, takes no touches, closes its sheets and the keyboard, and tells the core it is hidden.
+   */
+  parked?: boolean;
   /** Bumped by the terminal header's Search Conversation; each new value opens the search bar. */
   openSearchRequestId?: number;
   /** Bumped by the header's Session Note; each new value opens the note. */
@@ -140,6 +156,7 @@ export default function NativeChatScreen({
   hostActions = NO_HOST_ACTIONS,
   onHostAction,
   visible,
+  parked = false,
   openSearchRequestId = 0,
   openSessionNoteRequestId = 0,
   onQueueCountChange,
@@ -430,6 +447,29 @@ export default function NativeChatScreen({
     setPillMenu(null);
     setBoardFocus(null);
   }, []);
+
+  /*
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User: switching between session tabs "reloads each chat from scratch every time"; switching is to be instant, with
+   * the chats kept warm. A chat whose tab is no longer the selected one stays mounted for a while (`WarmChats.tsx`)
+   * instead of closing. Out of sight it must not act like the chat on screen: its sheets close as the chat that
+   * unmounted closed them, the keyboard its field held goes down (the field would otherwise keep typing into a chat
+   * nobody sees), and its core holds its redraw clocks (`setShown`), while its events keep arriving and applying.
+   */
+  const { setShown } = chat;
+  useEffect(() => {
+    setShown(!parked);
+    if (!parked) return undefined;
+    setDetailsOpen(false);
+    setShownPage(null);
+    setHandoff(null);
+    setGbotSettings(null);
+    setSavedPromptsOpen(false);
+    closePillMenu();
+    if (TextInput.State.currentlyFocusedInput() !== null) Keyboard.dismiss();
+    // A screen that lets go of a host it shared leaves it shown.
+    return () => setShown(true);
+  }, [closePillMenu, parked, setShown]);
   // The dock bar's Work items button: the Work sheet, as the Work pill opens it.
   const openWorkSheet = useCallback(() => {
     setBoardFocus(null);
@@ -514,13 +554,13 @@ export default function NativeChatScreen({
   const subagentOpen = document?.subagent !== undefined && document.subagent !== null;
 
   return (
-    <NativeChatUiProvider chat={chat}>
+    <NativeChatUiProvider chat={chat} shown={visible}>
       <ForkFromMessageProvider value={forkFromMessage}>
         <DictatedFormBoxes chat={chat} />
         <ChatPlacementProvider value={placement}>
           {/* An Expo view takes no `pointerEvents`, so the preloading chat's stays on the view inside. */}
           <GhostexImageIntakeView
-            style={[styles.root, style, !visible && styles.preloading]}
+            style={[styles.root, style, !visible && (parked ? styles.parked : styles.preloading)]}
             dropTarget={visible && composerShown}
             onImages={receiveImages}
             onDropActive={(event) => setDropActive(event.nativeEvent.active)}
@@ -547,7 +587,7 @@ export default function NativeChatScreen({
                   setComposerFrame((now) => ({ ...now, transcriptTop: y, transcriptBottom: y + height }));
                 }}
               >
-                <TabSwipeView swipe={tabSwipe}>
+                <TabSwipeView swipe={tabSwipe} shown={!parked}>
                   <NativeTranscript chat={chat} active={visible} />
                   {/* Scroll-to-bottom alone while no card carries it. */}
                   {document === null ? null : (
@@ -1133,6 +1173,8 @@ const styles = StyleSheet.create({
   transcript: { flex: 1, minHeight: 0 },
   error: { padding: 16, fontSize: 14 },
   preloading: { position: 'absolute', top: -2, left: -2, width: 1, height: 1, opacity: 0 },
+  /** A warm chat out of sight keeps its size, so its rows and its scroll position stay laid out (`WarmChats.tsx`). */
+  parked: { opacity: 0 },
   dropHighlight: {
     position: 'absolute',
     top: 6,

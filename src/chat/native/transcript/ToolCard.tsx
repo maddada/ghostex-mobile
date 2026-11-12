@@ -12,6 +12,7 @@
 import { createContext, memo, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   FadeIn,
   FadeInUp,
@@ -35,6 +36,7 @@ import type { TranscriptTheme } from './theme';
 import { SINGLE_LINE_CARD, SINGLE_LINE_HEADER_HEIGHT, singleLineShell } from './singleLineCard';
 import { ToolBody } from './ToolBody';
 import { FoldChevron } from './foldChevron';
+import { useChatShown } from '../chatShown';
 
 /** How long a row takes to grow in and the header's words to settle (desktop `ENTER`). */
 const ENTER_MS = 320;
@@ -266,9 +268,14 @@ function StackTile({
 export function Shimmer({ color }: { color: string }) {
   const [width, setWidth] = useState(0);
   const progress = useSharedValue(0);
+  // Only while the chat is on screen (`chatShown.ts`): a chat kept out of sight runs no frames.
+  const shown = useChatShown();
   useEffect(() => {
+    if (!shown) return undefined;
+    progress.value = 0;
     progress.value = withRepeat(withTiming(1, { duration: SHIMMER_MS, easing: Easing.linear }), -1, false);
-  }, [progress]);
+    return () => cancelAnimation(progress);
+  }, [progress, shown]);
   const band = Math.max(40, width * 0.35);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: -band + progress.value * (width + band) }] }));
   return (

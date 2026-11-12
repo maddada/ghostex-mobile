@@ -104,6 +104,7 @@ import DemoTerminalView from '../demo/DemoTerminalView';
 import { isDemoMachineId } from '../demo/identity';
 import SessionLinksSheet from '../chat/native/SessionLinksSheet';
 import type { TabSwipe } from '../chat/native/TabSwipe';
+import WarmChats from '../chat/native/WarmChats';
 import { useSessionLinksRefresh } from '../chat/native/useSessionLinksRefresh';
 import { useTranscriptTheme } from '../chat/native/transcript/theme';
 import { DuoChromeCopy, PanesCopy, RenameCopy, SessionCopy, TerminalHeaderCopy } from '../copy';
@@ -1640,37 +1641,63 @@ export default function TerminalScreen({ navigation, route }: Props) {
             onRatio={panes.setRatio}
           />
         ) : null}
-        {activeTab !== null &&
-        chatMachineTarget !== null &&
-        activeTab.sessionKey !== paneChatKey &&
-        sideBySide === null ? (
+        {sideBySide === null ? (
           /*
            * Keep the selected session's chat screen mounted while terminal mode
            * is visible. Its first transcript read warms in advance, and while
            * hidden it owns no input region until the user switches views.
            * Toggling no longer destroys the conversation. With two panes it stays hidden; a chat in a pane is its own
            * (`paneChat`), and while it is the selected session's this one is not mounted (one screen per chat core).
+           * The chats of the tabs selected just before stay mounted too, parked, so going back to one is instant
+           * (`WarmChats.tsx`).
            *
            * CDXC:SessionChat 2026-09-25 DECISION:
            * User (2026-09-25): delete the phone's "Web (previous)" chat fallback so the phone runs only the native Rust chat. NativeChatScreen is the only chat view; the WebView chat, the Settings > Chat view choice and its bundled page are gone, and a stored `sessionChatView: 'web'` is ignored. Supersedes the earlier 2026-09-25 decision that kept the WebView as a fallback.
            */
-          <SessionChatSurface
-            key={activeTab.sessionKey}
-            machine={chatMachineTarget}
-            projectId={activeProjectId}
-            sessionId={activeTab.ghostexSessionId ?? ''}
-            onSwitchToTerminal={() => {
-              if (chatModeActive) toggleChatView();
-            }}
-            hostActions={activeChatHostActions}
-            onHostAction={chatHostActionFor(chatMachineTarget, activeProjectId)}
-            visible={chatModeActive && twoPanes === null}
-            openSearchRequestId={chatSearchRequestId}
-            openSessionNoteRequestId={chatSessionNoteRequestId}
-            onQueueCountChange={handleChatQueueCount}
-            tabSwipe={chatTabSwipe}
-            links={{ links: activeSession?.links, onOpen: () => setLinksSheetVisible(true) }}
-            style={chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal}
+          <WarmChats
+            active={
+              activeTab !== null && chatMachineTarget !== null
+                ? {
+                    sessionKey: activeTab.sessionKey,
+                    machine: chatMachineTarget,
+                    projectId: activeProjectId,
+                    sessionId: activeTab.ghostexSessionId ?? '',
+                  }
+                : null
+            }
+            openKeys={tabs.map((tab) => tab.sessionKey)}
+            excludeKey={paneChatKey}
+            render={(chat, parked) =>
+              parked ? (
+                <SessionChatSurface
+                  machine={chat.machine}
+                  projectId={chat.projectId}
+                  sessionId={chat.sessionId}
+                  onSwitchToTerminal={() => undefined}
+                  visible={false}
+                  parked
+                  style={styles.terminal}
+                />
+              ) : (
+                <SessionChatSurface
+                  machine={chat.machine}
+                  projectId={chat.projectId}
+                  sessionId={chat.sessionId}
+                  onSwitchToTerminal={() => {
+                    if (chatModeActive) toggleChatView();
+                  }}
+                  hostActions={activeChatHostActions}
+                  onHostAction={chatHostActionFor(chat.machine, chat.projectId)}
+                  visible={chatModeActive && twoPanes === null}
+                  openSearchRequestId={chatSearchRequestId}
+                  openSessionNoteRequestId={chatSessionNoteRequestId}
+                  onQueueCountChange={handleChatQueueCount}
+                  tabSwipe={chatTabSwipe}
+                  links={{ links: activeSession?.links, onOpen: () => setLinksSheetVisible(true) }}
+                  style={chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal}
+                />
+              )
+            }
           />
         ) : null}
         {activeTab !== null && !chatModeActive && twoPanes === null && (

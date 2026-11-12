@@ -10,6 +10,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import type { RustChat } from '../../rust/useRustChat';
+import { ChatShownContext } from '../chatShown';
 import type { ChatDocument, ChatLook, Json } from '../../rust/document';
 import { arr, obj, str, type JsonRecord } from './json';
 import { relayedByReport } from '../cards/relayedApprovals';
@@ -57,7 +58,16 @@ export type NativeChatUi = {
 
 const UiContext = createContext<NativeChatUi | null>(null);
 
-export function NativeChatUiProvider({ chat, children }: { chat: RustChat; children: ReactNode }) {
+export function NativeChatUiProvider({
+  chat,
+  shown = true,
+  children,
+}: {
+  chat: RustChat;
+  /** Whether the chat is on screen; its views that animate forever stop while it is not (`chatShown.ts`). */
+  shown?: boolean;
+  children: ReactNode;
+}) {
   const disclosures = useMemo(() => new DisclosureStore(), []);
   const dictationTargets = useMemo(() => new DictationTargets(), []);
   const dispatchRef = useRef(chat.dispatch);
@@ -146,7 +156,11 @@ export function NativeChatUiProvider({ chat, children }: { chat: RustChat; child
       toolAppLogo,
     ],
   );
-  return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
+  return (
+    <UiContext.Provider value={value}>
+      <ChatShownContext.Provider value={shown}>{children}</ChatShownContext.Provider>
+    </UiContext.Provider>
+  );
 }
 
 /**

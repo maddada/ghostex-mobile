@@ -11,6 +11,7 @@ import { Animated, Easing, Pressable, Text, View, type StyleProp, type ViewStyle
 import { Glyph, type GlyphName } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { FoldChevron } from '../transcript/foldChevron';
+import { useChatShown } from '../chatShown';
 
 export const CARD_TEXT_SIZE = 14;
 export const CARD_LINE_HEIGHT = 20;
@@ -299,9 +300,14 @@ export function PulseDot({ size, color, active }: { size: number; color: string;
  */
 export const SWEEP_EASING = Easing.bezier(0.42, 0, 0.58, 1);
 
-/** A 0 to 1 value that loops forever while `running`; `easing` must be a stable reference. */
+/**
+ * A 0 to 1 value that loops forever while `running` and the chat is on screen (`chatShown.ts`); `easing` must be a
+ * stable reference.
+ */
 export function useLoop(periodMs: number, easing: (value: number) => number, running = true): Animated.Value {
   const value = useRef(new Animated.Value(0)).current;
+  const shown = useChatShown();
+  running = running && shown;
   useEffect(() => {
     // The native loop repeats from the value it starts at, so every start begins at 0.
     value.setValue(0);

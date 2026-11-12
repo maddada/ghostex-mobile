@@ -147,6 +147,7 @@ function useFakeChat(scene: string): RustChat {
       dispatch: (action) => fakeDispatch(action),
       measure: () => undefined,
       setTitle: () => undefined,
+      setShown: () => undefined,
       composer: {
         edited: (text, selection) => model.edited(text, selection),
         selected: (selection) => model.selected(selection),
