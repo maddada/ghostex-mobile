@@ -125,8 +125,9 @@ export function QuietRow({
             <BoxedToolCards.Provider value>
               <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
             </BoxedToolCards.Provider>
-            {/* The rail runs on through the row gap to the line's next row. */}
-            {continues ? <View style={{ height: Math.max(rowGap - 8, 0) }} /> : null}
+            {/* The rail runs on through the body's own 8px gap to the line's next row, the same
+                space as between the rows' parts (`RAIL_ROW_GAP` in the desktop's quiet_view.rs). */}
+            {continues ? <View /> : null}
           </DisclosureBody>
         ),
         gap: index === line.start ? 4 : 0,

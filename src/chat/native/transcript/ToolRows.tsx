@@ -77,7 +77,7 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   if (boxed && !inWorkFold && quietSteps !== true && hasVisibleTools(message, inWorkFold, workflowCards)) {
     return (
       <View style={[styles.boxed, singleLineShell(theme)]}>
-        <ToolRunRows message={message} />
+        <ToolRunRows message={message} boxed />
       </View>
     );
   }
@@ -102,7 +102,7 @@ export function hasVisibleTools(
   });
 }
 
-function ToolRunRows({ message }: { message: ProjectedMessage }) {
+function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; boxed?: boolean }) {
   const { theme, simple, workOpen } = useTranscriptEnv();
   const { workflowCards, chatLook } = useTranscriptFlags();
   const { disclosures } = useNativeChatUi();
@@ -191,7 +191,6 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
     );
   }
   if (showAll || hidden === 0) return <View style={styles.column}>{rows(visible)}</View>;
-  const keptFlags = arr(fold?.visible);
   // Closed, the toggle sits right before the last call; open, it moves to the top of the group and
   // every call follows below it in order, so it is never between the calls it reveals (gx-chat-core
   // `tool_run_fold`, `toggleBefore` and `toggleBeforeOpen`; CDXC:SessionChat 2026-11-08).
@@ -199,12 +198,32 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   const openBefore = typeof fold?.toggleBeforeOpen === 'number' ? fold.toggleBeforeOpen : 0;
   const before = runOpen ? openBefore : closedBefore;
   const label = str(fold, runOpen ? 'expandedLabel' : 'collapsedLabel');
+  const keptFlags = arr(fold?.visible);
+  const foldedPictures = tools
+    .filter((_, index) => keptFlags[index] !== true)
+    .flatMap((tool) => arr(tool.images))
+    .filter((image) => !isTrue(image, 'userShown'));
+  const keptAbove = visible.filter((index) => keptFlags[index] === true && index < before);
+  const keptBelow = visible.filter((index) => keptFlags[index] === true && index >= before);
+  // Closed in an opened Quiet View line's card, the toggle reaches past the card's inset to its
+  // sides, and to its top or bottom where it is the first or last row, so pressing it fills the
+  // card's whole header (desktop `tool_fold_toggle`, CDXC:SessionChat 2026-11-12).
+  const bleed = boxed && !runOpen;
+  const bleedTop = bleed && keptAbove.length === 0;
+  const bleedBottom = bleed && foldedPictures.length === 0 && keptBelow.length === 0;
   const toggle = (
     <Pressable
       onPress={toggleRun}
       accessibilityRole="button"
       accessibilityState={{ expanded: runOpen }}
-      style={({ pressed }) => [styles.foldToggle, pressed && { backgroundColor: theme.pressed }]}
+      style={({ pressed }) => [
+        styles.foldToggle,
+        bleed && styles.foldToggleBleed,
+        bleedTop && styles.foldToggleBleedTop,
+        bleedBottom && styles.foldToggleBleedBottom,
+        bleedTop && bleedBottom && styles.foldToggleAlone,
+        pressed && { backgroundColor: theme.pressed },
+      ]}
     >
       {/* The chevron sits in a slot as wide as the rows' glyph tiles, so the label starts where their names do. */}
       <View style={styles.foldSlot}>
@@ -225,16 +244,12 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   // The pictures the folded calls read stay in view under the toggle, except one the user's own
   // message already shows (`userShown`), which only its open row keeps (gx-chat-core
   // `read_images.rs`, CDXC:SessionChat 2026-11-06).
-  const foldedPictures = tools
-    .filter((_, index) => keptFlags[index] !== true)
-    .flatMap((tool) => arr(tool.images))
-    .filter((image) => !isTrue(image, 'userShown'));
   return (
     <View style={styles.column}>
-      {rows(visible.filter((index) => keptFlags[index] === true && index < before))}
+      {rows(keptAbove)}
       {toggle}
       <ReadImageStrip images={foldedPictures} inset={FOLDED_CALLS_INSET} />
-      {rows(visible.filter((index) => keptFlags[index] === true && index >= before))}
+      {rows(keptBelow)}
     </View>
   );
 }
@@ -726,6 +741,17 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
+  // In the boxed card (`boxed` above): past its horizontal inset, and past its 5.5pt top or bottom
+  // padding where the toggle is the first or last row; the shell's overflow clips the corners.
+  foldToggleBleed: {
+    marginHorizontal: -(SINGLE_LINE_CARD.paddingX - ROW_PAD_X),
+    paddingHorizontal: SINGLE_LINE_CARD.paddingX,
+    borderRadius: 0,
+  },
+  foldToggleBleedTop: { marginTop: -5.5, paddingTop: 2 + 5.5 },
+  foldToggleBleedBottom: { marginBottom: -5.5, paddingBottom: 2 + 5.5 },
+  // Alone in the card it is the card's whole height inside its border.
+  foldToggleAlone: { minHeight: SINGLE_LINE_CARD.height - 2 },
   foldSlot: { width: TILE, height: PROSE_LINE, alignItems: 'center', justifyContent: 'center' },
   foldLabel: { fontSize: 13.5, lineHeight: PROSE_LINE },
 });
