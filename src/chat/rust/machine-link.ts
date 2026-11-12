@@ -182,7 +182,18 @@ type Follower = {
   sessionId: string;
   limit: number;
   onFrame(frame: Record<string, unknown>): void;
+  /** The newest frame handed to this chat, which a resubscribe resumes from (`CHAT_RESUME_CAPABILITY`). */
+  position?: { serverId: string; epoch: number; seq: number };
 };
+
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * The user chose to resume a chat from where it was after a reconnect (Q2720): every new socket and every return to the
+ * app resubscribed each followed chat and got its whole snapshot again. On a computer that lists this, the resubscribe
+ * carries the position of the newest frame this chat got, and gxserver answers `sessionChatResumed` plus only the frames
+ * after it, or the snapshot as before when it cannot (server/src/session_chat_stream.rs).
+ */
+const CHAT_RESUME_CAPABILITY = 'chatResume';
 
 function followerKey(projectId: string, sessionId: string): string {
   return JSON.stringify([projectId, sessionId]);
@@ -870,11 +881,16 @@ class ChatMachineLink {
   }
 
   private subscribeMessage(follower: Follower): string {
+    const resume =
+      follower.position !== undefined && this.capabilities()?.includes(CHAT_RESUME_CAPABILITY) === true
+        ? { resume: follower.position }
+        : {};
     return JSON.stringify({
       type: 'subscribeSessionChat',
       projectId: follower.projectId,
       sessionId: follower.sessionId,
       limit: follower.limit,
+      ...resume,
       // CDXC:SessionChat 2026-11-10: a coordinator's thread list arrives as what changed, which this
       // build's chat core rebuilds (gx-chat-core session/thread_patch.rs). An older gxserver ignores it.
       coordinatorThreadsPatch: true,
@@ -1088,6 +1104,11 @@ class ChatMachineLink {
       }
       return;
     }
+    // A resumed subscribe's answer: the frames it missed follow, and the chat keeps what it holds.
+    if (frame.type === 'sessionChatResumed') {
+      this.settleOwedSnapshot(true);
+      return;
+    }
     if (
       typeof frame.type !== 'string' ||
       !FRAME_TYPES.has(frame.type) ||
@@ -1102,7 +1123,18 @@ class ChatMachineLink {
     }
     // A chat frame (never the stream's ready header) is what the socket was asked for.
     this.settleOwedSnapshot(true);
-    this.followers.get(followerKey(frame.projectId, frame.sessionId))?.onFrame(frame);
+    const follower = this.followers.get(followerKey(frame.projectId, frame.sessionId));
+    if (follower === undefined) return;
+    const held = follower.position;
+    if (
+      held === undefined ||
+      held.serverId !== frame.serverId ||
+      frame.epoch > held.epoch ||
+      (frame.epoch === held.epoch && frame.seq > held.seq)
+    ) {
+      follower.position = { serverId: frame.serverId, epoch: frame.epoch, seq: frame.seq };
+    }
+    follower.onFrame(frame);
   }
 }
 
