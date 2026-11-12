@@ -726,8 +726,6 @@ export default function SessionRow({
               {shownCoordinatorBadge !== undefined ? <CoordinatorBadgeView badge={shownCoordinatorBadge} /> : null}
               {voiceCall ? <VoiceCallBadge /> : null}
               {worktree !== undefined && worktree.length > 0 ? <WorktreeBadge label={worktree} /> : null}
-              {/* Its computer's icon, after the worktree, as the desktop's row (computer_mark.rs). */}
-              {computerIcon !== null ? <ComputerIconGlyph drawing={computerIcon} size={ds(12)} color={ink.muted} /> : null}
               {openerTag !== undefined && openerTag.length > 0 ? (
                 <Text style={[styles.agentboxLabel, inkStyle.agentboxLabel]} numberOfLines={1}>
                   {openerTag}
@@ -735,23 +733,29 @@ export default function SessionRow({
               ) : null}
               {session.agentbox !== undefined ? <AgentboxBadge agentbox={session.agentbox} /> : null}
               {session.cloudBox !== undefined ? <CloudBoxBadge cloudBox={session.cloudBox} /> : null}
-              {question ? (
-                <QuestionIndicator
-                  activity={session.activity}
-                  ringColor={active ? activeBackground : expandedGroupSurface}
-                />
-              ) : null}
-              {foldedStatus !== undefined ? (
-                <FoldedStatusIndicator
-                  status={foldedStatus}
-                  ringColor={active ? activeBackground : expandedGroupSurface}
-                />
-              ) : null}
-              {indicator !== null ? <ActivityDot kind={indicator} /> : null}
-              {timeLabel !== null ? (
-                <Text style={[styles.trailingText, session.isSleeping ? inkStyle.timeSleeping : inkStyle.time]}>
-                  {timeLabel}
-                </Text>
+              {/* Its computer's icon last before the status, as the desktop's row (computer_mark.rs); while it shows, the status and the time sit in a slot of one width so the icons line up down the list (CDXC:RemoteMachines 2026-11-12 in the desktop's native_sidebar/status.rs). */}
+              {computerIcon !== null ? <ComputerIconGlyph drawing={computerIcon} size={ds(12)} color={ink.muted} /> : null}
+              {question || foldedStatus !== undefined || indicator !== null || timeLabel !== null || computerIcon !== null ? (
+                <View style={[styles.trailingSlot, computerIcon !== null ? styles.trailingSlotFixed : null]}>
+                  {question ? (
+                    <QuestionIndicator
+                      activity={session.activity}
+                      ringColor={active ? activeBackground : expandedGroupSurface}
+                    />
+                  ) : null}
+                  {foldedStatus !== undefined ? (
+                    <FoldedStatusIndicator
+                      status={foldedStatus}
+                      ringColor={active ? activeBackground : expandedGroupSurface}
+                    />
+                  ) : null}
+                  {indicator !== null ? <ActivityDot kind={indicator} /> : null}
+                  {timeLabel !== null ? (
+                    <Text style={[styles.trailingText, session.isSleeping ? inkStyle.timeSleeping : inkStyle.time]}>
+                      {timeLabel}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -929,6 +933,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: ds(6),
     marginStart: ds(6),
+  },
+  /** What follows the computer's icon: the question, folded or status dot, then the time. */
+  trailingSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: ds(6),
+  },
+  /** desktop status.rs `TRAILING_SLOT_WIDTH`: fits "59m", "23h", "12d" and a status dot. */
+  trailingSlotFixed: {
+    minWidth: ds(28),
   },
   trailingText: {
     fontSize: ds(13.55),
