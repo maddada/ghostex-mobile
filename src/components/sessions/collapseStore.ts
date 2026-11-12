@@ -217,7 +217,8 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
             [machineId]: toggled(current[machineId] ?? [], kindCollapseKey),
           },
         });
-      } else if (kindCollapseKey.endsWith('|parked')) {
+      } else if (/\|(parked|working|snoozed)$/u.test(kindCollapseKey)) {
+        // Working and Snoozed start folded like Parked (contract/grouping.ts `FOLDED_FIRST`), so they share its open list.
         const current = get().expandedParkedSessionKeysByMachine;
         set({
           expandedParkedSessionKeysByMachine: {

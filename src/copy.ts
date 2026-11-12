@@ -249,6 +249,8 @@ export const SessionCopy = {
   pinnedKindLabel: 'Pinned',
   draftsKindLabel: 'Drafts',
   parkedKindLabel: 'Parked',
+  workingKindLabel: 'Working',
+  snoozedKindLabel: 'Snoozed',
   sessionsKindLabel: 'Sessions',
   unknownRecency: 'Unknown',
   attachCommandCopied: 'Attach command copied',

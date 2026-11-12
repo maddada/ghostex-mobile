@@ -184,9 +184,13 @@ function isBrowser(session: GhostexSession): boolean {
   return session.kind === 'browser' || session.surface === 'browser';
 }
 
-/** A parked thread stays in Parked; every other thread, resolved ones included, joins the tree. */
-function isNestableThread(session: GhostexSession): boolean {
-  return parentKey(session) !== null && !isBrowser(session) && session.isParked !== true;
+/**
+ * A parked or snoozed thread stays in its own section (gx-core threads.rs `is_nestable_thread`, which reads parking
+ * through the section: a parked thread is an ordinary one while parking is off); every other thread, resolved ones
+ * included, joins the tree.
+ */
+function isNestableThread(session: GhostexSession, ownSection: unknown): boolean {
+  return parentKey(session) !== null && !isBrowser(session) && ownSection !== 'parked' && ownSection !== 'snoozed';
 }
 
 function isBusyThread(session: GhostexSession): boolean {
@@ -299,7 +303,7 @@ export function nestCoordinatorThreads<S>(
   const children = new Map<number, number[]>();
   const parentOf: (number | null)[] = sessions.map(() => null);
   sessions.forEach((session, index) => {
-    if (!isNestableThread(session)) return;
+    if (!isNestableThread(session, baseSections[index])) return;
     const parent = coordinators.get(parentKey(session) ?? '');
     if (parent === undefined || parent === index) return;
     children.set(parent, [...(children.get(parent) ?? []), index]);

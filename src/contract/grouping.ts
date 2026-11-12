@@ -303,7 +303,7 @@ export function groupCollapseKey(projectKey: string, groupId: string): string {
  * User: parked sessions need their own section on mobile, with a Park action.
  * Keep the project-level Parked disclosure accessible independently of ordinary row clipping and named groups.
  */
-export type SessionKindSection = 'browser' | 'pinned' | 'sessions' | 'drafts' | 'parked';
+export type SessionKindSection = 'browser' | 'pinned' | 'sessions' | 'drafts' | 'parked' | 'working' | 'snoozed';
 
 export const SESSION_KIND_LABELS: Readonly<Record<SessionKindSection, string>> = {
   browser: SessionCopy.browserKindLabel,
@@ -311,13 +311,87 @@ export const SESSION_KIND_LABELS: Readonly<Record<SessionKindSection, string>> =
   sessions: SessionCopy.sessionsKindLabel,
   drafts: SessionCopy.draftsKindLabel,
   parked: SessionCopy.parkedKindLabel,
+  working: SessionCopy.workingKindLabel,
+  snoozed: SessionCopy.snoozedKindLabel,
 };
 
-export function sessionKindSection(session: GhostexSession, nowMs: number = Date.now()): SessionKindSection {
+/** What decides a row's section beyond the row itself: the synced switches, and the rows held out of Working. */
+export type SectionRules = {
+  /** Enable session parking (`enableSessionParking`): off, a parked row sits where it would unparked. */
+  parking: boolean;
+  /** Group working sessions (`groupWorkingSessions`). */
+  groupWorking: boolean;
+  /** Sessions Group working sessions leaves where they are (gx-core `held_out_of_working`), by session id. */
+  held?: ReadonlySet<string>;
+};
+
+const DEFAULT_SECTION_RULES: SectionRules = { parking: true, groupWorking: false };
+
+/** Sections listed apart from a project's ordinary rows and never inside a session group. */
+const SECTIONS_APART: readonly SessionKindSection[] = ['drafts', 'parked', 'snoozed'];
+
+/** Sections folded until opened (their open state is kept with Parked's in collapseStore). */
+const FOLDED_FIRST: readonly SessionKindSection[] = ['working', 'parked', 'snoozed'];
+
+/** gx-core `session_is_snoozed`: a wake time still ahead; a past one never hides a session. */
+export function isSnoozedSession(session: GhostexSession, nowMs: number = Date.now()): boolean {
+  const wake = Date.parse(session.snoozedUntil ?? '');
+  return Number.isFinite(wake) && wake > nowMs;
+}
+
+/**
+ * gx-core `is_grouped_working`: the agent works and nothing on the row waits for the user (a question, an approval,
+ * a failed model change or program).
+ */
+function isGroupedWorking(session: GhostexSession): boolean {
+  return (
+    session.activity === 'working' &&
+    session.awaitingAnswer !== true &&
+    session.awaitingApproval !== true &&
+    session.modelSelectionFailed !== true &&
+    session.programStatusFailed !== true
+  );
+}
+
+/**
+ * gx-core `section_of` (sidebar_view/ordering.rs): Browser, Snoozed, Parked (while parking is on), Drafts, Pinned,
+ * Working (while Group working sessions is on), else Sessions.
+ */
+export function sessionKindSection(
+  session: GhostexSession,
+  nowMs: number = Date.now(),
+  rules: SectionRules = DEFAULT_SECTION_RULES,
+): SessionKindSection {
   if (session.kind === 'browser' || session.surface === 'browser') return 'browser';
-  if (session.isParked) return 'parked';
+  if (isSnoozedSession(session, nowMs)) return 'snoozed';
+  if (rules.parking && session.isParked) return 'parked';
   if (isSidebarDraftSectionSession(session, nowMs)) return 'drafts';
-  return session.isPinned ? 'pinned' : 'sessions';
+  if (session.isPinned) return 'pinned';
+  if (rules.groupWorking && rules.held?.has(session.sessionId) !== true && isGroupedWorking(session)) return 'working';
+  return 'sessions';
+}
+
+/**
+ * gx-core `held_out_of_working`: the open session and every coordinator above it stay in their own section while
+ * their agents work, so opening a thread never hides it inside its working coordinator's block.
+ */
+export function heldOutOfWorking(
+  sessions: readonly GhostexSession[],
+  isActive: (session: GhostexSession) => boolean,
+): Set<string> {
+  const held = new Set<string>();
+  let current = sessions.find(isActive);
+  for (let step = 0; current !== undefined && step < sessions.length; step += 1) {
+    if (held.has(current.sessionId)) break;
+    held.add(current.sessionId);
+    const parent: GhostexSession = current;
+    current = sessions.find(
+      (candidate) =>
+        candidate.sessionId === parent.coordinatorSessionId &&
+        (parent.coordinatorProjectId === '' || candidate.projectId === parent.coordinatorProjectId),
+    );
+  }
+  return held;
 }
 
 export function sessionKindCollapseKey(projectKey: string, section: SessionKindSection): string {
@@ -397,13 +471,17 @@ export function compareForSidebarOrder(
   right: GhostexSession,
   nowMs: number = Date.now(),
   pinnedOrder: 'manual' | 'recent' = 'manual',
+  /** Enable session parking: off, a parked row is ordered as an ordinary one. */
+  parking: boolean = true,
 ): number {
   const kindDelta = sessionKindRank(left) - sessionKindRank(right);
   if (kindDelta !== 0) return kindDelta;
-  const parkedDelta = Number(left.isParked === true) - Number(right.isParked === true);
+  const leftParked = parking && left.isParked === true;
+  const rightParked = parking && right.isParked === true;
+  const parkedDelta = Number(leftParked) - Number(rightParked);
   if (parkedDelta !== 0) return parkedDelta;
   // CDXC:Sessions 2026-09-12 SEE-ALSO: packages/shared/active-sessions-sort.ts owns the decision to sort Parked by activity time alone, newest first, on every client.
-  if (left.isParked && right.isParked) {
+  if (leftParked && rightParked) {
     return (
       parseTimestamp(right.lastInteractionAt) - parseTimestamp(left.lastInteractionAt) ||
       left.sessionId.localeCompare(right.sessionId)
@@ -877,7 +955,13 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     sessionsByProjectKey.set(
       key,
       stableSort(bucket, (left, right) =>
-        compareForSidebarOrder(left, right, nowMs, summary.pinnedSessionOrder ?? 'manual'),
+        compareForSidebarOrder(
+          left,
+          right,
+          nowMs,
+          summary.pinnedSessionOrder ?? 'manual',
+          summary.enableSessionParking !== false,
+        ),
       ),
     );
   }
@@ -915,16 +999,22 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
 
     const namedGroups = groupsForProject(summary, projectId);
     const groupedSessionIds = new Set(namedGroups.flatMap((group) => group.sessionIds));
+    // The synced Enable session parking and Group working sessions (settingsSync/sidebarOrganization.ts).
+    const rules: SectionRules = {
+      parking: summary.enableSessionParking !== false,
+      groupWorking: summary.groupWorkingSessions === true,
+      held: summary.groupWorkingSessions === true ? heldOutOfWorking(allProjectSessions, isActive) : undefined,
+    };
     const inNamedGroup = (session: GhostexSession): boolean => {
-      const section = sessionKindSection(session, nowMs);
-      return section !== 'drafts' && section !== 'parked' && groupedSessionIds.has(session.sessionId);
+      const section = sessionKindSection(session, nowMs, rules);
+      return !SECTIONS_APART.includes(section) && section !== 'working' && groupedSessionIds.has(session.sessionId);
     };
     /*
      * Coordinator trees (coordinatorTree.ts, gx-core nest_threads): each
      * thread follows its coordinator and takes its section. A named group's
      * members are nested inside that group below.
      */
-    const kindSection = (session: GhostexSession): SessionKindSection => sessionKindSection(session, nowMs);
+    const kindSection = (session: GhostexSession): SessionKindSection => sessionKindSection(session, nowMs, rules);
     const tree = nestCoordinatorThreads(
       allProjectSessions.filter((session) => !inNamedGroup(session)),
       summary.capabilities,
@@ -939,9 +1029,11 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       tree.sections.get(coordinatorRowKey(session)) ?? kindSection(session);
     const isFolded = (session: GhostexSession): boolean => nesting.get(coordinatorRowKey(session))?.folded === true;
     const parkedSessions = tree.sessions.filter((session) => sectionOf(session) === 'parked');
+    const snoozedSessions = tree.sessions.filter((session) => sectionOf(session) === 'snoozed');
     const draftSessions = tree.sessions.filter((session) => sectionOf(session) === 'drafts');
+    const workingSessions = tree.sessions.filter((session) => sectionOf(session) === 'working');
     const projectSessions = [
-      ...tree.sessions.filter((session) => !['drafts', 'parked'].includes(sectionOf(session))),
+      ...tree.sessions.filter((session) => ![...SECTIONS_APART, 'working'].includes(sectionOf(session))),
       ...allProjectSessions.filter(inNamedGroup),
     ];
     /*
@@ -1061,11 +1153,12 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
         if (section === 'sessions') emitDraftSection();
         const kindCollapseKey = sessionKindCollapseKey(projectKey, section);
         const unlabelled = section === 'sessions' && loneSessionsSection;
+        // Drafts, Working, Parked and Snoozed start folded (gx-core sidebar_view/inputs.rs).
         const kindCollapsed = unlabelled
           ? false
           : section === 'drafts'
             ? !expandedDraftSessionKeys.has(kindCollapseKey)
-            : section === 'parked'
+            : FOLDED_FIRST.includes(section)
               ? !expandedParkedSessionKeys.has(kindCollapseKey)
               : collapsedSessionKindKeys.has(kindCollapseKey);
         if (!labelledSections.has(section) && !unlabelled) {
@@ -1091,11 +1184,13 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       }
     };
 
+    // Drafts, then Working, sit above the first Sessions row (gx-core sidebar_view/inputs.rs section order).
     let didEmitDraftSection = false;
     const emitDraftSection = (): void => {
       if (didEmitDraftSection) return;
       didEmitDraftSection = true;
       emitSessionsWithKindLabels(draftSessions, '');
+      emitSessionsWithKindLabels(workingSessions, '');
     };
 
     if (namedGroups.length === 0) {
@@ -1108,6 +1203,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       emitSessionsWithKindLabels(shownProjectSessions, legacyGroupId);
       emitDraftSection();
       emitSessionsWithKindLabels(parkedSessions, '');
+      emitSessionsWithKindLabels(snoozedSessions, '');
       return;
     }
 
@@ -1173,6 +1269,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
       }
     }
     emitSessionsWithKindLabels(parkedSessions, '');
+    emitSessionsWithKindLabels(snoozedSessions, '');
   };
 
   /*

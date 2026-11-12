@@ -905,7 +905,8 @@ export function useSessionsScreenMenus({
         chatMachineLink(ctx.machine).capabilities()?.includes('voiceAgent') === true &&
         voiceAgentOnFor(ctx.machine.id),
       sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
-      snooze: ctx.unified === true,
+      // Both lists offer Snooze, as both desktop sidebars do (the Project list's Snoozed section, contract/grouping.ts).
+      snooze: true,
       tagListItems: summaryFor(ctx.machine.id)?.sessionTagListItems,
       parking: summaryFor(ctx.machine.id)?.enableSessionParking !== false,
       actionsIcon:
