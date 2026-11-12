@@ -1,9 +1,11 @@
 /**
- * The terminal view's bottom bar while the keyboard is down (Android): the chat box's bottom row replayed under the
+ * The terminal view's bottom bar while the keyboard is down: the chat box's bottom row replayed under the
  * terminal, with no message field and no model picker, as the desktop's terminal bar is (`terminal_agent_action_bar.rs`):
  * the mode button (Shift+Tab, which cycles an agent TUI's permission mode), then More actions, Attach, Chat view, the
- * voice agent, Dictate and, in Send's place, the keyboard. A tap on the bar's empty room brings the keyboard back too;
- * with the keyboard up the screen shows its key bar instead (`TerminalKeyBar`).
+ * voice agent, Dictate and, in Send's place, the keyboard (on the iPhone also Panes, from its top bar). A tap on the
+ * bar's empty room brings the keyboard back too. With the keyboard up Android shows its key bar instead
+ * (`TerminalKeyBar`); the iPhone keeps the bar under the terminal, where the keyboard covers it, so the terminal keeps
+ * its size and only slides (`terminalKeyboardSlide.ts`).
  *
  * CDXC:Terminal 2026-11-12 DECISION:
  * User, of the phone's terminal view: show a bottom bar like the desktop's terminal bar, its buttons the chat box's
@@ -26,13 +28,13 @@ import { Glyph, ModeGlyph, type GlyphName } from '../../chat/native/composer/ico
 import { useDictation, type DictationChat } from '../../chat/native/composer/useDictation';
 import type { UserAction } from '../../chat/rust/actions';
 import type { MachineConnectionTarget } from '../../machines/credentials';
-import { colorWithOpacity } from '../../theme/palette';
+import { colorWithOpacity, GhostexPalette } from '../../theme/palette';
 import type { TerminalChrome } from '../../theme/terminalColours';
 import type { RootStackParamList } from '../../navigation/types';
 import { forgetRecording, requestEnded, wordsAsked } from '../../voice/dictation';
 import { chooseVoiceComputer } from '../../voice/dictateSettings';
 import { VoiceButton } from '../../voice/VoiceButton';
-import { KeyboardIcon } from './icons';
+import { KeyboardIcon, PanesIcon } from './icons';
 import { TRACK_TINT_ALPHA } from './tabStrip';
 
 /** The chat box's geometry (`NativeComposer.tsx`): its side margin, corner, inner padding and 32 pt controls. */
@@ -65,6 +67,18 @@ export type TerminalBottomBarProps = {
   onMore: () => void;
   onChatView: () => void;
   onUpload: () => void;
+  /**
+   * The iPhone's Panes button, which stood in its top bar: shown where the window has pane slots (`across`: side by
+   * side, else stacked; `selected` while two panes show).
+   */
+  panes?: { label: string; across: boolean; selected: boolean; onPress: () => void } | null;
+  /** The bar's height with its bottom inset, whenever it changes (the iPhone's terminal ends above it). */
+  onHeightChange?: (height: number) => void;
+  /**
+   * Kept in place but not drawn and not touched: the iPhone's keyboard is over it, and its glass would show the bar
+   * through it.
+   */
+  covered?: boolean;
 };
 
 /** A short problem no row shows (no microphone permission, nothing to transcribe again). */
@@ -88,6 +102,9 @@ export default function TerminalBottomBar({
   onMore,
   onChatView,
   onUpload,
+  panes = null,
+  onHeightChange,
+  covered = false,
 }: TerminalBottomBarProps) {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   // Dictate's Set up Hex: Settings › Voice on this terminal's computer, as the chat box's does.
@@ -146,7 +163,12 @@ export default function TerminalBottomBar({
     </Pressable>
   );
   return (
-    <View testID="terminal-bottom-bar" style={[styles.root, { paddingBottom: 8 + bottomInset }]}>
+    <View
+      testID="terminal-bottom-bar"
+      pointerEvents={covered ? 'none' : 'auto'}
+      style={[styles.root, { paddingBottom: 8 + bottomInset }, covered ? styles.covered : null]}
+      onLayout={onHeightChange === undefined ? undefined : (event) => onHeightChange(event.nativeEvent.layout.height)}
+    >
       {dictation.phase !== 'idle' ? (
         <View
           style={[
@@ -171,9 +193,10 @@ export default function TerminalBottomBar({
           />
         </View>
       ) : null}
-      {/* The bar's empty room is the keyboard's too; its buttons take their own taps. */}
+      {/* The bar's empty room is the keyboard's too; its buttons take their own taps. Not an accessibility element
+          itself, so VoiceOver and TalkBack reach each button (the keyboard button is the bar's Show the keyboard). */}
       <Pressable
-        accessibilityLabel="Show the keyboard"
+        accessible={false}
         onPress={onKeyboard}
         style={[
           styles.bar,
@@ -201,6 +224,22 @@ export default function TerminalBottomBar({
                 disabled: !uploadEnabled || uploading,
               })
             : null}
+          {panes !== null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={panes.label}
+              accessibilityState={{ selected: panes.selected }}
+              hitSlop={4}
+              onPress={panes.onPress}
+              style={({ pressed }) => [styles.control, pressed ? { backgroundColor: pressedWash } : null]}
+            >
+              <PanesIcon
+                across={panes.across}
+                size={GLYPH_SIZE}
+                color={panes.selected ? GhostexPalette.ACCENT : glyphColor}
+              />
+            </Pressable>
+          ) : null}
           {chatView ? control('message-circle', 'Chat View', onChatView) : null}
           <VoiceButton
             machine={machine}
@@ -281,6 +320,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 2,
   },
+  covered: { opacity: 0 },
   dim: { opacity: 0.45 },
   pressed: { opacity: 0.8 },
 });

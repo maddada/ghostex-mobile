@@ -629,6 +629,24 @@ export default function TerminalScreen({ navigation, route }: Props) {
   // has its own laptop layout, `chatFoldInset` below); with two panes always, which end above it whatever they show.
   const laptopFold = slidesWithKeyboard ? foldShown : null;
   const chatKeyboardUp = useKeyboardTop() !== null;
+  /*
+   * CDXC:Terminal 2026-11-12 DECISION:
+   * User: the terminal view's tab bar looks and behaves like the chat view's, and the terminal view has a bottom bar
+   * (`TerminalBottomBar`) while the keyboard is down, on Android and (follow-up, same day) on the iPhone. Where it has
+   * the bar (the top bar on top, one pane, not the iPhone Duo's laptop pose) its top bar's buttons are in that bar, so
+   * the top bar holds the tab strip alone there too, keyboard up or down (the strip keeps its width as the keyboard
+   * moves). Android swaps the bar for its key bar while the keyboard is up. The iPhone keeps the bar under the terminal
+   * and the keyboard covers it: the terminal still keeps its size and only slides (Q761 in terminalKeyboardSlide.ts),
+   * measured from the bar's top (`terminalBottomRoom`) instead of the home indicator's margin.
+   */
+  const terminalBarPlace =
+    headerPlacement.kind === 'top' && !chatModeActive && twoPanes === null && activeTab !== null && laptopFold === null;
+  const terminalBarShown = terminalBarPlace && !keyboardVisible && !tapKeyboardHint;
+  const [terminalBarHeight, setTerminalBarHeight] = useState(0);
+  // iOS: how far the terminal view ends above the window's bottom edge, the bar's height (it includes the home
+  // indicator's margin) while the bar stands under it, else that margin.
+  const terminalBottomRoom =
+    slidesWithKeyboard && terminalBarPlace && terminalBarHeight > 0 ? terminalBarHeight : insets.bottom;
   // A pane without a terminal (browser, files, Git changes, agents, attention list, usage, a session's chat view) tapped
   // last is the active one: the pad's keys, the text editor and Upload would reach no terminal there, so they are not
   // shown (the approved panes mockup).
@@ -664,7 +682,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const headerRoom = padArea === null ? 0 : Math.max(0, padArea.y - insets.top);
   // iOS: how much of the terminal's bottom the keyboard covers, with the text editor on it when `editorOpen`.
   const keyboardCover = (editorOpen: boolean): number =>
-    terminalObstruction(bottomInset, editorOpen ? editorHeight || TEXT_EDITOR_HEIGHT : 0, insets.bottom);
+    terminalObstruction(bottomInset, editorOpen ? editorHeight || TEXT_EDITOR_HEIGHT : 0, terminalBottomRoom);
   // How much of the pad room's bottom is covered while the keyboard is up, with the text editor when `editorOpen`:
   // in the laptop pose only the editor above the fold, as the keyboard lies below it.
   const padCoverWithKeyboard = (editorOpen: boolean): number =>
@@ -725,10 +743,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
     laptopFold !== null ? laptopLayerHeight(laptopFold, windowHeight, pad.layerMinHeight) : pad.layerMinHeight;
   // iOS: the covered part of the terminal's bottom, the keyboard with the editor on it or a layer in its place. In
   // the laptop pose, keyboard up or not: everything below the fold (and the editor above it).
-  const layerCover = layerShown ? (layerFrameHeight ?? layerHeight) - insets.bottom : 0;
+  const layerCover = layerShown ? Math.max(0, (layerFrameHeight ?? layerHeight) - terminalBottomRoom) : 0;
   // The terminal area's bottom edge in the window: the home indicator's inset above the window's bottom until measured.
   const terminalAreaBottom =
-    terminalArea === null ? windowHeight - insets.bottom : terminalArea.y + terminalArea.height;
+    terminalArea === null ? windowHeight - terminalBottomRoom : terminalArea.y + terminalArea.height;
   // In the laptop pose: how far the fold's top stands above the terminal area's bottom (0 in every other pose).
   const foldAboveAreaBottom = laptopFold === null ? 0 : Math.max(0, terminalAreaBottom - laptopFold.top);
   // The chat view in the laptop pose: with the keyboard down the transcript and the composer end above the fold, as
@@ -848,7 +866,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   // The round buttons with the pad switched off stand above what covers the terminal (in the laptop pose: the fold).
   const floatingLift =
-    laptopFold !== null ? obstruction : slidesWithKeyboard ? Math.max(0, bottomInset - insets.bottom) : 0;
+    laptopFold !== null ? obstruction : slidesWithKeyboard ? Math.max(0, bottomInset - terminalBottomRoom) : 0;
   // The round buttons' bottom edge in the terminal area: above the closed pad's toggle at the right edge, else in the
   // corner above what covers the area; in the laptop pose at least a finger's width above the fold's top
   // (`laptopFloatingBottom`). On iOS, where the area does not shrink with the keyboard, the height left for them above
@@ -1380,16 +1398,32 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * it has no chat box, and so do the iPhone Duo's status band and side bar and two panes, which serve both.
    */
   const chatTabsOnly = headerPlacement.kind === 'top' && chatModeActive && twoPanes === null;
-  /*
-   * CDXC:Terminal 2026-11-12 DECISION:
-   * User: the terminal view's tab bar looks and behaves like the chat view's. Where the terminal view has its bottom
-   * bar (`TerminalBottomBar`: Android, the top bar on top, one pane), its top bar's buttons are in that bar, so the top
-   * bar holds the tab strip alone there too, keyboard up or down (the strip keeps its width as the keyboard moves).
-   */
-  const terminalBarPlace =
-    !slidesWithKeyboard && headerPlacement.kind === 'top' && !chatModeActive && twoPanes === null && activeTab !== null;
-  const terminalBarShown = terminalBarPlace && !keyboardVisible && !tapKeyboardHint;
   const tabsOnlyHeader = chatTabsOnly || terminalBarPlace;
+  // The terminal view's bottom bar (`terminalBarPlace` above), with the top bar's buttons; the iPhone's also Panes.
+  const terminalBar = (sessionKey: string) => (
+    <TerminalBottomBar
+      sessionKey={sessionKey}
+      chrome={terminalSurface}
+      machine={activeMachine}
+      bottomInset={insets.bottom}
+      agent={activeAgentId !== 'terminal'}
+      chatView={chatCapable}
+      upload={settings.fileUploadButtonVisible}
+      uploadEnabled={uploadEnabled}
+      uploading={uploading}
+      onKeyboard={showKeyboard}
+      onMore={() => openMenu()}
+      onChatView={toggleChatView}
+      onUpload={promptAttachmentSource}
+      panes={
+        panesAvailable
+          ? { label: panesLabel, across: !panesUpright, selected: showsTwoPanes, onPress: pressPanes }
+          : null
+      }
+      onHeightChange={slidesWithKeyboard ? setTerminalBarHeight : undefined}
+      covered={!terminalBarShown}
+    />
+  );
   const docsEnabled = activeProject !== null && (activeProject.path ?? '').length > 0;
   const activeChatHostActions = useMemo(() => {
     const base =
@@ -1832,26 +1866,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
         toolbar while it is up, otherwise the bottom margin.
       */}
       <View ref={bottomEdgeFrameRef} collapsable={false} onLayout={reconcileBottomEdgeWithVisibleWindow}>
-        {slidesWithKeyboard ? (
+        {slidesWithKeyboard && terminalBarPlace && activeTab !== null ? (
+          // The iPhone's bar stays under the terminal while the keyboard is up, covered by it (the terminal slides).
+          terminalBar(activeTab.sessionKey)
+        ) : slidesWithKeyboard ? (
           // The terminal view ends above the home-indicator inset, with or without the keyboard; the text editor
           // rides over the keyboard (the dock below) and a pad layer stands in the keyboard's place, not in this flow.
           <View style={{ height: insets.bottom }} />
         ) : terminalBarShown && activeTab !== null ? (
-          <TerminalBottomBar
-            sessionKey={activeTab.sessionKey}
-            chrome={terminalSurface}
-            machine={activeMachine}
-            bottomInset={insets.bottom}
-            agent={activeAgentId !== 'terminal'}
-            chatView={chatCapable}
-            upload={settings.fileUploadButtonVisible}
-            uploadEnabled={uploadEnabled}
-            uploading={uploading}
-            onKeyboard={showKeyboard}
-            onMore={() => openMenu()}
-            onChatView={toggleChatView}
-            onUpload={promptAttachmentSource}
-          />
+          terminalBar(activeTab.sessionKey)
         ) : keyBarVisible && activeTab !== null && !chatModeActive ? (
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
