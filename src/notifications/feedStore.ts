@@ -577,6 +577,35 @@ export async function updateAttentionFeed(machineId: string, update: FeedUpdate)
 }
 
 /**
+ * A security row's Remove: takes the phone it names off the row's computer (`/api/removePairedDevice`), which ends
+ * its Easy Connect and its token there, then reads that computer's feed again. The button goes at once; when the
+ * computer did not take it, the read brings it back. False then.
+ */
+export async function removeFeedRowDevice(machineId: string, notificationId: string, deviceId: string): Promise<boolean> {
+  const machine = machineById(machineId);
+  if (machine === undefined) return false;
+  editFeed(machineId, (rows) =>
+    rows.map((row) => {
+      if (row.id !== notificationId) return row;
+      const { removeDevice: _removed, ...rest } = row;
+      return rest;
+    }),
+  );
+  try {
+    const rpc = await feedRpc(machine);
+    const answer = await rpc('removePairedDevice', { deviceId });
+    if (answer.error !== null && answer.error !== undefined) throw new Error(answer.error.message);
+    logAppEvent(`${machineDisplayLabel(machine)}: removed a phone from its notification`);
+    applySnapshot(machineId, await readFeed(rpc));
+    return true;
+  } catch (error) {
+    logAppEvent(`${machineDisplayLabel(machine)}: removing a phone from its notification failed (${failureCategory(error)})`);
+    void source.refresh(machineId);
+    return false;
+  }
+}
+
+/**
  * One row's change from the Notifications list, as the desktop's panel sends it (`titlebar_notifications_panel.rs`):
  * the phone's copy of the feed changes at once, so the tap feels instant, then the computer's answer replaces it. When
  * the computer did not take it, its feed is read again so the row comes back as it is there; false then.

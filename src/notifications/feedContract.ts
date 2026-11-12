@@ -76,6 +76,12 @@ export type FeedRow = {
   /** Present on account rows only. */
   accountId?: string;
   /**
+   * On the security row for a phone the computer added for Easy Connect without a click, while that phone is still
+   * paired there: the device its Remove takes off (CDXC:RemotePairing 2026-11-12 in
+   * `server/src/notification_feed/security_actions.rs`). A computer that predates it never sends it.
+   */
+  removeDevice?: { id: string; name: string };
+  /**
    * The session's newest row while its approval is open: the computer sends it unread whatever its read state, and
    * Mark as Read, Clear and Clear all leave it, until the approval is answered (CDXC:Notifications 2026-11-02 in
    * `server/src/notification_feed/store.rs`).
@@ -106,6 +112,11 @@ export function parseFeedRow(value: unknown): FeedRow | null {
   if (!id || projectId === undefined || !sessionId || !createdAt || Number.isNaN(Date.parse(createdAt))) return null;
   if (kind === undefined) return null;
   const accountId = text(raw, 'accountId');
+  const removeRaw = raw.removeDevice;
+  const removeDevice =
+    typeof removeRaw === 'object' && removeRaw !== null && !Array.isArray(removeRaw)
+      ? { id: text(removeRaw as Record<string, unknown>, 'id') ?? '', name: text(removeRaw as Record<string, unknown>, 'name') ?? '' }
+      : null;
   return {
     id,
     projectId,
@@ -119,6 +130,7 @@ export function parseFeedRow(value: unknown): FeedRow | null {
     read: raw.read === true,
     ...(accountId !== undefined && accountId.length > 0 ? { accountId } : {}),
     ...(raw.awaitingApproval === true ? { awaitingApproval: true } : {}),
+    ...(removeDevice !== null && removeDevice.id.length > 0 ? { removeDevice } : {}),
   };
 }
 

@@ -77,6 +77,7 @@ import {
 import {
   changeEveryFeed,
   changeFeedRow,
+  removeFeedRowDevice,
   refreshAttentionFeeds,
   restoreEndedSession,
   useAttentionFeedStore,
@@ -313,6 +314,7 @@ const Row = memo(function Row({
   onOpen,
   onCheck,
   onMenu,
+  onRemove,
 }: {
   row: PanelRow;
   now: number;
@@ -322,6 +324,7 @@ const Row = memo(function Row({
   onOpen: (row: PanelRow) => void;
   onCheck: (row: PanelRow) => void;
   onMenu: (row: PanelRow, frame: MenuAnchor) => void;
+  onRemove: (row: PanelRow) => void;
 }) {
   const ref = useRef<ViewInstance | null>(null);
   const unread = !row.read;
@@ -354,6 +357,23 @@ const Row = memo(function Row({
         appearance={appearance}
         trailing={
       <View style={styles.cardButtons}>
+        {row.removeDevice !== undefined ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={NotificationsCopy.feed.removeDeviceLabel(row.removeDevice.name)}
+            testID={`attention-row-remove-${row.id}`}
+            hitSlop={6}
+            onPress={() => onRemove(row)}
+            style={({ pressed }) => [
+              styles.cardTextButton,
+              { backgroundColor: colorWithOpacity(appearance.foreground, pressed ? 20 : 10) },
+            ]}
+          >
+            <Text style={[styles.cardTextButtonLabel, { color: colorWithOpacity(appearance.foreground, 92) }]}>
+              {NotificationsCopy.feed.removeDevice}
+            </Text>
+          </Pressable>
+        ) : null}
         <CardButton
           label={NotificationsCopy.feed.rowMenu}
           testID={`attention-row-menu-${row.id}`}
@@ -638,6 +658,13 @@ export default function AttentionList({
   /** The card's check: an unread card is marked read, a read card is cleared from the list. */
   const check = useCallback((row: PanelRow) => change(row, row.read ? 'dismiss' : 'markRead'), [change]);
 
+  const remove = useCallback(
+    (row: PanelRow) => {
+      if (row.removeDevice !== undefined) report(removeFeedRowDevice(row.machineId, row.id, row.removeDevice.id));
+    },
+    [report],
+  );
+
   const showMenu = useCallback((row: PanelRow, frame: MenuAnchor) => setMenu({ row, frame }), []);
 
   const pull = useCallback(() => {
@@ -694,9 +721,10 @@ export default function AttentionList({
         onOpen={open}
         onCheck={check}
         onMenu={showMenu}
+        onRemove={remove}
       />
     ),
-    [now, appearance, inks, heldKey, open, check, showMenu],
+    [now, appearance, inks, heldKey, open, check, showMenu, remove],
   );
   const renderSectionHeader = useCallback(
     ({ section }: { section: SectionListData<PanelRow, Section> }) => (
@@ -909,6 +937,14 @@ const styles = StyleSheet.create({
   footer: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: '500' },
   // The check and the ⋯ end the footer's line, in the card's bottom-right corner where the desktop's check floats.
   cardButtons: { flexDirection: 'row', gap: CARD_BUTTON_GAP, marginVertical: -4 },
+  cardTextButton: {
+    height: CARD_BUTTON_SIZE,
+    paddingHorizontal: 10,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTextButtonLabel: { fontSize: 13, fontWeight: '600' },
   cardButton: {
     width: CARD_BUTTON_SIZE,
     height: CARD_BUTTON_SIZE,

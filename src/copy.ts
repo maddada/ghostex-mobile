@@ -1650,6 +1650,9 @@ export const NotificationsCopy = {
     checkRead: 'Mark as read',
     checkClear: 'Clear',
     rowMenu: 'More actions',
+    /** The Remove on the row for a phone added for Easy Connect without a click. */
+    removeDevice: 'Remove',
+    removeDeviceLabel: (name: string) => `Remove ${name} from this computer`,
     unreadBell: (count: number) => `Notifications, ${count} unread`,
   },
   /** The attention list's sections, in their order. */
