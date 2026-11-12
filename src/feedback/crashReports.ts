@@ -96,7 +96,8 @@ export function crashTimeLabel(at: number): string {
 }
 
 /** The saved computers' names, addresses and SSH usernames, which a report must never show. */
-function privateTerms(): string[] {
+/** What the phone knows that names its owner or computers: their names, hosts, user names and ids. */
+export function privateTerms(): string[] {
   return useMachinesStore
     .getState()
     .machines.flatMap((machine) => [

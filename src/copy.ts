@@ -468,6 +468,36 @@ export const ConnectionsCopy = {
   troubleshooting: 'Troubleshooting',
 } as const;
 
+/** Logs › Send to developer (src/components/common/SendLogsReview.tsx, src/feedback/logReport.ts). */
+export const SendLogsCopy = {
+  button: 'Send to developer',
+  title: 'Send these logs?',
+  lede: 'They go to the Ghostex developer as a bug report. Check what is in them first; nothing is sent until you press Send.',
+  public:
+    'The report becomes a GitHub issue in the public Ghostex repository (github.com/maddada/Ghostex), where anyone can read it.',
+  included: {
+    events: "This phone's connection and status events",
+    device: 'The app version and the phone system (such as iOS 27)',
+    routes: 'Routes and timings: relays, round trips, drops',
+  },
+  lines: (count: number) => `(${count} ${count === 1 ? 'line' : 'lines'})`,
+  replaced: 'IP addresses, user names, computer names, host names and keys',
+  replacedDetail: '(replaced with placeholders)',
+  never: 'Your sessions, chats, prompts and terminal text',
+  neverDetail: '(never included)',
+  notePlaceholder: 'What went wrong? (optional)',
+  usernamePlaceholder: 'Your GitHub username, to hear back (optional)',
+  badUsername: 'That is not a GitHub username.',
+  showText: 'See the exact text that will be sent',
+  hideText: 'Hide the exact text',
+  cancel: 'Cancel',
+  send: 'Send',
+  sent: (issue: number) => `Sent as issue #${issue}`,
+  sentDetail: 'Thanks. The developer reads every report.',
+  openIssue: 'Open issue',
+  done: 'Done',
+} as const;
+
 /** Failure summarization copy map, sessions-drawer.md §5. */
 export const FailureCopy = {
   hostKey:

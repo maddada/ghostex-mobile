@@ -1,20 +1,23 @@
 /**
- * Logs bottom sheet, opened by tapping the sessions-screen status line: the
+ * Logs bottom sheet, opened from the Sessions ☰ menu, the Connections sheet and Settings › Connection: the
  * in-app event log (appLog.ts) as selectable timestamped lines, newest last,
- * with a Copy button that puts the full plain-text log on the clipboard. Half folded like a laptop it starts
+ * with a Copy button that puts the full plain-text log on the clipboard, and Send to developer, which opens its
+ * review step (SendLogsReview.tsx) in the same sheet. Half folded like a laptop it starts
  * below the fold and the log scrolls inside.
  */
 
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useFoldSheetMaxHeight } from './foldAvoidance';
 import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
 import { formatAppLog, formatLogTime, useAppLogStore } from '../../app/appLog';
+import { SendLogsCopy } from '../../copy';
+import SendLogsReview from './SendLogsReview';
 import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 
 export type LogsSheetProps = {
@@ -29,6 +32,7 @@ export default function LogsSheet({ visible, onClose }: LogsSheetProps) {
   const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: false });
   const entries = useAppLogStore((state) => state.entries);
   const [copied, setCopied] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -48,46 +52,70 @@ export default function LogsSheet({ visible, onClose }: LogsSheetProps) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, foldMaxHeight !== undefined && { maxHeight: foldMaxHeight }]}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>Logs</Text>
-            <Pressable
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.copyButton, pressed && styles.copyButtonPressed]}
-              disabled={entries.length === 0}
-              onPress={copyLog}
-            >
-              <Text style={[styles.copyButtonLabel, entries.length === 0 ? styles.copyButtonDisabled : null]}>
-                {copied ? 'Copied' : 'Copy'}
-              </Text>
-            </Pressable>
-          </View>
-          <Text style={styles.subtitle}>Recent connection and status events on this phone.</Text>
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {entries.length === 0 ? (
-              <Text style={styles.emptyText}>No log entries yet.</Text>
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
+          <Pressable
+            style={[styles.sheet, foldMaxHeight !== undefined && { maxHeight: foldMaxHeight }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            {reviewing ? (
+              <SendLogsReview onCancel={() => setReviewing(false)} onDone={onClose} />
             ) : (
-              entries.map((entry, index) => (
-                <View key={`${entry.at}-${index}`} style={styles.row}>
-                  <Text style={styles.rowTime}>{formatLogTime(entry.at)}</Text>
-                  <Text selectable style={styles.rowMessage}>
-                    {entry.message}
-                  </Text>
+              <>
+                <View style={styles.headerRow}>
+                  <Text style={styles.title}>Logs</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.copyButton, pressed && styles.copyButtonPressed]}
+                    disabled={entries.length === 0}
+                    onPress={copyLog}
+                  >
+                    <Text style={[styles.copyButtonLabel, entries.length === 0 ? styles.copyButtonDisabled : null]}>
+                      {copied ? 'Copied' : 'Copy'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.copyButton, styles.sendButton, pressed && styles.copyButtonPressed]}
+                    disabled={entries.length === 0}
+                    onPress={() => setReviewing(true)}
+                  >
+                    <Text style={[styles.copyButtonLabel, entries.length === 0 ? styles.copyButtonDisabled : null]}>
+                      {SendLogsCopy.button}
+                    </Text>
+                  </Pressable>
                 </View>
-              ))
+                <Text style={styles.subtitle}>Recent connection and status events on this phone.</Text>
+                <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+                  {entries.length === 0 ? (
+                    <Text style={styles.emptyText}>No log entries yet.</Text>
+                  ) : (
+                    entries.map((entry, index) => (
+                      <View key={`${entry.at}-${index}`} style={styles.row}>
+                        <Text style={styles.rowTime}>{formatLogTime(entry.at)}</Text>
+                        <Text selectable style={styles.rowMessage}>
+                          {entry.message}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              </>
             )}
-          </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const createStyles = (appearance: Appearance) => StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
+  sendButton: {
+    marginLeft: 8,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
