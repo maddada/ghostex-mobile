@@ -198,13 +198,15 @@ function KeptTail({ item, tail }: { item: TranscriptItem; tail: NonNullable<Quie
 
 /**
  * The quiet line itself: an icon (the messages icon on a line reports came in on, else the clock)
- * and the green check, its counts, then its time (desktop `quiet_view_line`). While the turn runs
- * the turning loader stands alone in their place.
+ * alone, its counts, then its time (desktop `quiet_view_line`). While the turn runs the turning
+ * loader stands alone in its place.
  *
  * CDXC:SessionChat 2026-11-12 DECISION:
  * User, of "Working · 1 message sent · 3 tool calls so far" on the phone: "Show just the spinner
- * not spinner + icon." A running line shows the loader only; a finished one keeps its icon and
- * check. The desktop still draws the clock beside its loader.
+ * not spinner + icon." A running line shows the loader only. Then, of finished lines ("1 item
+ * updated", "You answered …", "Worked for 19s …"): "remove check mark from all these no need": a
+ * finished line shows its own icon alone. Quiet View lines never fail, so no mark is lost. The
+ * desktop does the same (`quiet_view.rs`).
  */
 function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolean; onPress(): void }) {
   const time = line.time ?? '';
@@ -216,10 +218,7 @@ function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolea
         line.running === true ? (
           <QuietStatusMark mark="running" />
         ) : (
-          <>
-            <Glyph name={time.length > 0 ? 'messages' : 'clock'} size={13} color={tone} />
-            <QuietStatusMark mark="done" />
-          </>
+          <Glyph name={time.length > 0 ? 'messages' : 'clock'} size={13} color={tone} />
         )
       }
       segments={segments}
@@ -239,12 +238,7 @@ function AnswersLine({ card, children }: { card: QuietAnswers; children: ReactNo
   return (
     <View style={[styles.column, { gap: 4 }]}>
       <QuietLine
-        icons={(tone) => (
-          <>
-            <Glyph name="message-question" size={13} color={tone} />
-            <QuietStatusMark mark="done" />
-          </>
-        )}
+        icons={(tone) => <Glyph name="message-question" size={13} color={tone} />}
         segments={segments}
         open={open}
         expandable
