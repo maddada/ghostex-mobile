@@ -34,6 +34,7 @@ import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { GitBranchGlyph } from '../../../components/sessions/icons';
 import { Sheet } from '../composer/Sheet';
+import { FoldChevron } from '../transcript/foldChevron';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme, type TranscriptTheme } from '../transcript/theme';
 import { TaskRow } from './AgentPanels';
 import { Glyph, type GlyphName } from './icons';
@@ -266,13 +267,14 @@ function SectionCard({
           style={styles.cardTitle}
           onPress={() => send(chat, { type: 'sessionDetailsSection', section: id })}
         >
-          <Glyph name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} color={P.cardMuted} />
+          <FoldChevron open={!collapsed} size={13} color={P.cardMuted} />
           <Text style={styles.title} numberOfLines={1}>
             {str(section, 'title')}
           </Text>
         </Pressable>
         {trailing}
       </View>
+      {id === 'context' ? <ContextSummary section={fields} details={details} /> : null}
       {collapsed ? null : (
         <SectionBody
           id={id}
@@ -309,14 +311,7 @@ function SectionBody({
   switch (id) {
     case 'context':
       return (
-        <ContextBody
-          section={section}
-          details={details}
-          act={act}
-          meter={meter}
-          onCompact={onCompact}
-          onMoreDetails={onMoreDetails}
-        />
+        <ContextBody section={section} act={act} meter={meter} onCompact={onCompact} onMoreDetails={onMoreDetails} />
       );
     case 'tasks':
       return <TasksBody section={section} act={act} />;
@@ -413,31 +408,21 @@ function swatch(key: string, P: TranscriptTheme): string {
   }
 }
 
-function ContextBody({
-  section,
-  details,
-  act,
-  meter,
-  onCompact,
-  onMoreDetails,
-}: {
-  section: JsonRecord;
-  details: JsonRecord | null;
-  act: Act;
-  meter: JsonRecord | null;
-  onCompact: () => void;
-  onMoreDetails: (() => void) | undefined;
-}) {
+/**
+ * The Context card's usage line (percentage and tokens) and its overall usage bar, under the card's
+ * title whether the card is folded or not; the fold holds the breakdown.
+ *
+ * CDXC:SessionDetails 2026-11-12 DECISION:
+ * User: the Context card opens folded, and folded it still shows its usage bar under the title, so
+ * usage reads at a glance; unfolding shows the breakdown. The core folds Context by default
+ * (`gx-chat-core` `session_details/state.rs` `FOLDED_BY_DEFAULT`) and remembers the user's unfold.
+ */
+function ContextSummary({ section, details }: { section: JsonRecord; details: JsonRecord | null }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const percentLabel = str(section, 'percentLabel');
   const reading = percentLabel.length === 0 && isTrue(details, 'loading');
   const tokens = str(section, 'tokensLabel');
-  const messages = arr(section.messages);
-  const messagesOpen = isTrue(section, 'messagesOpen');
-  useEaseOnChange(messagesOpen);
-  const status = str(section, 'status');
-  const skeletonRows = num(section, 'skeletonRows') ?? 0;
   return (
     <View style={styles.rows}>
       <View style={styles.summary}>
@@ -461,6 +446,32 @@ function ContextBody({
           ) : null;
         })}
       </View>
+    </View>
+  );
+}
+
+function ContextBody({
+  section,
+  act,
+  meter,
+  onCompact,
+  onMoreDetails,
+}: {
+  section: JsonRecord;
+  act: Act;
+  meter: JsonRecord | null;
+  onCompact: () => void;
+  onMoreDetails: (() => void) | undefined;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const messages = arr(section.messages);
+  const messagesOpen = isTrue(section, 'messagesOpen');
+  useEaseOnChange(messagesOpen);
+  const status = str(section, 'status');
+  const skeletonRows = num(section, 'skeletonRows') ?? 0;
+  return (
+    <View style={styles.rows}>
       {skeletonRows > 0 ? <Skeleton rows={skeletonRows} /> : null}
       {arr(section.rows).map((row, index) => {
         const id = str(row, 'id');
