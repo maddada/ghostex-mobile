@@ -237,7 +237,19 @@ export type SessionItem = {
    * its branch, else its folder's name. Absent everywhere else.
    */
   worktree?: string;
+  /**
+   * In the one list of every computer, a row given back its own computer (drawerModel.ts `withOrigins`): the
+   * coordinatorRowKey of the list's copy, which the list's folds were read under. That copy's project can carry the
+   * entry's id (contract/mergedComputers.ts renames a merged copy's project), so the row's own `session` gives another
+   * key. Absent: `coordinatorRowKey(session)`. Read it through `sessionItemCoordinatorKey`.
+   */
+  listCoordinatorKey?: string;
 };
+
+/** The key a SESSION row's coordinator fold is saved and read under (`collapsedCoordinatorKeys`). */
+export function sessionItemCoordinatorKey(item: Pick<SessionItem, 'session' | 'listCoordinatorKey'>): string {
+  return item.listCoordinatorKey ?? coordinatorRowKey(item.session);
+}
 
 /**
  * In-project kind disclosure, mirroring the desktop

@@ -18,6 +18,7 @@ import {
   type DrawerItem,
   type ProjectHeaderItem,
 } from '../../contract/grouping';
+import { coordinatorRowKey } from '../../contract/coordinatorTree';
 import { creatingCopy, mergeComputers, type MergedComputers } from '../../contract/mergedComputers';
 import { matchesTagFilters } from '../../contract/sessionTagList';
 import { effectiveSessionTag } from '../../contract/sessionTags';
@@ -414,6 +415,8 @@ function withOrigins(items: DrawerItem[], merged: MergedComputers, listMachineId
       return {
         ...item,
         machineId: origin.machineId,
+        // The list's folds were read under the list's copy, whose project may be renamed to the entry's.
+        listCoordinatorKey: coordinatorRowKey(item.session),
         session: origin.session,
         capabilities: origin.capabilities,
         projectId: origin.session.projectId,

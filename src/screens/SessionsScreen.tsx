@@ -124,8 +124,7 @@ import {
   delayedSendCommand,
 } from '../commands/ghostexCli';
 import { stateWithCollectionTitle } from '../contract/collectionsState';
-import { countSessions, machineSessionCounts, tabStatusCounts } from '../contract/grouping';
-import { coordinatorRowKey } from '../contract/coordinatorTree';
+import { countSessions, machineSessionCounts, sessionItemCoordinatorKey, tabStatusCounts } from '../contract/grouping';
 import { EMPTY_SIDEBAR_SPACES, NO_SUMMARY_CAPABILITIES, type GhostexSession } from '../contract/mobileSummary';
 import {
   DuoChromeCopy,
@@ -1149,7 +1148,7 @@ export default function SessionsScreen({ navigation }: Props) {
     toggleCollection: (machineId, header) => collapse.toggleCollection(machineId, header.collectionId),
     toggleGroup: (machineId, item) => collapse.toggleGroup(machineId, item.groupCollapseKey),
     toggleSessionKind: (machineId, item) => collapse.toggleSessionKind(machineId, item.kindCollapseKey),
-    toggleCoordinator: (machineId, item) => collapse.toggleCoordinator(machineId, coordinatorRowKey(item.session)),
+    toggleCoordinator: (machineId, item) => collapse.toggleCoordinator(machineId, sessionItemCoordinatorKey(item)),
     toggleCoordinatorOlder: (machineId, coordinatorKey) => collapse.toggleCoordinatorOlder(machineId, coordinatorKey),
     openSession: (machineId, item) => withMachine(machineId, (target) => void attach(target, item.session)),
     sessionMenu: (machineId, item) =>
