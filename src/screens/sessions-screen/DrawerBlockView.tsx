@@ -140,8 +140,19 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
 
   const tileColumns = props.tileColumns ?? null;
 
+  /**
+   * Where a header's creating actions go: in the one list of every computer, the copy of the entry a session last
+   * started in (`actionTarget`, contract/mergedComputers.ts), as the desktop's header does; else the list's own.
+   */
+  const acting = <H extends ProjectHeaderItem | GroupHeaderItem>(header: H): [string, H] =>
+    header.actionTarget === undefined
+      ? [machineId, header]
+      : [header.actionTarget.machineId, { ...header, projectId: header.actionTarget.projectId }];
+
+  // A row of the one list of every computer acts on its own computer (contract/mergedComputers.ts).
   const sessionRow = (item: SessionItem, tag?: string): ReactElement => {
-    const key = sessionKey(machineId, item.session.sessionId);
+    const rowMachineId = item.machineId;
+    const key = sessionKey(rowMachineId, item.session.sessionId);
     return (
       <SessionRow
         key={item.key}
@@ -157,14 +168,14 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
         coordinatorBadge={item.coordinatorBadge}
         worktree={item.worktree}
         onToggleThreads={() => actions.toggleCoordinator(machineId, item)}
-        workActions={actions.workChipActions(machineId, item)}
+        workActions={actions.workChipActions(rowMachineId, item)}
         sessionLinksDisplay={linksDisplay}
         dimSleeping={dimSleeping}
         voiceCall={props.voiceCallSessionKey === key}
         openerTag={tag}
-        machineId={machineId}
-        onPress={() => actions.openSession(machineId, item)}
-        onMenu={(anchor) => actions.sessionMenu(machineId, item, anchor)}
+        machineId={rowMachineId}
+        onPress={() => actions.openSession(rowMachineId, item)}
+        onMenu={(anchor) => actions.sessionMenu(rowMachineId, item, anchor)}
       />
     );
   };
@@ -176,7 +187,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
           <ProjectEmptyRow
             key={child.key}
             text={child.text}
-            onPress={() => actions.createProjectTerminal(machineId, header)}
+            onPress={() => actions.createProjectTerminal(...acting(header))}
           />
         );
       case 'SESSION':
@@ -215,10 +226,10 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
         <SessionTile
           key={item.key}
           item={item}
-          sessionKey={sessionKey(machineId, item.session.sessionId)}
+          sessionKey={sessionKey(item.machineId, item.session.sessionId)}
           appearance={props.appearance}
-          onPress={() => actions.openSession(machineId, item)}
-          onMenu={(anchor) => actions.sessionMenu(machineId, item, anchor)}
+          onPress={() => actions.openSession(item.machineId, item)}
+          onMenu={(anchor) => actions.sessionMenu(item.machineId, item, anchor)}
         />
       ))}
     </WallTileRow>
@@ -300,8 +311,8 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
                 containsActive={header.containsActive}
                 status={header.status}
                 onPress={() => actions.toggleGroup(machineId, header)}
-                onMenu={() => actions.groupMenu(machineId, header)}
-                onCreateTerminal={() => actions.createGroupTerminal(machineId, header)}
+                onMenu={() => actions.groupMenu(...acting(header))}
+                onCreateTerminal={() => actions.createGroupTerminal(...acting(header))}
               />
               {!header.collapsed && rows.length > 0 ? <View style={styles.rows}>{rows}</View> : null}
               <View
@@ -345,12 +356,12 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
           awakeCount={header.awakeCount}
           primaryAgent={primaryAgent}
           onToggle={() => actions.toggleProject(machineId, header)}
-          onMenu={() => actions.projectMenu(machineId, header)}
+          onMenu={() => actions.projectMenu(...acting(header))}
           onLaunchPrimary={() => {
-            if (primaryAgent !== null) actions.launchPrimary(machineId, header, primaryAgent);
+            if (primaryAgent !== null) actions.launchPrimary(...acting(header), primaryAgent);
           }}
-          onCreateTerminal={() => actions.createProjectTerminal(machineId, header)}
-          onOpenAgentMenu={() => actions.agentMenu(machineId, header)}
+          onCreateTerminal={() => actions.createProjectTerminal(...acting(header))}
+          onOpenAgentMenu={() => actions.agentMenu(...acting(header))}
           home={header.isHome === true ? { onMenu: () => actions.homeMenu(machineId, header) } : undefined}
         />
         {/* Main Hub before Chief of Staff's first open: its row's place (ChiefRow.tsx). */}

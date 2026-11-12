@@ -64,6 +64,7 @@ import {
   hideProjectsWithoutSessions,
   hidesProjectsWithoutSessions,
   type DrawerBlock,
+  everyComputerList,
 } from '../components/sessions/drawerModel';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
@@ -438,7 +439,30 @@ export default function SessionsScreen({ navigation }: Props) {
       ? summary
       : filterSummaryForWorkspace(summary, selectedWorkspaceId);
   }, [selectedInventory?.summary, selectedWorkspaceId]);
-  const machineSpaces = selectedSummary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
+  /** Each other computer's shown workspace, for the one list of every computer. */
+  const workspaceIdOf = useCallback(
+    (machineId: string): string | null => {
+      const workspaces = inventoriesByMachineId[machineId]?.summary?.workspaces ?? null;
+      return workspaces === null ? null : resolveWorkspaceId(workspaces, selectedWorkspaceIdByMachine[machineId]);
+    },
+    [inventoriesByMachineId, selectedWorkspaceIdByMachine],
+  );
+  /*
+   * The one list of every computer while Separate by machine is off (components/sessions/drawerModel.ts): its Space
+   * row is every computer's Spaces added together, and its dots count every computer's sessions.
+   */
+  const everyComputer = useMemo(
+    () =>
+      machine === null
+        ? null
+        : everyComputerList(
+            { machines, inventoriesByMachineId, selectedWorkspaceId, workspaceIdOf, selectedSpaceId: '' },
+            machine,
+          ),
+    [machine, machines, inventoriesByMachineId, selectedWorkspaceId, workspaceIdOf],
+  );
+  const listSummary = everyComputer?.summary ?? selectedSummary;
+  const machineSpaces = listSummary?.sidebarSpaces ?? EMPTY_SIDEBAR_SPACES;
   /*
    * The tile shows whenever the computer has Spaces, and on its own once there is more than one
    * workspace (desktop `native_sidebar_shows_workspace_tile`).
@@ -498,7 +522,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const spaceCountsNowMs = useActiveProjectsClock(everySession, activeProjects);
   const spaceCounts = useMemo(() => {
     const counts = spaceSessionCounts(
-      selectedSummary,
+      listSummary,
       spaceItems.map((item) => item.spaceId),
     );
     if (!activeProjects) return counts;
@@ -515,7 +539,7 @@ export default function SessionsScreen({ navigation }: Props) {
       ...counts,
       [ACTIVE_SPACE_ID]: countSessions(sessions, selectedSummary?.capabilities ?? NO_SUMMARY_CAPABILITIES),
     };
-  }, [selectedSummary, spaceItems, activeProjects, inventoriesByMachineId, spaceCountsNowMs]);
+  }, [selectedSummary, listSummary, spaceItems, activeProjects, inventoriesByMachineId, spaceCountsNowMs]);
   /** The star's long-press menu: Remove Active projects, which turns the computer's switch off. */
   const [activeProjectsMenuOpen, setActiveProjectsMenuOpen] = useState(false);
 
@@ -535,6 +559,7 @@ export default function SessionsScreen({ navigation }: Props) {
         inventoriesByMachineId,
         selectedSpaceId,
         selectedWorkspaceId,
+        workspaceIdOf,
         collapse: {
           expandedProjectsByMachine: collapse.expandedProjectsByMachine,
           expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
@@ -552,6 +577,7 @@ export default function SessionsScreen({ navigation }: Props) {
       inventoriesByMachineId,
       selectedSpaceId,
       selectedWorkspaceId,
+      workspaceIdOf,
       collapse.expandedProjectsByMachine,
       collapse.expandedCollectionsByMachine,
       collapse.expandedGroupsByMachine,
@@ -1361,7 +1387,7 @@ export default function SessionsScreen({ navigation }: Props) {
         {inRail ? null : bellButton}
         {inRail ? null : moreButton}
       </View>
-      {machineTabsVisible(unified.on, machines.length) ? (
+      {machineTabsVisible(unified.on, machines.length, selectedSummary?.separateByMachine === true) ? (
         <MachineTabs
           items={machineTabs}
           selectedMachineId={machine === null ? null : machine.id}

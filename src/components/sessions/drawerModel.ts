@@ -5,10 +5,10 @@
  * cards (header + child rows in one bordered card), and collection panels
  * (tinted panel containing member project cards).
  *
- * The drawer shows ONE machine, the one its tab strip has selected (desktop
- * parity: packages/core-ui/sidebar-app/machine-tabs.tsx), filtered to the
- * workspace that machine's workspace tile has selected, then to the Space its
- * Space row has selected.
+ * With Separate by machine on, the drawer shows ONE machine, the one its tab strip has selected, filtered to the
+ * workspace that machine's workspace tile has selected, then to the Space its Space row has selected. Off (the
+ * default), and always for Active projects, it is one list of every connected computer (`everyComputerList`,
+ * contract/mergedComputers.ts), as the desktop's sidebar is.
  */
 
 import {
@@ -18,13 +18,14 @@ import {
   type DrawerItem,
   type ProjectHeaderItem,
 } from '../../contract/grouping';
+import { creatingCopy, mergeComputers, type MergedComputers } from '../../contract/mergedComputers';
 import { gbotsSection, type GbotsSectionModel } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
-import { ACTIVE_SPACE_ID, filterSummaryForActiveProjects, spaceRankOfProject } from '../../spaces/activeProjects';
-import { collectionIdByProjectId, filterSummaryForSpace, orderedSpaces } from '../../spaces/spaceFilter';
+import { ACTIVE_SPACE_ID } from '../../spaces/activeProjects';
+import { filterSummaryForSpace } from '../../spaces/spaceFilter';
 import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 
 export type ProjectCardBlock = {
@@ -69,6 +70,8 @@ export type DrawerListInput = {
   selectedSpaceId: string;
   /** Resolved workspace id for the selected machine; null when it has no workspaces. */
   selectedWorkspaceId: string | null;
+  /** Each other computer's resolved workspace id, for the one list of every computer (null: none). */
+  workspaceIdOf?: (machineId: string) => string | null;
   collapse: DrawerCollapseInput;
 };
 
@@ -154,8 +157,6 @@ function machineBlocks(
   collapse: DrawerCollapseInput,
   nowMs: number,
   selectedSessionKey: string | null,
-  /** Active projects (../../spaces/activeProjects.ts): the list to draw instead of the Space's, and no empty card. */
-  active?: { summaryOf: (summary: GhostexMobileSummary) => GhostexMobileSummary },
 ): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
   if (inventory === undefined || (inventory.summary === null && !inventory.hasLoaded)) {
@@ -192,12 +193,11 @@ function machineBlocks(
         ? selectedSessionKey.slice(machine.id.length + 1)
         : null,
       expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[machine.id] ?? []),
-      summary: (
-        active?.summaryOf ?? ((summary: GhostexMobileSummary) => filterSummaryForSpace(summary, selectedSpaceId))
-      )(
+      summary: filterSummaryForSpace(
         selectedWorkspaceId === null
           ? inventory.summary
           : filterSummaryForWorkspace(inventory.summary, selectedWorkspaceId),
+        selectedSpaceId,
       ),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
@@ -209,7 +209,6 @@ function machineBlocks(
     }),
   );
   if (items.length === 0) {
-    if (active !== undefined) return [];
     return [
       rowBlock(
         machine.id,
@@ -274,9 +273,8 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     ];
   }
   const machine = machines.find((entry) => entry.id === selectedMachineId) ?? machines[0];
-  if (selectedSpaceId === ACTIVE_SPACE_ID) {
-    return activeProjectsBlocks(input, machine);
-  }
+  const merged = everyComputerList(input, machine);
+  if (merged !== null) return mergedBlocks(input, machine, merged);
   return machineBlocks(
     machine,
     inventoriesByMachineId[machine.id],
@@ -334,73 +332,116 @@ export function hideProjectsWithoutSessions(
 }
 
 /**
- * Active projects (../../spaces/activeProjects.ts): one flat list of every connected computer's active projects, as
- * the desktop's one-list sidebar draws them. Each computer's cards come in its own Space order; the computers'
- * cards then interleave by the selected computer's Space names (Spaces sync between computers), this computer's
- * first within a Space. A computer that is away or has nothing active adds nothing.
+ * Whether the Project list is one list of every connected computer (contract/mergedComputers.ts), and that list's
+ * summary before any Space: while Separate by machine is off and another computer is connected, and always for
+ * Active projects, which lists every computer's active projects (gx-core active_projects.rs
+ * `project_list_merges_machines`). Each computer is read in its own shown workspace. `null`: the selected computer's
+ * list alone.
  */
-function activeProjectsBlocks(input: DrawerListInput, selected: MachineRecord): DrawerBlock[] {
-  const nowMs = input.nowMs ?? Date.now();
-  const selectedSummary = input.inventoriesByMachineId[selected.id]?.summary ?? null;
-  const spaceNames =
-    selectedSummary === null ? undefined : orderedSpaces(selectedSummary.sidebarSpaces).map((space) => space.name);
-  const ordered = [selected, ...input.machines.filter((entry) => entry.id !== selected.id)];
-  const ranked: Array<{ block: DrawerBlock; rank: number; machineIndex: number; index: number }> = [];
-  for (const [machineIndex, machine] of ordered.entries()) {
+export function everyComputerList(
+  input: Pick<DrawerListInput, 'machines' | 'inventoriesByMachineId' | 'selectedWorkspaceId' | 'workspaceIdOf' | 'selectedSpaceId'>,
+  selected: MachineRecord,
+): MergedComputers | null {
+  const own = input.inventoriesByMachineId[selected.id]?.summary ?? null;
+  if (own === null) return null;
+  const others = input.machines.filter((machine) => {
+    if (machine.id === selected.id) return false;
     const inventory = input.inventoriesByMachineId[machine.id];
-    if (inventory?.summary == null) continue;
-    const focusedSessionId = input.selectedSessionKey?.startsWith(`${machine.id}:`)
-      ? input.selectedSessionKey.slice(machine.id.length + 1)
-      : null;
-    const ranks = new Map<string, number>();
-    const summaryOf = (summary: GhostexMobileSummary): GhostexMobileSummary => {
-      const collections = collectionIdByProjectId(summary);
-      const scoped = filterSummaryForActiveProjects(
-        summary,
-        { nowMs, focusedSessionId },
-        (projectId) => collections.get(projectId),
-        spaceNames,
-      );
-      for (const project of scoped.projects) {
-        const parent = project.worktreeParentProjectId;
-        ranks.set(
-          project.projectId,
-          spaceRankOfProject(
-            scoped,
-            project.projectId,
-            collections.get(project.projectId),
-            parent.length > 0 ? parent : undefined,
-            spaceNames,
-          ),
-        );
-      }
-      return scoped;
-    };
-    const blocks = machineBlocks(
-      machine,
-      inventory,
-      ACTIVE_SPACE_ID,
-      machine.id === selected.id ? input.selectedWorkspaceId : null,
-      input.collapse,
-      nowMs,
-      input.selectedSessionKey ?? null,
-      { summaryOf },
-    );
-    let rank = 0;
-    for (const [index, block] of blocks.entries()) {
-      if (block.kind === 'project') rank = ranks.get(block.card.header.projectId) ?? rank;
-      ranked.push({ block, rank, machineIndex, index });
+    // A computer that is not connected gives no rows until it answers again, as on the desktop.
+    return inventory?.summary != null && inventory.lastError === null;
+  });
+  const active = input.selectedSpaceId === ACTIVE_SPACE_ID;
+  if (!active && (own.separateByMachine === true || others.length === 0)) return null;
+  const inWorkspace = (summary: GhostexMobileSummary, workspaceId: string | null) =>
+    workspaceId === null ? summary : filterSummaryForWorkspace(summary, workspaceId);
+  return mergeComputers([
+    { machineId: selected.id, summary: inWorkspace(own, input.selectedWorkspaceId) },
+    ...others.map((machine) => ({
+      machineId: machine.id,
+      summary: inWorkspace(input.inventoriesByMachineId[machine.id]!.summary!, input.workspaceIdOf?.(machine.id) ?? null),
+    })),
+  ]);
+}
+
+/** Each drawn row of the one list given back its own computer, and each entry's header its creating copy. */
+function withOrigins(items: DrawerItem[], merged: MergedComputers, listMachineId: string, summaryOf: (machineId: string) => GhostexMobileSummary | null): DrawerItem[] {
+  return items.map((item): DrawerItem => {
+    if (item.type === 'SESSION') {
+      const origin = merged.origins.get(item.session);
+      if (origin === undefined || origin.machineId === listMachineId) return item;
+      return {
+        ...item,
+        machineId: origin.machineId,
+        session: origin.session,
+        capabilities: origin.capabilities,
+        projectId: origin.session.projectId,
+      };
     }
+    if (item.type === 'PROJECT_HEADER') {
+      const copy = creatingCopy(merged, item.projectId);
+      if (copy === null || (copy.machineId === listMachineId && copy.projectId === item.projectId)) return item;
+      const theirs = summaryOf(copy.machineId);
+      return {
+        ...item,
+        actionTarget: copy,
+        agents: theirs?.agents ?? item.agents,
+        quickActions: theirs?.quickActionsByProject[copy.projectId] ?? [],
+      };
+    }
+    if (item.type === 'GROUP_HEADER') {
+      const copy = merged.copies.get(item.projectId)?.[0];
+      if (copy === undefined || (copy.machineId === listMachineId && copy.projectId === item.projectId)) return item;
+      return { ...item, actionTarget: copy };
+    }
+    return item;
+  });
+}
+
+/** The one list of every computer, drawn with the selected computer's folds. */
+function mergedBlocks(input: DrawerListInput, selected: MachineRecord, merged: MergedComputers): DrawerBlock[] {
+  const nowMs = input.nowMs ?? Date.now();
+  const { collapse } = input;
+  const focused = input.selectedSessionKey ?? null;
+  const focusedSessionId = (() => {
+    if (focused === null) return null;
+    for (const [, origin] of merged.origins) {
+      if (focused === `${origin.machineId}:${origin.session.sessionId}`) return origin.session.sessionId;
+    }
+    return null;
+  })();
+  const summary = filterSummaryForSpace(merged.summary, input.selectedSpaceId, { nowMs, focusedSessionId });
+  const items = withoutSectionLabels(
+    buildDrawerItems({
+      machineId: selected.id,
+      nowMs,
+      activeSessionId: focusedSessionId,
+      expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[selected.id] ?? []),
+      summary,
+      expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[selected.id] ?? []),
+      expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[selected.id] ?? []),
+      expandedGroupKeys: new Set(collapse.expandedGroupsByMachine[selected.id] ?? []),
+      collapsedSessionKindKeys: new Set(collapse.collapsedSessionKindsByMachine[selected.id] ?? []),
+      expandedParkedSessionKeys: new Set(collapse.expandedParkedSessionKeysByMachine?.[selected.id] ?? []),
+      collapsedCoordinatorKeys: new Set(collapse.collapsedCoordinatorsByMachine?.[selected.id] ?? []),
+      expandedCoordinatorOlderKeys: new Set(collapse.expandedCoordinatorOlderByMachine?.[selected.id] ?? []),
+    }),
+  );
+  if (items.length === 0) {
+    const copy = input.selectedSpaceId === ACTIVE_SPACE_ID ? StateCardCopy.activeProjectsEmpty : StateCardCopy.empty;
+    return [rowBlock(selected.id, stateCardItem('empty', copy.title, copy.body, 'actionHint' in copy ? copy.actionHint : ''))];
   }
-  if (ranked.length === 0) {
-    return [
-      rowBlock(
-        selected.id,
-        stateCardItem('empty', StateCardCopy.activeProjectsEmpty.title, StateCardCopy.activeProjectsEmpty.body, ''),
-      ),
-    ];
-  }
-  return ranked
-    .sort((left, right) => left.rank - right.rank || left.machineIndex - right.machineIndex || left.index - right.index)
-    .map((entry) => entry.block);
+  const restored = withOrigins(
+    items,
+    merged,
+    selected.id,
+    (machineId) => input.inventoriesByMachineId[machineId]?.summary ?? null,
+  );
+  return withGbotsSection(
+    blocksFromItems(selected.id, restored),
+    selected.id,
+    input.inventoriesByMachineId[selected.id]!.summary!,
+    collapse,
+    nowMs,
+    focused,
+  );
 }

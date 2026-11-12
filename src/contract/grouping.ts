@@ -112,12 +112,20 @@ export type CollectionHeaderItem = {
   containsActive: boolean;
 };
 
+/** Where a merged entry's header or group acts (contract/mergedComputers.ts): another computer's copy. */
+export type ActionTarget = { machineId: string; projectId: string };
+
 export type ProjectHeaderItem = {
   type: 'PROJECT_HEADER';
   key: string;
   machineId: string;
   projectKey: string;
   projectId: string;
+  /**
+   * In the one list of every computer: the copy its creating actions (New terminal, the agent button, the ⋯ menu)
+   * go to, when it is not the list's own computer and project id. Folding stays with `machineId`.
+   */
+  actionTarget?: ActionTarget;
   /** The home project: its header is Main Hub's row (components/sessions/ChiefRow.tsx). */
   isHome?: boolean;
   /** The computer's Chief, on the home project's header; `null` before its first open. */
@@ -186,6 +194,8 @@ export type GroupHeaderItem = {
   projectKey: string;
   projectId: string;
   groupId: string;
+  /** In the one list of every computer: the computer and project id the group's actions go to (see ProjectHeaderItem). */
+  actionTarget?: ActionTarget;
   /** Collapse key: `${projectKey}|${groupId}` (persisted per machine). */
   groupCollapseKey: string;
   title: string;
