@@ -554,6 +554,8 @@ function ToolDetail({
     const command = tool.glyph === 'terminal';
     // The first block's label row carries the copy button, which copies the whole call (the core's `copyText`).
     const copyText = str(detail, 'copyText');
+  // A cut output being read back whole (gx-chat-core `output_cut.rs`): its copy waits for the full text.
+  const copyPending = detail.loadingFullOutput === true;
     const parts = [];
     if (input.length > 0) {
       parts.push(
@@ -563,6 +565,7 @@ function ToolDetail({
           content={input}
           failed={false}
           copyText={copyText}
+          copyPending={copyPending}
         />,
       );
     }
@@ -574,6 +577,7 @@ function ToolDetail({
           content={output}
           failed={failed}
           copyText={parts.length === 0 ? copyText : ''}
+          copyPending={parts.length === 0 && copyPending}
         />,
       );
       if (capped) {

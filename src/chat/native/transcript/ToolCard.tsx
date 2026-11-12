@@ -451,6 +451,8 @@ function CardToolDetail({
   const capped = toolLines === true && !showAll && outputLines.length > LINE_OUTPUT_LINES;
   const output = capped ? outputLines.slice(0, LINE_OUTPUT_LINES).join('\n') : fullOutput;
   const copyText = str(detail, 'copyText');
+  // A cut output being read back whole (gx-chat-core `output_cut.rs`): its copy waits for the full text.
+  const copyPending = detail.loadingFullOutput === true;
   const command = tool.glyph === 'terminal';
   const parts = [];
   if (input.length > 0) {
@@ -461,6 +463,7 @@ function CardToolDetail({
         content={input}
         failed={false}
         copyText={copyText}
+        copyPending={copyPending}
       />,
     );
   }
@@ -472,6 +475,7 @@ function CardToolDetail({
         content={output}
         failed={tool.failed === true}
         copyText={parts.length === 0 ? copyText : ''}
+        copyPending={parts.length === 0 && copyPending}
       />,
     );
     if (capped) {

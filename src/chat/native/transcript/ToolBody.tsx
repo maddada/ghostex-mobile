@@ -4,7 +4,7 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTranscriptEnv } from './context';
@@ -14,35 +14,49 @@ import { CODE_LINE, CODE_SIZE, MONO_FONT } from './theme';
 /**
  * One labelled block of a tool's detail: verbatim monospaced text in a height-capped box, selectable
  * with a long press. A non-empty `copyText` puts the copy button for the whole call on its label row
- * (desktop `tool_run.rs`).
+ * (desktop `tool_run.rs`). `copyPending` keeps that button while the core reads a cut output back whole
+ * (gx-chat-core `output_cut.rs`): a press then copies as soon as the full text is here.
  */
 export function ToolBody({
   label,
   content,
   failed,
   copyText,
+  copyPending = false,
 }: {
   label: string | null;
   content: string;
   failed: boolean;
   copyText: string;
+  copyPending?: boolean;
 }) {
   // Tool call lines cut a long output at 12 lines instead of capping its box (`ToolCard.tsx`).
   const { theme, toolLines } = useTranscriptEnv();
   const [copied, setCopied] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const copy = useCallback(() => {
+    if (copyText.length === 0) {
+      setWaiting(true);
+      return;
+    }
     void Clipboard.setStringAsync(copyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [copyText]);
+  useEffect(() => {
+    if (!waiting || copyText.length === 0) return;
+    setWaiting(false);
+    copy();
+  }, [copy, copyText, waiting]);
+  const copyShown = copyText.length > 0 || copyPending;
   return (
     <View style={styles.bodyGroup}>
-      {label !== null || copyText.length > 0 ? (
+      {label !== null || copyShown ? (
         <View style={styles.bodyHeader}>
           <Text numberOfLines={1} style={[styles.bodyLabel, { color: theme.muted }]}>
             {label ?? ''}
           </Text>
-          {copyText.length > 0 ? (
+          {copyShown ? (
             <Pressable
               hitSlop={6}
               onPress={copy}

@@ -50,6 +50,13 @@ export const LINK_COMPRESSION_CAPABILITY = 'linkCompression';
 export const COMPRESS_HEADER = 'x-gxserver-compress';
 /** A computer that lists this skips the model catalog on a socket opened with the revision the phone holds. */
 const CATALOG_REVISION_CAPABILITY = 'modelCatalogRevision';
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION: the user chose "Head and tail plus counts" for long tool outputs (Q2729). A
+ * computer that lists this cuts them on a chat socket opened with `toolOutputs=cut` and on reads with `cutToolOutputs`
+ * (the core sets that from its start config, `host.ts`), keeping what open rows and card labels show; an opened row
+ * reads the whole text back for Copy (gx-chat-core `transcript/output_cut.rs`).
+ */
+export const TOOL_OUTPUT_CUT_CAPABILITY = 'toolOutputCut';
 /** `RECONNECT_DELAYS_MS` in `packages/gx-chat-client/src/wire.rs`; the last step repeats. */
 const RECONNECT_DELAYS_MS = [500, 1_000, 2_000];
 /** The ladder in the background, for Voice mode's computer only: the SSH reconnect's steps. */
@@ -983,7 +990,8 @@ class ChatMachineLink {
       endpoint.capabilities.includes(CATALOG_REVISION_CAPABILITY) && this.modelCatalogRevision !== null
         ? `&catalogRevision=${encodeURIComponent(this.modelCatalogRevision)}`
         : '';
-    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat${deflate ? '&encoding=deflate' : ''}${knownCatalog}`;
+    const cutOutputs = endpoint.capabilities.includes(TOOL_OUTPUT_CUT_CAPABILITY) ? '&toolOutputs=cut' : '';
+    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat${deflate ? '&encoding=deflate' : ''}${knownCatalog}${cutOutputs}`;
     // React Native's WebSocket takes headers, so the token never travels in the URL.
     const socket = new (WebSocket as unknown as HeaderWebSocket)(url, undefined, {
       headers: { Authorization: `Bearer ${endpoint.authToken}`, [PROTOCOL_HEADER]: String(PROTOCOL_VERSION) },

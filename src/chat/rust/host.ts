@@ -56,7 +56,7 @@ import {
 import { currentSessionDirectory, subscribeSessionDirectory } from './sessionDirectory';
 import { projectOrigin, subscribeProjectOrigin } from './projectOrigin';
 import { readRecord, readRetainedSnapshot, writeRecord, writeRetainedSnapshot } from './storage';
-import { chatMachineLink } from './machine-link';
+import { chatMachineLink, TOOL_OUTPUT_CUT_CAPABILITY } from './machine-link';
 import { checkComputer, HELD_SEND_METHODS, heldSendRpc, sessionComputer, subscribeSessionComputer } from './computer';
 import { coreUnavailableMessage } from './wasm-core/pageLoad';
 import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
@@ -306,6 +306,10 @@ export class RustChatHost {
         // The warm socket is up, so its snapshot brings the transcript at once and the core's seed
         // read asks for one row (gx-chat-core `issue_light_seed`); a cold open keeps the full seed.
         ...(chatMachineLink(this.target.machine).socketUp() ? { lightSeed: true } : {}),
+        // Long tool outputs come cut on this computer's socket; the chat's reads ask for the same cut.
+        ...(chatMachineLink(this.target.machine).capabilities()?.includes(TOOL_OUTPUT_CUT_CAPABILITY) === true
+          ? { cutToolOutputs: true }
+          : {}),
         ...(initialPresentation !== undefined ? { initialPresentation } : {}),
       },
     });
