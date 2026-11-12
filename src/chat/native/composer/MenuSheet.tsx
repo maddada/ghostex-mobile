@@ -91,6 +91,16 @@ const KNOWN_GLYPHS = new Set<string>([
   'file-diff',
   'logout',
   'axe',
+  'robot',
+  'folders',
+  'edit',
+  'history',
+  'circle-half',
+  'adjustments-horizontal',
+  'arrows-diagonal-minimize',
+  'wand',
+  'puzzle',
+  'terminal',
 ]);
 
 function isGlyph(name: string): name is GlyphName {

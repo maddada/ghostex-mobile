@@ -663,21 +663,12 @@ export function NativeComposer({
 
   const openMore = useCallback(() => {
     if (document === null) return;
-    // Send's own menu on desktop (`show_send_actions`), which a phone has no right press to open.
-    const compactAndSend =
-      model !== null && model.text.trim().length > 0
-        ? { disabled: !(model.ready && document.queue.capabilities.canQueue) }
-        : null;
-    const interruptAndSend =
-      model !== null && model.text.trim().length > 0 && document.working === true ? { disabled: !model.ready } : null;
     setMenu({
       kind: 'rows',
       rows: moreActionsRows({
         document,
         available,
         serves,
-        compactAndSend,
-        interruptAndSend,
         draft: model?.text ?? '',
         voiceCallTitle,
         voiceCallGbotName,
@@ -687,7 +678,10 @@ export function NativeComposer({
     });
   }, [available, compact, document, model, serves, sleeping, voiceCallGbotName, voiceCallTitle]);
 
-  /** Send held: the `/` `@` `+` pickers, then Queue (and Interrupt & Send while the agent works) once there is a draft. */
+  /**
+   * Send held: the `/` `@` `+` pickers, then Queue (Interrupt & Send while the agent works, Compact & Send while
+   * the draft has text) once there is a draft. Desktop has both send rows in Send's right-click menu.
+   */
   const openSendMenu = useCallback(() => {
     if (document === null || model === null) return;
     setMenu({
@@ -696,6 +690,7 @@ export function NativeComposer({
         ready: model.ready,
         canQueue: document.queue.capabilities.canQueue === true,
         hasDraft: model.text.trim().length > 0 || (document.pendingAttachments ?? 0) > 0,
+        hasText: model.text.trim().length > 0,
         working: document.working === true,
       }),
     });

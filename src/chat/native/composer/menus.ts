@@ -23,40 +23,14 @@ export type ComposerControlId = (typeof COMPOSER_CONTROLS)[number]['id'];
 export type ComposerActionId = ComposerControlId | 'summary' | 'stash' | 'dictate';
 
 const HOST_ACTION_ICONS: Record<string, string> = {
-  closeAfterDone: 'titlebar/clock.svg',
   delayedActions: 'titlebar/clock-check.svg',
-  exportTranscript: 'titlebar/file-export.svg',
-  fork: 'titlebar/git-branch.svg',
+  fork: 'titlebar/git-fork.svg',
   fullReload: 'titlebar/refresh.svg',
   rename: 'titlebar/pencil.svg',
   sleep: 'titlebar/moon.svg',
   switchAccount: 'titlebar/switch-horizontal.svg',
   viewPlaybook: 'titlebar/book.svg',
 };
-
-/**
- * The computer's actions that sit in the Chat group, after Side chat, in the core's order (desktop
- * `actions.rs`). View playbook comes only on a coordinator's chat (gx-chat-core `composer/document.rs`)
- * and shows only where the screen serves it (`TerminalScreen`), opening the sheet the coordinator's
- * long-press menu opens (CDXC:Coordinators 2026-11-09 on gx-chat-core `composer/host_actions.rs`).
- */
-const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone', 'viewPlaybook']);
-
-/**
- * CDXC:SessionChat 2026-11-12 DECISION:
- * User, of the chat's top bar ⋯ menu and the chat box's ⋯ (More actions): "please merge these 2. No need for top 3 dots. The one in chat is enough." The rows only the top bar menu had (the app's own screens and the tab, which the core's `hostActions` do not carry) are More actions rows now, each shown only where the screen performs it (`serves`); the top bar keeps its ⋯ in the terminal view alone, which has no chat box.
- */
-type ShellRow = { id: string; label: string; icon: string; destructive?: true };
-const PROJECT_SHELL_ROWS: readonly ShellRow[] = [
-  { id: 'docs', label: 'Files', icon: 'titlebar/folder.svg' },
-  { id: 'changes', label: 'Changes', icon: 'titlebar/file-diff.svg' },
-  { id: 'newTerminal', label: 'New terminal', icon: 'titlebar/terminal-2.svg' },
-];
-const APP_SHELL_ROWS: readonly ShellRow[] = [
-  { id: 'settings', label: 'Settings', icon: 'titlebar/settings.svg' },
-  { id: 'disconnect', label: 'Disconnect', icon: 'titlebar/logout.svg', destructive: true },
-  { id: 'killSession', label: 'Kill session', icon: 'titlebar/axe.svg', destructive: true },
-];
 
 export function overflowed(document: ChatDocument, id: string): boolean {
   return document.composerOverflow?.overflowed?.includes(id) === true;
@@ -68,17 +42,6 @@ export type MoreActionsInput = {
   available: (id: ComposerActionId) => boolean;
   /** Whether the screen performs this app-shell action (`NativeComposer`'s `hostActions`). */
   serves: (action: string) => boolean;
-  /**
-   * Compact & Send, while there is a draft. Desktop offers it in Send's own right-click menu
-   * (`show_send_actions` in `actions.rs`) and on Option+Enter; a phone has neither, and Send's hold
-   * already queues, so it leads this menu instead.
-   */
-  compactAndSend?: { disabled: boolean } | null;
-  /**
-   * Interrupt & Send, while there is a draft and the agent is working: it stops the running turn
-   * and sends the draft now. Desktop has it on Ctrl+Enter and in Send's right-click menu.
-   */
-  interruptAndSend?: { disabled: boolean } | null;
   /** The chat box's text, which Side chat toggles its `/btw ` prefix on. */
   draft?: string;
   /** The session's title, for Voice call about this chat's hint (the row shows when `serves('voiceCall')`). */
@@ -129,6 +92,9 @@ function viewModesRow(document: ChatDocument, summaryAvailable: boolean): MenuRo
       ...(level === 'summary' ? { description: 'Summary view folds more, so it wins while it is on' } : {}),
     });
   }
+  // Auto-read, under the view settings since layout A (CDXC:SessionChat 2026-11-12 above `moreActionsRows`).
+  const autoRead = autoReadRow(document);
+  if (autoRead !== null) modes.push({ separator: true }, autoRead);
   return {
     label: 'View',
     iconPath: 'titlebar/eye.svg',
@@ -145,40 +111,38 @@ function branchesRow(document: ChatDocument): MenuRow | null {
   const branches = obj(document.forkBranches);
   const tooltip = str(branches, 'tooltip');
   // A phone has no hover, so the summary sentence sits under the list's heading.
-  const children = rowsOf(branches?.menu).map((row) =>
-    row.heading === true && tooltip.length > 0 ? { ...row, description: tooltip } : row,
+  const children = withIcon(
+    rowsOf(branches?.menu).map((row) =>
+      row.heading === true && tooltip.length > 0 ? { ...row, description: tooltip } : row,
+    ),
+    'titlebar/git-branch.svg',
   );
   if (children.length === 0) return null;
   return { label: 'Branches', iconPath: 'titlebar/git-branch.svg', detail: String(branches?.count ?? ''), children };
 }
 
 /**
- * Read aloud's rows, below View: Stop reading while this chat is being read, then the Auto-read
- * check, which says why it is quiet during a voice call or dictation.
+ * Read aloud's Auto-read check, in View, which says why it is quiet during a voice call or dictation. Stop reading
+ * is a first-page row of its own while this chat is being read (`moreActionsRows`).
  *
  * CDXC:VoiceMode 2026-10-20 DECISION: User: the Auto-read switch lives in the composer's ⋯ (More actions) menu on both apps; it reads each finished reply of the chat on screen. Its rows show only while the chat's computer has Read aloud on and the phone has a voice (`readAloud.available`).
  */
-function readAloudRows(document: ChatDocument): MenuRow[] {
+function autoReadRow(document: ChatDocument): MenuRow | null {
   const state = document.readAloud;
-  if (state?.available !== true) return [];
-  const rows: MenuRow[] = [];
-  if (state.speaking) {
-    rows.push({ label: 'Stop reading', iconPath: 'titlebar/player-stop.svg', command: { type: 'readAloudStop' } });
-  }
+  if (state?.available !== true) return null;
   const held =
     state.autoReadHeld === 'voiceConversation'
       ? 'Quiet during the voice call'
       : state.autoReadHeld === 'dictation'
         ? 'Quiet while you dictate'
         : null;
-  rows.push({
+  return {
     label: 'Auto-read',
     iconPath: 'titlebar/volume.svg',
     checked: state.autoRead,
     ...(held !== null ? { description: held } : {}),
     command: { type: 'readAloudAuto' },
-  });
-  return rows;
+  };
 }
 
 /**
@@ -188,10 +152,11 @@ function readAloudRows(document: ChatDocument): MenuRow[] {
 function skillsRow(document: ChatDocument): MenuRow {
   const skills: MenuRow[] = (document.ghostexSkills ?? []).map((skill) => ({
     label: skill.name,
+    iconPath: 'titlebar/wand.svg',
     description: skill.description ?? null,
     command: { type: 'insertSkill', name: skill.name },
   }));
-  if (skills.length === 0) skills.push({ label: 'No Ghostex skills installed', disabled: true });
+  if (skills.length === 0) skills.push({ label: 'No Ghostex skills installed', iconPath: 'titlebar/puzzle.svg', disabled: true });
   skills.push(
     { separator: true },
     { label: 'Configure / Install more', iconPath: 'titlebar/settings.svg', command: { type: 'openSkillsSettings' } },
@@ -202,22 +167,47 @@ function skillsRow(document: ChatDocument): MenuRow {
 /**
  * CDXC:SessionChat 2026-10-11 DECISION:
  * User: on the phone, while the agent works, a long press on Send opens a small sheet with "Interrupt & Send" and "Queue"; while it is idle a long press still just queues. More actions keeps its Interrupt & Send row too.
+ * Superseded 2026-11-12 (`sendChoiceRows`): More actions has no send rows; this menu has Compact & Send too.
  */
-export function sendChoiceRows({ ready, canQueue }: { ready: boolean; canQueue: boolean }): MenuRow[] {
-  return [
-    {
+export function sendChoiceRows({
+  ready,
+  canQueue,
+  working = true,
+  compact = false,
+}: {
+  ready: boolean;
+  canQueue: boolean;
+  /** Interrupt & Send shows only while the agent works. */
+  working?: boolean;
+  /** Compact & Send shows while there is text to send. */
+  compact?: boolean;
+}): MenuRow[] {
+  const rows: MenuRow[] = [];
+  if (working) {
+    rows.push({
       label: 'Interrupt & Send',
       iconPath: 'titlebar/arrow-up.svg',
       disabled: !ready,
       command: { type: 'submit', mode: 'interrupt' },
-    },
-    {
-      label: 'Queue',
-      iconPath: 'titlebar/stack-push.svg',
+    });
+  }
+  // CDXC:SessionChat 2026-11-12 DECISION: User: "Move send ones under holding send button": Compact & Send left
+  // More actions for this menu, as Interrupt & Send did (desktop keeps both in Send's right-click menu).
+  if (compact) {
+    rows.push({
+      label: 'Compact & Send',
+      iconPath: 'titlebar/arrows-diagonal-minimize.svg',
       disabled: !(ready && canQueue),
-      command: { type: 'submit', mode: 'queue' },
-    },
-  ];
+      command: { type: 'submit', mode: 'compact' },
+    });
+  }
+  rows.push({
+    label: 'Queue',
+    iconPath: 'titlebar/stack-push.svg',
+    disabled: !(ready && canQueue),
+    command: { type: 'submit', mode: 'queue' },
+  });
+  return rows;
 }
 
 /**
@@ -226,7 +216,8 @@ export function sendChoiceRows({ ready, canQueue }: { ready: boolean; canQueue: 
  * The chat box's placeholder is now "Hold ↑ for options", so a hold on Send always opens this menu: the three
  * characters that open a picker (the words are the desktop's: the placeholder's "skills and commands", the
  * `/mention` command's "Mention a file", the `+` list's agents), then, after a divider, what a hold did before
- * (Interrupt & Send and Queue while the agent works, Queue while it is idle) once there is a draft to send.
+ * (Interrupt & Send and Queue while the agent works, Queue while it is idle) once there is a draft to send, with
+ * Compact & Send before Queue while the draft has text (2026-11-12).
  */
 export const TRIGGER_ROWS: readonly MenuRow[] = [
   {
@@ -253,25 +244,61 @@ export function sendMenuRows({
   ready,
   canQueue,
   hasDraft,
+  hasText,
   working,
 }: {
   ready: boolean;
   canQueue: boolean;
   hasDraft: boolean;
+  /** The draft has text, which Compact & Send needs. */
+  hasText: boolean;
   working: boolean;
 }): MenuRow[] {
   const rows: MenuRow[] = TRIGGER_ROWS.map((row) => ({ ...row, disabled: !ready }));
   if (!hasDraft) return rows;
-  const choices = sendChoiceRows({ ready, canQueue });
-  return [...rows, { separator: true }, ...(working ? choices : choices.slice(1))];
+  return [...rows, { separator: true }, ...sendChoiceRows({ ready, canQueue, working, compact: hasText })];
+}
+
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User picked layout A of the "phone chat menu cleanup" page (Q2723) for the chat box's ⋯ (More actions), on the phone
+ * and the computer, then which rows go (Q2725): "Move send ones under holding send button". The first page holds the
+ * rows a phone uses (Attach, Search conversation, Files and links, Voice call, Side chat, Prompt editor, View ›, and
+ * Catch me up, Stop reading and a pane's Terminal View when they apply), then three submenus: Agent › (the session's
+ * actions, Session note, Branches, Kill session), Project › (Files, Changes, New terminal) and More › (Stash prompt,
+ * Skills, and the folded Context window and Options). Auto-read moved into View ›. Interrupt & Send and Compact & Send
+ * left for Send's hold menu (`sendMenuRows`); Close After Done and Handoff / Export left (gx-chat-core
+ * `composer/host_actions.rs`, which no longer offers them here); Settings and Disconnect left (the Sessions list's ⋯
+ * and the tab's ×). Every row, submenu and value row has its own glyph. The computer's menu takes the same shape
+ * (desktop `actions.rs` `show_actions`) without the phone-only rows.
+ */
+const AGENT_FIRST = ['rename', 'sleep', 'fork', 'fullReload', 'switchAccount'];
+
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User, of the chat's top bar ⋯ menu and the chat box's ⋯ (More actions): "please merge these 2. No need for top 3 dots. The one in chat is enough." The rows only the top bar menu had (the app's own screens and the tab, which the core's `hostActions` do not carry) are More actions rows now, each shown only where the screen performs it (`serves`); the top bar keeps its ⋯ in the terminal view alone, which has no chat box. Layout A (above) keeps Files, Changes and New terminal under Project and Kill session under Agent; Settings and Disconnect left.
+ */
+
+const SHELL_ICONS: Record<string, string> = {
+  docs: 'titlebar/folder.svg',
+  changes: 'titlebar/file-diff.svg',
+  newTerminal: 'titlebar/terminal.svg',
+  killSession: 'titlebar/axe.svg',
+};
+
+/** A submenu row whose value rows lack a glyph get the given one (the core's option values, a fork's branch). */
+function withIcon(rows: MenuRow[], iconPath: string): MenuRow[] {
+  return rows.map((row) =>
+    row.heading === true || row.separator === true || row.iconPath !== undefined || typeof row.icon === 'string'
+      ? row
+      : { ...row, iconPath },
+  );
 }
 
 export function moreActionsRows({
   document,
   available,
   serves,
-  compactAndSend = null,
-  interruptAndSend = null,
   draft = '',
   voiceCallTitle = '',
   voiceCallGbotName = '',
@@ -279,57 +306,38 @@ export function moreActionsRows({
   sleeping = false,
 }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
-  if (interruptAndSend !== null) {
+  const folded = (id: string): boolean => allFolded || overflowed(document, id);
+  const actions = document.hostActions ?? [];
+  const hostRow = (action: (typeof actions)[number]): MenuRow =>
+    action.id === 'sleep' && sleeping
+      ? { label: 'Wake', iconPath: 'titlebar/player-play.svg', command: { type: 'host', action: action.id } }
+      : {
+          label: action.label,
+          iconPath: HOST_ACTION_ICONS[action.id] ?? null,
+          command: { type: 'host', action: action.id },
+        };
+
+  // The first page.
+  if (folded('attach') && available('attach')) {
     rows.push({
-      label: 'Interrupt & Send',
-      iconPath: 'titlebar/arrow-up.svg',
-      disabled: interruptAndSend.disabled,
-      command: { type: 'submit', mode: 'interrupt' },
+      label: 'Attach a file or folder',
+      iconPath: 'titlebar/paperclip.svg',
+      command: { type: 'composerHost', action: 'attachPath' },
     });
   }
-  if (compactAndSend !== null) {
-    rows.push({
-      label: 'Compact & Send',
-      iconPath: 'titlebar/arrow-up.svg',
-      disabled: compactAndSend.disabled,
-      command: { type: 'submit', mode: 'compact' },
-    });
-  }
-  if (interruptAndSend !== null || compactAndSend !== null) rows.push({ separator: true });
-  const labels = obj(document.optionLabels);
-  const merged = obj(document.modelMenu) !== null;
-  // The option settings fold here when the core says they overflow, or when the composer draws none of them; then
-  // only where there is one to show, as the core's `hasOverflowOptions` has it.
-  const optionsFolded = allFolded
-    ? (isTrue(labels, 'showOptions') && !merged) || obj(document.contextMeter) !== null
-    : document.composerOverflow?.optionsOverflowed === true;
-  if (optionsFolded) {
-    rows.push({ heading: true, label: 'Model settings' });
-    if (isTrue(labels, 'showOptions') && !merged) {
-      rows.push({
-        label: str(labels, 'optionsTitle') || 'Options',
-        detail: str(labels, 'options'),
-        disabled: str(labels, 'options').length === 0,
-        children: arr(obj(document.optionMenus)?.options),
-      });
-    }
-    if (obj(document.contextMeter) !== null) {
-      rows.push({
-        label: 'Context window',
-        detail: str(document.contextMeter, 'percentage'),
-        children: [{ context: document.contextMeter }],
-      });
-    }
-    rows.push({ separator: true });
-  }
-  rows.push({ heading: true, label: 'Chat' });
   // The transcript's search bar, which the top bar menu opened before the two menus merged.
   rows.push({ label: 'Search conversation', iconPath: 'titlebar/search.svg', command: { type: 'searchOpen' } });
-  const branches = branchesRow(document);
-  if (branches !== null) rows.push(branches);
-  rows.push(viewModesRow(document, available('summary')));
-  rows.push(...readAloudRows(document));
-  // Under Auto-read: a voice call about this session (`src/voice/callAbout.ts` has the DECISION).
+  // Files and links is always here, never a toolbar button (desktop `actions.rs`,
+  // CDXC:FilesAndLinks 2026-10-15 there); it opens as a sheet.
+  if (document.composerActions?.files !== false) {
+    rows.push({
+      label: 'Files and links',
+      iconPath: 'titlebar/link.svg',
+      checked: document.filesLinks?.open === true,
+      command: { type: 'composerHost', action: 'filesLinks' },
+    });
+  }
+  // A voice call about this session (`src/voice/callAbout.ts` has the DECISION).
   if (serves('voiceCall')) {
     const chatName = voiceCallTitle.length > 0 ? voiceCallTitle : 'this chat';
     rows.push({
@@ -338,17 +346,6 @@ export function moreActionsRows({
       description:
         voiceCallGbotName.length > 0 ? `Talk with ${voiceCallGbotName} about ${chatName}` : `Talk only about ${chatName}`,
       command: { type: 'host', action: 'voiceCall' },
-    });
-  }
-  /**
-   * CDXC:SessionChat 2026-10-17 DECISION:
-   * User: "Move catch me up on mobile to be inside the 3 dots menu above side chat". The phone has no Catch me up button on the composer; this row sends the same action (it opens the card, or closes it when open) whenever the button would have shown. Desktop keeps its button.
-   */
-  if (document.catchUp?.button === true) {
-    rows.push({
-      label: document.catchUp.loading ? 'Catching up…' : 'Catch me up',
-      iconPath: 'titlebar/sparkles.svg',
-      command: { type: 'catchUp' },
     });
   }
   // Side chat: offered only for agents that take `/btw` (core `composer/side_chat.rs`).
@@ -363,67 +360,51 @@ export function moreActionsRows({
   // Prompt editor writes the next message in a full-screen sheet; the core leaves it out of this menu for the
   // desktop, whose chat box has its own button, which the phone's has not.
   if (serves('promptEditor')) {
-    rows.push({ label: 'Prompt editor', iconPath: 'titlebar/pencil.svg', command: { type: 'host', action: 'promptEditor' } });
+    rows.push({ label: 'Prompt editor', iconPath: 'titlebar/edit.svg', command: { type: 'host', action: 'promptEditor' } });
   }
-  const actions = document.hostActions ?? [];
-  const hostRow = (action: (typeof actions)[number]): MenuRow =>
-    action.id === 'sleep' && sleeping
-      ? { label: 'Wake', iconPath: 'titlebar/player-play.svg', command: { type: 'host', action: action.id } }
-      : {
-          label: action.label,
-          iconPath: HOST_ACTION_ICONS[action.id] ?? null,
-          command: { type: 'host', action: action.id },
-        };
-  for (const action of actions)
-    if (CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id)) rows.push(hostRow(action));
+  rows.push(viewModesRow(document, available('summary')));
+  // Stop reading, while this chat is being read; Auto-read lives under View.
+  if (document.readAloud?.available === true && document.readAloud.speaking) {
+    rows.push({ label: 'Stop reading', iconPath: 'titlebar/player-stop.svg', command: { type: 'readAloudStop' } });
+  }
   /**
-   * CDXC:SessionChat 2026-10-29 DECISION:
-   * User, on the terminal view's More actions menu matching the chat's (Q729, "Yes, add it"): the chat's More actions menu gets a Session note row after Close After Done, with the same "1" badge when a note exists, on the computer and the phone. The note toolbar button is never offered (the core's `composerActions.note` is off), so this row is the only way in unless the control folded here itself.
-   * Here it opens the chat's own note panel, the one the terminal view's menu opens on the phone; the computer opens the same note dialog the terminal row opens (desktop `actions.rs`).
+   * CDXC:SessionChat 2026-10-17 DECISION:
+   * User: "Move catch me up on mobile to be inside the 3 dots menu above side chat". The phone has no Catch me up button on the composer; this row sends the same action (it opens the card, or closes it when open) whenever the button would have shown. Desktop keeps its button.
+   * Layout A (2026-11-12, above) puts it under View, with the other rows that show only now and then.
    */
-  // The screen lists `sessionNote` among its actions only while the computer has Session notes on
-  // (`sessions/sessionNotesSwitch.ts`; CDXC:SessionNotes 2026-10-30).
-  const folded = (id: string): boolean => allFolded || overflowed(document, id);
-  const noteFolded = folded('note') && available('note');
-  if (serves('sessionNote') && !noteFolded && document.composerActions?.files !== false) {
+  if (document.catchUp?.button === true) {
     rows.push({
-      label: 'Session note',
-      iconPath: 'titlebar/note.svg',
-      ...(document.composerChrome.notePresence ? { badge: '1' } : {}),
-      checked: document.note.open,
-      command: { type: 'composerHost', action: 'sessionNote' },
+      label: document.catchUp.loading ? 'Catching up…' : 'Catch me up',
+      iconPath: 'titlebar/history.svg',
+      command: { type: 'catchUp' },
     });
   }
-  for (const control of COMPOSER_CONTROLS) {
-    if (!folded(control.id) || !available(control.id)) continue;
-    // Terminal View never folds on the phone's full chat box (`NativeComposer`), so it is a row only in a pane's.
-    if (control.id === 'terminal' && !allFolded) continue;
-    const row: MenuRow = {
-      label: control.label,
-      iconPath: control.icon,
-      command: { type: 'composerHost', action: control.action },
-    };
-    if (control.id === 'note') row.checked = document.note.open;
-    rows.push(row);
-  }
-  // Files and links is always here, never a toolbar button (desktop `actions.rs`,
-  // CDXC:FilesAndLinks 2026-10-15 there); it opens as a sheet.
-  if (document.composerActions?.files !== false) {
+  // Terminal View never folds on the phone's full chat box (`NativeComposer`), so it is a row only in a pane's.
+  if (allFolded && available('terminal')) {
     rows.push({
-      label: 'Files and links',
-      iconPath: 'titlebar/link.svg',
-      checked: document.filesLinks?.open === true,
-      command: { type: 'composerHost', action: 'filesLinks' },
+      label: 'Terminal View',
+      iconPath: 'titlebar/terminal-2.svg',
+      command: { type: 'composerHost', action: 'terminalView' },
     });
   }
-  const agentRows: MenuRow[] = [];
-  for (const action of actions) {
-    if (action.group !== 'agent') continue;
+  // A host action the core puts outside the Agent group stays on the first page.
+  for (const action of actions) if (action.group !== 'agent' && serves(action.id)) rows.push(hostRow(action));
+
+  // Agent ›: the session's actions, then the ones about this chat, then Kill session.
+  const sessionRows: MenuRow[] = [];
+  const chatRows: MenuRow[] = [];
+  const agentActions = actions.filter((action) => action.group === 'agent');
+  const ordered = [
+    ...AGENT_FIRST.flatMap((id) => agentActions.filter((action) => action.id === id)),
+    ...agentActions.filter((action) => !AGENT_FIRST.includes(action.id)),
+  ];
+  for (const action of ordered) {
+    const into = AGENT_FIRST.includes(action.id) ? sessionRows : chatRows;
     if (action.id === 'switchAccount') {
       // Desktop's rule (actions.rs, a user decision there): Claude and Codex sessions open the
       // Accounts & limits panel; other agents keep the daemon's switchable-agent rows.
       if (obj(document.accountPanel) !== null) {
-        agentRows.push({
+        into.push({
           label: 'Switch Account',
           iconPath: HOST_ACTION_ICONS.switchAccount,
           children: [{ accounts: document.accountPanel }],
@@ -437,43 +418,99 @@ export function moreActionsRows({
         command: { type: 'host', action: 'switchAccount', agentId: obj(account)?.agentId ?? null },
       }));
       if (accounts.length > 0)
-        agentRows.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: accounts });
+        into.push({ label: 'Switch Account', iconPath: HOST_ACTION_ICONS.switchAccount, children: accounts });
     } else if (serves(action.id)) {
-      agentRows.push(hostRow(action));
+      into.push(hostRow(action));
     }
   }
-  if (agentRows.length > 0) {
-    rows.push({ separator: true }, { heading: true, label: 'Agent' }, ...agentRows);
+  /**
+   * CDXC:SessionChat 2026-10-29 DECISION:
+   * User, on the terminal view's More actions menu matching the chat's (Q729, "Yes, add it"): the chat's More actions menu gets a Session note row after Close After Done, with the same "1" badge when a note exists, on the computer and the phone. The note toolbar button is never offered (the core's `composerActions.note` is off), so this row is the only way in unless the control folded here itself.
+   * Here it opens the chat's own note panel, the one the terminal view's menu opens on the phone; the computer opens the same note dialog the terminal row opens (desktop `actions.rs`). Layout A (2026-11-12) puts it under Agent.
+   */
+  // The screen lists `sessionNote` among its actions only while the computer has Session notes on
+  // (`sessions/sessionNotesSwitch.ts`; CDXC:SessionNotes 2026-10-30).
+  const noteFolded = folded('note') && available('note');
+  if ((serves('sessionNote') && document.composerActions?.files !== false) || noteFolded) {
+    chatRows.push({
+      label: 'Session note',
+      iconPath: 'titlebar/note.svg',
+      ...(document.composerChrome.notePresence ? { badge: '1' } : {}),
+      checked: document.note.open,
+      command: { type: 'composerHost', action: 'sessionNote' },
+    });
   }
-  const other = actions.filter(
-    (action) => action.group !== 'agent' && !CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id),
-  );
-  if (other.length > 0) rows.push({ separator: true }, ...other.map(hostRow));
-  // Second from the bottom, as on desktop (actions.rs `skills_row`).
-  rows.splice(Math.max(rows.length - 1, 0), 0, skillsRow(document));
-  // Stash prompt then takes second from the bottom, below Skills (actions.rs `stash_menu_row`): it
-  // stashes the draft, or opens Saved prompts from an empty chat box. The stash count is the row's
-  // `badge`, a circle after the label (user, 2026-10-22), as on desktop.
+  const branches = branchesRow(document);
+  if (branches !== null) chatRows.push(branches);
+  const killRows: MenuRow[] = serves('killSession')
+    ? [
+        {
+          label: 'Kill session',
+          iconPath: SHELL_ICONS.killSession,
+          destructive: true,
+          command: { type: 'host', action: 'killSession' },
+        },
+      ]
+    : [];
+  const agentRows = [sessionRows, chatRows, killRows]
+    .filter((group) => group.length > 0)
+    .flatMap((group, index) => (index === 0 ? group : [{ separator: true }, ...group]));
+
+  // Project ›: the project's own screens and a new terminal.
+  const projectRows: MenuRow[] = [
+    { id: 'docs', label: 'Files' },
+    { id: 'changes', label: 'Changes' },
+    { id: 'newTerminal', label: 'New terminal' },
+  ]
+    .filter((row) => serves(row.id))
+    .map((row) => ({ label: row.label, iconPath: SHELL_ICONS[row.id], command: { type: 'host', action: row.id } }));
+
+  // More ›: Stash prompt, Skills, then the option settings when they fold here.
+  const moreRows: MenuRow[] = [];
+  // Stash prompt stashes the draft, or opens Saved prompts from an empty chat box (actions.rs
+  // `stash_menu_row`). The stash count is the row's `badge`, a circle after the label (user, 2026-10-22).
   if (available('stash')) {
     const stashed = document.composerChrome.stashBadge;
-    rows.splice(Math.max(rows.length - 1, 0), 0, {
+    moreRows.push({
       label: 'Stash prompt',
       iconPath: 'titlebar/stack-push.svg',
       ...(stashed !== null ? { badge: stashed } : {}),
       command: { type: 'composerHost', action: 'stashPrompt' },
     });
   }
-  const shellRow = (row: ShellRow): MenuRow => ({
-    label: row.label,
-    iconPath: row.icon,
-    ...(row.destructive === true ? { destructive: true } : {}),
-    command: { type: 'host', action: row.id },
-  });
-  const projectRows = PROJECT_SHELL_ROWS.filter((row) => serves(row.id)).map(shellRow);
-  if (projectRows.length > 0) rows.push({ separator: true }, { heading: true, label: 'Project' }, ...projectRows);
-  const appRows = APP_SHELL_ROWS.filter((row) => serves(row.id)).map(shellRow);
-  if (appRows.length > 0) rows.push({ separator: true }, ...appRows);
-  return rows;
+  moreRows.push(skillsRow(document));
+  const labels = obj(document.optionLabels);
+  const merged = obj(document.modelMenu) !== null;
+  // The option settings fold here when the core says they overflow, or when the composer draws none of them; then
+  // only where there is one to show, as the core's `hasOverflowOptions` has it.
+  const optionsFolded = allFolded
+    ? (isTrue(labels, 'showOptions') && !merged) || obj(document.contextMeter) !== null
+    : document.composerOverflow?.optionsOverflowed === true;
+  if (optionsFolded) {
+    if (obj(document.contextMeter) !== null) {
+      moreRows.push({
+        label: 'Context window',
+        iconPath: 'titlebar/circle-half.svg',
+        detail: str(document.contextMeter, 'percentage'),
+        children: [{ context: document.contextMeter }],
+      });
+    }
+    if (isTrue(labels, 'showOptions') && !merged) {
+      moreRows.push({
+        label: str(labels, 'optionsTitle') || 'Options',
+        iconPath: 'titlebar/adjustments-horizontal.svg',
+        detail: str(labels, 'options'),
+        disabled: str(labels, 'options').length === 0,
+        children: withIcon(rowsOf(obj(document.optionMenus)?.options), 'titlebar/brain.svg'),
+      });
+    }
+  }
+
+  const submenus: MenuRow[] = [];
+  if (agentRows.length > 0) submenus.push({ label: 'Agent', iconPath: 'titlebar/robot.svg', children: agentRows });
+  if (projectRows.length > 0) submenus.push({ label: 'Project', iconPath: 'titlebar/folders.svg', children: projectRows });
+  submenus.push({ label: 'More', iconPath: 'titlebar/dots.svg', children: moreRows });
+  return [...rows, { separator: true }, ...submenus];
 }
 
 /** A pill's menu (`show_option_menu`): the document's rows. */

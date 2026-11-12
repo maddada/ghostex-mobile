@@ -5,7 +5,8 @@
 
 import Svg, { Path, Rect } from 'react-native-svg';
 
-type GlyphSpec = { paths: string[]; filled?: boolean };
+/** `fills`: extra paths drawn filled in the stroke colour, as `circle-half.svg`'s half disc. */
+type GlyphSpec = { paths: string[]; filled?: boolean; fills?: string[] };
 
 const GLYPHS = {
   // The voice agent's headset (`titlebar/headset.svg`), for Voice call about this chat.
@@ -380,6 +381,53 @@ const GLYPHS = {
       'M21 18l-0 0',
     ],
   },
+  // The More actions rows of layout A (CDXC:SessionChat 2026-11-12 in `menus.ts`), each its own glyph.
+  robot: {
+    paths: [
+      'M6 6a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2l0 -4',
+      'M12 2v2',
+      'M9 12v9',
+      'M15 12v9',
+      'M5 16l4 -2',
+      'M15 14l4 2',
+      'M9 18h6',
+      'M10 8v.01',
+      'M14 8v.01',
+    ],
+  },
+  folders: {
+    paths: [
+      'M9 3h3l2 2h5a2 2 0 0 1 2 2v7a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2',
+      'M17 16v2a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2h2',
+    ],
+  },
+  edit: {
+    paths: [
+      'M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1',
+      'M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415',
+      'M16 5l3 3',
+    ],
+  },
+  history: { paths: ['M12 8v4l3 2', 'M3.05 11a9 9 0 1 1 2.64 6.36', 'M3 17v-6h6'] },
+  'circle-half': { paths: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0'], fills: ['M12 6a6 6 0 0 1 0 12z'] },
+  'arrows-diagonal-minimize': {
+    paths: ['M4 4l6 6', 'M4 10h6v-6', 'M20 20l-6 -6', 'M20 14h-6v6', 'M20 4l-6 6', 'M14 4v6h6', 'M4 20l6 -6', 'M10 20v-6h-6'],
+  },
+  wand: {
+    paths: [
+      'M6 21l15 -15l-3 -3l-15 15l3 3',
+      'M15 6l3 3',
+      'M9 3a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2',
+      'M19 13a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2',
+    ],
+  },
+  puzzle: {
+    paths: [
+      'M4 7h3a1 1 0 0 0 1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1',
+    ],
+  },
+  // New terminal (Tabler `terminal`), apart from Terminal View's `terminal-2`.
+  terminal: { paths: ['M5 7l5 5l-5 5', 'M12 19l7 0'] },
 } satisfies Record<string, GlyphSpec>;
 
 export type GlyphName = keyof typeof GLYPHS;
@@ -408,6 +456,9 @@ export function Glyph({
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+      ))}
+      {(spec.fills ?? []).map((d, index) => (
+        <Path key={`fill-${index}`} d={d} fill={color} stroke="none" />
       ))}
     </Svg>
   );
