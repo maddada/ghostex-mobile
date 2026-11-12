@@ -6,6 +6,7 @@
  */
 
 import { useInventoryStore, emptyMachineInventory } from '../inventory/store';
+import { pushedCloudBoxes } from '../inventory/summaryStream';
 import { enabledMachines, useMachinesStore, type MachineRecord } from '../machines/store';
 import { chatMachineLink } from '../chat/rust/machine-link';
 import { homeCloudBoxesRpc, forgetBoxLink } from './boxLink';
@@ -35,9 +36,15 @@ function once(key: string, run: () => Promise<void>): Promise<void> {
 /** One computer's boxes, when its Ghostex answers. A computer that does not keeps its stored rows. */
 export function refreshHomeBoxes(home: MachineRecord): Promise<void> {
   return once(`home:${home.id}`, async () => {
-    const answer = await homeCloudBoxesRpc(home.id, 'list', {}, LIST_TIMEOUT_MS);
-    if (answer.error !== null) return;
-    const boxes = (answer.result as { boxes?: CloudBox[] } | null)?.boxes;
+    // A computer that pushes the list on the sessions list stream is not asked (inventory/summaryStream.ts).
+    const pushed = pushedCloudBoxes(home.id);
+    let result: unknown = pushed;
+    if (pushed === undefined) {
+      const answer = await homeCloudBoxesRpc(home.id, 'list', {}, LIST_TIMEOUT_MS);
+      if (answer.error !== null) return;
+      result = answer.result;
+    }
+    const boxes = (result as { boxes?: CloudBox[] } | null)?.boxes;
     if (!Array.isArray(boxes)) return;
     // The computer answers: its cloud kit is read again when due (./cloudKit.ts).
     void syncCloudKit(home.id).catch(() => undefined);

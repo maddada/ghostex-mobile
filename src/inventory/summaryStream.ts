@@ -22,6 +22,12 @@ import { isDemoMachine } from '../demo/identity';
 import { foldListFrame, type ListState } from './summaryPatch';
 
 export const SESSIONS_LIST_STREAM_CAPABILITY = 'sessionsListStream';
+/**
+ * CDXC:StateSync 2026-11-12 DECISION: the user asked to fold the Cloud Boxes list into the same push ("ride the same push,
+ * same capability rules"). A computer that lists this sends `cloudBoxesList` (the answer of `POST /api/cloudBoxes {action:
+ * list}`) on this stream whenever it changes, and `cloudBoxes/sync.ts` reads it instead of asking every 5 s.
+ */
+const CLOUD_BOXES_PUSH_CAPABILITY = 'cloudBoxesPush';
 
 /** `GXSERVER_PROTOCOL_VERSION`, as the chat socket speaks it. */
 const PROTOCOL_VERSION = 1;
@@ -47,6 +53,9 @@ type Stream = {
   heardAt: number;
   pendingReads: Map<string, () => void>;
   closed: boolean;
+  /** The latest `cloudBoxesList` answer, when the computer pushes it. */
+  cloudBoxes: unknown;
+  pushesCloudBoxes: boolean;
 };
 
 const streams = new Map<string, Stream>();
@@ -124,6 +133,16 @@ export async function pushedListFresh(machine: MachineConnectionTarget): Promise
   return answered && live(stream) ? stream.text : null;
 }
 
+/**
+ * The computer's Cloud Boxes list as its stream last pushed it (`{boxes, machines}`), or undefined when it does not push it
+ * or the stream is not live; the caller then asks for it.
+ */
+export function pushedCloudBoxes(machineId: string): unknown {
+  const stream = streams.get(machineId);
+  if (!live(stream) || !stream.pushesCloudBoxes) return undefined;
+  return stream.cloudBoxes;
+}
+
 /** Closes every stream: the app left the foreground or the poll stopped. */
 export function closePushedLists(): void {
   for (const [machineId, stream] of [...streams.entries()]) close(machineId, stream);
@@ -146,7 +165,16 @@ function ensureStream(machine: MachineConnectionTarget): void {
     return;
   }
   if (!capabilities.includes(SESSIONS_LIST_STREAM_CAPABILITY)) return;
-  const stream: Stream = { socket: null, state: null, text: null, heardAt: 0, pendingReads: new Map(), closed: false };
+  const stream: Stream = {
+    socket: null,
+    state: null,
+    text: null,
+    heardAt: 0,
+    pendingReads: new Map(),
+    closed: false,
+    cloudBoxes: undefined,
+    pushesCloudBoxes: capabilities.includes(CLOUD_BOXES_PUSH_CAPABILITY),
+  };
   streams.set(machine.id, stream);
   void link
     .gxserverLink()
@@ -193,6 +221,10 @@ function open(machineId: string, stream: Stream, localPort: number, authToken: s
     const kind = (frame as { type?: unknown } | null)?.type;
     if (kind === 'serverStopping') {
       close(machineId, stream);
+      return;
+    }
+    if (kind === 'cloudBoxesList') {
+      stream.cloudBoxes = (frame as { result?: unknown }).result;
       return;
     }
     const result = foldListFrame(stream.state, frame);
