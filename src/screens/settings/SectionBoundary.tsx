@@ -10,6 +10,7 @@ import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { GhostexRadii } from '../../theme/palette';
 import { useAppearance } from '../../theme/useAppearance';
 import { useSettingsStyles } from './SettingsControls';
+import { SettingsSearchSectionContext } from './search/SettingsSearchAnchor';
 
 export const SectionErrorCopy = {
   title: "This section couldn't load",
@@ -52,11 +53,14 @@ function SectionErrorCard({ retry }: { error: unknown; retry: () => void }) {
   );
 }
 
-/** `name` is for the log line only, like `settings:advanced:cursor`. */
+/**
+ * `name` is the log line's name, like `settings:advanced:cursor`, and the section a Settings search result lands in
+ * (search/settingsSearchIndex.ts names sections by it).
+ */
 export function SettingsSection({ name, children }: { name: string; children: ReactNode }) {
   return (
     <ErrorBoundary name={name} renderFallback={(props) => <SectionErrorCard {...props} />}>
-      {children}
+      <SettingsSearchSectionContext.Provider value={name}>{children}</SettingsSearchSectionContext.Provider>
     </ErrorBoundary>
   );
 }

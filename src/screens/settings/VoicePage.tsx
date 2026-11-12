@@ -52,6 +52,7 @@ import {
   SettingsScreenLayout,
   useSettingsStyles,
 } from './SettingsControls';
+import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 import { computerName, useVoiceComputer } from './voiceComputer';
 import { isDemoMachine } from '../../demo/identity';
 import { DemoCopy } from '../../demo/copy';
@@ -121,20 +122,22 @@ function ComputerPicker({ machine, machines }: { machine: MachineRecord; machine
 
   return (
     <SettingsSection name="settings:voice:computer">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Voice settings for ${machineDisplayLabel(machine)}`}
-        accessibilityHint={several ? 'Picks another computer' : undefined}
-        disabled={!several}
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.row, local.computer, pressed && styles.rowPressed]}
-      >
-        <View style={styles.linkText}>
-          <Text style={styles.linkTitle}>{machineDisplayLabel(machine)}</Text>
-          <Text style={styles.linkDescription}>The settings below are saved on this computer</Text>
-        </View>
-        {several ? <Text style={[styles.chevron, { color: appearance.muted }]}>⌄</Text> : null}
-      </Pressable>
+      <SettingsSearchAnchor label="Computer">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Voice settings for ${machineDisplayLabel(machine)}`}
+          accessibilityHint={several ? 'Picks another computer' : undefined}
+          disabled={!several}
+          onPress={() => setOpen(true)}
+          style={({ pressed }) => [styles.row, local.computer, pressed && styles.rowPressed]}
+        >
+          <View style={styles.linkText}>
+            <Text style={styles.linkTitle}>{machineDisplayLabel(machine)}</Text>
+            <Text style={styles.linkDescription}>The settings below are saved on this computer</Text>
+          </View>
+          {several ? <Text style={[styles.chevron, { color: appearance.muted }]}>⌄</Text> : null}
+        </Pressable>
+      </SettingsSearchAnchor>
       <ActionSheet
         visible={open}
         title="Change voice settings on"

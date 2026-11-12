@@ -1,6 +1,7 @@
 import type { AddProjectSourceId } from '../addProject/client';
 import type { ContextSession } from '../files/sessionContext';
 import type { SettingsPageId } from '../screens/settings/pages';
+import type { SettingsSearchFocus } from '../screens/settings/search/SettingsSearchAnchor';
 
 /**
  * Add/edit machine form params. `tailcatToken` prefills the Easy Connect
@@ -116,9 +117,10 @@ export type RootStackParamList = {
   /**
    * One Settings page, including Notifications, Live Activity, Short replies and Licences.
    * `listOffset`: in two columns, where the Settings list stood when a row opened this page, so the
-   * list this screen draws starts there.
+   * list this screen draws starts there. `focus`: opened from a Settings search result, the row it scrolls to and
+   * flashes.
    */
-  SettingsPage: { page: SettingsPageId; listOffset?: number };
+  SettingsPage: { page: SettingsPageId; listOffset?: number; focus?: SettingsSearchFocus };
   /** Notifications: the attention list, what needs the user on every computer (the bell on the Sessions screen). */
   AttentionList: undefined;
   /**

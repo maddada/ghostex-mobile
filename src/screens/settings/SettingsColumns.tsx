@@ -43,6 +43,8 @@ import { useMachinesStore } from '../../machines/store';
 import { SETTINGS_PAGE_ORDER, SETTINGS_PAGES, type SettingsPageId } from './pages';
 import { LinkRow, SettingsPageEdgesContext, useSettingsStyles } from './SettingsControls';
 import { settingsColumnsFor, type ColumnRoute } from './columnRules';
+import { SettingsSearchField, SettingsSearchResults, useSettingsSearching } from './search/SettingsSearch';
+import type { SettingsSearchFocus } from './search/SettingsSearchAnchor';
 
 /** The Updates row with its "update ready" summary, which reads the update state and can throw. */
 function UpdatesNoticeRow({ onPress, selected }: { onPress: () => void; selected: boolean | undefined }) {
@@ -58,22 +60,31 @@ function UpdatesNoticeRow({ onPress, selected }: { onPress: () => void; selected
   );
 }
 
-/** One row per Settings page, each with its one-line summary; `selected` marks the page open beside it. */
+/**
+ * The Settings search, then one row per Settings page, each with its one-line summary; `selected` marks the page open
+ * beside it. While the search has words the rows give way to what it finds; `focus` is where a found row opens its page.
+ */
 export function SettingsPageList({
   selected,
   onOpen,
 }: {
   selected?: SettingsPageId;
-  onOpen: (page: SettingsPageId) => void;
+  onOpen: (page: SettingsPageId, focus?: SettingsSearchFocus) => void;
 }) {
   // Rows report a selection only beside an open page; the one-column list has none.
   const rowSelected = (page: SettingsPageId): boolean | undefined =>
     selected === undefined ? undefined : page === selected;
   const demoOn = useMachinesStore((state) => state.machines.some((machine) => isDemoMachine(machine)));
-  const pages = demoOn ? ([...SETTINGS_PAGE_ORDER, 'demo'] as const) : SETTINGS_PAGE_ORDER;
+  const pages = useMemo(
+    (): readonly SettingsPageId[] => (demoOn ? [...SETTINGS_PAGE_ORDER, 'demo'] : SETTINGS_PAGE_ORDER),
+    [demoOn],
+  );
+  const searching = useSettingsSearching();
   return (
     <>
-      {pages.map((page) => {
+      <SettingsSearchField />
+      {searching ? <SettingsSearchResults pages={pages} onOpen={onOpen} /> : null}
+      {searching ? null : pages.map((page) => {
         const open = () => onOpen(page);
         if (page === 'updates') {
           // A throwing summary falls back to the plain row, so the list and the Updates page stay reachable.
@@ -142,7 +153,7 @@ function SettingsListScroll({
 }: {
   start: number;
   selected: SettingsPageId;
-  onOpen: (page: SettingsPageId, listOffset: number) => void;
+  onOpen: (page: SettingsPageId, listOffset: number, focus?: SettingsSearchFocus) => void;
   style: StyleProp<ViewStyle>;
   contentContainerStyle: StyleProp<ViewStyle>;
 }) {
@@ -151,12 +162,17 @@ function SettingsListScroll({
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     offset.current = event.nativeEvent.contentOffset.y;
   }, []);
-  const openHere = useCallback((page: SettingsPageId) => onOpen(page, offset.current), [onOpen]);
+  const openHere = useCallback(
+    (page: SettingsPageId, focus?: SettingsSearchFocus) => onOpen(page, offset.current, focus),
+    [onOpen],
+  );
   return (
     <ScrollView
       style={style}
       contentContainerStyle={contentContainerStyle}
       contentOffset={contentOffset}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       scrollEventThrottle={16}
       onScroll={onScroll}
     >
@@ -202,7 +218,7 @@ export function SettingsColumnsFrame({
 
   // A row opens its page beside the list, in place of the page open there.
   const open = useCallback(
-    (page: SettingsPageId, listOffset: number) => {
+    (page: SettingsPageId, listOffset: number, focus?: SettingsSearchFocus) => {
       if (settingsIndex === undefined) return;
       const state = navigation.getState();
       // The routes up to Settings as they are (their keys keep those screens mounted), then the page. Only
@@ -216,7 +232,7 @@ export function SettingsColumnsFrame({
       const pageRoute = {
         key: opened?.name === 'SettingsPage' ? opened.key : undefined,
         name: 'SettingsPage' as const,
-        params: { page, listOffset },
+        params: { page, listOffset, focus },
       };
       navigation.dispatch(CommonActions.reset({ index: kept.length, routes: [...kept, pageRoute] }));
     },

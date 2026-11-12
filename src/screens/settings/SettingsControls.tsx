@@ -3,8 +3,18 @@
  * come from the current appearance (Settings > Interface), never the static palette.
  */
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type ScrollViewProps } from 'react-native';
+import { createContext, useContext, useEffect, useState, type ReactNode, type Ref } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+  type ScrollViewInstance,
+  type ScrollViewProps,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SwitchRow } from '../../components/common/SwitchRow';
@@ -19,6 +29,7 @@ import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 import { normalizeHexColor } from '../../theme/sidebarAppearance';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { useAppearanceHeader } from './useAppearanceHeader';
+import { SettingsSearchAnchor, SettingsSearchAnchorsProvider, useSettingsSearchLanding } from './search/SettingsSearchAnchor';
 
 export type BooleanSettingKey = {
   [Key in keyof GhostexSettings]-?: GhostexSettings[Key] extends boolean ? Key : never;
@@ -260,17 +271,23 @@ export const SettingsPageEdgesContext = createContext<HorizontalInsets | null>(n
  */
 export function SettingsPageScrollView({
   keyboardAware = false,
+  scrollRef,
   style,
   contentContainerStyle,
   children,
   ...props
-}: ScrollViewProps & { keyboardAware?: boolean }) {
+}: ScrollViewProps & { keyboardAware?: boolean; scrollRef?: Ref<ScrollViewInstance> }) {
   const edges = useScrollToBarEdges(contentContainerStyle, useContext(SettingsPageEdgesContext));
   const fold = useLaptopFold();
   const Scroll = keyboardAware ? KeyboardAwareScrollView : ScrollView;
   return (
     <FoldListFrame fold={fold}>
-      <Scroll {...props} style={[style, edges.scroll]} contentContainerStyle={[contentContainerStyle, edges.content]}>
+      <Scroll
+        {...props}
+        ref={scrollRef}
+        style={[style, edges.scroll]}
+        contentContainerStyle={[contentContainerStyle, edges.content]}
+      >
         {children}
       </Scroll>
     </FoldListFrame>
@@ -294,15 +311,20 @@ export function SettingsScreenLayout({ intro, children }: { intro?: string; chil
   // The iPhone Duo's chrome (status band, side bar) gives the pages wide windows (unfolded, landscape):
   // they keep a readable column there, as on any wide screen. Narrower windows are unaffected.
   const readable = useHeaderPlacement().kind !== 'top';
+  // A page opened from a Settings search result scrolls to the row it names and flashes it (search/).
+  const landing = useSettingsSearchLanding();
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <SettingsPageScrollView
         keyboardAware
+        scrollRef={landing.scrollRef}
         contentContainerStyle={[styles.list, readable ? READABLE_COLUMN : null]}
         keyboardShouldPersistTaps="handled"
       >
-        {shownIntro !== undefined ? <Text style={styles.intro}>{shownIntro}</Text> : null}
-        {children}
+        <SettingsSearchAnchorsProvider anchors={landing.anchors}>
+          {shownIntro !== undefined ? <Text style={styles.intro}>{shownIntro}</Text> : null}
+          {children}
+        </SettingsSearchAnchorsProvider>
       </SettingsPageScrollView>
     </SafeAreaView>
   );
@@ -310,7 +332,11 @@ export function SettingsScreenLayout({ intro, children }: { intro?: string; chil
 
 export function SectionHeader({ title }: { title: string }) {
   const styles = useSettingsStyles();
-  return <Text style={styles.sectionHeader}>{title}</Text>;
+  return (
+    <SettingsSearchAnchor kind="header" label={title}>
+      <Text style={styles.sectionHeader}>{title}</Text>
+    </SettingsSearchAnchor>
+  );
 }
 
 export function Caption({ children }: { children: ReactNode }) {
@@ -333,29 +359,31 @@ export function ToggleRow({
   const styles = useSettingsStyles();
   const appearance = useAppearance();
   return (
-    <SwitchRow
-      value={value}
-      onValueChange={onValueChange}
-      label={label}
-      style={styles.row}
-      pressedStyle={styles.rowPressed}
-    >
-      {detail === undefined ? (
-        <Text style={styles.rowLabel}>{label}</Text>
-      ) : (
-        <View style={styles.rowText}>
-          <Text style={styles.cardLabel}>{label}</Text>
-          <Text style={styles.linkDescription}>{detail}</Text>
-        </View>
-      )}
-      <Switch
+    <SettingsSearchAnchor label={label}>
+      <SwitchRow
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: appearance.control, true: appearance.accent }}
-        thumbColor={value ? (appearance.light ? '#ffffff' : appearance.foreground) : appearance.controlThumb}
-        ios_backgroundColor={appearance.control}
-      />
-    </SwitchRow>
+        label={label}
+        style={styles.row}
+        pressedStyle={styles.rowPressed}
+      >
+        {detail === undefined ? (
+          <Text style={styles.rowLabel}>{label}</Text>
+        ) : (
+          <View style={styles.rowText}>
+            <Text style={styles.cardLabel}>{label}</Text>
+            <Text style={styles.linkDescription}>{detail}</Text>
+          </View>
+        )}
+        <Switch
+          value={value}
+          onValueChange={onValueChange}
+          trackColor={{ false: appearance.control, true: appearance.accent }}
+          thumbColor={value ? (appearance.light ? '#ffffff' : appearance.foreground) : appearance.controlThumb}
+          ios_backgroundColor={appearance.control}
+        />
+      </SwitchRow>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -373,32 +401,34 @@ export function SegmentedRow<Value extends string>({
 }) {
   const styles = useSettingsStyles();
   return (
-    <View style={styles.segments} accessibilityRole="radiogroup" accessibilityLabel={label}>
-      {options.map((option, index) => {
-        const on = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={option.label}
-            onPress={() => {
-              if (!on) onChange(option.value);
-            }}
-            style={[styles.segment, index > 0 ? styles.segmentDivider : null, on ? styles.segmentOn : null]}
-          >
-            <Text
-              style={[styles.segmentText, on ? styles.segmentTextOn : null]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
+    <SettingsSearchAnchor label={label}>
+      <View style={styles.segments} accessibilityRole="radiogroup" accessibilityLabel={label}>
+        {options.map((option, index) => {
+          const on = option.value === value;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={option.label}
+              onPress={() => {
+                if (!on) onChange(option.value);
+              }}
+              style={[styles.segment, index > 0 ? styles.segmentDivider : null, on ? styles.segmentOn : null]}
             >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+              <Text
+                style={[styles.segmentText, on ? styles.segmentTextOn : null]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -412,12 +442,14 @@ export function SettingToggle({ settingKey, label }: { settingKey: BooleanSettin
 export function ChoiceRow({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const styles = useSettingsStyles();
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} style={styles.row} onPress={onPress}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-        {selected && <View style={styles.radioInner} />}
-      </View>
-    </Pressable>
+    <SettingsSearchAnchor label={label}>
+      <Pressable accessibilityRole="radio" accessibilityState={{ selected }} style={styles.row} onPress={onPress}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+          {selected && <View style={styles.radioInner} />}
+        </View>
+      </Pressable>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -438,30 +470,32 @@ export function StepperRow({
 }) {
   const styles = useSettingsStyles();
   return (
-    <View style={[styles.row, disabled && styles.rowDisabled]}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Decrease ${label.toLowerCase()}`}
-          style={[styles.stepperButton, (disabled || !canDecrease) && styles.stepperButtonDisabled]}
-          disabled={disabled || !canDecrease}
-          onPress={() => onStep(-1)}
-        >
-          <Text style={styles.stepperGlyph}>−</Text>
-        </Pressable>
-        <Text style={styles.stepperValue}>{value}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Increase ${label.toLowerCase()}`}
-          style={[styles.stepperButton, (disabled || !canIncrease) && styles.stepperButtonDisabled]}
-          disabled={disabled || !canIncrease}
-          onPress={() => onStep(1)}
-        >
-          <Text style={styles.stepperGlyph}>+</Text>
-        </Pressable>
+    <SettingsSearchAnchor label={label}>
+      <View style={[styles.row, disabled && styles.rowDisabled]}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <View style={styles.stepper}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Decrease ${label.toLowerCase()}`}
+            style={[styles.stepperButton, (disabled || !canDecrease) && styles.stepperButtonDisabled]}
+            disabled={disabled || !canDecrease}
+            onPress={() => onStep(-1)}
+          >
+            <Text style={styles.stepperGlyph}>−</Text>
+          </Pressable>
+          <Text style={styles.stepperValue}>{value}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Increase ${label.toLowerCase()}`}
+            style={[styles.stepperButton, (disabled || !canIncrease) && styles.stepperButtonDisabled]}
+            disabled={disabled || !canIncrease}
+            onPress={() => onStep(1)}
+          >
+            <Text style={styles.stepperGlyph}>+</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -482,22 +516,24 @@ export function LinkRow({
 }) {
   const styles = useSettingsStyles();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint={description}
-      // Only a list beside its page (two columns) has a selected row; a plain list reports no selection.
-      accessibilityState={selected === undefined ? undefined : { selected }}
-      style={({ pressed }) => [styles.row, (pressed || selected === true) && styles.rowPressed]}
-      onPress={onPress}
-    >
-      <View style={styles.linkText}>
-        <Text style={description !== undefined ? styles.linkTitle : styles.cardLabel}>{title}</Text>
-        {description !== undefined ? (
-          <Text style={[styles.linkDescription, descriptionAccent && styles.linkDescriptionAccent]}>{description}</Text>
-        ) : null}
-      </View>
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
+    <SettingsSearchAnchor label={title}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={description}
+        // Only a list beside its page (two columns) has a selected row; a plain list reports no selection.
+        accessibilityState={selected === undefined ? undefined : { selected }}
+        style={({ pressed }) => [styles.row, (pressed || selected === true) && styles.rowPressed]}
+        onPress={onPress}
+      >
+        <View style={styles.linkText}>
+          <Text style={description !== undefined ? styles.linkTitle : styles.cardLabel}>{title}</Text>
+          {description !== undefined ? (
+            <Text style={[styles.linkDescription, descriptionAccent && styles.linkDescriptionAccent]}>{description}</Text>
+          ) : null}
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -505,10 +541,12 @@ export function LinkRow({
 export function ValueRow({ label, value }: { label: string; value: string }) {
   const styles = useSettingsStyles();
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
+    <SettingsSearchAnchor label={label}>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.value}>{value}</Text>
+      </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -543,39 +581,45 @@ export function HexColourField({
   };
 
   return (
-    <View style={styles.row}>
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={[styles.hexSwatch, value === '' ? null : { backgroundColor: value }]}
-      />
-      <Text style={styles.rowLabel}>{label}</Text>
-      <TextInput
-        accessibilityLabel={`${label}, hex colour`}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        keyboardAppearance={appearance.light ? 'light' : 'dark'}
-        maxLength={7}
-        placeholder="#RRGGBB"
-        placeholderTextColor={appearance.muted}
-        returnKeyType="done"
-        spellCheck={false}
-        style={[styles.input, styles.hexInput]}
-        value={draft}
-        onBlur={commit}
-        onChangeText={(next) => {
-          setDraft(next);
-          const hex = colour(next);
-          if (hex !== '' && hex !== value) onChange(hex);
-        }}
-        onSubmitEditing={commit}
-      />
-    </View>
+    <SettingsSearchAnchor label={label}>
+      <View style={styles.row}>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.hexSwatch, value === '' ? null : { backgroundColor: value }]}
+        />
+        <Text style={styles.rowLabel}>{label}</Text>
+        <TextInput
+          accessibilityLabel={`${label}, hex colour`}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          keyboardAppearance={appearance.light ? 'light' : 'dark'}
+          maxLength={7}
+          placeholder="#RRGGBB"
+          placeholderTextColor={appearance.muted}
+          returnKeyType="done"
+          spellCheck={false}
+          style={[styles.input, styles.hexInput]}
+          value={draft}
+          onBlur={commit}
+          onChangeText={(next) => {
+            setDraft(next);
+            const hex = colour(next);
+            if (hex !== '' && hex !== value) onChange(hex);
+          }}
+          onSubmitEditing={commit}
+        />
+      </View>
+    </SettingsSearchAnchor>
   );
 }
 
 /** SteppedSlider in the current appearance. */
 export function SettingsSlider(props: Omit<Parameters<typeof SteppedSlider>[0], 'appearance'>) {
   const appearance = useAppearance();
-  return <SteppedSlider {...props} appearance={appearance} />;
+  return (
+    <SettingsSearchAnchor label={props.label}>
+      <SteppedSlider {...props} appearance={appearance} />
+    </SettingsSearchAnchor>
+  );
 }

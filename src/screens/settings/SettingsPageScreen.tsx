@@ -25,23 +25,29 @@ import TerminalPalettePage from './TerminalPalettePage';
 import ThemePage from './ThemePage';
 import UpdatesPage from './UpdatesPage';
 import VoicePage from './VoicePage';
+import { SettingsSearchFocusProvider, type SettingsSearchFocus } from './search/SettingsSearchAnchor';
 
 /** One Settings page, chosen by the `SettingsPage` route's `page` param; beside the list in two columns. */
 export default function SettingsPageScreen({ route }: NativeStackScreenProps<RootStackParamList, 'SettingsPage'>) {
-  const { page } = route.params;
+  const { page, focus } = route.params;
   return (
     <SettingsColumnsFrame title={SETTINGS_PAGES[page].title}>
-      <SettingsPageContent page={page} />
+      <SettingsPageContent page={page} focus={focus} />
     </SettingsColumnsFrame>
   );
 }
 
-/** A Settings page's content; a page that throws leaves the rest of Settings usable (the boundary resets per page). */
-export function SettingsPageContent({ page }: { page: SettingsPageId }) {
+/**
+ * A Settings page's content; a page that throws leaves the rest of Settings usable (the boundary resets per page).
+ * `focus`: the row a Settings search result opened it at.
+ */
+export function SettingsPageContent({ page, focus }: { page: SettingsPageId; focus?: SettingsSearchFocus }) {
   return (
     <SettingsPageBoundary key={page} name={`settings:${page}`}>
       <SettingsPageIntro.Provider value={SETTINGS_PAGES[page].description}>
-        <SettingsPageBody page={page} />
+        <SettingsSearchFocusProvider focus={focus}>
+          <SettingsPageBody page={page} />
+        </SettingsSearchFocusProvider>
       </SettingsPageIntro.Provider>
     </SettingsPageBoundary>
   );

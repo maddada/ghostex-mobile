@@ -45,6 +45,7 @@ import {
 } from '../../updates/overTheAir';
 import { SettingsSection } from './SectionBoundary';
 import { SectionHeader, SettingsScreenLayout, useSettingsStyles } from './SettingsControls';
+import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 
 const UpdatesCopy = {
   appHeader: 'App',
@@ -343,15 +344,17 @@ function CheckForUpdates() {
   const checkEverything = useAppUpdateStore((state) => state.checkEverything);
   const summary = running ? { text: UpdatesCopy.checking, tone: 'muted' as Tone } : result === null ? null : checkSummary(result);
   return (
-    <View style={styles.actions}>
-      <SetupButton
-        label={UpdatesCopy.checkButton}
-        accessibilityLabel={UpdatesCopy.checkButton}
-        busy={running}
-        onPress={() => void checkEverything()}
-      />
-      {summary !== null ? <StatusText text={summary.text} tone={summary.tone} /> : null}
-    </View>
+    <SettingsSearchAnchor label={UpdatesCopy.checkButton}>
+      <View style={styles.actions}>
+        <SetupButton
+          label={UpdatesCopy.checkButton}
+          accessibilityLabel={UpdatesCopy.checkButton}
+          busy={running}
+          onPress={() => void checkEverything()}
+        />
+        {summary !== null ? <StatusText text={summary.text} tone={summary.tone} /> : null}
+      </View>
+    </SettingsSearchAnchor>
   );
 }
 

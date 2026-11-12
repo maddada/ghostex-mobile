@@ -1441,6 +1441,17 @@ export const SettingsCopy = {
     "Configure the exact terminal shortcuts shown on the command pad's Agent layer for each agent. These keys never type slash commands.",
 } as const;
 
+/** The search at the top of the Settings list, worded as the desktop's Settings search. */
+export const SettingsSearchCopy = {
+  placeholder: 'Search settings',
+  clear: 'Clear search',
+  noMatches: 'No settings match',
+  noMatchesHint: 'Try another word, such as theme, font or notifications.',
+  count: (count: number) => (count === 1 ? '1 result' : `${count} results`),
+  /** A result's spoken name: the setting and where it is. */
+  resultLabel: (title: string, breadcrumb: string) => `${title}, in ${breadcrumb}`,
+} as const;
+
 /**
  * The Befehlspad (command pad) in the terminal, its Keys and Agent layers and the text editor, and its rows in
  * Settings > Keyboard (wording of the designs).

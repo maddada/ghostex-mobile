@@ -45,6 +45,7 @@ import {
   SettingToggle,
   useSettingsStyles,
 } from './SettingsControls';
+import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 
 /** The choice rows, in the page's order: what needs you first, then the turns you wait for, errors, thread reports. */
 const KIND_ROWS: readonly { key: AlertKindKey; label: string; detail: string }[] = [
@@ -81,17 +82,19 @@ function KindChoice({
   const styles = useSettingsStyles();
   const appearance = useAppearance();
   return (
-    <View
-      style={[styles.card, disabled && styles.rowDisabled]}
-      pointerEvents={disabled ? 'none' : 'auto'}
-      accessibilityState={{ disabled }}
-    >
-      <View style={local.kindText}>
-        <Text style={styles.cardLabel}>{label}</Text>
-        <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text>
+    <SettingsSearchAnchor label={label}>
+      <View
+        style={[styles.card, disabled && styles.rowDisabled]}
+        pointerEvents={disabled ? 'none' : 'auto'}
+        accessibilityState={{ disabled }}
+      >
+        <View style={local.kindText}>
+          <Text style={styles.cardLabel}>{label}</Text>
+          <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text>
+        </View>
+        <SegmentedRow label={label} options={CHOICE_OPTIONS} value={value} onChange={onChange} />
       </View>
-      <SegmentedRow label={label} options={CHOICE_OPTIONS} value={value} onChange={onChange} />
-    </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -107,13 +110,15 @@ function TestNotification({ settings }: { settings: NotificationSettings }) {
   };
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        onPress={send}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      >
-        <Text style={styles.rowLabel}>{NotificationChoicesCopy.test}</Text>
-      </Pressable>
+      <SettingsSearchAnchor label={NotificationChoicesCopy.test}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={send}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
+          <Text style={styles.rowLabel}>{NotificationChoicesCopy.test}</Text>
+        </Pressable>
+      </SettingsSearchAnchor>
       {outcome !== null ? (
         <Caption>{outcome === 'sent' ? NotificationChoicesCopy.testSent : NotificationChoicesCopy.testFailed}</Caption>
       ) : null}
@@ -138,27 +143,29 @@ function SwitchRow({
   const styles = useSettingsStyles();
   const appearance = useAppearance();
   return (
-    <RowToggle
-      value={value}
-      disabled={disabled}
-      onValueChange={onValueChange}
-      label={label}
-      style={[styles.row, disabled && styles.rowDisabled]}
-      pressedStyle={styles.rowPressed}
-    >
-      <View style={local.label}>
-        <Text style={styles.cardLabel}>{label}</Text>
-        {detail !== undefined ? <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text> : null}
-      </View>
-      <Switch
+    <SettingsSearchAnchor label={label}>
+      <RowToggle
         value={value}
         disabled={disabled}
         onValueChange={onValueChange}
-        trackColor={{ false: appearance.control, true: appearance.accent }}
-        thumbColor={value ? appearance.foreground : appearance.controlThumb}
-        ios_backgroundColor={appearance.control}
-      />
-    </RowToggle>
+        label={label}
+        style={[styles.row, disabled && styles.rowDisabled]}
+        pressedStyle={styles.rowPressed}
+      >
+        <View style={local.label}>
+          <Text style={styles.cardLabel}>{label}</Text>
+          {detail !== undefined ? <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text> : null}
+        </View>
+        <Switch
+          value={value}
+          disabled={disabled}
+          onValueChange={onValueChange}
+          trackColor={{ false: appearance.control, true: appearance.accent }}
+          thumbColor={value ? appearance.foreground : appearance.controlThumb}
+          ios_backgroundColor={appearance.control}
+        />
+      </RowToggle>
+    </SettingsSearchAnchor>
   );
 }
 

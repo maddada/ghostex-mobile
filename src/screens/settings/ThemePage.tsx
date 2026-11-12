@@ -66,6 +66,7 @@ import {
   useSettingsStyles,
   ValueRow,
 } from './SettingsControls';
+import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 
 /** Which appearance had a colour or preset picked on purpose since the page opened (`pickedOnPurpose`). */
 type Picked = { dark: boolean; light: boolean };
@@ -239,39 +240,41 @@ function AppearanceRow() {
   const appearance = useAppearance();
 
   return (
-    <View style={settingsStyles.card}>
-      <Text style={settingsStyles.cardLabel}>Appearance</Text>
-      <Caption>System follows your phone’s light or dark mode.</Caption>
-      <View style={styles.appearanceCards}>
-        {APPEARANCE_CHOICES.map((choice) => {
-          const selected = settings.sidebarTheme === choice.value;
-          return (
-            <Pressable
-              key={choice.value}
-              accessibilityRole="radio"
-              accessibilityLabel={`${choice.label} appearance`}
-              accessibilityState={{ selected }}
-              style={styles.appearanceCard}
-              onPress={() => setSetting('sidebarTheme', choice.value)}
-            >
-              <View
-                style={[
-                  styles.appearanceArt,
-                  { borderColor: selected ? colorWithOpacity(appearance.foreground, 85) : appearance.border },
-                  selected ? styles.appearanceArtSelected : null,
-                ]}
+    <SettingsSearchAnchor label="Appearance">
+      <View style={settingsStyles.card}>
+        <Text style={settingsStyles.cardLabel}>Appearance</Text>
+        <Caption>System follows your phone’s light or dark mode.</Caption>
+        <View style={styles.appearanceCards}>
+          {APPEARANCE_CHOICES.map((choice) => {
+            const selected = settings.sidebarTheme === choice.value;
+            return (
+              <Pressable
+                key={choice.value}
+                accessibilityRole="radio"
+                accessibilityLabel={`${choice.label} appearance`}
+                accessibilityState={{ selected }}
+                style={styles.appearanceCard}
+                onPress={() => setSetting('sidebarTheme', choice.value)}
               >
-                {choice.value !== 'dark-2' ? <MiniWindow settings={settings} light /> : null}
-                {choice.value !== 'plain-light' ? <MiniWindow settings={settings} light={false} /> : null}
-              </View>
-              <Text style={[styles.appearanceLabel, { color: selected ? appearance.foreground : appearance.muted }]}>
-                {choice.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <View
+                  style={[
+                    styles.appearanceArt,
+                    { borderColor: selected ? colorWithOpacity(appearance.foreground, 85) : appearance.border },
+                    selected ? styles.appearanceArtSelected : null,
+                  ]}
+                >
+                  {choice.value !== 'dark-2' ? <MiniWindow settings={settings} light /> : null}
+                  {choice.value !== 'plain-light' ? <MiniWindow settings={settings} light={false} /> : null}
+                </View>
+                <Text style={[styles.appearanceLabel, { color: selected ? appearance.foreground : appearance.muted }]}>
+                  {choice.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
-    </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -315,39 +318,41 @@ function ColourRow({ dark, picked, onPicked }: { dark: boolean; picked: Picked; 
   );
 
   return (
-    <View style={settingsStyles.card}>
-      <View style={styles.colourHeader}>
-        <Text style={settingsStyles.cardLabel}>{dark ? 'Dark mode colour' : 'Light mode colour'}</Text>
-        <Text style={[styles.readout, { color: appearance.muted }]}>
-          {follows ? `${name} · follows ${dark ? 'light' : 'dark'} mode` : name}
-        </Text>
+    <SettingsSearchAnchor label={dark ? 'Dark mode colour' : 'Light mode colour'}>
+      <View style={settingsStyles.card}>
+        <View style={styles.colourHeader}>
+          <Text style={settingsStyles.cardLabel}>{dark ? 'Dark mode colour' : 'Light mode colour'}</Text>
+          <Text style={[styles.readout, { color: appearance.muted }]}>
+            {follows ? `${name} · follows ${dark ? 'light' : 'dark'} mode` : name}
+          </Text>
+        </View>
+        <Caption>
+          {dark
+            ? 'The colour of the app in dark mode. Picking one gives light mode the same colour until you pick one there. The + square takes any tint.'
+            : 'The colour of the app in light mode. It follows the dark mode colour until you pick one here. The + square takes any tint.'}
+        </Caption>
+        <View style={styles.squares}>
+          {squares.map((entry) =>
+            square(entry.id, entry.label, entry.tint, selected === entry.id, () => choose(entry.id)),
+          )}
+          {square('custom', 'Custom', selected === 'custom' ? settings[tintKey] : null, selected === 'custom', () =>
+            choose('custom'),
+          )}
+        </View>
+        {selected === 'custom' ? (
+          <HexColourField
+            label="Custom tint"
+            value={settings[tintKey]}
+            // Typing a tint is picking this appearance's colour on purpose, as the desktop's picker records it
+            // (tabs/theme/mod.rs `picked_light`), so a later preset of the other appearance leaves it alone.
+            onChange={(hex) => {
+              patchSettings({ [tintKey]: hex });
+              onPicked(dark);
+            }}
+          />
+        ) : null}
       </View>
-      <Caption>
-        {dark
-          ? 'The colour of the app in dark mode. Picking one gives light mode the same colour until you pick one there. The + square takes any tint.'
-          : 'The colour of the app in light mode. It follows the dark mode colour until you pick one here. The + square takes any tint.'}
-      </Caption>
-      <View style={styles.squares}>
-        {squares.map((entry) =>
-          square(entry.id, entry.label, entry.tint, selected === entry.id, () => choose(entry.id)),
-        )}
-        {square('custom', 'Custom', selected === 'custom' ? settings[tintKey] : null, selected === 'custom', () =>
-          choose('custom'),
-        )}
-      </View>
-      {selected === 'custom' ? (
-        <HexColourField
-          label="Custom tint"
-          value={settings[tintKey]}
-          // Typing a tint is picking this appearance's colour on purpose, as the desktop's picker records it
-          // (tabs/theme/mod.rs `picked_light`), so a later preset of the other appearance leaves it alone.
-          onChange={(hex) => {
-            patchSettings({ [tintKey]: hex });
-            onPicked(dark);
-          }}
-        />
-      ) : null}
-    </View>
+    </SettingsSearchAnchor>
   );
 }
 
@@ -514,25 +519,27 @@ function TerminalPaletteRows() {
         onPress={() => navigation.navigate('SettingsPage', { page: 'terminalPaletteLight' })}
       />
       <Caption>The terminal colours in dark mode and in light mode.</Caption>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Import Ghostty theme"
-        accessibilityState={{ disabled: !hydrated || importing, busy: importing }}
-        disabled={!hydrated || importing}
-        onPress={() => void importPalette()}
-        style={({ pressed }) => [
-          settingsStyles.row,
-          pressed && settingsStyles.rowPressed,
-          (!hydrated || importing) && settingsStyles.rowDisabled,
-        ]}
-      >
-        <View style={settingsStyles.linkText}>
-          <Text style={settingsStyles.linkTitle}>Import Ghostty theme</Text>
-          <Text style={settingsStyles.linkDescription}>
-            {importing ? 'Reading file…' : 'Add a private terminal palette from a local file.'}
-          </Text>
-        </View>
-      </Pressable>
+      <SettingsSearchAnchor label="Import Ghostty theme">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Import Ghostty theme"
+          accessibilityState={{ disabled: !hydrated || importing, busy: importing }}
+          disabled={!hydrated || importing}
+          onPress={() => void importPalette()}
+          style={({ pressed }) => [
+            settingsStyles.row,
+            pressed && settingsStyles.rowPressed,
+            (!hydrated || importing) && settingsStyles.rowDisabled,
+          ]}
+        >
+          <View style={settingsStyles.linkText}>
+            <Text style={settingsStyles.linkTitle}>Import Ghostty theme</Text>
+            <Text style={settingsStyles.linkDescription}>
+              {importing ? 'Reading file…' : 'Add a private terminal palette from a local file.'}
+            </Text>
+          </View>
+        </Pressable>
+      </SettingsSearchAnchor>
     </>
   );
 }

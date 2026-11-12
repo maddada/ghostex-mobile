@@ -8,6 +8,7 @@
  */
 
 import { useNavigation } from '@react-navigation/native';
+import { useEffect } from 'react';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '../navigation/types';
@@ -16,16 +17,19 @@ import { SettingsColumnsFrame, SettingsPageList } from './settings/SettingsColum
 import { DEFAULT_SETTINGS_PAGE } from './settings/columnRules';
 import { SettingsScreenLayout } from './settings/SettingsControls';
 import { SettingsPageContent } from './settings/SettingsPageScreen';
+import { clearSettingsSearch } from './settings/search/SettingsSearch';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // The search's words last while Settings is open (Back from a result keeps them), not into the next visit.
+  useEffect(() => clearSettingsSearch, []);
 
   return (
     <SettingsColumnsFrame
       title={SETTINGS_PAGES[DEFAULT_SETTINGS_PAGE].title}
       single={
         <SettingsScreenLayout>
-          <SettingsPageList onOpen={(page) => navigation.navigate('SettingsPage', { page })} />
+          <SettingsPageList onOpen={(page, focus) => navigation.navigate('SettingsPage', { page, focus })} />
         </SettingsScreenLayout>
       }
     >
