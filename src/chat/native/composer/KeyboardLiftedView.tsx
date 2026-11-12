@@ -7,12 +7,25 @@
  * `LAPTOP_CLEAR` above the fold with the keyboard below it, as the approved mockup shows. In one of the Duo's pane
  * slots (`chatPlacement`) the pane already ends at the keyboard or above the fold and away from the home indicator:
  * the composer keeps only its least space below, with the keyboard or without.
+ *
+ * Android: the terminal screen already ends at the keyboard's top while it is up (its bottom padding,
+ * `TerminalScreen.tsx`), so the composer keeps only `KEYBOARD_GAP` below it there, not the home indicator's
+ * inset, which the keyboard covers.
+ *
+ * CDXC:SessionChat 2026-11-12 WHY:
+ * User (screenshot of the phone's chat with the keyboard open, status line off): an empty band stood between the
+ * chat box and the keyboard's suggestion bar (about 50 points on a Pixel-sized emulator: the gesture bar's 24 twice,
+ * plus 3). It was not a status line: on Android the composer kept the gesture bar's inset below it with the keyboard
+ * up, and the screen's bottom spacer kept it a second time, both under a keyboard that already covers that bar. With the keyboard up the chat box now sits
+ * `KEYBOARD_GAP` above the keyboard, as on the iPhone; with it down nothing changes (the 2026-10-29 spacer decision
+ * in `TerminalScreen.tsx`).
  */
 
 import { useRef, type ReactNode } from 'react';
-import { View, type StyleProp, type ViewInstance, type ViewStyle } from 'react-native';
+import { Platform, View, type StyleProp, type ViewInstance, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useKeyboardFrame } from '../../../components/common/keyboard/keyboardFrame';
 import { LAPTOP_CLEAR } from '../../../components/common/verticalBar/layout';
 import { useLaptopFold } from '../../../components/common/verticalBar/laptopFold';
 import { useChatPlacement } from '../chatPlacement';
@@ -36,7 +49,15 @@ export function KeyboardLiftedView({
   const { inset, onAnchorLayout } = useKeyboardInset(anchor);
   // In the laptop pose the lift ends at the fold's top: keep the knick's clearance there.
   const gap = useLaptopFold() === null ? KEYBOARD_GAP : LAPTOP_CLEAR;
-  const bottom = useChatPlacement().inPane ? MIN_BOTTOM : inset > 0 ? inset + gap : Math.max(insets.bottom, MIN_BOTTOM);
+  // Android reports the keyboard only while it is up (`keyboardDidShow` to `keyboardDidHide`).
+  const androidKeyboardUp = useKeyboardFrame() !== null && Platform.OS === 'android';
+  const bottom = useChatPlacement().inPane
+    ? MIN_BOTTOM
+    : inset > 0
+      ? inset + gap
+      : androidKeyboardUp
+        ? KEYBOARD_GAP
+        : Math.max(insets.bottom, MIN_BOTTOM);
   return (
     <View ref={anchor} style={[style, { paddingBottom: bottom }]} onLayout={onAnchorLayout}>
       {typeof children === 'function' ? children(bottom) : children}

@@ -1180,8 +1180,15 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * chat box sits lower. Take that?" (Q764): "Keep today's spacing". The spacer under the chat composer stays
    * on Android and on every iPhone; only the iPhone Duo, whose header stands in the status band or the side
    * bar, leaves the composer's own bottom margin alone below it.
+   *
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User, of an empty band between the Android chat box and the keyboard's suggestion bar with the status line off:
+   * "with the keyboard open the chat box sits right on the keyboard". On Android with the keyboard up the screen's
+   * padding already ends at the keyboard, so the spacer (the gesture bar's inset, under the keyboard then) goes, and
+   * the composer keeps only its keyboard gap (`KeyboardLiftedView`). With the keyboard down the spacer stays as decided
+   * above; the iPhone is unchanged (its composer lifts itself to the keyboard from wherever the spacer leaves it).
    */
-  const chatBottomSpacer = headerPlacement.kind === 'top';
+  const chatBottomSpacer = headerPlacement.kind === 'top' && !(Platform.OS === 'android' && keyboardVisible);
   // The same buttons standing in the iPhone Duo's side bar below the status items (rail): Back never
   // moves into the menu. The voice button has no rail entry: the rail exists only on iOS, where it does
   // not render (VOICE_SUPPORTED). Memoized on the header's inputs, so terminal output and tab updates
@@ -1683,9 +1690,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
           // With the keyboard up the container's bottom padding already clears
           // the IME, so the terminal surface takes all of it and only adds the
           // home-indicator inset while the keyboard is down. The chat composer
-          // is a control rather than a full-bleed surface: it keeps the margin
-          // it has with the keyboard down so its bottom row never sits flush
-          // against the keyboard. On the iPhone Duo the composer's own bottom
+          // keeps the inset below it with the keyboard down; with the keyboard up
+          // on Android the composer's own keyboard gap is the only space left
+          // above the keyboard, and on the iPhone Duo the composer's own bottom
           // margin is the only one (`chatBottomSpacer`).
           <View
             testID="terminal-bottom-spacer"
