@@ -50,6 +50,20 @@ const PAGE_IN_MS = 170;
 /** How far (a share of the width) the pages travel out and in. */
 const PAGE_SHIFT = 0.28;
 
+/**
+ * A raw touch event's point and time. React Native puts them on the event itself; react-native-web (the previews)
+ * passes the DOM's event, whose point is on its touches and whose time is `timeStamp`, the responder events' clock.
+ */
+function touchPoint(event: GestureResponderEvent): { x: number; y: number; at: number } {
+  const native = event.nativeEvent as GestureResponderEvent['nativeEvent'] & { timeStamp?: number };
+  const first = native.changedTouches?.[0] ?? native.touches?.[0];
+  return {
+    x: native.pageX ?? first?.pageX ?? 0,
+    y: native.pageY ?? first?.pageY ?? 0,
+    at: native.timestamp ?? native.timeStamp ?? event.timeStamp,
+  };
+}
+
 /** The page a swipe just left: the next chat mounted within this time slides in from the other side. */
 let entrance: { from: 1 | -1; at: number } | null = null;
 const ENTRANCE_WINDOW_MS = 1200;
@@ -155,7 +169,7 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
       style={[styles.fill, { opacity, transform: [{ translateX }] }]}
       {...handlers}
       onTouchStart={(event) => {
-        const { pageX, pageY, timestamp } = event.nativeEvent;
+        const { x: pageX, y: pageY, at: timestamp } = touchPoint(event);
         const afterHold = heldLast.current;
         heldLast.current = false;
         touch.current = {
@@ -172,7 +186,7 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
         };
       }}
       onTouchMove={(event) => {
-        const { pageX, pageY } = event.nativeEvent;
+        const { x: pageX, y: pageY } = touchPoint(event);
         if (Math.abs(pageX - touch.current.x) > TAP_SLOP || Math.abs(pageY - touch.current.y) > TAP_SLOP) {
           touch.current.travelled = true;
         }
@@ -181,10 +195,10 @@ export function TabSwipeView({ swipe, children }: { swipe: TabSwipe | null; chil
       // A press held in place is a hold: the words under it may now be selected, so the next touch is theirs. A
       // touch a list or a code block took (cancelled) keeps a selection's guard for the touch after it.
       onTouchEnd={(event) => {
-        heldLast.current = heldInPlace(event.nativeEvent.timestamp);
+        heldLast.current = heldInPlace(touchPoint(event).at);
       }}
       onTouchCancel={(event) => {
-        heldLast.current = heldInPlace(event.nativeEvent.timestamp) || touch.current.afterHold;
+        heldLast.current = heldInPlace(touchPoint(event).at) || touch.current.afterHold;
       }}
     >
       {children}
