@@ -4,40 +4,21 @@
  */
 
 import { StateCardCopy } from '../../copy';
-import type { MachineInventory } from '../../inventory/store';
-import type { MachineNotice } from './machineNotice';
 
 /**
- * Status line per sessions-drawer.md §5 for the selected machine.
+ * The status row's own words under the Sessions machine tabs: only the hint while there are no computers.
  *
- * CDXC:RemoteMachines 2026-10-28 DECISION:
- * User: "we shouldn't show connecting twice like we do here on the phone please". While the machine
- * notice shows (connecting, or a failure), it already says
- * what the machine is doing, so this line gives way to it instead of repeating it (2026-11-12: the
- * notice now is this same line, see machineNotice.ts). The line keeps what no other part of the screen says:
- * a refresh in progress, "Connected to <name>", and the no-machines hint.
+ * CDXC:RemoteMachines 2026-11-12 DECISION:
+ * User: "lets remove the log thing (connected to xyz)", then (Q2732 note) "we don't need to show this in the sessions
+ * list except when ... user isn't able to connect. so we show this only when error. not always". The row says nothing
+ * while everything works: no "Connected to <name>", no "Refreshing…" and no route label. A connecting or failing
+ * computer is the machine notice's line (machineNotice.ts), each computer's link its icon (ComputerStatusIcons.tsx),
+ * and Logs sit in the ☰ menu, the Connections sheet and Settings › Connection. Supersedes the 2026-10-28 line that kept
+ * "Connected to <name>" and opened Logs.
  */
 export function drawerStatusLine(
   /** `machineDisplayLabel` of the selected machine; null when there are no machines. */
   label: string | null,
-  inventory: MachineInventory | undefined,
-  notice: MachineNotice | null = null,
 ): string {
-  if (label === null) return StateCardCopy.noMachines.status;
-  if (notice !== null) return '';
-  if (inventory === undefined || (!inventory.hasLoaded && inventory.summary === null)) {
-    return StateCardCopy.connecting.status(label);
-  }
-  if (inventory.refreshing && inventory.summary !== null) {
-    return StateCardCopy.connecting.refreshingStatus(label);
-  }
-  // A failure is the machine notice's line (machineNotice.ts), never a second "refresh failed" line.
-  if (inventory.lastError !== null) return '';
-  if (inventory.summary !== null) {
-    if (inventory.summary.sessions.length === 0 && inventory.summary.projects.length > 0) {
-      return StateCardCopy.success.emptyProjectsStatus;
-    }
-    return StateCardCopy.success.status(label);
-  }
-  return StateCardCopy.initialStatus;
+  return label === null ? StateCardCopy.noMachines.status : '';
 }

@@ -92,7 +92,9 @@ export type Overlay =
     }
   | { kind: 'recentProjects'; machine: MachineRecord }
   | { kind: 'recovery'; machine: MachineRecord | null }
-  | { kind: 'logs' };
+  | { kind: 'logs' }
+  /** Every computer's connection (src/components/sessions/ConnectionsSheet.tsx). */
+  | { kind: 'connections' };
 
 export const NONE: Overlay = { kind: 'none' };
 

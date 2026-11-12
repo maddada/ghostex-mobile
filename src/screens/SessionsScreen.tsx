@@ -122,7 +122,6 @@ import DrawerBlockView, { type DrawerBlockActions } from './sessions-screen/Draw
 import { useGbots } from './sessions-screen/use-gbots';
 import { recentProjectsWithoutGbots } from '../contract/gbotsFilter';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
-import { CloseIcon, WarningTriangleIcon } from '../components/terminal/icons';
 import { DemoCopy } from '../demo/copy';
 import { isDemoMachine } from '../demo/identity';
 import {
@@ -148,7 +147,12 @@ import {
   WallCopy,
 } from '../copy';
 import JustPairedLine from './sessions-screen/JustPairedLine';
-import { MachineNoticeDetails, MachineNoticeLine, useNoticeClock } from './sessions-screen/MachineNotice';
+import { MachineNoticeLine, useNoticeClock, useShownNotices } from './sessions-screen/MachineNotice';
+import ComputerStatusIcons from '../components/sessions/ComputerStatusIcons';
+import ConnectionsSheet from '../components/sessions/ConnectionsSheet';
+import { useConnectionEntries } from '../components/sessions/useConnectionEntries';
+import { useConnectionHealth } from '../machines/connectionHealth';
+import { inventoryConnectionState } from '../machines/linkStatus';
 import { machineNotice, machineShortName } from '../components/sessions/machineNotice';
 import { renameInitialTitle } from '../sessions/sessionCommands';
 import { useInventoryStore } from '../inventory/store';
@@ -159,7 +163,6 @@ import {
   useMachinesStore,
   type MachineRecord,
 } from '../machines/store';
-import { useMachineRoutes } from '../machines/easyConnectRoute';
 import {
   computerIconDrawing,
   forgetComputerIcon,
@@ -186,8 +189,7 @@ import { restoreClosedSession } from '../sessions/closedSessions';
 import { filterSummaryForWorkspace, resolveWorkspaceId, workspaceSwitchTarget } from '../workspaces/workspaceFilter';
 import { useSettingsStore, type SessionListView } from '../settings/store';
 import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
-import { GhostexPalette, mixHexColors } from '../theme/palette';
-import { readableSecondaryText } from '../theme/sidebarAppearance';
+import { GhostexPalette } from '../theme/palette';
 import { useStatusBarStyle } from '../theme/statusBar';
 import { useAppearance } from '../theme/useAppearance';
 import {
@@ -204,8 +206,6 @@ import { SessionsBottomBar } from './sessions-screen/BottomBar';
 import {
   SESSIONS_HEADER_HEIGHT,
   styles,
-  TAILSCALE_WARNING_AMBER,
-  TAILSCALE_WARNING_WASH_PERCENT,
 } from './sessions-screen/styles';
 import { useSessionsScreenActions } from './sessions-screen/use-sessions-screen-actions';
 import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-menus';
@@ -260,6 +260,7 @@ export default function SessionsScreen({ navigation }: Props) {
   // Cloud Box sessions are listed inside their home project (cloudBoxes/listInventories.ts).
   const inventoriesByMachineId = useListInventories();
   const computerIconFacts = useComputerIconsStore((state) => state.facts);
+  const connectionHealth = useConnectionHealth((state) => state.byId);
   const refreshMachine = useInventoryStore((state) => state.refreshMachine);
   const refreshMachineFresh = useInventoryStore((state) => state.refreshMachineFresh);
   const retryMachine = useInventoryStore((state) => state.retryMachine);
@@ -282,11 +283,6 @@ export default function SessionsScreen({ navigation }: Props) {
   const lastActionByProject = useLauncherStore((state) => state.lastActionByProject);
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
   const sidebarGroupsOpacityPercent = useSettingsStore((state) => state.settings.sidebarGroupsOpacityPercent);
-  const tailscaleReminder = useSettingsStore((state) => state.settings.tailscaleReminder);
-  // A Tailscale computer that also has Easy Connect names the route it is on (`easyConnectRoute.ts`).
-  const onEasyConnect = useMachineRoutes((state) =>
-    machine === null || machine.transport === 'tailcat' ? false : state.active[machine.id] === 'easyConnect',
-  );
   const setSetting = useSettingsStore((state) => state.setSetting);
   const sidebarAppearance = useAppearance();
   useStatusBarStyle(sidebarAppearance.light);
@@ -295,22 +291,6 @@ export default function SessionsScreen({ navigation }: Props) {
   const neutralExpandedGroupSurface = useMemo(
     () => expandedGroupBackground(sidebarAppearance.background),
     [sidebarAppearance.background],
-  );
-  // The Tailscale notice on a light appearance: its line and its close glyph in the list's muted ink, darkened where its
-  // amber wash over the page needs that for 4.5:1 (the glyph needs 3:1).
-  const tailscaleNoticeMuted = useMemo(
-    () =>
-      readableSecondaryText(listInk.muted, sidebarAppearance.foreground, [
-        mixHexColors(TAILSCALE_WARNING_AMBER, sidebarAppearance.background, TAILSCALE_WARNING_WASH_PERCENT),
-      ]),
-    [listInk.muted, sidebarAppearance.foreground, sidebarAppearance.background],
-  );
-  const tailscaleConnectedInk = useMemo(
-    () =>
-      readableSecondaryText(GhostexPalette.STATUS_CONNECTED, sidebarAppearance.foreground, [
-        sidebarAppearance.background,
-      ]),
-    [sidebarAppearance],
   );
 
   const [overlay, setOverlay] = useState<Overlay>(NONE);
@@ -422,13 +402,6 @@ export default function SessionsScreen({ navigation }: Props) {
   );
 
   const selectedInventory = machine === null ? undefined : inventoriesByMachineId[machine.id];
-  /*
-   * The computer answered its last list read (over the local network, another VPN or Tailscale
-   * alike), so Tailscale being off on this phone is not what stands between them: the notice stays
-   * hidden. Issue #439: it showed on the same Wi-Fi as the computer.
-   */
-  const computerReachable =
-    selectedInventory !== undefined && selectedInventory.summary !== null && selectedInventory.lastError === null;
   const machineWorkspaces = selectedInventory?.summary?.workspaces ?? null;
   /*
    * The workspace the machine's list shows (null while it has no workspaces, which is also every
@@ -689,20 +662,11 @@ export default function SessionsScreen({ navigation }: Props) {
   const machineTabs = useMemo((): MachineTabStripItem[] => {
     const tabs = machines.map((entry): MachineTabItem => {
       const inventory = inventoriesByMachineId[entry.id];
-      const connectionState =
-        inventory === undefined ||
-        !inventory.hasLoaded ||
-        inventory.retrying ||
-        (inventory.refreshing && inventory.summary === null)
-          ? 'busy'
-          : inventory.lastError !== null
-            ? 'failed'
-            : inventory.summary === null
-              ? 'disconnected'
-              : 'connected';
+      const connectionState = inventoryConnectionState(inventory);
       const counts = tabStatusCounts(machineSessionCounts(inventory?.summary ?? null));
       const iconFacts = computerIconFacts[entry.id];
-      const retryable = connectionState === 'failed' || connectionState === 'disconnected';
+      const slow = connectionState === 'connected' && connectionHealth[entry.id]?.slowSince != null;
+      const explained = connectionState === 'failed' || connectionState === 'disconnected' || slow;
       return {
         id: entry.id,
         label: machineDisplayLabel(entry),
@@ -711,7 +675,8 @@ export default function SessionsScreen({ navigation }: Props) {
           connectionState === 'failed' && inventory?.lastError
             ? inventory.lastError
             : StripCopy.connection[connectionState],
-        onConnect: retryable ? () => retryMachineWithStatus(entry) : undefined,
+        slow,
+        onConnect: explained ? () => setOverlay({ kind: 'connections' }) : undefined,
         workingCount: counts.workingCount,
         attentionCount: counts.attentionCount,
         backgroundWorkCount: counts.backgroundWorkCount,
@@ -721,7 +686,7 @@ export default function SessionsScreen({ navigation }: Props) {
       };
     });
     return [...tabs, MACHINE_TAB_ADD];
-  }, [machines, inventoriesByMachineId, retryMachineWithStatus, computerIconFacts]);
+  }, [machines, inventoriesByMachineId, computerIconFacts, connectionHealth]);
 
   /*
    * Each computer's icon (machines/computerIcons.ts): asked once a connected computer's sessions have loaded, asked
@@ -850,20 +815,14 @@ export default function SessionsScreen({ navigation }: Props) {
     );
     return notice === null ? [] : [{ machineId: entry.id, notice }];
   });
-  // Unified speaks for every computer, a computer tab for its own (machineNotice.ts).
-  const shownNotices = unified.on ? notices : notices.filter(({ machineId }) => machineId === machine?.id);
+  // The line speaks for every computer ("2 computers aren't connected"); a connecting one only after 5 s (machineNotice.ts).
+  const shownNotices = useShownNotices(notices);
   const noticeFailing = shownNotices.some(({ notice }) => notice.kind === 'failure');
   const noticeNow = useNoticeClock(noticeFailing);
-  // The details a tap on the failure line opens; they close by themselves once nothing fails.
-  const [noticeOpen, setNoticeOpen] = useState(false);
-  useEffect(() => {
-    if (!noticeFailing) setNoticeOpen(false);
-  }, [noticeFailing]);
-  const statusLine = drawerStatusLine(
-    machine === null ? null : machineDisplayLabel(machine),
-    selectedInventory,
-    shownNotices[0]?.notice ?? null,
-  );
+  const statusLine = drawerStatusLine(machine === null ? null : machineDisplayLabel(machine));
+  const tabsShown = machineTabsVisible(unified.on, machines.length, selectedSummary?.separateByMachine === true);
+  const connectionEntries = useConnectionEntries(machines, tailscaleConnected);
+  const sortedConnectionEntries = useConnectionEntries(machines, tailscaleConnected, true);
   useWallPreviews(tilesShown && isFocused, unified.on ? unified.wallTargets : classicWallTargets);
 
   /*
@@ -1306,14 +1265,6 @@ export default function SessionsScreen({ navigation }: Props) {
     />
   );
 
-  /**
-   * Tailcat machines reach the computer through the in-app bridge, so the
-   * Tailscale app's VPN state says nothing about whether they can connect.
-   * Only plain-SSH machines (and the not-yet-added case, whose SSH host is
-   * normally a tailnet name) depend on it.
-   */
-  const tailscaleApplies = machine === null || machine.transport !== 'tailcat';
-
   const moreButtonRef = useRef<ViewInstance | null>(null);
   const contentTop = useContentTop();
   // The session list reaches under the iPhone Duo's side bar, its rows keep clear of it.
@@ -1551,7 +1502,7 @@ export default function SessionsScreen({ navigation }: Props) {
         {inRail ? null : bellButton}
         {inRail ? null : moreButton}
       </View>
-      {machineTabsVisible(unified.on, machines.length, selectedSummary?.separateByMachine === true) ? (
+      {tabsShown ? (
         <MachineTabs
           items={machineTabs}
           selectedMachineId={machine === null ? null : machine.id}
@@ -1588,92 +1539,30 @@ export default function SessionsScreen({ navigation }: Props) {
           <Text style={{ color: sidebarAppearance.muted, fontSize: 13, lineHeight: 18 }}>{DemoCopy.banner}</Text>
         </View>
       ) : null}
-      {tailscaleApplies && tailscaleReminder && tailscaleConnected === false && !computerReachable ? (
-        <View style={styles.tailscaleWarning}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tailscale is not connected. Open Tailscale"
-            style={styles.tailscaleWarningMain}
-            onPress={() => void openTailscaleOrDownload()}
-          >
-            <WarningTriangleIcon size={18} color={GhostexPalette.STATUS_WORKING} />
-            <View style={styles.tailscaleWarningCopy}>
-              <Text style={[styles.tailscaleWarningTitle, listInk.light ? { color: listInk.text } : null]}>
-                Tailscale isn’t connected
-              </Text>
-              <Text style={[styles.tailscaleWarningBody, listInk.light ? { color: tailscaleNoticeMuted } : null]}>
-                Tap to open Tailscale and reconnect.
-              </Text>
+      {shownNotices.length > 0 || statusLine.length > 0 || !tabsShown ? (
+        <View style={styles.statusRow}>
+          {shownNotices.length > 0 ? (
+            <View style={styles.statusPressable}>
+              <MachineNoticeLine
+                entries={shownNotices}
+                now={noticeNow}
+                appearance={sidebarAppearance}
+                onPress={() => setOverlay({ kind: 'connections' })}
+              />
             </View>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Hide the Tailscale notice"
-            accessibilityHint="Turn it back on in Settings, Connection"
-            hitSlop={10}
-            style={styles.tailscaleWarningClose}
-            onPress={() => setSetting('tailscaleReminder', false)}
-          >
-            <CloseIcon size={16} color={listInk.light ? tailscaleNoticeMuted : GhostexPalette.MUTED} />
-          </Pressable>
-        </View>
-      ) : null}
-      <View style={styles.statusRow}>
-        {shownNotices.length > 0 ? (
-          <View style={styles.statusPressable}>
-            <MachineNoticeLine
-              entries={shownNotices}
-              now={noticeNow}
-              open={noticeOpen}
-              appearance={sidebarAppearance}
-              onToggle={() => setNoticeOpen((current) => !current)}
-            />
-          </View>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Show logs"
-            hitSlop={8}
-            style={styles.statusPressable}
-            onPress={() => setOverlay({ kind: 'logs' })}
-          >
+          ) : statusLine.length > 0 ? (
             <Text
-              style={[styles.statusLine, { color: sidebarAppearance.muted }]}
+              style={[styles.statusPressable, styles.statusLine, { color: sidebarAppearance.muted }]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
               {statusLine}
             </Text>
-          </Pressable>
-        )}
-        {onEasyConnect && computerReachable ? (
-          <View accessibilityLabel="Connected through Easy Connect" style={styles.tailscaleIndicator}>
-            <Text style={[styles.tailscaleIndicatorLabel, { color: tailscaleConnectedInk }]}>• Easy Connect</Text>
-          </View>
-        ) : tailscaleApplies && tailscaleConnected === true ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tailscale connected"
-            hitSlop={8}
-            style={styles.tailscaleIndicator}
-            onPress={() => void openTailscaleOrDownload()}
-          >
-            <Text style={[styles.tailscaleIndicatorLabel, { color: tailscaleConnectedInk }]}>• Tailscale</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {noticeOpen ? (
-        <MachineNoticeDetails
-          entries={shownNotices}
-          now={noticeNow}
-          appearance={sidebarAppearance}
-          onRetry={(machineId) => {
-            const target = machineById(machineId);
-            if (target !== null) retryMachineWithStatus(target);
-          }}
-          onRemoteSettings={(machineId) => navigation.navigate('MachineForm', { machineId })}
-          onLogs={() => setOverlay({ kind: 'logs' })}
-        />
+          ) : null}
+          {tabsShown ? null : (
+            <ComputerStatusIcons entries={connectionEntries} onPress={() => setOverlay({ kind: 'connections' })} />
+          )}
+        </View>
       ) : null}
       {/*
         A machine with no Spaces has nothing to switch between — Other alone
@@ -2444,6 +2333,26 @@ export default function SessionsScreen({ navigation }: Props) {
       ) : null}
 
       {overlay.kind === 'logs' ? <LogsSheet visible onClose={() => setOverlay(NONE)} /> : null}
+      {overlay.kind === 'connections' ? (
+        <ConnectionsSheet
+          entries={sortedConnectionEntries}
+          onClose={() => setOverlay(NONE)}
+          onRetry={(machineId) => {
+            const target = machineById(machineId);
+            if (target !== null) retryMachineWithStatus(target);
+          }}
+          onOpenTailscale={() => void openTailscaleOrDownload()}
+          onRemoteSettings={(machineId) => {
+            setOverlay(NONE);
+            navigation.navigate('MachineForm', { machineId });
+          }}
+          onLogs={() => setOverlay({ kind: 'logs' })}
+          onConnectionSettings={() => {
+            setOverlay(NONE);
+            navigation.navigate('SettingsPage', { page: 'connection' });
+          }}
+        />
+      ) : null}
 
       {overlay.kind === 'recovery' ? (
         <ActionSheet

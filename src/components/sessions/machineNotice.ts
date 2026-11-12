@@ -8,8 +8,9 @@
  * "Also no need to show floating connecting there". Nothing floats over the list any more. A computer's
  * connection state has one place, the status line above the search row, in the screen's flow: one
  * short line naming the computer ("Can't reach MacBook · list from 2 min ago", "Connecting to
- * MacBook…") whose tap opens the full reason with Retry, Remote Settings and Logs under it, pushing
- * the list down. It goes away by itself when the computer answers. Supersedes the 2026-10-25 floating
+ * MacBook…"). It goes away by itself when the computer answers. 2026-11-12 (Q2738 to Q2742): its tap opens the
+ * Connections sheet (the full reason, the fix, Retry and Logs) instead of details under the line, it speaks for every
+ * computer ("2 computers aren't connected"), and a connecting computer shows only after 5 s. Supersedes the 2026-10-25 floating
  * card and pill (which matched the desktop sidebar's overlay); the 2026-09-16 rule stays: a failure
  * keeps showing through retries (its Retry busy) until a refresh succeeds.
  *

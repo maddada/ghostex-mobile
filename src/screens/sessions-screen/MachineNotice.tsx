@@ -1,21 +1,49 @@
 /**
- * The Sessions screen's line about a computer that is not connected, and the details its tap opens
- * (`machineNotice` and `noticeLine` in src/components/sessions/machineNotice.ts hold the rule). Both
- * sit in the screen's flow above the search row: the line in the status row, the details right under
- * it, so the list moves down for them and nothing ever covers its rows.
+ * The Sessions screen's line about a computer that is not connected (`machineNotice` and `noticeLine` in
+ * src/components/sessions/machineNotice.ts hold the rule). It sits in the screen's flow above the search row, so the
+ * list moves down for it and nothing ever covers its rows; its tap opens the Connections sheet
+ * (src/components/sessions/ConnectionsSheet.tsx), which has the full reason, the fix, Retry and Logs.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { RefreshGlyph, SettingsGlyph } from '../../components/sessions/icons';
-import { agoText, noticeLine, type NoticeEntry } from '../../components/sessions/machineNotice';
+import { noticeLine, type NoticeEntry } from '../../components/sessions/machineNotice';
 import { SpinningLoader } from '../../components/sessions/MachineTabs';
 import { WarningTriangleIcon } from '../../components/terminal/icons';
 import { MachineNoticeCopy } from '../../copy';
 import type { SidebarAppearance } from '../../theme/sidebarAppearance';
 import { SetupPalette } from '../../theme/palette';
+
+/** A computer connecting this long is said on the line; a quicker connect says nothing. */
+const CONNECTING_SHOWN_AFTER_MS = 5_000;
+
+/**
+ * `entries` with each connecting computer left out until it has been connecting for 5 s.
+ *
+ * CDXC:RemoteMachines 2026-11-12 DECISION:
+ * User (Q2739): the Sessions screen says nothing while everything works, and "Connecting to …" only if it takes more
+ * than 5 s. Failures always show at once.
+ */
+export function useShownNotices(entries: readonly NoticeEntry[]): NoticeEntry[] {
+  const since = useRef(new Map<string, number>());
+  const [, setTick] = useState(0);
+  const now = Date.now();
+  const connecting = new Set(entries.filter(({ notice }) => notice.kind === 'connecting').map(({ machineId }) => machineId));
+  for (const machineId of [...since.current.keys()]) if (!connecting.has(machineId)) since.current.delete(machineId);
+  for (const machineId of connecting) if (!since.current.has(machineId)) since.current.set(machineId, now);
+  const waiting = [...since.current.values()].filter((at) => now - at < CONNECTING_SHOWN_AFTER_MS);
+  const nextDue = waiting.length === 0 ? null : Math.min(...waiting) + CONNECTING_SHOWN_AFTER_MS;
+  useEffect(() => {
+    if (nextDue === null) return;
+    const timer = setTimeout(() => setTick((tick) => tick + 1), Math.max(0, nextDue - Date.now()) + 20);
+    return () => clearTimeout(timer);
+  }, [nextDue]);
+  return entries.filter(
+    ({ machineId, notice }) =>
+      notice.kind !== 'connecting' || now - (since.current.get(machineId) ?? now) >= CONNECTING_SHOWN_AFTER_MS,
+  );
+}
 
 /** The clock the "list from 2 min ago" part reads; ticks only while it is shown. */
 export function useNoticeClock(ticking: boolean): number {
@@ -33,15 +61,13 @@ export function useNoticeClock(ticking: boolean): number {
 export function MachineNoticeLine({
   entries,
   now,
-  open,
   appearance,
-  onToggle,
+  onPress,
 }: {
   entries: readonly NoticeEntry[];
   now: number;
-  open: boolean;
   appearance: SidebarAppearance;
-  onToggle: () => void;
+  onPress: () => void;
 }) {
   const line = noticeLine(entries, now);
   if (line === null) return null;
@@ -60,10 +86,9 @@ export function MachineNoticeLine({
       accessibilityRole="button"
       accessibilityLabel={line.text}
       accessibilityHint={MachineNoticeCopy.detailsHint}
-      accessibilityState={{ expanded: open }}
       accessibilityLiveRegion="polite"
       hitSlop={8}
-      onPress={onToggle}
+      onPress={onPress}
       style={({ pressed }) => [styles.line, styles.failureLine, pressed ? styles.pressed : null]}
     >
       <WarningTriangleIcon size={13} color={SetupPalette.ERROR} />
@@ -75,79 +100,10 @@ export function MachineNoticeLine({
   );
 }
 
-/** What the line's tap opens: per failing computer, the full reason, how old the list is, and its buttons. */
-export function MachineNoticeDetails({
-  entries,
-  now,
-  appearance,
-  onRetry,
-  onRemoteSettings,
-  onLogs,
-}: {
-  entries: readonly NoticeEntry[];
-  now: number;
-  appearance: SidebarAppearance;
-  onRetry: (machineId: string) => void;
-  onRemoteSettings: (machineId: string) => void;
-  onLogs: () => void;
-}) {
-  const failures = entries.flatMap(({ machineId, notice }) =>
-    notice.kind === 'failure' ? [{ machineId, notice }] : [],
-  );
-  if (failures.length === 0) return null;
-  return (
-    <View style={[styles.card, { backgroundColor: appearance.card, borderColor: appearance.border }]}>
-      {failures.map(({ machineId, notice }, index) => (
-        <View key={machineId} style={index > 0 ? [styles.next, { borderTopColor: appearance.border }] : null}>
-          {failures.length > 1 ? (
-            <Text style={[styles.title, { color: appearance.foreground }]}>{notice.title}</Text>
-          ) : null}
-          <Text selectable style={[styles.reason, { color: appearance.muted }]}>
-            {notice.reason}
-            {notice.staleSince === null ? '' : ` ${MachineNoticeCopy.staleLong(agoText(notice.staleSince, now))}`}
-          </Text>
-          <View style={styles.actions}>
-            <SetupButton
-              small
-              variant="primary"
-              busy={notice.retrying}
-              label={MachineNoticeCopy.retry}
-              icon={<RefreshGlyph size={13} color={SetupPalette.PRIMARY_BUTTON_FOREGROUND} />}
-              onPress={() => onRetry(machineId)}
-            />
-            <SetupButton
-              small
-              variant="secondary"
-              label={MachineNoticeCopy.remoteSettings}
-              icon={<SettingsGlyph size={13} color={SetupPalette.FOREGROUND} />}
-              onPress={() => onRemoteSettings(machineId)}
-            />
-            {index === failures.length - 1 ? (
-              <SetupButton small variant="secondary" label={MachineNoticeCopy.logs} onPress={onLogs} />
-            ) : null}
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, minWidth: 0 },
   failureLine: { alignItems: 'flex-start', paddingVertical: 2 },
   lineText: { fontSize: 12, flexShrink: 1 },
   failureText: { fontSize: 13, lineHeight: 17, fontWeight: '600' },
-  card: {
-    marginTop: 8,
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  next: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  title: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
-  reason: { fontSize: 13, lineHeight: 18 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   pressed: { opacity: 0.6 },
 });

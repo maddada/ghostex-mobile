@@ -57,7 +57,9 @@ export type MachineTabItem = {
    * label and shown as the long-press menu's subtitle.
    */
   connectionLabel?: string;
-  /** Retries the connection from the glyph; absent while connected or busy. */
+  /** Its link is slow (machines/connectionHealthModel.ts): the glyph draws yellow. */
+  slow?: boolean;
+  /** Opens the Connections sheet from the glyph; absent while connected and fine, or busy. */
   onConnect?: () => void;
   /** grouping.ts tabStatusCounts: the desktop machine tab's counts. */
   workingCount: number;
@@ -136,7 +138,13 @@ function ConnectionGlyph({ item }: { item: MachineTabItem }) {
       </View>
     );
   }
-  const color = GLYPH_COLOR[item.connectionState];
+  // A connected computer's glyph is green, yellow while slow (CDXC:RemoteMachines 2026-11-12, ComputerStatusIcons.tsx).
+  const color =
+    item.connectionState === 'connected'
+      ? item.slow === true
+        ? appearance.working
+        : appearance.connected
+      : GLYPH_COLOR[item.connectionState];
   if (item.onConnect === undefined) {
     return (
       <View style={styles.glyph}>
@@ -148,9 +156,7 @@ function ConnectionGlyph({ item }: { item: MachineTabItem }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={
-        item.connectionState === 'failed' ? StripCopy.glyphAction.retry : StripCopy.glyphAction.connect
-      }
+      accessibilityLabel={StripCopy.glyphAction}
       hitSlop={6}
       onPress={item.onConnect}
       style={({ pressed }) => [styles.glyph, pressed ? styles.glyphPressed : null]}

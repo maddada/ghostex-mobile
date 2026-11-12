@@ -6,14 +6,10 @@ import { StyleSheet } from 'react-native';
 
 import { SIDEBAR_BACKGROUND } from '../../components/sessions/rows';
 import { SPACE_CHIP_HEIGHT } from '../../components/sessions/SpaceTabs';
-import { colorWithOpacity, GhostexPalette, GhostexRadii } from '../../theme/palette';
+import { GhostexPalette, GhostexRadii } from '../../theme/palette';
 
 /** The header row's height: its title and buttons are 48 pt tall. */
 export const SESSIONS_HEADER_HEIGHT = 48;
-
-/** The Tailscale notice's amber: its border at 35 % and, over the page, its wash. */
-export const TAILSCALE_WARNING_AMBER = '#FFB454';
-export const TAILSCALE_WARNING_WASH_PERCENT = 10;
 
 const BAND_ROW_PADDING = 12;
 
@@ -78,48 +74,6 @@ export const styles = StyleSheet.create({
     marginTop: 4,
     gap: 8,
   },
-  tailscaleWarning: {
-    minHeight: 54,
-    marginTop: 8,
-    paddingLeft: 12,
-    paddingRight: 4,
-    paddingVertical: 9,
-    borderRadius: GhostexRadii.card,
-    borderWidth: 1,
-    borderColor: colorWithOpacity(TAILSCALE_WARNING_AMBER, 35),
-    backgroundColor: colorWithOpacity(TAILSCALE_WARNING_AMBER, TAILSCALE_WARNING_WASH_PERCENT),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  tailscaleWarningMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  tailscaleWarningClose: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tailscaleWarningCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  tailscaleWarningTitle: {
-    color: GhostexPalette.FOREGROUND,
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-  tailscaleWarningBody: {
-    color: GhostexPalette.MUTED,
-    fontSize: 11,
-    lineHeight: 15,
-  },
   statusPressable: {
     flex: 1,
     minWidth: 0,
@@ -182,16 +136,6 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     opacity: 0.72,
   },
-  tailscaleIndicator: {
-    minHeight: 28,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
   showAllProjects: { paddingHorizontal: 14, paddingVertical: 10 },
   showAllProjectsText: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
-  tailscaleIndicatorLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-  },
 });

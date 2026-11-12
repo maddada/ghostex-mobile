@@ -400,8 +400,6 @@ export const StateCardCopy = {
     title: 'Connecting',
     body: (label: string) => `Opening SSH to ${label} and loading its Ghostex sessions.`,
     actionHint: 'Keep Tailscale online on both devices.',
-    status: (label: string) => `Connecting to ${label}...`,
-    refreshingStatus: (label: string) => `Refreshing sessions on ${label}...`,
   },
   failure: {
     title: 'Connection needs attention',
@@ -418,11 +416,6 @@ export const StateCardCopy = {
     title: 'Nothing active right now',
     body: 'A project shows here while an agent works or waits in it, and for 8 hours after you last used it.',
   },
-  success: {
-    status: (label: string) => `Connected to ${label}`,
-    emptyProjectsStatus: 'Connected. Active projects have no sessions.',
-  },
-  initialStatus: 'Connect to a computer',
 } as const;
 
 /** The names of the path an Easy Connect link is on (`easyConnectRouteName` in machines/easyConnectPathModel.ts). */
@@ -431,6 +424,48 @@ export const RouteNameCopy = {
   globalRelay: 'Global Relay',
   direct: 'Direct',
   sameNetwork: 'Same network',
+} as const;
+
+/** The Connections sheet (src/components/sessions/ConnectionsSheet.tsx) and the Sessions screen's computer icons. */
+export const ConnectionsCopy = {
+  title: 'Connections',
+  summary: (counts: { failed: number; slow: number; fine: number }) =>
+    [
+      counts.failed > 0 ? `${counts.failed} can't connect` : null,
+      counts.slow > 0 ? `${counts.slow} slow` : null,
+      counts.fine > 0 ? `${counts.fine} fine` : null,
+    ]
+      .filter((part): part is string => part !== null)
+      .join(', '),
+  status: {
+    failed: "Can't connect",
+    slow: 'Slow',
+    connecting: 'Connecting…',
+    connected: 'Connected',
+    notConnected: 'Not connected',
+  },
+  tailscaleOff: 'Tailscale is off on this phone.',
+  tailscaleOffFix: 'Turn it on in the Tailscale app, then come back. Ghostex reconnects by itself.',
+  slowRoundTrip: (ms: number) => `Each round trip takes about ${ms} ms.`,
+  slowDrops: (count: number) => `Its connection dropped ${count} times in the last 5 minutes.`,
+  slowHint: 'If it stays slow, send the logs so the developer can see why.',
+  openTailscale: 'Open Tailscale',
+  retry: 'Retry',
+  remoteSettings: 'Remote Settings',
+  sendLogs: 'Send logs',
+  logs: 'Logs',
+  connectionSettings: 'Connection settings',
+  easyConnect: 'Easy Connect',
+  tailscale: 'Tailscale',
+  demo: 'Demo computer',
+  roundTrip: (ms: number) => `${ms} ms`,
+  /** A computer icon's VoiceOver label. */
+  iconLabel: (name: string, status: string) => `${name}, ${status}`,
+  iconHint: 'Shows every computer\'s connection',
+  /** Settings › Connection. */
+  computers: 'Computers',
+  noComputers: 'No computers yet.',
+  troubleshooting: 'Troubleshooting',
 } as const;
 
 /** Failure summarization copy map, sessions-drawer.md §5. */
@@ -694,10 +729,8 @@ export const StripCopy = {
     disconnected: 'Not connected',
     failed: 'Connection failed',
   },
-  glyphAction: {
-    retry: 'Retry connection',
-    connect: 'Connect',
-  },
+  /** The tab glyph's press: the Connections sheet (src/components/sessions/ConnectionsSheet.tsx). */
+  glyphAction: 'Show connection',
   /** Status line while a glyph / card retry is in flight. */
   retryingStatus: (name: string) => `Retrying ${name}…`,
   addTab: 'Add a computer',
@@ -729,16 +762,12 @@ export const MachineNoticeCopy = {
   several: (count: number) => `${count} computers aren't connected`,
   /** After the title while the list is the copy read before the failure. */
   staleShort: (ago: string) => `list from ${ago}`,
-  staleLong: (ago: string) => `Showing the list from ${ago}.`,
   justNow: 'a moment ago',
   minutesAgo: (minutes: number) => `${minutes} min ago`,
   hoursAgo: (hours: number) => `${hours} h ago`,
   daysAgo: (days: number) => `${days} d ago`,
-  retry: 'Retry',
-  remoteSettings: 'Remote Settings',
-  logs: 'Logs',
   /** The line's hint while a failure shows: a tap opens or closes the details. */
-  detailsHint: 'Shows the full reason, Retry and Remote Settings',
+  detailsHint: "Shows every computer's connection",
 } as const;
 
 /** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html). */
