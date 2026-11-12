@@ -107,6 +107,12 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    */
   emitsNetworkChanges?(): boolean;
 
+  /**
+   * True when `connect` takes `dialTimeoutSec`. Only in app builds from the native-ssh-connect-timeout
+   * change on; an older build has no such function, so `remote/connection.ts` checks for it.
+   */
+  supportsDialTimeout?(): boolean;
+
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
   /** `exec` with `input` written to the command's stdin, then EOF (Windows scripts; both platforms). */

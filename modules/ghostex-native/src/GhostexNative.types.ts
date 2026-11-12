@@ -22,6 +22,11 @@ export type SshConfig = {
    * or `credentials` uses the password / private key above.
    */
   authMethod?: 'credentials' | 'none';
+  /**
+   * Seconds the TCP connect may take on this call; absent or 0 keeps the default. Only builds where
+   * `supportsDialTimeout()` is true read it (src/machines/routeChoice.ts).
+   */
+  dialTimeoutSec?: number;
 };
 
 export type ExecResult = {

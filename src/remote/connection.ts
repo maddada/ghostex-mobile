@@ -12,7 +12,13 @@ import { noteConnectedThrough } from '../machines/duplicateComputers';
 import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
 import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
-import { easyConnectConfig, hasEasyConnectRoute, setActiveRoute, tailscaleOnPhone } from '../machines/easyConnectRoute';
+import {
+  easyConnectConfig,
+  hasEasyConnectRoute,
+  setActiveRoute,
+  tailscaleOnPhone,
+  withTailscaleHeadStart,
+} from '../machines/easyConnectRoute';
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 
@@ -158,11 +164,12 @@ async function connectEitherRoute(
   const order = routeDialOrder(await tailscaleOnPhone());
   assertCurrent();
   let firstError: unknown = null;
-  for (const route of order) {
+  for (const [index, route] of order.entries()) {
     const startedAt = Date.now();
     try {
       if (route === 'tailscale') {
-        await GhostexNative.connect(machine.id, config);
+        // A short head start only when Easy Connect is next; as the last try it keeps its full time.
+        await GhostexNative.connect(machine.id, index === 0 ? withTailscaleHeadStart(config) : config);
         // The Easy Connect tunnel of an earlier connect is not needed on Tailscale.
         await GhostexNative.stopTailcatForward(machine.id).catch(() => undefined);
       } else {

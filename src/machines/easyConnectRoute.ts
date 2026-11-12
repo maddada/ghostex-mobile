@@ -17,7 +17,7 @@ import {
   setEasyConnectSshKey,
   type MachineConnectionTarget,
 } from './credentials';
-import type { MachineRoute } from './routeChoice';
+import { TAILSCALE_HEAD_START_SEC, type MachineRoute } from './routeChoice';
 import { tailcatSyntheticHost, useMachinesStore } from './store';
 
 export type { MachineRoute } from './routeChoice';
@@ -42,6 +42,19 @@ export function hasEasyConnectRoute(machine: Pick<MachineConnectionTarget, 'id' 
   if (machine.transport === 'tailcat' || machine.transport === 'demo') return false;
   const record = useMachinesStore.getState().machines.find((entry) => entry.id === machine.id);
   return record?.easyConnectPairedAt !== undefined;
+}
+
+/**
+ * `config` with Tailscale's short head start (`TAILSCALE_HEAD_START_SEC`) when this app build's
+ * native connect takes a per-call timeout; unchanged on a build without it, which keeps its own.
+ */
+export function withTailscaleHeadStart(config: SshConfig): SshConfig {
+  try {
+    if (GhostexNative.supportsDialTimeout?.() !== true) return config;
+  } catch {
+    return config;
+  }
+  return { ...config, dialTimeoutSec: TAILSCALE_HEAD_START_SEC };
 }
 
 /** Whether Tailscale's VPN is on here; null when this app build can't tell. */

@@ -33,6 +33,13 @@ export function triesOtherRoute(errorCode: unknown): boolean {
   return errorCode !== 'E_HOST_KEY_MISMATCH';
 }
 
+/**
+ * How long Tailscale's TCP connect may take before a computer that also has Easy Connect tries Easy
+ * Connect (the head start the user picked). Only app builds whose native connect takes a per-call
+ * timeout use it; older builds wait out their own (8 s on Android, 20 s on iOS).
+ */
+export const TAILSCALE_HEAD_START_SEC = 2;
+
 /** How often a computer on Easy Connect checks whether Tailscale reaches it again. */
 export const MOVE_BACK_INTERVAL_MS = 15_000;
 

@@ -13,7 +13,12 @@ import { AppState, Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { resolveSshConfig } from '../machines/credentials';
-import { hasEasyConnectRoute, tailscaleOnPhone, useMachineRoutes } from '../machines/easyConnectRoute';
+import {
+  hasEasyConnectRoute,
+  tailscaleOnPhone,
+  useMachineRoutes,
+  withTailscaleHeadStart,
+} from '../machines/easyConnectRoute';
 import { MOVE_BACK_INTERVAL_MS, shouldTryMoveBack, tailscaleProbeId } from '../machines/routeChoice';
 import { enabledMachines, useMachinesStore, type MachineRecord } from '../machines/store';
 import { ensureConnected } from '../remote/connection';
@@ -28,7 +33,7 @@ const lastTryAt = new Map<string, number>();
 async function tailscaleReaches(machine: MachineRecord): Promise<boolean> {
   const probeId = tailscaleProbeId(machine.id);
   try {
-    await GhostexNative.connect(probeId, await resolveSshConfig(machine));
+    await GhostexNative.connect(probeId, withTailscaleHeadStart(await resolveSshConfig(machine)));
     return true;
   } catch {
     return false;
