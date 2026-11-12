@@ -35,6 +35,7 @@ import { MORE_DETAILS_LINE, sessionLinkText, sessionMentionText } from './sessio
 import { claudeCloudPageUrl } from '../../contract/claudeCloud';
 import { hasBackgroundWork } from '../../components/sessions/sessionStatus';
 import type { SessionWorkLinks, WorkLinkKind } from '../../commands/ghostexCli';
+import { enabledVisibleTagIds } from '../../contract/sessionTagList';
 import { effectiveSessionTag, SESSION_TAG_SECTIONS } from '../../contract/sessionTags';
 import { FORK_AGENT_ICONS, isCoordinatorAgent } from '../../sessions/sessionCommands';
 
@@ -154,9 +155,9 @@ type HoverAction = 'rename' | 'pin' | 'note' | 'snooze' | 'closeAfterDone' | 'ta
 
 /**
  * CDXC:ContextMenus 2026-09-25 WHY:
- * The desktop menu is shaped by Settings the phone cannot read: `tagListItems` is not in the
- * `ghostex settings` catalog at all, and reading the rest would cost an SSH exec per menu. So the
- * phone uses the desktop DEFAULTS (gx-core `SidebarSettings::default`), which also keep the Copy
+ * The desktop menu is shaped by Settings the phone cannot read, apart from the two Sidebar organization sync carries
+ * (Enable session parking and the Session Tags list, passed in `SessionMenuInput` since 2026-11-12). So the phone
+ * uses the desktop DEFAULTS for the rest (gx-core `SidebarSettings::default`), which also keep the Copy
  * section (the two debugging copy switches are off) and the Spaces submenu (Spaces are off) out.
  * The one deliberate difference is the hover strip: the phone has no hover buttons, so its strip is
  * the desktop default (Tag, Park and Sleep left of the chevron, Close right of it) WITHOUT Close.
@@ -169,12 +170,6 @@ const PHONE_MENU_SETTINGS = {
   showSessionCardHoverButtonsInContextMenu: true,
   hoverStrip: ['tag', 'park', 'sleep'] as readonly HoverAction[],
 };
-
-/**
- * Tags the desktop's first-run tag list hides and disables (gx-core `DEFAULT_OFF_TAGS`); the Tag
- * As menu leaves them out unless the session already carries one.
- */
-const DEFAULT_HIDDEN_TAGS: readonly string[] = ['high-priority', 'low-priority', 'todo', 'bug', 'feature'];
 
 /** Built-in tag glyph ids (gx-core `builtin_presentation`); the renderer maps them to TAG_ICONS. */
 export const BUILTIN_TAG_ICON_IDS: Readonly<Record<string, string>> = {
@@ -347,15 +342,20 @@ function sessionCapabilities(session: GhostexSession): SessionCapabilities {
 }
 
 // ---------------------------------------------------------------------------
-// Tags (gx-core `enabled_visible_tag_sections` over the default tag list).
+// Tags (gx-core `enabled_visible_tag_sections` over the synced Session Tags list, contract/sessionTagList.ts).
 // ---------------------------------------------------------------------------
 
 type TagOption = { value: string; label: string; icon: string; color: string };
 
-function tagSections(current: string | undefined, catalog: GhostexCustomSessionTags): TagOption[][] {
-  const builtins = SESSION_TAG_SECTIONS.map((section) =>
+function tagSections(
+  current: string | undefined,
+  catalog: GhostexCustomSessionTags,
+  tagListItems: unknown,
+): TagOption[][] {
+  const shown = enabledVisibleTagIds(tagListItems, catalog, current === undefined ? [] : [current]);
+  const builtins = SESSION_TAG_SECTIONS.map((section, index) =>
     section.options
-      .filter((option) => !DEFAULT_HIDDEN_TAGS.includes(option.value) || option.value === current)
+      .filter((option) => (shown.builtins[index] ?? []).includes(option.value))
       .map((option) => ({
         value: option.value,
         label: option.label,
@@ -363,10 +363,9 @@ function tagSections(current: string | undefined, catalog: GhostexCustomSessionT
         color: option.color,
       })),
   );
-  // Every catalog tag is visible on the default list; a custom id the catalog no longer has is
-  // dropped, the same as the desktop.
+  // A custom id the catalog no longer has is dropped, the same as the desktop.
   const custom: TagOption[] = [];
-  for (const tagId of catalog.order) {
+  for (const tagId of shown.custom) {
     const tag = catalog.tags[tagId];
     if (tag === undefined) continue;
     custom.push({
@@ -379,11 +378,10 @@ function tagSections(current: string | undefined, catalog: GhostexCustomSessionT
   return [...builtins, custom].filter((section) => section.length > 0);
 }
 
-/** The Tag As rows. New Tag… is left out: the phone has no tag editor. */
-function tagItems(session: GhostexSession, catalog: GhostexCustomSessionTags): SidebarMenuItem[] {
+function tagItems(session: GhostexSession, catalog: GhostexCustomSessionTags, tagListItems: unknown): SidebarMenuItem[] {
   const current = effectiveSessionTag(session);
   const items: SidebarMenuItem[] = [];
-  tagSections(current, catalog).forEach((section, index) => {
+  tagSections(current, catalog, tagListItems).forEach((section, index) => {
     if (index > 0) items.push(separator());
     for (const option of section) {
       const checked = current === option.value;
@@ -451,16 +449,17 @@ export type SessionMenuInput = {
   voiceCall?: boolean;
   /** The computer has Session notes on (`sessions/sessionNotesSwitch.ts`), so the menu offers Note. */
   sessionNotes?: boolean;
-  /**
-   * The menu offers Snooze (or Unsnooze), as the desktop's does: the Unified list, which runs it
-   * through gxserver directly. The Project list's menu leaves it out.
-   */
+  /** The menu offers Snooze (or Unsnooze), as the desktop's does, run through gxserver directly. */
   snooze?: boolean;
   /**
    * The Unified list's Actions… row, with the icon of the action it would mark (`player-play`, or `world` for a
    * browser action); absent when the project and computer list no action, and in the Project list's menu.
    */
   actionsIcon?: 'player-play' | 'world';
+  /** The synced Session Tags list (`sidebarSessionTagListItems`), which tags Tag As offers; the default list when absent. */
+  tagListItems?: unknown;
+  /** Enable session parking, synced: off leaves Park out, as the desktop does. On when absent. */
+  parking?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -695,8 +694,7 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
 /**
  * The session row's context menu.
  *
- * Left out, because the phone has no way to run them: Snooze / Unsnooze (no `ghostex` verb for
- * gxserver's `/api/snoozeSession`), the five Postpone By presets (no verb for
+ * Left out, because the phone has no way to run them: the five Postpone By presets (no verb for
  * `/api/postponeDelayedSend`), Switch Account, View 1st Message (the summary carries no first
  * message), Generate Title, Move to New Sessions Group, and New Tag…; Split Right and Focus act on the
  * computer's own panes.
@@ -719,14 +717,16 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
     sessionNotes = true,
     snooze = false,
     actionsIcon,
+    tagListItems,
+    parking = true,
   } = input;
-  const settings = PHONE_MENU_SETTINGS;
+  const settings = { ...PHONE_MENU_SETTINGS, enableSessionParking: parking };
   const caps = sessionCapabilities(session);
   const id = session.sessionId;
   const sleeping = isSleepingSession(session);
   const pinned = session.isPinned;
   const parked = session.isParked === true;
-  const tags = caps.canTag ? tagItems(session, customTags) : [];
+  const tags = caps.canTag ? tagItems(session, customTags, tagListItems) : [];
 
   let park = row(
     parked ? 'Unpark' : 'Park',

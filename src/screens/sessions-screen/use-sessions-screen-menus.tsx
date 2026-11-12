@@ -112,6 +112,7 @@ import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, isMachineEnabled, useMachinesStore, type MachineRecord } from '../../machines/store';
 import { useSettingsStore } from '../../settings/store';
+import { setSidebarSetting } from '../../settingsSync/settingsSync';
 import type { RootStackParamList } from '../../navigation/types';
 
 import { useAppearance } from '../../theme/useAppearance';
@@ -905,6 +906,8 @@ export function useSessionsScreenMenus({
         voiceAgentOnFor(ctx.machine.id),
       sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
       snooze: ctx.unified === true,
+      tagListItems: summaryFor(ctx.machine.id)?.sessionTagListItems,
+      parking: summaryFor(ctx.machine.id)?.enableSessionParking !== false,
       actionsIcon:
         actionsEntry === null ? undefined : actionsEntry.action.actionType === 'browser' ? 'world' : 'player-play',
     });
@@ -1336,10 +1339,7 @@ export function useSessionsScreenMenus({
     const projectKeys: string[] = [];
     for (const project of summary?.projects ?? []) projectKeys.push(`id:${project.projectId}`);
     const collectionIds = (summary?.projectCollections ?? []).map((entry) => entry.collectionId);
-    const hidesEmpty = hidesProjectsWithoutSessions(
-      useSettingsStore.getState().settings.sessionsListHideProjectsWithoutSessions,
-      summary,
-    );
+    const hidesEmpty = hidesProjectsWithoutSessions(summary);
     return [
       { kind: 'separator', key: 'sep-project-list' },
       {
@@ -1374,10 +1374,10 @@ export function useSessionsScreenMenus({
         key: 'hide-projects-without-sessions',
         label: 'Hide Projects Without Sessions',
         selected: hidesEmpty,
-        hint: 'Leaves projects with no sessions out of the Project list on this phone',
+        hint: 'Leaves projects with no sessions out of the Project list, here and on your computers',
         onPress: () => {
           setOverlay(NONE);
-          useSettingsStore.getState().setSetting('sessionsListHideProjectsWithoutSessions', !hidesEmpty);
+          setSidebarSetting('sidebarHideProjectsWithoutSessions', !hidesEmpty);
         },
       },
     ];

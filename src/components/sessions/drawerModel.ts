@@ -289,14 +289,11 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
 }
 
 /**
- * Whether the Project list leaves out projects without sessions: the phone's own switch once it was changed here
- * (`sessionsListHideProjectsWithoutSessions`), the computer's `sidebarHideProjectsWithoutSessions` until then.
+ * Whether the Project list leaves out projects without sessions: the synced Hide projects without sessions, laid
+ * over the computer's summary (settingsSync/sidebarOrganization.ts).
  */
-export function hidesProjectsWithoutSessions(
-  own: boolean | null,
-  summary: GhostexMobileSummary | null | undefined,
-): boolean {
-  return own ?? summary?.sidebarHideProjectsWithoutSessions === true;
+export function hidesProjectsWithoutSessions(summary: GhostexMobileSummary | null | undefined): boolean {
+  return summary?.sidebarHideProjectsWithoutSessions === true;
 }
 
 /**

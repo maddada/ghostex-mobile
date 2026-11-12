@@ -20,8 +20,11 @@ import { FailureCopy } from '../copy';
 import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
 import { pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { refreshCloudBoxes } from '../cloudBoxes/sync';
+import { organizeSummary } from '../settingsSync/sidebarOrganization';
+import { useSyncedEntriesStore } from '../settingsSync/syncedEntries';
+import { useSettingsStore } from '../settings/store';
 import {
-  applyOptimisticMutations,
+  applyOptimisticMutations as applyMutations,
   reconcileOptimisticMutations,
   type OptimisticInventoryChange,
   type PendingInventoryMutation,
@@ -120,6 +123,17 @@ type InventoryState = {
    */
   acknowledgeAttentionLocally: (machineId: string, sessionId: string) => void;
 };
+
+/**
+ * The rendered summary: the computer's, with pending changes applied and the synced Sidebar organization laid over
+ * its own sidebar settings (settingsSync/sidebarOrganization.ts), so every list rule reads the synced value.
+ */
+function applyOptimisticMutations(
+  serverSummary: GhostexMobileSummary,
+  pending: readonly PendingInventoryMutation[],
+): GhostexMobileSummary {
+  return organizeSummary(applyMutations(serverSummary, pending));
+}
 
 let nextMutationNumber = 1;
 const inFlightRefreshes = new Map<string, Promise<void>>();
@@ -236,7 +250,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
               ...get().inventoriesByMachineId,
               [machine.id]: {
                 ...(previous ?? emptyMachineInventory()),
-                summary: reconciled.summary,
+                summary: organizeSummary(reconciled.summary),
                 serverSummary,
                 fingerprint,
                 refreshing: false,
@@ -504,4 +518,32 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       });
     },
   };
+});
+
+/** A synced value or one of the phone's own Sessions list switches changed: every list is laid out again. */
+function reorganizeAll(): void {
+  const { inventoriesByMachineId, pendingMutationsByMachineId } = useInventoryStore.getState();
+  let changed = false;
+  const next: Record<string, MachineInventory> = {};
+  for (const [machineId, inventory] of Object.entries(inventoriesByMachineId)) {
+    if (inventory.serverSummary === null) {
+      next[machineId] = inventory;
+      continue;
+    }
+    changed = true;
+    next[machineId] = {
+      ...inventory,
+      summary: applyOptimisticMutations(inventory.serverSummary, pendingMutationsByMachineId[machineId] ?? []),
+    };
+  }
+  if (changed) useInventoryStore.setState({ inventoriesByMachineId: next });
+}
+
+useSyncedEntriesStore.subscribe((state, previous) => {
+  if (state.values !== previous.values) reorganizeAll();
+});
+useSettingsStore.subscribe((state, previous) => {
+  const own = (settings: typeof state.settings) =>
+    `${settings.sessionsListLayout}|${settings.sessionsListGroupByProject}|${settings.sessionsListWorkingSection}|${settings.sessionsListHideProjectsWithoutSessions}`;
+  if (own(state.settings) !== own(previous.settings)) reorganizeAll();
 });

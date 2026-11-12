@@ -710,9 +710,7 @@ export default function SessionsScreen({ navigation }: Props) {
     [runBulkSessionActions, refreshMachine, setTransientStatus],
   );
   const [showAllProjects, setShowAllProjects] = useState(false);
-  const ownHideProjects = useSettingsStore((state) => state.settings.sessionsListHideProjectsWithoutSessions);
   const hideProjects = hidesProjectsWithoutSessions(
-    ownHideProjects,
     machine === null ? null : (inventoriesByMachineId[machine.id]?.summary ?? null),
   );
   const visibleEntries = useMemo(

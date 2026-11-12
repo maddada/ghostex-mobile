@@ -131,47 +131,6 @@ export function unifiedMachineInput(computer: UnifiedComputer, alone: boolean): 
   };
 }
 
-/** The Unified switches of the computer whose setting picked the layout. */
-export function unifiedSettingsOf(summary: GhostexMobileSummary | null): UnifiedSettings {
-  return {
-    workingSection: summary?.unifiedWorkingSection !== false,
-    parking: summary?.enableSessionParking !== false,
-    pinnedOrder: summary?.pinnedSessionOrder === 'recent' ? 'recent' : 'manual',
-  };
-}
-
-/** Group by Project and the arranged order, from the computer whose setting picked the layout. */
-export function unifiedLayoutOf(summary: GhostexMobileSummary | null): {
-  groupByProject: boolean;
-  projectOrder: string[];
-} {
-  return {
-    groupByProject: summary?.unifiedGroupByProject === true,
-    projectOrder: summary?.unifiedProjectOrder ?? [],
-  };
-}
-
-/** Whether the computer asks for the Unified sidebar (Settings › Sidebar & Sessions › Sidebar). */
-export function wantsUnifiedSidebar(summary: GhostexMobileSummary | null | undefined): boolean {
-  return summary?.sidebarView === 'unified';
-}
-
-/**
- * The phone's own Settings › Sessions list values, first taken from what this computer has, so
- * nothing changes for the user until they flip them on the phone.
- */
-export function sessionsListSeedOf(summary: GhostexMobileSummary): {
-  sessionsListLayout: 'unified' | 'project';
-  sessionsListGroupByProject: boolean;
-  sessionsListWorkingSection: boolean;
-} {
-  return {
-    sessionsListLayout: wantsUnifiedSidebar(summary) ? 'unified' : 'project',
-    sessionsListGroupByProject: unifiedLayoutOf(summary).groupByProject,
-    sessionsListWorkingSection: unifiedSettingsOf(summary).workingSection,
-  };
-}
-
 /** The filter without picks its options no longer offer (a computer gone, a Space deleted). */
 export function filterWithinOptions(filter: UnifiedFilter, options: UnifiedFilterOptions): UnifiedFilter {
   const within = (picked: string[], offered: { key: string }[]) =>

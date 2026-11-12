@@ -183,28 +183,26 @@ export type GhostexSettings = ThemeColourSettings & {
   /** Read aloud's speed on this phone, a multiple of the engine's normal rate ({@link READ_ALOUD_RATES}). */
   readAloudRate: number;
   /**
-   * Settings › Sessions list: Unified (every computer's sessions in one list) or Project (one
-   * computer at a time behind its tabs). `null` until it is first taken from the selected computer's
-   * own Sidebar setting (`sessionsListSeedOf`); from then on the phone never follows the computer.
+   * What this phone picked for Unified or Project before Sidebar organization sync reached the phone (the old Settings
+   * › Sessions list, Q933): kept, with the three switches below, for computers without the sync, where it still
+   * decides; a synced value always wins (settingsSync/sidebarOrganization.ts). Nothing sets it any more.
    *
-   * CDXC:Sidebar 2026-11-01 DECISION:
-   * User: "On phone can we please set either project or unified look for the sessions list? I think it's taking this from what's set on the desktop now", then picked a Unified / Project switch in the phone's Settings with "Group by project" and "Show Working section" marked Unified only (Q933), Unified combining every computer and Project staying per computer (Q934). Supersedes the 2026-10-30 decision that the phone follows the computer's `sidebarView`.
+   * CDXC:Sidebar 2026-11-12 DECISION:
+   * User: "I want my phone sessions list to be just kind my macbook sessions list exactly pls add all the settings and stuff we need and add sync for this please". Supersedes Q933: the phone follows the synced Sidebar organization of the computers (Settings › Sidebar & Sessions on the phone edits it).
    */
   sessionsListLayout: SessionsListLayout | null;
   /** Settings › Notifications › Alert me for (`attentionAlerts` in src/notifications/attentionAlerts.ts). */
   attentionAlertsFor: AttentionAlertsFor;
-  /** Unified only: one group per project (the computer's `unifiedGroupByProject` until first set here). */
+  /** Unified only: one group per project, kept from before Sidebar organization sync (see `sessionsListLayout`). */
   sessionsListGroupByProject: boolean;
-  /** Unified only: working sessions fold into the Moving section (the computer's `unifiedWorkingSection` until first set here). */
+  /** Unified only: the Moving section, kept from before Sidebar organization sync (see `sessionsListLayout`). */
   sessionsListWorkingSection: boolean;
   /**
-   * Project list only: leave projects with no session out of the list (Hide Projects Without Sessions in the
-   * computer menu, Settings › Sessions list). `null` until it is first changed here: the phone then
-   * follows the computer's `sidebarHideProjectsWithoutSessions`; from then on it keeps its own value, and
-   * flipping it never changes the computer.
+   * Project list only: Hide projects without sessions as this phone set it before Sidebar organization sync (see
+   * `sessionsListLayout`); `null` when never set here. A synced value always wins.
    *
    * CDXC:Sidebar 2026-11-09 WHY:
-   * The contributor (sebastianarena, PR #540) chose this: the phone gets its own Hide projects without sessions switch with the desktop's rule. It starts from the computer's value and, once changed on the phone, remembers its own (the Sessions list layout's pattern, Q933); flipping it on the phone never changes the desktop.
+   * The contributor (sebastianarena, PR #540) chose this: the phone gets its own Hide projects without sessions switch with the desktop's rule. Since 2026-11-12 the switch is the synced `sidebarHideProjectsWithoutSessions` (CDXC:Sidebar 2026-11-12 above), and this value only stands in for computers without the sync.
    */
   sessionsListHideProjectsWithoutSessions: boolean | null;
   /**

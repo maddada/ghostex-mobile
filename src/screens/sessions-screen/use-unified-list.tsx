@@ -4,14 +4,8 @@
  * the screen's title row), its cards, project groups and shelves, its swipe buttons, and the menus
  * they open.
  *
- * CDXC:Sidebar 2026-11-01 DECISION:
- * User (Q933, Q934): the phone picks Unified or Project itself, in Settings › Sessions list
- * (`sessionsListLayout` in settings/store.ts, first taken from the selected computer's `sidebarView`
- * and never following it after), with its own Group by project and Moving section switches. Unified
- * lists every computer's sessions together; Project stays one computer at a time. The Space and
- * Workspace tiles give way to the filter, which narrows by computer, Space and project as on the
- * desktop. Parking, the project groups' order and the swipe buttons still come from the selected
- * computer. Supersedes the 2026-10-30 decision that the phone follows the computer.
+ * CDXC:Sidebar 2026-11-12 DECISION:
+ * User: "I want my phone sessions list to be just kind my macbook sessions list exactly pls add all the settings and stuff we need and add sync for this please". Unified or Project, Group by project, the Moving section, parking, Pinned order and the project groups' order follow the synced Sidebar organization (settingsSync/sidebarOrganization.ts), as on the computers, and a change on the phone syncs to them. Supersedes Q933 (the phone picked its own layout). Q934 stands: Unified lists every computer's sessions together, and its filter narrows by computer, Space and project. The swipe buttons still come from the selected computer (a look, kept per computer).
  *
  * The session wall (`wall`, the iPhone Duo's inner display with tiles chosen): each run of cards and shelf rows is
  * drawn as rows of tiles (`screens/wall/`) in the list's order, its group and shelf headers keeping their place; a
@@ -39,15 +33,8 @@ import {
 } from '../../contract/unified/build';
 import { unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
 import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../../contract/unified/filterMenu';
-import {
-  sessionsListSeedOf,
-  unifiedLayoutOf,
-  unifiedListOf,
-  unifiedMachineInput,
-  unifiedSettingsOf,
-  wantsUnifiedSidebar,
-  type UnifiedComputer,
-} from '../../contract/unified/fromSummary';
+import { unifiedListOf, unifiedMachineInput, type UnifiedComputer } from '../../contract/unified/fromSummary';
+import { useSidebarOrganization } from '../../settingsSync/sidebarOrganization';
 import { useOpenUnifiedDraftsOnArrival } from '../../components/sessions/useDraftArrivals';
 import { groupUnifiedList, unifiedGroupCount, type UnifiedGroup } from '../../contract/unified/grouping';
 import { unifiedSwipeActions } from '../../contract/unified/strip';
@@ -78,7 +65,6 @@ import type { RowNesting } from '../../contract/coordinatorTree';
 import { ancestorsOf, drawnLines, rowsInTree } from '../../contract/unified/tree';
 import type { MachineInventory } from '../../inventory/store';
 import { agentMenuNotice, type NewSessionNotice } from './new-session-button';
-import { useSettingsStore } from '../../settings/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
 import { attachSessionKey } from '../../terminal/sessions';
 import type { SidebarAppearance } from '../../theme/sidebarAppearance';
@@ -223,21 +209,17 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     wall = null,
   } = deps;
   const selectedSummary = selectedMachine === null ? null : (inventoriesByMachineId[selectedMachine.id]?.summary ?? null);
-  const settingsHydrated = useSettingsStore((state) => state.hydrated);
-  const listLayout = useSettingsStore((state) => state.settings.sessionsListLayout);
-  const phoneGroupByProject = useSettingsStore((state) => state.settings.sessionsListGroupByProject);
-  const phoneWorkingSection = useSettingsStore((state) => state.settings.sessionsListWorkingSection);
-  // The first computer summary after the update seeds the phone's own Sessions list settings.
-  useEffect(() => {
-    if (!settingsHydrated || listLayout !== null || selectedSummary === null) return;
-    useSettingsStore.getState().patchSettings(sessionsListSeedOf(selectedSummary));
-  }, [settingsHydrated, listLayout, selectedSummary]);
-  const seeded = listLayout !== null;
-  const on = seeded ? listLayout === 'unified' : wantsUnifiedSidebar(selectedSummary);
-  const unifiedSettings = useMemo(() => {
-    const fromComputer = unifiedSettingsOf(selectedSummary);
-    return seeded ? { ...fromComputer, workingSection: phoneWorkingSection } : fromComputer;
-  }, [selectedSummary, seeded, phoneWorkingSection]);
+  // The synced Sidebar organization, laid over each computer's summary (settingsSync/sidebarOrganization.ts).
+  const organization = useSidebarOrganization(selectedSummary);
+  const on = organization.sidebarView === 'unified';
+  const unifiedSettings = useMemo(
+    () => ({
+      workingSection: organization.unifiedWorkingSection,
+      parking: organization.enableSessionParking,
+      pinnedOrder: organization.pinnedSessionOrder,
+    }),
+    [organization.unifiedWorkingSection, organization.enableSessionParking, organization.pinnedSessionOrder],
+  );
   const ink = useSidebarInk();
   const styles = unifiedListStyles(ink);
   const filter = useUnifiedListStore((state) => state.filter);
@@ -384,8 +366,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, selectedSessionKey, view, storeReady, inventoriesReady]);
   useOpenUnifiedDraftsOnArrival(view.drafts, on);
-  const computerLayout = unifiedLayoutOf(selectedSummary);
-  const layout = seeded ? { ...computerLayout, groupByProject: phoneGroupByProject } : computerLayout;
+  const layout = { groupByProject: organization.unifiedGroupByProject, projectOrder: organization.unifiedProjectOrder };
   const groups = useMemo(
     (): UnifiedGroup<GhostexSession>[] => (layout.groupByProject ? groupUnifiedList(view, layout.projectOrder) : []),
     // `projectOrder` is a new array per summary read, so its content is the dependency.

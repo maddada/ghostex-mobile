@@ -36,7 +36,10 @@ export type SettingsPageId =
 export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; description: string }>> = {
   updates: { title: 'Updates', description: 'The app, the update it runs, and what is waiting.' },
   theme: { title: 'Interface', description: 'Theme presets, colours, and the chat and terminal appearance.' },
-  sessionsList: { title: 'Sessions list', description: 'Unified or Project layout, and how Unified groups.' },
+  sessionsList: {
+    title: 'Sidebar & Sessions',
+    description: 'How the sessions list is organized, synced with your computers.',
+  },
   chat: { title: 'Chat', description: 'Default agent view and chat detail.' },
   voice: { title: 'Voice', description: 'Dictation with Hex or your key, and the voice agent, on each computer.' },
   terminal: { title: 'Terminal', description: 'Font size, background, screen and tab behavior.' },

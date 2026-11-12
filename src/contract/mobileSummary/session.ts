@@ -403,6 +403,16 @@ export type GhostexMobileSummary = {
    * Manual unless the computer sends `recent`.
    */
   pinnedSessionOrder?: 'manual' | 'recent';
+  /**
+   * Group working sessions (`groupWorkingSessions`): the Project list puts each project's working sessions in a
+   * Working section. Only Sidebar organization sync carries it (settingsSync/sidebarOrganization.ts); off when absent.
+   */
+  groupWorkingSessions?: boolean;
+  /**
+   * The Session Tags list (`sidebarSessionTagListItems`), which shapes the Tag As menu and the tag filter. Only Sidebar
+   * organization sync carries it; the desktop's first-run list when absent (contract/sessionTagList.ts).
+   */
+  sessionTagListItems?: unknown;
   /** The capability flags the phone uses; all off from a computer that sends none. */
   capabilities: GhostexSummaryCapabilities;
 };
