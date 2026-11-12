@@ -21,6 +21,7 @@ import { isDemoMachine } from '../../demo/identity';
 import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
 import { useEasyConnectPath } from '../../machines/easyConnectPath';
+import { useMachineRoutes } from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
@@ -86,7 +87,12 @@ function ComputerPageBody({
     reachable &&
     machine.lastConnectedAt !== null &&
     Date.now() - new Date(machine.lastConnectedAt).getTime() < CONNECTED_NOW_WINDOW_MS;
-  const path = useEasyConnectPath(machine.id, connectedNow);
+  // A Tailscale computer that also has Easy Connect, and the route it is on now (`easyConnectRoute.ts`).
+  const twoRoutes = !easyConnect && machine.easyConnectPairedAt !== undefined;
+  const liveRoute = useMachineRoutes((state) => state.active[machine.id]);
+  const viaEasyConnect = easyConnect || (twoRoutes && liveRoute === 'easyConnect');
+  const easyConnectOffered = useSshPairings((state) => state.easyConnectOffered[machine.id] === true);
+  const path = useEasyConnectPath(machine.id, connectedNow && viaEasyConnect);
   const update = useAppUpdateStore((state) => state.byMachineId[machine.id]);
   const tools = useMachineToolsStore((state) => state.byMachineId[machine.id]);
   const sshPairing = useSshPairings((state) => state.pairings[machine.id]);
@@ -145,7 +151,7 @@ function ComputerPageBody({
     });
   };
 
-  const how = easyConnect
+  const how = viaEasyConnect
     ? path === null
       ? copy.easyConnect
       : path.path === 'direct'
@@ -224,6 +230,51 @@ function ComputerPageBody({
             </View>
           </View>
         </View>
+
+        {twoRoutes ? (
+          <>
+            <Text style={formStyles.sectionLabel}>{copy.routes.label}</Text>
+            <View style={formStyles.rowsCard}>
+              <View style={[formStyles.row, formStyles.rowFirst]}>
+                <View style={formStyles.rowMain}>
+                  <View style={styles.statusLine}>
+                    <StatusDot color={connectedNow && liveRoute === 'tailscale' ? appearance.connected : appearance.muted} />
+                    <Text style={formStyles.rowLabel}>{copy.routes.tailscale}</Text>
+                  </View>
+                  <Text style={formStyles.rowDetail}>
+                    {copy.routes.tailscaleDetail(machine.host, connectedNow && liveRoute === 'tailscale')}
+                  </Text>
+                </View>
+              </View>
+              <View style={formStyles.row}>
+                <View style={formStyles.rowMain}>
+                  <View style={styles.statusLine}>
+                    <StatusDot color={connectedNow && liveRoute === 'easyConnect' ? appearance.connected : appearance.muted} />
+                    <Text style={formStyles.rowLabel}>{copy.routes.easyConnect}</Text>
+                  </View>
+                  <Text style={formStyles.rowDetail}>{copy.routes.easyConnectDetail(connectedNow && liveRoute === 'easyConnect')}</Text>
+                </View>
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {/* The way to ask again for Easy Connect after a request that was denied, lapsed or hidden. */}
+        {!twoRoutes && !easyConnect && easyConnectOffered && signsInOverSsh(machine) ? (
+          <View style={formStyles.rowsCard}>
+            <View style={[formStyles.row, formStyles.rowFirst]}>
+              <View style={formStyles.rowMain}>
+                <Text style={formStyles.rowLabel}>{copy.routes.add.label}</Text>
+                <Text style={formStyles.rowDetail}>{copy.routes.add.detail(name)}</Text>
+              </View>
+              <SetupButton
+                small
+                label={copy.routes.add.button}
+                onPress={() => void startSshPairing(machine, { auto: false, easyConnect: true })}
+              />
+            </View>
+          </View>
+        ) : null}
 
         {/* CDXC:RemotePairing 2026-11-09: where a hidden pairing card comes back. Shown while this phone isn't
             approved on this computer (it signs in over SSH and has no device id there); Show brings the card back

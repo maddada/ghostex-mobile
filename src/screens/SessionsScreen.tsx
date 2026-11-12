@@ -159,6 +159,7 @@ import {
   useMachinesStore,
   type MachineRecord,
 } from '../machines/store';
+import { useMachineRoutes } from '../machines/easyConnectRoute';
 import {
   computerIconDrawing,
   forgetComputerIcon,
@@ -282,6 +283,10 @@ export default function SessionsScreen({ navigation }: Props) {
   const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
   const sidebarGroupsOpacityPercent = useSettingsStore((state) => state.settings.sidebarGroupsOpacityPercent);
   const tailscaleReminder = useSettingsStore((state) => state.settings.tailscaleReminder);
+  // A Tailscale computer that also has Easy Connect names the route it is on (`easyConnectRoute.ts`).
+  const onEasyConnect = useMachineRoutes((state) =>
+    machine === null || machine.transport === 'tailcat' ? false : state.active[machine.id] === 'easyConnect',
+  );
   const setSetting = useSettingsStore((state) => state.setSetting);
   const sidebarAppearance = useAppearance();
   useStatusBarStyle(sidebarAppearance.light);
@@ -1641,7 +1646,11 @@ export default function SessionsScreen({ navigation }: Props) {
             </Text>
           </Pressable>
         )}
-        {tailscaleApplies && tailscaleConnected === true ? (
+        {onEasyConnect && computerReachable ? (
+          <View accessibilityLabel="Connected through Easy Connect" style={styles.tailscaleIndicator}>
+            <Text style={[styles.tailscaleIndicatorLabel, { color: tailscaleConnectedInk }]}>• Easy Connect</Text>
+          </View>
+        ) : tailscaleApplies && tailscaleConnected === true ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Tailscale connected"

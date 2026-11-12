@@ -155,9 +155,10 @@ export async function saveEasyConnectAddresses(
  */
 export function refreshEasyConnectAddressesSoon(
   machine: MachineConnectionTarget,
-  begun: { epoch: number; pairedAddress: string | null },
+  begun: { epoch: number; pairedAddress: string | null; secondRoute?: boolean },
 ): void {
-  if (machine.transport !== 'tailcat' || refreshing.has(machine.id)) return;
+  // A Tailscale or SSH computer's Easy Connect route (`easyConnectRoute.ts`) keeps its list fresh too.
+  if ((machine.transport !== 'tailcat' && begun.secondRoute !== true) || refreshing.has(machine.id)) return;
   // The connect that asks began under a pairing the entry no longer has: its computer's list is
   // not this entry's (machines/pairingEpoch.ts).
   if (!samePairing(machine.id, begun.epoch)) return;

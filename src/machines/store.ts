@@ -90,6 +90,12 @@ export type MachineRecord = {
    * no password and no key. Absent means off.
    */
   tailscaleSsh?: boolean;
+  /**
+   * A Tailscale or SSH computer this phone also reaches through Easy Connect (ISO time it was
+   * paired for it): Tailscale first, Easy Connect when Tailscale doesn't answer
+   * (`easyConnectRoute.ts`). Absent means Tailscale only.
+   */
+  easyConnectPairedAt?: string;
 };
 
 /** Pairing metadata written by Easy Connect registration; never edited by hand. */
@@ -311,6 +317,8 @@ type MachinesState = {
   markConnected: (id: string) => void;
   /** This phone's paired-device id on an SSH machine, from pairing over SSH (`sshPairing.ts`); `undefined` clears it. */
   setMachineDeviceId: (id: string, deviceId: string | undefined) => void;
+  /** Marks a Tailscale or SSH computer as also reachable through Easy Connect, or not (`null`). */
+  setEasyConnectRoute: (id: string, pairedAt: string | null) => void;
 };
 
 /** The pairing fields present on an input, so an edit never clears them by omission. */
@@ -348,7 +356,8 @@ function isMachineRecord(value: unknown): value is MachineRecord {
     (record.pairedAt === undefined || typeof record.pairedAt === 'string') &&
     (record.computerName === undefined || typeof record.computerName === 'string') &&
     (record.gxserverPort === undefined || typeof record.gxserverPort === 'number') &&
-    (record.tailscaleSsh === undefined || typeof record.tailscaleSsh === 'boolean')
+    (record.tailscaleSsh === undefined || typeof record.tailscaleSsh === 'boolean') &&
+    (record.easyConnectPairedAt === undefined || typeof record.easyConnectPairedAt === 'string')
   );
 }
 
@@ -607,6 +616,15 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       if (machine.id !== id) return machine;
       const { deviceId: _old, ...rest } = machine;
       return deviceId === undefined ? rest : { ...rest, deviceId, pairedAt: new Date().toISOString() };
+    });
+    set({ machines: nextMachines });
+    persistMachines(nextMachines);
+  },
+  setEasyConnectRoute: (id, pairedAt) => {
+    const nextMachines = get().machines.map((machine) => {
+      if (machine.id !== id) return machine;
+      const { easyConnectPairedAt: _old, ...rest } = machine;
+      return pairedAt === null ? rest : { ...rest, easyConnectPairedAt: pairedAt };
     });
     set({ machines: nextMachines });
     persistMachines(nextMachines);

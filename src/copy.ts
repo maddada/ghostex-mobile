@@ -927,6 +927,21 @@ export const ComputerPageCopy = {
   easyConnectSameNetwork: 'Easy Connect, straight to the computer on this network',
   easyConnectRelay: 'Easy Connect, through a relay',
   tailscale: (address: string) => `Tailscale · ${address}`,
+  /** A Tailscale computer that also reaches its computer through Easy Connect (`easyConnectRoute.ts`). */
+  routes: {
+    label: 'Routes',
+    tailscale: 'Tailscale',
+    easyConnect: 'Easy Connect',
+    tailscaleDetail: (address: string, inUse: boolean) =>
+      inUse ? `${address} · In use` : `${address} · Tried first`,
+    easyConnectDetail: (inUse: boolean) => (inUse ? 'In use' : 'When Tailscale doesn\'t answer'),
+    add: {
+      label: 'Add Easy Connect',
+      detail: (computer: string) =>
+        `Reach ${computer} from any network when Tailscale is off. Your own Tailscale phone is added at once; otherwise approve it on the computer.`,
+      button: 'Add',
+    },
+  },
   approvals: 'Approvals',
   approvalsNone: 'Nothing is waiting',
   approvalsWaiting: (count: number) => (count === 1 ? '1 request is waiting' : `${count} requests are waiting`),
@@ -1863,6 +1878,8 @@ export const SshPairingCopy = {
   approveTitleMany: (count: number) => `Approve this phone on ${count} computers`,
   pendingSteps: (computer: string) =>
     `This phone isn't approved on ${computer} yet. Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there.`,
+  pendingStepsEasyConnect: (computer: string) =>
+    `Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there, and this phone also reaches ${computer} through Easy Connect when Tailscale is off.`,
   pendingStepsMany:
     "This phone isn't approved on these computers yet. Ghostex on each one shows “Approve this phone?” with the words next to its name. If they match, choose Approve there.",
   lapsedSteps: (computer: string) =>

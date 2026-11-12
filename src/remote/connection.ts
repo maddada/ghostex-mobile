@@ -12,6 +12,9 @@ import { noteConnectedThrough } from '../machines/duplicateComputers';
 import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
 import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
+import { easyConnectConfig, hasEasyConnectRoute, setActiveRoute, tailscaleOnPhone } from '../machines/easyConnectRoute';
+import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
+import { logAppEvent } from '../app/appLog';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -123,6 +126,10 @@ export function ensureConnected(
       const pairedAddress = await connectEasyConnect(machine, config, assertCurrent, assertKept);
       await assertKept();
       refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress });
+    } else if (hasEasyConnectRoute(machine)) {
+      await connectEitherRoute(machine, config, assertCurrent, assertKept);
+      await assertKept();
+      refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress: null, secondRoute: true });
     } else {
       await GhostexNative.connect(machine.id, config);
     }
@@ -135,6 +142,54 @@ export function ensureConnected(
   };
   void promise.then(clear, clear);
   return promise;
+}
+
+/**
+ * Dials a Tailscale or SSH computer that also has Easy Connect: Tailscale first, Easy Connect when
+ * it doesn't answer, or Easy Connect first when Tailscale is off on this phone (routeChoice.ts,
+ * CDXC:RemotePairing 2026-11-12). Throws the first route's failure when neither connects.
+ */
+async function connectEitherRoute(
+  machine: MachineConnectionTarget,
+  config: SshConfig,
+  assertCurrent: () => void,
+  assertKept: () => Promise<void>,
+): Promise<void> {
+  const order = routeDialOrder(await tailscaleOnPhone());
+  assertCurrent();
+  let firstError: unknown = null;
+  for (const route of order) {
+    const startedAt = Date.now();
+    try {
+      if (route === 'tailscale') {
+        await GhostexNative.connect(machine.id, config);
+        // The Easy Connect tunnel of an earlier connect is not needed on Tailscale.
+        await GhostexNative.stopTailcatForward(machine.id).catch(() => undefined);
+      } else {
+        const routeConfig = await easyConnectConfig(machine, config);
+        if (routeConfig === null) throw new Error('No Easy Connect key is saved for this computer.');
+        if ((await easyConnectDialCandidates(machine.id)).length === 0) {
+          throw new Error('No Easy Connect address is saved for this computer.');
+        }
+        await connectEasyConnect(machine, routeConfig, assertCurrent, assertKept);
+      }
+      setActiveRoute(machine.id, route);
+      logAppEvent(`Connection: ${machine.id} connected over ${route} in ${Date.now() - startedAt}ms`);
+      return;
+    } catch (error) {
+      firstError ??= error;
+      const code = (error as { code?: unknown } | null)?.code;
+      logAppEvent(
+        `Connection: ${machine.id} could not connect over ${route} (${typeof code === 'string' ? code : 'error'})`,
+      );
+      if (!triesOtherRoute(code)) throw error;
+      assertCurrent();
+      // A half-built connection must not be what the other route's connect finds.
+      await GhostexNative.disconnect(machine.id).catch(() => undefined);
+    }
+  }
+  setActiveRoute(machine.id, null);
+  throw firstError;
 }
 
 /**

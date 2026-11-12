@@ -2,7 +2,8 @@
  * Machine credential storage.
  * - Saved credentials live in the platform secure store (Keychain/Keystore via
  *   expo-secure-store), keyed `machine.<id>.password` / `.sshkey` /
- *   `.passphrase` / `.publickey` / `.tailcattoken` / `.apitoken` / `.easyconnectaddresses`.
+ *   `.passphrase` / `.publickey` / `.tailcattoken` / `.apitoken` / `.easyconnectaddresses`, and for a
+ *   Tailscale or SSH computer's second route `.ecsshkey` / `.ecpublickey` (`easyConnectRoute.ts`).
  * - Passwords entered with savePassword=false live only in an in-memory map
  *   for this app run.
  */
@@ -13,7 +14,16 @@ import type { SshConfig } from '../../modules/ghostex-native/src';
 import { useSettingsStore } from '../settings/store';
 
 type CredentialKind =
-  'password' | 'sshkey' | 'passphrase' | 'publickey' | 'tailcattoken' | 'apitoken' | 'apitokenexpires' | 'easyconnectaddresses';
+  | 'password'
+  | 'sshkey'
+  | 'passphrase'
+  | 'publickey'
+  | 'tailcattoken'
+  | 'apitoken'
+  | 'apitokenexpires'
+  | 'easyconnectaddresses'
+  | 'ecsshkey'
+  | 'ecpublickey';
 
 /**
  * How the phone reaches a machine. `ssh` (or absent) dials host:port directly;
@@ -151,6 +161,26 @@ export function setEasyConnectAddresses(machineId: string, encoded: string): Pro
   return setCredential(machineId, 'easyconnectaddresses', encoded);
 }
 
+/**
+ * The SSH key a Tailscale or SSH computer's Easy Connect route signs in with: generated for it when the
+ * phone pairs over its SSH login (`sshPairing.ts`), and apart from the person's own key (`sshkey`).
+ */
+export function getEasyConnectSshKey(machineId: string): Promise<string | null> {
+  return getCredential(machineId, 'ecsshkey');
+}
+
+export function setEasyConnectSshKey(machineId: string, privateKey: string): Promise<void> {
+  return setCredential(machineId, 'ecsshkey', privateKey);
+}
+
+export function getEasyConnectPublicKey(machineId: string): Promise<string | null> {
+  return getCredential(machineId, 'ecpublickey');
+}
+
+export function setEasyConnectPublicKey(machineId: string, publicKey: string): Promise<void> {
+  return setCredential(machineId, 'ecpublickey', publicKey);
+}
+
 /** Remove every stored credential for a machine (used when deleting it). */
 export async function deleteAllCredentials(machineId: string): Promise<void> {
   clearSessionPassword(machineId);
@@ -163,6 +193,8 @@ export async function deleteAllCredentials(machineId: string): Promise<void> {
     deleteCredential(machineId, 'apitoken'),
     deleteCredential(machineId, 'apitokenexpires'),
     deleteCredential(machineId, 'easyconnectaddresses'),
+    deleteCredential(machineId, 'ecsshkey'),
+    deleteCredential(machineId, 'ecpublickey'),
   ]);
 }
 

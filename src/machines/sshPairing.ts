@@ -34,7 +34,20 @@ import { setHeldAnswerHandler, type RpcAnswer } from '../chat/rust/transport';
 import { approvalIdOf, notePlainApprovals } from '../security/approvals';
 import { SshPairingCopy } from '../copy';
 import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
-import { getDeviceApiToken, setDeviceApiToken, setDeviceTokenExpiresAt, type MachineConnectionTarget } from './credentials';
+import { GhostexNative } from '../../modules/ghostex-native/src';
+import {
+  getDeviceApiToken,
+  getEasyConnectPublicKey,
+  getEasyConnectSshKey,
+  setDeviceApiToken,
+  setDeviceTokenExpiresAt,
+  setEasyConnectPublicKey,
+  setEasyConnectSshKey,
+  type MachineConnectionTarget,
+} from './credentials';
+import { saveEasyConnectAddresses } from './easyConnectDial';
+import { nativeHasMachineKeys, saveRegistered } from './easyConnectLinkKeyState';
+import { forgetEasyConnectRoute, hasEasyConnectRoute, saveEasyConnectRoute } from './easyConnectRoute';
 import { DEVICE_KEY_ALGORITHM, deviceKeyPublic, deviceKeySign, hasDeviceKey } from './deviceKey';
 import { pairingDeviceName } from './pairing';
 import { matchWords, pairingStatusPayload, sameWords } from './pairingWords';
@@ -42,6 +55,13 @@ import { machineDisplayLabel, useMachinesStore } from './store';
 
 /** What `ghostex server endpoint` lists when the computer takes `/api/pairOverSsh`. */
 export const PAIR_OVER_SSH_CAPABILITY = 'pairOverSsh';
+
+/**
+ * What `ghostex server endpoint` lists when `/api/pairOverSsh` also pairs for Easy Connect, with no
+ * click for the owner's own Tailscale device (CDXC:RemotePairing 2026-11-12 in
+ * server/src/remote_access/tailnet_owner.rs).
+ */
+export const PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY = 'pairOverSshEasyConnect';
 
 /** What `ghostex server endpoint` lists when the computer takes Approve as one tap (option B). */
 export const PLAIN_APPROVALS_CAPABILITY = 'plainApprovals';
@@ -76,6 +96,8 @@ type SavedPairing = {
   lapsedAtMs?: number;
   /** Hide on its card; until something changes. */
   hidden?: boolean;
+  /** The waiting request also pairs for Easy Connect (sent with this phone's Easy Connect keys). */
+  easyConnect?: boolean;
 };
 
 async function readSaved(machineId: string): Promise<SavedPairing> {
@@ -116,6 +138,8 @@ export type SshPairing = {
   phase: SshPairingPhase;
   words: string[];
   message?: string;
+  /** The request also pairs for Easy Connect: the card says so. */
+  easyConnect?: boolean;
 };
 
 type State = {
@@ -123,9 +147,19 @@ type State = {
   hidden: Record<string, true>;
   /** Computers whose last ask the link couldn't deliver (asleep, offline): they show no card. */
   unreachable: Record<string, true>;
+  /** Computers that can pair this phone for Easy Connect over its SSH login (their handshake said so). */
+  easyConnectOffered: Record<string, true>;
 };
 
-export const useSshPairings = create<State>(() => ({ pairings: {}, hidden: {}, unreachable: {} }));
+export const useSshPairings = create<State>(() => ({ pairings: {}, hidden: {}, unreachable: {}, easyConnectOffered: {} }));
+
+function setEasyConnectOffered(machineId: string, offered: boolean): void {
+  if ((useSshPairings.getState().easyConnectOffered[machineId] === true) === offered) return;
+  useSshPairings.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.easyConnectOffered;
+    return { easyConnectOffered: offered ? { ...rest, [machineId]: true } : rest };
+  });
+}
 
 function put(pairing: SshPairing): void {
   useSshPairings.setState((state) => ({ pairings: { ...state.pairings, [pairing.machineId]: pairing } }));
@@ -187,9 +221,15 @@ function record(value: unknown): Record<string, unknown> {
  * or is pairing now. A request saved from an earlier launch that still waits is waited on again
  * (no new request). `auto`: the sign-in's own ask, which never asks again after the owner denied
  * it or a request lapsed, and keeps a hidden card hidden; an action that would have waited, or
- * Ask again, asks anyway and shows the card again.
+ * Ask again, asks anyway and shows the card again. `easyConnect`: also pair for Easy Connect (the
+ * computer offers it), which asks again of a phone already paired without it; when gxserver finds
+ * the phone is the owner's own Tailscale device it approves by itself and no card shows.
  */
-export async function startSshPairing(machine: MachineConnectionTarget, options: { auto: boolean }): Promise<void> {
+export async function startSshPairing(
+  machine: MachineConnectionTarget,
+  options: { auto: boolean; easyConnect?: boolean },
+): Promise<void> {
+  const easyConnect = options.easyConnect === true && !hasEasyConnectRoute(machine);
   if (!signsInOverSsh(machine) || !hasDeviceKey()) return;
   if (running.has(machine.id)) {
     // Already asking or waiting: an action that waits, or Ask again, shows its card again.
@@ -202,8 +242,9 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
   running.add(machine.id);
   let saved: SavedPairing = {};
   let computer = computerName(machine.id);
+  let autoApproved = false;
   try {
-    if (await getDeviceApiToken(machine.id)) {
+    if (!easyConnect && (await getDeviceApiToken(machine.id))) {
       forget(machine.id);
       await writeSaved(machine.id, null);
       return;
@@ -211,7 +252,11 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
     saved = await readSaved(machine.id);
     computer = computerName(machine.id, saved.computer);
     const live =
-      saved.pendingId !== undefined && saved.nonce !== undefined && (saved.expiresAtMs ?? 0) > Date.now()
+      saved.pendingId !== undefined &&
+      saved.nonce !== undefined &&
+      (saved.expiresAtMs ?? 0) > Date.now() &&
+      // A request saved without Easy Connect isn't the one to wait on when this ask adds it.
+      (saved.easyConnect === true) === easyConnect
         ? { pendingId: saved.pendingId, words: saved.words ?? [], expiresAtMs: saved.expiresAtMs ?? 0 }
         : null;
     if (options.auto) {
@@ -248,6 +293,12 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
       if (approverPublicKey !== null) {
         params.approverKey = { algorithm: APPROVER_KEY_ALGORITHM, publicKey: approverPublicKey, presence: 'biometric' };
       }
+      if (easyConnect) {
+        const keys = await easyConnectKeys(machine.id);
+        params.easyConnect = true;
+        params.sshPublicKey = keys.sshPublicKey;
+        params.tailcatClientKey = keys.tailcatClientKey;
+      }
       await link.route();
       const started = await link.rpc('pairOverSsh', params, RPC_TIMEOUT_MS);
       if (started.error !== null) {
@@ -278,6 +329,7 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
         Date.now() + WAIT_MAX_MS,
       );
       pending = { pendingId, words, expiresAtMs };
+      autoApproved = result.autoApproved === true;
       saved = await updateSaved(machine.id, (latest) => ({
         ...latest,
         pendingId,
@@ -286,14 +338,17 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
         expiresAtMs,
         computer: named.length > 0 ? named : latest.computer,
         lapsedAtMs: undefined,
+        easyConnect: easyConnect ? true : undefined,
       }));
     }
-    put({ machineId: machine.id, computer, phase: 'pending', words: pending.words });
+    // The owner's own Tailscale device: approved without a click, so nothing to show or compare.
+    if (autoApproved) forget(machine.id);
+    else put({ machineId: machine.id, computer, phase: 'pending', words: pending.words, easyConnect });
     const { pendingId, words } = pending;
     let lastTimestamp = 0;
     while (Date.now() < pending.expiresAtMs) {
-      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-      if (await getDeviceApiToken(machine.id)) {
+      if (!autoApproved || lastTimestamp > 0) await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      if (!easyConnect && (await getDeviceApiToken(machine.id))) {
         // Paired another way meanwhile (scanned the computer's code, say).
         forget(machine.id);
         await writeSaved(machine.id, null);
@@ -320,10 +375,15 @@ export async function startSshPairing(machine: MachineConnectionTarget, options:
           writeSaved(machine.id, null),
         ]);
         useMachinesStore.getState().setMachineDeviceId(machine.id, status.deviceId);
+        if (easyConnect) await saveSecondRoute(machine.id, status.easyConnectAddresses);
         // The next request shakes hands again, now with this phone's own token.
         link.forgetEndpoint();
         setHidden(machine.id, false);
-        put({ machineId: machine.id, computer, phase: 'paired', words });
+        if (autoApproved) {
+          forget(machine.id);
+          return;
+        }
+        put({ machineId: machine.id, computer, phase: 'paired', words, easyConnect });
         setTimeout(() => {
           if (useSshPairings.getState().pairings[machine.id]?.phase === 'paired') forget(machine.id);
         }, 6_000);
@@ -371,9 +431,47 @@ export async function dropRevokedSshDeviceToken(machine: MachineConnectionTarget
   if (!stored || stored !== refusedToken) return false;
   await Promise.all([setDeviceApiToken(machine.id, ''), setDeviceTokenExpiresAt(machine.id, '')]);
   useMachinesStore.getState().setMachineDeviceId(machine.id, undefined);
+  // Removing the phone on the computer ended its Easy Connect route with it.
+  if (hasEasyConnectRoute(machine)) await forgetEasyConnectRoute(machine.id);
   forget(machine.id);
   return true;
 }
+
+/**
+ * The keys this phone pairs for Easy Connect with: an SSH key of the route's own (kept from an earlier
+ * ask that is still unanswered, so the request stays the same), and this computer's own Easy Connect
+ * key when this app build has one (`easyConnectLinkKey.ts`), the phone's shared key otherwise.
+ */
+async function easyConnectKeys(machineId: string): Promise<{ sshPublicKey: string; tailcatClientKey: string }> {
+  let [privateKey, sshPublicKey] = await Promise.all([getEasyConnectSshKey(machineId), getEasyConnectPublicKey(machineId)]);
+  if (!privateKey || !sshPublicKey) {
+    const key = await GhostexNative.generateSshKey('ed25519', SSH_KEY_COMMENT);
+    privateKey = key.privateKey;
+    sshPublicKey = key.publicKey;
+    // Saved before asking: an approval that lands after a restart still matches this key.
+    await Promise.all([setEasyConnectSshKey(machineId, privateKey), setEasyConnectPublicKey(machineId, sshPublicKey)]);
+  }
+  const tailcatClientKey = nativeHasMachineKeys()
+    ? await GhostexNative.tailcatMachineClientKey!(machineId)
+    : await GhostexNative.tailcatClientPublicKey();
+  return { sshPublicKey, tailcatClientKey };
+}
+
+/** After an approval that included Easy Connect: the route, and this computer's own key as accepted. */
+async function saveSecondRoute(machineId: string, addresses: unknown): Promise<void> {
+  const [privateKey, publicKey] = await Promise.all([getEasyConnectSshKey(machineId), getEasyConnectPublicKey(machineId)]);
+  if (!privateKey || !publicKey) return;
+  if (nativeHasMachineKeys()) {
+    const accepted = await GhostexNative.tailcatMachineClientKey!(machineId);
+    await saveRegistered((current) => ({ ...current, [machineId]: accepted }));
+  }
+  await saveEasyConnectRoute(machineId, { privateKey, publicKey }, () =>
+    saveEasyConnectAddresses(machineId, addresses, null),
+  );
+}
+
+/** The comment on the SSH key line the computer writes for this phone's Easy Connect route. */
+const SSH_KEY_COMMENT = 'ghostex-mobile';
 
 /** Same answer pairing.ts gives the computer. */
 function pairingPlatform(): 'ios' | 'android' {
@@ -439,6 +537,19 @@ onChatLinkHandshake((machine, capabilities) => {
   setReachable(machine.id, true);
   const plain = capabilities.includes(PLAIN_APPROVALS_CAPABILITY);
   notePlainApprovals(machine.id, plain);
+  const easyConnect = capabilities.includes(PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY) && signsInOverSsh(machine);
+  setEasyConnectOffered(machine.id, easyConnect);
+  /*
+  CDXC:RemotePairing 2026-11-12 DECISION:
+  User (Q2716 = A, Q2719): the first time a phone added by hand (Tailscale address, user, password
+  or key) signs in, it also pairs for Easy Connect, with no click when it is the owner's own
+  Tailscale device (gxserver checks; anything else gets the usual Approve with the three words),
+  including on a computer that approves plainly, where nothing else asks.
+  */
+  if (easyConnect && !hasEasyConnectRoute(machine)) {
+    void startSshPairing(machine, { auto: true, easyConnect: true });
+    return;
+  }
   // A computer that approves plainly lets a phone on its SSH login do everything, approving
   // included, so there is nothing to pair: no "Approve this phone?" there (CDXC:Security 2026-11-10
   // in `security/approvals.ts`).

@@ -93,7 +93,11 @@ export default function SshPairingNotices() {
           <>
             {single.phase === 'pending' && (
               <>
-                <Text style={styles.body}>{SshPairingCopy.pendingSteps(single.computer)}</Text>
+                <Text style={styles.body}>
+                  {single.easyConnect === true
+                    ? SshPairingCopy.pendingStepsEasyConnect(single.computer)
+                    : SshPairingCopy.pendingSteps(single.computer)}
+                </Text>
                 <Text style={styles.words} testID="ssh-pairing-words">
                   {single.words.join(' · ')}
                 </Text>

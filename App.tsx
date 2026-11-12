@@ -21,6 +21,7 @@ import { checkForCrashReport, noteCrashRoute } from './src/app/crashReports';
 import { reportMobileView } from './src/analytics/clientView';
 import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/deepLinks';
 import { initAppLifecycle } from './src/app/lifecycle';
+import { initRouteMoveBack } from './src/app/routeMoveBack';
 import { initSettingsSync } from './src/settingsSync/settingsSync';
 import { initLiveActivity } from './src/notifications/liveActivity';
 import { initLiveActivityPush } from './src/notifications/liveActivityPushStore';
@@ -162,6 +163,7 @@ export default function App() {
     initWidgets();
     initPushNotifications();
     initAutoReconnect();
+    initRouteMoveBack();
     // A computer that accepts this phone's own key ends the tunnel on the shared key: dial again on the new one.
     installEasyConnectLinkKeys(redialAfterServerStop);
     initSettingsSync();
