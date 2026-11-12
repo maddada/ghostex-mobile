@@ -35,11 +35,11 @@ export function coordinatorIntro(document: ChatDocument): CoordinatorIntro | nul
 }
 
 const TIP_GLYPHS: Record<string, GlyphName> = {
-  'coordinator-captain-hat': 'coordinator-captain-hat',
-  // The desktop's small-size copy of the same hat; the phone draws the hat itself.
-  'coordinator-captain-hat-small': 'coordinator-captain-hat',
-  // An older chat core still names the crown.
-  'coordinator-crown': 'coordinator-captain-hat',
+  'coordinator-crown-points': 'coordinator-crown-points',
+  // An older chat core still names the captain's hat (or its small copy, or the first crown).
+  'coordinator-captain-hat': 'coordinator-crown-points',
+  'coordinator-captain-hat-small': 'coordinator-crown-points',
+  'coordinator-crown': 'coordinator-crown-points',
   'file-type-html': 'file-type-html',
   microscope: 'microscope',
   photo: 'photo',

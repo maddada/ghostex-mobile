@@ -663,7 +663,7 @@ export function useSessionsScreenMenus({
         setOverlay({
           kind: 'confirmAction',
           title: 'Make coordinator?',
-          body: `${sessionTitle(session)} keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the captain's hat now, and its coordinator playbook arrives once its current turn is over.`,
+          body: `${sessionTitle(session)} keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the coordinator's crown now, and its coordinator playbook arrives once its current turn is over.`,
           confirmLabel: 'Make Coordinator',
           run: () => void makeCoordinator(machine, session),
         });

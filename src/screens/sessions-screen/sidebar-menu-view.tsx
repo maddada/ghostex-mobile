@@ -65,7 +65,10 @@ const MENU_GLYPHS: Readonly<Record<string, (props: GlyphProps) => ReactElement>>
   'circle-check': CircleCheckGlyph,
   'circle-dot': CircleDotGlyph,
   clock: ClockGlyph,
+  // An older chat core names the captain's hat (or its small copy) for the same row.
   'coordinator-captain-hat': CoordinatorGlyph,
+  'coordinator-captain-hat-small': CoordinatorGlyph,
+  'coordinator-crown-points': CoordinatorGlyph,
   copy: CopyGlyph,
   dots: DotsGlyph,
   'file-diff': COMMAND_ICONS.fileDiff,

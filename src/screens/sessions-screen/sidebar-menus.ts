@@ -672,7 +672,7 @@ function coordinatorRows(session: GhostexSession): SidebarMenuItem[] {
     // CDXC:Coordinators 2026-11-10 (gx-core `coordinator_rows`): gives this coordinator its project's
     // main-coordinator label on its computer; hidden on the main one and on Chief of Staff.
     if (!session.isMainCoordinator && !session.isChief) {
-      rows.push(row('Make main coordinator', 'coordinator-captain-hat', action('makeMain')));
+      rows.push(row('Make main coordinator', 'coordinator-crown-points', action('makeMain')));
     }
     rows.push(row('Goal & Instructions…', 'checklist', action('goal')));
     rows.push(row('Memory…', 'brain', action('memory')));

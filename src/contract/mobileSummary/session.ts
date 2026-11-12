@@ -135,7 +135,7 @@ export type GhostexSession = {
    * note follows the conversation across resumes and across clients.
    */
   sessionNote: string;
-  /** The session is a coordinator: its row draws the captain's hat instead of its agent logo. */
+  /** The session is a coordinator: its row draws the coordinator's crown instead of its agent logo. */
   isCoordinator: boolean;
   /** The coordinator is its project's main one on its computer: the row's "Main" tag. */
   isMainCoordinator: boolean;

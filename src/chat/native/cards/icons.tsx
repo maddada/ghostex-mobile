@@ -5,7 +5,7 @@
 
 import Svg, { Path } from 'react-native-svg';
 
-import { CAPTAIN_HAT_PATHS, CAPTAIN_HAT_STROKE } from '../../../components/sessions/icons';
+import { COORDINATOR_CROWN_PATHS, COORDINATOR_CROWN_STROKE } from '../../../components/sessions/icons';
 
 type GlyphSpec = { paths: string[]; strokeWidth?: number; filled?: boolean };
 
@@ -51,8 +51,8 @@ const GLYPHS = {
       'M9.7 17l4.6 0',
     ],
   },
-  /** A coordinator: the captain's hat from the front (`CAPTAIN_HAT_PATHS`, components/sessions/icons.tsx). */
-  'coordinator-captain-hat': { paths: CAPTAIN_HAT_PATHS, strokeWidth: CAPTAIN_HAT_STROKE },
+  /** A coordinator: its outline crown (`COORDINATOR_CROWN_PATHS`, components/sessions/icons.tsx). */
+  'coordinator-crown-points': { paths: COORDINATOR_CROWN_PATHS, strokeWidth: COORDINATOR_CROWN_STROKE },
   'file-type-html': {
     paths: [
       'M14 3v4a1 1 0 0 0 1 1h4',

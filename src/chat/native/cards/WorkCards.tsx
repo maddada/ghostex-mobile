@@ -1001,7 +1001,7 @@ function WhoMark({ who }: { who: JsonRecord | null }) {
   if (kind === 'thread') return <AgentMark icon={agent || null} size={14} />;
   if (kind === 'github') return <Glyph name="brand-github" size={14} color={P.muted} />;
   if (kind === 'you') return <Glyph name="user" size={14} color={SidebarPalette.ROW_QUESTION} />;
-  if (kind === 'coordinator') return <Glyph name="coordinator-captain-hat" size={14} color={P.muted} />;
+  if (kind === 'coordinator') return <Glyph name="coordinator-crown-points" size={14} color={P.muted} />;
   return <Glyph name="clock" size={14} color={P.muted} />;
 }
 
