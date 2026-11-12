@@ -614,7 +614,11 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                 // `fit_chips`), so a closed card keeps its two lines. An open card shows them all.
                 const shownTags = expanded ? tags : tags.slice(0, 2);
                 const hiddenTags = tags.length - shownTags.length;
-                const line = str(row, 'detail') || note;
+                // An ask's item pills lead its opened answers; its line then keeps only what they don't say.
+                const pills = arr(obj(row)?.itemPills)
+                  .map(obj)
+                  .filter((pill): pill is NonNullable<ReturnType<typeof obj>> => pill !== null);
+                const line = pills.length > 0 ? str(row, 'openLine') : str(row, 'detail') || note;
                 // Opened, the chip line takes its own taps (`TextArea`); closed, a tap on it opens the card.
                 const ChipArea = expanded ? TextArea : View;
                 return (
@@ -787,6 +791,7 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                           room={-80}
                           chooser="inline"
                           initialChoosing={chooseFor === key}
+                          pills={pills}
                           scope={scope}
                           dispatch={chat.dispatch as never}
                           before={(kind) => (kind === 'reply' ? onDone() : undefined)}

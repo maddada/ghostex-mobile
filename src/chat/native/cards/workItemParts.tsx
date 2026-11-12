@@ -21,6 +21,7 @@ import { useState, type ReactNode } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { Pressable, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 
+import { SidebarPalette } from '../../../theme/palette';
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { Sheet } from '../composer/Sheet';
@@ -44,6 +45,117 @@ export const CHOOSE_ANSWER = 'Choose an answer';
  */
 function buttonWidth(label: string, icon: boolean, mark: boolean, fontScale: number): number {
   return label.length * 8 * fontScale + 24 + (icon ? 20 : 0) + (mark ? 16 : 0);
+}
+
+/** Each status's colour, the board's (`CoordinatorBoard.tsx` `GROUP_COLOR`, desktop `group_look`). */
+export const STATUS_COLOR: Record<string, string> = {
+  needs: SidebarPalette.ROW_QUESTION,
+  blocked: SidebarPalette.ROW_APPROVAL,
+  waiting: '#7fa1c4',
+  moving: '#c68a06',
+  finished: '#2fa865',
+};
+
+/** An item pill's sides and dot. */
+const PILL_PAD = 7;
+const PILL_DOT = 6;
+
+type PillFit = 'full' | 'dots' | 'plus';
+
+/** The item pills' widths, each with the 6 gap after it: whole, dots only, one "+N" pill. */
+function pillWidths(pills: JsonRecord[], fontScale: number): [number, number, number] {
+  if (pills.length === 0) return [0, 0, 0];
+  const gaps = 6 * pills.length;
+  const full = pills.reduce(
+    (sum, pill) => sum + PILL_PAD * 2 + PILL_DOT + 4 + str(pill, 'id').length * 7 * fontScale + 2,
+    0,
+  );
+  const dots = (PILL_PAD * 2 + PILL_DOT + 2) * pills.length;
+  const plus = PILL_PAD * 2 + `+${pills.length}`.length * 7 * fontScale + 2;
+  return [full + gaps, dots + gaps, plus + 6];
+}
+
+function pillFit(widths: [number, number, number], room: number): PillFit {
+  if (widths[0] <= room) return 'full';
+  if (widths[1] <= room) return 'dots';
+  return 'plus';
+}
+
+/**
+ * An opened row's item pills, leading its answers (gx-chat-core `item_pills`; desktop
+ * `item_pill_elements`): a dot in the item's state colour (an item that waits on the answer in the
+ * blocked red) and its short id. A tap opens the item in the Work sheet; a long press reads its
+ * whole name and state, with Open. `dots` drops the ids, `plus` is one "+N" pill that lists them.
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of the line under an opened row's title: "has to be pills looking, and small, only show id
+ * (hover to read which work item), and show dot color for each one before the id in the pill".
+ */
+function ItemPills({ pills, fit, dispatch }: { pills: JsonRecord[]; fit: PillFit; dispatch: (action: never) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const [reading, setReading] = useState<JsonRecord[] | null>(null);
+  if (pills.length === 0) return null;
+  const open = (pill: JsonRecord) => {
+    const command = obj(pill.command);
+    if (command !== null) dispatch(command as never);
+  };
+  return (
+    <>
+      {fit === 'plus' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={pills.map((pill) => str(pill, 'tip')).join(', ')}
+          onPress={() => setReading(pills)}
+          style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+        >
+          <Text style={styles.pillText}>{`+${pills.length}`}</Text>
+        </Pressable>
+      ) : (
+        pills.map((pill, index) => (
+          <Pressable
+            key={`pill:${index}`}
+            accessibilityRole="button"
+            accessibilityLabel={str(pill, 'tip')}
+            accessibilityHint="Long-press to read it"
+            hitSlop={4}
+            onPress={() => open(pill)}
+            onLongPress={() => setReading([pill])}
+            style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          >
+            <View style={[styles.pillDot, { backgroundColor: STATUS_COLOR[str(pill, 'state')] ?? P.cardMuted }]} />
+            {fit === 'full' ? <Text style={styles.pillText}>{str(pill, 'id')}</Text> : null}
+          </Pressable>
+        ))
+      )}
+      <Sheet visible={reading !== null} onClose={() => setReading(null)} title="Work items">
+        <View>
+          {(reading ?? []).map((pill, index) => (
+            <Pressable
+              key={`read:${index}`}
+              accessibilityRole="button"
+              onPress={() => {
+                setReading(null);
+                open(pill);
+              }}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+            >
+              <View style={[styles.pillDot, { backgroundColor: STATUS_COLOR[str(pill, 'state')] ?? P.cardMuted }]} />
+              <Text style={[styles.menuText, { flex: 1 }]} numberOfLines={2}>
+                {str(pill, 'tip')}
+              </Text>
+              <Glyph name="external-link" size={15} color={P.cardMuted} />
+            </Pressable>
+          ))}
+        </View>
+      </Sheet>
+    </>
+  );
+}
+
+/** A Reply button's width as `WorkAnswerLine` measures it. */
+function replyWidthOf(replied: string, draft: boolean, fontScale: number): number {
+  return buttonWidth(replyLabel(replied), true, draft, fontScale);
 }
 
 /** A Reply's label: the words it sent, cut short so the button stays a button (desktop `reply_answer`). */
@@ -294,6 +406,7 @@ export function WorkAnswerLine({
   question = '',
   chooser = 'sheet',
   initialChoosing = false,
+  pills = [],
 }: {
   answers: JsonRecord[];
   reply: JsonRecord | null;
@@ -312,6 +425,8 @@ export function WorkAnswerLine({
   chooser?: 'sheet' | 'inline';
   /** The folded answers start open (the Work sheet's closed card asked for them). */
   initialChoosing?: boolean;
+  /** An opened row's item pills, before its answers (`ItemPills`). */
+  pills?: JsonRecord[];
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -338,15 +453,24 @@ export function WorkAnswerLine({
         }}
       />
     ) : null;
+  const pillRoom = pillWidths(pills, fontScale);
   if (answers.length === 0) {
+    const alone = open != null ? buttonWidth('Open', true, false, fontScale) : replyWidthOf(replied, draft, fontScale);
+    const lead = <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone)} dispatch={dispatch} />;
     if (open != null) {
       return (
         <View style={styles.line}>
+          {lead}
           <WorkButton label="Open" icon="external-link" onPress={() => dispatch(open as never)} />
         </View>
       );
     }
-    return replyButton !== null ? <View style={styles.line}>{replyButton}</View> : null;
+    return replyButton !== null || pills.length > 0 ? (
+      <View style={styles.line}>
+        {lead}
+        {replyButton}
+      </View>
+    ) : null;
   }
   const answer = (command: JsonRecord) => {
     if (busy || locked) return;
@@ -376,14 +500,19 @@ export function WorkAnswerLine({
   const replyWidth =
     reply !== null ? buttonWidth(replyLabel(replied), true, draft, fontScale) + 6 + (divider ? 13 : 0) : 0;
   const answersWidth = widths.reduce((sum, value) => sum + value, 0) + 6 * Math.max(0, widths.length - 1);
-  const fits = answersWidth + replyWidth <= lineRoom;
+  // The item pills lead: the answers fold first, then the pills drop their ids, then they are one "+N".
+  const fits = answersWidth + replyWidth + pillRoom[0] <= lineRoom;
   // Answers no wider than the dropdown stay as they are: folding them would gain nothing.
   const fold = !given && !fits && answersWidth > buttonWidth(CHOOSE_ANSWER, true, false, fontScale);
   const shown = fits || !given ? answers : answers.filter((choice) => isTrue(choice, 'picked'));
   const list = <AnswerChoices answers={answers} disabled={busy || locked} onPick={answer} />;
+  const used = fold
+    ? buttonWidth(CHOOSE_ANSWER, true, false, fontScale) + replyWidth
+    : (fits ? answersWidth : shown.reduce((sum, choice) => sum + widths[answers.indexOf(choice)]!, 0)) + replyWidth;
   return (
     <View style={styles.column}>
       <View style={styles.line}>
+        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - used)} dispatch={dispatch} />
         {fold ? (
           <WorkButton
             label={CHOOSE_ANSWER}
@@ -528,6 +657,22 @@ const useStyles = themedStyles((P) => ({
   column: { gap: 6 },
   // One line: its buttons shrink and wrap their words rather than run past it or wrap below.
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  // An item pill (desktop `item_pill_elements`): small and round, a dot and a short id.
+  pill: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 22,
+    paddingHorizontal: PILL_PAD,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: P.ink(0.1),
+    backgroundColor: P.ink(0.04),
+  },
+  pillPressed: { backgroundColor: P.ink(0.08) },
+  pillDot: { width: PILL_DOT, height: PILL_DOT, borderRadius: PILL_DOT / 2 },
+  pillText: { fontSize: 12, lineHeight: 16, color: P.cardMuted, fontVariant: ['tabular-nums'] },
   button: {
     minHeight: 28,
     flexShrink: 1,

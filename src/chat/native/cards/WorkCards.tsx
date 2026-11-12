@@ -36,6 +36,7 @@ import { LinkWords } from '../transcript/LinkWords';
 import { Sheet } from '../composer/Sheet';
 import {
   OPENED_ROW_GAP,
+  STATUS_COLOR,
   TextArea,
   WorkAnswerLine,
   WorkDescription,
@@ -61,15 +62,6 @@ function useBodyColor(): string {
   const { chatTextStrength } = useTranscriptFlags();
   return strengthenedText(P.prose, chatTextStrength, P.light);
 }
-
-/** Each status's colour, the board's (`CoordinatorBoard.tsx` `GROUP_COLOR`, desktop `group_look`). */
-const STATUS_COLOR: Record<string, string> = {
-  needs: SidebarPalette.ROW_QUESTION,
-  blocked: SidebarPalette.ROW_APPROVAL,
-  waiting: '#7fa1c4',
-  moving: '#c68a06',
-  finished: '#2fa865',
-};
 
 const CHIP_ICON: Record<string, GlyphName> = {
   thread: 'robot',
@@ -487,7 +479,16 @@ function DockRow({
   const description = str(row, 'body');
   // The description (or where a line of work stands) sits `OPENED_ROW_GAP` under the title and
   // its work item line: the column's own 4 when that line is drawn, the press's 2 when not.
-  const bodyLead = OPENED_ROW_GAP - (Array.isArray(row.waitedBy) || chips.length > 0 ? 4 : 2);
+  // Opened, the item pills lead the answers (gx-chat-core `item_pills`) and carry the item and
+  // what waits on it; only its other parts (the steps) stay under the title.
+  const pills = opened
+    ? arr(row.itemPills)
+        .map(obj)
+        .filter((pill): pill is JsonRecord => pill !== null)
+    : [];
+  const headChips = pills.length > 0 ? chips.filter((chip) => str(chip, 'kind') !== 'item') : chips;
+  const itemLine = pills.length === 0 && Array.isArray(row.waitedBy);
+  const bodyLead = OPENED_ROW_GAP - (itemLine || headChips.length > 0 ? 4 : 2);
   const count = str(row, 'count');
   const markStatus = page && str(row, 'status') === 'needs' ? 'page' : str(row, 'status');
   const answerLine =
@@ -504,6 +505,7 @@ function DockRow({
           question={str(row, 'title')}
           scope={scope}
           dispatch={dispatch as never}
+          pills={pills}
         />
       </View>
     ) : null;
@@ -558,11 +560,11 @@ function DockRow({
       {opened ? (
         <TextArea style={[styles.dockDetailArea, answerLine !== null && styles.dockDetailAreaAnswers]}>
           <View style={styles.dockDetail}>
-            {Array.isArray(row.waitedBy) ? (
+            {itemLine ? (
               <ItemLine row={row} chips={chips} dispatch={dispatch} />
-            ) : chips.length > 0 ? (
+            ) : headChips.length > 0 ? (
               <View style={styles.dockLinks}>
-                {chips.map((chip, index) => (
+                {headChips.map((chip, index) => (
                   <ItemChip key={`link:${index}`} chip={chip} dispatch={dispatch} />
                 ))}
               </View>
