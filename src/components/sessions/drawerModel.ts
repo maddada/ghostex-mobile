@@ -19,6 +19,8 @@ import {
   type ProjectHeaderItem,
 } from '../../contract/grouping';
 import { creatingCopy, mergeComputers, type MergedComputers } from '../../contract/mergedComputers';
+import { matchesTagFilters } from '../../contract/sessionTagList';
+import { effectiveSessionTag } from '../../contract/sessionTags';
 import { gbotsSection, type GbotsSectionModel } from '../../contract/gbots';
 import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { StateCardCopy } from '../../copy';
@@ -72,8 +74,40 @@ export type DrawerListInput = {
   selectedWorkspaceId: string | null;
   /** Each other computer's resolved workspace id, for the one list of every computer (null: none). */
   workspaceIdOf?: (machineId: string) => string | null;
+  /** The tag filter (./tagFilterStore.ts), already pruned to the tags the list offers; empty keeps every session. */
+  tagFilters?: readonly string[];
+  /** The tag filter's labels, for its empty card ("No sessions tagged Bug."). */
+  tagFilterLabel?: string;
   collapse: DrawerCollapseInput;
 };
+
+/**
+ * The tag filter (gx-core sidebar_view/tags.rs `matches_session_filters`, applied in groups.rs): only the sessions
+ * carrying a picked tag (or no tag, for No tag), and no project the filter leaves empty, Main Hub included.
+ */
+function withTagFilter(summary: GhostexMobileSummary, filters: readonly string[] | undefined): GhostexMobileSummary {
+  if (filters === undefined || filters.length === 0) return summary;
+  const sessions = summary.sessions.filter((session) => matchesTagFilters(effectiveSessionTag(session), filters));
+  const withSessions = new Set(sessions.map((session) => session.projectId));
+  const parentOf = new Map(summary.projects.map((project) => [project.projectId, project.worktreeParentProjectId]));
+  for (const projectId of [...withSessions]) {
+    const parent = parentOf.get(projectId);
+    if (parent !== undefined && parent.length > 0) withSessions.add(parent);
+  }
+  return {
+    ...summary,
+    sessions,
+    projects: summary.projects.filter((project) => withSessions.has(project.projectId)),
+  };
+}
+
+/** The empty card while the tag filter leaves nothing (gx-core assemble.rs's "No sessions tagged X."). */
+function tagFilterEmptyBlock(machineId: string, label: string | undefined): DrawerBlock {
+  return rowBlock(
+    machineId,
+    stateCardItem('empty', `No sessions tagged ${label ?? 'that'}.`, 'Long-press a session › Tag As to tag it.', 'Tap to clear the filter.'),
+  );
+}
 
 function rowBlock(machineId: string, item: DrawerItem): DrawerBlock {
   return { kind: 'row', listKey: `${machineId}:${item.key}`, machineId, item };
@@ -157,6 +191,8 @@ function machineBlocks(
   collapse: DrawerCollapseInput,
   nowMs: number,
   selectedSessionKey: string | null,
+  tagFilters?: readonly string[],
+  tagFilterLabel?: string,
 ): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
   if (inventory === undefined || (inventory.summary === null && !inventory.hasLoaded)) {
@@ -193,11 +229,14 @@ function machineBlocks(
         ? selectedSessionKey.slice(machine.id.length + 1)
         : null,
       expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[machine.id] ?? []),
-      summary: filterSummaryForSpace(
-        selectedWorkspaceId === null
-          ? inventory.summary
-          : filterSummaryForWorkspace(inventory.summary, selectedWorkspaceId),
-        selectedSpaceId,
+      summary: withTagFilter(
+        filterSummaryForSpace(
+          selectedWorkspaceId === null
+            ? inventory.summary
+            : filterSummaryForWorkspace(inventory.summary, selectedWorkspaceId),
+          selectedSpaceId,
+        ),
+        tagFilters,
       ),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
@@ -209,6 +248,7 @@ function machineBlocks(
     }),
   );
   if (items.length === 0) {
+    if ((tagFilters?.length ?? 0) > 0) return [tagFilterEmptyBlock(machine.id, tagFilterLabel)];
     return [
       rowBlock(
         machine.id,
@@ -283,6 +323,8 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     collapse,
     input.nowMs ?? Date.now(),
     input.selectedSessionKey ?? null,
+    input.tagFilters,
+    input.tagFilterLabel,
   );
 }
 
@@ -409,7 +451,10 @@ function mergedBlocks(input: DrawerListInput, selected: MachineRecord, merged: M
     }
     return null;
   })();
-  const summary = filterSummaryForSpace(merged.summary, input.selectedSpaceId, { nowMs, focusedSessionId });
+  const summary = withTagFilter(
+    filterSummaryForSpace(merged.summary, input.selectedSpaceId, { nowMs, focusedSessionId }),
+    input.tagFilters,
+  );
   const items = withoutSectionLabels(
     buildDrawerItems({
       machineId: selected.id,
@@ -427,6 +472,7 @@ function mergedBlocks(input: DrawerListInput, selected: MachineRecord, merged: M
     }),
   );
   if (items.length === 0) {
+    if ((input.tagFilters?.length ?? 0) > 0) return [tagFilterEmptyBlock(selected.id, input.tagFilterLabel)];
     const copy = input.selectedSpaceId === ACTIVE_SPACE_ID ? StateCardCopy.activeProjectsEmpty : StateCardCopy.empty;
     return [rowBlock(selected.id, stateCardItem('empty', copy.title, copy.body, 'actionHint' in copy ? copy.actionHint : ''))];
   }

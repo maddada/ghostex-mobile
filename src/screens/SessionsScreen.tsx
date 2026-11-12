@@ -66,6 +66,10 @@ import {
   type DrawerBlock,
   everyComputerList,
 } from '../components/sessions/drawerModel';
+import { useTagFilterStore } from '../components/sessions/tagFilterStore';
+import { enabledVisibleTagFilters, UNTAGGED_TAG_FILTER } from '../contract/sessionTagList';
+import { SESSION_TAG_SECTIONS } from '../contract/sessionTags';
+import { setSidebarSetting } from '../settingsSync/settingsSync';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
 import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
 import { EditGlyph } from '../components/sessions/unified/glyphs';
@@ -548,6 +552,29 @@ export default function SessionsScreen({ navigation }: Props) {
     [inventoriesByMachineId],
   );
   const sessionListNowMs = useSessionListClock(clockSessions);
+  /*
+   * The tag filter (Sort & Filter › Show only sessions tagged), pruned to the tags the synced Session Tags list
+   * offers, as the desktop prunes it (gx-core sidebar_ui/store.rs `retain_tag_filters`). The Project list's only.
+   */
+  const storedTagFilters = useTagFilterStore((state) => state.filters);
+  useEffect(() => void useTagFilterStore.getState().hydrate(), []);
+  const offeredTagFilters = useMemo(
+    () => enabledVisibleTagFilters(selectedSummary?.sessionTagListItems, selectedSummary?.customSessionTags ?? null),
+    [selectedSummary?.sessionTagListItems, selectedSummary?.customSessionTags],
+  );
+  const tagFilters = useMemo(
+    () => storedTagFilters.filter((filter) => offeredTagFilters.includes(filter)),
+    [storedTagFilters, offeredTagFilters],
+  );
+  const tagLabel = useCallback(
+    (tag: string): string =>
+      tag === UNTAGGED_TAG_FILTER
+        ? 'No tag'
+        : (SESSION_TAG_SECTIONS.flatMap((section) => section.options).find((option) => option.value === tag)?.label ??
+          selectedSummary?.customSessionTags.tags[tag]?.name ??
+          tag),
+    [selectedSummary?.customSessionTags],
+  );
   const entries = useMemo(
     () =>
       buildDrawerList({
@@ -560,6 +587,8 @@ export default function SessionsScreen({ navigation }: Props) {
         selectedSpaceId,
         selectedWorkspaceId,
         workspaceIdOf,
+        tagFilters,
+        tagFilterLabel: tagFilters.map(tagLabel).join(' or '),
         collapse: {
           expandedProjectsByMachine: collapse.expandedProjectsByMachine,
           expandedCollectionsByMachine: collapse.expandedCollectionsByMachine,
@@ -578,6 +607,8 @@ export default function SessionsScreen({ navigation }: Props) {
       selectedSpaceId,
       selectedWorkspaceId,
       workspaceIdOf,
+      tagFilters,
+      tagLabel,
       collapse.expandedProjectsByMachine,
       collapse.expandedCollectionsByMachine,
       collapse.expandedGroupsByMachine,
@@ -1182,7 +1213,11 @@ export default function SessionsScreen({ navigation }: Props) {
           }),
         true,
       ),
-    stateCard: (machineId) => setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
+    stateCard: (machineId, item) =>
+      // The tag filter's empty card clears the filter; every other one opens the computer's recovery menu.
+      tagFilters.length > 0 && item.variant === 'empty'
+        ? useTagFilterStore.getState().clear()
+        : setOverlay({ kind: 'recovery', machine: machineById(machineId) }),
     workChipActions: (machineId, item) => workChipActions(machineById(machineId), item.session),
     toggleGbotsHeading: (machineId, headingKey) => collapse.toggleSessionKind(machineId, headingKey),
     toggleGbot: (machineId, bot) => collapse.toggleProject(machineId, bot.projectKey),
@@ -1273,6 +1308,101 @@ export default function SessionsScreen({ navigation }: Props) {
       <BellWithCount size={22} color={sidebarAppearance.foreground} count={needsYou} />
     </Pressable>
   );
+  /**
+   * The desktop's More › Sort & Filter (gx-core sidebar_menu/navigation.rs `more_menu`): the view switch, the list's
+   * organization (synced with the computers through Sidebar organization sync) and, in the Project list, the tag
+   * filter (this phone's own, as each desktop window keeps its own). The menu stays open so a pick shows at once.
+   */
+  const sortFilterItems = (): ContextMenuItem[] => {
+    const summary = selectedSummary;
+    const pinnedOrder = summary?.pinnedSessionOrder === 'recent' ? 'recent' : 'manual';
+    const items: ContextMenuItem[] = [
+      {
+        kind: 'item',
+        key: 'view',
+        label: unified.on ? 'Switch to Project View' : 'Switch to Unified View',
+        onPress: () => {
+          setOverlay(NONE);
+          setSidebarSetting('sidebarView', unified.on ? 'project' : 'unified');
+        },
+      },
+      { kind: 'separator', key: 'sep-view' },
+    ];
+    if (unified.on) {
+      items.push(
+        {
+          kind: 'item',
+          key: 'group-by-project',
+          label: 'Group by Project',
+          selected: summary?.unifiedGroupByProject === true,
+          onPress: () => setSidebarSetting('unifiedGroupByProject', summary?.unifiedGroupByProject !== true),
+        },
+        {
+          kind: 'item',
+          key: 'moving-section',
+          label: 'Moving Section',
+          selected: summary?.unifiedWorkingSection !== false,
+          onPress: () => setSidebarSetting('unifiedWorkingSection', summary?.unifiedWorkingSection === false),
+        },
+      );
+    } else {
+      items.push(
+        {
+          kind: 'item',
+          key: 'group-working',
+          label: 'Group Working Sessions',
+          selected: summary?.groupWorkingSessions === true,
+          onPress: () => setSidebarSetting('groupWorkingSessions', summary?.groupWorkingSessions !== true),
+        },
+        {
+          kind: 'item',
+          key: 'hide-empty',
+          label: 'Hide Projects Without Sessions',
+          selected: hideProjects,
+          onPress: () => setSidebarSetting('sidebarHideProjectsWithoutSessions', !hideProjects),
+        },
+      );
+    }
+    items.push(
+      { kind: 'heading', key: 'pinned-heading', label: 'Pinned order' },
+      {
+        kind: 'item',
+        key: 'pinned-manual',
+        label: 'Manual',
+        selected: pinnedOrder === 'manual',
+        onPress: () => setSidebarSetting('pinnedSessionOrder', 'manual'),
+      },
+      {
+        kind: 'item',
+        key: 'pinned-recent',
+        label: 'Most recently updated',
+        selected: pinnedOrder === 'recent',
+        onPress: () => setSidebarSetting('pinnedSessionOrder', 'recent'),
+      },
+    );
+    if (!unified.on && offeredTagFilters.length > 0) {
+      items.push({ kind: 'heading', key: 'tags-heading', label: 'Show only sessions tagged' });
+      for (const tag of offeredTagFilters) {
+        items.push({
+          kind: 'item',
+          key: `tag:${tag}`,
+          label: tagLabel(tag),
+          selected: tagFilters.includes(tag),
+          onPress: () => useTagFilterStore.getState().toggle(tag),
+        });
+      }
+      if (tagFilters.length > 0) {
+        items.push({
+          kind: 'item',
+          key: 'tags-clear',
+          label: 'Clear filter',
+          onPress: () => useTagFilterStore.getState().clear(),
+        });
+      }
+    }
+    return items;
+  };
+
   const moreButton = (
     <Pressable
       ref={moreButtonRef}
@@ -1918,8 +2048,8 @@ export default function SessionsScreen({ navigation }: Props) {
           visible
           title="Ghostex"
           subtitle={machine === null ? undefined : machineDisplayLabel(machine)}
-          items={
-            unified.on
+          items={[
+            ...(unified.on
               ? [
                   {
                     kind: 'item' as const,
@@ -1927,12 +2057,29 @@ export default function SessionsScreen({ navigation }: Props) {
                     label: 'Computers',
                     onPress: () => setOverlay({ kind: 'machinePicker', purpose: 'select' }),
                   },
-                  ...appMenuItems(machine),
                 ]
-              : appMenuItems(machine)
-          }
+              : []),
+            {
+              kind: 'item' as const,
+              key: 'sort-filter',
+              label: 'Sort & Filter',
+              submenu: true,
+              onPress: () => setOverlay({ kind: 'sortFilter' }),
+            },
+            ...appMenuItems(machine),
+          ]}
           onClose={() => setOverlay(NONE)}
           anchor={appMenuAnchor}
+        />
+      ) : null}
+
+      {overlay.kind === 'sortFilter' ? (
+        <ContextMenu
+          visible
+          title="Sort & Filter"
+          subtitle={tagFilters.length > 0 ? `Showing ${tagFilters.map(tagLabel).join(' or ')}` : undefined}
+          items={sortFilterItems()}
+          onClose={() => setOverlay(NONE)}
         />
       ) : null}
 

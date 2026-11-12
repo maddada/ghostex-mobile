@@ -80,6 +80,8 @@ export type Overlay =
   | { kind: 'machinePicker'; purpose: 'select' | 'addProject' }
   /** Header hamburger: Search Prompts, Settings, Logout; at its button on the iPhone Duo (`anchor`). */
   | { kind: 'appMenu'; anchor?: MenuAnchor }
+  /** The desktop's More › Sort & Filter: how the list is organized (synced) and the tag filter (this phone's). */
+  | { kind: 'sortFilter' }
   | { kind: 'sectionMenu'; machine: MachineRecord; section: 'projects' }
   | {
       kind: 'confirmAction';
