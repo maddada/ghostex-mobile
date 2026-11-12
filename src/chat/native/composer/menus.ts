@@ -42,6 +42,22 @@ const HOST_ACTION_ICONS: Record<string, string> = {
  */
 const CHAT_GROUP_HOST_ACTIONS = new Set(['delayedActions', 'closeAfterDone', 'viewPlaybook']);
 
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User, of the chat's top bar ⋯ menu and the chat box's ⋯ (More actions): "please merge these 2. No need for top 3 dots. The one in chat is enough." The rows only the top bar menu had (the app's own screens and the tab, which the core's `hostActions` do not carry) are More actions rows now, each shown only where the screen performs it (`serves`); the top bar keeps its ⋯ in the terminal view alone, which has no chat box.
+ */
+type ShellRow = { id: string; label: string; icon: string; destructive?: true };
+const PROJECT_SHELL_ROWS: readonly ShellRow[] = [
+  { id: 'docs', label: 'Files', icon: 'titlebar/folder.svg' },
+  { id: 'changes', label: 'Changes', icon: 'titlebar/file-diff.svg' },
+  { id: 'newTerminal', label: 'New terminal', icon: 'titlebar/terminal-2.svg' },
+];
+const APP_SHELL_ROWS: readonly ShellRow[] = [
+  { id: 'settings', label: 'Settings', icon: 'titlebar/settings.svg' },
+  { id: 'disconnect', label: 'Disconnect', icon: 'titlebar/logout.svg', destructive: true },
+  { id: 'killSession', label: 'Kill session', icon: 'titlebar/axe.svg', destructive: true },
+];
+
 export function overflowed(document: ChatDocument, id: string): boolean {
   return document.composerOverflow?.overflowed?.includes(id) === true;
 }
@@ -74,6 +90,8 @@ export type MoreActionsInput = {
    * every control it may draw and the option settings are rows here, as when they all overflow.
    */
   allFolded?: boolean;
+  /** The session sleeps: the core's Sleep row reads Wake, as the sidebar's does. */
+  sleeping?: boolean;
 };
 
 /**
@@ -258,6 +276,7 @@ export function moreActionsRows({
   voiceCallTitle = '',
   voiceCallGbotName = '',
   allFolded = false,
+  sleeping = false,
 }: MoreActionsInput): MenuRow[] {
   const rows: MenuRow[] = [];
   if (interruptAndSend !== null) {
@@ -304,6 +323,8 @@ export function moreActionsRows({
     rows.push({ separator: true });
   }
   rows.push({ heading: true, label: 'Chat' });
+  // The transcript's search bar, which the top bar menu opened before the two menus merged.
+  rows.push({ label: 'Search conversation', iconPath: 'titlebar/search.svg', command: { type: 'searchOpen' } });
   const branches = branchesRow(document);
   if (branches !== null) rows.push(branches);
   rows.push(viewModesRow(document, available('summary')));
@@ -339,12 +360,20 @@ export function moreActionsRows({
       command: { type: 'toggleSideChat', text: draft },
     });
   }
+  // Prompt editor writes the next message in a full-screen sheet; the core leaves it out of this menu for the
+  // desktop, whose chat box has its own button, which the phone's has not.
+  if (serves('promptEditor')) {
+    rows.push({ label: 'Prompt editor', iconPath: 'titlebar/pencil.svg', command: { type: 'host', action: 'promptEditor' } });
+  }
   const actions = document.hostActions ?? [];
-  const hostRow = (action: (typeof actions)[number]): MenuRow => ({
-    label: action.label,
-    iconPath: HOST_ACTION_ICONS[action.id] ?? null,
-    command: { type: 'host', action: action.id },
-  });
+  const hostRow = (action: (typeof actions)[number]): MenuRow =>
+    action.id === 'sleep' && sleeping
+      ? { label: 'Wake', iconPath: 'titlebar/player-play.svg', command: { type: 'host', action: action.id } }
+      : {
+          label: action.label,
+          iconPath: HOST_ACTION_ICONS[action.id] ?? null,
+          command: { type: 'host', action: action.id },
+        };
   for (const action of actions)
     if (CHAT_GROUP_HOST_ACTIONS.has(action.id) && serves(action.id)) rows.push(hostRow(action));
   /**
@@ -367,6 +396,8 @@ export function moreActionsRows({
   }
   for (const control of COMPOSER_CONTROLS) {
     if (!folded(control.id) || !available(control.id)) continue;
+    // Terminal View never folds on the phone's full chat box (`NativeComposer`), so it is a row only in a pane's.
+    if (control.id === 'terminal' && !allFolded) continue;
     const row: MenuRow = {
       label: control.label,
       iconPath: control.icon,
@@ -432,6 +463,16 @@ export function moreActionsRows({
       command: { type: 'composerHost', action: 'stashPrompt' },
     });
   }
+  const shellRow = (row: ShellRow): MenuRow => ({
+    label: row.label,
+    iconPath: row.icon,
+    ...(row.destructive === true ? { destructive: true } : {}),
+    command: { type: 'host', action: row.id },
+  });
+  const projectRows = PROJECT_SHELL_ROWS.filter((row) => serves(row.id)).map(shellRow);
+  if (projectRows.length > 0) rows.push({ separator: true }, { heading: true, label: 'Project' }, ...projectRows);
+  const appRows = APP_SHELL_ROWS.filter((row) => serves(row.id)).map(shellRow);
+  if (appRows.length > 0) rows.push({ separator: true }, ...appRows);
   return rows;
 }
 

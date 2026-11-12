@@ -159,6 +159,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 /** The header buttons of the status band's row: 44 pt wide, side by side (`headerButton`). */
 const TERMINAL_BAND_BUTTONS = { size: 44, gap: 0 } as const;
 
+/** The tab strip's margin from a screen edge with no header button beside it (the chat box's own side margin). */
+const TABS_EDGE_MARGIN = 10;
+
 /** The native chat's More actions rows this screen performs (the terminal menu's own actions). */
 const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
   'rename',
@@ -172,6 +175,29 @@ const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
 const NO_NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [];
 /** A coordinator's chat also serves View playbook (the sheet its long-press menu opens). */
 const COORDINATOR_CHAT_HOST_ACTIONS: readonly string[] = [...NATIVE_CHAT_HOST_ACTIONS, 'viewPlaybook'];
+
+/**
+ * The rows the chat's top bar menu held, now the chat's More actions rows (`moreActionsRows`, which records the
+ * user's decision): each served only where the top bar menu enabled it, on the selected session's tab.
+ */
+function chatShellActions({
+  agentActions,
+  project,
+  session,
+}: {
+  agentActions: boolean;
+  project: boolean;
+  session: boolean;
+}): string[] {
+  return [
+    ...(agentActions ? ['promptEditor'] : []),
+    ...(project ? ['docs', 'changes'] : []),
+    'newTerminal',
+    'settings',
+    'disconnect',
+    ...(session ? ['killSession'] : []),
+  ];
+}
 
 export default function TerminalScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -1270,6 +1296,34 @@ export default function TerminalScreen({ navigation, route }: Props) {
       </Pressable>
     ) : null;
 
+  /*
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User, on the phone's chat: "I want top bar just to show tabs", with the voice agent and the terminal switch moved
+   * to the chat box and the top bar's ⋯ merged into the chat box's (`moreActionsRows`). In the chat view the top bar
+   * holds the tab strip alone (on the iPhone also Back, below); the terminal view keeps its buttons and its ⋯ menu, as
+   * it has no chat box, and so do the iPhone Duo's status band and side bar and two panes, which serve both.
+   */
+  const tabsOnlyHeader = headerPlacement.kind === 'top' && chatModeActive && twoPanes === null;
+  const docsEnabled = activeProject !== null && (activeProject.path ?? '').length > 0;
+  const activeChatHostActions = useMemo(() => {
+    const base =
+      !agentActionsCapable || activeSession === null
+        ? NO_NATIVE_CHAT_HOST_ACTIONS
+        : activeSession.isCoordinator
+          ? COORDINATOR_CHAT_HOST_ACTIONS
+          : NATIVE_CHAT_HOST_ACTIONS;
+    // The top bar's ⋯ rows, only where that menu is gone (one place each).
+    if (!tabsOnlyHeader) return base;
+    return [
+      ...base,
+      ...chatShellActions({
+        agentActions: agentActionsCapable && activeSession !== null,
+        project: docsEnabled,
+        session: activeSession !== null,
+      }),
+    ];
+  }, [activeSession, agentActionsCapable, docsEnabled, tabsOnlyHeader]);
+
   // What the chat's More actions rows and cards ask of the screen: the terminal menu's own actions, on the selected
   // session (a touch in a chat pane selects its session before its rows are reached).
   const chatHostAction = (action: string): void => {
@@ -1341,6 +1395,13 @@ export default function TerminalScreen({ navigation, route }: Props) {
         style={[
           styles.header,
           { backgroundColor: surfaceBackground },
+          // No Back on Android and no buttons in the chat view: the tab strip keeps the chat's side margin there.
+          headerPlacement.kind === 'top'
+            ? {
+                paddingLeft: Platform.OS === 'android' ? TABS_EDGE_MARGIN : HEADER_PADDING,
+                paddingRight: tabsOnlyHeader ? TABS_EDGE_MARGIN : HEADER_PADDING,
+              }
+            : null,
           headerPlacement.kind === 'band'
             ? [styles.bandHeader, bandRowFrame(headerPlacement.frame, HEADER_HEIGHT)]
             : null,
@@ -1354,7 +1415,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
             : null,
         ]}
       >
-        {inRail ? null : backButton(styles.headerButton)}
+        {/* Android's own Back (gesture and button) goes back to Sessions (`BackHandler` above): no arrow there. The
+            iPhone has no system Back, so it keeps the arrow. */}
+        {inRail || Platform.OS === 'android' ? null : backButton(styles.headerButton)}
         <TerminalTabsBar
           headerColor={surfaceBackground}
           tabs={tabs}
@@ -1365,7 +1428,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             if (tab !== undefined) requestCloseTab(tab);
           }}
         />
-        {inRail ? null : headerButtons(styles.headerButton)}
+        {inRail || tabsOnlyHeader ? null : headerButtons(styles.headerButton)}
       </View>
       {activeBoxEntry !== null ? (
         <CloudBoxPill entry={activeBoxEntry} sessionId={activeTab?.ghostexSessionId ?? null} />
@@ -1466,13 +1529,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             onSwitchToTerminal={() => {
               if (chatModeActive) toggleChatView();
             }}
-            hostActions={
-              !agentActionsCapable || activeSession === null
-                ? NO_NATIVE_CHAT_HOST_ACTIONS
-                : activeSession.isCoordinator
-                  ? COORDINATOR_CHAT_HOST_ACTIONS
-                  : NATIVE_CHAT_HOST_ACTIONS
-            }
+            hostActions={activeChatHostActions}
             onHostAction={chatHostActionFor(chatMachineTarget, activeProjectId)}
             visible={chatModeActive && twoPanes === null}
             openSearchRequestId={chatSearchRequestId}
@@ -1653,7 +1710,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         exportTranscriptEnabled={isSessionChatSupportedAgent(activeAgentId)}
         sessionNoteEnabled={sessionNotesOn && chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
         searchConversationEnabled={chatModeActive}
-        docsEnabled={activeProject !== null && (activeProject.path ?? '').length > 0}
+        docsEnabled={docsEnabled}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         killSessionEnabled={activeTab !== null && activeSession !== null}

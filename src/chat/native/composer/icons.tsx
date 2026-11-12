@@ -180,6 +180,30 @@ const GLYPHS = {
     filled: true,
   },
   search: { paths: ['M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0', 'M21 21l-6 -6'] },
+  // The rows the chat's top bar menu held before it merged into More actions.
+  'player-play': { paths: ['M7 4v16l13 -8z'] },
+  'file-diff': {
+    paths: [
+      'M14 3v4a1 1 0 0 0 1 1h4',
+      'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z',
+      'M12 10l0 4',
+      'M10 12l4 0',
+      'M10 17l4 0',
+    ],
+  },
+  logout: {
+    paths: [
+      'M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2',
+      'M9 12h12l-3 -3',
+      'M18 15l3 -3',
+    ],
+  },
+  axe: {
+    paths: [
+      'M13 9l7.383 7.418c.823 .82 .823 2.148 0 2.967a2.11 2.11 0 0 1 -2.976 0l-7.407 -7.385',
+      'M6.66 15.66l-3.32 -3.32a1.25 1.25 0 0 1 .42 -2.044l3.24 -1.296l6 -6l3 3l-6 6l-1.296 3.24a1.25 1.25 0 0 1 -2.044 .42z',
+    ],
+  },
   eye: {
     paths: [
       'M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0',

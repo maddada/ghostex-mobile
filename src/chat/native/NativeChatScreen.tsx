@@ -45,6 +45,7 @@ import { machineTargetFor } from '../../screens/terminal-screen/session-lookups'
 import { callVoiceAbout } from '../../voice/callAbout';
 import { useGbotOfChat } from '../../voice/gbotCall';
 import { useVoiceCapability } from '../../voice/VoiceButton';
+import { startVoice, useVoiceStore, voiceActive } from '../../voice/conversation';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
 import GbotSettingsHost from '../../screens/sessions-screen/GbotSettingsHost';
 import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettingsSheet';
@@ -191,6 +192,12 @@ export default function NativeChatScreen({
       store.inventoriesByMachineId[machine.id]?.summary?.sessions.find((entry) => entry.sessionId === sessionId)
         ?.displayTitle ?? '',
   );
+  // More actions' Sleep row reads Wake while the session sleeps.
+  const sleeping = useInventoryStore(
+    (store) =>
+      store.inventoriesByMachineId[machine.id]?.summary?.sessions.find((entry) => entry.sessionId === sessionId)
+        ?.isSleeping === true,
+  );
   const { setTitle } = chat;
   useEffect(() => {
     setTitle(title.length > 0 ? title : null);
@@ -198,7 +205,12 @@ export default function NativeChatScreen({
 
   // More actions' "Voice call about this chat", on a computer whose gxserver has the voice agent.
   const voiceNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const voiceCallable = useVoiceCapability(machine) && sessionId.length > 0 && projectId.length > 0;
+  // The chat box's headset (the voice agent, which the top bar held before) needs the same computer capability.
+  const voiceAgent = useVoiceCapability(machine);
+  const voiceCallable = voiceAgent && sessionId.length > 0 && projectId.length > 0;
+  const machineName = useMachinesStore(
+    (store) => store.machines.find((entry) => entry.id === machine.id)?.name ?? '',
+  );
   // A GBot's chat offers "Call <GBot>" there instead, a call with the GBot about this chat.
   const chatGbot = useGbotOfChat(machine.id, projectId, sessionId);
   // More actions' Session note, while the computer has Session notes on (Settings > Extensions).
@@ -272,6 +284,12 @@ export default function NativeChatScreen({
           },
           () => voiceNavigation.navigate('Voice'),
         );
+      } else if (action === 'voiceAgent') {
+        // The headset in the chat box: a conversation with the voice agent on this computer, or the running one.
+        if (!voiceActive(useVoiceStore.getState().phase)) {
+          void startVoice(machine, machineName.length > 0 ? machineName : machine.username);
+        }
+        voiceNavigation.navigate('Voice');
       } else if (action === 'exportTranscript') {
         exportCount.current += 1;
         openHandoff({ id: -exportCount.current, target: null });
@@ -279,12 +297,19 @@ export default function NativeChatScreen({
         // Stash folded into More actions opens this from that sheet, which iOS must finish closing first.
         if (Platform.OS === 'ios') setTimeout(() => setSavedPromptsOpen(true), HANDOFF_OPEN_DELAY_MS);
         else setSavedPromptsOpen(true);
-      } else if (hostActions.includes(action)) onHostAction?.(action, params);
+      } else if (hostActions.includes(action)) {
+        // A dialog or an alert from a More actions row waits for that sheet to finish closing on iOS, which drops a
+        // presentation made during another's dismissal (the Handoff sheet's wait).
+        if (Platform.OS === 'ios' && OPENS_OVER_SHEET.has(action))
+          setTimeout(() => onHostAction?.(action, params), HANDOFF_OPEN_DELAY_MS);
+        else onHostAction?.(action, params);
+      }
     },
     [
       chatGbot,
       hostActions,
       machine,
+      machineName,
       onHostAction,
       onSwitchToTerminal,
       openHandoff,
@@ -517,6 +542,8 @@ export default function NativeChatScreen({
                   onFocusChange={setComposerFocused}
                   voiceCallTitle={title}
                   voiceCallGbotName={chatGbot?.name}
+                  sleeping={sleeping}
+                  voiceAgent={voiceAgent}
                   {...(composerRoom !== undefined ? { room: composerRoom } : {})}
                   {...(document !== null
                     ? {
@@ -618,6 +645,9 @@ export default function NativeChatScreen({
 }
 
 const NO_HOST_ACTIONS: readonly string[] = [];
+
+/** The More actions rows (once the top bar menu's) whose action presents a dialog or an alert over the chat. */
+const OPENS_OVER_SHEET = new Set(['promptEditor', 'disconnect', 'killSession']);
 
 /**
  * The composer's model sheet while a question takes the composer's place: the held-messages card's Pick model

@@ -1,7 +1,7 @@
 /**
  * The chat's row menus on the phone: More actions, the option pills' menus, the attach sheet. Rows
  * have the shape desktop's `show_chat_menu` draws (`option_menu/render.rs`): `heading`,
- * `separator`, `label` + `description` / `detail` / `badge` (a count circle after the label), `checked`, `disabled`, `iconPath`, `icon` (an
+ * `separator`, `label` + `description` / `detail` / `badge` (a count circle after the label), `checked`, `disabled`, `destructive` (label and glyph in the error colour), `iconPath`, `icon` (an
  * agent mark), a `command` to run, `children` for a submenu (a pushed page here), and the two
  * panel rows `accounts` (the Accounts & limits panel) and `context` (the context window panel).
  */
@@ -87,6 +87,10 @@ const KNOWN_GLYPHS = new Set<string>([
   'microphone',
   'player-stop',
   'volume',
+  'player-play',
+  'file-diff',
+  'logout',
+  'axe',
 ]);
 
 function isGlyph(name: string): name is GlyphName {
@@ -170,6 +174,7 @@ export function MenuRowView({
   const context = obj(row.context);
   if (context !== null) return <ContextPanel context={context} onCommand={(command) => onRun(command, false)} />;
   const label = str(row, 'label');
+  const destructive = isTrue(row, 'destructive');
   if (isTrue(row, 'heading')) {
     const description = str(row, 'description');
     return (
@@ -209,14 +214,14 @@ export function MenuRowView({
           {character}
         </Text>
       ) : glyph !== null ? (
-        <Glyph name={glyph} size={17} color={P.primary} />
+        <Glyph name={glyph} size={17} color={destructive ? P.error : P.primary} />
       ) : AgentIcon !== undefined ? (
         <AgentIcon size={17} color={P.primary} />
       ) : null}
       {dot !== null ? <View style={[styles.dot, { backgroundColor: branchDotColor(dot, P) }]} /> : null}
       <View style={styles.rowText}>
         <View style={styles.labelLine}>
-          <Text style={[styles.label, styles.labelText]} numberOfLines={2}>
+          <Text style={[styles.label, styles.labelText, destructive ? { color: P.error } : null]} numberOfLines={2}>
             {label}
           </Text>
           {badge.length > 0 ? (

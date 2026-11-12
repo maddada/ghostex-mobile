@@ -74,6 +74,7 @@ import { engineStatusLine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
 import { useChatPlacement } from '../chatPlacement';
+import { useVoiceStore, voiceActive } from '../../../voice/conversation';
 
 export type NativeComposerProps = {
   /** The draft's own place, which the tray's project chip moves it from. */
@@ -122,6 +123,13 @@ export type NativeComposerProps = {
   room?: number;
   /** The chat's pill strip (`PillsStrip.tsx`), drawn along the box's top edge inside its border; not in a pane. */
   strip?: ReactNode;
+  /** The session sleeps: More actions' Sleep row reads Wake. */
+  sleeping?: boolean;
+  /**
+   * The chat's computer runs the voice agent: the headset button stands in the bottom row (the host's `voiceAgent`
+   * action starts a conversation or opens the running one, which keeps the button lit wherever it was started).
+   */
+  voiceAgent?: boolean;
 };
 
 const DEFAULT_HOST_ACTIONS: readonly string[] = ['terminalView'];
@@ -180,8 +188,11 @@ export function NativeComposer({
   voiceCallGbotName = '',
   room,
   strip,
+  sleeping = false,
+  voiceAgent = false,
 }: NativeComposerProps) {
   const styles = useStyles();
+  const P = useTranscriptTheme();
   // A chat in a pane slot: the compact form (see the head of this file).
   const compact = useChatPlacement().inPane;
   const serves = useCallback(
@@ -305,6 +316,17 @@ export function NativeComposer({
     },
     [dictation.available, document, serves],
   );
+  /*
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User: "move the terminal switch and voice agent buttons to the composer". The full chat box's bottom row keeps
+   * Terminal View and the voice agent's headset beside More actions, Dictate and Send: neither folds into More actions
+   * (they count with Send as fixed width, so the option pills and the other controls fold first); a pane's compact box
+   * still carries Terminal View as a More actions row.
+   */
+  const voicePhase = useVoiceStore((voice) => voice.phase);
+  const voiceShown = !compact && (voiceAgent || voiceActive(voicePhase));
+  const voiceLit = voiceActive(voicePhase);
+  const terminalFixed = !compact && available('terminal');
   const [footerWidth, setFooterWidth] = useState(0);
   const [optionsWidth, setOptionsWidth] = useState(0);
   const sentMeasurement = useRef('');
@@ -312,12 +334,14 @@ export function NativeComposer({
   useEffect(() => {
     // The compact form draws no control and no option pill but the model's: nothing to fit.
     if (compact || document === null || !composerReady || footerWidth <= 0) return;
-    const controls = COMPOSER_CONTROLS.filter((control) => available(control.id)).map((control) => ({
-      id: control.id,
-      width: CONTROL_WIDTH,
-    }));
-    // More actions and Dictate never fold, so they are part of the fixed width with Send.
-    const fixed = 1 + (available('dictate') ? 1 : 0);
+    const controls = COMPOSER_CONTROLS.filter((control) => available(control.id) && control.id !== 'terminal').map(
+      (control) => ({
+        id: control.id,
+        width: CONTROL_WIDTH,
+      }),
+    );
+    // More actions, Terminal View, the headset and Dictate never fold, so they are part of the fixed width with Send.
+    const fixed = 1 + (terminalFixed ? 1 : 0) + (voiceShown ? 1 : 0) + (available('dictate') ? 1 : 0);
     const labels = obj(document.optionLabels);
     const measurements = {
       available: footerWidth,
@@ -337,7 +361,7 @@ export function NativeComposer({
     if (key === sentMeasurement.current) return;
     sentMeasurement.current = key;
     dispatch({ type: 'measureComposer', measurements });
-  }, [compact, document, composerReady, footerWidth, optionsWidth, available, dispatch]);
+  }, [compact, document, composerReady, footerWidth, optionsWidth, available, dispatch, terminalFixed, voiceShown]);
 
   // ---- menus and host actions --------------------------------------------------------------------
 
@@ -658,9 +682,10 @@ export function NativeComposer({
         voiceCallTitle,
         voiceCallGbotName,
         allFolded: compact,
+        sleeping,
       }),
     });
-  }, [available, compact, document, model, serves, voiceCallGbotName, voiceCallTitle]);
+  }, [available, compact, document, model, serves, sleeping, voiceCallGbotName, voiceCallTitle]);
 
   /** Send held: the `/` `@` `+` pickers, then Queue (and Interrupt & Send while the agent works) once there is a draft. */
   const openSendMenu = useCallback(() => {
@@ -895,7 +920,9 @@ export function NativeComposer({
                       />
                       {document !== null && !compact
                         ? COMPOSER_CONTROLS.filter(
-                            (control) => available(control.id) && !overflowed(document, control.id),
+                            (control) =>
+                              available(control.id) &&
+                              (control.id === 'terminal' ? terminalFixed : !overflowed(document, control.id)),
                           ).map((control) => {
                             const glyph = CONTROL_GLYPHS[control.id];
                             const pressed = control.id === 'note' && document.composerChrome.notePressed;
@@ -920,6 +947,14 @@ export function NativeComposer({
                             ];
                           })
                         : null}
+                      {voiceShown ? (
+                        <ToolbarButton
+                          glyph="headset"
+                          label={voiceLit ? 'Voice mode on: open the voice agent' : 'Talk to the voice agent'}
+                          tint={voiceLit ? P.accent : null}
+                          onPress={() => host('voiceAgent')}
+                        />
+                      ) : null}
                       {available('dictate') ? (
                         <ToolbarButton
                           glyph={dictation.listening ? 'player-stop' : 'microphone'}
