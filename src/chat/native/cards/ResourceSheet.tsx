@@ -9,7 +9,7 @@
  */
 
 import { useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -47,35 +47,27 @@ export function ResourceSheet({ chat, document }: { chat: RustChat; document: Ch
       // No "Go to chat": nothing the reader taps scrolls the chat to a question any more
       // (gx-chat-core questions/open_questions.rs `show`).
     >
-      {modal === null ? null : modal.loading ? (
-        <Text style={styles.note}>Reading it from the chat…</Text>
-      ) : modal.missing.length > 0 ? (
-        <Text style={styles.note}>{modal.missing}</Text>
-      ) : modal.kind === 'chart' ? (
-        <VisualBlock source={modal.source} />
-      ) : (
-        <TranscriptEnvProvider value={env}>
-          <QuestionFormsProvider value={forms}>
-            <View>
+      {/* The panel stops at its max height; the form (two questions, a long option list) scrolls inside it. */}
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+        {modal === null ? null : modal.loading ? (
+          <Text style={styles.note}>Reading it from the chat…</Text>
+        ) : modal.missing.length > 0 ? (
+          <Text style={styles.note}>{modal.missing}</Text>
+        ) : modal.kind === 'chart' ? (
+          <VisualBlock source={modal.source} />
+        ) : (
+          <TranscriptEnvProvider value={env}>
+            <QuestionFormsProvider value={forms}>
               <QuestionFormCard id={modal.id} source="" />
-            </View>
-          </QuestionFormsProvider>
-        </TranscriptEnvProvider>
-      )}
+            </QuestionFormsProvider>
+          </TranscriptEnvProvider>
+        )}
+      </ScrollView>
     </Sheet>
   );
 }
 
 const useStyles = themedStyles((P) => ({
-  go: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: P.ink(0.12),
-    backgroundColor: P.ink(0.06),
-  },
-  goBusy: { opacity: 0.55 },
-  goLabel: { color: P.primary, fontSize: 13 },
+  content: { paddingBottom: 4 },
   note: { color: P.cardMuted, fontSize: 13.5, paddingHorizontal: 4, paddingVertical: 10 },
 }));
