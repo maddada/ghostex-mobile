@@ -215,7 +215,9 @@ function KeptTail({ item, tail }: { item: TranscriptItem; tail: NonNullable<Quie
  */
 function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolean; onPress(): void }) {
   const time = line.time ?? '';
-  const segments: QuietSegment[] = [{ text: line.text }];
+  // An open line drops its counts: its rows show them (gx-chat-core quiet_view.rs, 2026-11-13).
+  const text = open && (line.openText ?? '').length > 0 ? (line.openText as string) : line.text;
+  const segments: QuietSegment[] = [{ text }];
   if (time.length > 0) segments.push({ text: ` ${time}` });
   return (
     <QuietLine

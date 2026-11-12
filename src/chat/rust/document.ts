@@ -375,6 +375,8 @@ export type QuietStretch = {
   after?: number;
   /** "3 reports · 1 message sent · 3 tool calls · 1 item updated". */
   text: string;
+  /** What the line says while open, without its counts (`openText`, gx-chat-core quiet_view.rs). */
+  openText?: string;
   /** "1:08 to 1:09 AM" on a line reports came in on. */
   time?: string;
   /** The turn still runs: the line counts up. */
