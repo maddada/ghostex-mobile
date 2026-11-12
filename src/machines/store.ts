@@ -21,6 +21,8 @@ import {
   getSavedPassword,
   getTailcatToken,
   setEasyConnectAddresses,
+  setEasyConnectPublicKey,
+  setEasyConnectSshKey,
   setSavedPassword,
   setSessionPassword,
   setTailcatToken,
@@ -486,7 +488,7 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
     const errors = await validateInput(machines, input, id);
     if (errors !== null) return { ok: false, errors };
     const normalized = normalizedInput(input);
-    const machine: MachineRecord = {
+    const edited: MachineRecord = {
       ...existing,
       name: normalized.name,
       // The synthetic identity is derived from the id, so it survives edits and
@@ -499,6 +501,26 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
       ...pairingFieldsOf(input),
       ...tailscaleSshOf(input),
     };
+    /*
+     * CDXC:RemotePairing 2026-11-12 DECISION:
+     * Coordinator, for the user: "drop the Easy Connect route when a Tailscale entry's host changes".
+     * Its Easy Connect key, addresses and pairing belong to the computer at the address before; a new
+     * address may be another computer, so the entry goes back to Tailscale only (it pairs for Easy
+     * Connect again on its next sign-in), and a connect still running under the route is ended.
+     */
+    const { easyConnectPairedAt: routePairedAt, ...withoutRoute } = edited;
+    const routeGone =
+      routePairedAt !== undefined && (edited.transport === 'tailcat' || edited.host !== existing.host);
+    const machine: MachineRecord = routeGone ? withoutRoute : edited;
+    if (routeGone) {
+      notePairingChanged(machine.id);
+      await Promise.all([
+        setEasyConnectSshKey(machine.id, ''),
+        setEasyConnectPublicKey(machine.id, ''),
+        setEasyConnectAddresses(machine.id, ''),
+      ]);
+      logAppEvent(`Easy Connect: ${machine.id} got another address; its Easy Connect route was dropped`);
+    }
     await persistPassword(machine.id, normalized.savePassword, normalized.password);
     /*
      * CDXC:RemotePairing 2026-11-11 WHY:

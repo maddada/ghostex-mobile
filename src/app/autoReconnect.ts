@@ -17,6 +17,7 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import type { FailureReasonCode } from '../inventory/client';
 import { useInventoryStore } from '../inventory/store';
 import { chatLinkKeptInBackground, onChatLinkCutOff } from '../chat/rust/machine-link';
+import { hasEasyConnectRoute, useMachineRoutes } from '../machines/easyConnectRoute';
 import { enabledMachines, useMachinesStore } from '../machines/store';
 import { cancelConnectionAttempt, ensureConnected } from '../remote/connection';
 import { isDemoMachineId } from '../demo/identity';
@@ -136,11 +137,17 @@ const RESTART_REDIAL_DELAYS_MS = [2_500, 2_000, 2_500, 3_000, 5_000, 8_000];
  * tunnel to it dies without closing, and the phone noticed only when its chat went quiet and a probe ran out,
  * about 15 s after the restart, then waited out the reconnect ladder. The computer says so first: an Easy
  * Connect phone drops the dead tunnel and dials again on a short ladder until the new helper answers. Over
- * Tailscale or SSH the connection outlives a gxserver restart, so nothing is done there.
+ * Tailscale or SSH the connection outlives a gxserver restart, so nothing is done there, except for a
+ * Tailscale computer that is on its Easy Connect route at the time.
  */
 export function redialAfterServerStop(machineId: string): void {
   const target = machineTarget(machineId);
-  if (target === undefined || target.transport !== 'tailcat' || !canRecover(machineId)) return;
+  if (target === undefined || !canRecover(machineId)) return;
+  // A Tailscale computer on its Easy Connect route rides the same helper (`easyConnectRoute.ts`).
+  const onTunnel =
+    target.transport === 'tailcat' ||
+    (hasEasyConnectRoute(target) && useMachineRoutes.getState().active[machineId] === 'easyConnect');
+  if (!onTunnel) return;
   cancelRetry(machineId);
   const redial = (attempt: number): void => {
     const delay = RESTART_REDIAL_DELAYS_MS[attempt];
