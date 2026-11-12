@@ -659,7 +659,14 @@ const styles = StyleSheet.create({
   column: { gap: ROW_GAP, minWidth: 0 },
   // The rows' own 8pt inset plus 4 puts their words 12pt in, the "Message to" card's padding; a
   // single row in it is that card's 44pt.
-  boxed: { paddingHorizontal: SINGLE_LINE_CARD.paddingX - ROW_PAD_X, paddingVertical: 5.5, minWidth: 0 },
+  // Never shorter than that card, a folded "2 tool calls" heading too.
+  boxed: {
+    paddingHorizontal: SINGLE_LINE_CARD.paddingX - ROW_PAD_X,
+    paddingVertical: 5.5,
+    minHeight: SINGLE_LINE_CARD.height,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
   quietSteps: { minWidth: 0 },
   quietStep: { minWidth: 0 },
   quietStepTrigger: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
