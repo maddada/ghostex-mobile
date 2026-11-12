@@ -8,7 +8,7 @@
  * words are). Desktop: `resource_modal.rs`.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ScrollView, Text } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
@@ -23,7 +23,51 @@ export function ResourceSheet({ chat, document }: { chat: RustChat; document: Ch
   const styles = useStyles();
   const theme = useTranscriptTheme();
   const modal = document?.resourceModal ?? null;
-  const { dispatch, uploadFiles, queryAsync } = chat;
+  const { dispatch: chatDispatch, uploadFiles, queryAsync } = chat;
+  const forms = document?.questionForms ?? {};
+  // The form the reader sent from this sheet (Send or Skip all), and whether its call was seen in
+  // flight: the sheet closes (its own slide and fade) once the send settles OK, and stays open on
+  // the answers when it fails (the form open again with its `sendError`). Desktop:
+  // `resource_modal.rs` `settle_resource_modal_send`.
+  //
+  // CDXC:SessionChat 2026-11-12 DECISION:
+  // User: as soon as the reply is sent, close the question form popup and the Ghostex page popup
+  // with a short fade; keep it open with the answers if the send fails.
+  const sent = useRef<{ id: string; seen: boolean } | null>(null);
+  const modalId = modal?.id ?? null;
+  const dispatch = useMemo<typeof chatDispatch>(
+    () => (action) => {
+      const type = (action as { type?: unknown }).type;
+      const form = (action as { form?: unknown }).form;
+      if ((type === 'formSend' || type === 'formSkipAll') && typeof form === 'string' && form === modalId) {
+        sent.current = { id: form, seen: false };
+      }
+      return chatDispatch(action);
+    },
+    [chatDispatch, modalId],
+  );
+  const sentForm = sent.current ? (forms[sent.current.id] as { sendInFlight?: unknown; state?: unknown } | undefined) : undefined;
+  const inFlight = sentForm?.sendInFlight === true;
+  const sentState = typeof sentForm?.state === 'string' ? sentForm.state : '';
+  useEffect(() => {
+    const watched = sent.current;
+    if (watched === null) return;
+    if (modalId !== watched.id) {
+      sent.current = null;
+      return;
+    }
+    if (inFlight) {
+      watched.seen = true;
+      return;
+    }
+    if (sentState === 'open' || sentState === '') {
+      // Not dispatched yet, or it failed after going out.
+      if (watched.seen) sent.current = null;
+      return;
+    }
+    sent.current = null;
+    chatDispatch({ type: 'closeResource' });
+  }, [modalId, inFlight, sentState, chatDispatch]);
   const env = useMemo<TranscriptEnv>(
     () => ({
       dispatch,
@@ -38,7 +82,6 @@ export function ResourceSheet({ chat, document }: { chat: RustChat; document: Ch
     }),
     [dispatch, theme, uploadFiles, queryAsync],
   );
-  const forms = document?.questionForms ?? {};
   return (
     <Sheet
       visible={modal !== null}
