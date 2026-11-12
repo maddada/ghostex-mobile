@@ -34,6 +34,7 @@ import { useDisclosure } from './state';
 import type { TranscriptTheme } from './theme';
 import { SINGLE_LINE_CARD, SINGLE_LINE_HEADER_HEIGHT, singleLineShell } from './singleLineCard';
 import { ToolBody } from './ToolBody';
+import { FoldChevron } from './foldChevron';
 
 /** How long a row takes to grow in and the header's words to settle (desktop `ENTER`). */
 const ENTER_MS = 320;
@@ -213,7 +214,7 @@ export function ToolCard({ message }: { message: ProjectedMessage }) {
             <ActivityIndicator size="small" color={theme.muted} style={styles.spinner} />
           </View>
         ) : null}
-        <Glyph name={open ? 'chevron-up' : 'chevron-down'} size={12} color={theme.muted} />
+        <FoldChevron open={open} size={12} color={theme.muted} half />
       </Pressable>
       {open ? (
         <Animated.View

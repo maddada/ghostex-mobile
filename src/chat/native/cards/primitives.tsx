@@ -10,6 +10,7 @@ import { Animated, Easing, Pressable, Text, View, type StyleProp, type ViewStyle
 
 import { Glyph, type GlyphName } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { FoldChevron } from '../transcript/foldChevron';
 
 export const CARD_TEXT_SIZE = 14;
 export const CARD_LINE_HEIGHT = 20;
@@ -95,7 +96,7 @@ export function CardHeader({
       {trailing}
       {chevron !== undefined ? (
         <View style={styles.headerIcon}>
-          <Glyph name={chevron === 'open' ? 'chevron-down' : 'chevron-right'} size={14} color={P.muted} />
+          <FoldChevron open={chevron === 'open'} size={14} color={P.muted} />
         </View>
       ) : null}
     </>

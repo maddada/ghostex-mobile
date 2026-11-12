@@ -9,8 +9,8 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTranscriptEnv } from './context';
-import { Glyph } from './icons';
 import { MARKER_INSET, MARKER_SLOT, PROSE_LINE, PROSE_SIZE } from './theme';
+import { FoldChevron } from './foldChevron';
 
 /**
  * Where a row is drawn: inside a finished turn's work fold, rows keep their tool pairs as plain rows
@@ -33,7 +33,7 @@ export function useFoldPlace(): FoldPlace {
 export function Chevron({ open, color, size = 14 }: { open: boolean; color: string; size?: number }) {
   return (
     <View style={styles.markerSlot}>
-      <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={size} color={color} />
+      <FoldChevron open={open} size={size} color={color} />
     </View>
   );
 }

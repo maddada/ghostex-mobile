@@ -17,6 +17,7 @@ import { useTranscriptEnv } from './context';
 import { Glyph } from './icons';
 import { FOOTER_DIM } from './messageSpacing';
 import { successTone, type QuietMark } from './quietWork';
+import { FoldChevron } from './foldChevron';
 
 /** The work of one `grouped-work` row, waiting for the reply whose time row shows its button. */
 export type HiddenWork = {
@@ -70,7 +71,7 @@ export function WorkButton({ work, height }: { work: HiddenWork; height: number 
             <Text numberOfLines={1} style={[styles.label, { color: tone }]}>
               {work.label}
             </Text>
-            <Glyph name={work.open ? 'chevron-down' : 'chevron-right'} size={12} color={tone} />
+            <FoldChevron open={work.open} size={12} color={tone} />
           </>
         );
       }}

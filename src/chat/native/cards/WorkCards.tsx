@@ -46,6 +46,7 @@ import {
 } from './workItemParts';
 import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
+import { FoldChevron } from '../transcript/foldChevron';
 
 type Dispatch = RustChat['dispatch'];
 
@@ -924,7 +925,7 @@ function WorkMovingRow({ card, dispatch }: { card: JsonRecord; dispatch: Dispatc
         onPress={() => setOpen((was) => !was)}
         style={styles.movingHead}
       >
-        <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
+        <FoldChevron open={open} size={12} color={P.muted} />
         {/* The same 14 px as the list's who-has-it marks under it. */}
         <StatusMarker status="moving" size={14} />
         <Text style={[styles.movingTitle, { color: body }]}>{str(card, 'title')}</Text>

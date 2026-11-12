@@ -38,6 +38,7 @@ import { PermissionDetails } from './PermissionDetails';
 import { SideAnswer, SideQuestionCard } from './SideQuestionCard';
 import { PassthroughCard, TerminalPickerCard } from './TerminalPickerCard';
 import type { CardHostAction } from './types';
+import { FoldChevron } from '../transcript/foldChevron';
 
 export function NoticeCard({
   chat,
@@ -376,7 +377,7 @@ export function NoticeCard({
       detail={approval !== null ? str(approval, 'source') : undefined}
       trailing={
         foldable ? (
-          <Glyph name={collapsed ? 'chevron-right' : 'chevron-down'} size={14} color={look.P.muted} />
+          <FoldChevron open={!collapsed} size={14} color={look.P.muted} />
         ) : undefined
       }
       body={dimPending(body, pending)}

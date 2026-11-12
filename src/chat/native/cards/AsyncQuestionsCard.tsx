@@ -14,6 +14,7 @@ import { Glyph } from './icons';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { CardButton, ChoiceRow, Spinner } from './primitives';
 import { useEchoedText } from './useEchoedText';
+import { FoldChevron } from '../transcript/foldChevron';
 
 export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const styles = useStyles();
@@ -53,7 +54,7 @@ export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; documen
         {state.working ? 'Still working' : ''}
       </Text>
       <Text style={styles.headerCount}>{`${state.index + 1}/${count}`}</Text>
-      <Glyph name={collapsed ? 'chevron-right' : 'chevron-down'} size={16} color={P.foreground} />
+      <FoldChevron open={!collapsed} size={16} color={P.foreground} />
     </Pressable>
   );
 

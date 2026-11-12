@@ -39,6 +39,7 @@ import {
 } from './quietWork';
 import { CODE_SIZE, MONO_FONT, PROSE_LINE, PROSE_SIZE } from './theme';
 import { userBandFill } from './userMessageLook';
+import { FoldChevron } from './foldChevron';
 
 /** Each row carries its own padding (the 2026-10-11 work look), so the gap between rows is small. */
 const ROW_GAP = 2;
@@ -190,7 +191,7 @@ function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; bo
           accessibilityState={{ expanded: simpleOpen }}
           style={({ pressed }) => [styles.cardHeader, pressed && singleLinePressed(theme)]}
         >
-          <Glyph name={simpleOpen ? 'chevron-down' : 'chevron-right'} size={14} color={theme.primary} />
+          <FoldChevron open={simpleOpen} size={14} color={theme.primary} />
           <Text numberOfLines={1} style={[styles.cardHeaderText, { color: theme.primary }]}>
             {str(message, 'simpleToolLabel')}
           </Text>
@@ -249,7 +250,7 @@ function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; bo
     >
       {/* The chevron sits in a slot as wide as the rows' glyph tiles, so the label starts where their names do. */}
       <View style={styles.foldSlot}>
-        <Glyph name={runOpen ? 'chevron-down' : 'chevron-right'} size={14} color={theme.muted} />
+        <FoldChevron open={runOpen} size={14} color={theme.muted} />
       </View>
       <Text style={[styles.foldLabel, { color: theme.muted }]}>{label}</Text>
     </Pressable>
@@ -336,7 +337,7 @@ export function ShellCommandCard({ message }: { message: ProjectedMessage }) {
             <Text numberOfLines={1} style={[styles.shellCommand, { color: failed ? theme.error : theme.primary }]}>
               {str(card, 'command')}
             </Text>
-            {hasBody ? <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={theme.muted} /> : null}
+            {hasBody ? <FoldChevron open={open} size={12} color={theme.muted} /> : null}
             <View style={styles.shellSpacer} />
             {status.length > 0 ? (
               <Text style={[styles.shellStatus, { color: failed ? theme.error : theme.muted }]}>{status}</Text>

@@ -10,8 +10,8 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import { Glyph } from './icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { FoldChevron } from '../transcript/foldChevron';
 
 export function DetailsToggle({ lines }: { lines: ReadonlyArray<unknown> }) {
   const P = useTranscriptTheme();
@@ -31,7 +31,7 @@ export function DetailsToggle({ lines }: { lines: ReadonlyArray<unknown> }) {
         style={styles.toggle}
       >
         <Text style={styles.toggleText}>Details</Text>
-        <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
+        <FoldChevron open={open} size={12} color={P.muted} />
       </Pressable>
       {open ? (
         <ScrollView style={styles.box} nestedScrollEnabled>

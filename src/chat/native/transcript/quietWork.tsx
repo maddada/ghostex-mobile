@@ -22,6 +22,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import type { ProjectedMessage, WorkStat } from '../../rust/document';
 import { useLoop } from '../cards/primitives';
 import { useTranscriptEnv } from './context';
+import { FoldChevron } from './foldChevron';
 import { Glyph } from './icons';
 import { arr, obj, str } from './json';
 import type { TranscriptTheme } from './theme';
@@ -179,7 +180,7 @@ export function QuietLine({
                   </Text>
                 ))}
               </Text>
-              {expandable && open ? <Glyph name="chevron-down" size={12} color={tone} /> : null}
+              {expandable ? <FoldChevron open={open} size={12} color={tone} hideWhenShut /> : null}
             </>
           );
         }}

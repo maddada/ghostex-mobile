@@ -19,6 +19,7 @@ import { useDisclosure } from './state';
 import { MONO_FONT, type TranscriptTheme } from './theme';
 import { SingleLineTile } from './singleLineCard';
 import { openTranscriptMenu } from './transcriptMenuStore';
+import { FoldChevron } from './foldChevron';
 
 function fileRows(files: unknown): JsonRecord[] {
   return arr(files)
@@ -196,7 +197,7 @@ const FileChangeRow = memo(function FileChangeRow({
           pressed && { backgroundColor: theme.pressed },
         ]}
       >
-        <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={13} color={theme.muted} />
+        <FoldChevron open={open} size={13} color={theme.muted} />
         <Glyph name={statusGlyph(status)} size={15} color={hue} />
         <Text numberOfLines={1} style={[styles.fileName, { color: theme.foreground }]}>
           {str(file, 'filename')}
@@ -312,7 +313,7 @@ export function FileChangeDiff({ rowKey, file, colors }: { rowKey: string; file:
               { backgroundColor: pressed ? theme.neutralFillPressed : theme.neutralFill },
             ]}
           >
-            <Glyph name={showAll ? 'chevron-up' : 'chevron-down'} size={13} color={theme.muted} />
+            <FoldChevron open={showAll} size={13} color={theme.muted} half />
             <Text style={[styles.ghostText, { color: theme.muted }]}>
               {showAll ? 'Show fewer lines' : str(file, 'showAllLabel')}
             </Text>

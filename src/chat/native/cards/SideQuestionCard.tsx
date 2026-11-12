@@ -17,6 +17,7 @@ import { PROSE_LINE, themedStyles, useTranscriptTheme } from '../transcript/them
 import { Glyph } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { ChatButton, StatusCard } from './primitives';
+import { FoldChevron } from '../transcript/foldChevron';
 
 /** A long answer shows about this many lines before "Show all". */
 const CAP_LINES = 12;
@@ -115,7 +116,7 @@ export function SideAnswer({
           hitSlop={6}
           style={styles.toggle}
         >
-          <Glyph name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={theme.primary} />
+          <FoldChevron open={expanded} size={14} color={theme.primary} half />
           <Text style={styles.toggleLabel}>
             {expanded ? 'Show less' : `Show all · ${lines - CAP_LINES} more lines`}
           </Text>

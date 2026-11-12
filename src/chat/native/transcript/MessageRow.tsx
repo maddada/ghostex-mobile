@@ -47,6 +47,7 @@ import { LeftUserMessage, userStyleProse } from './userMessageLook';
 import { Glyph } from './icons';
 import { strengthenedText } from './textStrength';
 import { useHiddenWorkFor } from './hiddenWorkButton';
+import { FoldChevron } from './foldChevron';
 
 /** The gap below an agent's thinking at Message spacing Default (desktop `THINKING_GAP`). */
 const THINKING_GAP = 13;
@@ -538,7 +539,7 @@ function ThinkingLine({ id, body, message }: { id: string; body: string; message
             style={({ pressed }) => [styles.thinkingCalls, pressed && { backgroundColor: theme.pressed }]}
           >
             <Text style={[styles.thinkingCallsLabel, { color: theme.muted }]}>{calls}</Text>
-            <Glyph name={callsOpen ? 'chevron-down' : 'chevron-right'} size={13} color={theme.muted} />
+            <FoldChevron open={callsOpen} size={13} color={theme.muted} />
           </Pressable>
         ) : null}
       </Pressable>

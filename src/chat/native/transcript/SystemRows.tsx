@@ -29,6 +29,7 @@ import {
 import { MONO_FONT, PROSE_LINE, PROSE_SIZE, type TranscriptTheme } from './theme';
 import { ROW_GAP } from './cardSpacing';
 import { useInnerGap, useRowGap } from './messageSpacing';
+import { FoldChevron } from './foldChevron';
 
 /** Collapsed, a goal shows this many lines of its objective. */
 const GOAL_PREVIEW_LINES = 3;
@@ -102,7 +103,7 @@ function CardChevron({ open, onPress }: { open: boolean; onPress(): void }) {
       accessibilityState={{ expanded: open }}
       style={styles.cardChevron}
     >
-      <Glyph name={open ? 'chevron-down' : 'chevron-right'} size={14} color={theme.muted} />
+      <FoldChevron open={open} size={14} color={theme.muted} />
     </Pressable>
   );
 }

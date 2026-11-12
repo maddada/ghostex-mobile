@@ -13,12 +13,12 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { AnswerAside, AskCard, AskHead, PlainAnswer, ReceiptRow, type AskTone } from './askCard';
-import { Glyph } from './icons';
 import { arr, isTrue, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChoiceRow } from './primitives';
 import { ROW_GAP, cardStackMargin } from '../transcript/cardSpacing';
 import { useRowGap } from '../transcript/messageSpacing';
+import { FoldChevron } from '../transcript/foldChevron';
 
 export function QuestionExchangeCards({ exchanges, aboveIsCard = false, columnGap = 0 }: { exchanges: unknown; aboveIsCard?: boolean; columnGap?: number }) {
   const styles = useStyles();
@@ -167,7 +167,7 @@ function ExchangeRow({
             <Text style={styles.disclosureLabel}>
               {expanded ? 'Hide options' : `Show all ${options.length} options`}
             </Text>
-            <Glyph name={expanded ? 'chevron-down' : 'chevron-right'} size={12} color={P.muted} />
+            <FoldChevron open={expanded} size={12} color={P.muted} />
           </Pressable>
           {expanded ? (
             <View style={styles.options}>
