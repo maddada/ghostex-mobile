@@ -387,16 +387,13 @@ export function moreActionsRows({
       command: { type: 'composerHost', action: 'terminalView' },
     });
   }
-  // A host action the core puts outside the Agent group stays on the first page.
-  for (const action of actions) if (action.group !== 'agent' && serves(action.id)) rows.push(hostRow(action));
-
   // Agent ›: the session's actions, then the ones about this chat, then Kill session.
   const sessionRows: MenuRow[] = [];
   const chatRows: MenuRow[] = [];
-  const agentActions = actions.filter((action) => action.group === 'agent');
+  // Every host action the core offers here (gx-chat-core `composer/host_actions.rs`), the agent's own first.
   const ordered = [
-    ...AGENT_FIRST.flatMap((id) => agentActions.filter((action) => action.id === id)),
-    ...agentActions.filter((action) => !AGENT_FIRST.includes(action.id)),
+    ...AGENT_FIRST.flatMap((id) => actions.filter((action) => action.id === id)),
+    ...actions.filter((action) => !AGENT_FIRST.includes(action.id)),
   ];
   for (const action of ordered) {
     const into = AGENT_FIRST.includes(action.id) ? sessionRows : chatRows;
