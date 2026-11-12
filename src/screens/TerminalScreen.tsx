@@ -69,6 +69,7 @@ import EdgeSwipeZones from '../components/terminal/EdgeSwipeZones';
 import ExportTranscriptSheet from '../components/terminal/ExportTranscriptSheet';
 import KeyBarDock from '../components/terminal/KeyBarDock';
 import PromptEditorSheet from '../components/terminal/PromptEditorSheet';
+import TerminalBottomBar from '../components/terminal/TerminalBottomBar';
 import TerminalFloatingControls from '../components/terminal/TerminalFloatingControls';
 import TerminalKeyBar from '../components/terminal/TerminalKeyBar';
 import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/TerminalMenu';
@@ -199,8 +200,6 @@ function chatShellActions({
     ...(agentActions ? ['promptEditor'] : []),
     ...(project ? ['docs', 'changes'] : []),
     'newTerminal',
-    'settings',
-    'disconnect',
     ...(session ? ['killSession'] : []),
   ];
 }
@@ -950,20 +949,24 @@ export default function TerminalScreen({ navigation, route }: Props) {
   );
 
   // A held tab let go over a bar or the chat (`useTabDrag` in tabDrag/TabDrag.tsx): reordered, moved to the other side, or opened
-  // beside the rest. Only a chat view goes side by side, so a drop on the chat's right half is offered for a tab with
-  // one, while the screen shows the chat, on a wide window with one bar.
+  // beside the rest. Only a chat view goes side by side, so a drop on the screen's right half is offered for a tab with
+  // one, on a wide window with one bar; from the terminal view too, as the chat view's strip does, when the selected
+  // tab has a chat view as well (the two then show as chats side by side).
   const canSplitTab = useCallback(
     (sessionKey: string): boolean => {
-      if (!splitWide || sideBySide !== null || !chatModeActive) return false;
+      if (!splitWide || sideBySide !== null || twoPanes !== null) return false;
       const store = useTerminalStore.getState();
       if (store.tabs.length < 2) return false;
-      const tab = store.tabs.find((entry) => entry.sessionKey === sessionKey) ?? null;
-      return tabChatCapable(
-        tab,
-        tab === null ? undefined : useInventoryStore.getState().inventoriesByMachineId[tab.machineId]?.summary,
-      );
+      const hasChat = (key: string | null): boolean => {
+        const tab = store.tabs.find((entry) => entry.sessionKey === key) ?? null;
+        return tabChatCapable(
+          tab,
+          tab === null ? undefined : useInventoryStore.getState().inventoriesByMachineId[tab.machineId]?.summary,
+        );
+      };
+      return hasChat(sessionKey) && (chatModeActive || hasChat(store.selectedSessionKey));
     },
-    [splitWide, sideBySide, chatModeActive],
+    [splitWide, sideBySide, chatModeActive, twoPanes],
   );
   const handleTabDrop = useCallback((request: TabDropRequest): void => {
     const store = useTerminalStore.getState();
@@ -1376,7 +1379,17 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * holds the tab strip alone (on the iPhone also Back, below); the terminal view keeps its buttons and its ⋯ menu, as
    * it has no chat box, and so do the iPhone Duo's status band and side bar and two panes, which serve both.
    */
-  const tabsOnlyHeader = headerPlacement.kind === 'top' && chatModeActive && twoPanes === null;
+  const chatTabsOnly = headerPlacement.kind === 'top' && chatModeActive && twoPanes === null;
+  /*
+   * CDXC:Terminal 2026-11-12 DECISION:
+   * User: the terminal view's tab bar looks and behaves like the chat view's. Where the terminal view has its bottom
+   * bar (`TerminalBottomBar`: Android, the top bar on top, one pane), its top bar's buttons are in that bar, so the top
+   * bar holds the tab strip alone there too, keyboard up or down (the strip keeps its width as the keyboard moves).
+   */
+  const terminalBarPlace =
+    !slidesWithKeyboard && headerPlacement.kind === 'top' && !chatModeActive && twoPanes === null && activeTab !== null;
+  const terminalBarShown = terminalBarPlace && !keyboardVisible && !tapKeyboardHint;
+  const tabsOnlyHeader = chatTabsOnly || terminalBarPlace;
   const docsEnabled = activeProject !== null && (activeProject.path ?? '').length > 0;
   const activeChatHostActions = useMemo(() => {
     const base =
@@ -1386,7 +1399,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           ? COORDINATOR_CHAT_HOST_ACTIONS
           : NATIVE_CHAT_HOST_ACTIONS;
     // The top bar's ⋯ rows, only where that menu is gone (one place each).
-    if (!tabsOnlyHeader) return base;
+    if (!chatTabsOnly) return base;
     return [
       ...base,
       ...chatShellActions({
@@ -1395,7 +1408,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         session: activeSession !== null,
       }),
     ];
-  }, [activeSession, agentActionsCapable, docsEnabled, tabsOnlyHeader]);
+  }, [activeSession, agentActionsCapable, docsEnabled, chatTabsOnly]);
 
   // A sideways swipe on the chat's transcript: the tab before or after it in the strip (`TabSwipe.tsx`), taken as a
   // tap on that tab takes it. Not with two panes, whose edges and contents are their own.
@@ -1739,9 +1752,12 @@ export default function TerminalScreen({ navigation, route }: Props) {
         {(terminalButtonsShown || chatPaneKeyboardButton) && (
           <TerminalFloatingControls
             showKeyboardButton={
-              chatPaneKeyboardButton || settings.keyboardButtonVisible || (slidesWithKeyboard && keyboardVisible)
+              !terminalBarShown &&
+              (chatPaneKeyboardButton || settings.keyboardButtonVisible || (slidesWithKeyboard && keyboardVisible))
             }
-            showUploadButton={terminalButtonsShown && padSessionKey === null && settings.fileUploadButtonVisible}
+            showUploadButton={
+              !terminalBarShown && terminalButtonsShown && padSessionKey === null && settings.fileUploadButtonVisible
+            }
             showRefreshButton={
               terminalButtonsShown &&
               settings.refreshButtonVisible &&
@@ -1820,6 +1836,22 @@ export default function TerminalScreen({ navigation, route }: Props) {
           // The terminal view ends above the home-indicator inset, with or without the keyboard; the text editor
           // rides over the keyboard (the dock below) and a pad layer stands in the keyboard's place, not in this flow.
           <View style={{ height: insets.bottom }} />
+        ) : terminalBarShown && activeTab !== null ? (
+          <TerminalBottomBar
+            sessionKey={activeTab.sessionKey}
+            chrome={terminalSurface}
+            machine={activeMachine}
+            bottomInset={insets.bottom}
+            agent={activeAgentId !== 'terminal'}
+            chatView={chatCapable}
+            upload={settings.fileUploadButtonVisible}
+            uploadEnabled={uploadEnabled}
+            uploading={uploading}
+            onKeyboard={showKeyboard}
+            onMore={() => openMenu()}
+            onChatView={toggleChatView}
+            onUpload={promptAttachmentSource}
+          />
         ) : keyBarVisible && activeTab !== null && !chatModeActive ? (
           <TerminalKeyBar
             sessionKey={activeTab.sessionKey}
