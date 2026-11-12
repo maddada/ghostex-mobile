@@ -34,7 +34,15 @@ import {
 import { strengthenedText } from '../transcript/textStrength';
 import { LinkWords } from '../transcript/LinkWords';
 import { Sheet } from '../composer/Sheet';
-import { TextArea, WorkAnswerLine, WorkDescription, WorkMenuButton, WorkMenuList, workMenuRows } from './workItemParts';
+import {
+  OPENED_ROW_GAP,
+  TextArea,
+  WorkAnswerLine,
+  WorkDescription,
+  WorkMenuButton,
+  WorkMenuList,
+  workMenuRows,
+} from './workItemParts';
 import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 
@@ -477,6 +485,9 @@ function DockRow({
     .map(obj)
     .filter((chip): chip is JsonRecord => chip !== null);
   const description = str(row, 'body');
+  // The description (or where a line of work stands) sits `OPENED_ROW_GAP` under the title and
+  // its work item line: the column's own 4 when that line is drawn, the press's 2 when not.
+  const bodyLead = OPENED_ROW_GAP - (Array.isArray(row.waitedBy) || chips.length > 0 ? 4 : 2);
   const count = str(row, 'count');
   const markStatus = page && str(row, 'status') === 'needs' ? 'page' : str(row, 'status');
   const answerLine =
@@ -545,7 +556,7 @@ function DockRow({
           They sit outside the row's press, so only the title line shuts it; a tap under it does
           nothing and a long press on the description offers Copy (`WorkDescription`). */}
       {opened ? (
-        <TextArea style={styles.dockDetailArea}>
+        <TextArea style={[styles.dockDetailArea, answerLine !== null && styles.dockDetailAreaAnswers]}>
           <View style={styles.dockDetail}>
             {Array.isArray(row.waitedBy) ? (
               <ItemLine row={row} chips={chips} dispatch={dispatch} />
@@ -557,13 +568,18 @@ function DockRow({
               </View>
             ) : null}
             {description.length > 0 ? (
-              <WorkDescription text={description} color={P.cardMuted} title={str(row, 'title')} dispatch={dispatch} />
+              <View style={{ marginTop: bodyLead }}>
+                <WorkDescription text={description} color={P.cardMuted} title={str(row, 'title')} dispatch={dispatch} />
+              </View>
             ) : null}
             {arr(row.detail)
               .map((line) => (typeof line === 'string' ? line : ''))
               .filter((line) => line.length > 0)
               .map((line, index) => (
-                <Text key={`line:${index}`} style={styles.movingRowLine}>
+                <Text
+                  key={`line:${index}`}
+                  style={[styles.movingRowLine, index === 0 && description.length === 0 && { marginTop: bodyLead }]}
+                >
                   {line}
                 </Text>
               ))}
@@ -1067,6 +1083,8 @@ const useStyles = themedStyles((P) => ({
   dockPress: { gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
   dockPressOpen: { paddingBottom: 2 },
   dockDetailArea: { paddingHorizontal: 8, paddingBottom: 6 },
+  // The answers' line sits `OPENED_ROW_GAP` under the text.
+  dockDetailAreaAnswers: { paddingBottom: OPENED_ROW_GAP },
   dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   // An opened row is its own card, a little lighter than the dock (desktop `dock_row`).
   dockRowOpen: {

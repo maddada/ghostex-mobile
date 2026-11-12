@@ -26,6 +26,7 @@ import { LinkWords } from '../transcript/LinkWords';
 import { askColor, tint } from './askCard';
 import {
   CHOOSE_ANSWER,
+  OPENED_ROW_GAP,
   TextArea,
   WorkAnswerLine,
   WorkDescription,
@@ -922,7 +923,8 @@ const useStyles = themedStyles((P) => ({
     backgroundColor: P.ink(0.035),
   },
   /** An opened card's description and line, one block under its title (the card's gap). */
-  cardText: { gap: 8 },
+  // 12 under the title (the card's 8 and these 4) and over the answers: `OPENED_ROW_GAP`.
+  cardText: { gap: 8, marginTop: OPENED_ROW_GAP - 8 },
   /** The open card (gx-chat-core `expanded`): a step brighter, growing to its content. */
   cardOpen: {
     borderColor: P.ink(0.14),
@@ -1005,6 +1007,7 @@ const useStyles = themedStyles((P) => ({
   /** An open card's answers, then its ⋯ and age. */
   cardOpenFoot: {
     gap: 8,
+    marginTop: OPENED_ROW_GAP - 8,
   },
   age: {
     color: P.cardMuted,

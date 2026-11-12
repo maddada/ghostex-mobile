@@ -63,6 +63,17 @@ export function openWorkReply(reply: JsonRecord, scope: ReplyDraftScope | null):
 }
 
 /**
+ * An opened row's (and an opened Work sheet card's) space between its title with its work item
+ * line, its description and its answers: the question card's (desktop question.rs, 12 from the
+ * head to the text and from the text to the options; `OPENED_ROW_GAP` in work_cards.rs).
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of an opened row: "please add space between the title/description/choice buttons they're
+ * too close together now".
+ */
+export const OPENED_ROW_GAP = 12;
+
+/**
  * The part of an opened work row or card under its title line: it takes a tap itself, so a tap
  * there never shuts the row or card around it (only its title line does), while the links, chips
  * and buttons inside keep their own taps.
