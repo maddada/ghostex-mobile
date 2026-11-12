@@ -105,3 +105,31 @@ export function dropMoves(target: DropTarget | null, bars: readonly BarFrames[],
   const was = bar?.slots.findIndex((slot) => slot.key === key) ?? -1;
   return was !== target.index;
 }
+
+/** How near a scrolling bar's end a held tab scrolls it, and the fastest it scrolls (points a frame, at the very end). */
+export const EDGE_SCROLL_ZONE = 48;
+export const EDGE_SCROLL_MAX = 14;
+
+/**
+ * How fast a scrolling bar scrolls while the finger holding a tab is at (`x`, `y`): toward the end the finger is near,
+ * faster the nearer (at or past the end, the fastest); 0 away from both ends or off the bar. Negative: toward the start.
+ */
+export function edgeScrollSpeed(track: Rect, x: number, y: number): number {
+  if (y < track.y - BAR_REACH || y > track.y + track.height + BAR_REACH) return 0;
+  const zone = Math.min(EDGE_SCROLL_ZONE, track.width / 4);
+  const fromStart = x - track.x;
+  const fromEnd = track.x + track.width - x;
+  const speed = (distance: number): number => EDGE_SCROLL_MAX * Math.min(1, Math.max(0, 1 - distance / zone));
+  if (fromStart < zone) return -speed(fromStart);
+  if (fromEnd < zone) return speed(fromEnd);
+  return 0;
+}
+
+/** A bar's tabs as they stand after its strip scrolled `scrolled` points on since they were measured. */
+export function scrolledBar(bar: BarFrames, scrolled: number): BarFrames {
+  if (scrolled === 0) return bar;
+  return {
+    ...bar,
+    slots: bar.slots.map((slot) => ({ key: slot.key, rect: { ...slot.rect, x: slot.rect.x - scrolled } })),
+  };
+}

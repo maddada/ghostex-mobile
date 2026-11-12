@@ -3,7 +3,8 @@
  * whole screen, the other tabs of a bar slide to make room where it would land, and letting go puts it there
  * (`model.ts` says where). On a wide window with one bar the chat's right half is a drop zone that opens the tab beside
  * the rest; with two bars a tab drags from one to the other, or onto the other side's chat. A light tap on lift and
- * on a drop that moves the tab.
+ * on a drop that moves the tab. A held tab near a scrolling bar's end scrolls that bar, faster the nearer, so a tab
+ * reaches any place in a strip too long to show (`edgeScrollSpeed`).
  *
  * The screen owns one drag (`useTabDrag`), hands it to its tab bars and chat areas (they register their views, which
  * the drag measures when a tab lifts), and draws `TabDragOverlay` over them: the lifted tab and the drop zones.
@@ -22,6 +23,8 @@ import { stripFadeColor, TAB_SPACING } from '../tabStrip';
 import {
   dropMoves,
   dropTarget,
+  edgeScrollSpeed,
+  scrolledBar,
   splitZone,
   tabShifts,
   type BarFrames,
@@ -38,6 +41,11 @@ export type BarHandle = {
   readonly slots: Map<string, ViewInstance>;
   /** Its tabs' session keys in order. */
   readonly keys: () => readonly string[];
+  /**
+   * A scrolling strip scrolls on by `dx` points (negative: back toward its start), within its ends, and says how far it
+   * went; absent for a bar whose tabs all show.
+   */
+  readonly scrollBy?: (dx: number) => number;
 };
 
 /** A chat area a tab drops on: the only chat (`chat`), or one side's. */
@@ -111,6 +119,9 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
     x: number;
     y: number;
   }>({ held: null, measured: null, target: null, x: 0, y: 0 });
+  // How far each scrolling bar scrolled since the drag measured it, and the frame loop that scrolls them.
+  const scrolled = useRef(new Map<BarId, number>());
+  const frame = useRef<number | null>(null);
   const options = useRef({ canSplit, onDrop });
   options.current = { canSplit, onDrop };
   // The lifted tab follows the finger on the UI thread: where the finger is, less where on the tab it was held.
@@ -122,11 +133,44 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
   const retarget = useCallback((x: number, y: number): void => {
     const state = live.current;
     if (state.held === null || state.measured === null) return;
-    const next = dropTarget(state.measured.zones, state.held.key, state.held.from, x, y);
+    const { zones } = state.measured;
+    const bars = zones.bars.map((bar) => scrolledBar(bar, scrolled.current.get(bar.id) ?? 0));
+    const next = dropTarget({ ...zones, bars }, state.held.key, state.held.from, x, y);
     if (sameTarget(next, state.target)) return;
     state.target = next;
     setTarget(next);
   }, []);
+
+  // While the finger holding a tab is near a scrolling bar's end, that bar scrolls a little every frame, and where the
+  // tab would land follows the tabs passing under the finger.
+  const stopScrolling = useCallback((): void => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+  }, []);
+  const scrollStep = useCallback((): void => {
+    frame.current = null;
+    const state = live.current;
+    if (state.held === null || state.measured === null) return;
+    let scrolling = false;
+    let moved = false;
+    for (const bar of state.measured.bars) {
+      const scrollBy = bars.current.get(bar.id)?.scrollBy;
+      const speed = scrollBy === undefined ? 0 : edgeScrollSpeed(bar.track, state.x, state.y);
+      if (speed === 0 || scrollBy === undefined) continue;
+      scrolling = true;
+      const went = scrollBy(speed);
+      if (went !== 0) {
+        scrolled.current.set(bar.id, (scrolled.current.get(bar.id) ?? 0) + went);
+        moved = true;
+      }
+    }
+    if (moved) retarget(state.x, state.y);
+    // At a strip's end nothing moves any more: the loop rests until the finger moves again.
+    if (scrolling && moved) frame.current = requestAnimationFrame(scrollStep);
+  }, [retarget]);
+  const keepScrolling = useCallback((): void => {
+    if (frame.current === null) frame.current = requestAnimationFrame(scrollStep);
+  }, [scrollStep]);
 
   const registerBar = useCallback((id: BarId, handle: BarHandle) => {
     bars.current.set(id, handle);
@@ -145,6 +189,8 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
       fingerX.value = x;
       fingerY.value = y;
       live.current = { held: tab, measured: null, target: null, x, y };
+      scrolled.current.clear();
+      stopScrolling();
       setHeld(tab);
       setTarget(null);
       setMeasured(null);
@@ -180,9 +226,10 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
         live.current.measured = next;
         setMeasured(next);
         retarget(live.current.x, live.current.y);
+        keepScrolling();
       })();
     },
-    [fingerX, fingerY, grabX, grabY, retarget],
+    [fingerX, fingerY, grabX, grabY, retarget, stopScrolling, keepScrolling],
   );
 
   const move = useCallback(
@@ -192,8 +239,9 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
       live.current.x = x;
       live.current.y = y;
       retarget(x, y);
+      keepScrolling();
     },
-    [fingerX, fingerY, retarget],
+    [fingerX, fingerY, retarget, keepScrolling],
   );
 
   const end = useCallback(
@@ -201,6 +249,7 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
       const state = live.current;
       const tab = state.held;
       if (tab === null || tab.key !== key) return;
+      stopScrolling();
       if (!canceled) retarget(x, y);
       const landing = canceled ? null : state.target;
       const moves = state.measured !== null && dropMoves(landing, state.measured.bars, tab.key, tab.from);
@@ -215,7 +264,7 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
       else if (landing.kind === 'split') drop({ kind: 'split', key: tab.key });
       else drop({ kind: 'side', key: tab.key, side: landing.side });
     },
-    [retarget],
+    [retarget, stopScrolling],
   );
 
   const shifts = useMemo(() => {
@@ -226,6 +275,7 @@ export function useTabDrag({ canSplit, onDrop }: TabDragOptions): TabDragControl
     }
     return result;
   }, [held, measured, target]);
+  useEffect(() => stopScrolling, [stopScrolling]);
   const shiftsFor = useCallback(
     (id: BarId): ReadonlyMap<string, number> | null => (held === null ? null : (shifts.get(id) ?? new Map())),
     [held, shifts],

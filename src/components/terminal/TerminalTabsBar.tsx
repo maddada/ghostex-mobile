@@ -218,11 +218,6 @@ export default function TerminalTabsBar({
   const slotViews = useRef(new Map<string, ViewInstance>()).current;
   const keysRef = useRef<readonly string[]>([]);
   keysRef.current = tabs.map((tab) => tab.sessionKey);
-  const registerBar = drag?.registerBar;
-  useEffect(() => {
-    if (registerBar === undefined || dragBar === undefined) return undefined;
-    return registerBar(dragBar, { track: trackRef, slots: slotViews, keys: () => keysRef.current });
-  }, [registerBar, dragBar, slotViews]);
   const slotRef = useCallback(
     (sessionKey: string, view: ViewInstance | null): void => {
       if (view === null) slotViews.delete(sessionKey);
@@ -259,6 +254,31 @@ export default function TerminalTabsBar({
   useEffect(() => {
     centerPending.current = true;
   }, [selectedSessionKey, tabs.length, trackWidth, equalWidth]);
+
+  // A held tab near a scrolling strip's end scrolls it (`TabDrag.tsx`): it goes on from where it is, within its ends,
+  // and stays where the drag leaves it (as a manual scroll does).
+  const stripRef = useRef({ scrolls: false, room: 0 });
+  stripRef.current = { scrolls: !equalWidth, room: Math.max(0, scrollContentWidth - trackWidth) };
+  const registerBar = drag?.registerBar;
+  useEffect(() => {
+    if (registerBar === undefined || dragBar === undefined) return undefined;
+    return registerBar(dragBar, {
+      track: trackRef,
+      slots: slotViews,
+      keys: () => keysRef.current,
+      scrollBy: (dx) => {
+        const { scrolls, room } = stripRef.current;
+        if (!scrolls) return 0;
+        const from = scrollOffset.current;
+        const to = Math.min(room, Math.max(0, from + dx));
+        if (to === from) return 0;
+        centerPending.current = false;
+        scrollOffset.current = to;
+        scrollRef.current?.scrollTo({ x: to, animated: false });
+        return to - from;
+      },
+    });
+  }, [registerBar, dragBar, slotViews]);
 
   /** Scroll so the active tab rests at the strip's start (the last at its end): its neighbour peeks in. */
   const centerSelected = useCallback(
