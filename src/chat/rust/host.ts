@@ -303,6 +303,9 @@ export class RustChatHost {
         retainedKey: this.retainedKey,
         // The phone's field has no Enter-to-send; the core then names the tap and hold gestures.
         touchComposer: true,
+        // The warm socket is up, so its snapshot brings the transcript at once and the core's seed
+        // read asks for one row (gx-chat-core `issue_light_seed`); a cold open keeps the full seed.
+        ...(chatMachineLink(this.target.machine).socketUp() ? { lightSeed: true } : {}),
         ...(initialPresentation !== undefined ? { initialPresentation } : {}),
       },
     });

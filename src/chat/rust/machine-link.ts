@@ -48,6 +48,8 @@ const PROTOCOL_HEADER = 'x-gxserver-protocol-version';
  */
 export const LINK_COMPRESSION_CAPABILITY = 'linkCompression';
 export const COMPRESS_HEADER = 'x-gxserver-compress';
+/** A computer that lists this skips the model catalog on a socket opened with the revision the phone holds. */
+const CATALOG_REVISION_CAPABILITY = 'modelCatalogRevision';
 /** `RECONNECT_DELAYS_MS` in `packages/gx-chat-client/src/wire.rs`; the last step repeats. */
 const RECONNECT_DELAYS_MS = [500, 1_000, 2_000];
 /** The ladder in the background, for Voice mode's computer only: the SSH reconnect's steps. */
@@ -264,6 +266,8 @@ class ChatMachineLink {
   private readonly followers = new Map<string, Follower>();
   /** The model catalog this computer's gxserver last pushed on the socket, or null before its first. */
   private modelCatalog: unknown = null;
+  /** The `catalogRevision` of `modelCatalog`, sent when a socket opens so it need not start with the catalog again. */
+  private modelCatalogRevision: string | null = null;
   private readonly catalogListeners = new Set<(catalog: unknown) => void>();
   private socket: WebSocket | null = null;
   private socketOpen = false;
@@ -959,7 +963,11 @@ class ChatMachineLink {
   private open(localPort: number, endpoint: Endpoint): void {
     const generation = ++this.socketGeneration;
     const deflate = endpoint.capabilities.includes(LINK_COMPRESSION_CAPABILITY);
-    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat${deflate ? '&encoding=deflate' : ''}`;
+    const knownCatalog =
+      endpoint.capabilities.includes(CATALOG_REVISION_CAPABILITY) && this.modelCatalogRevision !== null
+        ? `&catalogRevision=${encodeURIComponent(this.modelCatalogRevision)}`
+        : '';
+    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat${deflate ? '&encoding=deflate' : ''}${knownCatalog}`;
     // React Native's WebSocket takes headers, so the token never travels in the URL.
     const socket = new (WebSocket as unknown as HeaderWebSocket)(url, undefined, {
       headers: { Authorization: `Bearer ${endpoint.authToken}`, [PROTOCOL_HEADER]: String(PROTOCOL_VERSION) },
@@ -1068,6 +1076,7 @@ class ChatMachineLink {
     }
     if (frame.type === 'agentModelCatalogChanged' && typeof frame.catalog === 'object' && frame.catalog !== null) {
       this.modelCatalog = frame.catalog;
+      this.modelCatalogRevision = typeof frame.catalogRevision === 'string' ? frame.catalogRevision : null;
       for (const listener of this.catalogListeners) listener(frame.catalog);
       return;
     }
