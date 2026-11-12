@@ -46,6 +46,7 @@ import {
   OPENED_ROW_GAP,
   STATUS_COLOR,
   TextArea,
+  WORK_BUTTON_SLOP,
   WorkAnswerLine,
   WorkDescription,
   WorkMenuButton,
@@ -661,9 +662,28 @@ function DockRow({
         .map(obj)
         .filter((pill): pill is JsonRecord => pill !== null)
     : [];
-  const headChips = pills.length > 0 ? chips.filter((chip) => str(chip, 'kind') !== 'item') : chips;
+  // Opened, a line of work's threads are their agents' logos at the left of the answers' line (the
+  // desktop's `work_thread_logo`), not a line between the title and the text; its other parts
+  // (a GitHub link, the steps) stay under the title.
+  //
+  // CDXC:Coordinators 2026-11-12 DECISION:
+  // User, of the thread line between an opened row's title and text ("looks out of place in this
+  // case. and the spacing above it is smaller than below it"): the logo alone, its name shown on
+  // a press and hold (the phone has no hover), a tap opening the thread. The title, the text and
+  // the answers are then 6 apart (two lines of text) and 12 before the answers.
+  const threadChips =
+    opened && !Array.isArray(row.waitedBy) ? chips.filter((chip) => str(chip, 'kind') === 'thread') : [];
+  const shownChips = threadChips.length > 0 ? chips.filter((chip) => str(chip, 'kind') !== 'thread') : chips;
+  const headChips = pills.length > 0 ? shownChips.filter((chip) => str(chip, 'kind') !== 'item') : shownChips;
   const itemLine = pills.length === 0 && Array.isArray(row.waitedBy);
-  const bodyLead = OPENED_ROW_GAP - (itemLine || headChips.length > 0 ? 4 : 2);
+  const bodyLead = itemLine || headChips.length > 0 ? OPENED_ROW_GAP - 4 : 4;
+  const logos =
+    threadChips.length > 0
+      ? threadChips.map((chip, index) => (
+          <ThreadLogo key={`logo:${index}`} chip={chip} dispatch={dispatch} />
+        ))
+      : null;
+  const logosWidth = threadChips.length * (THREAD_LOGO + 6);
   const count = str(row, 'count');
   const markStatus = page && str(row, 'status') === 'needs' ? 'page' : str(row, 'status');
   const answerLine =
@@ -681,7 +701,14 @@ function DockRow({
           scope={scope}
           dispatch={dispatch as never}
           pills={pills}
+          logos={logos}
+          logosWidth={logosWidth}
         />
+      </View>
+    ) : logos !== null ? (
+      // No answers to stand beside: the logos alone, at the left of their line.
+      <View style={styles.dockAnswersOpen}>
+        <View style={styles.threadLogos}>{logos}</View>
       </View>
     ) : null;
   return (
@@ -776,6 +803,50 @@ function DockRow({
             }}
           />
         </Sheet>
+      ) : null}
+    </View>
+  );
+}
+
+/** A thread's logo button: 28 points square, like the buttons beside it. */
+const THREAD_LOGO = 28;
+
+/**
+ * An opened dock row's thread as its agent's logo alone (desktop `work_thread_logo`): a tap opens
+ * the thread, and pressing and holding shows its name over the logo for as long as it is held,
+ * as a long press shows a cut choice's whole label (`ChoiceRow`); the name is also its VoiceOver label.
+ */
+function ThreadLogo({ chip, dispatch }: { chip: JsonRecord; dispatch: Dispatch }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const [held, setHeld] = useState(false);
+  const command = obj(chip.command);
+  const state = str(chip, 'state');
+  const label = state.length > 0 ? `${str(chip, 'label')}, ${state}` : str(chip, 'label');
+  return (
+    <View style={styles.threadLogoSlot}>
+      <Pressable
+        accessibilityRole={command !== null ? 'button' : 'image'}
+        accessibilityLabel={label}
+        disabled={command === null}
+        hitSlop={WORK_BUTTON_SLOP}
+        onPress={() => (command !== null ? dispatch(command as never) : undefined)}
+        onLongPress={() => setHeld(true)}
+        onPressOut={() => setHeld(false)}
+        style={({ pressed }) => [styles.threadLogo, pressed && { backgroundColor: P.ink(0.08) }]}
+      >
+        {str(chip, 'agentIcon').length > 0 ? (
+          <AgentMark icon={str(chip, 'agentIcon')} size={14} />
+        ) : (
+          <Glyph name={CHIP_ICON.thread ?? 'robot'} size={14} color={P.muted} />
+        )}
+      </Pressable>
+      {held ? (
+        <View pointerEvents="none" style={styles.threadTip}>
+          <Text numberOfLines={1} style={styles.threadTipText}>
+            {label}
+          </Text>
+        </View>
       ) : null}
     </View>
   );
@@ -1288,6 +1359,25 @@ const useStyles = themedStyles((P) => ({
   dockAnswersOpen: { paddingLeft: 31, paddingRight: 8, paddingBottom: 8 },
   // Under the title's text, not the mark: the mark and its gap (DOCK_LEAD).
   dockDetail: { gap: 4, marginLeft: DOCK_LEAD },
+  threadLogos: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  threadLogoSlot: { width: THREAD_LOGO, height: THREAD_LOGO },
+  threadLogo: { width: THREAD_LOGO, height: THREAD_LOGO, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  // Over the logo, left edges together, drawn over the text above it.
+  threadTip: {
+    position: 'absolute',
+    left: 0,
+    bottom: THREAD_LOGO + 6,
+    zIndex: 3,
+    elevation: 3,
+    maxWidth: 260,
+    paddingHorizontal: 11,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: P.menuBorder,
+    backgroundColor: P.menu,
+  },
+  threadTipText: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE, color: P.menuForeground },
   dockLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 4 },
   itemLineColumn: { gap: 4 },
   // On a phone's width the names and "waits on this" wrap rather than cut each other to a few

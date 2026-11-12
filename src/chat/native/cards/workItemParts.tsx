@@ -407,6 +407,8 @@ export function WorkAnswerLine({
   chooser = 'sheet',
   initialChoosing = false,
   pills = [],
+  logos,
+  logosWidth = 0,
 }: {
   answers: JsonRecord[];
   reply: JsonRecord | null;
@@ -427,6 +429,9 @@ export function WorkAnswerLine({
   initialChoosing?: boolean;
   /** An opened row's item pills, before its answers (`ItemPills`). */
   pills?: JsonRecord[];
+  /** An opened row's threads as their logos, after the item pills at the line's left, and their width. */
+  logos?: ReactNode;
+  logosWidth?: number;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -458,7 +463,8 @@ export function WorkAnswerLine({
     const alone = open != null ? buttonWidth('Open', true, false, fontScale) : replyWidthOf(replied, draft, fontScale);
     const lead = (
       <>
-        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone)} dispatch={dispatch} />
+        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone - logosWidth)} dispatch={dispatch} />
+        {logos}
         {divider ? <View style={styles.flex} /> : null}
       </>
     );
@@ -470,7 +476,7 @@ export function WorkAnswerLine({
         </View>
       );
     }
-    return replyButton !== null || pills.length > 0 ? (
+    return replyButton !== null || pills.length > 0 || logos != null ? (
       <View style={styles.line}>
         {lead}
         {replyButton}
@@ -506,7 +512,7 @@ export function WorkAnswerLine({
     reply !== null ? buttonWidth(replyLabel(replied), true, draft, fontScale) + 6 + (divider ? 13 : 0) : 0;
   const answersWidth = widths.reduce((sum, value) => sum + value, 0) + 6 * Math.max(0, widths.length - 1);
   // The item pills lead: the answers fold first, then the pills drop their ids, then they are one "+N".
-  const fits = answersWidth + replyWidth + pillRoom[0] <= lineRoom;
+  const fits = answersWidth + replyWidth + pillRoom[0] + logosWidth <= lineRoom;
   // Answers no wider than the dropdown stay as they are: folding them would gain nothing.
   const fold = !given && !fits && answersWidth > buttonWidth(CHOOSE_ANSWER, true, false, fontScale);
   const shown = fits || !given ? answers : answers.filter((choice) => isTrue(choice, 'picked'));
@@ -517,7 +523,8 @@ export function WorkAnswerLine({
   return (
     <View style={styles.column}>
       <View style={styles.line}>
-        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - used)} dispatch={dispatch} />
+        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - used - logosWidth)} dispatch={dispatch} />
+        {logos}
         {/* Opened: the item pills at the left, the answers and Reply at the right edge (user,
             2026-11-12: "move the answer buttons to bottom right. keep work item tag bottom left"). */}
         {divider ? <View style={styles.flex} /> : null}
