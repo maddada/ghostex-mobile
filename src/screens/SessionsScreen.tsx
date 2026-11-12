@@ -71,7 +71,15 @@ import { enabledVisibleTagFilters, UNTAGGED_TAG_FILTER } from '../contract/sessi
 import { SESSION_TAG_SECTIONS } from '../contract/sessionTags';
 import { setSidebarSetting } from '../settingsSync/settingsSync';
 import { drawerStatusLine } from '../components/sessions/drawerStatusLine';
-import { ListGlyph, MachinesGlyph, MenuGlyph, SearchGlyph, TilesGlyph, WorldGlyph } from '../components/sessions/icons';
+import {
+  FilterGlyph,
+  ListGlyph,
+  MachinesGlyph,
+  MenuGlyph,
+  SearchGlyph,
+  TilesGlyph,
+  WorldGlyph,
+} from '../components/sessions/icons';
 import { EditGlyph } from '../components/sessions/unified/glyphs';
 import { bellLabel, BellWithCount, useNeedsYouCount } from '../notifications/NotificationsBell';
 import { VoiceButton } from '../voice/VoiceButton';
@@ -2096,7 +2104,6 @@ export default function SessionsScreen({ navigation }: Props) {
         <ContextMenu
           visible
           title="Ghostex"
-          subtitle={machine === null ? undefined : machineDisplayLabel(machine)}
           items={[
             ...(unified.on
               ? [
@@ -2112,6 +2119,7 @@ export default function SessionsScreen({ navigation }: Props) {
               kind: 'item' as const,
               key: 'sort-filter',
               label: 'Sort & Filter',
+              icon: <FilterGlyph size={14} color={sidebarAppearance.foreground} />,
               submenu: true,
               onPress: () => setOverlay({ kind: 'sortFilter' }),
             },
