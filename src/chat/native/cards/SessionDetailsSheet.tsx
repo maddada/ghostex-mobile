@@ -243,7 +243,10 @@ function SectionCard({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const id = str(section, 'id');
-  const collapsed = isTrue(section, 'collapsed');
+  // A Context card with no breakdown (Codex) has nothing to fold: its title is plain and what its
+  // fold would hold (the meter's Compact context and More details) shows under the bar.
+  const foldable = obj(section)?.foldable !== false;
+  const collapsed = foldable && isTrue(section, 'collapsed');
   useEaseOnChange(collapsed);
   const fields = obj(section) ?? {};
   let trailing: ReactNode = null;
@@ -262,12 +265,13 @@ function SectionCard({
     <View accessibilityLabel={str(section, 'title')} style={styles.card}>
       <View style={styles.cardHeader}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: !collapsed }}
+          disabled={!foldable}
+          accessibilityRole={foldable ? 'button' : 'header'}
+          {...(foldable ? { accessibilityState: { expanded: !collapsed } } : {})}
           style={styles.cardTitle}
           onPress={() => send(chat, { type: 'sessionDetailsSection', section: id })}
         >
-          <FoldChevron open={!collapsed} size={13} color={P.cardMuted} />
+          {foldable ? <FoldChevron open={!collapsed} size={13} color={P.cardMuted} /> : <View style={{ width: 13 }} />}
           <Text style={styles.title} numberOfLines={1}>
             {str(section, 'title')}
           </Text>
