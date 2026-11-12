@@ -1097,14 +1097,18 @@ export function setCallMode(mode: VoiceCallMode): void {
 /** The call mode saved on `machine` (Settings › Voice agent), or an error sentence. */
 export async function readComputerCallMode(
   machine: MachineConnectionTarget,
-): Promise<{ mode: VoiceCallMode } | { error: string }> {
+): Promise<{ mode: VoiceCallMode; waitForReply: boolean | null } | { error: string }> {
   try {
     const answer = await chatMachineLink(machine).rpc('readVoiceAgent', {}, READ_TIMEOUT_MS);
     if (answer.error !== null) return { error: answer.error.message };
-    const result = (answer.result ?? {}) as { callMode?: string; callModeLive?: boolean };
+    const result = (answer.result ?? {}) as { callMode?: string; callModeLive?: boolean; waitForReply?: boolean };
     // A gxserver that switches a running call says so here too, so Settings' note is right before any call.
     if (result.callModeLive === true) liveCallModeComputers.add(machine.id);
-    return { mode: result.callMode === 'pushToTalk' ? 'pushToTalk' : 'regular' };
+    return {
+      mode: result.callMode === 'pushToTalk' ? 'pushToTalk' : 'regular',
+      // `null`: an older gxserver without "Answer when I say "reply"" (server/src/voice_agent/keys.rs).
+      waitForReply: typeof result.waitForReply === 'boolean' ? result.waitForReply : null,
+    };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Couldn't reach your computer." };
   }
@@ -1120,6 +1124,19 @@ export async function saveComputerCallMode(
     if (answer.error !== null) return answer.error.message;
     if (target?.id === machine.id) set({ callMode: mode });
     return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Couldn't reach your computer.";
+  }
+}
+
+/**
+ * Saves "Answer when I say "reply"" (`voiceAgentWaitForReply`) on `machine` through gxserver;
+ * answers an error sentence, or null when saved. The computer reads it when a call starts.
+ */
+export async function saveComputerWaitForReply(machine: MachineConnectionTarget, on: boolean): Promise<string | null> {
+  try {
+    const answer = await chatMachineLink(machine).rpc('setVoiceAgentSettings', { waitForReply: on }, READ_TIMEOUT_MS);
+    return answer.error !== null ? answer.error.message : null;
   } catch (error) {
     return error instanceof Error ? error.message : "Couldn't reach your computer.";
   }

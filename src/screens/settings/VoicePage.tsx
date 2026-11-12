@@ -22,6 +22,7 @@ import { useAppearance } from '../../theme/useAppearance';
 import {
   readComputerCallMode,
   saveComputerCallMode,
+  saveComputerWaitForReply,
   callModeSwitchesLive,
   voiceCallModeNote,
   VOICE_CALL_MODES,
@@ -50,6 +51,7 @@ import {
   SectionHeader,
   SegmentedRow,
   SettingsScreenLayout,
+  ToggleRow,
   useSettingsStyles,
 } from './SettingsControls';
 import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
@@ -267,17 +269,21 @@ function CallModeSection({ machine }: { machine: MachineRecord }) {
   // The computer's voice agent switch (Settings > Extensions there); its call mode means nothing while it is off.
   const switchedOn = useInventoryStore((state) => voiceAgentOnIn(state.inventoriesByMachineId[machine.id]?.summary));
   const [mode, setMode] = useState<VoiceCallMode | null>(null);
+  const [waitForReply, setWaitForReply] = useState<boolean | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const name = computerName(machine);
 
   useEffect(() => {
     let live = true;
     setMode(null);
+    setWaitForReply(null);
     setProblem(null);
     void readComputerCallMode(machine).then((answer) => {
       if (!live) return;
-      if ('mode' in answer) setMode(answer.mode);
-      else setProblem(answer.error);
+      if ('mode' in answer) {
+        setMode(answer.mode);
+        setWaitForReply(answer.waitForReply);
+      } else setProblem(answer.error);
     });
     return () => {
       live = false;
@@ -293,6 +299,17 @@ function CallModeSection({ machine }: { machine: MachineRecord }) {
     void saveComputerCallMode(machine, next).then((error) => {
       if (error === null) return;
       setMode(previous);
+      setProblem(`Couldn't save it on your computer: ${error}`);
+    });
+  };
+
+  const chooseWait = (next: boolean) => {
+    const previous = waitForReply;
+    setWaitForReply(next);
+    setProblem(null);
+    void saveComputerWaitForReply(machine, next).then((error) => {
+      if (error === null) return;
+      setWaitForReply(previous);
       setProblem(`Couldn't save it on your computer: ${error}`);
     });
   };
@@ -314,6 +331,17 @@ function CallModeSection({ machine }: { machine: MachineRecord }) {
               onPress={() => choose(choice.mode)}
             />
           ))}
+          {/* CDXC:VoiceMode 2026-11-12 DECISION: User (Q2749): the phone gets the desktop's "Answer when I say "reply"" switch, saved on the computer like the call mode, and shown only for Regular calls (Q2748); server/src/voice_agent/keys.rs holds the decision. A computer too old to have it shows no row. */}
+          {mode === 'regular' && waitForReply !== null ? (
+            <ToggleRow
+              label={'Answer when I say "reply"'}
+              detail={
+                'The voice agent keeps listening until you end with "reply", "over" or "go ahead", then answers. Each Regular call starts with it saying "Hey, I hear you. Please say reply after you finish speaking so I can reply to you." Off: it answers when you pause.'
+              }
+              value={waitForReply}
+              onValueChange={chooseWait}
+            />
+          ) : null}
           {VOICE_CALL_MODES.map((choice) => (
             <Caption key={choice.mode}>{`${choice.label}: ${choice.detail}`}</Caption>
           ))}
