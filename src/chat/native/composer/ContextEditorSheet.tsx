@@ -112,6 +112,13 @@ export function ContextEditorSheet({
                 {starred.length === 0 ? 'Star rows above to show them under the chat box.' : ''}
               </Text>
             </View>
+            {/* The line under the chat box is the computer's while it sends one (gx-chat-core `computer_pins.rs`); the stars here stay this phone's own. */}
+            {isTrue(editor, 'statusLineFromComputer') ? (
+              <Text style={styles.rowDescription}>
+                The status line under the chat box comes from the Ghostex app on this chat's computer. Stars here are
+                used with computers that do not send one.
+              </Text>
+            ) : null}
             <ReorderList
               ids={starred.map((row) => str(row, 'id'))}
               disabled={saving}
