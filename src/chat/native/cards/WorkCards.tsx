@@ -215,6 +215,7 @@ export function WorkDock({
   projectId,
   sessionId,
   status = null,
+  onOpenWork,
   typing = false,
   maxHeight,
   gapBelow = 6,
@@ -223,6 +224,8 @@ export function WorkDock({
   chat: RustChat;
   /** The working status the bar carries at its left (`dockStatusCard`), or null for none. */
   status?: WorkingCardValue | null;
+  /** Opens the Work sheet, as the Work pill does (the chat screen's pill sheet). */
+  onOpenWork?: () => void;
   projectId?: string;
   sessionId?: string;
   /** The chat box has the caret with the keyboard up: the dock folds to its bar until a tap opens it. */
@@ -322,7 +325,9 @@ export function WorkDock({
               status={status}
               collapsible={collapsible}
               open={!collapsed}
-              dispatch={dispatch}
+              onOpenWork={
+                onOpenWork ?? (() => dispatch({ type: 'showCoordinatorBoardGroup', group: 'needs' } as never))
+              }
               onToggle={() => {
                 if (!collapsed) {
                   dispatch({ type: 'hideWorkDock' } as never);
@@ -437,7 +442,7 @@ function DockHeader({
   status,
   collapsible,
   open,
-  dispatch,
+  onOpenWork,
   onToggle,
 }: {
   rows: JsonRecord[];
@@ -445,7 +450,7 @@ function DockHeader({
   status: WorkingCardValue | null;
   collapsible: boolean;
   open: boolean;
-  dispatch: Dispatch;
+  onOpenWork: () => void;
   onToggle: () => void;
 }) {
   const styles = useStyles();
@@ -519,7 +524,11 @@ function DockHeader({
           accessibilityRole="button"
           accessibilityLabel="Work items"
           hitSlop={{ top: 10, bottom: 10, left: 6, right: 4 }}
-          onPress={() => dispatch({ type: 'showCoordinatorBoardGroup', group: 'needs' } as never)}
+          // Opens the sheet itself, as the Work pill does. Going through the core's
+          // `showCoordinatorBoardGroup` (`needs`) opened nothing when no item needed him: the
+          // core moves the board's focus only to a group's first row, so an empty Needs you
+          // group gave the chat screen no focus to open the sheet at.
+          onPress={onOpenWork}
           style={({ pressed }) => [styles.dockHeadButton, pressed && { backgroundColor: P.neutralFillPressed }]}
         >
           <Glyph name="layout-board-split" size={14} color={P.cardMuted} />

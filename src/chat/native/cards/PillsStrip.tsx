@@ -86,12 +86,26 @@ function questionWaiting(document: ChatDocument): boolean {
 }
 
 /** Whether the strip shows: the Saved draft pill, a view chip, a panel pill, the ?, the Links pill or an armed timer calls for it; the ↓ only joins them. */
+const NO_PILLS: readonly string[] = [];
+
+/**
+ * The pills the strip leaves out while the work dock's bar shows above the chat box: the Work
+ * pill, whose sheet the bar's Work items button opens (`WorkCards.tsx` `DockHeader`).
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of the phone's bar with its Work items button beside "● 6" and the Work pill "▦ ● 6" in
+ * the row under it: remove the Work items pill from the pills row, since the bar's button does the
+ * same thing; only while the chat shows the bar, so a chat with work items and no bar keeps it.
+ */
+export const PILLS_IN_DOCK_BAR: readonly string[] = ['board'];
+
 export function pillsStripShown(
   document: ChatDocument,
   armed: readonly ArmedAction[],
   links: PillsStripLinks | null,
   muted: string,
   hiddenPages = 0,
+  omitPills: readonly string[] = NO_PILLS,
 ): boolean {
   return (
     hiddenPages > 0 ||
@@ -99,7 +113,7 @@ export function pillsStripShown(
     (document.savedDraftPill ?? null) !== null ||
     (document.viewChips?.length ?? 0) > 0 ||
     questionWaiting(document) ||
-    (document.workingCard?.pills.length ?? 0) > 0 ||
+    (document.workingCard?.pills ?? []).some((id) => !omitPills.includes(id)) ||
     (links !== null && sessionLinksChatPill(links.links, muted) !== null) ||
     // The Session details ring lives in the strip, so a chat with the panel always has one.
     sessionDetailsRingOf(document) !== null
@@ -119,8 +133,11 @@ export function PillsStrip({
   hiddenPages = [],
   onShowPage,
   onClosePage,
+  omitPills = NO_PILLS,
 }: {
   chat: RustChat;
+  /** Pills left out of the strip (`PILLS_IN_DOCK_BAR` while the dock's bar shows). */
+  omitPills?: readonly string[];
   document: ChatDocument;
   /** The chat's hidden pages, oldest first (`hiddenPages.ts`), drawn first among the panel pills. */
   hiddenPages?: readonly HiddenPage[];
@@ -157,7 +174,7 @@ export function PillsStrip({
   }, [savedDraft]);
   // The box's width, which the Saved draft pill shortens its label by (`savedDraft.ts`).
   const [stripWidth, setStripWidth] = useState(0);
-  const shown = pillsStripShown(document, armed, links, P.cardMuted, hiddenPages.length);
+  const shown = pillsStripShown(document, armed, links, P.cardMuted, hiddenPages.length, omitPills);
   // Grows in and shrinks away; drawn while it shrinks, dropped once it has.
   const open = useRef(new Animated.Value(shown ? 1 : 0)).current;
   const [drawn, setDrawn] = useState(shown);
@@ -182,6 +199,7 @@ export function PillsStrip({
   const linksPill = links ? sessionLinksChatPill(links.links, P.cardMuted, P.light) : null;
   const card = document.workingCard;
   const pills = (card?.pills ?? [])
+    .filter((id) => !omitPills.includes(id))
     .map((id) => (document.chatPills ?? []).find((pill) => pill.id === id))
     .filter((pill) => pill !== undefined);
   const pressPill = (pill: ChatPill) =>

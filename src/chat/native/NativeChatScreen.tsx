@@ -61,7 +61,7 @@ import { ComputerCard } from './cards/ComputerCard';
 import type { BoardFocus } from './cards/CoordinatorBoard';
 import { num, obj, str } from './cards/json';
 import { remoteWorkerNotice, remoteWorkerOfAction } from './cards/remoteWorker';
-import { PillsStrip, type PillsStripLinks } from './cards/PillsStrip';
+import { PILLS_IN_DOCK_BAR, PillsStrip, type PillsStripLinks } from './cards/PillsStrip';
 import { SideChatBar } from './cards/SideChats';
 import { useTerminalStore } from '../../terminal/sessions';
 import { LoneScrollBottom, WorkingCard, cardGap, dockStatusCard, useWorkedLineSpent } from './cards/WorkingCard';
@@ -430,6 +430,11 @@ export default function NativeChatScreen({
     setPillMenu(null);
     setBoardFocus(null);
   }, []);
+  // The dock bar's Work items button: the Work sheet, as the Work pill opens it.
+  const openWorkSheet = useCallback(() => {
+    setBoardFocus(null);
+    setPillMenu('board');
+  }, []);
   const focus = obj(obj(document?.coordinatorBoard)?.focus);
   const focusKey = str(focus, 'key');
   const focusSeq = num(focus, 'seq') ?? null;
@@ -551,6 +556,7 @@ export default function NativeChatScreen({
                       armed={armed}
                       links={links}
                       hiddenPages={hiddenPages.length}
+                      {...(dockShown ? { omitPills: PILLS_IN_DOCK_BAR } : {})}
                     />
                   )}
                 </TabSwipeView>
@@ -575,6 +581,7 @@ export default function NativeChatScreen({
                 projectId={projectId}
                 sessionId={sessionId}
                 status={dockStatus}
+                onOpenWork={openWorkSheet}
                 typing={composerShown && composerFocused && keyboardUp}
                 {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
                 gapBelow={
@@ -625,6 +632,7 @@ export default function NativeChatScreen({
                               armed={armed}
                               links={links}
                               hiddenPages={hiddenPages}
+                              {...(dockShown ? { omitPills: PILLS_IN_DOCK_BAR } : {})}
                               onShowPage={showHiddenPage}
                               onClosePage={closeHiddenPage}
                               onSessionDetailsPress={openDetails}

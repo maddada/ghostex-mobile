@@ -258,8 +258,11 @@ export function LoneScrollBottom({
   armed,
   links,
   hiddenPages = 0,
+  omitPills,
 }: {
   document: ChatDocument;
+  /** Pills the strip leaves out (`PillsStrip.tsx` `PILLS_IN_DOCK_BAR`). */
+  omitPills?: readonly string[];
   armed: readonly ArmedAction[];
   links?: PillsStripLinks | null;
   /** How many pages the chat has hidden, whose pills alone show the strip (`hiddenPages.ts`). */
@@ -270,7 +273,7 @@ export function LoneScrollBottom({
   const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
   const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
   const stripCarriesIt =
-    !useChatPlacement().inPane && pillsStripShown(document, armed, links ?? null, P.cardMuted, hiddenPages);
+    !useChatPlacement().inPane && pillsStripShown(document, armed, links ?? null, P.cardMuted, hiddenPages, omitPills);
   if (stripCarriesIt || !awayFromBottom || jumpToBottom === null) {
     return null;
   }
