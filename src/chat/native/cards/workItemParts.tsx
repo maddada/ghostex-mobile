@@ -39,12 +39,12 @@ export const WORK_BUTTON_SLOP = { top: 8, bottom: 8, left: 3, right: 3 };
 export const CHOOSE_ANSWER = 'Choose an answer';
 
 /**
- * A button's width, roughly as `WorkButton` draws it on one line: its label at 13 points grown by
+ * A button's width, roughly as `WorkButton` draws it on one line: its label at 14 points grown by
  * the phone's text size (`fontScale`: Android's and iOS's larger text), its sides, and an icon or
  * mark. Generous, so an estimate never lets a row cut an answer.
  */
 function buttonWidth(label: string, icon: boolean, mark: boolean, fontScale: number): number {
-  return label.length * 8 * fontScale + 24 + (icon ? 20 : 0) + (mark ? 16 : 0);
+  return label.length * 8.6 * fontScale + 24 + (icon ? 20 : 0) + (mark ? 16 : 0);
 }
 
 /** Each status's colour, the board's (`CoordinatorBoard.tsx` `GROUP_COLOR`, desktop `group_look`). */
@@ -67,11 +67,11 @@ function pillWidths(pills: JsonRecord[], fontScale: number): [number, number, nu
   if (pills.length === 0) return [0, 0, 0];
   const gaps = 6 * pills.length;
   const full = pills.reduce(
-    (sum, pill) => sum + PILL_PAD * 2 + PILL_DOT + 4 + str(pill, 'id').length * 7 * fontScale + 2,
+    (sum, pill) => sum + PILL_PAD * 2 + PILL_DOT + 4 + str(pill, 'id').length * 7.6 * fontScale + 2,
     0,
   );
   const dots = (PILL_PAD * 2 + PILL_DOT + 2) * pills.length;
-  const plus = PILL_PAD * 2 + `+${pills.length}`.length * 7 * fontScale + 2;
+  const plus = PILL_PAD * 2 + `+${pills.length}`.length * 7.6 * fontScale + 2;
   return [full + gaps, dots + gaps, plus + 6];
 }
 
@@ -680,7 +680,7 @@ const useStyles = themedStyles((P) => ({
   },
   pillPressed: { backgroundColor: P.ink(0.08) },
   pillDot: { width: PILL_DOT, height: PILL_DOT, borderRadius: PILL_DOT / 2 },
-  pillText: { fontSize: 12, lineHeight: 16, color: P.cardMuted, fontVariant: ['tabular-nums'] },
+  pillText: { fontSize: PROSE_SIZE, lineHeight: 18, color: P.cardMuted, fontVariant: ['tabular-nums'] },
   button: {
     minHeight: 28,
     flexShrink: 1,
@@ -695,7 +695,7 @@ const useStyles = themedStyles((P) => ({
     justifyContent: 'center',
     gap: 6,
   },
-  buttonLabel: { flexShrink: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  buttonLabel: { flexShrink: 1, fontSize: PROSE_SIZE, lineHeight: 20, fontWeight: '400' },
   disabled: { opacity: 0.5 },
   choicesBox: {
     borderRadius: 10,
@@ -715,7 +715,7 @@ const useStyles = themedStyles((P) => ({
   choiceText: { flexShrink: 1, color: P.foreground, fontSize: PROSE_SIZE + 1, lineHeight: 21 },
   choiceQuestion: { paddingHorizontal: 16, paddingBottom: 8, fontSize: PROSE_SIZE, lineHeight: 20 },
   divider: { width: 1, height: 16, marginHorizontal: 3, backgroundColor: P.ink(0.1) },
-  draft: { fontSize: 13, color: P.muted },
+  draft: { fontSize: PROSE_SIZE, color: P.muted },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16 },
   menuRowPressed: { backgroundColor: P.neutralFillPressed },
   menuText: { color: P.foreground, fontSize: PROSE_SIZE + 1 },
