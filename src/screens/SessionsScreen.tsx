@@ -81,7 +81,7 @@ import MachineTabs, {
   type MachineTabItem,
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
-import SpaceTabs from '../components/sessions/SpaceTabs';
+import SpaceTabs, { spaceMenuIcon } from '../components/sessions/SpaceTabs';
 import ChiefRow, { CHIEF_LABEL } from '../components/sessions/ChiefRow';
 import { runGhostexCli } from '../components/sessions/cli';
 import {
@@ -166,7 +166,9 @@ import {
   resolveSelectedSpaceId,
   spaceRowItems,
   spaceSessionCounts,
+  type SpaceRowItem,
 } from '../spaces/spaceFilter';
+import { OTHER_SIDEBAR_SPACE_ID } from '../spaces/otherSpace';
 import { ACTIVE_SPACE_ID, activeProjectsOn, filterSummaryForActiveProjects } from '../spaces/activeProjects';
 import { removeActiveProjects } from '../spaces/removeActiveProjects';
 import { useSpacesStore } from '../spaces/store';
@@ -546,6 +548,16 @@ export default function SessionsScreen({ navigation }: Props) {
   }, [selectedSummary, listSummary, spaceItems, activeProjects, inventoriesByMachineId, spaceCountsNowMs]);
   /** The star's long-press menu: Remove Active projects, which turns the computer's switch off. */
   const [activeProjectsMenuOpen, setActiveProjectsMenuOpen] = useState(false);
+  /**
+   * A Space tile's long-press menu (the tiles carry no names, so its header names the Space). The
+   * desktop's Edit Space, New Space and Sleep Inactive are computer-side, so the phone's menu shows
+   * the Space and says where those are.
+   */
+  const [spaceMenu, setSpaceMenu] = useState<SpaceRowItem | null>(null);
+  const openSpaceMenu = useCallback((item: SpaceRowItem) => {
+    if (item.spaceId === ACTIVE_SPACE_ID) setActiveProjectsMenuOpen(true);
+    else setSpaceMenu(item);
+  }, []);
 
   const clockSessions = useMemo(
     () => Object.values(inventoriesByMachineId).flatMap((inventory) => inventory.summary?.sessions ?? []),
@@ -1669,7 +1681,7 @@ export default function SessionsScreen({ navigation }: Props) {
               countsBySpaceId={spaceCounts}
               onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
               activeProjects={activeProjects}
-              onActiveProjectsMenu={() => setActiveProjectsMenuOpen(true)}
+              onSpaceMenu={openSpaceMenu}
               style={styles.workspaceRowSpaces}
             />
           ) : null}
@@ -1681,7 +1693,35 @@ export default function SessionsScreen({ navigation }: Props) {
           countsBySpaceId={spaceCounts}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
           activeProjects={activeProjects}
-          onActiveProjectsMenu={() => setActiveProjectsMenuOpen(true)}
+          onSpaceMenu={openSpaceMenu}
+        />
+      ) : null}
+      {spaceMenu !== null && machine !== null ? (
+        <ContextMenu
+          visible
+          title={spaceMenu.name}
+          items={[
+            {
+              kind: 'item',
+              key: 'show-space',
+              label: 'Show Space',
+              icon: spaceMenuIcon(spaceMenu, listInk),
+              selected: spaceMenu.spaceId === selectedSpaceId,
+              onPress: () => {
+                setSpaceMenu(null);
+                selectSpace(machine.id, spaceMenu.spaceId);
+              },
+            },
+            {
+              kind: 'note',
+              key: 'computer-side',
+              label:
+                spaceMenu.spaceId === OTHER_SIDEBAR_SPACE_ID
+                  ? 'Other shows the projects no Space claims. New Space and Sleep Inactive are on the computer.'
+                  : 'Edit Space, New Space and Sleep Inactive are on the computer.',
+            },
+          ]}
+          onClose={() => setSpaceMenu(null)}
         />
       ) : null}
       {activeProjectsMenuOpen && machine !== null ? (

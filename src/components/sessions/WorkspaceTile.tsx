@@ -19,14 +19,15 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GhostexWorkspace, GhostexWorkspaces } from '../../contract/mobileSummary';
-import { GhostexRadii, GhostexStrokeWidth, SidebarPalette } from '../../theme/palette';
+import { GhostexStrokeWidth, SidebarPalette } from '../../theme/palette';
 import { orderedWorkspaces } from '../../workspaces/workspaceFilter';
 import type { ContextMenuItem } from './ContextMenu';
 import { BriefcaseGlyph, ChevronDownGlyph, UserGlyph } from './icons';
 import { inkStyleSheets, useSidebarInk } from './rows';
+import { SPACE_CHIP_HEIGHT } from './SpaceTabs';
 
-/** A Space chip's height (SpaceTabs `SPACE_CHIP_HEIGHT`), so the tile lines up with the chips. */
-const TILE_HEIGHT = 30;
+/** A Space tile's height (SpaceTabs `SPACE_CHIP_HEIGHT`), so the tile lines up with the Space tiles. */
+const TILE_HEIGHT = SPACE_CHIP_HEIGHT;
 const LETTER_PART_WIDTH = 34;
 const CHEVRON_PART_WIDTH = 22;
 const LETTER_BLOCK_SIZE = 20;
@@ -105,7 +106,8 @@ const tileStyles = inkStyleSheets((ink) =>
       flexDirection: 'row',
       height: TILE_HEIGHT,
       flexShrink: 0,
-      borderRadius: GhostexRadii.pill,
+      // The Space tiles' rounded square (SpaceTabs), so the line reads as one set of tiles.
+      borderRadius: 8,
       borderWidth: GhostexStrokeWidth,
       borderColor: ink.chipBorder,
       backgroundColor: ink.chipCard,

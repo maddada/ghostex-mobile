@@ -5,6 +5,7 @@
 import { StyleSheet } from 'react-native';
 
 import { SIDEBAR_BACKGROUND } from '../../components/sessions/rows';
+import { SPACE_CHIP_HEIGHT } from '../../components/sessions/SpaceTabs';
 import { colorWithOpacity, GhostexPalette, GhostexRadii } from '../../theme/palette';
 
 /** The header row's height: its title and buttons are 48 pt tall. */
@@ -150,7 +151,7 @@ export const styles = StyleSheet.create({
   /** The workspace tile, then the Space row; fixed height so the list cannot squeeze it. */
   workspaceRow: {
     marginTop: 6,
-    height: 30,
+    height: SPACE_CHIP_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
