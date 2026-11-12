@@ -23,16 +23,18 @@ import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 export type LogsSheetProps = {
   visible: boolean;
   onClose: () => void;
+  /** Opens on the Send to developer review (the Connections sheet's Send logs). */
+  sending?: boolean;
 };
 
-export default function LogsSheet({ visible, onClose }: LogsSheetProps) {
+export default function LogsSheet({ visible, onClose, sending = false }: LogsSheetProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const bar = useVerticalBarSpace();
   const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: false });
   const entries = useAppLogStore((state) => state.entries);
   const [copied, setCopied] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
+  const [reviewing, setReviewing] = useState(sending);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(

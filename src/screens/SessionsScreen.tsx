@@ -2332,7 +2332,9 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
 
-      {overlay.kind === 'logs' ? <LogsSheet visible onClose={() => setOverlay(NONE)} /> : null}
+      {overlay.kind === 'logs' ? (
+        <LogsSheet visible sending={overlay.sending === true} onClose={() => setOverlay(NONE)} />
+      ) : null}
       {overlay.kind === 'connections' ? (
         <ConnectionsSheet
           entries={sortedConnectionEntries}
@@ -2346,7 +2348,7 @@ export default function SessionsScreen({ navigation }: Props) {
             setOverlay(NONE);
             navigation.navigate('MachineForm', { machineId });
           }}
-          onLogs={() => setOverlay({ kind: 'logs' })}
+          onLogs={(machineId) => setOverlay({ kind: 'logs', sending: machineId !== null })}
           onConnectionSettings={() => {
             setOverlay(NONE);
             navigation.navigate('SettingsPage', { page: 'connection' });
