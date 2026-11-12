@@ -10,7 +10,7 @@
  * one: the card sits on the chat's glass (the user's standing rule, no black fills on glass).
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
@@ -47,6 +47,7 @@ import {
 import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 import { FoldChevron } from '../transcript/foldChevron';
+import { animateNextFold } from '../transcript/foldMotion';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { WorkingLine } from './WorkingCard';
 
@@ -276,18 +277,32 @@ export function WorkDock({
   useEffect(() => {
     if (scope !== null && (dockValue != null || boardValue != null)) pruneReplyDrafts(scope, dockValue, boardValue);
   }, [scope, dockValue, boardValue]);
+  // The dock's own collapse eases as the chat's folds do (`foldMotion.ts`). It can come from the
+  // core (`hidden`), the keyboard or a tap, so the change is caught where it is drawn: the render
+  // that first draws it configures the layout it commits.
+  const shownCollapsed = useRef<boolean | null>(null);
   const dock = obj(dockValue);
   const rows = dockRows(document);
   const board = obj(boardValue);
-  if (document === null || !workDockShown(document, status)) return null;
+  if (document === null || !workDockShown(document, status)) {
+    shownCollapsed.current = null;
+    return null;
+  }
   // With nothing docked the bar is one line: no chevron, nothing to open.
   const collapsible = rows.length > 0;
   const hiddenInCore = isTrue(dock, 'hidden');
   const collapsed = !collapsible || hiddenInCore || (typing && !peek);
+  if (shownCollapsed.current !== null && shownCollapsed.current !== collapsed) animateNextFold();
+  shownCollapsed.current = collapsed;
   const limit = typeof dock?.phoneLimit === 'number' ? dock.phoneLimit : 3;
   const hidden = Math.max(0, rows.length - limit);
   const shown = all && hidden > 0 ? rows : rows.slice(0, limit);
-  const toggle = (key: string) =>
+  // A row opening into its card, or shutting back to its line, eases as the chat's folds do.
+  //
+  // CDXC:Coordinators 2026-11-12 DECISION: User: opening and closing each docked card animated,
+  // quickly, the way the chat's folds ease open and shut (desktop `work_cards.rs` `dock_row`).
+  const toggle = (key: string) => {
+    animateNextFold();
     setOpenKey((was) => {
       // One row open at a time: opening this one shuts the one that was open.
       const next = was === key ? null : key;
@@ -295,6 +310,7 @@ export function WorkDock({
       else openRows.set(dispatch, next);
       return next;
     });
+  };
   return (
     <TranscriptFlagsProvider value={flags}>
       <TranscriptEnvProvider value={env}>
