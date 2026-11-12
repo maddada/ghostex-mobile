@@ -35,6 +35,8 @@ import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 /** How long after opening or a tab switch the highlighted row's first layout scrolls it into view. */
 const SCROLL_WINDOW_MS = 600;
+/** The Legacy models bar under the list: its 40pt toggle and 3pt above and below. */
+const LEGACY_BAR_HEIGHT = 46;
 
 /**
  * CDXC:SessionChat 2026-09-25 DECISION:
@@ -84,6 +86,8 @@ export function ModelMenuSheet({
   const [query, setQuery] = useState('');
   const list = useRef<ScrollViewInstance>(null);
   const scrollUntil = useRef(0);
+  /** Set when the Legacy models list is opened, so its first model scrolls into view once drawn. */
+  const scrollToLegacy = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -146,7 +150,10 @@ export function ModelMenuSheet({
   }, [openButton, open]);
   const error = str(menu, 'error');
   const emptyText = str(menu, 'emptyText');
-  // The tab's Legacy models toggle: the core lists the legacy rows after the current ones while it is open.
+  /**
+   * CDXC:AgentModelCatalog 2026-11-12 DECISION:
+   * User: "please align legacy models item to the bottom of the picker always". The Legacy models toggle is pinned under the list, right above the footer buttons, however short the list (render.rs on the desktop); the core lists the legacy rows after the current ones, scrolling above it, while it is open.
+   */
   const legacy = obj(menu?.legacy);
   const legacyOpen = legacy !== null && isTrue(legacy, 'open');
   const firstLegacy = rows.findIndex((row) => isTrue(row, 'legacy'));
@@ -156,7 +163,10 @@ export function ModelMenuSheet({
         key="legacy-toggle"
         accessibilityRole="button"
         accessibilityState={{ expanded: legacyOpen }}
-        onPress={() => dispatch({ type: 'modelMenuView', legacyOpen: !legacyOpen })}
+        onPress={() => {
+          scrollToLegacy.current = !legacyOpen;
+          dispatch({ type: 'modelMenuView', legacyOpen: !legacyOpen });
+        }}
         style={({ pressed }) => [styles.legacy, pressed ? styles.rowButtonPressed : null]}
       >
         <Glyph name={legacyOpen ? 'chevron-down' : 'chevron-right'} size={16} color={P.ink(0.64)} />
@@ -317,7 +327,11 @@ export function ModelMenuSheet({
         <ScrollView
           ref={list}
           keyboardShouldPersistTaps="handled"
-          style={[styles.list, { height: listHeight }, disabled ? styles.waiting : null]}
+          style={[
+            styles.list,
+            { height: legacyToggle === null ? listHeight : listHeight - LEGACY_BAR_HEIGHT },
+            disabled ? styles.waiting : null,
+          ]}
           contentContainerStyle={styles.listContent}
         >
           {rows.length === 0 ? <Text style={styles.empty}>{emptyText}</Text> : null}
@@ -338,6 +352,12 @@ export function ModelMenuSheet({
                 accessibilityState={{ checked: selected, selected: active }}
                 onPress={() => highlight(key)}
                 onLayout={(event) => {
+                  // Opening the Legacy models list scrolls to its first model, so the tap shows what it added.
+                  if (index === firstLegacy && scrollToLegacy.current) {
+                    scrollToLegacy.current = false;
+                    list.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: true });
+                    return;
+                  }
                   if (!active || Date.now() > scrollUntil.current) return;
                   scrollUntil.current = 0;
                   list.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: false });
@@ -382,10 +402,12 @@ export function ModelMenuSheet({
                 ) : null}
               </Pressable>
             );
-            return index === firstLegacy ? [legacyToggle, item] : item;
+            return item;
           })}
-          {firstLegacy === -1 ? legacyToggle : null}
         </ScrollView>
+        {legacyToggle === null ? null : (
+          <View style={[styles.legacyBar, disabled ? styles.waiting : null]}>{legacyToggle}</View>
+        )}
         <ModelMenuTray buttons={buttons} disabled={disabled} sessionScope={sessionScope} onActivate={activate} />
         <ApplyBar
           menu={menu}
@@ -538,6 +560,7 @@ const useStyles = themedStyles((P) => ({
   rowButton: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rowButtonPressed: { backgroundColor: P.ink(0.08) },
   description: { color: P.ink(0.64), fontSize: 13, lineHeight: 18, paddingBottom: 6, paddingRight: 8 },
+  legacyBar: { height: LEGACY_BAR_HEIGHT, justifyContent: 'center', paddingHorizontal: 6, backgroundColor: P.ink(0.02) },
   legacy: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 8, paddingHorizontal: 10, minHeight: 40 },
   legacyLabel: { color: P.ink(0.64), fontSize: 14 },
   applyBar: {
