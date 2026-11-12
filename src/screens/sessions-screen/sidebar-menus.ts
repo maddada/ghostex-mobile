@@ -599,17 +599,26 @@ function linkSubmenu(session: GhostexSession, project: SessionMenuInput['project
 }
 
 /**
+ * The menu's own Copy ID row, or null while the session has no Global Ref yet.
+ *
+ * CDXC:ContextMenus 2026-11-12 DECISION:
+ * User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats" (2026-10-28), then (2026-11-12) "move Copy ID to sit directly above Tag As": Copy ID leaves the Copy submenu and is a row of the menu itself, right above Tag As, as on the desktop (gx-core copy.rs `copy_id_row`). It copies `[<session title>](<Global Ref>)`.
+ */
+function copyIdRow(session: GhostexSession): SidebarMenuItem | null {
+  const ref = session.globalRef.trim();
+  if (ref.length === 0) return null;
+  return row('Copy ID', 'hash', command({ type: 'copyText', text: sessionMentionText(sessionTitle(session), ref) }));
+}
+
+/**
  * The Copy submenu: Copy Details always, the other rows only when the session has something for
  * them.
  *
  * CDXC:ContextMenus 2026-10-09 DECISION:
  * User: Copy Details moves into a Copy submenu next to Copy Branch, Copy Linear ID, Copy PR Link and the like, for normal and work-mode sessions; it stays always available so anyone can hand a session to another agent. The phone's session menu matches the desktop's (2026-10-01), so it has the same submenu.
  *
- * CDXC:ContextMenus 2026-10-28 DECISION:
- * User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats". Copy ID, right under Copy Details, copies `[<session title>](<Global Ref>)`, as on the desktop (gx-core copy.rs).
- *
  * CDXC:ContextMenus 2026-10-31 DECISION:
- * User (GitHub issue #373): a Copy Link row next to Copy Details and Copy ID copies the https page that opens the session (`https://ghostex.dev/open/session#<Global Ref>`), as on the desktop. A link opens on a computer; the phone only copies it for now.
+ * User (GitHub issue #373): a Copy Link row next to Copy Details copies the https page that opens the session (`https://ghostex.dev/open/session#<Global Ref>`), as on the desktop. A link opens on a computer; the phone only copies it for now.
  */
 function copySubmenu(session: GhostexSession, project: SessionMenuInput['project']): SidebarMenuItem {
   const children: SidebarMenuItem[] = [
@@ -627,7 +636,6 @@ function copySubmenu(session: GhostexSession, project: SessionMenuInput['project
     if (text.trim().length > 0) children.push(row(label, icon, command({ type: 'copyText', text })));
   };
   if (session.globalRef.trim().length > 0) {
-    copyRow('Copy ID', 'hash', sessionMentionText(sessionTitle(session), session.globalRef.trim()));
     copyRow('Copy Link', 'link', sessionLinkText(session.globalRef.trim()));
   }
   const work = session.work;
@@ -799,11 +807,17 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   // included, Tag As after a line; Note shows here only as a mirrored hover button.
   const primaryOrder: HoverAction[] = ['rename', 'pin', 'snooze', 'park', 'sleep', 'note', 'tag'];
   const menu: SidebarMenuItem[] = [];
+  // Copy ID opens the block after the line, right above Tag As, and keeps that place when Tag As
+  // is not in the menu (gx-core `full_menu`).
+  const copyId = copyIdRow(session);
   for (const action of primaryOrder) {
     const shown = mirror.includes(action) || (action !== 'note' && !enabled.includes(action));
-    const item = rows[action];
-    if (!shown || item === undefined) continue;
-    if (action === 'tag' && menu.length > 0) menu.push(separator());
+    const item = shown ? rows[action] : undefined;
+    if (action === 'tag') {
+      if (menu.length > 0 && (copyId !== null || item !== undefined)) menu.push(separator());
+      if (copyId !== null) menu.push(copyId);
+    }
+    if (item === undefined) continue;
     menu.push(action === 'pin' && !pinned ? { ...item, icon: 'pinned' } : item);
   }
 
