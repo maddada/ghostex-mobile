@@ -519,6 +519,7 @@ export function UnifiedGroupHeader({
   open,
   onToggle,
   onNew,
+  onMenu,
   urgent = null,
 }: {
   label: string;
@@ -527,6 +528,8 @@ export function UnifiedGroupHeader({
   open: boolean;
   onToggle: () => void;
   onNew: () => void;
+  /** A long press: the header's menu (Move Up, Move Down), where the desktop drags the header. */
+  onMenu?: () => void;
   /** The most urgent status under a folded header, its threads' included: the dot the desktop's header draws (groups.rs `most_urgent`). */
   urgent?: UnifiedStatus | null;
 }) {
@@ -539,6 +542,7 @@ export function UnifiedGroupHeader({
       accessibilityLabel={`${label} (${count})`}
       accessibilityState={{ expanded: open }}
       onPress={onToggle}
+      onLongPress={onMenu}
       style={({ pressed }) => [styles.shelfHeader, pressed ? styles.shelfPressed : null]}
     >
       <Chevron size={ds(13)} color={ink.muted} />

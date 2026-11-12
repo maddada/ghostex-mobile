@@ -36,7 +36,8 @@ import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../.
 import { unifiedListOf, unifiedMachineInput, type UnifiedComputer } from '../../contract/unified/fromSummary';
 import { useSidebarOrganization } from '../../settingsSync/sidebarOrganization';
 import { useOpenUnifiedDraftsOnArrival } from '../../components/sessions/useDraftArrivals';
-import { groupUnifiedList, unifiedGroupCount, type UnifiedGroup } from '../../contract/unified/grouping';
+import { groupUnifiedList, moveUnifiedProject, unifiedGroupCount, type UnifiedGroup } from '../../contract/unified/grouping';
+import { setSidebarSetting } from '../../settingsSync/settingsSync';
 import { unifiedSwipeActions } from '../../contract/unified/strip';
 import { SNOOZE_PRESETS, snoozeWakeAt } from '../../contract/unified/snooze';
 import { chatMachineLink } from '../../chat/rust/machine-link';
@@ -243,6 +244,8 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   /** What a filter row's "+" opens once the filter menu has gone (iOS presents one modal at a time). */
   const afterFilterMenu = useRef<(() => void) | null>(null);
+  /** The project group whose long-press menu is open (Move Up, Move Down). */
+  const [groupMenuFor, setGroupMenuFor] = useState<{ repoKey: string; label: string } | null>(null);
   const [snoozeFor, setSnoozeFor] = useState<{ machine: MachineRecord; session: GhostexSession; anchor: MenuAnchor } | null>(
     null,
   );
@@ -587,6 +590,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
           open={item.open}
           onToggle={() => toggleGroup(item.repoKey)}
           onNew={() => openGroupNewSession(item.repoKey)}
+          onMenu={() => setGroupMenuFor({ repoKey: item.repoKey, label: item.label })}
           urgent={item.urgent}
         />
       );
@@ -800,6 +804,34 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       }
     });
 
+  /**
+   * A project group's place, where the desktop drags its header (gx-core unified_sidebar/grouping.rs
+   * `move_unified_project`): one step up or down among the groups drawn, the whole order written out so what is off
+   * screen keeps its place, and synced with the computers (`unifiedProjectOrder`).
+   */
+  const groupMenuItems = (repoKey: string): ContextMenuItem[] => {
+    const drawn = groups.map((group) => group.repoKey);
+    const at = drawn.indexOf(repoKey);
+    const move = (target: string | undefined, after: boolean) => () => {
+      setGroupMenuFor(null);
+      if (target === undefined) return;
+      setSidebarSetting(
+        'unifiedProjectOrder',
+        moveUnifiedProject(layout.projectOrder, view.options.repos, repoKey, target, after),
+      );
+    };
+    return [
+      { kind: 'item', key: 'up', label: 'Move Up', disabled: at <= 0, onPress: move(drawn[at - 1], false) },
+      {
+        kind: 'item',
+        key: 'down',
+        label: 'Move Down',
+        disabled: at < 0 || at >= drawn.length - 1,
+        onPress: move(drawn[at + 1], true),
+      },
+    ];
+  };
+
   const overlays = (
     <>
       {/* Stays mounted while hidden so a row's "+" can open the agent menu once it has gone (iOS). */}
@@ -815,6 +847,14 @@ export function useUnifiedList(deps: UnifiedListDeps) {
             afterFilterMenu.current = null;
             work?.();
           }}
+        />
+      ) : null}
+      {groupMenuFor !== null ? (
+        <ContextMenu
+          visible
+          title={groupMenuFor.label}
+          items={groupMenuItems(groupMenuFor.repoKey)}
+          onClose={() => setGroupMenuFor(null)}
         />
       ) : null}
       {snoozeFor !== null ? (
