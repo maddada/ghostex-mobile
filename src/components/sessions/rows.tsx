@@ -15,9 +15,12 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { SvgXml } from 'react-native-svg';
+import { useShallow } from 'zustand/react/shallow';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
+import { computerIconDrawing, useComputerIconsStore } from '../../machines/computerIcons';
+import { ComputerIconGlyph } from './ComputerIconGlyph';
 import { HOME_LABEL } from '../../contract/chief';
 import {
   agentIconTint,
@@ -1150,8 +1153,11 @@ export function ProjectHeaderRow({
   onOpenAgentMenu,
   onMenu,
   home,
+  machineIds,
 }: {
   title: string;
+  /** The computers a project of the one list of every computer is on, when more than one: their icons follow the title. */
+  machineIds?: readonly string[];
   /** Project identity, ranked by ProjectIcon like the desktop header does. */
   icon: GhostexProjectIcon;
   collapsed: boolean;
@@ -1188,6 +1194,7 @@ export function ProjectHeaderRow({
       onToggle={onToggle}
       onMenu={home !== undefined ? () => home.onMenu() : onMenu}
     >
+      {machineIds !== undefined && machineIds.length > 1 ? <ProjectMachineIcons machineIds={machineIds} /> : null}
       {collapsed ? (
         <ProjectStatusCounts
           workingCount={workingCount}
@@ -1215,6 +1222,29 @@ export function ProjectHeaderRow({
         </View>
       )}
     </SidebarHeaderBox>
+  );
+}
+
+/** The icons of a merged project's computers (desktop native_sidebar/project_header.rs machine chips). */
+function ProjectMachineIcons({ machineIds }: { machineIds: readonly string[] }) {
+  const ink = useSidebarInk();
+  const drawings = useComputerIconsStore(
+    useShallow((state) =>
+      machineIds.map((machineId) => {
+        const facts = state.facts[machineId];
+        return facts === undefined ? null : computerIconDrawing(facts);
+      }),
+    ),
+  );
+  if (drawings.every((drawing) => drawing === null)) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: ds(3), marginRight: ds(4) }}>
+      {drawings.map((drawing, index) =>
+        drawing === null ? null : (
+          <ComputerIconGlyph key={machineIds[index]} drawing={drawing} size={ds(12)} color={ink.muted} />
+        ),
+      )}
+    </View>
   );
 }
 

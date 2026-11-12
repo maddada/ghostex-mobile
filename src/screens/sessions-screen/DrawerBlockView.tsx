@@ -355,6 +355,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
           backgroundWorkCount={header.backgroundWorkCount}
           awakeCount={header.awakeCount}
           primaryAgent={primaryAgent}
+          machineIds={header.machineIds}
           onToggle={() => actions.toggleProject(machineId, header)}
           onMenu={() => actions.projectMenu(...acting(header))}
           onLaunchPrimary={() => {

@@ -420,11 +420,14 @@ function withOrigins(items: DrawerItem[], merged: MergedComputers, listMachineId
       };
     }
     if (item.type === 'PROJECT_HEADER') {
+      // A project on several computers names them with their icons after its title (gx-core view.rs `MachineChip`).
+      const machineIds = [...new Set((merged.copies.get(item.projectId) ?? []).map((copy) => copy.machineId))];
+      const withMachines = machineIds.length > 1 ? { ...item, machineIds } : item;
       const copy = creatingCopy(merged, item.projectId);
-      if (copy === null || (copy.machineId === listMachineId && copy.projectId === item.projectId)) return item;
+      if (copy === null || (copy.machineId === listMachineId && copy.projectId === item.projectId)) return withMachines;
       const theirs = summaryOf(copy.machineId);
       return {
-        ...item,
+        ...withMachines,
         actionTarget: copy,
         agents: theirs?.agents ?? item.agents,
         quickActions: theirs?.quickActionsByProject[copy.projectId] ?? [],

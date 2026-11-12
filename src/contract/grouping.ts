@@ -126,6 +126,8 @@ export type ProjectHeaderItem = {
    * go to, when it is not the list's own computer and project id. Folding stays with `machineId`.
    */
   actionTarget?: ActionTarget;
+  /** In the one list of every computer: the computers whose copies the entry holds, when more than one. */
+  machineIds?: string[];
   /** The home project: its header is Main Hub's row (components/sessions/ChiefRow.tsx). */
   isHome?: boolean;
   /** The computer's Chief, on the home project's header; `null` before its first open. */
