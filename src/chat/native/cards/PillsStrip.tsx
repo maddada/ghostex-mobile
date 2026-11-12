@@ -90,14 +90,18 @@ const NO_PILLS: readonly string[] = [];
 
 /**
  * The pills the strip leaves out while the work dock's bar shows above the chat box: the Work
- * pill, whose sheet the bar's Work items button opens (`WorkCards.tsx` `DockHeader`).
+ * pill, whose sheet the bar's Work items button opens (`WorkCards.tsx` `DockHeader`), and the red
+ * Blocked pill, whose count the bar shows. Both leave the desktop's pills row the same way
+ * (`pills_strip.rs`).
  *
  * CDXC:Coordinators 2026-11-12 DECISION:
  * User, of the phone's bar with its Work items button beside "● 6" and the Work pill "▦ ● 6" in
  * the row under it: remove the Work items pill from the pills row, since the bar's button does the
  * same thing; only while the chat shows the bar, so a chat with work items and no bar keeps it.
+ * Then, of the Blocked pill: "match the desktop: drop the Blocked pill too while the bar shows (keep
+ * it where there's no bar)".
  */
-export const PILLS_IN_DOCK_BAR: readonly string[] = ['board'];
+export const PILLS_IN_DOCK_BAR: readonly string[] = ['board', BLOCKED_PILL];
 
 export function pillsStripShown(
   document: ChatDocument,
