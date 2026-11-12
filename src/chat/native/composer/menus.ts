@@ -7,6 +7,7 @@
 import type { ChatDocument } from '../../rust/document';
 import { arr, isTrue, obj, str } from './json';
 import { rowsOf, type MenuRow } from './MenuSheet';
+import { sessionDetailsRingOf } from '../cards/SessionDetailsSheet';
 
 /** The toolbar controls in desktop's order, which is also the order they fold into More actions
  * (`toolbar.rs`, `COMPOSER_CONTROLS`). Maximize is desktop-only. Files and links, Summary mode (under
@@ -480,11 +481,15 @@ export function moreActionsRows({
   const merged = obj(document.modelMenu) !== null;
   // The option settings fold here when the core says they overflow, or when the composer draws none of them; then
   // only where there is one to show, as the core's `hasOverflowOptions` has it.
+  // CDXC:SessionDetails 2026-11-12 DECISION: the Context window row and its sheet went where Session details carries
+  // the context (its first tab's Context card and its second tab's details, `SessionDetailsSheet.tsx`); a computer too
+  // old to send Session details keeps them.
+  const contextRow = obj(document.contextMeter) !== null && sessionDetailsRingOf(document) === null;
   const optionsFolded = allFolded
-    ? (isTrue(labels, 'showOptions') && !merged) || obj(document.contextMeter) !== null
+    ? (isTrue(labels, 'showOptions') && !merged) || contextRow
     : document.composerOverflow?.optionsOverflowed === true;
   if (optionsFolded) {
-    if (obj(document.contextMeter) !== null) {
+    if (contextRow) {
       moreRows.push({
         label: 'Context window',
         iconPath: 'titlebar/circle-half.svg',

@@ -49,6 +49,7 @@ import { ModelMenuSheet, type ModelSheetMode } from './ModelMenuSheet';
 import { NotePanel } from './NotePanel';
 import { phonePlaceholder } from './placeholder';
 import { CatchUpCard } from '../cards/CatchUpCard';
+import { sessionDetailsRingOf } from '../cards/SessionDetailsSheet';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
 import { OptionPills, modeInModelPill, modeLook, type PillKind } from './OptionPills';
 import { RunLocationRow } from './RunLocationRow';
@@ -106,11 +107,6 @@ export type NativeComposerProps = {
    * held-messages card's Pick model). Each new value opens what a tap on the model pill opens; 0 opens nothing.
    */
   openModelRequestId?: number;
-  /**
-   * Bumped by the screen for the context meter's sheet (the Session details sheet's More details row,
-   * while the meter's own ring steps aside for the strip's). Each new value opens it; 0 opens nothing.
-   */
-  openContextRequestId?: number;
   /** The session's title, for the More actions row "Voice call about this chat" (shown when `voiceCall` is served). */
   voiceCallTitle?: string;
   /** A GBot's chat: the GBot's name, that row then being "Call <GBot>". */
@@ -183,7 +179,6 @@ export function NativeComposer({
   focusRequestId = 0,
   onFocusChange,
   openModelRequestId = 0,
-  openContextRequestId = 0,
   voiceCallTitle = '',
   voiceCallGbotName = '',
   room,
@@ -361,8 +356,10 @@ export function NativeComposer({
       footerGap: FOOTER_GAP,
       actionGap: ACTION_GAP,
       clearance: CLEARANCE,
+      // The context meter folds into More actions only where Session details does not carry it (`menus.ts`).
       hasOverflowOptions:
-        (isTrue(labels, 'showOptions') && obj(document.modelMenu) === null) || obj(document.contextMeter) !== null,
+        (isTrue(labels, 'showOptions') && obj(document.modelMenu) === null) ||
+        (obj(document.contextMeter) !== null && sessionDetailsRingOf(document) === null),
       controls,
     };
     const key = JSON.stringify(measurements);
@@ -630,13 +627,6 @@ export function NativeComposer({
     handledModelRequest.current = openModelRequestId;
     if (openModelRequestId > 0) openPill('model');
   }, [openModelRequestId, openPill]);
-
-  const handledContextRequest = useRef(openContextRequestId);
-  useEffect(() => {
-    if (openContextRequestId === handledContextRequest.current) return;
-    handledContextRequest.current = openContextRequestId;
-    if (openContextRequestId > 0) openPill('context');
-  }, [openContextRequestId, openPill]);
 
   // The chat's computer by name, for the Dictate menu ("Transcribes on MacBook Pro").
   const machineLabel = useMachinesStore((state) => {

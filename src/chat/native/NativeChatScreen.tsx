@@ -410,21 +410,20 @@ export default function NativeChatScreen({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const openDetails = useCallback(() => setDetailsOpen(true), []);
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
-  // Its Context card's More details opens the context meter's own sheet once this one has gone: iOS
-  // waits for it to go (`onDismissed`); Android never reports that, and its sheets are dialogs that
-  // open over a closing one, so it opens at once (the More pills sheet's way, `PillsStrip.tsx`).
-  const [contextRequestId, setContextRequestId] = useState(0);
-  const contextAfterDismiss = useRef(false);
-  const openContextDetails = useCallback(() => {
+  // Its second tab's Choose details opens the context meter's editor (the chat box's `ContextEditorSheet`) once this
+  // sheet has gone: iOS waits for it to go (`onDismissed`); Android never reports that, and its sheets are dialogs
+  // that open over a closing one, so it opens at once (the More pills sheet's way, `PillsStrip.tsx`).
+  const editAfterDismiss = useRef(false);
+  const chooseDetails = useCallback(() => {
     setDetailsOpen(false);
-    if (Platform.OS === 'ios') contextAfterDismiss.current = true;
-    else setContextRequestId((current) => current + 1);
-  }, []);
+    if (Platform.OS === 'ios') editAfterDismiss.current = true;
+    else chat.dispatch({ type: 'contextEdit' });
+  }, [chat]);
   const detailsDismissed = useCallback(() => {
-    if (!contextAfterDismiss.current) return;
-    contextAfterDismiss.current = false;
-    setContextRequestId((current) => current + 1);
-  }, []);
+    if (!editAfterDismiss.current) return;
+    editAfterDismiss.current = false;
+    chat.dispatch({ type: 'contextEdit' });
+  }, [chat]);
   // Switching to the terminal takes the sheet away with the chat.
   useEffect(() => {
     if (!visible) setDetailsOpen(false);
@@ -645,7 +644,6 @@ export default function NativeChatScreen({
                     hostActions={composerHostActions}
                     openAccountsRequestId={accountsRequestId}
                     openModelRequestId={modelRequestId}
-                    openContextRequestId={contextRequestId}
                     focusRequestId={focusRequestId}
                     onFocusChange={setComposerFocused}
                     voiceCallTitle={title}
@@ -730,9 +728,11 @@ export default function NativeChatScreen({
                 chat={chat}
                 document={document}
                 visible={detailsOpen}
+                // The ring opens it, on the first tab scrolled to the Context card.
+                focus="context"
                 onClose={closeDetails}
-                // The Context sheet's host is the composer, which a question replaces: no row then.
-                {...(composerShown ? { onMoreDetails: openContextDetails } : {})}
+                // The context meter's editor lives in the chat box, which a question replaces: no Choose details then.
+                {...(composerShown ? { onChooseDetails: chooseDetails } : {})}
                 onDismissed={detailsDismissed}
               />
               {gbotSettings !== null ? (
