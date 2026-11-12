@@ -518,7 +518,9 @@ function DockRow({
         style={({ pressed }) => [
           styles.dockPress,
           opened && styles.dockPressOpen,
-          pressed && !opened && { backgroundColor: P.ink(0.04) },
+          // Opened too: the title line is what shuts the row (user, 2026-11-12: "show bg hover
+          // effect change when i hover the title of this so i know clicking collapses it").
+          pressed && { backgroundColor: P.ink(0.04) },
         ]}
       >
         <View style={styles.dockRow}>

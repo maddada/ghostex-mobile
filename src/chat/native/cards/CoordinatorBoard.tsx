@@ -515,6 +515,8 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
   const [menuTags, setMenuTags] = useState(false);
   // The card whose closed "Choose an answer" opened it: its answers start listed.
   const [chooseFor, setChooseFor] = useState<string | null>(null);
+  // The card under a finger: an opened card lights its title line, the part that shuts it.
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
   const { width: screenWidth, fontScale } = useWindowDimensions();
   // The chat the dock registered, so a Reply from here keeps its draft (`replyDrafts.ts`).
   const scope = replyDraftScopeOf(chat.dispatch);
@@ -629,6 +631,8 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                     accessibilityState={{ expanded }}
                     accessibilityHint={menuRows.length > 0 ? 'Long-press for its actions' : undefined}
                     onPress={tapCard}
+                    onPressIn={() => setPressedKey(key)}
+                    onPressOut={() => setPressedKey(null)}
                     onLongPress={
                       menuRows.length > 0
                         ? () => {
@@ -647,7 +651,13 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                       ringed === key ? { borderColor: P.accent, backgroundColor: `${P.accent}14` } : null,
                     ]}
                   >
-                    <View style={styles.cardTitleLine}>
+                    <View
+                      style={[
+                        styles.cardTitleLine,
+                        expanded && styles.cardTitleLineOpen,
+                        expanded && pressedKey === key && { backgroundColor: P.ink(0.06) },
+                      ]}
+                    >
                       {expanded ? (
                         <LinkWords
                           text={str(row, 'title')}
@@ -993,6 +1003,15 @@ const useStyles = themedStyles((P) => ({
   cardMenuText: {
     color: P.foreground,
     fontSize: PROSE_SIZE,
+  },
+  // Opened, the title line reaches a little past the text, rounded inside the card, for its
+  // pressed state.
+  cardTitleLineOpen: {
+    marginHorizontal: -6,
+    paddingHorizontal: 6,
+    marginVertical: -2,
+    paddingVertical: 2,
+    borderRadius: 7,
   },
   cardTitleLine: {
     flexDirection: 'row',

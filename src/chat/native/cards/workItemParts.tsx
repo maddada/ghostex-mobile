@@ -456,7 +456,12 @@ export function WorkAnswerLine({
   const pillRoom = pillWidths(pills, fontScale);
   if (answers.length === 0) {
     const alone = open != null ? buttonWidth('Open', true, false, fontScale) : replyWidthOf(replied, draft, fontScale);
-    const lead = <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone)} dispatch={dispatch} />;
+    const lead = (
+      <>
+        <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - alone)} dispatch={dispatch} />
+        {divider ? <View style={styles.flex} /> : null}
+      </>
+    );
     if (open != null) {
       return (
         <View style={styles.line}>
@@ -513,6 +518,9 @@ export function WorkAnswerLine({
     <View style={styles.column}>
       <View style={styles.line}>
         <ItemPills pills={pills} fit={pillFit(pillRoom, lineRoom - used)} dispatch={dispatch} />
+        {/* Opened: the item pills at the left, the answers and Reply at the right edge (user,
+            2026-11-12: "move the answer buttons to bottom right. keep work item tag bottom left"). */}
+        {divider ? <View style={styles.flex} /> : null}
         {fold ? (
           <WorkButton
             label={CHOOSE_ANSWER}
