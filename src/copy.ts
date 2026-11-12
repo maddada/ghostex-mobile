@@ -457,7 +457,7 @@ export const ConnectionsCopy = {
   connectionSettings: 'Connection settings',
   easyConnect: 'Easy Connect',
   tailscale: 'Tailscale',
-  demo: 'Demo computer',
+  demo: 'Sample, on this phone',
   roundTrip: (ms: number) => `${ms} ms`,
   /** A computer icon's VoiceOver label. */
   iconLabel: (name: string, status: string) => `${name}, ${status}`,
