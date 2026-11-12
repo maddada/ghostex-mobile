@@ -97,8 +97,8 @@ export function notificationAllowed(kind: AttentionKind, settings: NotificationS
 /*
 CDXC:Notifications 2026-11-11 DECISION: User (push follow-ups, fault 4): the notification the app posts while it runs
 follows the push's names rule (CDXC:Notifications 2026-11-11 in server/src/push/message.rs), so a notice reads the same
-whether the app is open or closed: with "Show session names" off (the default) it leads with the agent's name, on with
-the session's title (the agent's name when the session has none).
+whether the app is open or closed: with "Show session names" on (the default since 2026-11-12) it leads with the session's title (the agent's
+name when the session has none), off with the agent's name.
 */
 export function notificationRequestFor(
   event: AttentionEvent,

@@ -17,7 +17,7 @@ import { Caption, SectionHeader, SettingsScreenLayout, SettingToggle } from './S
  * Under it while it is on, "Keep it updated while locked", off by default (`liveActivityLockedUpdates`): one computer
  * keeps the activity current through Ghostex's push relay while the phone is locked (`liveActivityPush.ts`).
  *
- * A second switch, off by default (`liveActivitySessionNames`): rows lead with the session's name instead of the
+ * A second switch, on by default (`liveActivitySessionNames`): rows lead with the session's name instead of the
  * agent's. It stays on the page while the Live Activity is off, because the Home Screen widgets follow it too.
  */
 export default function LiveActivityPage() {

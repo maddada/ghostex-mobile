@@ -87,9 +87,14 @@ export type GhostexSettings = ThemeColourSettings & {
    * Rows of the Live Activity and of the Home Screen widgets lead with the session's name, as the Sessions list
    * shows it, instead of the agent's name. iOS only.
    *
-   * CDXC:Notifications 2026-11-10 DECISION: Off by default, also for stored settings from before the switch, which have no value for it, so an update changes nothing on a locked phone until the user turns it on. User (Q2278, on Ghostex PR #545 / ghostex-mobile PR #35): keep the earlier promise that no session title shows on the Lock Screen, the Live Activity or the widgets; both surfaces show on a locked phone, where anyone can read them, and a session's name can come from its first prompt. On, the rows of several sessions of one agent in one project can be told apart; off, they are the rows from before the names.
+   * CDXC:Notifications 2026-11-12 DECISION: On by default (it was off since 11.4.0, CDXC:Notifications 2026-11-10, which kept the earlier promise that no session title shows on a locked phone). User: wants session names by default, so the rows of several sessions of one agent in one project can be told apart without a visit to Settings. Settings saved by a build before this one hold `false` for it whether or not the user chose it (the store saves its whole object), so such a `false` reads as the old default and becomes on, once; see `liveActivitySessionNamesDefaultedOn`. A `false` saved by this build or later is the user's own and stays.
    */
   liveActivitySessionNames: boolean;
+  /**
+   * Marker, always true: only a build that has `liveActivitySessionNames` on by default saves it (the store saves its
+   * whole object). A saved `liveActivitySessionNames: false` without it is the old default, not a choice.
+   */
+  liveActivitySessionNamesDefaultedOn: boolean;
   /**
    * While the phone is locked, one computer keeps the Live Activity current through Ghostex's push relay
    * (`notifications/liveActivityPush.ts`). Off, the Live Activity updates only while the app runs, as before.
@@ -291,7 +296,8 @@ export function defaultSettings(): GhostexSettings {
     doneNotificationSound: true,
     settingsSyncThroughPhone: true,
     liveActivityEnabled: true,
-    liveActivitySessionNames: false,
+    liveActivitySessionNames: true,
+    liveActivitySessionNamesDefaultedOn: true,
     liveActivityLockedUpdates: false,
     hideKeyboardOnStartup: true,
     openUrlsOnTap: true,
@@ -537,7 +543,12 @@ function sanitizeSettings(value: unknown): GhostexSettings {
     doneNotificationSound: bool('doneNotificationSound', defaults.doneNotificationSound),
     settingsSyncThroughPhone: bool('settingsSyncThroughPhone', defaults.settingsSyncThroughPhone),
     liveActivityEnabled: bool('liveActivityEnabled', defaults.liveActivityEnabled),
-    liveActivitySessionNames: bool('liveActivitySessionNames', defaults.liveActivitySessionNames),
+    // A `false` saved without the marker is the old default (off), not a choice: it becomes on. The next save writes
+    // the marker, so from then on an off is the user's own and stays.
+    liveActivitySessionNames: Object.hasOwn(record, 'liveActivitySessionNamesDefaultedOn')
+      ? bool('liveActivitySessionNames', defaults.liveActivitySessionNames)
+      : true,
+    liveActivitySessionNamesDefaultedOn: true,
     liveActivityLockedUpdates: bool('liveActivityLockedUpdates', defaults.liveActivityLockedUpdates),
     hideKeyboardOnStartup: bool('hideKeyboardOnStartup', defaults.hideKeyboardOnStartup),
     openUrlsOnTap: bool('openUrlsOnTap', defaults.openUrlsOnTap),
