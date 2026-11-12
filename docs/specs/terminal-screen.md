@@ -42,6 +42,13 @@ The screen (status bar area, header, the strip under the iPhone Duo's rail) pain
 - Tap anywhere selects. Selection animation easeInOut 0.12s.
 - statusColor: connected/open → NO dot; connecting/reconnecting → orange; disconnected/idle → secondary; failed → red.
 
+### Dragging tabs and two sides (`src/components/terminal/tabDrag/`, `src/terminal/tabSplit.ts`)
+
+- Hold a tab 300 ms, then drag (react-native-gesture-handler pan with `activateAfterLongPress`; a quick swipe still scrolls the strip and a tap still selects). The tab lifts (a copy 5 % larger follows the finger over the whole screen, its place in the bar empties), the bar's other tabs slide a tab's place to open a gap where it would land, and the strip does not scroll while a tab is held. Light haptic on lift and on a drop that moves the tab. Every phone size.
+- Wide window (content at least `SETTINGS_LIST_WIDTH + SETTINGS_PAGE_MIN_WIDTH` = 695 pt wide, Settings' two-column breakpoint; the unfolded foldable, a tablet, a phone across), header on top, none of the iPhone Duo's panes, the screen in the chat view: the chat's right half is a drop zone (accent outline and wash, "Open side by side" near its top, stronger under the finger) for a tab with a chat view. Dropping there opens that session's chat beside the current one; at most two sides.
+- Two sides: each side has its own tab bar over its own chat, the handle (a grip, "Show one pane") between them; tapping it puts every tab back in one bar, left side's tabs then right side's. A tab drags from one bar to the other (or onto the other side's chat), and a side left without tabs ends the split. The selected tab is the side the user touched last (its keyboard, its menus); the other side keeps the tab it showed. A side's Terminal View merges first (the terminal needs the whole screen).
+- Order and split live with the tabs in the terminal store (in memory, as the tabs). A narrower window shows one bar in the same order and keeps the split for when it is wide again.
+
 ### Nav bar toolbar
 
 - Leading: back chevron (`chevron.left`) → dismiss keyboard, then back.

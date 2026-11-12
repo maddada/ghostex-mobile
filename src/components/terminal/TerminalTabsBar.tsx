@@ -10,17 +10,33 @@
  * happens on tap and after a close, so the track re-clamps immediately instead
  * of leaving a gap. One tab fills the strip, however narrow. Open tabs show no
  * status dot; only opening/failed/closed states get one.
+ *
+ * Given the screen's tab drag (`drag`, `dragBar`) a tab held for a moment lifts and drags: to another place in this bar, to the
+ * other side's bar, or onto the chat (`tabDrag/`). The other tabs slide to make room; the strip does not scroll while
+ * a tab is held.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewInstance,
+  type ViewInstance,
+} from 'react-native';
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import type { TerminalTab, TerminalTabState } from '../../terminal/sessions';
 import { colorWithOpacity, GhostexPalette } from '../../theme/palette';
 import { terminalChrome, type TerminalChrome } from '../../theme/terminalColours';
 import { HorizontalFade } from '../../chat/native/transcript/verticalFade';
 import { CloseIcon } from './icons';
+import type { BarId } from './tabDrag/model';
+import type { TabDrag } from './tabDrag/TabDrag';
 import {
   MIN_TAB_WIDTH,
   TAB_SPACING,
@@ -38,6 +54,10 @@ const TRACK_HEIGHT = 36;
 const TAB_HEIGHT = 28;
 /** The width of the fade at an edge that hides more tabs. */
 const FADE_WIDTH = 24;
+/** How long a tab is held before it lifts to drag: a little shorter than Android's long press. */
+const LIFT_HOLD_MS = 300;
+/** How fast the other tabs slide to make room. */
+const SLIDE_MS = 160;
 
 /** opening → orange; failed → red; closed → gray; open and detached (chat only) → no dot. */
 function statusDotColor(state: TerminalTabState): string | null {
@@ -68,14 +88,64 @@ type TabButtonProps = {
   onSelect: (sessionKey: string) => void;
   onClose: (sessionKey: string) => void;
   onSlotLayout?: (sessionKey: string, event: LayoutChangeEvent) => void;
+  /** The screen's tab drag and the bar this tab drags from; absent: no drag. */
+  drag?: TabDrag | null;
+  dragBar?: BarId;
+  /** Keeps the slot's view for the drag's measurements (null when it unmounts). */
+  slotRef?: (sessionKey: string, view: ViewInstance | null) => void;
 };
 
-function TabButton({ tab, selected, fill, width, chrome, onSelect, onClose, onSlotLayout }: TabButtonProps) {
+function TabButton({
+  tab,
+  selected,
+  fill,
+  width,
+  chrome,
+  onSelect,
+  onClose,
+  onSlotLayout,
+  drag = null,
+  dragBar,
+  slotRef,
+}: TabButtonProps) {
   const dotColor = statusDotColor(tab.state);
   const showClose = fill || selected;
-  return (
-    <View
-      style={[styles.tabSlot, fill ? styles.tabSlotFill : { width }]}
+  const draggable = drag !== null && dragBar !== undefined;
+  const held = drag?.held?.key === tab.sessionKey;
+  const shifts = dragBar === undefined ? null : (drag?.shiftsFor(dragBar) ?? null);
+  const shift = shifts?.get(tab.sessionKey) ?? 0;
+  // While a tab is held the others slide; on the drop they stand still in their new places at once (sliding back from
+  // where they made room would cross the new order).
+  const sliding = shifts !== null;
+  const slide = useAnimatedStyle(() => ({
+    transform: [{ translateX: sliding ? withTiming(shift, { duration: SLIDE_MS }) : 0 }],
+  }));
+  // Held for a moment, then dragged: a quick swipe still scrolls the strip and a tap still selects. JS callbacks: the
+  // lifted tab follows the finger through shared values (`useTabDrag` in tabDrag/TabDrag.tsx), the rest are a few state changes.
+  const pan = usePanGesture({
+    enabled: draggable,
+    activateAfterLongPress: LIFT_HOLD_MS,
+    runOnJS: true,
+    onActivate: (event) => {
+      if (drag === null || dragBar === undefined) return;
+      drag.begin({ key: tab.sessionKey, from: dragBar, title: tab.title }, event.absoluteX, event.absoluteY);
+    },
+    onUpdate: (event) => {
+      drag?.move(event.absoluteX, event.absoluteY);
+    },
+    onDeactivate: (event) => {
+      drag?.end(tab.sessionKey, event.absoluteX, event.absoluteY, event.canceled);
+    },
+    onFinalize: (event) => {
+      // A touch the system took before the drop: the tab goes back (nothing once the drop above ended the drag).
+      drag?.end(tab.sessionKey, event.absoluteX, event.absoluteY, true);
+    },
+  });
+  const slot = (
+    <Animated.View
+      ref={slotRef === undefined ? undefined : (view: ViewInstance | null) => slotRef(tab.sessionKey, view)}
+      collapsable={false}
+      style={[styles.tabSlot, fill ? styles.tabSlotFill : { width }, slide, held ? styles.tabHeld : null]}
       onLayout={onSlotLayout === undefined ? undefined : (event) => onSlotLayout(tab.sessionKey, event)}
     >
       <Pressable
@@ -110,8 +180,9 @@ function TabButton({ tab, selected, fill, width, chrome, onSelect, onClose, onSl
           <CloseIcon size={11} color={colorWithOpacity(chrome.ink, 92)} strokeWidth={3} />
         </Pressable>
       ) : null}
-    </View>
+    </Animated.View>
   );
+  return draggable ? <GestureDetector gesture={pan}>{slot}</GestureDetector> : slot;
 }
 
 export type TerminalTabsBarProps = {
@@ -124,6 +195,9 @@ export type TerminalTabsBarProps = {
    * over a dark header, dark over a light one) and the edge fades melt into the track over it.
    */
   headerColor?: string;
+  /** The screen's tab drag (`useTabDrag`) and which bar this is (the only one, or a side's): its tabs drag. */
+  drag?: TabDrag | null;
+  dragBar?: BarId;
 };
 
 export default function TerminalTabsBar({
@@ -132,10 +206,31 @@ export default function TerminalTabsBar({
   onSelect,
   onClose,
   headerColor = GhostexPalette.TERMINAL_BACKGROUND,
+  drag = null,
+  dragBar,
 }: TerminalTabsBarProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const contentWidth = useRef(0);
+
+  // The drag measures the track and the tabs when a tab lifts.
+  const trackRef = useRef<ViewInstance>(null);
+  const slotViews = useRef(new Map<string, ViewInstance>()).current;
+  const keysRef = useRef<readonly string[]>([]);
+  keysRef.current = tabs.map((tab) => tab.sessionKey);
+  const registerBar = drag?.registerBar;
+  useEffect(() => {
+    if (registerBar === undefined || dragBar === undefined) return undefined;
+    return registerBar(dragBar, { track: trackRef, slots: slotViews, keys: () => keysRef.current });
+  }, [registerBar, dragBar, slotViews]);
+  const slotRef = useCallback(
+    (sessionKey: string, view: ViewInstance | null): void => {
+      if (view === null) slotViews.delete(sessionKey);
+      else slotViews.set(sessionKey, view);
+    },
+    [slotViews],
+  );
+  const dragging = drag?.held !== null && drag?.held !== undefined;
 
   // The strip's scroll offset as it moves, and the one the fades were last drawn for: a scroll only re-renders
   // the strip when an edge fade appears or goes, not on every frame.
@@ -200,12 +295,17 @@ export default function TerminalTabsBar({
       onSelect={onSelect}
       onClose={onClose}
       onSlotLayout={equalWidth ? undefined : handleSlotLayout}
+      drag={drag}
+      dragBar={dragBar}
+      slotRef={dragBar === undefined ? undefined : slotRef}
     />
   );
 
   return (
     <View style={styles.container}>
       <View
+        ref={trackRef}
+        collapsable={false}
         style={[
           styles.track,
           {
@@ -225,6 +325,7 @@ export default function TerminalTabsBar({
             ref={scrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
+            scrollEnabled={!dragging}
             contentContainerStyle={styles.scrollRow}
             scrollEventThrottle={16}
             onScrollBeginDrag={() => {
@@ -295,6 +396,10 @@ const styles = StyleSheet.create({
   },
   tabSlotFill: {
     flex: 1,
+  },
+  /** The held tab's place while it is lifted: the lifted copy follows the finger instead. */
+  tabHeld: {
+    opacity: 0,
   },
   /** A soft edge where more tabs are hidden, the chat's pill rows' fade (`HorizontalFade`, 24 pt wide). */
   fade: {

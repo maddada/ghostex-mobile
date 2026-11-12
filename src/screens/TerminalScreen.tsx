@@ -75,6 +75,7 @@ import TerminalMenu, { type TerminalMenuActionId } from '../components/terminal/
 import TerminalSkillsMenu from '../components/terminal/TerminalSkillsMenu';
 import TerminalStateOverlay from '../components/terminal/TerminalStateOverlay';
 import TerminalTabsBar, { MIN_TAB_WIDTH } from '../components/terminal/TerminalTabsBar';
+import { ChatDropZone, TabDragOverlay, useTabDrag, type TabDropRequest } from '../components/terminal/tabDrag/TabDrag';
 import TerminalTextEditor, { TEXT_EDITOR_HEIGHT } from '../components/terminal/TerminalTextEditor';
 import {
   ChatBubbleIcon,
@@ -118,7 +119,7 @@ import { acknowledgeSessionAttention } from '../terminal/attention';
 import { useTerminalStore, type TerminalTab } from '../terminal/sessions';
 import { setChatGridSessionKey } from '../terminal/chatGridClaim';
 import { setMountedSessionKeys } from '../terminal/zmxDisplay';
-import { GhostexPalette } from '../theme/palette';
+import { colorWithOpacity, GhostexPalette } from '../theme/palette';
 import { useStatusBarStyle } from '../theme/statusBar';
 import { terminalChrome } from '../theme/terminalColours';
 import { useTerminalColours } from '../theme/useTerminalColours';
@@ -148,6 +149,8 @@ import {
   type ExportedTranscript,
 } from './terminal-screen/session-lookups';
 import { styles } from './terminal-screen/styles';
+import { SplitChatPanes, SplitPaneChat, SplitTabsHeader } from './terminal-screen/SplitTabs';
+import { splitView, splitWindow } from '../terminal/tabSplit';
 import { useTerminalAgentActions } from './terminal-screen/use-agent-actions';
 import { boxMachineRecord, useCloudBoxesStore } from '../cloudBoxes/store';
 import { boxIdOfMachine } from '../cloudBoxes/types';
@@ -375,8 +378,31 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const setPaneChat = panes.setChatSession;
   // The session pane showing its chat view (one at most, the panes' own choice, never saved), or null.
   const paneChatKey = twoPanes === null ? null : panes.chatSessionKey;
-  // The selected session shows its chat view: with two panes in its pane, with one as its saved view says.
-  const chatModeActive = twoPanes === null ? savedChatMode : activeTab !== null && paneChatKey === activeTab.sessionKey;
+  // The chat's tabs side by side (`tabSplit.ts`): a wide window (the unfolded foldable, a tablet, the two-column
+  // breakpoint) with the header on top and none of the iPhone Duo's panes. Each side shows its tab's chat; a narrower
+  // window shows one bar and keeps the split for when it is wide again.
+  const tabSplit = useTerminalStore((state) => state.tabSplit);
+  const splitWide =
+    headerPlacement.kind === 'top' &&
+    !panesAvailable &&
+    twoPanes === null &&
+    splitWindow(windowWidth, insets.left, insets.right);
+  const sideBySide = useMemo(
+    () =>
+      splitWide
+        ? splitView(
+            tabs.map((tab) => tab.sessionKey),
+            selectedSessionKey,
+            tabSplit,
+          )
+        : null,
+    [splitWide, tabs, selectedSessionKey, tabSplit],
+  );
+  // The selected session shows its chat view: side by side always, with two panes in its pane, with one as its saved
+  // view says.
+  const chatModeActive =
+    sideBySide !== null ||
+    (twoPanes === null ? savedChatMode : activeTab !== null && paneChatKey === activeTab.sessionKey);
   // The chat on screen: the one in a pane, else the selected session's (mounted hidden while its terminal shows).
   const chatTab = paneChatKey === null ? activeTab : (tabs.find((tab) => tab.sessionKey === paneChatKey) ?? null);
   const chatProjectId = useInventoryStore((state) =>
@@ -914,6 +940,52 @@ export default function TerminalScreen({ navigation, route }: Props) {
     [selectTab],
   );
 
+  const closeTabByKey = useCallback(
+    (sessionKey: string): void => {
+      const tab = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === sessionKey);
+      if (tab !== undefined) requestCloseTab(tab);
+    },
+    [requestCloseTab],
+  );
+
+  // A held tab let go over a bar or the chat (`useTabDrag` in tabDrag/TabDrag.tsx): reordered, moved to the other side, or opened
+  // beside the rest. Only a chat view goes side by side, so a drop on the chat's right half is offered for a tab with
+  // one, while the screen shows the chat, on a wide window with one bar.
+  const canSplitTab = useCallback(
+    (sessionKey: string): boolean => {
+      if (!splitWide || sideBySide !== null || !chatModeActive) return false;
+      const store = useTerminalStore.getState();
+      if (store.tabs.length < 2) return false;
+      const tab = store.tabs.find((entry) => entry.sessionKey === sessionKey) ?? null;
+      return tabChatCapable(
+        tab,
+        tab === null ? undefined : useInventoryStore.getState().inventoriesByMachineId[tab.machineId]?.summary,
+      );
+    },
+    [splitWide, sideBySide, chatModeActive],
+  );
+  const handleTabDrop = useCallback((request: TabDropRequest): void => {
+    const store = useTerminalStore.getState();
+    if (request.kind === 'split') store.splitTab(request.key);
+    else if (request.kind === 'side') store.moveTab(request.key, { bar: request.side, index: Number.MAX_SAFE_INTEGER });
+    // The only bar while a split is kept for a wide window: places in the order both sides make.
+    else store.moveTab(request.key, { bar: request.bar, index: request.index });
+  }, []);
+  const tabDrag = useTabDrag({ canSplit: canSplitTab, onDrop: handleTabDrop });
+  // The split's handle: one bar again, the selected tab kept.
+  const mergeTabs = useCallback((): void => useTerminalStore.getState().mergeTabs(), []);
+  // A side's chat asks for its terminal: that needs the whole screen, so the sides merge first.
+  const showSplitTabTerminal = useCallback((sessionKey: string): void => {
+    const store = useTerminalStore.getState();
+    store.mergeTabs();
+    store.selectTab(sessionKey);
+    store.setSessionViewMode(sessionKey, 'terminal');
+  }, []);
+  // A touch in a side's chat: that side's tab is the selected one, quietly (no tap, the chat keeps its place).
+  const focusSplitTab = useCallback((sessionKey: string): void => {
+    useTerminalStore.getState().selectTab(sessionKey, { scrollToBottom: false });
+  }, []);
+
   const switchTabBy = useCallback((delta: -1 | 1): void => {
     const store = useTerminalStore.getState();
     const index = store.tabs.findIndex((tab) => tab.sessionKey === store.selectedSessionKey);
@@ -1441,16 +1513,27 @@ export default function TerminalScreen({ navigation, route }: Props) {
         {/* Android's own Back (gesture and button) goes back to Sessions (`BackHandler` above): no arrow there. The
             iPhone has no system Back, so it keeps the arrow. */}
         {inRail || Platform.OS === 'android' ? null : backButton(styles.headerButton)}
-        <TerminalTabsBar
-          headerColor={surfaceBackground}
-          tabs={tabs}
-          selectedSessionKey={selectedSessionKey}
-          onSelect={handleSelectTab}
-          onClose={(sessionKey) => {
-            const tab = tabs.find((entry) => entry.sessionKey === sessionKey);
-            if (tab !== undefined) requestCloseTab(tab);
-          }}
-        />
+        {sideBySide !== null ? (
+          <SplitTabsHeader
+            tabs={tabs}
+            view={sideBySide}
+            headerColor={surfaceBackground}
+            onSelect={handleSelectTab}
+            onClose={closeTabByKey}
+            onMerge={mergeTabs}
+            drag={tabDrag}
+          />
+        ) : (
+          <TerminalTabsBar
+            headerColor={surfaceBackground}
+            tabs={tabs}
+            selectedSessionKey={selectedSessionKey}
+            onSelect={handleSelectTab}
+            onClose={closeTabByKey}
+            drag={tabDrag}
+            dragBar="single"
+          />
+        )}
         {inRail || tabsOnlyHeader ? null : headerButtons(styles.headerButton)}
       </View>
       {activeBoxEntry !== null ? (
@@ -1479,6 +1562,32 @@ export default function TerminalScreen({ navigation, route }: Props) {
         style={slidesWithKeyboard ? [styles.terminalArea, styles.terminalAreaSliding] : styles.terminalArea}
         onLayout={onTerminalAreaLayout}
       >
+        {sideBySide === null ? <ChatDropZone drag={tabDrag} id="chat" /> : null}
+        {sideBySide !== null ? (
+          <SplitChatPanes
+            drag={tabDrag}
+            tabs={tabs}
+            view={sideBySide}
+            dividerColor={colorWithOpacity(terminalChrome(surfaceBackground).ink, 14)}
+            onFocus={focusSplitTab}
+            renderPane={(tab, side) => (
+              <SplitPaneChat
+                tab={tab}
+                focused={sideBySide.focus === side}
+                sideKeys={side === 'left' ? sideBySide.left : sideBySide.right}
+                onSelect={handleSelectTab}
+                hostActions={activeChatHostActions}
+                onHostAction={chatHostActionFor(chatMachineTarget, activeProjectId)}
+                openSearchRequestId={chatSearchRequestId}
+                openSessionNoteRequestId={chatSessionNoteRequestId}
+                onQueueCountChange={handleChatQueueCount}
+                onOpenLinks={() => setLinksSheetVisible(true)}
+                onSwitchToTerminal={showSplitTabTerminal}
+                textColor={terminalChrome(surfaceBackground).foreground}
+              />
+            )}
+          />
+        ) : null}
         {activeTab !== null && !chatModeActive && twoPanes === null ? (
           isDemoMachineId(activeTab.machineId) ? (
             <DemoTerminalView sessionId={activeTab.ghostexSessionId ?? activeTab.sessionKey} style={styles.terminal} />
@@ -1531,7 +1640,10 @@ export default function TerminalScreen({ navigation, route }: Props) {
             onRatio={panes.setRatio}
           />
         ) : null}
-        {activeTab !== null && chatMachineTarget !== null && activeTab.sessionKey !== paneChatKey ? (
+        {activeTab !== null &&
+        chatMachineTarget !== null &&
+        activeTab.sessionKey !== paneChatKey &&
+        sideBySide === null ? (
           /*
            * Keep the selected session's chat screen mounted while terminal mode
            * is visible. Its first transcript read warms in advance, and while
@@ -1573,7 +1685,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             contentBottom={foldAboveAreaBottom}
           />
         )}
-        {twoPanes === null ? queuedPill : null}
+        {twoPanes === null && sideBySide === null ? queuedPill : null}
         {/* With two panes the screen's edges are their title bars' and contents': no edge swipe there. The chat view
             swipes on its transcript instead (`chatTabSwipe`), clear of the edges. */}
         {twoPanes === null && !chatModeActive && tabs.length > 1 && (
@@ -1622,6 +1734,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           />
         )}
       </View>
+      <TabDragOverlay drag={tabDrag} headerColor={surfaceBackground} />
       {/*
         The pad's room (`padRoom`): the terminal area within the window's safe area across, and the header above it
         while the open pad needs that (`padReach`); in the laptop pose the upper half, reaching below the fold while

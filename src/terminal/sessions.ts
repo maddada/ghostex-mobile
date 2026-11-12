@@ -21,6 +21,16 @@ import { ensureConnected } from '../inventory/client';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { useSettingsStore, type PreferredAgentInterface } from '../settings/store';
+import {
+  moveTab,
+  openSplit,
+  splitOrder,
+  splitSuccessor,
+  splitView,
+  syncSplit,
+  type TabDrop,
+  type TabSplit,
+} from './tabSplit';
 import { warmPoolOverBudget } from './warmBudget';
 import { forgetAttach, noteAttachOpened } from './zmxDisplay';
 import { isDemoMachineId } from '../demo/identity';
@@ -146,6 +156,11 @@ type TerminalState = {
    * the selection.
    */
   paneSessionKey: string | null;
+  /**
+   * The chat's tabs side by side (`tabSplit.ts`): which tabs are on the right side and what each side shows; null while
+   * they are on one side. Kept in step with the tabs and the selection by the store's own subscription below.
+   */
+  tabSplit: TabSplit | null;
   /** LRU of warm native entries, most recently used last. */
   warmOrder: string[];
   /** Per-session font size overrides, persisted. */
@@ -193,6 +208,12 @@ type TerminalState = {
   /** `scrollToBottom: false` keeps the terminal where it is scrolled (a pane already on screen taking the focus). */
   selectTab: (sessionKey: string, options?: { scrollToBottom?: boolean }) => void;
   setPaneSessionKey: (sessionKey: string | null) => void;
+  /** A held tab dropped in a tab bar: its new place, on that bar's side (`moveTab` in tabSplit.ts). */
+  moveTab: (sessionKey: string, drop: TabDrop) => void;
+  /** A held tab dropped on the chat's right half: it opens on a new right side, selected. */
+  splitTab: (sessionKey: string) => void;
+  /** The split's handle: every tab back in one bar, in the order the two bars showed them. */
+  mergeTabs: () => void;
   /** Close a tab and its warm native entry. */
   closeTab: (sessionKey: string) => Promise<void>;
   /** Kill/sleep actions must also drop the warm surface for that session. */
@@ -253,8 +274,15 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     const rowsOf = (key: string): number =>
       warmScrollbackRows.get(key) ?? useSettingsStore.getState().settings.scrollbackRows;
     while (warmPoolOverBudget(get().warmOrder.map(rowsOf), MAX_WARM_SESSIONS)) {
-      const { warmOrder, selectedSessionKey, paneSessionKey } = get();
-      const offScreen = warmOrder.find((key) => key !== selectedSessionKey && key !== paneSessionKey);
+      const { warmOrder, selectedSessionKey, paneSessionKey, tabs, tabSplit } = get();
+      // With the tabs side by side, the other side's tab is on screen too.
+      const split = splitView(
+        tabs.map((tab) => tab.sessionKey),
+        selectedSessionKey,
+        tabSplit,
+      );
+      const beside = split === null ? null : split.focus === 'left' ? split.rightShown : split.leftShown;
+      const offScreen = warmOrder.find((key) => key !== selectedSessionKey && key !== paneSessionKey && key !== beside);
       // Only the two terminals on screen are left: like a single one (warmBudget.ts), neither is closed to make room.
       if (offScreen === undefined && paneSessionKey !== null) break;
       const victim = offScreen ?? warmOrder[0];
@@ -267,8 +295,14 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     let { selectedSessionKey, paneSessionKey } = get();
     if (paneSessionKey === sessionKey) paneSessionKey = null;
     if (selectedSessionKey === sessionKey) {
-      // The pane beside the closed one stays on screen and takes the selection; otherwise the last tab, as before.
-      selectedSessionKey = paneSessionKey ?? (tabs.length > 0 ? tabs[tabs.length - 1].sessionKey : null);
+      // The pane beside the closed one stays on screen and takes the selection; with the tabs side by side, the
+      // closed tab's neighbour on its side (else the other side's tab); otherwise the last tab, as before.
+      const successor = splitSuccessor(
+        get().tabs.map((tab) => tab.sessionKey),
+        get().tabSplit,
+        sessionKey,
+      );
+      selectedSessionKey = paneSessionKey ?? successor ?? (tabs.length > 0 ? tabs[tabs.length - 1].sessionKey : null);
       paneSessionKey = null;
     }
     set({ tabs, selectedSessionKey, paneSessionKey });
@@ -336,6 +370,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     tabs: [],
     selectedSessionKey: null,
     paneSessionKey: null,
+    tabSplit: null,
     warmOrder: [],
     fontSizeBySessionKey: {},
     sessionViewModeBySessionKey: {},
@@ -506,6 +541,59 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       if (get().paneSessionKey !== paneSessionKey) set({ paneSessionKey });
     },
 
+    moveTab: (sessionKey, drop) => {
+      const { tabs, tabSplit, selectedSessionKey } = get();
+      const moved = moveTab(
+        tabs.map((tab) => tab.sessionKey),
+        tabSplit,
+        sessionKey,
+        drop,
+      );
+      const byKey = new Map(tabs.map((tab) => [tab.sessionKey, tab]));
+      const fromRight = tabSplit?.right.includes(sessionKey) === true;
+      const toRight = moved.split?.right.includes(sessionKey) === true;
+      set({
+        tabs: moved.keys.map((key) => byKey.get(key)).filter((tab): tab is TerminalTab => tab !== undefined),
+        tabSplit: moved.split,
+        // A tab dropped in the other side's bar is what the user is looking at there; in the only bar (a narrow
+        // window keeping a split) the selection stays.
+        selectedSessionKey:
+          moved.split !== null && drop.bar !== 'single' && fromRight !== toRight ? sessionKey : selectedSessionKey,
+      });
+    },
+
+    splitTab: (sessionKey) => {
+      const { tabs, selectedSessionKey } = get();
+      const opened = openSplit(
+        tabs.map((tab) => tab.sessionKey),
+        selectedSessionKey,
+        sessionKey,
+      );
+      if (opened === null) return;
+      const byKey = new Map(tabs.map((tab) => [tab.sessionKey, tab]));
+      set({
+        tabs: opened.keys.map((key) => byKey.get(key)).filter((tab): tab is TerminalTab => tab !== undefined),
+        tabSplit: opened.split,
+        selectedSessionKey: sessionKey,
+      });
+      touchWarm(sessionKey);
+    },
+
+    mergeTabs: () => {
+      const { tabs, tabSplit } = get();
+      if (tabSplit === null) return;
+      const byKey = new Map(tabs.map((tab) => [tab.sessionKey, tab]));
+      set({
+        tabs: splitOrder(
+          tabs.map((tab) => tab.sessionKey),
+          tabSplit,
+        )
+          .map((key) => byKey.get(key))
+          .filter((tab): tab is TerminalTab => tab !== undefined),
+        tabSplit: null,
+      });
+    },
+
     closeTab: async (sessionKey) => {
       cancelZmxRefresh(sessionKey);
       zmxRefreshSent.delete(sessionKey);
@@ -646,6 +734,26 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       set({ textEditorDraftBySessionKey: text.length === 0 ? others : { ...others, [sessionKey]: text } });
     },
   };
+});
+
+/*
+ * The split follows the tabs and the selection: a closed tab leaves it, a side without tabs ends it, the selected tab
+ * is what its side shows, and the tab list stays in the order the two bars show (a tab opened meanwhile joins the left
+ * side's end). Each write reaches a state this leaves alone, so it settles after one more call.
+ */
+useTerminalStore.subscribe((state) => {
+  const keys = state.tabs.map((tab) => tab.sessionKey);
+  const tabSplit = syncSplit(keys, state.selectedSessionKey, state.tabSplit);
+  const order = tabSplit === null ? keys : splitOrder(keys, tabSplit);
+  const reordered = order.some((key, index) => key !== keys[index]);
+  if (tabSplit === state.tabSplit && !reordered) return;
+  const byKey = new Map(state.tabs.map((tab) => [tab.sessionKey, tab]));
+  useTerminalStore.setState({
+    tabSplit,
+    ...(reordered
+      ? { tabs: order.map((key) => byKey.get(key)).filter((tab): tab is TerminalTab => tab !== undefined) }
+      : {}),
+  });
 });
 
 const restoring = new Map<string, Promise<void>>();
