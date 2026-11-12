@@ -1,7 +1,7 @@
 /**
  * The one line on top of Sessions after pairing (the user's pick, Q2189): "Connected to <computer> · 7 sessions,
  * 2 working" once the new computer's first list arrives. While it connects, and when it can't be reached, the
- * floating MachineNotice says so instead; this line shows only success, then leaves by itself or on its ×.
+ * machine notice line above the search row says so instead; this line shows only success, then leaves by itself or on its ×.
  */
 
 import { useEffect } from 'react';

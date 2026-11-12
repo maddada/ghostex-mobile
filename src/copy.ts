@@ -405,12 +405,16 @@ export const StateCardCopy = {
     title: 'Connection needs attention',
     fallbackBody: 'Could not connect to the selected machine.',
     actionHint: 'Use Retry, Tailscale, Setup, or switch machines above.',
-    refreshFailedStatus: (message: string) => `Session refresh failed: ${message}`,
   },
   empty: {
     title: 'No sessions yet',
     body: 'The computer is connected and has no active sessions.',
     actionHint: 'Start or resume sessions in Ghostex on the remote machine, then tap Retry.',
+  },
+  /** Active projects with nothing in it (src/spaces/activeProjects.ts). */
+  activeProjectsEmpty: {
+    title: 'Nothing active right now',
+    body: 'A project shows here while an agent works or waits in it, and for 8 hours after you last used it.',
   },
   success: {
     status: (label: string) => `Connected to ${label}`,
@@ -700,22 +704,31 @@ export const StripCopy = {
 } as const;
 
 /**
- * The notice floating over the top of a machine's session list while it is not connected. The
- * titles are gx-core's `machine_state_copy` (packages/gx-core/src/sidebar_view/machine_connection.rs),
- * so the phone and the desktop sidebar say the same thing about one machine.
+ * The Sessions screen's one line about a computer that is not connected, in the status row above the
+ * search row (src/components/sessions/machineNotice.ts holds the rule). Short enough to read whole on
+ * a phone; a tap opens the full reason with Retry. The wording follows gx-core's `machine_state_copy`
+ * (packages/gx-core/src/sidebar_view/machine_connection.rs), with the computer named.
  */
 export const MachineNoticeCopy = {
   connecting: (name: string) => `Connecting to ${name}…`,
-  cannotReach: 'Cannot reach machine',
-  cannotSignIn: 'Cannot sign in to machine',
-  setupNeeded: 'Remote setup needed',
-  reconnecting: 'Reconnecting to machine…',
-  reconnect: 'Reconnect',
+  cannotReach: (name: string) => `Can't reach ${name}`,
+  cannotSignIn: (name: string) => `Can't sign in to ${name}`,
+  setupNeeded: (name: string) => `${name} needs remote setup`,
+  reconnecting: (name: string) => `Waiting for Ghostex on ${name}`,
+  /** Unified, more than one computer not connected. */
+  several: (count: number) => `${count} computers aren't connected`,
+  /** After the title while the list is the copy read before the failure. */
+  staleShort: (ago: string) => `list from ${ago}`,
+  staleLong: (ago: string) => `Showing the list from ${ago}.`,
+  justNow: 'a moment ago',
+  minutesAgo: (minutes: number) => `${minutes} min ago`,
+  hoursAgo: (hours: number) => `${hours} h ago`,
+  daysAgo: (days: number) => `${days} d ago`,
+  retry: 'Retry',
   remoteSettings: 'Remote Settings',
-  /** The ×: shrinks the card to its one-line pill. */
-  shrink: 'Shrink',
-  /** The shrunk pill's hint: a tap opens the card again. */
-  expandHint: 'Shows the reason and the Reconnect and Remote Settings buttons',
+  logs: 'Logs',
+  /** The line's hint while a failure shows: a tap opens or closes the details. */
+  detailsHint: 'Shows the full reason, Retry and Remote Settings',
 } as const;
 
 /** Machines list (docs/2026-09-03/mobile-setup/mobile-07-machines.html). */

@@ -136,9 +136,8 @@ import {
   WallCopy,
 } from '../copy';
 import JustPairedLine from './sessions-screen/JustPairedLine';
-import MachineNotice from './sessions-screen/MachineNotice';
-import { machineNotice } from '../components/sessions/machineNotice';
-import type { FailureReasonCode } from '../inventory/client';
+import { MachineNoticeDetails, MachineNoticeLine, useNoticeClock } from './sessions-screen/MachineNotice';
+import { machineNotice, machineShortName } from '../components/sessions/machineNotice';
 import { renameInitialTitle } from '../sessions/sessionCommands';
 import { useInventoryStore } from '../inventory/store';
 import {
@@ -192,7 +191,7 @@ import {
 import { useSessionsScreenActions } from './sessions-screen/use-sessions-screen-actions';
 import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-menus';
 import { makeSnoozeSession, useUnifiedList } from './sessions-screen/use-unified-list';
-import { machineTabsVisible, noticeMachineId } from './sessions-screen/machineStripPolicy';
+import { machineTabsVisible } from './sessions-screen/machineStripPolicy';
 import { useListInventories } from '../cloudBoxes/listInventories';
 import { cloudBoxRowMenu } from '../cloudBoxes/rowMenu';
 import { cloudWhereItems, useCloudWhere } from '../cloudBoxes/whereMenu';
@@ -640,20 +639,6 @@ export default function SessionsScreen({ navigation }: Props) {
     [machineTabs],
   );
 
-  /** Per machine, the failure the user shrank to its pill with the card's ×. */
-  const [shrunkNotices, setShrunkNotices] = useState<Readonly<Record<string, FailureReasonCode>>>({});
-  // A shrink holds for that failure only: once the machine loads again or fails for another
-  // reason, the next failure opens the full card (gx-core `retain_machine_notice_collapses`).
-  useEffect(() => {
-    setShrunkNotices((current) => {
-      const kept = Object.entries(current).filter(
-        ([machineId, failureKey]) =>
-          inventoriesByMachineId[machineId]?.lastError != null &&
-          (inventoriesByMachineId[machineId]?.lastErrorCode ?? 'unknown') === failureKey,
-      );
-      return kept.length === Object.keys(current).length ? current : Object.fromEntries(kept);
-    });
-  }, [inventoriesByMachineId]);
   const recentProjects = recentProjectsWithoutGbots(selectedInventory?.summary);
 
   // -------------------------------------------------------------------------
@@ -742,23 +727,25 @@ export default function SessionsScreen({ navigation }: Props) {
   const notices = machines.flatMap((entry) => {
     const tab = machineTabs.find((item): item is MachineTabItem => !('kind' in item) && item.id === entry.id);
     const notice = machineNotice(
-      machineDisplayLabel(entry),
+      machineShortName(entry),
       inventoriesByMachineId[entry.id],
       tab?.connectionState ?? 'disconnected',
     );
     return notice === null ? [] : [{ machineId: entry.id, notice }];
   });
-  const noticeId = noticeMachineId(
-    unified.on,
-    machine?.id ?? null,
-    notices.map(({ machineId, notice }) => ({ machineId, kind: notice.kind })),
-  );
-  const noticeTarget = noticeId === null ? null : machineById(noticeId);
-  const selectedNotice = notices.find(({ machineId }) => machineId === noticeId)?.notice ?? null;
+  // Unified speaks for every computer, a computer tab for its own (machineNotice.ts).
+  const shownNotices = unified.on ? notices : notices.filter(({ machineId }) => machineId === machine?.id);
+  const noticeFailing = shownNotices.some(({ notice }) => notice.kind === 'failure');
+  const noticeNow = useNoticeClock(noticeFailing);
+  // The details a tap on the failure line opens; they close by themselves once nothing fails.
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  useEffect(() => {
+    if (!noticeFailing) setNoticeOpen(false);
+  }, [noticeFailing]);
   const statusLine = drawerStatusLine(
     machine === null ? null : machineDisplayLabel(machine),
     selectedInventory,
-    unified.on ? null : selectedNotice,
+    shownNotices[0]?.notice ?? null,
   );
   useWallPreviews(tilesShown && isFocused, unified.on ? unified.wallTargets : classicWallTargets);
 
@@ -1189,7 +1176,7 @@ export default function SessionsScreen({ navigation }: Props) {
       summary={inventoriesByMachineId[block.machineId]?.summary ?? null}
       voiceCallSessionKey={voiceCallSessionKey}
       primaryAgent={resolvePrimaryAgent}
-      // The floating MachineNotice over the list says these two.
+      // The machine notice's line above the search row says these two.
       hideStateCard={(item) =>
         (item.variant === 'failure' || item.variant === 'connecting') && machineById(block.machineId) !== null
       }
@@ -1416,17 +1403,29 @@ export default function SessionsScreen({ navigation }: Props) {
         </View>
       ) : null}
       <View style={styles.statusRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Show logs"
-          hitSlop={8}
-          style={styles.statusPressable}
-          onPress={() => setOverlay({ kind: 'logs' })}
-        >
-          <Text style={[styles.statusLine, { color: sidebarAppearance.muted }]} numberOfLines={1} ellipsizeMode="tail">
-            {statusLine}
-          </Text>
-        </Pressable>
+        {shownNotices.length > 0 ? (
+          <View style={styles.statusPressable}>
+            <MachineNoticeLine
+              entries={shownNotices}
+              now={noticeNow}
+              open={noticeOpen}
+              appearance={sidebarAppearance}
+              onToggle={() => setNoticeOpen((current) => !current)}
+            />
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show logs"
+            hitSlop={8}
+            style={styles.statusPressable}
+            onPress={() => setOverlay({ kind: 'logs' })}
+          >
+            <Text style={[styles.statusLine, { color: sidebarAppearance.muted }]} numberOfLines={1} ellipsizeMode="tail">
+              {statusLine}
+            </Text>
+          </Pressable>
+        )}
         {tailscaleApplies && tailscaleConnected === true ? (
           <Pressable
             accessibilityRole="button"
@@ -1439,6 +1438,19 @@ export default function SessionsScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
       </View>
+      {noticeOpen ? (
+        <MachineNoticeDetails
+          entries={shownNotices}
+          now={noticeNow}
+          appearance={sidebarAppearance}
+          onRetry={(machineId) => {
+            const target = machineById(machineId);
+            if (target !== null) retryMachineWithStatus(target);
+          }}
+          onRemoteSettings={(machineId) => navigation.navigate('MachineForm', { machineId })}
+          onLogs={() => setOverlay({ kind: 'logs' })}
+        />
+      ) : null}
       {/*
         A machine with no Spaces has nothing to switch between — Other alone
         would be every project — so the row appears only once it has one.
@@ -1563,30 +1575,6 @@ export default function SessionsScreen({ navigation }: Props) {
             ),
           }}
         />
-        {noticeTarget !== null && selectedNotice !== null ? (
-          <MachineNotice
-            notice={
-              unified.on && selectedNotice.kind === 'failure'
-                ? { ...selectedNotice, title: `${machineDisplayLabel(noticeTarget)}: ${selectedNotice.title}` }
-                : selectedNotice
-            }
-            collapsed={
-              selectedNotice.kind === 'failure' && shrunkNotices[noticeTarget.id] === selectedNotice.failureKey
-            }
-            appearance={sidebarAppearance}
-            onShrink={() => {
-              if (selectedNotice.kind !== 'failure') return;
-              setShrunkNotices((current) => ({ ...current, [noticeTarget.id]: selectedNotice.failureKey }));
-            }}
-            onExpand={() =>
-              setShrunkNotices((current) =>
-                Object.fromEntries(Object.entries(current).filter(([id]) => id !== noticeTarget.id)),
-              )
-            }
-            onReconnect={() => retryMachineWithStatus(noticeTarget)}
-            onRemoteSettings={() => navigation.navigate('MachineForm', { machineId: noticeTarget.id })}
-          />
-        ) : null}
         <NoticeToast notice={notice} bottom={12} />
       </View>
       {/*

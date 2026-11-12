@@ -1,145 +1,151 @@
 /**
- * The notice floating over the top of the Sessions list while its machine is not connected
- * (`machineNotice` in src/components/sessions/machineNotice.ts holds the rule): the connecting
- * pill, the failure card with its × and buttons, or the failure shrunk to a pill that a tap opens
- * again. It is absolutely positioned over the list so the rows never move; only the card and the
- * pill take touches, the space beside the pill passes them to the list.
+ * The Sessions screen's line about a computer that is not connected, and the details its tap opens
+ * (`machineNotice` and `noticeLine` in src/components/sessions/machineNotice.ts hold the rule). Both
+ * sit in the screen's flow above the search row: the line in the status row, the details right under
+ * it, so the list moves down for them and nothing ever covers its rows.
  */
 
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { RefreshGlyph, SettingsGlyph, XGlyph } from '../../components/sessions/icons';
-import type { MachineNotice as MachineNoticeModel } from '../../components/sessions/machineNotice';
+import { RefreshGlyph, SettingsGlyph } from '../../components/sessions/icons';
+import { agoText, noticeLine, type NoticeEntry } from '../../components/sessions/machineNotice';
 import { SpinningLoader } from '../../components/sessions/MachineTabs';
 import { WarningTriangleIcon } from '../../components/terminal/icons';
 import { MachineNoticeCopy } from '../../copy';
 import type { SidebarAppearance } from '../../theme/sidebarAppearance';
 import { SetupPalette } from '../../theme/palette';
 
-export default function MachineNotice({
-  notice,
-  collapsed,
+/** The clock the "list from 2 min ago" part reads; ticks only while it is shown. */
+export function useNoticeClock(ticking: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ticking) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  return now;
+}
+
+/** The status row's text while a computer is connecting or failing; null when there is nothing to say. */
+export function MachineNoticeLine({
+  entries,
+  now,
+  open,
   appearance,
-  onShrink,
-  onExpand,
-  onReconnect,
-  onRemoteSettings,
+  onToggle,
 }: {
-  notice: MachineNoticeModel;
-  /** The user shrank this failure to its pill. */
-  collapsed: boolean;
+  entries: readonly NoticeEntry[];
+  now: number;
+  open: boolean;
   appearance: SidebarAppearance;
-  onShrink: () => void;
-  onExpand: () => void;
-  onReconnect: () => void;
-  onRemoteSettings: () => void;
+  onToggle: () => void;
 }) {
-  const surface = { backgroundColor: appearance.card, borderColor: appearance.border };
-  if (notice.kind === 'connecting') {
+  const line = noticeLine(entries, now);
+  if (line === null) return null;
+  if (line.kind === 'connecting') {
     return (
-      <View pointerEvents="box-none" style={styles.pillRow}>
-        <View accessibilityLiveRegion="polite" style={[styles.pill, surface]}>
-          <SpinningLoader color={appearance.mutedGlyph} size={13} />
-          <Text numberOfLines={1} style={[styles.pillText, { color: appearance.muted }]}>
-            {notice.title}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-  if (collapsed) {
-    return (
-      <View pointerEvents="box-none" style={styles.pillRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={notice.title}
-          accessibilityHint={MachineNoticeCopy.expandHint}
-          onPress={onExpand}
-          style={({ pressed }) => [styles.pill, surface, pressed ? styles.pressed : null]}
-        >
-          <WarningTriangleIcon size={13} color={SetupPalette.ERROR} />
-          <Text numberOfLines={1} style={[styles.pillText, styles.pillTitle, { color: appearance.foreground }]}>
-            {notice.title}
-          </Text>
-        </Pressable>
+      <View accessibilityLiveRegion="polite" style={styles.line}>
+        <SpinningLoader color={appearance.mutedGlyph} size={12} />
+        <Text numberOfLines={1} style={[styles.lineText, { color: appearance.muted }]}>
+          {line.text}
+        </Text>
       </View>
     );
   }
   return (
-    <View accessibilityLiveRegion="polite" style={[styles.card, surface]}>
-      <View style={styles.header}>
-        <WarningTriangleIcon size={14} color={SetupPalette.ERROR} />
-        <Text style={[styles.title, { color: appearance.foreground }]}>{notice.title}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={MachineNoticeCopy.shrink}
-          hitSlop={10}
-          onPress={onShrink}
-          style={({ pressed }) => [styles.close, pressed ? styles.pressed : null]}
-        >
-          <XGlyph size={14} color={appearance.mutedGlyph} />
-        </Pressable>
-      </View>
-      <Text style={[styles.reason, { color: appearance.muted }]}>{notice.reason}</Text>
-      <View style={styles.actions}>
-        <SetupButton
-          small
-          variant="primary"
-          busy={notice.retrying}
-          label={MachineNoticeCopy.reconnect}
-          icon={<RefreshGlyph size={13} color={SetupPalette.PRIMARY_BUTTON_FOREGROUND} />}
-          onPress={onReconnect}
-        />
-        <SetupButton
-          small
-          variant="secondary"
-          label={MachineNoticeCopy.remoteSettings}
-          icon={<SettingsGlyph size={13} color={SetupPalette.FOREGROUND} />}
-          onPress={onRemoteSettings}
-        />
-      </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={line.text}
+      accessibilityHint={MachineNoticeCopy.detailsHint}
+      accessibilityState={{ expanded: open }}
+      accessibilityLiveRegion="polite"
+      hitSlop={8}
+      onPress={onToggle}
+      style={({ pressed }) => [styles.line, pressed ? styles.pressed : null]}
+    >
+      <WarningTriangleIcon size={13} color={SetupPalette.ERROR} />
+      <Text numberOfLines={1} style={[styles.lineText, styles.failureText, { color: appearance.foreground }]}>
+        {line.text}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** What the line's tap opens: per failing computer, the full reason, how old the list is, and its buttons. */
+export function MachineNoticeDetails({
+  entries,
+  now,
+  appearance,
+  onRetry,
+  onRemoteSettings,
+  onLogs,
+}: {
+  entries: readonly NoticeEntry[];
+  now: number;
+  appearance: SidebarAppearance;
+  onRetry: (machineId: string) => void;
+  onRemoteSettings: (machineId: string) => void;
+  onLogs: () => void;
+}) {
+  const failures = entries.flatMap(({ machineId, notice }) =>
+    notice.kind === 'failure' ? [{ machineId, notice }] : [],
+  );
+  if (failures.length === 0) return null;
+  return (
+    <View style={[styles.card, { backgroundColor: appearance.card, borderColor: appearance.border }]}>
+      {failures.map(({ machineId, notice }, index) => (
+        <View key={machineId} style={index > 0 ? [styles.next, { borderTopColor: appearance.border }] : null}>
+          {failures.length > 1 ? (
+            <Text style={[styles.title, { color: appearance.foreground }]}>{notice.title}</Text>
+          ) : null}
+          <Text selectable style={[styles.reason, { color: appearance.muted }]}>
+            {notice.reason}
+            {notice.staleSince === null ? '' : ` ${MachineNoticeCopy.staleLong(agoText(notice.staleSince, now))}`}
+          </Text>
+          <View style={styles.actions}>
+            <SetupButton
+              small
+              variant="primary"
+              busy={notice.retrying}
+              label={MachineNoticeCopy.retry}
+              icon={<RefreshGlyph size={13} color={SetupPalette.PRIMARY_BUTTON_FOREGROUND} />}
+              onPress={() => onRetry(machineId)}
+            />
+            <SetupButton
+              small
+              variant="secondary"
+              label={MachineNoticeCopy.remoteSettings}
+              icon={<SettingsGlyph size={13} color={SetupPalette.FOREGROUND} />}
+              onPress={() => onRemoteSettings(machineId)}
+            />
+            {index === failures.length - 1 ? (
+              <SetupButton small variant="secondary" label={MachineNoticeCopy.logs} onPress={onLogs} />
+            ) : null}
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pillRow: {
-    position: 'absolute',
-    top: 6,
-    left: 12,
-    right: 12,
-    alignItems: 'center',
-  },
-  pill: {
-    maxWidth: '100%',
-    height: 32,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    elevation: 4,
-  },
-  pillText: { fontSize: 13, flexShrink: 1 },
-  pillTitle: { fontWeight: '600' },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, minWidth: 0 },
+  lineText: { fontSize: 12, flexShrink: 1 },
+  failureText: { fontSize: 13, fontWeight: '600' },
   card: {
-    position: 'absolute',
-    top: 6,
-    left: 8,
-    right: 8,
+    marginTop: 8,
+    marginHorizontal: 12,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    elevation: 6,
   },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 14, fontWeight: '600' },
-  close: { width: 26, height: 26, marginRight: -4, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
-  reason: { fontSize: 13, lineHeight: 18, marginTop: 2, paddingLeft: 22 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10, paddingLeft: 22 },
+  next: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  title: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  reason: { fontSize: 13, lineHeight: 18 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   pressed: { opacity: 0.6 },
 });

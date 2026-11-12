@@ -12,9 +12,9 @@ import type { MachineNotice } from './machineNotice';
  *
  * CDXC:RemoteMachines 2026-10-28 DECISION:
  * User: "we shouldn't show connecting twice like we do here on the phone please". While the machine
- * notice floats over the list (the connecting pill, a failure card or its pill), it already says
- * what the machine is doing, so the line under the tabs stays empty instead of repeating it; the
- * desktop sidebar has no such line at all. The line keeps what no other part of the screen says:
+ * notice shows (connecting, or a failure), it already says
+ * what the machine is doing, so this line gives way to it instead of repeating it (2026-11-12: the
+ * notice now is this same line, see machineNotice.ts). The line keeps what no other part of the screen says:
  * a refresh in progress, "Connected to <name>", and the no-machines hint.
  */
 export function drawerStatusLine(
@@ -31,9 +31,8 @@ export function drawerStatusLine(
   if (inventory.refreshing && inventory.summary !== null) {
     return StateCardCopy.connecting.refreshingStatus(label);
   }
-  if (inventory.lastError !== null) {
-    return StateCardCopy.failure.refreshFailedStatus(inventory.lastError);
-  }
+  // A failure is the machine notice's line (machineNotice.ts), never a second "refresh failed" line.
+  if (inventory.lastError !== null) return '';
   if (inventory.summary !== null) {
     if (inventory.summary.sessions.length === 0 && inventory.summary.projects.length > 0) {
       return StateCardCopy.success.emptyProjectsStatus;
