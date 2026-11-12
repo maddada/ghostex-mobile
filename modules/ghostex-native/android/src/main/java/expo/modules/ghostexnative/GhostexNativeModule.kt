@@ -198,6 +198,10 @@ class GhostexNativeModule : Module() {
       promise.resolve(null)
     }
 
+    // This build takes `dialTimeoutSec` on connect (an older build has no such function, so JS checks;
+    // src/machines/routeChoice.ts).
+    Function("supportsDialTimeout") { true }
+
     AsyncFunction("isConnected") { machineId: String ->
       connections[machineId]?.isConnected() ?: false
     }

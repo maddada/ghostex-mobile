@@ -66,6 +66,9 @@ struct SSHConnectionConfig: Sendable {
     /// tailcat peer token. Non-empty means dial the tailcat loopback forward for
     /// `machineId` instead of `host`:`port`. Host-key identity stays `host`:`port`.
     var tailcatToken: String = ""
+    /// When above 0, bounds only the TCP connect (below `connectionTimeout`): a Tailscale computer that
+    /// also has Easy Connect gives Tailscale a short head start before trying Easy Connect.
+    var dialTimeout: TimeInterval = 0
 }
 
 struct SSHExecResult: Sendable {
@@ -464,7 +467,9 @@ actor SSHConnection {
                 candidate = current.pointee.ai_next
                 continue
             }
-            var connectTimeoutSeconds = Int32(config.connectionTimeout)
+            let dialSeconds =
+                config.dialTimeout > 0 ? min(config.dialTimeout, config.connectionTimeout) : config.connectionTimeout
+            var connectTimeoutSeconds = Int32(max(1, dialSeconds))
             setsockopt(
                 candidateSocket, IPPROTO_TCP, TCP_CONNECTIONTIMEOUT,
                 &connectTimeoutSeconds, socklen_t(MemoryLayout<Int32>.size)

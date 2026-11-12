@@ -90,7 +90,9 @@ class GhostexSshConnection(
   fun connect() {
     ensureBundledBouncyCastleProvider()
     val ssh = SSHClient(createSshConfig())
-    ssh.connectTimeout = CONNECT_TIMEOUT_MS
+    // A shorter TCP connect when asked (a Tailscale head start before Easy Connect); never longer.
+    ssh.connectTimeout =
+      if (config.dialTimeoutSec > 0) minOf(config.dialTimeoutSec * 1_000, CONNECT_TIMEOUT_MS) else CONNECT_TIMEOUT_MS
     // Bound the SSH greeting as well as TCP connect. Idle reads become unlimited after auth.
     ssh.timeout = CONNECT_TIMEOUT_MS
     /**
