@@ -17,7 +17,13 @@ export type ComposerBootRead = {
   optionStates: Record<string, unknown>;
   modelOutboxes: Record<string, unknown>;
   modelCatalog: unknown;
-  chatSettings: { hideAccountEmails: boolean; title: string | null; toolCards: boolean; detailedDefault: boolean };
+  chatSettings: {
+    hideAccountEmails: boolean;
+    title: string | null;
+    toolCards: boolean;
+    detailedDefault: boolean;
+    statusLineFromComputer: boolean;
+  };
   contextPreferences: {
     claude: unknown;
     codex: unknown;
@@ -292,6 +298,10 @@ export async function readComposerBoot(sessionKey: string, nowMs: number): Promi
         useSettingsStore.getState().settings.chatToolCallCards ||
         useSettingsStore.getState().settings.chatToolCallLines,
       detailedDefault: useSettingsStore.getState().settings.sessionChatDetailedView,
+      // The status line under the chat box is the one the chat's computer shows, which its reads
+      // carry; this phone's own pins stay for a computer that sends none (gx-chat-core
+      // `menus/context/computer_pins.rs`, CDXC:SessionChat 2026-11-12).
+      statusLineFromComputer: true,
     },
     contextPreferences: { claude, codex, cursor, hermes, pi, basic },
     dismissedNotice,
