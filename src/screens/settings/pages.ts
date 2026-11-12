@@ -34,7 +34,7 @@ export type SettingsPageId =
   | 'licences';
 
 export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; description: string }>> = {
-  updates: { title: 'Updates', description: 'Your Ghostex version, and newer releases.' },
+  updates: { title: 'Updates', description: 'The app, the update it runs, and what is waiting.' },
   theme: { title: 'Interface', description: 'Theme presets, colours, and the chat and terminal appearance.' },
   sessionsList: { title: 'Sessions list', description: 'Unified or Project layout, and how Unified groups.' },
   chat: { title: 'Chat', description: 'Default agent view and chat detail.' },
