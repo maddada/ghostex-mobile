@@ -14,7 +14,8 @@
  * SEE-ALSO: server/src/server/sessions_list_stream.rs, src/inventory/summaryPatch.ts
  */
 
-import { chatMachineLink } from '../chat/rust/machine-link';
+import { chatMachineLink, frameText, LINK_COMPRESSION_CAPABILITY } from '../chat/rust/machine-link';
+import { FrameInflater } from '../remote/inflate';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { isDemoMachine } from '../demo/identity';
@@ -155,23 +156,37 @@ function ensureStream(machine: MachineConnectionTarget): void {
         close(machine.id, stream);
         return;
       }
-      open(machine.id, stream, gxserver.localPort, gxserver.authToken);
+      open(
+        machine.id,
+        stream,
+        gxserver.localPort,
+        gxserver.authToken,
+        gxserver.capabilities.includes(LINK_COMPRESSION_CAPABILITY),
+      );
     })
     .catch(() => close(machine.id, stream));
 }
 
-function open(machineId: string, stream: Stream, localPort: number, authToken: string): void {
-  const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionsList`;
+function open(machineId: string, stream: Stream, localPort: number, authToken: string, deflate: boolean): void {
+  const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionsList${deflate ? '&encoding=deflate' : ''}`;
   // React Native's WebSocket takes headers, so the token never travels in the URL.
   const socket = new (WebSocket as unknown as HeaderWebSocket)(url, undefined, {
     headers: { Authorization: `Bearer ${authToken}`, [PROTOCOL_HEADER]: String(PROTOCOL_VERSION) },
   });
+  const inflater = deflate ? new FrameInflater() : null;
+  if (deflate) socket.binaryType = 'arraybuffer';
   stream.socket = socket;
   socket.onmessage = (event: WebSocketMessageEvent) => {
-    if (stream.closed || typeof event.data !== 'string') return;
+    if (stream.closed) return;
+    const text = frameText(event.data, inflater);
+    if (text === null) {
+      // Deflated bytes that do not decode: the poll covers the gap and the next read opens a fresh stream.
+      if (inflater !== null && typeof event.data !== 'string') close(machineId, stream);
+      return;
+    }
     let frame: unknown;
     try {
-      frame = JSON.parse(event.data);
+      frame = JSON.parse(text);
     } catch {
       return;
     }

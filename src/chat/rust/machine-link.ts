@@ -37,10 +37,17 @@ import { isDemoMachine } from '../../demo/identity';
 import type { RpcAnswer } from './transport';
 import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress } from '../../remote/linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../../machines/pairingEpoch';
+import { FrameInflater } from '../../remote/inflate';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
 const PROTOCOL_VERSION = 1;
 const PROTOCOL_HEADER = 'x-gxserver-protocol-version';
+/**
+ * A computer that lists this sends deflated socket frames when asked (`encoding=deflate`) and gzips JSON answers to a
+ * request carrying `COMPRESS_HEADER` (server/src/server/link_compression.rs); the phone's HTTP stack undoes the gzip.
+ */
+export const LINK_COMPRESSION_CAPABILITY = 'linkCompression';
+export const COMPRESS_HEADER = 'x-gxserver-compress';
 /** `RECONNECT_DELAYS_MS` in `packages/gx-chat-client/src/wire.rs`; the last step repeats. */
 const RECONNECT_DELAYS_MS = [500, 1_000, 2_000];
 /** The ladder in the background, for Voice mode's computer only: the SSH reconnect's steps. */
@@ -135,6 +142,20 @@ export type LinkAnswer = { kind: 'answered'; answer: RpcAnswer } | { kind: 'fall
 
 /** One HTTP attempt: answered, never sent (no forward), or lost after it may have been sent. */
 type Attempt = { kind: 'answered'; answer: RpcAnswer } | { kind: 'notSent' } | { kind: 'lost'; timedOut: boolean };
+
+/**
+ * A socket message's text: a text frame as it is, a binary frame inflated when the socket asked for deflated frames,
+ * else null (a frame this socket cannot read, or bytes that do not decode).
+ */
+export function frameText(data: unknown, inflater: FrameInflater | null): string | null {
+  if (typeof data === 'string') return data;
+  if (inflater === null || !(data instanceof ArrayBuffer)) return null;
+  try {
+    return inflater.frame(data);
+  } catch {
+    return null;
+  }
+}
 
 function unreachable(endpoint: string, message: string): LinkAnswer {
   return { kind: 'answered', answer: { error: { code: 'unreachable', message, endpoint } } };
@@ -734,6 +755,7 @@ class ChatMachineLink {
           Authorization: `Bearer ${endpointInfo.authToken}`,
           'Content-Type': 'application/json',
           [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+          ...(endpointInfo.capabilities.includes(LINK_COMPRESSION_CAPABILITY) ? { [COMPRESS_HEADER]: 'gzip' } : {}),
         },
         body: JSON.stringify({ protocolVersion: PROTOCOL_VERSION, params: params ?? {} }),
         signal: controller.signal,
@@ -936,11 +958,14 @@ class ChatMachineLink {
 
   private open(localPort: number, endpoint: Endpoint): void {
     const generation = ++this.socketGeneration;
-    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat`;
+    const deflate = endpoint.capabilities.includes(LINK_COMPRESSION_CAPABILITY);
+    const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionChat${deflate ? '&encoding=deflate' : ''}`;
     // React Native's WebSocket takes headers, so the token never travels in the URL.
     const socket = new (WebSocket as unknown as HeaderWebSocket)(url, undefined, {
       headers: { Authorization: `Bearer ${endpoint.authToken}`, [PROTOCOL_HEADER]: String(PROTOCOL_VERSION) },
     });
+    const inflater = deflate ? new FrameInflater() : null;
+    if (deflate) socket.binaryType = 'arraybuffer';
     this.socket = socket;
     socket.onopen = () => {
       if (generation !== this.socketGeneration) return;
@@ -952,13 +977,19 @@ class ChatMachineLink {
       if (this.followers.size > 0) this.oweSnapshot();
     };
     socket.onmessage = (event: WebSocketMessageEvent) => {
-      if (generation !== this.socketGeneration || typeof event.data !== 'string') return;
+      if (generation !== this.socketGeneration) return;
+      const text = frameText(event.data, inflater);
+      if (text === null) {
+        // A deflated frame that does not decode leaves the stream unreadable: a fresh socket resubscribes.
+        if (inflater !== null && typeof event.data !== 'string') socket.close();
+        return;
+      }
       if (this.resumeTimer !== null) {
         clearTimeout(this.resumeTimer);
         this.resumeTimer = null;
       }
       this.heard();
-      this.receive(event.data);
+      this.receive(text);
     };
     socket.onerror = () => {
       // `onclose` follows and does the work.
