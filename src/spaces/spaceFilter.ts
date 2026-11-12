@@ -10,6 +10,7 @@
 import type { GhostexMobileSummary, GhostexSidebarSpace, GhostexSidebarSpaces } from '../contract/mobileSummary';
 import { withoutGbots } from '../contract/gbotsFilter';
 import { countSessions, type SessionCounts } from '../contract/grouping';
+import { ACTIVE_SPACE_ID, filterSummaryForActiveProjects, type ActiveProjectsContext } from './activeProjects';
 import { isSidebarSpaceProject, isUnassignedSidebarSpaceProject, OTHER_SIDEBAR_SPACE_ID } from './otherSpace';
 
 /** The Space row as rendered: the machine's Spaces in order, then Other last. */
@@ -36,8 +37,14 @@ export function orderedSpaces(spaces: GhostexSidebarSpaces): GhostexSidebarSpace
  * Other when the machine has no Spaces. Never a ghost Space, and never an
  * "unfiltered" view.
  */
-export function resolveSelectedSpaceId(spaces: GhostexSidebarSpaces, storedSpaceId: string | undefined): string {
+export function resolveSelectedSpaceId(
+  spaces: GhostexSidebarSpaces,
+  storedSpaceId: string | undefined,
+  activeProjects = false,
+): string {
   if (storedSpaceId === OTHER_SIDEBAR_SPACE_ID) return OTHER_SIDEBAR_SPACE_ID;
+  // The Active projects star (./activeProjects.ts) resolves while the computer shows it; off, it falls back.
+  if (activeProjects && storedSpaceId === ACTIVE_SPACE_ID) return ACTIVE_SPACE_ID;
   if (storedSpaceId !== undefined && spaces.spaces[storedSpaceId] !== undefined) {
     return storedSpaceId;
   }
@@ -70,7 +77,17 @@ export function collectionIdByProjectId(summary: GhostexMobileSummary): Map<stri
  * Returns the input unchanged when the machine has no Spaces at all — Other
  * alone would then be every project, and the row is hidden.
  */
-export function filterSummaryForSpace(whole: GhostexMobileSummary, selectedSpaceId: string): GhostexMobileSummary {
+export function filterSummaryForSpace(
+  whole: GhostexMobileSummary,
+  selectedSpaceId: string,
+  active?: ActiveProjectsContext,
+): GhostexMobileSummary {
+  if (selectedSpaceId === ACTIVE_SPACE_ID) {
+    const collections = collectionIdByProjectId(withoutGbots(whole));
+    return filterSummaryForActiveProjects(whole, active ?? { nowMs: Date.now(), focusedSessionId: null }, (projectId) =>
+      collections.get(projectId),
+    );
+  }
   // A Space only shows and counts the user's projects: GBots follow Main Hub instead (contract/gbots.ts).
   const summary = withoutGbots(whole);
   const spaces = orderedSpaces(summary.sidebarSpaces);
@@ -145,11 +162,12 @@ export function spaceRowItems(spaces: GhostexSidebarSpaces): SpaceRowItem[] {
 export function spaceSessionCounts(
   summary: GhostexMobileSummary | null,
   spaceIds: readonly string[],
+  active?: ActiveProjectsContext,
 ): Record<string, SessionCounts> {
   const counts: Record<string, SessionCounts> = {};
   if (summary === null) return counts;
   for (const spaceId of [...spaceIds, OTHER_SIDEBAR_SPACE_ID]) {
-    counts[spaceId] = countSessions(filterSummaryForSpace(summary, spaceId).sessions, summary.capabilities);
+    counts[spaceId] = countSessions(filterSummaryForSpace(summary, spaceId, active).sessions, summary.capabilities);
   }
   return counts;
 }

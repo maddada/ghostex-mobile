@@ -479,6 +479,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     chiefShowOnAllSpaces: root.chiefShowOnAllSpaces === true,
     chiefConfirmNewChat: root.chiefConfirmNewChat !== false,
     enableSessionParking: root.enableSessionParking !== false,
+    sidebarActiveProjects: root.sidebarActiveProjects !== false,
     worktreeSessionsInProject: root.worktreeSessionsInProject !== false,
     mergeRepositoryCopies: root.sidebarMergeRepositoryCopies !== false,
     separateByMachine: root.sidebarSeparateByMachine === true,

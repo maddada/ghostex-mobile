@@ -18,12 +18,25 @@
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
+import { ACTIVE_SPACE_COLOR, ACTIVE_SPACE_ICON, ACTIVE_SPACE_ID } from '../../spaces/activeProjects';
 import { OTHER_SIDEBAR_SPACE_ICON, OTHER_SIDEBAR_SPACE_ID, OTHER_SIDEBAR_SPACE_LABEL } from '../../spaces/otherSpace';
 import { tabStatusCounts, type SessionCounts } from '../../contract/grouping';
 import type { SpaceRowItem } from '../../spaces/spaceFilter';
 import { GhostexPalette, GhostexRadii, GhostexStrokeWidth, SidebarPalette } from '../../theme/palette';
 import { inkStyleSheets, useSidebarInk } from './rows';
+import { StarGlyph } from './icons';
 import StatusDotStack from './StatusDotStack';
+
+/**
+ * The Active projects star, first in the row (src/spaces/activeProjects.ts): a short name, since the phone's chips
+ * carry one, and the desktop star's yellow.
+ */
+const ACTIVE_ROW_ITEM: SpaceRowItem = {
+  spaceId: ACTIVE_SPACE_ID,
+  name: 'Active',
+  icon: ACTIVE_SPACE_ICON,
+  color: ACTIVE_SPACE_COLOR,
+};
 
 const OTHER_ROW_ITEM: SpaceRowItem = {
   spaceId: OTHER_SIDEBAR_SPACE_ID,
@@ -37,6 +50,8 @@ export default function SpaceTabs({
   selectedSpaceId,
   countsBySpaceId,
   onSelect,
+  activeProjects = false,
+  onActiveProjectsMenu,
   style,
 }: {
   /** The machine's own Spaces, in order; Other is appended here. */
@@ -45,10 +60,14 @@ export default function SpaceTabs({
   /** spaceSessionCounts: what each chip's status dots draw. */
   countsBySpaceId: Readonly<Record<string, SessionCounts>>;
   onSelect: (spaceId: string) => void;
+  /** The computer shows the Active projects star (its `sidebarActiveProjects`); it leads the row. */
+  activeProjects?: boolean;
+  /** A long press on the star: its menu (Remove Active projects), as the desktop's right click. */
+  onActiveProjectsMenu?: () => void;
   /** Overrides for the row's own box, e.g. when it shares a line with the workspace tile. */
   style?: StyleProp<ViewStyle>;
 }) {
-  const items = [...spaces, OTHER_ROW_ITEM];
+  const items = activeProjects ? [ACTIVE_ROW_ITEM, ...spaces, OTHER_ROW_ITEM] : [...spaces, OTHER_ROW_ITEM];
   const ink = useSidebarInk();
   const styles = spaceStyles(ink);
   // The ring between overlapping dots is drawn in the chip's own card (dark: its active card, as before).
@@ -62,6 +81,7 @@ export default function SpaceTabs({
     >
       {items.map((item) => {
         const selected = item.spaceId === selectedSpaceId;
+        const star = item.spaceId === ACTIVE_SPACE_ID;
         const Icon = COMMAND_ICONS[item.icon] ?? COMMAND_ICONS.stack;
         const sessionCounts = countsBySpaceId[item.spaceId];
         // The Space being shown has its sessions on screen, so only the other tabs carry status dots (desktop `assemble.rs`).
@@ -80,10 +100,15 @@ export default function SpaceTabs({
             accessibilityState={{ selected }}
             key={item.spaceId}
             onPress={() => onSelect(item.spaceId)}
+            onLongPress={star ? onActiveProjectsMenu : undefined}
             style={[styles.chip, selected ? styles.chipSelected : null]}
           >
             <View style={hasStatus ? styles.iconWithStatus : null}>
-              <Icon size={14} color={selected ? styles.labelSelected.color : styles.label.color} />
+              {star ? (
+                <StarGlyph size={14} color={ACTIVE_SPACE_COLOR} filled />
+              ) : (
+                <Icon size={14} color={selected ? styles.labelSelected.color : styles.label.color} />
+              )}
             </View>
             <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.label, selected ? styles.labelSelected : null]}>
               {item.name}

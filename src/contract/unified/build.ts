@@ -14,6 +14,7 @@
  * into it and fails when they change; this file must give the same answers. The summary adapter supplies `hasQuestion` through the shared mobile-summary predicate.
  */
 
+import { ACTIVE_SPACE_LABEL, sessionKeepsActive } from '../../spaces/activeProjects';
 import { mergedRepoIdentities, repoIdentity, type RepoIdentity } from './repo';
 import {
   NO_UNIFIED_FOLDS,
@@ -27,6 +28,11 @@ import {
 
 export const LOCAL_MACHINE_KEY = 'local';
 export const OTHER_SPACE_ID = 'other';
+/**
+ * The Spaces pick that keeps the active projects' cards (src/spaces/activeProjects.ts), every computer's: the phone's
+ * Unified list has no Space row, so its filter carries the desktop star.
+ */
+export const ACTIVE_PROJECTS_FILTER_KEY = 'active';
 
 /** One session as the builder reads it. */
 export type UnifiedSessionInput = {
@@ -112,6 +118,8 @@ export type UnifiedMachineInput<S = unknown> = {
   label: string;
   /** The computer's Spaces in order, when its Spaces are on. */
   spaces: UnifiedSpaceInput[] | null;
+  /** The computer shows the Active projects star (its `sidebarActiveProjects`, with Spaces on). */
+  activeProjects?: boolean;
   projects: UnifiedProjectInput[];
   sessions: Array<UnifiedSessionInput & { source?: S }>;
 };
@@ -159,6 +167,8 @@ export type UnifiedRow<S = unknown> = {
   repo: RepoIdentity;
   /** `machine|space` of the Space that shows the project; `null` when its computer has Spaces off. */
   spaceKey: string | null;
+  /** Its project is in Active projects now (src/spaces/activeProjects.ts). */
+  projectActive?: boolean;
   shelf: UnifiedShelf;
   status: UnifiedStatus | null;
   cameBackMs: number;
@@ -233,11 +243,7 @@ export function cameBackMs(session: UnifiedSessionInput): number {
  * a session nobody has sent a message to, Working while the Working section is on and its agent
  * works or still runs something in the background, else the list.
  */
-export function unifiedShelf(
-  session: UnifiedSessionInput,
-  settings: UnifiedSettings,
-  nowMs: number,
-): UnifiedShelf {
+export function unifiedShelf(session: UnifiedSessionInput, settings: UnifiedSettings, nowMs: number): UnifiedShelf {
   if (session.snoozedUntilMs !== null && session.snoozedUntilMs > nowMs) return 'snoozed';
   if (settings.parking && session.isParked) return 'parked';
   if (session.isPinned) return 'pinned';
@@ -276,18 +282,30 @@ export function repoDisambiguator(key: string): string {
   return parts.length >= 2 ? `${parts[parts.length - 2]}/${parts[parts.length - 1]}` : key;
 }
 
+/** The Spaces picks keep the row: its Space's, or Active projects while its project is active. */
+function spacesKeep(filter: UnifiedFilter, row: UnifiedRow<unknown>): boolean {
+  return (
+    filter.spaces.length === 0 ||
+    (row.spaceKey !== null && filter.spaces.includes(row.spaceKey)) ||
+    (row.projectActive === true && filter.spaces.includes(ACTIVE_PROJECTS_FILTER_KEY))
+  );
+}
+
 function keeps(filter: UnifiedFilter, row: UnifiedRow<unknown>, machineKey: string): boolean {
   return (
     (filter.repos.length === 0 || filter.repos.includes(row.repo.key)) &&
     (filter.machines.length === 0 || filter.machines.includes(machineKey)) &&
-    (filter.spaces.length === 0 || (row.spaceKey !== null && filter.spaces.includes(row.spaceKey)))
+    spacesKeep(filter, row)
   );
 }
 
 /** Builds the list. */
 /** Whether every word typed in the search field is in a row's title, project, branch or computer. */
 function queryMatches(query: string, row: UnifiedRow<unknown>): boolean {
-  const words = query.toLowerCase().split(/\s+/u).filter((word) => word.length > 0);
+  const words = query
+    .toLowerCase()
+    .split(/\s+/u)
+    .filter((word) => word.length > 0);
   if (words.length === 0) return true;
   const haystack = [row.session.title ?? '', row.repo.label, row.session.branch ?? '', row.machineLabel ?? '']
     .join('\n')
@@ -306,7 +324,7 @@ export function admittingFilter(filter: UnifiedFilter, row: UnifiedRow<unknown>)
   const lifted: UnifiedFilter = { ...filter };
   if (filter.repos.length > 0 && !filter.repos.includes(row.repo.key)) lifted.repos = [];
   if (filter.machines.length > 0 && !filter.machines.includes(machineKey)) lifted.machines = [];
-  if (filter.spaces.length > 0 && (row.spaceKey === null || !filter.spaces.includes(row.spaceKey))) lifted.spaces = [];
+  if (!spacesKeep(filter, row)) lifted.spaces = [];
   if (!queryMatches(lifted.query ?? '', row)) lifted.query = '';
   return lifted;
 }
@@ -339,9 +357,21 @@ export function buildUnifiedList<S>(
       ),
     ),
   );
+  if (machines.some((machine) => machine.activeProjects === true && machine.spaces !== null)) {
+    options.spaces.push({ key: ACTIVE_PROJECTS_FILTER_KEY, label: ACTIVE_SPACE_LABEL, detail: null });
+  }
   for (const [machineIndex, machine] of machines.entries()) {
     const machineKey = machineKeyOf(machine);
     options.machines.push({ key: machineKey, label: machine.label, detail: null });
+    // The projects a session keeps active, and a worktree's parent with it (src/spaces/activeProjects.ts).
+    const parentById = new Map(machine.projects.map((project) => [project.projectId, project.parentProjectId]));
+    const activeProjectIds = new Set<string>();
+    for (const session of machine.sessions) {
+      if (session.isFocused !== true && !sessionKeepsActive(session, nowMs)) continue;
+      activeProjectIds.add(session.projectId);
+      const parent = parentById.get(session.projectId);
+      if (parent != null) activeProjectIds.add(parent);
+    }
     const remoteName = machine.isLocal ? null : machine.label;
     if (machine.spaces !== null) {
       for (const space of machine.spaces) {
@@ -363,9 +393,7 @@ export function buildUnifiedList<S>(
       entry.machines.add(machine.label);
       repoMachines.set(repo.key, entry);
       const spaceKey =
-        machine.spaces === null
-          ? null
-          : spaceFilterKey(machineKey, spaceOfProject(machine.spaces, project));
+        machine.spaces === null ? null : spaceFilterKey(machineKey, spaceOfProject(machine.spaces, project));
       for (const session of machine.sessions) {
         if (session.projectId !== project.projectId || session.isBrowser) continue;
         rows.push({
@@ -380,6 +408,7 @@ export function buildUnifiedList<S>(
               : `${machine.machine}:${session.projectId}:${session.sessionId}`,
             repo: { ...repo },
             spaceKey,
+            projectActive: activeProjectIds.has(project.projectId),
             shelf: unifiedShelf(session, settings, nowMs),
             status: unifiedStatus(session),
             cameBackMs: cameBackMs(session),
@@ -399,12 +428,9 @@ export function buildUnifiedList<S>(
     .map(([key, entry]) => ({
       key,
       label: entry.label,
-      detail:
-        entry.machines.size > 1 ? [...entry.machines].sort(compareText).join(', ') : null,
+      detail: entry.machines.size > 1 ? [...entry.machines].sort(compareText).join(', ') : null,
     }));
-  options.repos.sort((left, right) =>
-    compareText(left.label.toLowerCase(), right.label.toLowerCase()),
-  );
+  options.repos.sort((left, right) => compareText(left.label.toLowerCase(), right.label.toLowerCase()));
   // Two different repositories with the same name (a fork, another owner's, a folder with no
   // remote) say which is which.
   const names = options.repos.map((option) => option.label.toLowerCase());
@@ -465,8 +491,7 @@ export function buildUnifiedList<S>(
   for (const row of tops) {
     if (row.subtreeMatched) view[row.shelf].push(row);
   }
-  const tie = (left: UnifiedRow<S>, right: UnifiedRow<S>) =>
-    compareText(left.sidebarSessionId, right.sidebarSessionId);
+  const tie = (left: UnifiedRow<S>, right: UnifiedRow<S>) => compareText(left.sidebarSessionId, right.sidebarSessionId);
   const newestFirst = (value: (row: UnifiedRow<S>) => number) => (left: UnifiedRow<S>, right: UnifiedRow<S>) =>
     value(right) - value(left) || tie(left, right);
   view.drafts.sort(newestFirst((row) => row.session.createdMs ?? 0));

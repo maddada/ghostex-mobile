@@ -23,7 +23,8 @@ import type { GhostexMobileSummary } from '../../contract/mobileSummary';
 import { StateCardCopy } from '../../copy';
 import type { MachineInventory } from '../../inventory/store';
 import { machineDisplayLabel, type MachineRecord } from '../../machines/store';
-import { filterSummaryForSpace } from '../../spaces/spaceFilter';
+import { ACTIVE_SPACE_ID, filterSummaryForActiveProjects, spaceRankOfProject } from '../../spaces/activeProjects';
+import { collectionIdByProjectId, filterSummaryForSpace, orderedSpaces } from '../../spaces/spaceFilter';
 import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 
 export type ProjectCardBlock = {
@@ -153,6 +154,8 @@ function machineBlocks(
   collapse: DrawerCollapseInput,
   nowMs: number,
   selectedSessionKey: string | null,
+  /** Active projects (../../spaces/activeProjects.ts): the list to draw instead of the Space's, and no empty card. */
+  active?: { summaryOf: (summary: GhostexMobileSummary) => GhostexMobileSummary },
 ): DrawerBlock[] {
   const label = machineDisplayLabel(machine);
   if (inventory === undefined || (inventory.summary === null && !inventory.hasLoaded)) {
@@ -189,11 +192,12 @@ function machineBlocks(
         ? selectedSessionKey.slice(machine.id.length + 1)
         : null,
       expandedDraftSessionKeys: new Set(collapse.expandedDraftSessionKeysByMachine?.[machine.id] ?? []),
-      summary: filterSummaryForSpace(
+      summary: (
+        active?.summaryOf ?? ((summary: GhostexMobileSummary) => filterSummaryForSpace(summary, selectedSpaceId))
+      )(
         selectedWorkspaceId === null
           ? inventory.summary
           : filterSummaryForWorkspace(inventory.summary, selectedWorkspaceId),
-        selectedSpaceId,
       ),
       expandedProjectKeys: new Set(collapse.expandedProjectsByMachine[machine.id] ?? []),
       expandedCollectionIds: new Set(collapse.expandedCollectionsByMachine[machine.id] ?? []),
@@ -205,6 +209,7 @@ function machineBlocks(
     }),
   );
   if (items.length === 0) {
+    if (active !== undefined) return [];
     return [
       rowBlock(
         machine.id,
@@ -269,6 +274,9 @@ export function buildDrawerList(input: DrawerListInput): DrawerBlock[] {
     ];
   }
   const machine = machines.find((entry) => entry.id === selectedMachineId) ?? machines[0];
+  if (selectedSpaceId === ACTIVE_SPACE_ID) {
+    return activeProjectsBlocks(input, machine);
+  }
   return machineBlocks(
     machine,
     inventoriesByMachineId[machine.id],
@@ -326,4 +334,76 @@ export function hideProjectsWithoutSessions(
     }
   }
   return { blocks: showAll ? blocks : kept, emptyProjects };
+}
+
+/**
+ * Active projects (../../spaces/activeProjects.ts): one flat list of every connected computer's active projects, as
+ * the desktop's one-list sidebar draws them. Each computer's cards come in its own Space order; the computers'
+ * cards then interleave by the selected computer's Space names (Spaces sync between computers), this computer's
+ * first within a Space. A computer that is away or has nothing active adds nothing.
+ */
+function activeProjectsBlocks(input: DrawerListInput, selected: MachineRecord): DrawerBlock[] {
+  const nowMs = input.nowMs ?? Date.now();
+  const selectedSummary = input.inventoriesByMachineId[selected.id]?.summary ?? null;
+  const spaceNames =
+    selectedSummary === null ? undefined : orderedSpaces(selectedSummary.sidebarSpaces).map((space) => space.name);
+  const ordered = [selected, ...input.machines.filter((entry) => entry.id !== selected.id)];
+  const ranked: Array<{ block: DrawerBlock; rank: number; machineIndex: number; index: number }> = [];
+  for (const [machineIndex, machine] of ordered.entries()) {
+    const inventory = input.inventoriesByMachineId[machine.id];
+    if (inventory?.summary == null) continue;
+    const focusedSessionId = input.selectedSessionKey?.startsWith(`${machine.id}:`)
+      ? input.selectedSessionKey.slice(machine.id.length + 1)
+      : null;
+    const ranks = new Map<string, number>();
+    const summaryOf = (summary: GhostexMobileSummary): GhostexMobileSummary => {
+      const collections = collectionIdByProjectId(summary);
+      const scoped = filterSummaryForActiveProjects(
+        summary,
+        { nowMs, focusedSessionId },
+        (projectId) => collections.get(projectId),
+        spaceNames,
+      );
+      for (const project of scoped.projects) {
+        const parent = project.worktreeParentProjectId;
+        ranks.set(
+          project.projectId,
+          spaceRankOfProject(
+            scoped,
+            project.projectId,
+            collections.get(project.projectId),
+            parent.length > 0 ? parent : undefined,
+            spaceNames,
+          ),
+        );
+      }
+      return scoped;
+    };
+    const blocks = machineBlocks(
+      machine,
+      inventory,
+      ACTIVE_SPACE_ID,
+      machine.id === selected.id ? input.selectedWorkspaceId : null,
+      input.collapse,
+      nowMs,
+      input.selectedSessionKey ?? null,
+      { summaryOf },
+    );
+    let rank = 0;
+    for (const [index, block] of blocks.entries()) {
+      if (block.kind === 'project') rank = ranks.get(block.card.header.projectId) ?? rank;
+      ranked.push({ block, rank, machineIndex, index });
+    }
+  }
+  if (ranked.length === 0) {
+    return [
+      rowBlock(
+        selected.id,
+        stateCardItem('empty', StateCardCopy.activeProjectsEmpty.title, StateCardCopy.activeProjectsEmpty.body, ''),
+      ),
+    ];
+  }
+  return ranked
+    .sort((left, right) => left.rank - right.rank || left.machineIndex - right.machineIndex || left.index - right.index)
+    .map((entry) => entry.block);
 }

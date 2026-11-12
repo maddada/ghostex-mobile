@@ -112,6 +112,8 @@ export function unifiedMachineInput(computer: UnifiedComputer, alone: boolean): 
             memberProjectIds: space.memberProjectIds,
             memberCollectionIds: space.memberCollectionIds,
           })),
+    // The computer's Active projects switch (src/spaces/activeProjects.ts), which the filter's star follows.
+    activeProjects: summary.sidebarActiveProjects !== false,
     projects: summary.projects.map((project) => {
       const parent = project.worktreeParentProjectId;
       return {

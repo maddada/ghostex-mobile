@@ -119,7 +119,7 @@ import {
   delayedSendCommand,
 } from '../commands/ghostexCli';
 import { stateWithCollectionTitle } from '../contract/collectionsState';
-import { machineSessionCounts, tabStatusCounts } from '../contract/grouping';
+import { countSessions, machineSessionCounts, tabStatusCounts } from '../contract/grouping';
 import { coordinatorRowKey } from '../contract/coordinatorTree';
 import { EMPTY_SIDEBAR_SPACES, NO_SUMMARY_CAPABILITIES, type GhostexSession } from '../contract/mobileSummary';
 import {
@@ -156,12 +156,16 @@ import {
 } from '../machines/computerIcons';
 import type { RootStackParamList } from '../navigation/types';
 import {
+  collectionIdByProjectId,
   filterSummaryForSpace,
   resolveSelectedSpaceId,
   spaceRowItems,
   spaceSessionCounts,
 } from '../spaces/spaceFilter';
+import { ACTIVE_SPACE_ID, activeProjectsOn, filterSummaryForActiveProjects } from '../spaces/activeProjects';
+import { removeActiveProjects } from '../spaces/removeActiveProjects';
 import { useSpacesStore } from '../spaces/store';
+import { useActiveProjectsClock } from '../spaces/useActiveProjectsClock';
 import { revealSessionWorkspace, useWorkspacesStore } from '../workspaces/store';
 import { restoreClosedSession } from '../sessions/closedSessions';
 import { filterSummaryForWorkspace, resolveWorkspaceId, workspaceSwitchTarget } from '../workspaces/workspaceFilter';
@@ -448,9 +452,12 @@ export default function SessionsScreen({ navigation }: Props) {
    * stored id from another machine — or one this daemon has since deleted —
    * falls back to the first Space, then to the built-in Other.
    */
+  // The Active projects star (spaces/activeProjects.ts) shows while the computer's switch is on.
+  const activeProjects = activeProjectsOn(selectedSummary);
   const selectedSpaceId = resolveSelectedSpaceId(
     machineSpaces,
     machine === null ? undefined : selectedSpaceIdByMachine[machine.id],
+    activeProjects,
   );
   const spaceItems = useMemo(() => spaceRowItems(machineSpaces), [machineSpaces]);
   /**
@@ -484,14 +491,33 @@ export default function SessionsScreen({ navigation }: Props) {
     },
     [machine?.id, inventoriesByMachineId, selectedSpaceId, selectedSpaceIdByMachine, selectedWorkspaceIdByMachine],
   );
-  const spaceCounts = useMemo(
-    () =>
-      spaceSessionCounts(
-        selectedSummary,
-        spaceItems.map((item) => item.spaceId),
-      ),
-    [selectedSummary, spaceItems],
+  const everySession = useMemo(
+    () => Object.values(inventoriesByMachineId).flatMap((inventory) => inventory.summary?.sessions ?? []),
+    [inventoriesByMachineId],
   );
+  const spaceCountsNowMs = useActiveProjectsClock(everySession, activeProjects);
+  const spaceCounts = useMemo(() => {
+    const counts = spaceSessionCounts(
+      selectedSummary,
+      spaceItems.map((item) => item.spaceId),
+    );
+    if (!activeProjects) return counts;
+    // The star's dots count every connected computer's active projects, as its list does.
+    const sessions = Object.values(inventoriesByMachineId).flatMap((inventory) => {
+      const summary = inventory.summary;
+      if (summary == null) return [];
+      const collections = collectionIdByProjectId(summary);
+      return filterSummaryForActiveProjects(summary, { nowMs: spaceCountsNowMs, focusedSessionId: null }, (projectId) =>
+        collections.get(projectId),
+      ).sessions;
+    });
+    return {
+      ...counts,
+      [ACTIVE_SPACE_ID]: countSessions(sessions, selectedSummary?.capabilities ?? NO_SUMMARY_CAPABILITIES),
+    };
+  }, [selectedSummary, spaceItems, activeProjects, inventoriesByMachineId, spaceCountsNowMs]);
+  /** The star's long-press menu: Remove Active projects, which turns the computer's switch off. */
+  const [activeProjectsMenuOpen, setActiveProjectsMenuOpen] = useState(false);
 
   const clockSessions = useMemo(
     () => Object.values(inventoriesByMachineId).flatMap((inventory) => inventory.summary?.sessions ?? []),
@@ -501,7 +527,8 @@ export default function SessionsScreen({ navigation }: Props) {
   const entries = useMemo(
     () =>
       buildDrawerList({
-        nowMs: sessionListNowMs,
+        // Active projects moves on its own clock too (a project's 8 hours running out).
+        nowMs: Math.max(sessionListNowMs, spaceCountsNowMs),
         selectedSessionKey,
         machines,
         selectedMachineId: machine === null ? null : machine.id,
@@ -534,6 +561,7 @@ export default function SessionsScreen({ navigation }: Props) {
       collapse.expandedParkedSessionKeysByMachine,
       collapse.expandedDraftSessionKeysByMachine,
       sessionListNowMs,
+      spaceCountsNowMs,
       selectedSessionKey,
     ],
   );
@@ -1421,7 +1449,11 @@ export default function SessionsScreen({ navigation }: Props) {
             style={styles.statusPressable}
             onPress={() => setOverlay({ kind: 'logs' })}
           >
-            <Text style={[styles.statusLine, { color: sidebarAppearance.muted }]} numberOfLines={1} ellipsizeMode="tail">
+            <Text
+              style={[styles.statusLine, { color: sidebarAppearance.muted }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {statusLine}
             </Text>
           </Pressable>
@@ -1472,6 +1504,8 @@ export default function SessionsScreen({ navigation }: Props) {
               selectedSpaceId={selectedSpaceId}
               countsBySpaceId={spaceCounts}
               onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
+              activeProjects={activeProjects}
+              onActiveProjectsMenu={() => setActiveProjectsMenuOpen(true)}
               style={styles.workspaceRowSpaces}
             />
           ) : null}
@@ -1482,6 +1516,32 @@ export default function SessionsScreen({ navigation }: Props) {
           selectedSpaceId={selectedSpaceId}
           countsBySpaceId={spaceCounts}
           onSelect={(spaceId) => selectSpace(machine.id, spaceId)}
+          activeProjects={activeProjects}
+          onActiveProjectsMenu={() => setActiveProjectsMenuOpen(true)}
+        />
+      ) : null}
+      {activeProjectsMenuOpen && machine !== null ? (
+        <ContextMenu
+          visible
+          title="Active projects"
+          items={[
+            {
+              kind: 'item',
+              key: 'remove-active-projects',
+              label: 'Remove Active projects',
+              info: 'Turn it back on in Settings > Sidebar & Sessions > Spaces on the computer.',
+              onPress: () => {
+                setActiveProjectsMenuOpen(false);
+                void removeActiveProjects(machine).catch((error: unknown) =>
+                  setTransientStatus(error instanceof Error ? error.message : String(error), {
+                    title: 'Could not remove Active projects',
+                    error: true,
+                  }),
+                );
+              },
+            },
+          ]}
+          onClose={() => setActiveProjectsMenuOpen(false)}
         />
       ) : null}
       {machine !== null && !hasHomeProject(inventoriesByMachineId[machine.id]?.summary) ? (

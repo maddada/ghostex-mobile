@@ -382,6 +382,8 @@ export type GhostexMobileSummary = {
   chiefConfirmNewChat?: boolean;
   /** The computer's Enable session parking; on unless the computer sends `false`. */
   enableSessionParking?: boolean;
+  /** The computer's Active projects star (`sidebarActiveProjects`); on unless the computer sends `false`. */
+  sidebarActiveProjects?: boolean;
   /**
    * The computer's Advanced > Worktree sessions show in their project: the Project list draws a
    * worktree's sessions under its parent project (contract/grouping.ts). On unless the computer sends `false`.
