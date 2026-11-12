@@ -84,6 +84,7 @@ import {
 } from './transcript';
 import { SaveMarkdownDialog } from './transcript/SaveMarkdownDialog';
 import { ChatToast, type Toast } from './ChatToast';
+import { TabSwipeView, type TabSwipe } from './TabSwipe';
 import { TranscriptMenuSheet, type TranscriptMenuHost } from './transcript/TranscriptMenu';
 
 export type NativeChatScreenProps = {
@@ -117,6 +118,8 @@ export type NativeChatScreenProps = {
   inPane?: boolean;
   /** Bumped when the composer is to take the keyboard (the pane it stands in became the active one); 0 asks nothing. */
   focusRequestId?: number;
+  /** A sideways swipe on the transcript goes to the previous or next tab (`TabSwipe.tsx`); null: no swipe. */
+  tabSwipe?: TabSwipe | null;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -134,6 +137,7 @@ export default function NativeChatScreen({
   links = null,
   inPane = false,
   focusRequestId = 0,
+  tabSwipe = null,
   style,
 }: NativeChatScreenProps) {
   const chat = useRustChat({ machine, projectId, sessionId });
@@ -484,9 +488,11 @@ export default function NativeChatScreen({
                 setComposerFrame((now) => ({ ...now, transcriptTop: y, transcriptBottom: y + height }));
               }}
             >
-              <NativeTranscript chat={chat} active={visible} />
-              {/* Scroll-to-bottom alone while no card carries it. */}
-              {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
+              <TabSwipeView swipe={tabSwipe}>
+                <NativeTranscript chat={chat} active={visible} />
+                {/* Scroll-to-bottom alone while no card carries it. */}
+                {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
+              </TabSwipeView>
             </View>
             {/* The offline computer's card tops the stack, above the working card; it names the
                 computer itself, so "Reconnecting to …" steps aside while it shows. */}

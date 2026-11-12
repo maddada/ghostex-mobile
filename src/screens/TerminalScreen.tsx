@@ -102,6 +102,7 @@ import SessionChatSurface from '../demo/SessionChatSurface';
 import DemoTerminalView from '../demo/DemoTerminalView';
 import { isDemoMachineId } from '../demo/identity';
 import SessionLinksSheet from '../chat/native/SessionLinksSheet';
+import type { TabSwipe } from '../chat/native/TabSwipe';
 import { useSessionLinksRefresh } from '../chat/native/useSessionLinksRefresh';
 import { useTranscriptTheme } from '../chat/native/transcript/theme';
 import { DuoChromeCopy, PanesCopy, RenameCopy, SessionCopy, TerminalHeaderCopy } from '../copy';
@@ -1324,6 +1325,26 @@ export default function TerminalScreen({ navigation, route }: Props) {
     ];
   }, [activeSession, agentActionsCapable, docsEnabled, tabsOnlyHeader]);
 
+  // A sideways swipe on the chat's transcript: the tab before or after it in the strip (`TabSwipe.tsx`), taken as a
+  // tap on that tab takes it. Not with two panes, whose edges and contents are their own.
+  const chatTabSwipe = useMemo<TabSwipe | null>(() => {
+    if (twoPanes !== null || tabs.length < 2) return null;
+    const neighbour = (delta: -1 | 1): TerminalTab | undefined => {
+      const store = useTerminalStore.getState();
+      const index = store.tabs.findIndex((tab) => tab.sessionKey === store.selectedSessionKey);
+      return index < 0 ? undefined : store.tabs[index + delta];
+    };
+    return {
+      canSwipe: (delta) => neighbour(delta) !== undefined,
+      onSwipe: (delta) => {
+        const next = neighbour(delta);
+        if (next === undefined) return;
+        handleSelectTab(next.sessionKey);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+    };
+  }, [handleSelectTab, tabs.length, twoPanes]);
+
   // What the chat's More actions rows and cards ask of the screen: the terminal menu's own actions, on the selected
   // session (a touch in a chat pane selects its session before its rows are reached).
   const chatHostAction = (action: string): void => {
@@ -1535,6 +1556,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             openSearchRequestId={chatSearchRequestId}
             openSessionNoteRequestId={chatSessionNoteRequestId}
             onQueueCountChange={handleChatQueueCount}
+            tabSwipe={chatTabSwipe}
             links={{ links: activeSession?.links, onOpen: () => setLinksSheetVisible(true) }}
             style={chatFoldInset > 0 ? [styles.terminal, { marginBottom: chatFoldInset }] : styles.terminal}
           />
@@ -1550,8 +1572,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
           />
         )}
         {twoPanes === null ? queuedPill : null}
-        {/* With two panes the screen's edges are their title bars' and contents': no edge swipe there. */}
-        {twoPanes === null && tabs.length > 1 && (
+        {/* With two panes the screen's edges are their title bars' and contents': no edge swipe there. The chat view
+            swipes on its transcript instead (`chatTabSwipe`), clear of the edges. */}
+        {twoPanes === null && !chatModeActive && tabs.length > 1 && (
           <EdgeSwipeZones onPrev={() => switchTabBy(-1)} onNext={() => switchTabBy(1)} />
         )}
         {laptopFold !== null && laptopCover > 0 ? (
