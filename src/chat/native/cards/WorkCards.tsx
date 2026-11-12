@@ -685,7 +685,11 @@ function DockRow({
       : null;
   const logosWidth = threadChips.length * (THREAD_LOGO + 6);
   const count = str(row, 'count');
-  const markStatus = page && str(row, 'status') === 'needs' ? 'page' : str(row, 'status');
+  // A question form that needs the reader is the visuals list's checklist in the need-you pink
+  // (desktop `row_mark`; the user: "use this icon for this one when it's a question form (keep
+  // pink color)"); a page its page, everything else its status's mark.
+  const questionForm = !page && str(row, 'kind') === 'form' && str(row, 'status') === 'needs';
+  const markStatus = page && str(row, 'status') === 'needs' ? 'page' : questionForm ? 'form' : str(row, 'status');
   const answerLine =
     answers.length > 0 || (needs && (reply !== null || obj(row.open) !== null)) ? (
       <View style={opened ? styles.dockAnswersOpen : styles.dockAnswers}>
@@ -729,6 +733,8 @@ function DockRow({
           <View style={styles.dockIcon}>
             {markStatus === 'page' ? (
               <Glyph name="note" size={14} color={STATUS_COLOR.needs} />
+            ) : markStatus === 'form' ? (
+              <Glyph name="list-check" size={14} color={STATUS_COLOR.needs} />
             ) : (
               <StatusMarker status={markStatus} size={13} />
             )}
