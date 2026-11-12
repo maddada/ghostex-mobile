@@ -33,9 +33,8 @@ import {
 } from '../transcript/context';
 import { strengthenedText } from '../transcript/textStrength';
 import { LinkWords } from '../transcript/LinkWords';
-import { Markdown } from '../transcript/markdown/Markdown';
 import { Sheet } from '../composer/Sheet';
-import { WorkAnswerLine, WorkMenuButton, WorkMenuList, workMenuRows } from './workItemParts';
+import { TextArea, WorkAnswerLine, WorkDescription, WorkMenuButton, WorkMenuList, workMenuRows } from './workItemParts';
 import { STACK_GAP } from './NativeChatCards';
 import { loadReplyDrafts, pruneReplyDrafts, registerReplyDraftScope, type ReplyDraftScope } from './replyDrafts';
 
@@ -503,7 +502,11 @@ function DockRow({
         accessibilityRole="button"
         accessibilityState={page ? undefined : { expanded: opened }}
         onPress={page ? () => dispatch(row.open as never) : onToggle}
-        style={({ pressed }) => [styles.dockPress, pressed && !opened && { backgroundColor: P.ink(0.04) }]}
+        style={({ pressed }) => [
+          styles.dockPress,
+          opened && styles.dockPressOpen,
+          pressed && !opened && { backgroundColor: P.ink(0.04) },
+        ]}
       >
         <View style={styles.dockRow}>
           <View style={styles.dockIcon}>
@@ -535,10 +538,14 @@ function DockRow({
             {menuRows.length > 0 ? <WorkMenuButton active={menu} onPress={() => setMenu(true)} /> : null}
           </View>
         </View>
-        {/* Opened, only the title line shares its width with the age and the ⋯; the work item line,
-            the description and the lines under them run to the card's right edge, from the title's
-            left edge (user, 2026-11-12: "It should take up the full width of this card when I expand"). */}
-        {opened ? (
+      </Pressable>
+      {/* Opened, only the title line shares its width with the age and the ⋯; the work item line,
+          the description and the lines under them run to the card's right edge, from the title's
+          left edge (user, 2026-11-12: "It should take up the full width of this card when I expand").
+          They sit outside the row's press, so only the title line shuts it; a tap under it does
+          nothing and a long press on the description offers Copy (`WorkDescription`). */}
+      {opened ? (
+        <TextArea style={styles.dockDetailArea}>
           <View style={styles.dockDetail}>
             {Array.isArray(row.waitedBy) ? (
               <ItemLine row={row} chips={chips} dispatch={dispatch} />
@@ -550,7 +557,7 @@ function DockRow({
               </View>
             ) : null}
             {description.length > 0 ? (
-              <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
+              <WorkDescription text={description} color={P.cardMuted} title={str(row, 'title')} dispatch={dispatch} />
             ) : null}
             {arr(row.detail)
               .map((line) => (typeof line === 'string' ? line : ''))
@@ -561,8 +568,8 @@ function DockRow({
                 </Text>
               ))}
           </View>
-        ) : null}
-      </Pressable>
+        </TextArea>
+      ) : null}
       {answerLine}
       {menuRows.length > 0 ? (
         <Sheet visible={menu} onClose={() => setMenu(false)} title={str(row, 'title')}>
@@ -1058,6 +1065,8 @@ const useStyles = themedStyles((P) => ({
   dockCountName: { marginLeft: -1, fontSize: 13, color: P.cardMuted },
   dockHeadButton: { width: 28, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   dockPress: { gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
+  dockPressOpen: { paddingBottom: 2 },
+  dockDetailArea: { paddingHorizontal: 8, paddingBottom: 6 },
   dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   // An opened row is its own card, a little lighter than the dock (desktop `dock_row`).
   dockRowOpen: {

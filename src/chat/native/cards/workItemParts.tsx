@@ -18,7 +18,8 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Pressable, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
@@ -26,6 +27,8 @@ import { Sheet } from '../composer/Sheet';
 import { askColor, tint } from './askCard';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { openQuestionReply } from '../transcript/QuestionReply';
+import { Markdown } from '../transcript/markdown/Markdown';
+import { messageCommands } from '../transcript/markdown/runCommands';
 import { replyDraftRow, useReplyDraft, type ReplyDraftScope } from './replyDrafts';
 
 /** Every button's touch area: 8 above and below a 28-point button make Apple's 44. */
@@ -57,6 +60,98 @@ export function openWorkReply(reply: JsonRecord, scope: ReplyDraftScope | null):
     ...(typeof reply.item === 'string' ? { item: reply.item, key: str(reply, 'key') } : {}),
     scope,
   });
+}
+
+/**
+ * The part of an opened work row or card under its title line: it takes a tap itself, so a tap
+ * there never shuts the row or card around it (only its title line does), while the links, chips
+ * and buttons inside keep their own taps.
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User, of an opened row whose command he could not copy: "let's make collapsing require clicking
+ * on the header of the card not the inner part please".
+ */
+export function TextArea({ style, children }: { style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  return (
+    <View style={style} onStartShouldSetResponder={() => true}>
+      {children}
+    </View>
+  );
+}
+
+/** A Markdown text as words to copy: a link becomes its label. */
+function plainWords(markdown: string): string {
+  return markdown.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+}
+
+/**
+ * A work ask's description in an opened row or card. A long press opens Copy text and, for a
+ * command in it (an inline span the core marked, gx-chat-core `native_markdown::ask_markdown`),
+ * what a reply's command offers in the transcript's long-press menu: Copy command and Paste in
+ * terminal, or Run in terminal for a command block (`MessageActions.tsx`).
+ */
+export function WorkDescription({
+  text,
+  color,
+  title,
+  dispatch,
+}: {
+  text: string;
+  color: string;
+  title: string;
+  dispatch: (action: never) => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const [open, setOpen] = useState(false);
+  const commands = messageCommands(text);
+  const items: { label: string; icon: GlyphName; run: () => void }[] = [
+    { label: 'Copy text', icon: 'copy', run: () => void Clipboard.setStringAsync(plainWords(text)) },
+  ];
+  for (const { command, inline } of commands) {
+    const named = commands.length > 1 ? ` ${command.length > 32 ? `${command.slice(0, 31)}\u2026` : command}` : '';
+    if (inline) {
+      items.push({ label: `Copy command${named}`, icon: 'copy', run: () => void Clipboard.setStringAsync(command) });
+      items.push({
+        label: `Paste in terminal${named}`,
+        icon: 'terminal-2',
+        run: () => dispatch({ type: 'pasteInTerminal', command } as never),
+      });
+    } else {
+      items.push({
+        label: `Run in terminal${named}`,
+        icon: 'terminal-2',
+        run: () => dispatch({ type: 'runInTerminal', command } as never),
+      });
+    }
+  }
+  return (
+    <>
+      <Pressable accessibilityHint="Long-press to copy" delayLongPress={350} onLongPress={() => setOpen(true)}>
+        <Markdown text={text} color={color} breaks selectable={false} />
+      </Pressable>
+      <Sheet visible={open} onClose={() => setOpen(false)} title={title}>
+        <View>
+          {items.map((item) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => {
+                setOpen(false);
+                item.run();
+              }}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+            >
+              <Glyph name={item.icon} size={15} color={P.cardMuted} />
+              <Text style={styles.menuText} numberOfLines={1}>
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </Sheet>
+    </>
+  );
 }
 
 /** The quiet word after a Reply that holds words not yet sent (desktop `draft_sign`). */

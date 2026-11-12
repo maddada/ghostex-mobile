@@ -23,11 +23,12 @@ import { arr, asJson, isTrue, num, obj, str } from './json';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { TranscriptEnvProvider, type TranscriptEnv } from '../transcript/context';
 import { LinkWords } from '../transcript/LinkWords';
-import { Markdown } from '../transcript/markdown/Markdown';
 import { askColor, tint } from './askCard';
 import {
   CHOOSE_ANSWER,
+  TextArea,
   WorkAnswerLine,
+  WorkDescription,
   WorkMenuButton,
   openWorkReply,
   workMenuRows,
@@ -613,6 +614,8 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                 const shownTags = expanded ? tags : tags.slice(0, 2);
                 const hiddenTags = tags.length - shownTags.length;
                 const line = str(row, 'detail') || note;
+                // Opened, the chip line takes its own taps (`TextArea`); closed, a tap on it opens the card.
+                const ChipArea = expanded ? TextArea : View;
                 return (
                   <Pressable
                     key={key}
@@ -674,14 +677,25 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                         </Text>
                       ) : null}
                     </View>
-                    {/* A work ask's longer explanation under its short title, whole (desktop `ask_markdown`). */}
-                    {expanded && description.length > 0 ? (
-                      <Markdown text={description} color={P.cardMuted} breaks selectable={false} />
+                    {/* A work ask's longer explanation under its short title, whole (desktop `ask_markdown`).
+                        Opened, only the title line shuts the card: what is under it takes a tap
+                        itself (`TextArea`), and a long press on the description offers Copy. */}
+                    {expanded && (description.length > 0 || line.length > 0) ? (
+                      <TextArea style={styles.cardText}>
+                        {description.length > 0 ? (
+                          <WorkDescription
+                            text={description}
+                            color={P.cardMuted}
+                            title={str(row, 'title')}
+                            dispatch={chat.dispatch as never}
+                          />
+                        ) : null}
+                        {line.length > 0 ? <Text style={styles.cardLine}>{line}</Text> : null}
+                      </TextArea>
                     ) : null}
-                    {expanded && line.length > 0 ? <Text style={styles.cardLine}>{line}</Text> : null}
                     {/* An opened ask draws its answers below, so its chip line would be empty. */}
                     {expanded && answers.length > 0 && relayed === null ? null : (
-                      <View style={[styles.chipLine, expanded && styles.chipLineOpen]}>
+                      <ChipArea style={[styles.chipLine, expanded && styles.chipLineOpen]}>
                         <View style={[styles.chips, expanded && styles.chipsOpen]}>
                           {relayed !== null ? (
                             <BoardRelayButtons card={relayed} dispatch={chat.dispatch} />
@@ -749,7 +763,7 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                           ) : null}
                         </View>
                         {expanded ? null : <Text style={styles.age}>{str(row, 'age')}</Text>}
-                      </View>
+                      </ChipArea>
                     )}
                     {relayed !== null ? (
                       <Text style={styles.note} numberOfLines={2}>
@@ -759,7 +773,7 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                       </Text>
                     ) : null}
                     {expanded ? (
-                      <View style={styles.cardOpenFoot}>
+                      <TextArea style={styles.cardOpenFoot}>
                         {/* Its answers with Reply after a divider, or Reply or Open alone, drawn by
                             the dock's own code (desktop `board_card_buttons`). */}
                         <WorkAnswerLine
@@ -789,7 +803,7 @@ function CoordinatorBoardList({ chat, document, onDone, focus = null }: BoardMen
                           <View style={styles.flex} />
                           <Text style={styles.age}>{str(row, 'age')}</Text>
                         </View>
-                      </View>
+                      </TextArea>
                     ) : null}
                     {menuFor === key ? (
                       <CardMenu
@@ -907,6 +921,8 @@ const useStyles = themedStyles((P) => ({
     borderColor: P.ink(0.08),
     backgroundColor: P.ink(0.035),
   },
+  /** An opened card's description and line, one block under its title (the card's gap). */
+  cardText: { gap: 8 },
   /** The open card (gx-chat-core `expanded`): a step brighter, growing to its content. */
   cardOpen: {
     borderColor: P.ink(0.14),
