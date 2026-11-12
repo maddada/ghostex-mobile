@@ -8,8 +8,15 @@ import WidgetKit
 #endif
 
 // The design: state colours of the session list (orange works, blue
-// waits, pink asks, muted finished), always with a glyph and a word so colour never carries meaning alone;
-// rows of the agent's mark, agent + project; four rows within Apple's 160 pt Lock Screen height.
+// waits, pink asks, muted finished), always with a glyph whose shape differs per state, so colour never carries
+// meaning alone; rows of the agent's mark, agent + project, the time and the state's glyph at the right edge; four
+// rows within Apple's 160 pt Lock Screen height.
+//
+// CDXC:Notifications 2026-11-12 DECISION: User: on the Live Activity, "don't show 'working' / 'waiting' text next
+// to each session, it takes space"; picked "state glyph by the time", with "put the glyphs at the far right of each
+// row so the time's length doesn't push them and they stay vertically lined up with each other"; the expanded
+// Dynamic Island does the same, and the top line shows numbers only (glyph + number, no words). The words stay in
+// VoiceOver: a row reads its state as its value, a count reads "3 working".
 
 enum ActivityStyle {
   static let working = Color(red: 0xC6 / 255, green: 0x8A / 255, blue: 0x06 / 255)
@@ -24,6 +31,8 @@ enum ActivityStyle {
   static let rowHeight: CGFloat = 29
   /// Width of the time column: `12h 59m`, or `1:02:03` of the timer before iOS 18, at caption size.
   static let timeWidth: CGFloat = 52
+  /// Width of the state glyph's column at a row's right edge, so the glyphs of all rows line up.
+  static let glyphColumnWidth: CGFloat = 14
 }
 
 /// What a row or a count shows: the agent's state, with "has a question" for a waiting agent that asks one.
@@ -101,7 +110,8 @@ struct StatusGlyph: View {
   }
 }
 
-/// "2 working" / "1 waiting", or only glyph and number where the words do not fit.
+/// "2 working" / "1 waiting", or only glyph and number (the Live Activity's top line and island sides); VoiceOver
+/// always reads the word.
 struct CountLabel: View {
   let kind: ActivityStatus
   let count: Int
@@ -168,12 +178,6 @@ struct ActivityRowView: View {
       }
       .lineLimit(1)
       .frame(maxWidth: .infinity, alignment: .leading)
-      HStack(spacing: 4) {
-        StatusGlyph(status: status, size: 12)
-        Text(status.word).fontWeight(.semibold)
-      }
-      .font(.caption)
-      .lineLimit(1)
       ElapsedText(row: row, frozenAt: frozenAt)
         .font(.caption)
         .foregroundStyle(ActivityStyle.secondaryText)
@@ -181,9 +185,13 @@ struct ActivityRowView: View {
         // A live time text takes the whole column; this keeps it at the right edge like the frozen one.
         .multilineTextAlignment(.trailing)
         .frame(width: ActivityStyle.timeWidth, alignment: .trailing)
+      // The glyph has its own column at the far right, so a long time never moves it and the rows' glyphs line up.
+      StatusGlyph(status: status, size: 12)
+        .frame(width: ActivityStyle.glyphColumnWidth, alignment: .trailing)
     }
     .frame(height: ActivityStyle.rowHeight)
     .accessibilityElement(children: .combine)
+    .accessibilityValue(Text(status.word))
     .accessibilityHint(Text("Opens this session"))
   }
 }
@@ -270,8 +278,8 @@ struct LockScreenCard: View {
             Text("+\(content.moreCount)").foregroundStyle(ActivityStyle.secondaryText)
           }
         } else {
-          CountLabel(kind: .working, count: content.counts.working, showsWord: true)
-          CountLabel(kind: .waiting, count: content.counts.waiting, showsWord: true)
+          CountLabel(kind: .working, count: content.counts.working, showsWord: false)
+          CountLabel(kind: .waiting, count: content.counts.waiting, showsWord: false)
           Spacer(minLength: 4)
           if content.moreCount > 0 {
             Text("+\(content.moreCount) more").fontWeight(.semibold).foregroundStyle(ActivityStyle.secondaryText)
