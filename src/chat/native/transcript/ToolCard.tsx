@@ -25,7 +25,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop, SvgXml } from 'react-native-svg'
 
 import type { ProjectedMessage } from '../../rust/document';
 import { useNativeChatUi, useRowDetail, useTranscriptEnv } from './context';
-import { DisclosureBody } from './Disclosure';
+import { DisclosureBody, useFoldPlace } from './Disclosure';
 import { Counts, FileChangeDiff, palette } from './FileChanges';
 import { Glyph, toolGlyph } from './icons';
 import { ReadImages } from './Images';
@@ -121,7 +121,9 @@ export const BoxedToolCards = createContext(false);
 export function ToolCard({ message }: { message: ProjectedMessage }) {
   const { theme, workOpen, toolLines } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
-  const boxed = useContext(BoxedToolCards);
+  // Not in a finished turn's log under its "Worked for" card, which is a card already.
+  const { inWorkFold } = useFoldPlace();
+  const boxed = useContext(BoxedToolCards) && !inWorkFold;
   const card = obj(message.toolCard);
   const running = card?.running === true;
   const live = message.toolCardLive === true;

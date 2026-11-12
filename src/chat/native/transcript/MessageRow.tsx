@@ -347,7 +347,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   // Which of the row's parts are one-line cards, for the gap between two of them (`cardSpacing.ts`).
   const filesCard = !hideFileChanges && !toolCard && arr(message.files).length > 0;
   // Inside an opened Quiet View line the plain tool rows are a card too (`ToolRows`, `BoxedToolCards`).
-  const boxedRows = boxedTools && quietSteps !== true && hasVisibleTools(message, inWorkFold, flags.workflowCards);
+  const boxedRows = boxedTools && !inWorkFold && quietSteps !== true && hasVisibleTools(message, inWorkFold, flags.workflowCards);
   const callsCard = filesCard || (!toolsRendered && (toolCard || boxedRows));
   const questionCards = !inWorkFold && arr(message.questions).length > 0;
   const sentCards = !inWorkFold && arr(message.sentMessages).length > 0;

@@ -74,7 +74,7 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   if (card !== null && !(toolLines === true && card.background === true)) return <ToolCard message={message} />;
   // Inside an opened Quiet View line the plain rows sit in the "Message to" card's shell too
   // (`BoxedToolCards`, CDXC:SessionChat 2026-11-12), whatever Tool call cards says.
-  if (boxed && quietSteps !== true && hasVisibleTools(message, inWorkFold, workflowCards)) {
+  if (boxed && !inWorkFold && quietSteps !== true && hasVisibleTools(message, inWorkFold, workflowCards)) {
     return (
       <View style={[styles.boxed, singleLineShell(theme)]}>
         <ToolRunRows message={message} />
