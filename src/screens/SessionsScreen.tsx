@@ -712,8 +712,18 @@ export default function SessionsScreen({ navigation }: Props) {
       if (isConnected(entry.id)) void readComputerIcon(entry);
       else forgetComputerIcon(entry.id);
     }
-    setConnectedComputers(machines.filter((entry) => isConnected(entry.id)).map((entry) => entry.id));
-  }, [machines, inventoriesByMachineId]);
+    // The computers the list shows: one, with Separate by machine on in the Project list (not Active projects, which
+    // lists every computer), so its rows carry no computer icon, as on the desktop (native_sidebar/computer_mark.rs).
+    const oneComputer =
+      selectedSummary?.separateByMachine === true &&
+      selectedSummary.sidebarView !== 'unified' &&
+      selectedSpaceId !== ACTIVE_SPACE_ID;
+    setConnectedComputers(
+      machines
+        .filter((entry) => isConnected(entry.id) && (!oneComputer || entry.id === machine?.id))
+        .map((entry) => entry.id),
+    );
+  }, [machines, inventoriesByMachineId, selectedSummary, selectedSpaceId, machine]);
 
   /** The tab's connection line (the failure reason when failed): the long-press menu subtitle. */
   const machineConnectionLine = useCallback(
