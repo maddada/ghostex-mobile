@@ -4,7 +4,7 @@
  * and each row's arguments and result, which the core ships only while the row is open.
  */
 
-import { memo, useContext, useState } from 'react';
+import { memo, useContext, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
@@ -21,7 +21,7 @@ import { DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { ToolBody } from './ToolBody';
 import { BoxedToolCards, LINE_OUTPUT_LINES, Shimmer, ShowAllLines, ToolCard } from './ToolCard';
-import { SINGLE_LINE_CARD, singleLineShell } from './singleLineCard';
+import { SINGLE_LINE_CARD, SINGLE_LINE_HEADER_HEIGHT, singleLineShell, singleLinePressed } from './singleLineCard';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { FOLDED_CALLS_INSET, ReadImageStrip, ReadImages } from './Images';
 import { highlightLabel, useRowFind } from './searchHighlight';
@@ -64,7 +64,7 @@ function dimmed(hex: string, alpha: number): string {
  * behind one "N tool calls" heading (desktop `tool_run.rs`).
  */
 export function ToolRows({ message }: { message: ProjectedMessage }) {
-  const { toolLines, theme } = useTranscriptEnv();
+  const { toolLines } = useTranscriptEnv();
   const boxed = useContext(BoxedToolCards);
   const { inWorkFold, quietSteps } = useFoldPlace();
   const { workflowCards } = useTranscriptFlags();
@@ -75,11 +75,7 @@ export function ToolRows({ message }: { message: ProjectedMessage }) {
   // Inside an opened Quiet View line the plain rows sit in the "Message to" card's shell too
   // (`BoxedToolCards`, CDXC:SessionChat 2026-11-12), whatever Tool call cards says.
   if (boxed && !inWorkFold && quietSteps !== true && hasVisibleTools(message, inWorkFold, workflowCards)) {
-    return (
-      <View style={[styles.boxed, singleLineShell(theme)]}>
-        <ToolRunRows message={message} />
-      </View>
-    );
+    return <ToolRunRows message={message} boxed />;
   }
   return <ToolRunRows message={message} />;
 }
@@ -102,7 +98,15 @@ export function hasVisibleTools(
   });
 }
 
-function ToolRunRows({ message }: { message: ProjectedMessage }) {
+/**
+ * A message's plain tool rows. `boxed`: in an opened Quiet View line they sit in the "Message to"
+ * card's shell, where a folded group's "3 tool calls" or a lone call is the card's header, filling
+ * it edge to edge with that card's pressed fill (desktop `tool_rows`).
+ *
+ * CDXC:SessionChat 2026-11-12 DECISION: User, of a folded "3 tool calls" card in a Quiet View line:
+ * "make hovering here please show hover effect on whole card header not just small part like now".
+ */
+function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; boxed?: boolean }) {
   const { theme, simple, workOpen } = useTranscriptEnv();
   const { workflowCards, chatLook } = useTranscriptFlags();
   const { disclosures } = useNativeChatUi();
@@ -143,6 +147,8 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   const hidden = typeof fold?.hiddenCount === 'number' ? fold.hiddenCount : 0;
   const rows = (indices: number[]) =>
     indices.map((index) => <ToolRow key={index} messageId={message.id} index={index} tool={tools[index]!} />);
+  const shell = (node: ReactNode, flush = false) =>
+    boxed ? <View style={[flush ? styles.boxedFlush : styles.boxed, singleLineShell(theme)]}>{node}</View> : node;
   // An opened quiet line lists each call as one of its steps.
   if (quietSteps === true) {
     return (
@@ -156,7 +162,7 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
   if (quiet && !showAll) {
     const running = tools.some((tool) => tool.status === 'running');
     const label = str(message, 'simpleToolLabel');
-    return (
+    return shell(
       <View style={styles.column}>
         <QuietWorkLine
           segments={[{ text: running ? `Working \u00b7 ${label}\u2026` : label }]}
@@ -172,7 +178,36 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
         ) : (
           <ReadImageStrip images={message.readImages} inset={0} />
         )}
-      </View>
+      </View>,
+    );
+  }
+  if (simple && !showAll && boxed) {
+    return shell(
+      <View style={styles.flushColumn}>
+        <Pressable
+          onPress={toggleSimple}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: simpleOpen }}
+          style={({ pressed }) => [styles.cardHeader, pressed && singleLinePressed(theme)]}
+        >
+          <Glyph name={simpleOpen ? 'chevron-down' : 'chevron-right'} size={14} color={theme.primary} />
+          <Text numberOfLines={1} style={[styles.cardHeaderText, { color: theme.primary }]}>
+            {str(message, 'simpleToolLabel')}
+          </Text>
+        </Pressable>
+        {simpleOpen ? (
+          <View style={[styles.cardBody, { borderTopColor: theme.ink(SINGLE_LINE_CARD.borderAlpha) }]}>
+            <DisclosureBody onCollapse={toggleSimple} label="Collapse tool calls" gap={ROW_GAP}>
+              {rows(visible)}
+            </DisclosureBody>
+          </View>
+        ) : (message.readImages ?? []).length > 0 ? (
+          <View style={styles.cardPictures}>
+            <ReadImageStrip images={message.readImages} inset={FOLDED_CALLS_INSET} />
+          </View>
+        ) : null}
+      </View>,
+      true,
     );
   }
   if (simple && !showAll) {
@@ -190,7 +225,13 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
       </View>
     );
   }
-  if (showAll || hidden === 0) return <View style={styles.column}>{rows(visible)}</View>;
+  if (showAll || hidden === 0) {
+    if (boxed && visible.length === 1) {
+      const index = visible[0]!;
+      return shell(<ToolRow messageId={message.id} index={index} tool={tools[index]!} flush />, true);
+    }
+    return shell(<View style={styles.column}>{rows(visible)}</View>);
+  }
   const keptFlags = arr(fold?.visible);
   // Closed, the toggle sits right before the last call; open, it moves to the top of the group and
   // every call follows below it in order, so it is never between the calls it reveals (gx-chat-core
@@ -214,12 +255,12 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
     </Pressable>
   );
   if (runOpen) {
-    return (
+    return shell(
       <DisclosureBody onCollapse={toggleRun} label="Show fewer tool calls" gap={ROW_GAP}>
         {rows(visible.filter((index) => index < before))}
         {toggle}
         {rows(visible.filter((index) => index >= before))}
-      </DisclosureBody>
+      </DisclosureBody>,
     );
   }
   // The pictures the folded calls read stay in view under the toggle, except one the user's own
@@ -229,13 +270,13 @@ function ToolRunRows({ message }: { message: ProjectedMessage }) {
     .filter((_, index) => keptFlags[index] !== true)
     .flatMap((tool) => arr(tool.images))
     .filter((image) => !isTrue(image, 'userShown'));
-  return (
+  return shell(
     <View style={styles.column}>
       {rows(visible.filter((index) => keptFlags[index] === true && index < before))}
       {toggle}
       <ReadImageStrip images={foldedPictures} inset={FOLDED_CALLS_INSET} />
       {rows(visible.filter((index) => keptFlags[index] === true && index >= before))}
-    </View>
+    </View>,
   );
 }
 
@@ -320,10 +361,13 @@ const ToolRow = memo(function ToolRow({
   messageId,
   index,
   tool,
+  flush = false,
 }: {
   messageId: string;
   index: number;
   tool: JsonRecord;
+  /** The lone call of a Quiet View card, drawn as its header (`ToolRunRows`). */
+  flush?: boolean;
 }) {
   const { theme, dispatch, simple, working } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
@@ -379,8 +423,9 @@ const ToolRow = memo(function ToolRow({
       style={({ pressed }) => [
         styles.trigger,
         subagent.length === 0 && styles.triggerFill,
+        flush && styles.flushTrigger,
         failed && { backgroundColor: errorWash(theme.error) },
-        pressed && { backgroundColor: theme.pressed },
+        pressed && (flush ? singleLinePressed(theme) : { backgroundColor: theme.pressed }),
       ]}
     >
       <View style={[styles.tile, { backgroundColor: theme.ink(0.05) }]}>
@@ -417,7 +462,7 @@ const ToolRow = memo(function ToolRow({
     </Pressable>
   );
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, flush && expanded && styles.flushOpen]}>
       {subagent.length === 0 ? (
         trigger
       ) : (
@@ -450,7 +495,7 @@ const ToolRow = memo(function ToolRow({
         expanded={expanded}
         onCollapse={toggle}
         name={name}
-        inset={styles.detailInset}
+        inset={flush ? [styles.detailInset, styles.flushDetail] : styles.detailInset}
       />
     </View>
   );
@@ -660,6 +705,28 @@ const styles = StyleSheet.create({
   // The rows' own 8pt inset plus 4 puts their words 12pt in, the "Message to" card's padding; a
   // single row in it is that card's 44pt.
   // Never shorter than that card, a folded "2 tool calls" heading too.
+  // A lone call or a group's heading fills the card (`ToolRunRows`).
+  boxedFlush: { minWidth: 0 },
+  flushColumn: { minWidth: 0 },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: SINGLE_LINE_CARD.paddingX,
+    height: SINGLE_LINE_HEADER_HEIGHT,
+    minWidth: 0,
+  },
+  cardHeaderText: { flexShrink: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
+  cardBody: { borderTopWidth: StyleSheet.hairlineWidth, padding: 4 },
+  cardPictures: { paddingHorizontal: SINGLE_LINE_CARD.paddingX, paddingBottom: 8 },
+  flushTrigger: {
+    paddingHorizontal: SINGLE_LINE_CARD.paddingX,
+    paddingVertical: 0,
+    minHeight: SINGLE_LINE_HEADER_HEIGHT,
+    borderRadius: 0,
+  },
+  flushOpen: { paddingBottom: 4 },
+  flushDetail: { marginLeft: SINGLE_LINE_CARD.paddingX - ROW_PAD_X },
   boxed: {
     paddingHorizontal: SINGLE_LINE_CARD.paddingX - ROW_PAD_X,
     paddingVertical: 5.5,
