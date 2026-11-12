@@ -28,8 +28,9 @@
  * User, of the ⋯ "Context window" sheet and this sheet showing the same things on the phone: "let's do 2 tabs that
  * show the 2 things. both are under Session details. we need to deduplicate stuff too", then (Q2755, Q2756, Q2762) the
  * merged sheet as drawn on the "Session details: final phone sheet and desktop match" page, with "i dont like that we
- * lost the stuff that's below the context fam" and the Context card moved to the first tab. One sheet, two tabs
- * (`SESSION_DETAILS_TABS`, whose names are still to be picked):
+ * lost the stuff that's below the context fam" and the Context card moved to the first tab, and the names "Overview |
+ * Limits" (Q2769). The chat core lays the sheet out for the phone and the desktop alike (`TABS` and the cards in
+ * gx-chat-core `extras/session_details/document.rs`): one sheet, two tabs:
  * - The first: Environment, Changes, then the Context card always open (its bar, every breakdown row with tokens and
  *   %, when it was counted with the refresh, Compact context), then Tasks, Connectors, Skills, Memory files,
  *   Background tasks, and an Agent card for the agent's own settings rows. The ring opens the sheet here, scrolled
@@ -70,102 +71,15 @@ import { Spinner } from './primitives';
 /** The sheet's title and the header button's name, the desktop panel's own. */
 export const SESSION_DETAILS_TITLE = 'Session details';
 
-/** The two tabs' names, in their order: the one place to rename them. */
-export const SESSION_DETAILS_TABS = { session: 'Session', usage: 'Usage' } as const;
+/**
+ * The two tabs' names, for a core too old to send its own (`sessionDetails.tabs`, whose names the core keeps for every
+ * app in `TABS`, gx-chat-core `extras/session_details/document.rs`).
+ */
+export const SESSION_DETAILS_TABS = { overview: 'Overview', usage: 'Limits' } as const;
 type DetailsTab = keyof typeof SESSION_DETAILS_TABS;
 
 /** Where the sheet scrolls to as it opens: the ring's Context card, or the top. */
 export type SessionDetailsFocus = 'context' | null;
-
-/** The first tab's cards in this order; any card the core adds later follows them. */
-const FIRST_TAB_ORDER = ['environment', 'changes', 'context', 'tasks', 'connectors', 'skills', 'memory', 'background'];
-
-/** The second tab's cards: the context meter's detail rows by id, in each card's order. */
-const USAGE_CARDS: readonly { title: string; ids: readonly string[] }[] = [
-  {
-    title: 'Limits',
-    ids: [
-      'fiveHourLimit',
-      'sevenDayLimit',
-      'modelLimit',
-      'accountResets',
-      'credits',
-      'accountSpending',
-      'plan',
-      'accountUsageStatus',
-      'accountUsageUpdated',
-    ],
-  },
-  {
-    title: 'Cost and time',
-    ids: ['costUsd', 'sessionTime', 'apiTime', 'lastTurnDuration', 'firstTokenTime', 'startedAt'],
-  },
-  {
-    title: 'Cache',
-    ids: [
-      'cacheState',
-      'cacheHitRate',
-      'cacheRatio',
-      'cacheMisses',
-      'cacheLastMiss',
-      'lastRequestInput',
-      'lastRequestOutput',
-      'lastRequestCached',
-      'lastRequestCacheWrite',
-      'cachedTokens',
-      'cacheWriteTokens',
-      'tokens',
-      'totalTokens',
-      'totalInputTokens',
-      'totalOutputTokens',
-      'turnTokens',
-      'reasoningTokens',
-    ],
-  },
-];
-
-/** The core's reset text is the window's name and the countdown ("5h 2h 10m"); on its limit's row it reads "resets in 2h 10m". */
-const resetText = (value: string): string => `resets in ${value.replace(/^\S+\s+/u, '')}`;
-
-/** A reset that rides on its limit's row ("34% · resets in 2h 10m"), and the time left that rides on Cache state. */
-const RIDES_ON: Record<string, { host: string; text: (value: string) => string }> = {
-  fiveHourReset: { host: 'fiveHourLimit', text: resetText },
-  sevenDayReset: { host: 'sevenDayLimit', text: resetText },
-  cacheTimeLeft: { host: 'cacheState', text: (value) => value },
-};
-
-/** Detail rows the sheet does not list: the Context card, Environment, Changes, the model pill or the tab show them. */
-const SHOWN_ELSEWHERE = new Set([
-  'contextUsed',
-  'contextTokens',
-  'model',
-  'thinking',
-  'accountName',
-  'accountEmail',
-  'repo',
-  'folder',
-  'branch',
-  'worktree',
-  'lines',
-  'pr',
-  'sessionName',
-  'agentName',
-]);
-
-type DetailItem = { id: string; label: string; value: string };
-
-/** The context meter's detail rows (`contextMeter.details`, the ones Choose details picked), by id. */
-function detailItems(meter: JsonRecord | null): Map<string, DetailItem> {
-  const items = new Map<string, DetailItem>();
-  for (const group of arr(meter?.details)) {
-    for (const item of arr(obj(group)?.items)) {
-      const id = str(item, 'id');
-      const value = str(item, 'value');
-      if (id.length > 0 && value.length > 0) items.set(id, { id, label: str(item, 'label'), value });
-    }
-  }
-  return items;
-}
 
 /** What the header button draws: the core's ring (`sessionDetails.ring`). */
 export type SessionDetailsRing = { percent: number | null; label: string };
@@ -286,7 +200,7 @@ export function SessionDetailsSheet({
   const styles = useStyles();
   const details = sessionDetailsOf(document);
   const shown = visible && details !== null;
-  const [tab, setTab] = useState<DetailsTab>('session');
+  const [tab, setTab] = useState<DetailsTab>('overview');
   const scroll = useRef<ScrollViewInstance>(null);
   /** The Context card's top in the first tab's list, once laid out. */
   const contextTop = useRef<number | null>(null);
@@ -294,7 +208,7 @@ export function SessionDetailsSheet({
   const scrollToContext = useRef(false);
   useEffect(() => {
     if (!shown) return;
-    setTab('session');
+    setTab('overview');
     if (focus !== 'context') {
       scroll.current?.scrollTo({ y: 0, animated: false });
       return;
@@ -326,10 +240,9 @@ export function SessionDetailsSheet({
     send(chat, action);
   };
   const error = str(details, 'error');
-  // The context meter's Compact context, which the Context sheet held (`ContextPanel.tsx`): the
-  // strip's ring opens this sheet in its place.
-  const meter = obj(document?.contextMeter);
-  const items = detailItems(meter);
+  // The core's tab names, by place: the first is the session and its Context card, the second the meter's details.
+  const tabNames = arr(details?.tabs).map((entry) => str(entry, 'label'));
+  const tabName = (key: DetailsTab, index: number): string => tabNames[index] || SESSION_DETAILS_TABS[key];
   const compact = () => {
     onClose();
     send(chat, { type: 'contextCompact' });
@@ -343,7 +256,7 @@ export function SessionDetailsSheet({
       {...(onDismissed !== undefined ? { onDismissed } : {})}
     >
       <View style={styles.tabs} accessibilityRole="tablist">
-        {(Object.keys(SESSION_DETAILS_TABS) as DetailsTab[]).map((key) => (
+        {(Object.keys(SESSION_DETAILS_TABS) as DetailsTab[]).map((key, index) => (
           <Pressable
             key={key}
             accessibilityRole="tab"
@@ -352,7 +265,7 @@ export function SessionDetailsSheet({
             style={[styles.tab, tab === key ? styles.tabOn : null]}
           >
             <Text style={[styles.tabText, tab === key ? styles.tabTextOn : null]} numberOfLines={1}>
-              {SESSION_DETAILS_TABS[key]}
+              {tabName(key, index)}
             </Text>
           </Pressable>
         ))}
@@ -360,8 +273,8 @@ export function SessionDetailsSheet({
       <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.cards}>
         {error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
         {/* The first tab stays mounted under the second, so its scroll and its Context card's place are kept. */}
-        <View style={[styles.cards, styles.tabPage, tab === 'session' ? null : styles.hidden]}>
-          {firstTabSections(details, items).map((section, index) => (
+        <View style={[styles.cards, styles.tabPage, tab === 'overview' ? null : styles.hidden]}>
+          {arr(details?.sections).map((section, index) => (
             <View
               key={str(section, 'id') || String(index)}
               onLayout={
@@ -375,13 +288,12 @@ export function SessionDetailsSheet({
                 section={section}
                 details={details}
                 act={act}
-                meter={meter}
                 onCompact={compact}
               />
             </View>
           ))}
         </View>
-        {tab === 'usage' ? <UsageTab items={items} onChooseDetails={onChooseDetails} /> : null}
+        {tab === 'usage' ? <UsageTab usage={obj(details?.usage)} onChooseDetails={onChooseDetails} /> : null}
       </ScrollView>
     </Sheet>
   );
@@ -403,22 +315,19 @@ function SectionCard({
   section,
   details,
   act,
-  meter,
   onCompact,
 }: {
   chat: RustChat;
   section: unknown;
   details: JsonRecord | null;
   act: Act;
-  meter: JsonRecord | null;
   onCompact: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const id = str(section, 'id');
-  // The Context card is always open (the decision at the head of this file), so it has no fold; a card with
-  // nothing to fold (Codex's Context had none) has a plain title too.
-  const foldable = id !== 'context' && obj(section)?.foldable !== false;
+  // A card the core pins open (Context, Agent) has no fold; nor does one with nothing to fold.
+  const foldable = obj(section)?.foldable !== false && !isTrue(section, 'pinnedOpen');
   const collapsed = foldable && isTrue(section, 'collapsed');
   useEaseOnChange(collapsed);
   const fields = obj(section) ?? {};
@@ -458,7 +367,6 @@ function SectionCard({
           section={fields}
           details={details}
           act={act}
-          meter={meter}
           onCompact={onCompact}
         />
       )}
@@ -471,20 +379,18 @@ function SectionBody({
   section,
   details,
   act,
-  meter,
   onCompact,
 }: {
   id: string;
   section: JsonRecord;
   details: JsonRecord | null;
   act: Act;
-  meter: JsonRecord | null;
   onCompact: () => void;
 }) {
   if (isTrue(section, 'loading')) return <Skeleton rows={num(section, 'skeletonRows') ?? 2} />;
   switch (id) {
     case 'context':
-      return <ContextBody section={section} act={act} meter={meter} onCompact={onCompact} />;
+      return <ContextBody section={section} act={act} onCompact={onCompact} />;
     case 'tasks':
       return <TasksBody section={section} act={act} />;
     case 'connectors':
@@ -500,92 +406,44 @@ function SectionBody({
   }
 }
 
-/**
- * The first tab's cards in `FIRST_TAB_ORDER`. Environment gains the agent's version from the detail rows ("Claude
- * Code 2.1.4"), and an Agent card at the end lists the agent's other settings rows (output style, approval policy,
- * sandbox and the like) that no Usage card and no other place shows.
- */
-function firstTabSections(details: JsonRecord | null, items: Map<string, DetailItem>): unknown[] {
-  const rank = (section: unknown): number => {
-    const at = FIRST_TAB_ORDER.indexOf(str(section, 'id'));
-    return at < 0 ? FIRST_TAB_ORDER.length : at;
-  };
-  const sections = arr(details?.sections)
-    .map((section, index) => ({ section, index }))
-    .sort((a, b) => rank(a.section) - rank(b.section) || a.index - b.index)
-    .map(({ section }) => {
-      const version = items.get('version');
-      if (str(section, 'id') !== 'environment' || version === undefined || isTrue(section, 'loading')) return section;
-      const name = version.label.replace(/ version$/u, '');
-      return { ...obj(section), rows: [...arr(obj(section)?.rows), { icon: 'agent', text: `${name} ${version.value}` }] };
-    });
-  const listed = new Set<string>(['version', ...USAGE_CARDS.flatMap((card) => card.ids), ...Object.keys(RIDES_ON)]);
-  const rest = [...items.values()].filter((item) => !listed.has(item.id) && !SHOWN_ELSEWHERE.has(item.id));
-  if (rest.length > 0) {
-    sections.push({
-      id: 'agent',
-      title: 'Agent',
-      foldable: false,
-      rows: rest.map((item) => ({ text: item.label, detail: item.value })),
-    });
-  }
-  return sections;
-}
-
-/** The second tab: Limits, Cost and time and Cache from the detail rows, then Choose details. */
-function UsageTab({ items, onChooseDetails }: { items: Map<string, DetailItem>; onChooseDetails?: () => void }) {
+/** The second tab: the core's cards of the context meter's details (`sessionDetails.usage`), then Choose details. */
+function UsageTab({ usage, onChooseDetails }: { usage: JsonRecord | null; onChooseDetails?: () => void }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
-  const riders = new Map<string, DetailItem>();
-  for (const [rider, { host, text }] of Object.entries(RIDES_ON)) {
-    const item = items.get(rider);
-    if (item !== undefined) riders.set(host, { ...item, value: text(item.value) });
-  }
-  const cards = USAGE_CARDS.map((card) => ({
-    title: card.title,
-    rows: card.ids.flatMap((id) => {
-      const item = items.get(id) ?? (riders.has(id) ? { id, label: '', value: '' } : undefined);
-      if (item === undefined) return [];
-      const rider = riders.get(id);
-      const label = item.label.length > 0 ? item.label : (rider?.label ?? '');
-      const value = [item.value, rider?.value ?? ''].filter((part) => part.length > 0).join(' · ');
-      return [{ id, label, value }];
-    }),
-  })).filter((card) => card.rows.length > 0);
+  const cards = arr(usage?.cards);
+  const choose = obj(usage?.chooseDetails);
   return (
     <View style={[styles.cards, styles.tabPage]}>
-      {cards.length === 0 ? (
-        <Text style={styles.empty}>Nothing picked to show here. Choose details picks which rows show.</Text>
-      ) : null}
-      {cards.map((card) => (
-        <View key={card.title} accessibilityLabel={card.title} style={styles.card}>
+      {cards.length === 0 && str(usage, 'empty').length > 0 ? <Text style={styles.empty}>{str(usage, 'empty')}</Text> : null}
+      {cards.map((card, index) => (
+        <View key={str(card, 'id') || String(index)} accessibilityLabel={str(card, 'title')} style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.title} numberOfLines={1}>
-              {card.title}
+              {str(card, 'title')}
             </Text>
           </View>
           <View style={styles.rows}>
-            {card.rows.map((row) => (
-              <View key={row.id} style={styles.row}>
+            {arr(obj(card)?.rows).map((row, rowIndex) => (
+              <View key={str(row, 'id') || String(rowIndex)} style={styles.row}>
                 <Text style={styles.rowText} numberOfLines={1}>
-                  {row.label}
+                  {str(row, 'label')}
                 </Text>
                 <Text style={styles.detail} numberOfLines={1}>
-                  {row.value}
+                  {str(row, 'value')}
                 </Text>
               </View>
             ))}
           </View>
         </View>
       ))}
-      {onChooseDetails !== undefined ? (
+      {choose !== null && onChooseDetails !== undefined ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Choose details"
+          accessibilityLabel={str(choose, 'label')}
           onPress={onChooseDetails}
           style={({ pressed }) => [styles.row, styles.choose, pressed ? styles.rowPressed : null]}
         >
-          <Text style={[styles.rowText, styles.mutedText]}>Choose details</Text>
+          <Text style={[styles.rowText, styles.mutedText]}>{str(choose, 'label')}</Text>
           <Glyph name="pencil" size={15} color={P.cardMuted} />
         </Pressable>
       ) : null}
@@ -719,12 +577,10 @@ function ContextSummary({ section, details }: { section: JsonRecord; details: Js
 function ContextBody({
   section,
   act,
-  meter,
   onCompact,
 }: {
   section: JsonRecord;
   act: Act;
-  meter: JsonRecord | null;
   onCompact: () => void;
 }) {
   const styles = useStyles();
@@ -794,16 +650,16 @@ function ContextBody({
       {status.length > 0 ? (
         <Text style={[styles.status, isTrue(section, 'statusError') ? { color: P.error } : null]}>{status}</Text>
       ) : null}
-      {meter !== null ? <CompactButton meter={meter} onCompact={onCompact} /> : null}
+      {obj(section.compact) !== null ? <CompactButton compact={obj(section.compact)!} onCompact={onCompact} /> : null}
     </View>
   );
 }
 
-/** The context meter's Compact context (`ContextPanel.tsx`), with why it cannot run when it cannot. */
-function CompactButton({ meter, onCompact }: { meter: JsonRecord; onCompact: () => void }) {
+/** The core's Compact context on the Context card (the meter's), with why it cannot run when it cannot. */
+function CompactButton({ compact, onCompact }: { compact: JsonRecord; onCompact: () => void }) {
   const styles = useStyles();
-  const disabled = isTrue(meter, 'compactDisabled');
-  const reason = str(meter, 'compactDisabledReason');
+  const disabled = isTrue(compact, 'disabled');
+  const reason = str(compact, 'reason');
   return (
     <>
       <Pressable
