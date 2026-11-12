@@ -18,6 +18,7 @@ import { restoreAttachTabs } from '../terminal/sessions';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { FailureCopy } from '../copy';
 import { fetchInventory, summarizeFailureDetailed, type FailureReasonCode } from './client';
+import { closePushedList, closePushedLists, onPushedListChanged } from './summaryStream';
 import { pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { refreshCloudBoxes } from '../cloudBoxes/sync';
 import { organizeSummary } from '../settingsSync/sidebarOrganization';
@@ -39,6 +40,8 @@ export const INVENTORY_POLL_INTERVAL_MS = 5000;
  */
 const NOT_ANSWERING_RETRY_MS = 2000;
 const notAnsweringRetries = new Map<string, ReturnType<typeof setTimeout>>();
+/** Machines whose next refresh must be read after the caller's change (`refreshMachineFresh`). */
+const freshReads = new Set<string>();
 /** When each machine's Ghostex stopped answering, for the "taking longer than usual" line. */
 const notAnsweringSince = new Map<string, number>();
 const NOT_ANSWERING_LONG_MS = 30_000;
@@ -211,7 +214,8 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
 
       const refresh = (async (): Promise<void> => {
         try {
-          const { summary: serverSummary, fingerprint } = await fetchInventory(machine);
+          const fresh = freshReads.delete(machine.id);
+          const { summary: serverSummary, fingerprint } = await fetchInventory(machine, { fresh });
           if (refreshRevisions.get(machine.id) !== refreshRevision) return;
           if (pairedAgain()) return;
           const previous = get().inventoriesByMachineId[machine.id];
@@ -325,6 +329,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           // A fresh request should still run if an older refresh aborted.
         }
       }
+      freshReads.add(machine.id);
       await get().refreshMachine(machine);
     },
 
@@ -387,12 +392,15 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       if (!polling) {
         for (const timer of notAnsweringRetries.values()) clearTimeout(timer);
         notAnsweringRetries.clear();
+        // Pushed lists follow the poll: none stays open in the background (summaryStream.ts).
+        closePushedLists();
       }
       set({ polling });
     },
 
     clearMachine: (machineId) => {
       retryRequests.delete(machineId);
+      closePushedList(machineId);
       const next = { ...get().inventoriesByMachineId };
       const nextPending = { ...get().pendingMutationsByMachineId };
       delete next[machineId];
@@ -546,4 +554,12 @@ useSettingsStore.subscribe((state, previous) => {
   const own = (settings: typeof state.settings) =>
     `${settings.sessionsListLayout}|${settings.sessionsListGroupByProject}|${settings.sessionsListWorkingSection}|${settings.sessionsListHideProjectsWithoutSessions}`;
   if (own(state.settings) !== own(previous.settings)) reorganizeAll();
+});
+
+// A computer that pushes its list shows each change as it arrives, not on the next poll tick.
+onPushedListChanged((machineId) => {
+  const store = useInventoryStore.getState();
+  if (!store.polling) return;
+  const machine = enabledMachines(useMachinesStore.getState()).find((entry) => entry.id === machineId);
+  if (machine !== undefined) void store.refreshMachine(machine);
 });

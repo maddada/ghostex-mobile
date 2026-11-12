@@ -14,6 +14,7 @@ import { logAppEvent } from '../app/appLog';
 import { FailureCopy } from '../copy';
 import { readablePowerShellError } from '../remote/powershell';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { pushedList, pushedListFresh } from './summaryStream';
 
 export const INVENTORY_EXEC_TIMEOUT_MS = 20000;
 
@@ -27,7 +28,17 @@ export type InventoryFetchResult = {
  * Fetch and parse the mobile summary for one machine. Throws an Error whose
  * message is the raw failure text (callers summarize via summarizeFailure).
  */
-export async function fetchInventory(machine: MachineConnectionTarget): Promise<InventoryFetchResult> {
+export async function fetchInventory(
+  machine: MachineConnectionTarget,
+  options: { fresh?: boolean } = {},
+): Promise<InventoryFetchResult> {
+  // A computer that pushes its list (summaryStream.ts) is read from the stream; a fresh read asks it to
+  // build the list now. Anything the stream cannot answer goes over SSH as before.
+  const pushed = options.fresh === true ? await pushedListFresh(machine) : pushedList(machine);
+  if (pushed !== null) {
+    const summary = parsePushedList(machine.id, pushed);
+    if (summary !== null) return { summary, fingerprint: pushed };
+  }
   await ensureConnected(machine);
   const result = await execRemoteCommand(machine.id, sessionsListCommand(), INVENTORY_EXEC_TIMEOUT_MS);
   const output = `${result.stdout}\n${result.stderr}`.trim();
@@ -40,6 +51,17 @@ export async function fetchInventory(machine: MachineConnectionTarget): Promise<
   }
   const fingerprint = fingerprintForOutput(result.stdout);
   return { summary, fingerprint };
+}
+
+/** Each computer's last pushed list parsed, so an unchanged list is not parsed again on every poll tick. */
+const pushedParses = new Map<string, { text: string; summary: GhostexMobileSummary }>();
+
+function parsePushedList(machineId: string, text: string): GhostexMobileSummary | null {
+  const cached = pushedParses.get(machineId);
+  if (cached?.text === text) return cached.summary;
+  const summary = parseMobileSummary(text);
+  if (summary !== null) pushedParses.set(machineId, { text, summary });
+  return summary;
 }
 
 /** The matched summary JSON text (falls back to the whole stdout). */
