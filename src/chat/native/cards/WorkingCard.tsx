@@ -83,11 +83,7 @@ export function workingCardShown(document: ChatDocument): boolean {
 export function statusTailShown(document: ChatDocument, rowCount: number): boolean {
   const card = document.workingCard;
   return (
-    card?.inTranscript === true &&
-    rowCount > 0 &&
-    card !== undefined &&
-    card.visible === true &&
-    card.label !== null
+    card?.inTranscript === true && rowCount > 0 && card !== undefined && card.visible === true && card.label !== null
   );
 }
 
@@ -168,12 +164,7 @@ export const StatusTail = memo(function StatusTail({ document }: { document: Cha
     .filter((part) => part.length > 0)
     .join(', ');
   return (
-    <View
-      accessibilityRole="summary"
-      accessibilityLiveRegion="polite"
-      accessibilityLabel={spoken}
-      style={styles.tail}
-    >
+    <View accessibilityRole="summary" accessibilityLiveRegion="polite" accessibilityLabel={spoken} style={styles.tail}>
       <Lead card={card} />
       <View style={[styles.labelSlot, styles.tailSlot]}>
         <Text
@@ -205,16 +196,20 @@ export function LoneScrollBottom({
   document,
   armed,
   links,
+  hiddenPages = 0,
 }: {
   document: ChatDocument;
   armed: readonly ArmedAction[];
   links?: PillsStripLinks | null;
+  /** How many pages the chat has hidden, whose pills alone show the strip (`hiddenPages.ts`). */
+  hiddenPages?: number;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
   const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
-  const stripCarriesIt = !useChatPlacement().inPane && pillsStripShown(document, armed, links ?? null, P.cardMuted);
+  const stripCarriesIt =
+    !useChatPlacement().inPane && pillsStripShown(document, armed, links ?? null, P.cardMuted, hiddenPages);
   if (stripCarriesIt || !awayFromBottom || jumpToBottom === null) {
     return null;
   }

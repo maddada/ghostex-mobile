@@ -87,6 +87,14 @@ import { SaveMarkdownDialog } from './transcript/SaveMarkdownDialog';
 import { ChatToast, type Toast } from './ChatToast';
 import { TabSwipeView, type TabSwipe } from './TabSwipe';
 import { TranscriptMenuSheet, type TranscriptMenuHost } from './transcript/TranscriptMenu';
+import {
+  hiddenPagesChatKey,
+  readHiddenPageStatus,
+  useHiddenPages,
+  useHiddenPagesStore,
+  type HiddenPage,
+} from './cards/hiddenPages';
+import { pageIdOfPath } from './cards/pageSheetScript';
 
 export type NativeChatScreenProps = {
   machine: MachineConnectionTarget;
@@ -152,7 +160,19 @@ export default function NativeChatScreen({
     else setHandoff(next);
   }, []);
   // The published page a page card (or a link to one) opened, shown in the chat's page sheet.
-  const [page, setPage] = useState<ComputerAddress | null>(null);
+  const [page, setShownPage] = useState<ComputerAddress | null>(null);
+  // The pages this chat's page sheet put aside with Hide, as pills in the strip (`cards/hiddenPages.ts`).
+  const hiddenChat = hiddenPagesChatKey(machine.id, sessionId);
+  const hiddenPages = useHiddenPages(hiddenChat);
+  /** Opens a page in the sheet; a page waiting as a pill comes back from it instead of twice. */
+  const setPage = useCallback(
+    (next: ComputerAddress | null) => {
+      const nextId = next === null ? null : pageIdOfPath(next.path);
+      if (nextId !== null) useHiddenPagesStore.getState().remove(hiddenChat, nextId);
+      setShownPage(next);
+    },
+    [hiddenChat],
+  );
   // The GBot whose settings the "GBot added" card's Open settings opened (the core's `openGbotSettings`).
   // A "Routine set" card's Edit opens the same sheet on its Routines tab (`editGbotRoutine`).
   const [gbotSettings, setGbotSettings] = useState<{ botId: string; tab?: GbotSettingsTab } | null>(null);
@@ -186,9 +206,28 @@ export default function NativeChatScreen({
       setPage(null);
       openMachineLink(machine.id, url, { projectId, notify: show });
     },
-    [machine.id, openMachineLink, projectId, show],
+    [machine.id, openMachineLink, projectId, setPage, show],
   );
-  const closePage = useCallback(() => setPage(null), []);
+  const closePage = useCallback(() => setPage(null), [setPage]);
+  /** Hide in the sheet: the page waits as a pill, which asks its computer how much is answered. */
+  const hidePage = useCallback(
+    (pageTitle: string) => {
+      const pageId = page === null ? null : pageIdOfPath(page.path);
+      if (page !== null && pageId !== null) {
+        useHiddenPagesStore
+          .getState()
+          .put(hiddenChat, { pageId, page, title: pageTitle, questionsLeft: false, counts: null });
+        readHiddenPageStatus(hiddenChat, machine, pageId);
+      }
+      setShownPage(null);
+    },
+    [hiddenChat, machine, page],
+  );
+  const showHiddenPage = useCallback((hidden: HiddenPage) => setPage(hidden.page), [setPage]);
+  const closeHiddenPage = useCallback(
+    (hidden: HiddenPage) => useHiddenPagesStore.getState().remove(hiddenChat, hidden.pageId),
+    [hiddenChat],
+  );
   const menuHost = useTranscriptMenuHost(machine.id, projectId, show);
 
   // The session title the core names saved files after and shows in the context meter.
@@ -501,7 +540,14 @@ export default function NativeChatScreen({
                 <TabSwipeView swipe={tabSwipe}>
                   <NativeTranscript chat={chat} active={visible} />
                   {/* Scroll-to-bottom alone while no card carries it. */}
-                  {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
+                  {document === null ? null : (
+                    <LoneScrollBottom
+                      document={document}
+                      armed={armed}
+                      links={links}
+                      hiddenPages={hiddenPages.length}
+                    />
+                  )}
                 </TabSwipeView>
               </View>
               {/* The offline computer's card tops the stack, above the working card; it names the
@@ -571,6 +617,9 @@ export default function NativeChatScreen({
                               onMenuChange={setPillMenu}
                               armed={armed}
                               links={links}
+                              hiddenPages={hiddenPages}
+                              onShowPage={showHiddenPage}
+                              onClosePage={closeHiddenPage}
                               onSessionDetailsPress={openDetails}
                               {...(sessionId.length > 0 && projectId.length > 0
                                 ? { onStashedPress: () => hostAction('stashedPrompts') }
@@ -621,7 +670,14 @@ export default function NativeChatScreen({
                 renderTranscriptItem={renderSubagentRow}
                 subagentMenu={<TranscriptMenuSheet chat={chat} host={menuHost} />}
               />
-              <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
+              <PageSheet
+                chat={chat}
+                machine={machine}
+                page={page}
+                onClose={closePage}
+                {...(pageIdOfPath(page?.path ?? '') !== null ? { onHide: hidePage } : {})}
+                onOpenLink={openPageLink}
+              />
               <ResourceSheet chat={chat} document={document} />
               <SessionDetailsSheet
                 chat={chat}

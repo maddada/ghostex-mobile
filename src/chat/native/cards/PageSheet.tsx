@@ -1,6 +1,6 @@
 /**
  * The sheet a chat page card (`ghostex show`) opens on the phone: the published page over the whole
- * screen with a slim bar for its title, Refresh and Close, the phone form of the desktop's floating
+ * screen with a slim bar for its title, Refresh, Hide and Close, the phone form of the desktop's floating
  * page window. The page comes from the computer's gxserver through the chat's own forward
  * (`webPreview/machineLinks.ts`) and wears the chat's theme from its first paint. Like the desktop's
  * window it closes once the page's answers are sent (CDXC:SessionChat 2026-10-11 on
@@ -81,6 +81,12 @@ export type PageSheetProps = {
   page: ComputerAddress | null;
   onClose: () => void;
   /**
+   * Hide: the sheet closes as Close does and the page waits as a pill in the chat's pills bar
+   * (`hiddenPages.ts`), named by `title`, the page's own title as the sheet shows it. Without it
+   * the sheet has no Hide.
+   */
+  onHide?: (title: string) => void;
+  /**
    * A link the page followed, written as the computer would (`http://127.0.0.1:<port>/…`). The
    * opener decides whether it replaces the page, goes to the phone's browser, or closes the sheet
    * and opens elsewhere, as the desktop's page window sends the page's links out.
@@ -88,7 +94,7 @@ export type PageSheetProps = {
   onOpenLink: (url: string) => void;
 };
 
-export function PageSheet({ chat, machine, page, onClose, onOpenLink }: PageSheetProps) {
+export function PageSheet({ chat, machine, page, onClose, onHide, onOpenLink }: PageSheetProps) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const insets = useSafeAreaInsets();
@@ -265,6 +271,18 @@ export function PageSheet({ chat, machine, page, onClose, onOpenLink }: PageShee
     });
   }, [keepPendingDraft, onClose, pageId]);
 
+  /** Hide: closes the same way, then leaves the page as a pill (`hiddenPages.ts`). */
+  const hide = useCallback(() => {
+    if (onHide === undefined) return;
+    setPictures(null);
+    const target = machineRef.current;
+    const shown = title.length > 0 ? title : 'Ghostex page';
+    void keepPendingDraft().then(() => {
+      onHide(shown);
+      if (pageId !== null) void sendUnsavedDraft(target.id, pageId);
+    });
+  }, [keepPendingDraft, onHide, pageId, title]);
+
   /** Android's back: the first one arms, a second within `CLOSE_ARMED_FOR_MS` closes. */
   const backPressed = useCallback(() => {
     if (armed) close();
@@ -361,6 +379,18 @@ export function PageSheet({ chat, machine, page, onClose, onOpenLink }: PageShee
                 <Glyph name="refresh" size={14} color={P.background} />
               )}
               <Text style={styles.refreshText}>{refreshing ? 'Refreshing…' : 'Refresh'}</Text>
+            </Pressable>
+          ) : null}
+          {onHide !== undefined ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Hide page"
+              accessibilityHint="Keeps the page as a pill above the chat box"
+              onPress={hide}
+              hitSlop={6}
+              style={({ pressed }) => [styles.close, pressed && { backgroundColor: P.input }]}
+            >
+              <Glyph name="window-minimize" size={18} color={P.primary} />
             </Pressable>
           ) : null}
           <Pressable

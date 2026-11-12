@@ -13,6 +13,11 @@
  * Before it, while a draft saved elsewhere is offered, the Saved draft pill (`SavedDraftPill.tsx`),
  * which alone is enough to show the strip and opens its own sheet.
  *
+ * A Ghostex page put aside with the page sheet's Hide shows as a pill of its own, first among the
+ * panel pills (`PagePill`, `hiddenPages.ts`), and is enough to show the strip. It shrinks with the
+ * others: icon and count once labels drop, icon and a dot only once every pill shown has dropped its
+ * label (`planStripTiers`), then into "+N". Desktop: `minimized_pages.rs`.
+ *
  * CDXC:SessionChat 2026-10-29 SEE-ALSO:
  * The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs.
  */
@@ -31,7 +36,18 @@ import { sessionLinksChatPill } from '../sessionLinks';
 import { SessionDetailsPill, sessionDetailsRingOf } from './SessionDetailsSheet';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { IconPill, LinksPill, OverflowPill, OverflowPillRow, Pill, QuestionPill } from './ChatPills';
+import {
+  IconPill,
+  LinksPill,
+  OverflowPill,
+  OverflowPillRow,
+  PageOverflowRow,
+  PagePill,
+  Pill,
+  QuestionPill,
+  type PagePillTier,
+} from './ChatPills';
+import type { HiddenPage } from './hiddenPages';
 import { Sheet } from '../composer/Sheet';
 import { SavedDraftPill, SavedDraftSheet } from './SavedDraftPill';
 import { VISUAL, type ArmedAction } from './WorkingStrip';
@@ -75,8 +91,10 @@ export function pillsStripShown(
   armed: readonly ArmedAction[],
   links: PillsStripLinks | null,
   muted: string,
+  hiddenPages = 0,
 ): boolean {
   return (
+    hiddenPages > 0 ||
     armed.length > 0 ||
     (document.savedDraftPill ?? null) !== null ||
     (document.viewChips?.length ?? 0) > 0 ||
@@ -98,9 +116,18 @@ export function PillsStrip({
   onSessionDetailsPress,
   menu,
   onMenuChange,
+  hiddenPages = [],
+  onShowPage,
+  onClosePage,
 }: {
   chat: RustChat;
   document: ChatDocument;
+  /** The chat's hidden pages, oldest first (`hiddenPages.ts`), drawn first among the panel pills. */
+  hiddenPages?: readonly HiddenPage[];
+  /** A tap on a page's pill (or its "+N" row): the page opens again. */
+  onShowPage?: (page: HiddenPage) => void;
+  /** A long press on a page's pill: the page closes for good. */
+  onClosePage?: (page: HiddenPage) => void;
   menu: string | null;
   onMenuChange: (menu: string | null) => void;
   armed: readonly ArmedAction[];
@@ -122,7 +149,7 @@ export function PillsStrip({
   // The pills in the "+N" pill (`PillsFit`), its sheet, and the pill a row of it picked, pressed once the sheet is gone.
   const [hiddenIds, setHiddenIds] = useState<readonly string[]>([]);
   const [overflowOpen, setOverflowOpen] = useState(false);
-  const afterDismiss = useRef<ChatPill | null>(null);
+  const afterDismiss = useRef<ChatPill | HiddenPage | null>(null);
   const closeDraft = useCallback(() => setDraftOpen(false), []);
   // A draft answered or withdrawn elsewhere takes its sheet with it.
   useEffect(() => {
@@ -130,7 +157,7 @@ export function PillsStrip({
   }, [savedDraft]);
   // The box's width, which the Saved draft pill shortens its label by (`savedDraft.ts`).
   const [stripWidth, setStripWidth] = useState(0);
-  const shown = pillsStripShown(document, armed, links, P.cardMuted);
+  const shown = pillsStripShown(document, armed, links, P.cardMuted, hiddenPages.length);
   // Grows in and shrinks away; drawn while it shrinks, dropped once it has.
   const open = useRef(new Animated.Value(shown ? 1 : 0)).current;
   const [drawn, setDrawn] = useState(shown);
@@ -169,13 +196,34 @@ export function PillsStrip({
         : // The Work pill opens the Work sheet, collapsed dock or not, as the desktop's opens its Work
           // panel: a collapsed dock keeps its bar, whose tap opens it again (`WorkCards.tsx` `DockHeader`).
           onMenuChange(pill.id);
-  const panel = pills.map((pill) => ({
-    id: pill.id,
-    pill,
-    node: (collapsed: boolean) => (
-      <Pill key={pill.id} pill={pill} open={pill.id === menu} collapsed={collapsed} onPress={() => pressPill(pill)} />
+  const pagePanel: FitPanel[] = hiddenPages.map((page) => ({
+    id: `page:${page.pageId}`,
+    tiny: true,
+    node: (tier: PagePillTier) => (
+      <PagePill
+        key={page.pageId}
+        page={page}
+        tier={tier}
+        onPress={() => onShowPage?.(page)}
+        onLongPress={() => onClosePage?.(page)}
+      />
     ),
   }));
+  const panel: FitPanel[] = [
+    ...pagePanel,
+    ...pills.map((pill) => ({
+      id: pill.id,
+      node: (tier: PagePillTier) => (
+        <Pill
+          key={pill.id}
+          pill={pill}
+          open={pill.id === menu}
+          collapsed={tier !== 'full'}
+          onPress={() => pressPill(pill)}
+        />
+      ),
+    })),
+  ];
   // The Links pill is the last one (desktop `links_pill.rs` has the user's words).
   const linksNode =
     links && linksPill !== null ? <LinksPill key="links" pill={linksPill} onPress={links.onOpen} /> : null;
@@ -199,9 +247,11 @@ export function PillsStrip({
       linksNode
     );
   const hiddenPills = pills.filter((pill) => hiddenIds.includes(pill.id));
+  const overflowPages = hiddenPages.filter((page) => hiddenIds.includes(`page:${page.pageId}`));
+  const overflowCount = hiddenPills.length + overflowPages.length;
   useEffect(() => {
-    if (hiddenPills.length === 0) setOverflowOpen(false);
-  }, [hiddenPills.length]);
+    if (overflowCount === 0) setOverflowOpen(false);
+  }, [overflowCount]);
   const questions = document.openQuestions;
   const showJump = awayFromBottom && jumpToBottom !== null;
   return (
@@ -284,18 +334,32 @@ export function PillsStrip({
       ) : null}
       <SavedDraftSheet pill={savedDraft} open={draftOpen} onClose={closeDraft} dispatch={chat.dispatch} />
       <Sheet
-        visible={overflowOpen && hiddenPills.length > 0}
+        visible={overflowOpen && overflowCount > 0}
         title="More pills"
         // The desktop menu's detail (`strip_overflow.rs`).
-        subtitle={`${hiddenPills.length} hidden`}
+        subtitle={`${overflowCount} hidden`}
         onClose={() => setOverflowOpen(false)}
         // A sheet picked from this one opens only after this one has gone (iOS drops a modal presented over a closing one).
         onDismissed={() => {
           const pill = afterDismiss.current;
           afterDismiss.current = null;
-          if (pill !== null) pressPill(pill);
+          if (pill === null) return;
+          if ('pageId' in pill) onShowPage?.(pill);
+          else pressPill(pill);
         }}
       >
+        {overflowPages.map((page) => (
+          <PageOverflowRow
+            key={page.pageId}
+            page={page}
+            onPress={() => {
+              // As a pill's row below: iOS waits for this sheet to go first, Android goes now.
+              setOverflowOpen(false);
+              if (Platform.OS === 'ios') afterDismiss.current = page;
+              else onShowPage?.(page);
+            }}
+          />
+        ))}
         {hiddenPills.map((pill) => (
           <OverflowPillRow
             key={pill.id}
@@ -376,30 +440,62 @@ export function planStrip(
   overflow: number,
   gap: number,
 ): { hidden: number; collapsed: number } {
+  const { hidden, collapsed } = planStripTiers(
+    avail,
+    fixed,
+    pills.map((pill) => ({ ...pill, least: pill.icon })),
+    overflow,
+    gap,
+  );
+  return { hidden, collapsed };
+}
+
+/**
+ * `planStrip` for pills with a third, narrowest width (a hidden page's pill: full, icon and count,
+ * icon and dot; a panel pill's last two are the same). The last pills shown take their narrowest
+ * width only once every pill shown has dropped its label, and before any goes into "+N": `tiny` of
+ * the last `collapsed`. Port of desktop `plan_strip_tiers`.
+ */
+export function planStripTiers(
+  avail: number,
+  fixed: readonly number[],
+  pills: readonly { full: number; icon: number; least: number }[],
+  overflow: number,
+  gap: number,
+): { hidden: number; collapsed: number; tiny: number } {
   const n = pills.length;
   const fixedTotal = fixed.reduce((sum, width) => sum + width, 0);
   for (let hidden = 0; hidden <= n; hidden += 1) {
     const visible = n - hidden;
     for (let collapsed = 0; collapsed <= visible; collapsed += 1) {
-      let total = fixedTotal;
-      let count = fixed.length;
-      for (let index = 0; index < visible; index += 1) {
-        const pill = pills[index];
-        total += index >= visible - collapsed ? (pill?.icon ?? 0) : (pill?.full ?? 0);
-        count += 1;
+      const tinyMost = collapsed === visible ? visible : 0;
+      for (let tiny = 0; tiny <= tinyMost; tiny += 1) {
+        let total = fixedTotal;
+        let count = fixed.length;
+        for (let index = 0; index < visible; index += 1) {
+          const pill = pills[index];
+          total +=
+            index >= visible - tiny
+              ? (pill?.least ?? 0)
+              : index >= visible - collapsed
+                ? (pill?.icon ?? 0)
+                : (pill?.full ?? 0);
+          count += 1;
+        }
+        if (hidden > 0) {
+          total += overflow;
+          count += 1;
+        }
+        total += gap * Math.max(0, count - 1);
+        if (total <= avail + 0.5) return { hidden, collapsed, tiny };
       }
-      if (hidden > 0) {
-        total += overflow;
-        count += 1;
-      }
-      total += gap * Math.max(0, count - 1);
-      if (total <= avail + 0.5) return { hidden, collapsed };
     }
   }
-  return { hidden: n, collapsed: 0 };
+  return { hidden: n, collapsed: 0, tiny: 0 };
 }
 
-type FitPanel = { id: string; node: (collapsed: boolean) => ReactNode };
+/** A panel pill drawn at a tier; `tiny` pills (a hidden page's) have a narrowest one of their own. */
+type FitPanel = { id: string; tiny?: boolean; node: (tier: PagePillTier) => ReactNode };
 
 /**
  * The pills' room: they sit at the right, whole. No pill is scrolled, cut or faded; when the row is
@@ -440,19 +536,29 @@ function PillsFit({
     after !== null ? widths['fixed:after'] : undefined,
   ].filter((width): width is number => width !== undefined && width > 0);
   const known = panel.every(
-    (pill) => widths[`full:${pill.id}`] !== undefined && widths[`icon:${pill.id}`] !== undefined,
+    (pill) =>
+      widths[`full:${pill.id}`] !== undefined &&
+      widths[`icon:${pill.id}`] !== undefined &&
+      (pill.tiny !== true || widths[`tiny:${pill.id}`] !== undefined),
   );
   // Everything drawn whole until the widths are known.
   const plan =
     avail > 0 && known
-      ? planStrip(
+      ? planStripTiers(
           avail,
           fixed,
-          panel.map((pill) => ({ full: widths[`full:${pill.id}`] ?? 0, icon: widths[`icon:${pill.id}`] ?? 0 })),
+          panel.map((pill) => {
+            const icon = widths[`icon:${pill.id}`] ?? 0;
+            return {
+              full: widths[`full:${pill.id}`] ?? 0,
+              icon,
+              least: pill.tiny === true ? (widths[`tiny:${pill.id}`] ?? icon) : icon,
+            };
+          }),
           widths.overflow ?? 56,
           PILL_GAP,
         )
-      : { hidden: 0, collapsed: 0 };
+      : { hidden: 0, collapsed: 0, tiny: 0 };
   const visible = panel.length - plan.hidden;
   const hiddenIds = panel.slice(visible).map((pill) => pill.id);
   const hiddenKey = hiddenIds.join(',');
@@ -468,7 +574,9 @@ function PillsFit({
           </View>
         ) : null}
         {panel.slice(0, visible).map((pill, index) => (
-          <View key={pill.id}>{pill.node(index >= visible - plan.collapsed)}</View>
+          <View key={pill.id}>
+            {pill.node(index >= visible - plan.tiny ? 'icon' : index >= visible - plan.collapsed ? 'count' : 'full')}
+          </View>
         ))}
         {plan.hidden > 0 ? <View onLayout={measure('overflow')}>{overflow(plan.hidden)}</View> : null}
         {after !== null ? <View onLayout={measure('fixed:after')}>{after}</View> : null}
@@ -481,8 +589,9 @@ function PillsFit({
       >
         {panel.map((pill) => (
           <View key={pill.id} style={styles.measureRow}>
-            <View onLayout={measure(`full:${pill.id}`)}>{pill.node(false)}</View>
-            <View onLayout={measure(`icon:${pill.id}`)}>{pill.node(true)}</View>
+            <View onLayout={measure(`full:${pill.id}`)}>{pill.node('full')}</View>
+            <View onLayout={measure(`icon:${pill.id}`)}>{pill.node('count')}</View>
+            {pill.tiny === true ? <View onLayout={measure(`tiny:${pill.id}`)}>{pill.node('icon')}</View> : null}
           </View>
         ))}
         {plan.hidden === 0 && widths.overflow === undefined ? (

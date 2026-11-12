@@ -138,6 +138,8 @@ const GLYPHS = {
   },
   pencil: { paths: ['M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4', 'M13.5 6.5l4 4'] },
   x: { paths: ['M18 6l-12 12', 'M6 6l12 12'], strokeWidth: 1.8 },
+  /** The page sheet's Hide (desktop `titlebar/window-minimize.svg`, the page window's Hide). */
+  'window-minimize': { paths: ['M5 12h14'], strokeWidth: 1.8 },
   clock: { paths: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M12 7v5l3 3'] },
   /** The Resources pill's glyph (desktop `titlebar/stack.svg`). */
   stack: { paths: ['M12 6l-8 4l8 4l8 -4l-8 -4', 'M4 14l8 4l8 -4'] },

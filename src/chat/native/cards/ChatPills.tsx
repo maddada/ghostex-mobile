@@ -65,6 +65,7 @@ import { RelayedApprovalsMenu } from './RelayedApprovalCard';
 import { approvalsWaitingLine } from './relayedApprovals';
 import { SidebarPalette } from '../../../theme/palette';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { hiddenPageCount, hiddenPageDescription, hiddenPageWaiting, type HiddenPage } from './hiddenPages';
 
 /** How often the open Chat Resources list redraws so its ages stay current (desktop `AGE_REFRESH`). */
 const AGE_REFRESH_MS = 30_000;
@@ -586,6 +587,99 @@ export function LinksPill({ pill, onPress }: { pill: SessionLinksChatPill; onPre
   );
 }
 
+/** How much of a hidden page's pill shows (`PillsStrip.tsx` plans it, desktop `minimized_pages.rs` `PageTier`). */
+export type PagePillTier = 'full' | 'count' | 'icon';
+
+/** The preset width a page pill never grows past: its icon, about fourteen characters of title and "16/16" (desktop `PAGE_PILL_WIDTH`). */
+const PAGE_PILL_WIDTH = 172;
+
+/**
+ * A hidden page's pill (`hiddenPages.ts`, where the user's words are): the page's icon, its title cut
+ * short and its answered count ("3/16", muted once all are answered) while the row has room; its icon
+ * and count once the row drops labels; its icon and a pink dot while questions wait on the narrowest.
+ * A tap brings the page back; a long press closes it for good. Desktop: `minimized_pages.rs`.
+ */
+export function PagePill({
+  page,
+  tier,
+  onPress,
+  onLongPress,
+}: {
+  page: HiddenPage;
+  tier: PagePillTier;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const count = hiddenPageCount(page);
+  const waiting = hiddenPageWaiting(page);
+  const dot = <View style={[styles.pageDot, { backgroundColor: SidebarPalette.ROW_QUESTION }]} />;
+  const trailing =
+    tier === 'icon' ? (
+      waiting ? (
+        dot
+      ) : null
+    ) : count !== null ? (
+      <Text style={[styles.count, !waiting && styles.overflowCount]}>{count}</Text>
+    ) : page.questionsLeft ? (
+      dot
+    ) : null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Show ${hiddenPageDescription(page)}`}
+      accessibilityHint="Long press to close the page"
+      accessibilityActions={[{ name: 'longpress', label: 'Close page' }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') onLongPress();
+      }}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.pill,
+        tier !== 'full' && styles.pillNoLabel,
+        { maxWidth: PAGE_PILL_WIDTH },
+        pressed && styles.pillPressed,
+      ]}
+    >
+      <Glyph name="file-type-html" size={14} color={P.cardMuted} />
+      {tier === 'full' ? (
+        <Text style={styles.pageTitle} numberOfLines={1}>
+          {page.title.trim().length > 0 ? page.title.trim() : 'Ghostex page'}
+        </Text>
+      ) : null}
+      {trailing}
+    </Pressable>
+  );
+}
+
+/** A hidden page's row in the "+N" sheet: its icon, title and count, or the dot while it waits uncounted. */
+export function PageOverflowRow({ page, onPress }: { page: HiddenPage; onPress: () => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  const count = hiddenPageCount(page);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Show ${hiddenPageDescription(page)}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.overflowRow, pressed && styles.pillPressed]}
+    >
+      <Glyph name="file-type-html" size={16} color={P.cardMuted} />
+      <Text style={styles.overflowName} numberOfLines={1}>
+        {page.title.trim().length > 0 ? page.title.trim() : 'Ghostex page'}
+      </Text>
+      {count !== null ? (
+        <Text style={[styles.count, styles.overflowCount]}>{count}</Text>
+      ) : page.questionsLeft ? (
+        <View style={[styles.pageDot, { backgroundColor: SidebarPalette.ROW_QUESTION }]} />
+      ) : null}
+    </Pressable>
+  );
+}
+
 /** `#rrggbb` at `alpha`, as `#rrggbbaa`; any other colour as it is. */
 function withAlpha(color: string, alpha: number): string {
   if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
@@ -736,6 +830,10 @@ export function PillMenuSheet({
 
 const useStyles = themedStyles((P) => ({
   switchOnDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#22c55e' },
+  /** A hidden page's pink dot while its questions wait (`PagePill`). */
+  pageDot: { width: 7, height: 7, borderRadius: 3.5 },
+  /** A hidden page's title in its pill, cut short with an ellipsis (`PagePill`). */
+  pageTitle: { flexShrink: 1, minWidth: 0, color: P.foreground, fontSize: 13, lineHeight: 19 },
   /** One of the Board pill's coloured counts: its group's dot and number. */
   boardCount: {
     flexDirection: 'row',
