@@ -9,6 +9,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
 import type { UserAction } from '../../rust/actions';
+import { animateNextFold } from './foldMotion';
 
 /**
  * Open rows. A row whose default comes from verbose mode records a close against that default
@@ -24,8 +25,9 @@ export class DisclosureStore {
     return this.expanded.has(key) || (openByDefault && !this.collapsed.has(key));
   }
 
-  /** Flip a row; `open` is what the row showed when it was pressed. */
+  /** Flip a row; `open` is what the row showed when it was pressed. The change eases (`foldMotion.ts`). */
   toggle(key: string, open: boolean): void {
+    animateNextFold();
     if (open) {
       this.expanded.delete(key);
       this.collapsed.add(key);
