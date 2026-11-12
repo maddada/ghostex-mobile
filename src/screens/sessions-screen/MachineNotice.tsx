@@ -64,10 +64,11 @@ export function MachineNoticeLine({
       accessibilityLiveRegion="polite"
       hitSlop={8}
       onPress={onToggle}
-      style={({ pressed }) => [styles.line, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.line, styles.failureLine, pressed ? styles.pressed : null]}
     >
       <WarningTriangleIcon size={13} color={SetupPalette.ERROR} />
-      <Text numberOfLines={1} style={[styles.lineText, styles.failureText, { color: appearance.foreground }]}>
+      {/* Two lines at most: in the flow it may wrap, so a long computer name never cuts the message. */}
+      <Text numberOfLines={2} style={[styles.lineText, styles.failureText, { color: appearance.foreground }]}>
         {line.text}
       </Text>
     </Pressable>
@@ -133,8 +134,9 @@ export function MachineNoticeDetails({
 
 const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, minWidth: 0 },
+  failureLine: { alignItems: 'flex-start', paddingVertical: 2 },
   lineText: { fontSize: 12, flexShrink: 1 },
-  failureText: { fontSize: 13, fontWeight: '600' },
+  failureText: { fontSize: 13, lineHeight: 17, fontWeight: '600' },
   card: {
     marginTop: 8,
     marginHorizontal: 12,
