@@ -255,7 +255,7 @@ export const ComposerInput = forwardRef<
 
   // A TextInput wraps its placeholder and cannot truncate it, so the field draws the placeholder's
   // first line itself, cut to one line with an ellipsis, over the empty field: at a large text size
-  // the hint shortens instead of wrapping or growing the box (the phone's "Hold ↑ for options").
+  // the hint shortens instead of wrapping or growing the box (the phone's "Hold the send or mic button for more...").
   const collapsedHint = draft.length === 0 ? (placeholder.split('\n')[0] ?? '') : null;
   const field_ = (
     <GhostexImageIntakeView onImages={onImages}>
@@ -305,7 +305,8 @@ const useStyles = themedStyles((P) => ({
     paddingBottom: 2,
     paddingHorizontal: 0,
   },
-  hint: { position: 'absolute', left: 0, right: 0, top: 2, fontSize: 15, lineHeight: 21 },
+  // A bit fainter than the theme's placeholder ink (layout A, `placeholder.ts`), so the hint reads as a hint.
+  hint: { position: 'absolute', left: 0, right: 0, top: 2, fontSize: 15, lineHeight: 21, opacity: 0.7 },
   collapsed: { height: COLLAPSED_INPUT_HEIGHT, maxHeight: COLLAPSED_INPUT_HEIGHT },
   chip: { fontWeight: '500' },
 }));

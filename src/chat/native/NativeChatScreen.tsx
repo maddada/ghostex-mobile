@@ -589,16 +589,8 @@ export default function NativeChatScreen({
               >
                 <TabSwipeView swipe={tabSwipe} shown={!parked}>
                   <NativeTranscript chat={chat} active={visible} />
-                  {/* Scroll-to-bottom alone while no card carries it. */}
-                  {document === null ? null : (
-                    <LoneScrollBottom
-                      document={document}
-                      armed={armed}
-                      links={links}
-                      hiddenPages={hiddenPages.length}
-                      {...(dockShown ? { omitPills: PILLS_IN_DOCK_BAR } : {})}
-                    />
-                  )}
+                  {/* Scroll-to-bottom, floating over the transcript's bottom edge. */}
+                  {document === null ? null : <LoneScrollBottom />}
                 </TabSwipeView>
               </View>
               {/* The offline computer's card tops the stack, above the working card; it names the

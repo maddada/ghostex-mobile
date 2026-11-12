@@ -2,7 +2,8 @@
  * The pill strip along the chat box's top edge (`NativeComposer.tsx` draws it inside the box): a
  * faintly tinted band with a hairline under it and the box's top corners, holding the chat's pills
  * on the right: the armed timers, the ? (a question waits), Resources, Workers, Links, Tasks,
- * Subagents and Background, and the ↓ jump-to-bottom at the left of them while the strip shows.
+ * Subagents and Background. The ↓ jump-to-bottom is never here: it floats over the transcript
+ * (`LoneScrollBottom` in `WorkingCard.tsx`, layout A of 2026-11-12).
  * Pills that don't fit drop their label, last first, then the last ones wait in one "+N" pill; nothing scrolls or
  * fades (`planStrip`). With no pill there is no strip; it grows in and shrinks away with the chat box's own ease (`composer-animation.json`).
  * Each pill opens its own sheet (`ChatPills.tsx`). Port of desktop `pills_strip.rs`.
@@ -34,10 +35,8 @@ import type { GhostexSessionLinks } from '../../../contract/mobileSummary';
 import { Glyph as ComposerGlyph } from '../composer/icons';
 import { sessionLinksChatPill } from '../sessionLinks';
 import { SessionDetailsPill, sessionDetailsRingOf } from './SessionDetailsSheet';
-import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import {
-  IconPill,
   LinksPill,
   OverflowPill,
   OverflowPillRow,
@@ -85,7 +84,7 @@ function questionWaiting(document: ChatDocument): boolean {
   return (document.openQuestions?.pillCount ?? 0) > 0;
 }
 
-/** Whether the strip shows: the Saved draft pill, a view chip, a panel pill, the ?, the Links pill or an armed timer calls for it; the ↓ only joins them. */
+/** Whether the strip shows: the Saved draft pill, a view chip, a panel pill, the ?, the Links pill or an armed timer calls for it. */
 const NO_PILLS: readonly string[] = [];
 
 /**
@@ -163,8 +162,6 @@ export function PillsStrip({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const reduceMotion = useReducedMotion();
-  const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
-  const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
   const savedDraft = document.savedDraftPill ?? null;
   const [draftOpen, setDraftOpen] = useState(false);
   // The pills in the "+N" pill (`PillsFit`), its sheet, and the pill a row of it picked, pressed once the sheet is gone.
@@ -275,7 +272,6 @@ export function PillsStrip({
     if (overflowCount === 0) setOverflowOpen(false);
   }, [overflowCount]);
   const questions = document.openQuestions;
-  const showJump = awayFromBottom && jumpToBottom !== null;
   return (
     <>
       {drawn ? (
@@ -312,15 +308,6 @@ export function PillsStrip({
               )}
               onHidden={setHiddenIds}
             >
-              {/* The ↓ at the left of the pills, so it appearing moves none of them. */}
-              {shown && showJump ? (
-                <IconPill
-                  glyph="arrow-down"
-                  accessibilityLabel="Scroll to bottom"
-                  color={P.primary}
-                  onPress={() => jumpToBottom?.()}
-                />
-              ) : null}
               {armed.map((action) => (
                 <Pressable
                   key={action.id}

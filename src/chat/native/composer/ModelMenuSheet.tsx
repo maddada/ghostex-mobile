@@ -26,7 +26,7 @@ import {
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
 import type { UserAction } from '../../rust/actions';
 import { agentAccent } from './agentColors';
-import { Glyph } from './icons';
+import { Glyph, ModeGlyph } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { effortFor, reasoningFor } from './modelMenuState';
 import { ModelMenuChoices, ModelMenuTray } from './ModelMenuTray';
@@ -52,12 +52,25 @@ const LEGACY_BAR_HEIGHT = 46;
  * CDXC:SessionChat 2026-09-27 DECISION:
  * User: "please remove the effort pills from each model in the react native model picker, we can pick the effort from the bottom button". A model row carries no reasoning level chips; the level is picked in the footer's Reasoning list, which follows the highlighted row, as on the desktop pop-up (which never had per-row chips).
  */
+/**
+ * The Mode row at the sheet's top (layout A, `OptionPills.tsx`): the permission mode the model pill now carries, its
+ * glyph and name, opening the core's mode rows (`optionMenus.mode`) as a page of this sheet.
+ */
+export type ModelSheetMode = {
+  /** The mode's name ("Bypass permissions"), or empty while unknown. */
+  label: string;
+  look: { mode: 'advance' | 'pause'; color: string };
+  /** The core's mode rows: label, description, checked, disabled and the `selectOption` command. */
+  rows: JsonRecord[];
+};
+
 export function ModelMenuSheet({
   menu,
   visible,
   ownProvider,
   onClose,
   dispatch,
+  mode,
 }: {
   menu: JsonRecord | null;
   visible: boolean;
@@ -70,6 +83,8 @@ export function ModelMenuSheet({
   ownProvider: string;
   onClose: () => void;
   dispatch: (action: UserAction) => void;
+  /** The permission mode, when the model pill carries it; absent, no Mode row. */
+  mode?: ModelSheetMode | null;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -84,6 +99,8 @@ export function ModelMenuSheet({
   const [about, setAbout] = useState<string | null>(null);
   /** The search field's text, which the core filters by (`modelMenuView` query). */
   const [query, setQuery] = useState('');
+  /** The Mode page is open. */
+  const [modeOpen, setModeOpen] = useState(false);
   const list = useRef<ScrollViewInstance>(null);
   const scrollUntil = useRef(0);
   /** Set when the Legacy models list is opened, so its toggle and models scroll into view once drawn. */
@@ -97,6 +114,7 @@ export function ModelMenuSheet({
     setOpenButton(null);
     setAbout(null);
     setQuery('');
+    setModeOpen(false);
     scrollUntil.current = Date.now() + SCROLL_WINDOW_MS;
     dispatch({ type: 'modelMenuView', tab: null, query: '' });
   }, [visible, dispatch]);
@@ -243,9 +261,22 @@ export function ModelMenuSheet({
     <Sheet
       visible={visible && menu !== null}
       onClose={onClose}
-      {...(open !== undefined ? { title: str(open, 'label'), onBack: () => setOpenButton(null) } : {})}
+      {...(open !== undefined
+        ? { title: str(open, 'label'), onBack: () => setOpenButton(null) }
+        : modeOpen && mode
+          ? { title: 'Mode', onBack: () => setModeOpen(false) }
+          : {})}
       maxHeight="90%"
     >
+      {open === undefined && modeOpen && mode ? (
+        <ModeChoices
+          rows={mode.rows}
+          onChoose={(command) => {
+            dispatch(command as UserAction);
+            setModeOpen(false);
+          }}
+        />
+      ) : null}
       {open !== undefined ? (
         <ModelMenuChoices
           setting={open}
@@ -254,7 +285,24 @@ export function ModelMenuSheet({
         />
       ) : null}
       {/* Kept mounted under an open list, so coming back keeps the list where it was scrolled. */}
-      <View style={open !== undefined ? styles.hidden : null}>
+      <View style={open !== undefined || (modeOpen && mode) ? styles.hidden : null}>
+        {mode ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={mode.label.length > 0 ? `Mode: ${mode.label}` : 'Mode'}
+            onPress={() => setModeOpen(true)}
+            style={({ pressed }) => [styles.modeRow, pressed ? styles.tabPressed : null]}
+          >
+            <View style={styles.modeGlyph}>
+              <ModeGlyph mode={mode.look.mode} color={mode.look.color} />
+            </View>
+            <Text style={styles.modeTitle}>Mode</Text>
+            <Text style={styles.modeValue} numberOfLines={1}>
+              {mode.label}
+            </Text>
+            <Glyph name="chevron-right" size={16} color={P.ink(0.64)} />
+          </Pressable>
+        ) : null}
         <View style={styles.tabs} accessibilityRole="tablist">
           {tabs.map((entry) => {
             const id = str(entry, 'id');
@@ -424,6 +472,51 @@ export function ModelMenuSheet({
   );
 }
 
+/** The Mode page: the core's mode rows, the current one checked; a mode the session can't use is greyed with why. */
+function ModeChoices({ rows, onChoose }: { rows: JsonRecord[]; onChoose: (command: JsonRecord) => void }) {
+  const styles = useStyles();
+  const P = useTranscriptTheme();
+  return (
+    <ScrollView contentContainerStyle={styles.modeChoices}>
+      {rows.map((row, index) => {
+        if (isTrue(row, 'separator')) return null;
+        // The core's heading ("Mode", with what the modes are) under the page's own "Mode" title: its line alone.
+        if (isTrue(row, 'heading')) {
+          const caption = str(row, 'description') || str(row, 'label');
+          return caption.length > 0 ? (
+            <Text key={`${index}:heading`} style={styles.modeCaption}>
+              {caption}
+            </Text>
+          ) : null;
+        }
+        const command = obj(row.command);
+        const off = isTrue(row, 'disabled') || command === null;
+        const description = str(row, 'description');
+        return (
+          <Pressable
+            key={`${index}:${str(row, 'id')}`}
+            accessibilityRole="menuitem"
+            accessibilityState={{ checked: isTrue(row, 'checked'), disabled: off }}
+            disabled={off}
+            onPress={() => {
+              if (command !== null) onChoose(command);
+            }}
+            style={({ pressed }) => [styles.modeChoice, pressed ? styles.tabPressed : null, off ? styles.modeOff : null]}
+          >
+            <View style={styles.modeChoiceText}>
+              <Text style={styles.modeTitle} numberOfLines={1}>
+                {str(row, 'label')}
+              </Text>
+              {description.length > 0 ? <Text style={styles.modeDescription}>{description}</Text> : null}
+            </View>
+            {isTrue(row, 'checked') ? <Glyph name="check" size={17} color={P.menuForeground} /> : null}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 /**
  * CDXC:SessionChat 2026-09-25 WHY:
  * The desktop pop-up is driven from the keyboard (keys.rs DECISION): Up and Down move the highlight, Left and Right move its reasoning level, Enter saves the model and level as the agent's default and Option+Enter uses them in this session only (2026-09-29). A phone has no such keys, so a tap on a row only highlights it, the footer's Reasoning list is Left and Right, and these buttons are Enter (Save as default, the primary one) and Option+Enter. Where the agent cannot apply a pick to one session (`sessionScope` false), both keys save the default, so one Apply button stands for them with the core's `scopeHint`; another agent's row hands off (a draft switches agent), which one button names.
@@ -487,6 +580,24 @@ function ApplyBar({
 
 const useStyles = themedStyles((P) => ({
   hidden: { display: 'none' },
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: P.ink(0.08),
+  },
+  modeGlyph: { opacity: 0.8 },
+  modeTitle: { color: P.menuForeground, fontSize: 15 },
+  modeValue: { flex: 1, textAlign: 'right', color: P.ink(0.64), fontSize: 14 },
+  modeChoices: { paddingVertical: 4 },
+  modeChoice: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16, paddingVertical: 6 },
+  modeChoiceText: { flex: 1, gap: 2 },
+  modeDescription: { color: P.ink(0.64), fontSize: 12.5 },
+  modeCaption: { color: P.ink(0.64), fontSize: 13, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 },
+  modeOff: { opacity: 0.5 },
   tabs: {
     flexDirection: 'row',
     alignItems: 'center',

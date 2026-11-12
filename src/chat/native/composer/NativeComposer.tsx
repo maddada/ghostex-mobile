@@ -45,12 +45,12 @@ import {
   type ComposerControlId,
 } from './menus';
 import { MenuSheet, type MenuRow } from './MenuSheet';
-import { ModelMenuSheet } from './ModelMenuSheet';
+import { ModelMenuSheet, type ModelSheetMode } from './ModelMenuSheet';
 import { NotePanel } from './NotePanel';
 import { phonePlaceholder } from './placeholder';
 import { CatchUpCard } from '../cards/CatchUpCard';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
-import { OptionPills, type PillKind } from './OptionPills';
+import { OptionPills, modeInModelPill, modeLook, type PillKind } from './OptionPills';
 import { RunLocationRow } from './RunLocationRow';
 import { ProjectPickerSheet } from './ProjectPickerSheet';
 import { draftProjectChoices, moveDraftToProject } from './draftProjectChoices';
@@ -324,8 +324,16 @@ export function NativeComposer({
    * still carries Terminal View as a More actions row.
    */
   const voicePhase = useVoiceStore((voice) => voice.phase);
-  const voiceShown = !compact && (voiceAgent || voiceActive(voicePhase));
   const voiceLit = voiceActive(voicePhase);
+  /*
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User picked layout A of the "Phone chat box: a cleaner bottom bar" page (Q2727): the voice agent joins the mic.
+   * "Talk to the voice agent" is the first row of the mic's hold menu (`openDictationMenu`), and the headset button
+   * shows only while a voice conversation runs (lit, so it opens the running one), or where there is no mic to hold.
+   * Supersedes the headset always standing in the bottom row (the decision above it, same day).
+   */
+  const voiceInMic = !compact && voiceAgent && dictation.available;
+  const voiceShown = !compact && (voiceLit || (voiceAgent && !dictation.available));
   const terminalFixed = !compact && available('terminal');
   const [footerWidth, setFooterWidth] = useState(0);
   const [optionsWidth, setOptionsWidth] = useState(0);
@@ -588,9 +596,23 @@ export function NativeComposer({
         return;
       }
       const rows = optionMenuRows(document, kind);
+      // Layout A: the model pill carries the permission mode, so its sheet leads with a Mode submenu.
+      if (kind === 'model' && modeInModelPill(document, compact)) {
+        const labels = obj(document.optionLabels);
+        const glyph = modeLook(str(labels, 'modeValue'), false).mode;
+        rows.unshift(
+          {
+            label: 'Mode',
+            detail: str(labels, 'mode'),
+            iconPath: glyph === 'advance' ? 'titlebar/mode-advance.svg' : 'titlebar/mode-pause.svg',
+            children: optionMenuRows(document, 'mode'),
+          },
+          { separator: true },
+        );
+      }
       if (rows.length > 0) setMenu({ kind: 'rows', rows });
     },
-    [document],
+    [compact, document],
   );
 
   const handledAccountsRequest = useRef(openAccountsRequestId);
@@ -628,6 +650,13 @@ export function NativeComposer({
     void dictation.previous().then((previous) => {
       const engine = dictation.engine;
       const rows: MenuRow[] = [];
+      if (voiceInMic) {
+        rows.push({
+          label: voiceLit ? 'Open the voice agent' : 'Talk to the voice agent',
+          iconPath: 'titlebar/headset.svg',
+          command: { type: 'host', action: 'voiceAgent' },
+        });
+      }
       if (engine !== null) {
         rows.push({
           heading: true,
@@ -659,7 +688,7 @@ export function NativeComposer({
       });
       setMenu({ kind: 'rows', title: 'Dictate', rows });
     });
-  }, [dictation, machineLabel]);
+  }, [dictation, machineLabel, voiceInMic, voiceLit]);
 
   const openMore = useCallback(() => {
     if (document === null) return;
@@ -713,9 +742,18 @@ export function NativeComposer({
   // ---- layout ------------------------------------------------------------------------------------
 
   if (state === null || input === null || model === null) return null;
+  // The Mode row of the merged model sheet, while the model pill carries the mode (layout A, `OptionPills.tsx`).
+  const sheetMode: ModelSheetMode | null =
+    document !== null && modeInModelPill(document, compact)
+      ? {
+          label: str(obj(document.optionLabels), 'mode'),
+          look: modeLook(str(obj(document.optionLabels), 'modeValue'), P.light),
+          rows: optionMenuRows(document, 'mode'),
+        }
+      : null;
   const collapsed = motion.collapsed;
   const hasDraft = text.trim().length > 0;
-  const placeholder = phonePlaceholder(document?.composerPlaceholder ?? '');
+  const placeholder = phonePlaceholder(document?.composerPlaceholder ?? '', available('dictate'));
   const statusLine = document !== null && statusLineReserved(document);
   /*
    * CDXC:SessionChat 2026-10-28 DECISION:
@@ -1013,6 +1051,7 @@ export function NativeComposer({
             ownProvider={str(document?.modelMenuContext, 'provider')}
             onClose={closeMenu}
             dispatch={dispatch}
+            mode={sheetMode}
           />
           <ContextEditorSheet editor={obj(document?.contextEditor)} dispatch={dispatch} />
         </>
@@ -1114,7 +1153,13 @@ const useStyles = themedStyles((P) => ({
   collapsedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grow: { flex: 1, minWidth: 0 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: FOOTER_GAP },
-  options: { flexShrink: 1, minWidth: 0, flexDirection: 'row' },
+  /*
+   * CDXC:SessionChat 2026-11-12 DECISION:
+   * User, with layout A: "less space left of the model pill so it matches the space right of the send button". The
+   * pills keep their 10pt pressed-fill padding, and the row reaches that far past the card's 14pt inset, so the model's
+   * mark starts 14pt from the box's edge, as Send ends 14pt from the other one.
+   */
+  options: { flexShrink: 1, minWidth: 0, flexDirection: 'row', marginLeft: -10 },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: ACTION_GAP, marginLeft: 'auto' },
   control: {
     width: CONTROL_WIDTH,

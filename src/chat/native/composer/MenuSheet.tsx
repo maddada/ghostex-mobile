@@ -88,6 +88,8 @@ const KNOWN_GLYPHS = new Set<string>([
   'player-stop',
   'volume',
   'player-play',
+  'mode-advance',
+  'mode-pause',
   'file-diff',
   'logout',
   'axe',

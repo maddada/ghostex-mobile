@@ -7,10 +7,20 @@
  * in the menu a hold on Send opens (`sendMenuRows`). The core's other texts (a held input, a pending question, a
  * switching mode) pass through unchanged.
  */
-export const HOLD_FOR_OPTIONS_PLACEHOLDER = 'Hold ↑ for options';
+/**
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User, with layout A of the "Phone chat box: a cleaner bottom bar" page: the placeholder becomes "Hold the send or mic
+ * button for more...", on one line (no wrap, truncated if needed; `ComposerInput` draws it cut to one line) and a bit
+ * more faded. The mic's hold menu now leads with Talk to the voice agent, so both holds are worth naming; a chat box
+ * with no mic names Send alone. Supersedes "Hold ↑ for options" above.
+ */
+export const HOLD_FOR_MORE_PLACEHOLDER = 'Hold the send or mic button for more...';
+const HOLD_SEND_FOR_MORE_PLACEHOLDER = 'Hold the send button for more...';
 
 const CORE_TOUCH_PLACEHOLDER = 'Tap ↑ to send or hold it to queue; use / for skills, @ for files and + for agents.';
 
-export function phonePlaceholder(fromCore: string): string {
-  return fromCore === CORE_TOUCH_PLACEHOLDER ? HOLD_FOR_OPTIONS_PLACEHOLDER : fromCore;
+/** The phone's placeholder for the core's: the hold hint for its long touch hint, anything else unchanged. */
+export function phonePlaceholder(fromCore: string, mic: boolean): string {
+  if (fromCore !== CORE_TOUCH_PLACEHOLDER) return fromCore;
+  return mic ? HOLD_FOR_MORE_PLACEHOLDER : HOLD_SEND_FOR_MORE_PLACEHOLDER;
 }

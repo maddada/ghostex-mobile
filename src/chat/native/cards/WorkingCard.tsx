@@ -16,7 +16,6 @@ import { memo, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
-import { useChatPlacement } from '../chatPlacement';
 import { useTranscriptBottomStore } from '../transcript/bottomStore';
 import { QUIET_ICON_GAP, QUIET_LINE_HEIGHT, QUIET_TEXT_SIZE, quietDim } from '../transcript/quietWork';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -24,9 +23,8 @@ import { IconPill } from './ChatPills';
 import { Glyph } from './icons';
 import { isTrue, num, obj, str } from './json';
 import { chatCardsShown, COMPOSER_TOP_PADDING, STACK_GAP } from './NativeChatCards';
-import { pillsStripShown, type PillsStripLinks } from './PillsStrip';
 import { PulseDot, Spinner } from './primitives';
-import { ProgressTrack, VISUAL, WorkingSpark, type ArmedAction } from './WorkingStrip';
+import { ProgressTrack, VISUAL, WorkingSpark } from './WorkingStrip';
 
 /** The transcript rows' column (`Transcript.tsx` `ROW_MAX_WIDTH`). */
 const ROW_MAX_WIDTH = 768;
@@ -248,33 +246,21 @@ export const StatusTail = memo(function StatusTail({ document }: { document: Cha
 });
 
 /**
- * Scroll-to-bottom on its own over the transcript's bottom edge, while the reader is away from the
- * bottom and the chat box has no pill strip to carry it (desktop `render_lone_scroll_bottom`): a strip
- * opened only for the ↓ would resize the box every time the reader scrolled up. A chat in a pane slot
- * draws no strip (`NativeComposer`'s compact form), so there it is always on its own.
+ * Scroll-to-bottom on its own over the transcript's bottom edge, at the card's right end, while the
+ * reader is away from the bottom.
+ *
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User picked layout A of the "Phone chat box: a cleaner bottom bar" page (Q2727): the ↓ leaves the
+ * chat box's pill strip and always floats here, so the strip holds only the chat's pills. Supersedes
+ * the ↓ riding at the strip's left while the strip showed (desktop `render_lone_scroll_bottom` still
+ * steps aside for its strip).
  */
-export function LoneScrollBottom({
-  document,
-  armed,
-  links,
-  hiddenPages = 0,
-  omitPills,
-}: {
-  document: ChatDocument;
-  /** Pills the strip leaves out (`PillsStrip.tsx` `PILLS_IN_DOCK_BAR`). */
-  omitPills?: readonly string[];
-  armed: readonly ArmedAction[];
-  links?: PillsStripLinks | null;
-  /** How many pages the chat has hidden, whose pills alone show the strip (`hiddenPages.ts`). */
-  hiddenPages?: number;
-}) {
+export function LoneScrollBottom() {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const awayFromBottom = useTranscriptBottomStore((store) => store.awayFromBottom);
   const jumpToBottom = useTranscriptBottomStore((store) => store.jumpToBottom);
-  const stripCarriesIt =
-    !useChatPlacement().inPane && pillsStripShown(document, armed, links ?? null, P.cardMuted, hiddenPages, omitPills);
-  if (stripCarriesIt || !awayFromBottom || jumpToBottom === null) {
+  if (!awayFromBottom || jumpToBottom === null) {
     return null;
   }
   return (

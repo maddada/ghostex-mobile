@@ -42,6 +42,27 @@ function lightModeColor(hex: string): string {
   return `#${channel(16)}${channel(8)}${channel(0)}`;
 }
 
+/** The permission mode's glyph and its pastel colour (darkened for the light chat), for the model pill and its sheet. */
+export function modeLook(modeValue: string, light: boolean): { mode: 'advance' | 'pause'; color: string } {
+  const [mode, color] = MODE_COLORS[modeValue] ?? ['pause', '#d2d4dc'];
+  return { mode, color: light ? lightModeColor(color) : color };
+}
+
+/**
+ * Whether the permission mode rides inside the model pill (layout A, below): the agent has modes and a model pill,
+ * in the full chat box. Its sheet then carries the Mode row (`ModelMenuSheet`, or the rows sheet's Mode submenu).
+ */
+export function modeInModelPill(document: ChatDocument, modelOnly = false): boolean {
+  const labels = obj(document.optionLabels);
+  return !modelOnly && isTrue(labels, 'showModel') && arr(obj(document.optionMenus)?.mode).length > 0;
+}
+
+/*
+ * CDXC:SessionChat 2026-11-12 DECISION:
+ * User picked layout A of the "Phone chat box: a cleaner bottom bar" page (Q2727): the permission mode joins the model
+ * pill as a small glyph after the model's name, and the model sheet gets a Mode row at its top; the separate mode pill
+ * stays only for an agent with modes and no model pill.
+ */
 export function OptionPills({
   document,
   onOpen,
@@ -70,8 +91,9 @@ export function OptionPills({
   const chipIcon = str(agentChip, 'icon');
   const indicator = str(labels, 'accountIndicator');
   const hasMode = arr(obj(document.optionMenus)?.mode).length > 0;
-  const modeValue = str(labels, 'modeValue');
-  const [modeGlyph, modeColor] = MODE_COLORS[modeValue] ?? ['pause', '#d2d4dc'];
+  const look = modeLook(str(labels, 'modeValue'), P.light);
+  const modeInModel = modeInModelPill(document, modelOnly);
+  const modeLabel = str(labels, 'mode');
   const optionsLabel = str(labels, 'options');
   // While the chat has the Session details panel its ring in the pill strip is the context meter
   // (`PillsStrip.tsx`), so this one steps aside; a computer that cannot serve the panel keeps it.
@@ -102,7 +124,11 @@ export function OptionPills({
       {isTrue(labels, 'showModel') ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={loadingModel ? 'Reading model' : `Model: ${modelLabel}`}
+          accessibilityLabel={
+            loadingModel
+              ? 'Reading model'
+              : `Model: ${modelLabel}${modeInModel && modeLabel.length > 0 ? `, mode: ${modeLabel}` : ''}`
+          }
           onPress={() => onOpen('model')}
           style={({ pressed }) => [styles.pill, merged ? styles.pillMerged : null, pressed ? styles.pressed : null]}
         >
@@ -129,6 +155,14 @@ export function OptionPills({
             </Text>
           )}
           {merged && !loadingModel ? badges : null}
+          {modeInModel ? (
+            <>
+              <View style={styles.modeRule} />
+              <View style={styles.modeGlyph}>
+                <ModeGlyph mode={look.mode} color={look.color} />
+              </View>
+            </>
+          ) : null}
           <Glyph name="chevron-down" size={12} color={P.primary} />
         </Pressable>
       ) : null}
@@ -151,7 +185,7 @@ export function OptionPills({
           <Glyph name="chevron-down" size={12} color={P.primary} />
         </Pressable>
       ) : null}
-      {hasMode && !modelOnly ? (
+      {hasMode && !modelOnly && !modeInModel ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={str(labels, 'mode') ? `Mode: ${str(labels, 'mode')}` : 'Mode'}
@@ -159,7 +193,7 @@ export function OptionPills({
           style={({ pressed }) => [styles.pill, styles.modePill, pressed ? styles.pressed : null]}
         >
           <View style={styles.modeGlyph}>
-            <ModeGlyph mode={modeGlyph} color={P.light ? lightModeColor(modeColor) : modeColor} />
+            <ModeGlyph mode={look.mode} color={look.color} />
           </View>
         </Pressable>
       ) : null}
@@ -228,6 +262,8 @@ const useStyles = themedStyles((P) => ({
   skeleton: { height: 10, borderRadius: 5, backgroundColor: P.mutedInk(0.24) },
   modePill: { paddingHorizontal: 7 },
   modeGlyph: { opacity: 0.55 },
+  /** The hairline between the model's name and the mode glyph inside the model pill. */
+  modeRule: { width: StyleSheet.hairlineWidth * 2, height: 14, marginHorizontal: 2, backgroundColor: P.ink(0.16) },
   ring: { width: 30, height: 30, marginLeft: 4, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   accountMark: { width: 19, height: 19, marginRight: 2, alignItems: 'center', justifyContent: 'center' },
   accountLogo: { ...StyleSheet.absoluteFill, opacity: 0.3, alignItems: 'center', justifyContent: 'center' },

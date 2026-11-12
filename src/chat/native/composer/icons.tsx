@@ -183,6 +183,10 @@ const GLYPHS = {
   search: { paths: ['M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0', 'M21 21l-6 -6'] },
   // The rows the chat's top bar menu held before it merged into More actions.
   'player-play': { paths: ['M7 4v16l13 -8z'] },
+  // The permission mode's glyphs (`ModeGlyph`, `titlebar/mode-advance.svg` and `mode-pause.svg`) on a 24pt grid, for
+  // the model sheet's Mode row (layout A, `OptionPills.tsx`).
+  'mode-advance': { paths: [], fills: ['M2.5 5.2 11.3 12 2.5 18.8Z', 'M12.6 5.2 21.4 12 12.6 18.8Z'] },
+  'mode-pause': { paths: [], fills: ['M5.2 5.2h4.6v13.6h-4.6Z', 'M14.2 5.2h4.6v13.6h-4.6Z'] },
   'file-diff': {
     paths: [
       'M14 3v4a1 1 0 0 0 1 1h4',
