@@ -124,13 +124,13 @@ function StatusMarker({ status, size, dim }: { status: string; size: number; dim
   return <View style={[box, styles.ring, { borderRadius: size / 2, borderColor: color, borderStyle: 'dashed' }]} />;
 }
 
-/** The cards under one reply or summary-mode turn. */
-export function WorkCardStack({ cards, dispatch }: { cards: JsonRecord[]; dispatch: Dispatch }) {
+/** The cards under one reply or summary-mode turn. `gap` spaces the cards when given (an opened Quiet View line's rail, `quietView.tsx`). */
+export function WorkCardStack({ cards, dispatch, gap }: { cards: JsonRecord[]; dispatch: Dispatch; gap?: number }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   if (cards.length === 0) return null;
   return (
-    <View style={styles.stack}>
+    <View style={gap === undefined ? styles.stack : [styles.stack, { gap }]}>
       {cards.map((card) => (
         // The ? pill's jump lands on an ask's card and outlines it (`OpenQuestions.tsx`).
         <QuestionFlashFrame key={str(card, 'key')} target={str(card, 'key')} light={P.light}>

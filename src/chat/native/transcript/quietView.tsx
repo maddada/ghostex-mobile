@@ -35,6 +35,10 @@ import { TranscriptItemView } from './TranscriptItemRow';
 /** The space between a shut line and the reply that ends it (desktop `LINE_TO_REPLY`). */
 export const LINE_TO_REPLY = 8;
 const HIDE_FILES = { inWorkFold: false, hideFileChanges: true };
+/** The space between the cards on an opened line's rail, the body's own gap between its parts
+ *  (desktop `RAIL_ROW_GAP`): an opened "3 items updated" line's work item cards sit this close, as
+ *  a "1 report · 1 tool call" line's cards do (user, 2026-11-12: the gap is "ALWAYS small"). */
+const RAIL_ROW_GAP = 8;
 
 /** The main transcript's lines; `null` outside Quiet View and in the subagent viewer. */
 export const QuietLinesContext = createContext<QuietLines | null>(null);
@@ -120,7 +124,7 @@ export function QuietRow({
       parts.push({
         node: (
           <DisclosureBody onCollapse={state.toggle} label="Collapse" rail="work">
-            {cards.length > 0 ? <WorkCardStack cards={cards} dispatch={dispatch} /> : null}
+            {cards.length > 0 ? <WorkCardStack cards={cards} dispatch={dispatch} gap={RAIL_ROW_GAP} /> : null}
             {/* Its tool calls are cards, as its "Message to …" cards are (`ToolCard.tsx`). */}
             <BoxedToolCards.Provider value>
               <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
@@ -148,7 +152,7 @@ export function QuietRow({
       parts.push({
         node: (
           <DisclosureBody onCollapse={state.afterToggle} label="Collapse" rail="work">
-            <WorkCardStack cards={cards} dispatch={dispatch} />
+            <WorkCardStack cards={cards} dispatch={dispatch} gap={RAIL_ROW_GAP} />
           </DisclosureBody>
         ),
         gap: 4,
