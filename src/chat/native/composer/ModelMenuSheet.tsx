@@ -86,7 +86,7 @@ export function ModelMenuSheet({
   const [query, setQuery] = useState('');
   const list = useRef<ScrollViewInstance>(null);
   const scrollUntil = useRef(0);
-  /** Set when the Legacy models list is opened, so its first model scrolls into view once drawn. */
+  /** Set when the Legacy models list is opened, so its toggle and models scroll into view once drawn. */
   const scrollToLegacy = useRef(false);
 
   useEffect(() => {
@@ -152,7 +152,7 @@ export function ModelMenuSheet({
   const emptyText = str(menu, 'emptyText');
   /**
    * CDXC:AgentModelCatalog 2026-11-12 DECISION:
-   * User: "please align legacy models item to the bottom of the picker always". The Legacy models toggle is pinned under the list, right above the footer buttons, however short the list (render.rs on the desktop); the core lists the legacy rows after the current ones, scrolling above it, while it is open.
+   * User: "please align legacy models item to the bottom of the picker always". The shut Legacy models toggle is pinned under the list, right above the footer buttons, however short the list (render.rs on the desktop). Opened, it stays the last thing after the current models and its models are listed under it: the list draws it right before the first of them (the core lists them after the current ones), so no gap opens between the toggle and the models, and they scroll together. This supersedes the open list's models scrolling above the pinned toggle.
    */
   const legacy = obj(menu?.legacy);
   const legacyOpen = legacy !== null && isTrue(legacy, 'open');
@@ -166,6 +166,12 @@ export function ModelMenuSheet({
         onPress={() => {
           scrollToLegacy.current = !legacyOpen;
           dispatch({ type: 'modelMenuView', legacyOpen: !legacyOpen });
+        }}
+        onLayout={(event) => {
+          // Opening the Legacy models list scrolls to it, its models under it, so the tap shows what it added.
+          if (!legacyOpen || !scrollToLegacy.current) return;
+          scrollToLegacy.current = false;
+          list.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: true });
         }}
         style={({ pressed }) => [styles.legacy, pressed ? styles.rowButtonPressed : null]}
       >
@@ -329,7 +335,7 @@ export function ModelMenuSheet({
           keyboardShouldPersistTaps="handled"
           style={[
             styles.list,
-            { height: legacyToggle === null ? listHeight : listHeight - LEGACY_BAR_HEIGHT },
+            { height: legacyToggle === null || legacyOpen ? listHeight : listHeight - LEGACY_BAR_HEIGHT },
             disabled ? styles.waiting : null,
           ]}
           contentContainerStyle={styles.listContent}
@@ -352,12 +358,6 @@ export function ModelMenuSheet({
                 accessibilityState={{ checked: selected, selected: active }}
                 onPress={() => highlight(key)}
                 onLayout={(event) => {
-                  // Opening the Legacy models list scrolls to its first model, so the tap shows what it added.
-                  if (index === firstLegacy && scrollToLegacy.current) {
-                    scrollToLegacy.current = false;
-                    list.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: true });
-                    return;
-                  }
                   if (!active || Date.now() > scrollUntil.current) return;
                   scrollUntil.current = 0;
                   list.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 8), animated: false });
@@ -402,10 +402,12 @@ export function ModelMenuSheet({
                 ) : null}
               </Pressable>
             );
-            return item;
+            // The open Legacy models toggle heads its models.
+            return legacyOpen && index === firstLegacy ? [legacyToggle, item] : item;
           })}
+          {legacyOpen && firstLegacy < 0 ? legacyToggle : null}
         </ScrollView>
-        {legacyToggle === null ? null : (
+        {legacyToggle === null || legacyOpen ? null : (
           <View style={[styles.legacyBar, disabled ? styles.waiting : null]}>{legacyToggle}</View>
         )}
         <ModelMenuTray buttons={buttons} disabled={disabled} sessionScope={sessionScope} onActivate={activate} />
