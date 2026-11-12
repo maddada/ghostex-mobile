@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { readEasyConnectPath, type EasyConnectPath } from './easyConnectPathModel';
 
-export { isPublicRelayName, type EasyConnectPath } from './easyConnectPathModel';
+export { easyConnectRouteName, isPublicRelayName, type EasyConnectPath } from './easyConnectPathModel';
 
 const POLL_MS = 10_000;
 

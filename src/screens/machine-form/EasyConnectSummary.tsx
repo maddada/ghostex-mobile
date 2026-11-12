@@ -11,7 +11,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { SetupButton, StatusDot } from '../../components/onboarding/SetupPrimitives';
 import { EditMachineCopy } from '../../copy';
-import { isPublicRelayName, useEasyConnectPath } from '../../machines/easyConnectPath';
+import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import type { MachineRecord } from '../../machines/store';
 
 import { formatShortDate } from './dates';
@@ -33,10 +33,7 @@ export default function EasyConnectSummary({
   if (machine.pairedAt !== undefined) parts.push(formatShortDate(machine.pairedAt));
   parts.push(connectedNow ? copy.connectedNow : copy.notConnected);
   const path = useEasyConnectPath(machine.id, connectedNow);
-  if (path !== null) {
-    if (path.path === 'direct') parts.push(path.route === 'lan' ? copy.directSameNetwork : copy.direct);
-    else parts.push(isPublicRelayName(path.relay) ? copy.viaPublicRelay : copy.viaRelay(path.relay));
-  }
+  if (path !== null) parts.push(easyConnectRouteName(path));
   return (
     <View style={[formStyles.row, formStyles.rowFirst]}>
       <View style={formStyles.rowMain}>

@@ -425,6 +425,14 @@ export const StateCardCopy = {
   initialStatus: 'Connect to a computer',
 } as const;
 
+/** The names of the path an Easy Connect link is on (`easyConnectRouteName` in machines/easyConnectPathModel.ts). */
+export const RouteNameCopy = {
+  privateRelay: 'Private Relay',
+  globalRelay: 'Global Relay',
+  direct: 'Direct',
+  sameNetwork: 'Same network',
+} as const;
+
 /** Failure summarization copy map, sessions-drawer.md §5. */
 export const FailureCopy = {
   hostKey:
@@ -923,9 +931,8 @@ export const ComputerPageCopy = {
     notConnected: 'Not connected',
   },
   easyConnect: 'Easy Connect',
-  easyConnectDirect: 'Easy Connect, straight to the computer',
-  easyConnectSameNetwork: 'Easy Connect, straight to the computer on this network',
-  easyConnectRelay: 'Easy Connect, through a relay',
+  /** "Easy Connect · Private Relay" (`easyConnectRouteName`). */
+  easyConnectRoute: (route: string) => `Easy Connect · ${route}`,
   tailscale: (address: string) => `Tailscale · ${address}`,
   /** A Tailscale computer that also reaches its computer through Easy Connect (`easyConnectRoute.ts`). */
   routes: {
@@ -1007,11 +1014,6 @@ export const EditMachineCopy = {
     pairedAs: (user: string) => `Paired as ${user}`,
     connectedNow: 'connected now',
     notConnected: 'not connected',
-    /** The tunnel's path (`easyConnectPath.ts`): straight to the computer, or through a relay. */
-    direct: 'direct',
-    directSameNetwork: 'direct, same network',
-    viaRelay: (relay: string) => `via relay ${relay}`,
-    viaPublicRelay: "via Tailscale's public relay",
     rePair: 'Re-pair',
   },
   showInSessions: 'Show in Sessions',

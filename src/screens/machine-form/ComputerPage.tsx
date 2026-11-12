@@ -20,7 +20,7 @@ import DemoMachineForm from '../../demo/DemoMachineForm';
 import { isDemoMachine } from '../../demo/identity';
 import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
-import { useEasyConnectPath } from '../../machines/easyConnectPath';
+import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import { useMachineRoutes } from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
@@ -154,11 +154,7 @@ function ComputerPageBody({
   const how = viaEasyConnect
     ? path === null
       ? copy.easyConnect
-      : path.path === 'direct'
-        ? path.route === 'lan'
-          ? copy.easyConnectSameNetwork
-          : copy.easyConnectDirect
-        : copy.easyConnectRelay
+      : copy.easyConnectRoute(easyConnectRouteName(path))
     : copy.tailscale(machine.host);
   const dotColor =
     status === 'connected' ? appearance.connected : status === 'failed' ? appearance.danger : appearance.muted;
