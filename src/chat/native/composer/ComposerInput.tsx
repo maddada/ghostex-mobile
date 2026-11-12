@@ -9,7 +9,15 @@
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Text, TextInput, View, type TextInputInstance, type TextInputSelectionChangeEvent } from 'react-native';
+import {
+  Keyboard,
+  Platform,
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+  type TextInputSelectionChangeEvent,
+} from 'react-native';
 
 import GhostexImageIntakeView from '../../../../modules/ghostex-native/src/GhostexImageIntakeView';
 import type { ComposerModelState } from '../../rust/composer';
@@ -122,6 +130,23 @@ export const ComposerInput = forwardRef<
       field.current?.focus();
     },
   }));
+
+  /*
+   * CDXC:SessionChat 2026-11-12 WHY:
+   * User (Android): tap the chat box, close the keyboard with the back gesture or its hide key, tap the box again:
+   * no keyboard. Android keeps the field focused when the keyboard closes that way. A tap right on the field's
+   * text line brings the keyboard back, but a tap anywhere else in the box goes through the box's `focus()`, which
+   * does nothing for a field React Native already holds as focused (`TextInputState.focusTextInput`), and the field
+   * is a single line while the box is empty. The field lets go of its focus when the keyboard closes, so the next
+   * tap focuses it afresh and opens the keyboard, as on the iPhone (whose field blurs when its keyboard goes).
+   */
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = Keyboard.addListener('keyboardDidHide', () => {
+      if (field.current?.isFocused() === true) field.current.blur();
+    });
+    return () => subscription.remove();
+  }, []);
 
   const live = parsedFor === draft ? references : parse(draft);
   const text = useMemo(() => projectDraft(draft, live), [draft, live]);
