@@ -1,10 +1,16 @@
 /**
  * The Notifications list, drawn as the desktop's Notifications panel (`titlebar_notifications_panel.rs` in the Ghostex
- * repo; the rules in `feedPanel.ts`, CDXC:Notifications 2026-11-12): the header actions Mark all read and
- * Clear all; then the computer's feed rows in two groups, Unread and Read, newest first. A row is the desktop's card:
- * the agent's icon (or the kind's) in a square tile, the bold title with the computer's chip (with several computers)
- * and the time, a two-line body, and "project · kind" as its footer, with the blue accent wash while unread (red for an
- * approval, a failure, a message not sent and an expiring reset), dimmed once read.
+ * repo; the rules in `feedPanel.ts`, CDXC:Notifications 2026-11-12): one ⋯ button whose menu holds Mark all read
+ * and Clear all; then the computer's feed rows in two groups, Unread and Read, newest first. A row is the desktop's
+ * card: the agent's icon (or the kind's) in a square tile, the bold title followed by its computer's icon (with several
+ * computers, as a session row ends with it) and the time, a two-line body, and "project · kind" as its footer, with
+ * the blue accent wash while unread (red for an approval, a failure, a message not sent and an expiring reset), dimmed
+ * once read.
+ *
+ * CDXC:Notifications 2026-11-12 DECISION: User, on the desktop panel's options page: "Yes" to the phone getting the
+ * same change (Q2736). The two equal-width header actions became one ⋯ menu (Q2734 C), and the computer's name chip
+ * became the computer's own icon right after the title (Q2735 B), on every row while several computers feed the list
+ * (Q2741 B, the sidebar's rule). The computer's name stays in the card's VoiceOver label.
  *
  * Touch stands in for the desktop's hover and right click: the card's check is always shown (the desktop shows it on
  * hover): on an unread card it marks the card read, on a read card it clears it; an open approval has none, as on the
@@ -41,6 +47,7 @@ import BottomSheet from '../components/common/BottomSheet';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../components/sessions/ContextMenu';
 import { FoldListFrame } from '../components/common/foldGap';
 import { measureInWindow } from '../components/common/measureInWindow';
+import { ComputerIconGlyph } from '../components/sessions/ComputerIconGlyph';
 import { MoreGlyph } from '../components/sessions/icons';
 import { useLaptopFold } from '../components/common/verticalBar/laptopFold';
 import { NO_BAR_INSETS } from '../components/common/verticalBar/layout';
@@ -48,6 +55,7 @@ import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBa
 import { agentIconTint, resolveAgentIconId } from '../contract/mobileSummary';
 import { NotificationsCopy } from '../copy';
 import { useInventoryStore } from '../inventory/store';
+import { useSessionComputerIcon } from '../machines/computerIcons';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { PaneBarInset } from '../panes/geometry';
 import type { ClosedSession } from '../sessions/sessionSearch';
@@ -82,7 +90,7 @@ import {
   restoreEndedSession,
   useAttentionFeedStore,
 } from './feedStore';
-import { CloudOffGlyph, feedKindGlyph, PanelGlyph, type PanelGlyphName } from './icons';
+import { CloudOffGlyph, feedKindGlyph, PanelGlyph } from './icons';
 import { useFeedPanel } from './useFeedPanel';
 
 /** What opening a row's session asks for. */
@@ -178,21 +186,16 @@ function TileIcon({ row, appearance }: { row: PanelRow; appearance: Appearance }
   return <PanelGlyph name={feedKindGlyph(row.kind)} size={18} color={colorWithOpacity(appearance.foreground, 84)} />;
 }
 
-function MachineChip({ label, appearance }: { label: string; appearance: Appearance }) {
+/**
+ * The row's computer as its icon after the title, the one its session rows end with (machines/computerIcons.ts);
+ * a computer whose icon is not known yet wears the plain computer, as on the desktop. None with one computer.
+ */
+function RowComputerIcon({ row, color }: { row: PanelRow; color: string }) {
+  const drawing = useSessionComputerIcon(row.machineId);
+  if (row.machineLabel === null) return null;
   return (
-    <View
-      style={[
-        styles.chip,
-        {
-          borderColor: colorWithOpacity(appearance.foreground, 16),
-          backgroundColor: colorWithOpacity(appearance.foreground, 7),
-        },
-      ]}
-    >
-      <PanelGlyph name="deviceDesktop" size={12} color={colorWithOpacity(appearance.foreground, 80)} />
-      <Text style={[styles.chipText, { color: colorWithOpacity(appearance.foreground, 80) }]} numberOfLines={1}>
-        {label}
-      </Text>
+    <View style={styles.computerIcon}>
+      <ComputerIconGlyph drawing={drawing ?? 'desktop'} size={13} color={color} />
     </View>
   );
 }
@@ -231,7 +234,8 @@ function RowContent({
           <Text testID="attention-card-title" style={[styles.title, { color: ink.foreground }]} numberOfLines={1}>
             {feedRowTitle(row)}
           </Text>
-          {row.machineLabel !== null ? <MachineChip label={row.machineLabel} appearance={appearance} /> : null}
+          <RowComputerIcon row={row} color={colorWithOpacity(appearance.foreground, 55)} />
+          <View style={styles.titleGap} />
           {time.length > 0 ? (
             <Text testID="attention-card-time" style={[styles.time, { color: ink.muted }]}>
               {time}
@@ -423,45 +427,36 @@ function EmptyState({
   );
 }
 
-/**
- * The panel's header actions (the desktop's "Mark all read", "Clear all"): equal shares of the row,
- * unfilled, divided by thin lines, an icon beside each label, dimmed while there is nothing to act on.
- */
-function HeaderActions({
+/** The list's ⋯ (the desktop panel's header button): its menu holds Mark all read and Clear all. */
+function HeaderMenuButton({
   appearance,
-  actions,
+  enabled,
+  onPress,
 }: {
   appearance: Appearance;
-  actions: { key: string; label: string; glyph: PanelGlyphName; enabled: boolean; onPress: () => void }[];
+  enabled: boolean;
+  onPress: (frame: MenuAnchor) => void;
 }) {
+  const ref = useRef<ViewInstance>(null);
   const line = colorWithOpacity(appearance.foreground, 12);
   return (
-    <View style={[styles.actions, { borderColor: line }]}>
-      {actions.map((action, index) => {
-        const ink = colorWithOpacity(appearance.foreground, action.enabled ? 78 : 38);
-        return (
-          <Pressable
-            key={action.key}
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            accessibilityState={{ disabled: !action.enabled }}
-            disabled={!action.enabled}
-            testID={`notifications-${action.key}`}
-            onPress={action.onPress}
-            style={({ pressed }) => [
-              styles.action,
-              index > 0 && { borderLeftWidth: GhostexStrokeWidth, borderLeftColor: line },
-              pressed && { backgroundColor: colorWithOpacity(appearance.foreground, 14) },
-            ]}
-          >
-            <PanelGlyph name={action.glyph} size={15} color={ink} />
-            <Text style={[styles.actionText, { color: ink }]} numberOfLines={1}>
-              {action.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Pressable
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={NotificationsCopy.feed.listMenu}
+      accessibilityState={{ disabled: !enabled }}
+      disabled={!enabled}
+      testID="notifications-menu"
+      hitSlop={6}
+      onPress={() => measureInWindow(ref, onPress)}
+      style={({ pressed }) => [
+        styles.headerMenu,
+        { borderColor: line },
+        pressed && { backgroundColor: colorWithOpacity(appearance.foreground, 14) },
+      ]}
+    >
+      <MoreGlyph size={17} color={colorWithOpacity(appearance.foreground, enabled ? 78 : 38)} />
+    </Pressable>
   );
 }
 
@@ -616,6 +611,7 @@ export default function AttentionList({
   const questions = useMemo(() => questionKeys(inbox), [inbox]);
   const [now, setNow] = useState(() => Date.now());
   const [menu, setMenu] = useState<{ row: PanelRow; frame: MenuAnchor } | null>(null);
+  const [listMenu, setListMenu] = useState<MenuAnchor | null>(null);
   const [endedTarget, setEndedTarget] = useState<EndedTarget | null>(null);
   const [failed, setFailed] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -704,6 +700,37 @@ export default function AttentionList({
   }, [menu, open, change]);
 
   const nothing = panel.unread.length + panel.read.length === 0;
+  const listMenuItems = useMemo((): ContextMenuItem[] => {
+    const item = (
+      key: string,
+      label: string,
+      disabled: boolean,
+      run: () => void,
+      destructive = false,
+    ): ContextMenuItem => ({
+      kind: 'item',
+      key,
+      label,
+      destructive,
+      disabled,
+      onPress: () => {
+        setListMenu(null);
+        run();
+      },
+    });
+    return [
+      item('mark-all-read', NotificationsCopy.feed.markAllRead, panel.unreadCount === 0, () =>
+        report(changeEveryFeed(onlineMachines, 'markAllRead')),
+      ),
+      item(
+        'clear-all',
+        NotificationsCopy.feed.clearAll,
+        nothing,
+        () => report(changeEveryFeed(onlineMachines, 'clearAll')),
+        true,
+      ),
+    ];
+  }, [panel.unreadCount, nothing, onlineMachines, report]);
   const sections: Section[] = [
     { key: 'unread' as const, title: NotificationsCopy.feed.unread, data: panel.unread },
     { key: 'read' as const, title: NotificationsCopy.feed.read, data: panel.read },
@@ -796,25 +823,7 @@ export default function AttentionList({
               ]
         }
       >
-        <HeaderActions
-          appearance={appearance}
-          actions={[
-            {
-              key: 'mark-all-read',
-              label: NotificationsCopy.feed.markAllRead,
-              glyph: 'check',
-              enabled: panel.unreadCount > 0,
-              onPress: () => report(changeEveryFeed(onlineMachines, 'markAllRead')),
-            },
-            {
-              key: 'clear-all',
-              label: NotificationsCopy.feed.clearAll,
-              glyph: 'xmark',
-              enabled: !nothing,
-              onPress: () => report(changeEveryFeed(onlineMachines, 'clearAll')),
-            },
-          ]}
-        />
+        <HeaderMenuButton appearance={appearance} enabled={!nothing} onPress={setListMenu} />
       </View>
       <FoldListFrame fold={pane === undefined ? laptopFold : null}>
         <SectionList
@@ -862,6 +871,13 @@ export default function AttentionList({
               }
         }
       />
+      <ContextMenu
+        visible={listMenu !== null}
+        title={NotificationsCopy.feed.listMenuTitle}
+        items={listMenuItems}
+        onClose={() => setListMenu(null)}
+        rowAnchor={listMenu ?? undefined}
+      />
       <EndedSheet target={endedTarget} onClose={() => setEndedTarget(null)} appearance={appearance} />
     </View>
   );
@@ -875,16 +891,16 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 12, paddingBottom: 28, flexGrow: 1 },
   actionsFrame: { paddingHorizontal: 12, paddingTop: 4 },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    minHeight: 40,
+  // The ⋯ at the list's top right, the desktop header button's square on the card radius.
+  headerMenu: {
+    alignSelf: 'flex-end',
+    width: 40,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: GhostexRadii.card,
     borderWidth: GhostexStrokeWidth,
-    overflow: 'hidden',
   },
-  action: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 4 },
-  actionText: { fontSize: 13, flexShrink: 1 },
   // The desktop's UNREAD / READ headings: small, bold, capitals.
   sectionTitle: {
     fontSize: 12,
@@ -918,20 +934,11 @@ const styles = StyleSheet.create({
   },
   text: { flex: 1, minWidth: 0, gap: 6 },
   firstLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  title: { flexShrink: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  // Pushes the time to the line's end after the title and its computer's icon.
+  titleGap: { flex: 1 },
+  computerIcon: { marginLeft: -2 },
   time: { fontSize: 12, fontVariant: ['tabular-nums'] },
-  chip: {
-    flexShrink: 1,
-    maxWidth: 140,
-    height: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-    borderWidth: GhostexStrokeWidth,
-  },
-  chipText: { flexShrink: 1, fontSize: 11, fontWeight: '600' },
   body: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
   footerLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 16 },
   footer: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: '500' },

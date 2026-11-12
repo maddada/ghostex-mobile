@@ -35,7 +35,7 @@ export type PanelRow = FeedRow & {
   /** Unique across computers. */
   key: string;
   machineId: string;
-  /** The computer's name for the row's chip, only while more than one computer feeds the list. */
+  /** The computer's name (its icon on the card, its name for VoiceOver), only while more than one computer feeds the list. */
   machineLabel: string | null;
 };
 

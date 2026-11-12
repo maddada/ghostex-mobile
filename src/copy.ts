@@ -1639,6 +1639,9 @@ export const NotificationsCopy = {
     read: 'Read',
     markAllRead: 'Mark all read',
     clearAll: 'Clear all',
+    /** The list's ⋯ (Mark all read, Clear all) and its menu's title. */
+    listMenu: 'Notification actions',
+    listMenuTitle: 'Notifications',
     emptyTitle: 'No notifications yet',
     emptyText: 'Agents that finish or need you will show up here.',
     offlineOne: (machine: string) => `${machine} is offline. Its notifications show again when it reconnects.`,
