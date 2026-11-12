@@ -574,9 +574,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     page: 'connection',
     section: '',
-    title: 'Tailscale reminder',
-    description: 'A notice on Sessions when Tailscale is off on this phone and your computer cannot be reached.',
-    keywords: ['vpn'],
+    title: 'Computers',
+    description: 'Every computer with its live route (Tailscale, Private Relay, Global Relay, Direct) and status.',
+    keywords: ['tailscale', 'easy connect', 'relay', 'route', 'vpn', 'slow'],
+  },
+  {
+    page: 'connection',
+    section: '',
+    title: 'Logs',
+    description: 'Recent connection and status events on this phone. Copy them, or send them to the developer.',
+    keywords: ['log', 'debug', 'send logs'],
   },
 
   // Sync

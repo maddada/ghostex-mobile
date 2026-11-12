@@ -36,6 +36,7 @@ import {
   EyeOffGlyph,
   InfoGlyph,
   MachinesGlyph,
+  ListGlyph,
   MessageCircleGlyph,
   NoteGlyph,
   PaletteGlyph,
@@ -107,7 +108,7 @@ import {
   type GhostexAgentLauncher,
   type GhostexSession,
 } from '../../contract/mobileSummary';
-import { DocsCopy, FeedbackCopy, ProgressCopy, StripCopy, WebPreviewCopy } from '../../copy';
+import { ConnectionsCopy, DocsCopy, FeedbackCopy, ProgressCopy, StripCopy, WebPreviewCopy } from '../../copy';
 import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import { useInventoryStore } from '../../inventory/store';
 import { enabledMachines, isMachineEnabled, useMachinesStore, type MachineRecord } from '../../machines/store';
@@ -1572,6 +1573,14 @@ export function useSessionsScreenMenus({
         setOverlay(NONE);
         navigation.navigate('Feedback', target === null ? undefined : { machineId: target.id });
       },
+    });
+    // CDXC:RemoteMachines 2026-11-12 DECISION: the user put Logs in the ☰ menu too (Q2737), once the Sessions status line that opened them went.
+    items.push({
+      kind: 'item',
+      key: 'logs',
+      label: ConnectionsCopy.logs,
+      icon: <ListGlyph size={14} color={menuIconColor} />,
+      onPress: () => setOverlay({ kind: 'logs' }),
     });
     if (Platform.OS === 'android') {
       items.push({ kind: 'separator', key: 'sep-1' });
