@@ -11,7 +11,15 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type ScrollViewInstance,
+} from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
@@ -179,6 +187,26 @@ export function dockHeightCap(space: number, keyboardUp: boolean): number {
   return Math.min(DOCK_MAX_HEIGHT, Math.max(0, space) * (keyboardUp ? 0.5 : 0.45));
 }
 
+/** How long after a tap an opened row is still followed into view (desktop `dock_row_reveal`). */
+const REVEAL_FOR_MS = 1500;
+
+/**
+ * How far to scroll the dock's rows down so an opened row's end shows above their visible bottom,
+ * never so far that its top (its title) leaves their visible top: the transcript's arithmetic for a
+ * fold opened by a reader scrolled up (desktop `disclosure_reveal.rs` `reveal_distance`). `room` is
+ * what must stay visible above `top`. Never negative: a row that already fits moves nothing.
+ *
+ * CDXC:Coordinators 2026-11-12 DECISION:
+ * User: when a docked row opens while the dock is at its height cap, scroll the dock so the opened
+ * card shows fully (to its answer buttons) without pushing its title off the top, as the desktop
+ * does (`work_cards.rs` `dock_row_reveal`).
+ */
+export function revealDistance(viewTop: number, viewBottom: number, top: number, end: number, room: number): number {
+  const hidden = end - viewBottom;
+  if (hidden <= 0) return 0;
+  return Math.min(hidden, Math.max(0, top - room - viewTop));
+}
+
 /** Which dock row is open, per chat, kept outside the component so a new document keeps it. */
 const openRows = new WeakMap<object, string>();
 
@@ -247,6 +275,30 @@ export function WorkDock({
   const dispatch = chat.dispatch;
   const [openKey, setOpenKey] = useState<string | null>(() => openRows.get(dispatch) ?? null);
   const [all, setAll] = useState(false);
+  // A row just opened past the height cap scrolls into view (`revealDistance`): the rows' scroller,
+  // where it stands, how tall it shows, and each row's place in it as last laid out.
+  const rowsScroll = useRef<ScrollViewInstance | null>(null);
+  const scrollTop = useRef(0);
+  const viewHeight = useRef(0);
+  const rowFrames = useRef(new Map<string, { y: number; height: number }>());
+  const reveal = useRef<{ key: string; at: number } | null>(null);
+  const tryReveal = () => {
+    const pending = reveal.current;
+    if (pending === null) return;
+    // Followed while the row and the dock settle; one opened longer ago is left where he puts it.
+    if (Date.now() - pending.at > REVEAL_FOR_MS) {
+      reveal.current = null;
+      return;
+    }
+    const frame = rowFrames.current.get(pending.key);
+    if (frame === undefined || viewHeight.current <= 0) return;
+    const top = scrollTop.current;
+    const distance = revealDistance(top, top + viewHeight.current, frame.y, frame.y + frame.height, 0);
+    if (distance > 0.5) {
+      scrollTop.current = top + distance;
+      rowsScroll.current?.scrollTo({ y: top + distance, animated: true });
+    }
+  };
   const env = useMemo<TranscriptEnv>(
     () => ({
       dispatch,
@@ -309,6 +361,7 @@ export function WorkDock({
     setOpenKey((was) => {
       // One row open at a time: opening this one shuts the one that was open.
       const next = was === key ? null : key;
+      reveal.current = next === null ? null : { key: next, at: Date.now() };
       if (next === null) openRows.delete(dispatch);
       else openRows.set(dispatch, next);
       return next;
@@ -348,17 +401,35 @@ export function WorkDock({
                 }}
                 contentContainerStyle={styles.dockRows}
                 nestedScrollEnabled
+                ref={rowsScroll}
+                scrollEventThrottle={16}
+                onScroll={(event) => {
+                  scrollTop.current = event.nativeEvent.contentOffset.y;
+                }}
+                onLayout={(event: LayoutChangeEvent) => {
+                  viewHeight.current = event.nativeEvent.layout.height;
+                  tryReveal();
+                }}
               >
                 {shown.map((row) => (
-                  <QuestionFlashFrame key={str(row, 'key')} target={str(row, 'key')} light={P.light}>
-                    <DockRow
-                      row={row}
-                      chat={chat}
-                      scope={scope}
-                      open={openKey === str(row, 'key')}
-                      onToggle={() => toggle(str(row, 'key'))}
-                    />
-                  </QuestionFlashFrame>
+                  <View
+                    key={str(row, 'key')}
+                    onLayout={(event: LayoutChangeEvent) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      rowFrames.current.set(str(row, 'key'), { y, height });
+                      if (reveal.current?.key === str(row, 'key')) tryReveal();
+                    }}
+                  >
+                    <QuestionFlashFrame target={str(row, 'key')} light={P.light}>
+                      <DockRow
+                        row={row}
+                        chat={chat}
+                        scope={scope}
+                        open={openKey === str(row, 'key')}
+                        onToggle={() => toggle(str(row, 'key'))}
+                      />
+                    </QuestionFlashFrame>
+                  </View>
                 ))}
                 {hidden > 0 ? (
                   <Pressable
