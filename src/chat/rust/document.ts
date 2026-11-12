@@ -221,13 +221,20 @@ export type SummaryItem = {
   outcome?: ProjectedMessage[];
   /** The newest turn that has a reply: its "Agent reply" fold starts open. */
   latestReply?: boolean;
-  /** The agent's messages in the turn that hold a page card, a question form or a chart, drawn in
-   * full under the prompt; the folds leave them out (gx-chat-core `content_rows`). */
+  /** The agent's messages in the turn that hold a page card or a chart, or a question still waiting
+   * on the reader, drawn in full under the prompt; the folds leave them out (gx-chat-core
+   * `summary_cards`). */
   cards?: ProjectedMessage[];
   /** The pictures the running turn's work opened from disk (image sources, like a message's
    * `images`), drawn under the closed "Active work" fold (gx-chat-core `read_images.rs`); omitted
    * when there are none. */
   readImages?: Json[];
+  /** The closed line above the newest reply, or above a running turn's "Active work", that holds
+   * `earlierReplies`: "2 earlier replies · 1 report" (gx-chat-core `turns::earlier_label`). */
+  earlierLabel?: string;
+  /** The quiet lines the open "Active work" draws over `work`, by row index (gx-chat-core
+   * `quiet_view::summary_work_lines`): a row inside a line shows only while it is open. */
+  workLines?: QuietStretch[];
 };
 
 /** One count beside a finished turn's "Worked for 2m 5s" (gx-chat-core `work_summary.rs`). */

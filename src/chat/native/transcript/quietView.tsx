@@ -234,6 +234,28 @@ function StretchLine({ line, open, onPress }: { line: QuietStretch; open: boolea
   );
 }
 
+/**
+ * One quiet line of the Summary view's open "Active work" (gx-chat-core
+ * `quiet_view::summary_work_lines`, where the user's decision is; desktop `summary_quiet_run`): the
+ * line, and while it is open its rows on the rail an opened Quiet View line draws them on.
+ */
+export function SummaryQuietRun({ line, rows }: { line: QuietStretch; rows: ProjectedMessage[] }) {
+  const { disclosures } = useNativeChatUi();
+  const [open, toggle] = useDisclosure(disclosures, line.key, line.open === true);
+  return (
+    <View style={[styles.column, { gap: 4 }]}>
+      <StretchLine line={line} open={open} onPress={toggle} />
+      {open ? (
+        <DisclosureBody onCollapse={toggle} label="Collapse" rail="work">
+          {rows.map((row) => (
+            <MessageRow key={row.id} message={row} />
+          ))}
+        </DisclosureBody>
+      ) : null}
+    </View>
+  );
+}
+
 /** An answers card drawn shut as its own line, "You answered “…” · 7 answers"; opened, the card follows it. */
 function AnswersLine({ card, children }: { card: QuietAnswers; children: ReactNode }) {
   const { disclosures } = useNativeChatUi();

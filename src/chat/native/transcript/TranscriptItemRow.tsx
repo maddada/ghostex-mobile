@@ -4,7 +4,7 @@
  * `deferred_work.rs`). A kind this build does not know draws nothing.
  */
 
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type {
@@ -23,7 +23,6 @@ import {
   useTranscriptEnv,
   useTranscriptFlags,
 } from './context';
-import { WorkCardStack } from '../cards/WorkCards';
 import { DeferredNotice } from './DeferredNotice';
 import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosure';
 import { cardEdge, ReadImageStrip } from './Images';
@@ -47,6 +46,7 @@ import {
   singleLineShell,
 } from './singleLineCard';
 import { GroupedWorkRow } from './quietWorkRows';
+import { SummaryQuietRun } from './quietView';
 import { StatPills } from './statPills';
 import { HiddenGroupedWorkRow } from './hiddenWork';
 
@@ -80,8 +80,6 @@ export const TranscriptItemView = memo(function TranscriptItemView({ item }: { i
 
 function SummaryRow({ item }: { item: SummaryItem }) {
   const { disclosures } = useNativeChatUi();
-  const { dispatch } = useTranscriptEnv();
-  const { workCards } = useTranscriptFlags();
   const hasFinal = obj(item.final) !== null;
   // A running turn's "Active work" fold starts open and has a key of its own, so closing it holds
   // for that turn without closing the reply fold that replaces it (gx-chat-core `summary_mode_turns`).
@@ -90,17 +88,59 @@ function SummaryRow({ item }: { item: SummaryItem }) {
     hasFinal ? `summary:${item.id}` : `active-work:${item.id}`,
     item.latestReply === true || item.workOpen === true,
   );
-  // The turn's messages holding a page card, a question form or a chart, drawn in full and never
-  // folded; the folds below leave them out (gx-chat-core `content_rows`, where the user's decision
-  // lives; desktop `transcript.rs`).
+  const [earlierOpen, toggleEarlier] = useDisclosure(disclosures, `summary-earlier:${item.id}`, false);
+  // The turn's pages and charts, and the questions still waiting on the reader, drawn in full and
+  // never folded; the folds below leave them out (gx-chat-core `summary_cards`, where the user's
+  // decision lives; desktop `transcript.rs`).
   const cards = item.cards ?? [];
   const content = new Set(cards.map((card) => card.id));
-  const foldRows = (hasFinal ? [...(item.earlierReplies ?? []), item.final!] : item.work).filter(
-    (message) => !content.has(message.id),
-  );
-  // The gap between the turn's parts shrinks at Message spacing Compact (`messageSpacing.ts`).
+  const earlier = (item.earlierReplies ?? []).filter((message) => !content.has(message.id));
+  // The newest reply, or a running turn's work, keeps the earlier replies and the reports between
+  // them behind one closed line ("2 earlier replies · 1 report", gx-chat-core `turns::earlier_label`).
+  const label = item.earlierLabel ?? '';
+  const earlierLine =
+    label.length > 0 && earlier.length > 0 ? (
+      <>
+        <DisclosureHeading label={label} open={earlierOpen} onToggle={toggleEarlier} />
+        {earlierOpen ? (
+          <View style={styles.column}>
+            {earlier.map((message) => (
+              <MessageRow key={message.id} message={message} />
+            ))}
+          </View>
+        ) : null}
+      </>
+    ) : null;
+  const final = hasFinal && !content.has(item.final!.id) ? [item.final!] : [];
+  const foldRows = hasFinal
+    ? earlierLine !== null
+      ? final
+      : [...earlier, ...final]
+    : item.work.filter((message) => !content.has(message.id));
+  const lines = item.workLines ?? [];
+  // The partGap between the turn's parts shrinks at Message spacing Compact (`messageSpacing.ts`).
   const partGap = useInnerGap(SUMMARY_PART_GAP);
   const column = [styles.column, partGap !== SUMMARY_PART_GAP && { gap: partGap }];
+  // The running work as Quiet View draws it (gx-chat-core `quiet_view::summary_work_lines`): what
+  // the reader reads in full, each run of the rest as one counted line.
+  const workParts = (): ReactNode[] => {
+    const parts: ReactNode[] = [];
+    let at = 0;
+    while (at < item.work.length) {
+      const line = lines.find((candidate) => candidate.start === at);
+      if (line !== undefined) {
+        const end = Math.min(Math.max(line.end, at + 1), item.work.length);
+        const rows = item.work.slice(at, end).filter((message) => !content.has(message.id));
+        parts.push(<SummaryQuietRun key={line.key} line={line} rows={rows} />);
+        at = end;
+      } else {
+        const message = item.work[at];
+        if (!content.has(message.id)) parts.push(<MessageRow key={message.id} message={message} />);
+        at += 1;
+      }
+    }
+    return parts;
+  };
   return (
     <View style={column}>
       <SummaryTurnProvider value={true}>
@@ -111,23 +151,24 @@ function SummaryRow({ item }: { item: SummaryItem }) {
       {cards.map((card) => (
         <MessageRow key={card.id} message={card} />
       ))}
-      {(hasFinal || item.active) && foldRows.length > 0 ? (
+      {!hasFinal ? earlierLine : null}
+      {(hasFinal || item.active) && (foldRows.length > 0 || (hasFinal && earlierLine !== null)) ? (
         <>
           <DisclosureHeading label={hasFinal ? 'Agent reply' : 'Active work'} open={open} onToggle={toggle} />
-          {/* The closed "Active work" fold keeps the pictures its rows read in view (gx-chat-core `read_images.rs`). */}
+          {/* The closed fold keeps the pictures its rows read in view (gx-chat-core `read_images.rs`). */}
           {!open ? <ReadImageStrip images={item.readImages} inset={4} /> : null}
           {open ? (
             <View style={column}>
-              {foldRows.map((message) => (
-                <MessageRow key={message.id} message={message} />
-              ))}
+              {hasFinal ? earlierLine : null}
+              {hasFinal || lines.length === 0
+                ? foldRows.map((message) => <MessageRow key={message.id} message={message} />)
+                : workParts()}
             </View>
           ) : null}
         </>
       ) : null}
       </SummaryTurnProvider>
-      {/* The turn's work item cards, under the whole turn and outside its folds (`cards/WorkCards.tsx`). */}
-      <WorkCardStack cards={workCards.byTurn[item.id] ?? []} dispatch={dispatch} />
+      {/* Work item cards stay out of the Summary view (gx-chat-core `summary_cards`). */}
     </View>
   );
 }
