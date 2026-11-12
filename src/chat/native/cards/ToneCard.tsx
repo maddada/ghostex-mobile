@@ -220,6 +220,7 @@ export function ToneButton({
   trailing,
   accessibilityLabel,
   hitSlop,
+  slotWidth,
 }: {
   label: string;
   icon?: GlyphName;
@@ -232,6 +233,12 @@ export function ToneButton({
   accessibilityLabel?: string;
   /** The touch area past the button's edges; 6 all round unless a card needs more. */
   hitSlop?: number | { top: number; bottom: number; left: number; right: number };
+  /**
+   * A fixed width for a label that changes while the card stays open (a menu's highlighted row); a long label is cut with an ellipsis.
+   * CDXC:SessionChat 2026-11-12 WHY: The footer is right aligned, so a button whose width followed its label moved the buttons beside it on every highlight change (#576).
+   * SEE-ALSO: apps/desktop/src/app/native_chat/tone_card.rs (`tone_button_in_slot`).
+   */
+  slotWidth?: number;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -248,13 +255,20 @@ export function ToneButton({
       hitSlop={hitSlop ?? 6}
       style={({ pressed }) => [
         styles.button,
+        slotWidth !== undefined && { width: slotWidth, maxWidth: '100%' },
         { backgroundColor: pressed ? pressedFill : fill, borderColor: border },
         pressed && kind === 'primary' && { opacity: 0.88 },
         disabled === true && styles.disabled,
       ]}
     >
       {icon !== undefined ? <Glyph name={icon} size={14} color={ink} /> : null}
-      <Text style={[styles.buttonLabel, { color: ink }]}>{label}</Text>
+      <Text
+        style={[styles.buttonLabel, { color: ink }, slotWidth !== undefined && styles.slotLabel]}
+        numberOfLines={slotWidth !== undefined ? 1 : undefined}
+        ellipsizeMode="tail"
+      >
+        {label}
+      </Text>
       {trailing}
     </Pressable>
   );
@@ -392,6 +406,9 @@ const useStyles = themedStyles((P) => ({
   buttonLabel: {
     fontSize: SHELL.buttonTextSize,
     fontWeight: '500',
+  },
+  slotLabel: {
+    flexShrink: 1,
   },
   disabled: {
     opacity: 0.5,

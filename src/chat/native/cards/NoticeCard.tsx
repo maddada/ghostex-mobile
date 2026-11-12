@@ -529,6 +529,8 @@ function terminalDialogParts(
         // The labelled Confirm says what Enter picks, so it is the card's filled button (terminal_dialog.rs).
         kind={hasRows && str(action, 'action') === 'confirm' ? 'primary' : 'secondary'}
         label={str(action, 'label')}
+        // The button named after the highlighted row keeps one width as the highlight moves (terminal_dialog.rs).
+        slotWidth={obj(action)?.highlightedRow === true ? 200 : undefined}
         onPress={() =>
           dispatch({
             type: 'answer',
