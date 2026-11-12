@@ -162,6 +162,7 @@ export default function DrawerBlockView(props: DrawerBlockViewProps): ReactEleme
         dimSleeping={dimSleeping}
         voiceCall={props.voiceCallSessionKey === key}
         openerTag={tag}
+        machineId={machineId}
         onPress={() => actions.openSession(machineId, item)}
         onMenu={(anchor) => actions.sessionMenu(machineId, item, anchor)}
       />

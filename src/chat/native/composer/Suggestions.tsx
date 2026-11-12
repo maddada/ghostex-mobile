@@ -15,6 +15,7 @@ import { arr, isTrue, num, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { AgentMark } from '../cards/agentMark';
 import { CoordinatorGlyph } from '../../../components/sessions/icons';
+import { sidebarInk } from '../../../components/sessions/rows';
 import { SidebarPalette } from '../../../theme/palette';
 
 /** A working session's state in the `+` list: the working amber of the chat's pills. */
@@ -68,7 +69,17 @@ export function Suggestions({ data, dispatch }: { data: unknown; dispatch: (acti
               {files ? <Glyph name="file" size={16} color={P.muted} strokeWidth={1.6} /> : null}
               {sessions ? (
                 isTrue(row, 'coordinator') ? (
-                  <CoordinatorGlyph size={16} color={P.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
+                  /* A main coordinator's crown is gold (the core's `mainCoordinator`; CDXC:Coordinators 2026-11-12 in gx-chat-core session_mentions.rs). */
+                  <CoordinatorGlyph
+                    size={16}
+                    color={
+                      isTrue(row, 'mainCoordinator')
+                        ? sidebarInk(P.light).mainCrown
+                        : P.light
+                          ? '#000000'
+                          : SidebarPalette.ROW_COORDINATOR_CROWN
+                    }
+                  />
                 ) : (
                   <AgentMark icon={str(row, 'agentIcon') || null} size={16} />
                 )

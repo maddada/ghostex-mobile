@@ -40,6 +40,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { StripCopy } from '../../copy';
 import { GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
+import { ComputerIconGlyph } from './ComputerIconGlyph';
 import { CloudGlyph, LoaderGlyph, PlusGlyph } from './icons';
 import { machineTabLayout, machineTabRevealOffset, machineTabsOutOfView } from './machineTabLayout';
 import StatusDotStack from './StatusDotStack';
@@ -65,6 +66,11 @@ export type MachineTabItem = {
   questionCount: number;
   /** Sessions waiting for approval: the red dot. */
   approvalCount: number;
+  /**
+   * The computer's icon (machines/computerIcons.ts), drawn in the cloud's place with the same colours and press;
+   * absent while unknown, which keeps the cloud.
+   */
+  iconDrawing?: string;
 };
 
 /** The trailing "+" tab; the strip's `items` always end with it. */
@@ -111,6 +117,15 @@ export function SpinningLoader({ color, size = GLYPH_SIZE }: { color: string; si
   );
 }
 
+/** The computer's icon when it is known, else the cloud. */
+function TabGlyph({ item, color }: { item: MachineTabItem; color: string }) {
+  return item.iconDrawing !== undefined ? (
+    <ComputerIconGlyph drawing={item.iconDrawing} size={GLYPH_SIZE} color={color} />
+  ) : (
+    <CloudGlyph size={GLYPH_SIZE} color={color} />
+  );
+}
+
 function ConnectionGlyph({ item }: { item: MachineTabItem }) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
@@ -125,7 +140,7 @@ function ConnectionGlyph({ item }: { item: MachineTabItem }) {
   if (item.onConnect === undefined) {
     return (
       <View style={styles.glyph}>
-        <CloudGlyph size={GLYPH_SIZE} color={color} />
+        <TabGlyph item={item} color={color} />
       </View>
     );
   }
@@ -140,7 +155,7 @@ function ConnectionGlyph({ item }: { item: MachineTabItem }) {
       onPress={item.onConnect}
       style={({ pressed }) => [styles.glyph, pressed ? styles.glyphPressed : null]}
     >
-      <CloudGlyph size={GLYPH_SIZE} color={color} />
+      <TabGlyph item={item} color={color} />
     </Pressable>
   );
 }

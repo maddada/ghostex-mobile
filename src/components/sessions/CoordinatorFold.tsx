@@ -51,7 +51,16 @@ export function CoordinatorFold({
  * A coordinator's hat (a Chief of Staff's crown), or the hollow ring while a fold hides the open thread under it
  * (gx-core `RowNesting::contains_active_session`), at 15dp like SessionRow's icon slot.
  */
-export function CoordinatorHat({ chief, containsActive }: { chief: boolean; containsActive: boolean }) {
+export function CoordinatorHat({
+  chief,
+  containsActive,
+  main = false,
+}: {
+  chief: boolean;
+  containsActive: boolean;
+  /** The project's main coordinator: its crown is gold (rows.tsx `mainCrown`). */
+  main?: boolean;
+}) {
   const ink = useSidebarInk();
   return (
     <View style={styles.hat}>
@@ -60,7 +69,7 @@ export function CoordinatorHat({ chief, containsActive }: { chief: boolean; cont
       ) : chief ? (
         <CrownGlyph size={ds(13)} color={ink.crown} />
       ) : (
-        <CoordinatorGlyph size={ds(15)} color={ink.crown} />
+        <CoordinatorGlyph size={ds(15)} color={main ? ink.mainCrown : ink.crown} />
       )}
     </View>
   );

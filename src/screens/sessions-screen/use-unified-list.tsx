@@ -689,6 +689,7 @@ export function useUnifiedList(deps: UnifiedListDeps) {
             workActions={workChipActions(target, session)}
             sessionLinksDisplay={sessionLinksDisplay(summary?.sidebarSessionLinks)}
             dimSleeping={summary?.dimSleepingSessions === true}
+            machineId={row.machine}
             onPress={() => target !== null && void attach(target, session)}
             onMenu={() => openMenu(row)}
           />

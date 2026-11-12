@@ -59,6 +59,8 @@ import {
   StatusCircleDotGlyph,
 } from './glyphs';
 import CloudBoxBadge from '../CloudBoxBadge';
+import { ComputerIconGlyph } from '../ComputerIconGlyph';
+import { useSessionComputerIcon } from '../../../machines/computerIcons';
 import { CoordinatorFold, CoordinatorHat } from '../CoordinatorFold';
 import { showsFoldedStatus, UnifiedCrewCount, UnifiedFoldedStatus } from './crew';
 
@@ -79,7 +81,13 @@ function CardHat({ row, onToggleCrew }: { row: UnifiedRow<GhostexSession>; onTog
   const session = row.session.source!;
   const crew = row.crew;
   if (session.isCoordinator !== true) return null;
-  const hat = <CoordinatorHat chief={session.isChief === true} containsActive={crew !== null && !crew.open && crew.containsActive} />;
+  const hat = (
+    <CoordinatorHat
+      chief={session.isChief === true}
+      containsActive={crew !== null && !crew.open && crew.containsActive}
+      main={session.isMainCoordinator}
+    />
+  );
   // The hat and its chevron are one button, so a tap on the hat folds and never opens the card.
   return crew === null ? hat : <CoordinatorFold collapsed={!crew.open} onToggle={() => onToggleCrew(crew.key)} hat={hat} />;
 }
@@ -294,6 +302,7 @@ export function UnifiedCard({
       : `${row.repo.label} · ${row.machineLabel}`;
   // With no computer to name either, the status moves up beside the title (cards.rs).
   const titleLineOnly = inGroup && row.machineLabel === null;
+  const computerIcon = useSessionComputerIcon(row.machine);
   const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
   const branch = session.gitBranch !== undefined && session.gitBranch.length > 0 ? session.gitBranch : (session.work?.branch ?? '');
   const prNumber = session.work?.pullRequestNumber ?? null;
@@ -368,6 +377,8 @@ export function UnifiedCard({
                 </Text>
               </View>
             )}
+            {/* Its computer's icon while more than one computer is connected (the desktop card's, cards.rs). */}
+            {computerIcon !== null ? <ComputerIconGlyph drawing={computerIcon} size={ds(12)} color={ink.muted} /> : null}
             {prNumber !== null ? (
               <View style={styles.pullRequest}>
                 <GitPullRequestGlyph size={ds(12)} color={pullRequestColor(session.work?.pullRequestState ?? '', ink)} />

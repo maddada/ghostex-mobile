@@ -148,6 +148,13 @@ import {
   useMachinesStore,
   type MachineRecord,
 } from '../machines/store';
+import {
+  computerIconDrawing,
+  forgetComputerIcon,
+  readComputerIcon,
+  setConnectedComputers,
+  useComputerIconsStore,
+} from '../machines/computerIcons';
 import type { RootStackParamList } from '../navigation/types';
 import {
   filterSummaryForSpace,
@@ -234,6 +241,7 @@ export default function SessionsScreen({ navigation }: Props) {
   const selectMachine = useMachinesStore((state) => state.selectMachine);
   // Cloud Box sessions are listed inside their home project (cloudBoxes/listInventories.ts).
   const inventoriesByMachineId = useListInventories();
+  const computerIconFacts = useComputerIconsStore((state) => state.facts);
   const refreshMachine = useInventoryStore((state) => state.refreshMachine);
   const refreshMachineFresh = useInventoryStore((state) => state.refreshMachineFresh);
   const retryMachine = useInventoryStore((state) => state.retryMachine);
@@ -585,6 +593,7 @@ export default function SessionsScreen({ navigation }: Props) {
               ? 'disconnected'
               : 'connected';
       const counts = tabStatusCounts(machineSessionCounts(inventory?.summary ?? null));
+      const iconFacts = computerIconFacts[entry.id];
       const retryable = connectionState === 'failed' || connectionState === 'disconnected';
       return {
         id: entry.id,
@@ -600,10 +609,27 @@ export default function SessionsScreen({ navigation }: Props) {
         backgroundWorkCount: counts.backgroundWorkCount,
         questionCount: counts.questionCount,
         approvalCount: counts.approvalCount,
+        iconDrawing: iconFacts !== undefined ? computerIconDrawing(iconFacts) : undefined,
       };
     });
     return [...tabs, MACHINE_TAB_ADD];
-  }, [machines, inventoriesByMachineId, retryMachineWithStatus]);
+  }, [machines, inventoriesByMachineId, retryMachineWithStatus, computerIconFacts]);
+
+  /*
+   * Each computer's icon (machines/computerIcons.ts): asked once a connected computer's sessions have loaded, asked
+   * again after it was away; the connected ones decide whether session rows show it (more than one).
+   */
+  useEffect(() => {
+    const isConnected = (machineId: string): boolean => {
+      const inventory = inventoriesByMachineId[machineId];
+      return inventory?.summary != null && inventory.lastError === null;
+    };
+    for (const entry of machines) {
+      if (isConnected(entry.id)) void readComputerIcon(entry);
+      else forgetComputerIcon(entry.id);
+    }
+    setConnectedComputers(machines.filter((entry) => isConnected(entry.id)).map((entry) => entry.id));
+  }, [machines, inventoriesByMachineId]);
 
   /** The tab's connection line (the failure reason when failed): the long-press menu subtitle. */
   const machineConnectionLine = useCallback(

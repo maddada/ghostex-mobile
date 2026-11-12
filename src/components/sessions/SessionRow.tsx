@@ -40,7 +40,8 @@ import {
 import { resolveSessionTag } from '../../contract/sessionTags';
 import { SessionCopy } from '../../copy';
 import { useSettingsStore } from '../../settings/store';
-import { colorWithOpacity, mixHexColors, SidebarPalette } from '../../theme/palette';
+import { useSessionComputerIcon } from '../../machines/computerIcons';
+import { mixHexColors, SidebarPalette } from '../../theme/palette';
 import type { MenuAnchor } from './ContextMenu';
 import {
   ds,
@@ -67,6 +68,7 @@ import {
   HeadsetGlyph,
   ServerGlyph,
 } from './icons';
+import { ComputerIconGlyph } from './ComputerIconGlyph';
 import WorkChips, {
   ChipGlyph,
   WORK_SESSION_ROW_HEIGHT,
@@ -411,6 +413,11 @@ export type SessionRowProps = {
   worktree?: string;
   /** A small muted word after the title: "Chief" on a GBot chat Chief of Staff opened (contract/gbots.ts). */
   openerTag?: string;
+  /**
+   * The computer the session runs on: the row ends with that computer's icon while more than one computer is
+   * connected (machines/computerIcons.ts, the desktop's native_sidebar/computer_mark.rs).
+   */
+  machineId?: string;
 };
 
 /**
@@ -438,9 +445,11 @@ export default function SessionRow({
   voiceCall = false,
   worktree,
   openerTag,
+  machineId,
 }: SessionRowProps) {
   const rowRef = useRef<ViewInstance | null>(null);
   const ink = useSidebarInk();
+  const computerIcon = useSessionComputerIcon(machineId);
   const inkStyle = inkStyles(ink);
   const iconId = resolveAgentArtId(
     session.agentIcon,
@@ -601,8 +610,8 @@ export default function SessionRow({
             ) : session.isCoordinator && session.isChief ? (
               <CrownGlyph size={ds(13)} color={ink.crown} />
             ) : session.isCoordinator ? (
-              /* The hat is wide and short, so it fills the 15dp slot like the desktop's row (threads.rs `coordinator_icon`). */
-              <CoordinatorGlyph size={ds(15)} color={ink.crown} />
+              /* The crown fills the 15dp slot like the desktop's row (threads.rs `coordinator_icon`); gold on the main coordinator. */
+              <CoordinatorGlyph size={ds(15)} color={session.isMainCoordinator ? ink.mainCrown : ink.crown} />
             ) : (
               <Icon size={iconSize} color={agentIconTint(iconId)} />
             )}
@@ -678,9 +687,9 @@ export default function SessionRow({
           indicator !== null ||
           timeLabel !== null ||
           shownCoordinatorBadge !== undefined ||
-          session.isMainCoordinator ||
           linksBadge !== null ||
           voiceCall ||
+          computerIcon !== null ||
           session.agentbox !== undefined ||
           session.cloudBox !== undefined ? (
             <View style={styles.trailing}>
@@ -715,16 +724,10 @@ export default function SessionRow({
                 </View>
               ) : null}
               {shownCoordinatorBadge !== undefined ? <CoordinatorBadgeView badge={shownCoordinatorBadge} /> : null}
-              {/* The project's main coordinator: the desktop's quiet "Main" tag (native_sidebar/threads.rs `main_coordinator_tag`). */}
-              {session.isMainCoordinator ? (
-                <View style={[styles.mainTag, inkStyle.mainTag]} accessibilityLabel="Main coordinator">
-                  <Text style={[styles.mainTagText, inkStyle.agentboxLabel]} numberOfLines={1}>
-                    Main
-                  </Text>
-                </View>
-              ) : null}
               {voiceCall ? <VoiceCallBadge /> : null}
               {worktree !== undefined && worktree.length > 0 ? <WorktreeBadge label={worktree} /> : null}
+              {/* Its computer's icon, after the worktree, as the desktop's row (computer_mark.rs). */}
+              {computerIcon !== null ? <ComputerIconGlyph drawing={computerIcon} size={ds(12)} color={ink.muted} /> : null}
               {openerTag !== undefined && openerTag.length > 0 ? (
                 <Text style={[styles.agentboxLabel, inkStyle.agentboxLabel]} numberOfLines={1}>
                   {openerTag}
@@ -810,15 +813,6 @@ const styles = StyleSheet.create({
     gap: ds(3),
     maxWidth: ds(110),
     flexShrink: 1,
-  },
-  /** threads.rs `main_coordinator_tag`: 4dp padding and radius, a hairline in the muted colour at 35%, 10dp text. */
-  mainTag: {
-    paddingHorizontal: ds(4),
-    borderRadius: ds(4),
-    borderWidth: 1,
-  },
-  mainTagText: {
-    fontSize: ds(10),
   },
   agentboxLabel: {
     fontSize: ds(11.5),
@@ -991,7 +985,6 @@ const styles = StyleSheet.create({
 const inkStyles = inkStyleSheets((ink) =>
   StyleSheet.create({
     agentboxLabel: { color: ink.muted },
-    mainTag: { borderColor: colorWithOpacity(ink.muted, 35) },
     threadLine: { borderLeftColor: ink.threadLine },
     threadLineAcross: { backgroundColor: ink.threadLine },
     containsActiveRing: { borderColor: ink.activeRing },

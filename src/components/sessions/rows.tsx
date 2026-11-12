@@ -71,6 +71,14 @@ export type SidebarInk = {
   activeRing: string;
   /** A coordinator's crown (threads.rs `COORDINATOR_COLOR_*`). */
   crown: string;
+  /**
+   * A main coordinator's crown: the desktop's gold (threads.rs `MAIN_COORDINATOR_GOLD_*`).
+   *
+   * CDXC:Coordinators 2026-11-12 DECISION: user: "please dont' show Main for main coordinators, instead make the
+   * color of their icon gold", then "Yes, both" to the phone following. The main coordinator's crown is gold
+   * (#fbbf24 on dark, #d97706 on light) and the row has no "Main" tag, as on the desktop.
+   */
+  mainCrown: string;
   /** The session note dot (decorations.rs). */
   noteDot: string;
   /** The open session's card fill over the page (appearance.rs `session_selected`). */
@@ -95,6 +103,7 @@ const DARK_INK: SidebarInk = {
   threadLine: SidebarPalette.ROW_THREAD_LINE,
   activeRing: '#A3A3A3',
   crown: SidebarPalette.ROW_COORDINATOR_CROWN,
+  mainCrown: '#fbbf24',
   noteDot: '#FFFFFF',
   selected: 'rgba(255,255,255,0.12)',
   selectedOutline: 'rgba(255,255,255,0.08)',
@@ -115,6 +124,7 @@ const LIGHT_INK: SidebarInk = {
   threadLine: '#C8C8C8',
   activeRing: '#858585',
   crown: '#000000',
+  mainCrown: '#d97706',
   noteDot: '#262626',
   selected: '#E7E7E7',
   selectedOutline: 'rgba(0,0,0,0.22)',
