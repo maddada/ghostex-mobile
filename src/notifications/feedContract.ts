@@ -85,10 +85,6 @@ export type FeedRow = {
 
 export type FeedSnapshot = {
   readonly rows: readonly FeedRow[];
-  /** The row the computer's own "Next unread" opens: newest undeferred unread first, then deferred ones. */
-  readonly nextUnreadId?: string;
-  /** Set when that row was pushed back ("come back to it last"): such a target ranks after every undeferred one. */
-  readonly nextUnreadDeferredAt?: string;
 };
 
 function text(raw: Record<string, unknown>, key: string): string | undefined {
@@ -139,13 +135,7 @@ export function parseFeedState(value: unknown): FeedSnapshot | null {
   }
   // The cast holds: `value` is a non-null object that is no array (checked above).
   const state = value as Record<string, unknown>;
-  const nextUnreadId = text(state, 'nextUnreadId');
-  const nextUnreadDeferredAt = text(state, 'nextUnreadDeferredAt');
-  return {
-    rows,
-    ...(nextUnreadId ? { nextUnreadId } : {}),
-    ...(nextUnreadId && nextUnreadDeferredAt ? { nextUnreadDeferredAt } : {}),
-  };
+  return { rows };
 }
 
 /** An account row: no session behind it, never an OS notification, a tap only marks it read. */

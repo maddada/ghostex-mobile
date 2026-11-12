@@ -18,8 +18,6 @@ function panelOf(feeds: Readonly<Record<string, MachineFeedState>>, machines: Ma
         machineLabel: machineDisplayLabel(machine),
         online: feed?.status === 'ready',
         rows: feed?.rows ?? [],
-        ...(feed?.nextUnreadId !== undefined ? { nextUnreadId: feed.nextUnreadId } : {}),
-        ...(feed?.nextUnreadDeferredAt !== undefined ? { nextUnreadDeferredAt: feed.nextUnreadDeferredAt } : {}),
       };
     }),
   );
@@ -29,9 +27,4 @@ export function useFeedPanel(): FeedPanel {
   const feeds = useAttentionFeedStore((state) => state.feeds);
   const machines = useMachinesStore((state) => state.machines);
   return useMemo(() => panelOf(feeds, machines), [feeds, machines]);
-}
-
-/** The list's rows as the stores hold them now (for code outside React, such as Next unread after its reads). */
-export function currentFeedPanel(): FeedPanel {
-  return panelOf(useAttentionFeedStore.getState().feeds, useMachinesStore.getState().machines);
 }

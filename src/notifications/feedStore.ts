@@ -84,9 +84,6 @@ export type MachineFeedStatus = 'loading' | 'ready' | FeedReadFailure;
 export type MachineFeedState = {
   status: MachineFeedStatus;
   rows: readonly FeedRow[];
-  /** The computer's own next unread row and when it was pushed back (`FeedSnapshot`); kept with the rows. */
-  nextUnreadId?: string;
-  nextUnreadDeferredAt?: string;
 };
 
 type AttentionFeedState = {
@@ -152,12 +149,7 @@ function setFeed(machineId: string, feed: MachineFeedState): void {
 
 /** The computer's feed as just read or changed: the list shows it, the event record keeps its rows. */
 function applySnapshot(machineId: string, snapshot: FeedSnapshot): void {
-  setFeed(machineId, {
-    status: 'ready',
-    rows: snapshot.rows,
-    ...(snapshot.nextUnreadId !== undefined ? { nextUnreadId: snapshot.nextUnreadId } : {}),
-    ...(snapshot.nextUnreadDeferredAt !== undefined ? { nextUnreadDeferredAt: snapshot.nextUnreadDeferredAt } : {}),
-  });
+  setFeed(machineId, { status: 'ready', rows: snapshot.rows });
   announcedEvents.retainFeed(machineId, snapshot.rows);
 }
 
@@ -637,14 +629,6 @@ function editFeed(machineId: string, edit: (rows: readonly FeedRow[]) => readonl
   const feed = useAttentionFeedStore.getState().feeds[machineId];
   if (feed === undefined) return;
   setFeed(machineId, { ...feed, rows: edit(feed.rows) });
-}
-
-/**
- * Next unread, as the desktop's: every computer's feed is read anew first, so the jump goes to what is unread now,
- * then the merged next row (`nextUnreadRow` in `feedPanel.ts`) is returned for the caller to open.
- */
-export async function readFeedsForNextUnread(): Promise<void> {
-  await Promise.all(feedMachines().map((machine) => source.refresh(machine.id)));
 }
 
 /** Marks rows of a computer's feed read, one `markRead` each; false (and a log line) when it did not take them all. */

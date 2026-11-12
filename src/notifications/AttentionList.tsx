@@ -1,6 +1,6 @@
 /**
  * The Notifications list, drawn as the desktop's Notifications panel (`titlebar_notifications_panel.rs` in the Ghostex
- * repo; the rules in `feedPanel.ts`, CDXC:Notifications 2026-11-12): the header actions Next unread, Mark all read and
+ * repo; the rules in `feedPanel.ts`, CDXC:Notifications 2026-11-12): the header actions Mark all read and
  * Clear all; then the computer's feed rows in two groups, Unread and Read, newest first. A row is the desktop's card:
  * the agent's icon (or the kind's) in a square tile, the bold title with the computer's chip (with several computers)
  * and the time, a two-line body, and "project · kind" as its footer, with the blue accent wash while unread (red for an
@@ -64,7 +64,7 @@ import {
 import { readableSecondaryText } from '../theme/sidebarAppearance';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import { sessionKey, type AttentionInbox } from './attentionRows';
-import { attentionInboxOf, currentAttentionInbox, type Notice } from './attentionInbox';
+import { attentionInboxOf, type Notice } from './attentionInbox';
 import {
   feedRelativeTime,
   feedRowCanBeDone,
@@ -77,13 +77,12 @@ import {
 import {
   changeEveryFeed,
   changeFeedRow,
-  readFeedsForNextUnread,
   refreshAttentionFeeds,
   restoreEndedSession,
   useAttentionFeedStore,
 } from './feedStore';
 import { CloudOffGlyph, feedKindGlyph, PanelGlyph, type PanelGlyphName } from './icons';
-import { currentFeedPanel, useFeedPanel } from './useFeedPanel';
+import { useFeedPanel } from './useFeedPanel';
 
 /** What opening a row's session asks for. */
 export type OpenSessionTarget = { machineId: string; sessionId: string; question: boolean };
@@ -405,7 +404,7 @@ function EmptyState({
 }
 
 /**
- * The panel's header actions (the desktop's "Next unread", "Mark all read", "Clear all"): equal shares of the row,
+ * The panel's header actions (the desktop's "Mark all read", "Clear all"): equal shares of the row,
  * unfilled, divided by thin lines, an icon beside each label, dimmed while there is nothing to act on.
  */
 function HeaderActions({
@@ -646,14 +645,6 @@ export default function AttentionList({
     void refreshAttentionFeeds().finally(() => setPulling(false));
   }, []);
 
-  /** Next unread: every computer's feed read anew, then its merged next card opened (and marked read). */
-  const nextUnread = useCallback(() => {
-    void readFeedsForNextUnread().then(() => {
-      const next = currentFeedPanel().next;
-      if (next !== null) open(next, questionKeys(currentAttentionInbox()));
-    });
-  }, [open]);
-
   const onlineMachines = useMemo(
     () => [...new Set([...panel.unread, ...panel.read].map((row) => row.machineId))],
     [panel],
@@ -780,13 +771,6 @@ export default function AttentionList({
         <HeaderActions
           appearance={appearance}
           actions={[
-            {
-              key: 'next-unread',
-              label: NotificationsCopy.feed.nextUnread,
-              glyph: 'chevronRight',
-              enabled: panel.next !== null,
-              onPress: nextUnread,
-            },
             {
               key: 'mark-all-read',
               label: NotificationsCopy.feed.markAllRead,

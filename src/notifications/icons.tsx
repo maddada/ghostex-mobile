@@ -160,7 +160,6 @@ const PANEL_GLYPH_PATHS = {
   shieldCheck: ['M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06', 'M15 19l2 2l4 -4'],
   infoCircle: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M12 9h.01', 'M11 12h1v4h1'],
   check: ['m5 12 4 4L19 6'],
-  chevronRight: ['M9 6l6 6l-6 6'],
   xmark: ['M7 7l10 10', 'M17 7l-10 10'],
   deviceDesktop: [
     'M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10',

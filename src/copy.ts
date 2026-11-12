@@ -1622,7 +1622,6 @@ export const NotificationsCopy = {
     },
     unread: 'Unread',
     read: 'Read',
-    nextUnread: 'Next unread',
     markAllRead: 'Mark all read',
     clearAll: 'Clear all',
     emptyTitle: 'No notifications yet',

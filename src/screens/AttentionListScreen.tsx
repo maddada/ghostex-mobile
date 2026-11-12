@@ -1,7 +1,6 @@
 /**
  * Notifications: the computer's notification list as a screen, opened from the bell on the Sessions screen, drawn as
- * the desktop's Notifications panel (`notifications/AttentionList.tsx`). Its actions (Next unread, Mark all read,
- * Clear all) stand in the list's own header row, as on the desktop, so the screen's header holds only its title; the
+ * the desktop's Notifications panel (`notifications/AttentionList.tsx`). Its actions (Mark all read, Clear all) stand in the list's own header row, as on the desktop, so the screen's header holds only its title; the
  * "…" that held Clear Done went with the Done section (CDXC:Notifications 2026-11-12 in `notifications/feedPanel.ts`).
  * A card opens its session as a notification does (`ghostex://session`, a session with a question at its question
  * card).

@@ -1,18 +1,18 @@
 /**
  * The Notifications list as the desktop's Notifications panel draws it (`titlebar_notifications_panel.rs` in the
  * Ghostex repo): every reachable computer's feed rows merged newest first, in two groups, Unread then Read; each row's
- * card words; the panel's "Next unread" target; and the one dimmed line for a computer that is offline.
+ * card words; and the one dimmed line for a computer that is offline.
  *
  * CDXC:Notifications 2026-11-12 DECISION: User, on the phone's Notifications screen: "Please make this notifications
  * area match the one on desktop so I can mark a single notification as done ... It has to match desktop exactly in
  * all aspects". The list is the computer's notification feed, as on the desktop, no longer the phone's own one row per
  * session inbox (Needs you, Done, Failed): Unread and Read, a check that marks a row read (and clears a read one),
- * Next unread, Mark all read and Clear all. Every change goes to the computer that owns the row, so it is the same on
+ * Mark all read and Clear all (Next unread was removed on 2026-11-12). Every change goes to the computer that owns the row, so it is the same on
  * every device. A phone has no "This computer", so it draws no All / This computer / Remote tabs: it shows what the
  * desktop's All tab shows, and like its Remote tab it names an offline computer in one dimmed line.
  *
- * SEE-ALSO: packages/gx-core/src/notification_feeds.rs (`merged_notification_feed_message`: the merge order, the jump
- * order, the offline line; the phone runs no gx-core, so this follows it), apps/desktop/src/notification_feed/mod.rs
+ * SEE-ALSO: packages/gx-core/src/notification_feeds.rs (`merged_notification_feed_message`: the merge order and the
+ * offline line; the phone runs no gx-core, so this follows it), apps/desktop/src/notification_feed/mod.rs
  * (the kind labels, the urgent kinds, `notification_feed_relative_time`), server/src/notification_feed/store.rs (the
  * rows, read state and `awaitingApproval`).
  *
@@ -29,8 +29,6 @@ export type PanelMachineFeed = {
   /** The computer answered its last read; an offline one's rows leave the list until it is back. */
   online: boolean;
   rows: readonly FeedRow[];
-  nextUnreadId?: string;
-  nextUnreadDeferredAt?: string;
 };
 
 export type PanelRow = FeedRow & {
@@ -46,8 +44,6 @@ export type FeedPanel = {
   read: PanelRow[];
   /** Unread rows of every online computer (an open approval counts as unread), the bell's number. */
   unreadCount: number;
-  /** The row Next unread opens, or null when nothing is unread. */
-  next: PanelRow | null;
   /** "<Computer> is offline. ..." while an offline computer has rows waiting to come back. */
   offlineNotice: string | null;
 };
@@ -61,8 +57,6 @@ export function buildFeedPanel(feeds: readonly PanelMachineFeed[]): FeedPanel {
   const several = feeds.length > 1;
   const rows: PanelRow[] = [];
   const offline: string[] = [];
-  type Candidate = { row: PanelRow; deferredAt?: string };
-  const candidates: Candidate[] = [];
   for (const feed of feeds) {
     if (!feed.online) {
       if (feed.rows.length > 0) offline.push(feed.machineLabel);
@@ -76,23 +70,14 @@ export function buildFeedPanel(feeds: readonly PanelMachineFeed[]): FeedPanel {
         machineLabel: several ? feed.machineLabel : null,
       };
       rows.push(panelRow);
-      if (row.id === feed.nextUnreadId) candidates.push({ row: panelRow, deferredAt: feed.nextUnreadDeferredAt });
     }
   }
   rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  // Newest undeferred target first; deferred targets after them, oldest deferral first (gx-core `jump_order`).
-  candidates.sort((a, b) => {
-    if (a.deferredAt === undefined && b.deferredAt === undefined) return b.row.createdAt.localeCompare(a.row.createdAt);
-    if (a.deferredAt === undefined) return -1;
-    if (b.deferredAt === undefined) return 1;
-    return a.deferredAt.localeCompare(b.deferredAt);
-  });
   const unread = rows.filter((row) => !row.read);
   return {
     unread,
     read: rows.filter((row) => row.read),
     unreadCount: unread.length,
-    next: candidates[0]?.row ?? null,
     offlineNotice: offlineNotice(offline),
   };
 }
