@@ -170,6 +170,7 @@ const NATIVE_CHAT_HOST_ACTIONS: readonly string[] = [
   'delayedActions',
   'closeAfterDone',
   'fork',
+  'forkFromMessage',
   'fullReload',
   'exportTranscript',
 ];
@@ -988,6 +989,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
     handleMenuDismissed,
     pickSkill,
     configureSkills,
+    runAgentFork,
   } = useTerminalAgentActions({
     activeTab,
     activeProjectId,
@@ -1123,13 +1125,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
   // `railButtons` below.
   const headerButtons = (buttonStyle: StyleProp<ViewStyle>) => (
     <>
-      <VoiceButton
-        machine={activeMachine}
-        style={buttonStyle}
-        color={ink}
-        size={20}
-        activeFill={false}
-      />
+      <VoiceButton machine={activeMachine} style={buttonStyle} color={ink} size={20} activeFill={false} />
       {panesAvailable && bandOverflow.shows('panes') && (
         <Pressable
           accessibilityRole="button"
@@ -1139,11 +1135,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
           style={buttonStyle}
           onPress={pressPanes}
         >
-          <PanesIcon
-            across={!panesUpright}
-            size={20}
-            color={showsTwoPanes ? GhostexPalette.ACCENT : ink}
-          />
+          <PanesIcon across={!panesUpright} size={20} color={showsTwoPanes ? GhostexPalette.ACCENT : ink} />
         </Pressable>
       )}
       {chatCapable && bandOverflow.shows('view') && (
@@ -1347,15 +1339,18 @@ export default function TerminalScreen({ navigation, route }: Props) {
 
   // What the chat's More actions rows and cards ask of the screen: the terminal menu's own actions, on the selected
   // session (a touch in a chat pane selects its session before its rows are reached).
-  const chatHostAction = (action: string): void => {
+  const chatHostAction = (action: string, params: Record<string, unknown> = {}): void => {
     if (action === 'closeAfterDone') void toggleCloseAfterDone();
-    else handleTerminalMenuAction(action as TerminalMenuActionId);
+    // A prompt's or a reply's Fork from here: the session's fork, ending at that message.
+    else if (action === 'forkFromMessage') {
+      if (typeof params.messageId === 'string' && params.messageId.length > 0) void runAgentFork(params.messageId);
+    } else handleTerminalMenuAction(action as TerminalMenuActionId);
   };
   // A chat's own View playbook: the coordinator's project on the chat's computer, not the selected session's.
   const chatHostActionFor =
     (machine: MachineConnectionTarget | null, projectId: string) =>
-    (action: string): void => {
-      if (action !== 'viewPlaybook') chatHostAction(action);
+    (action: string, params: Record<string, unknown> = {}): void => {
+      if (action !== 'viewPlaybook') chatHostAction(action, params);
       else if (machine !== null && projectId.length > 0) setPlaybook({ machine, projectId });
     };
   // The chat in a pane: today's chat view at the size of the pane's body, which ends at
@@ -1468,7 +1463,8 @@ export default function TerminalScreen({ navigation, route }: Props) {
           onPress={() => void reopenTab(activeTab)}
         >
           <Text style={styles.chatStartupErrorText}>
-            {activeTab.error ? summarizeFailure(activeTab.error, activeMachineHasPassword) : 'Agent startup failed.'} Tap to retry.
+            {activeTab.error ? summarizeFailure(activeTab.error, activeMachineHasPassword) : 'Agent startup failed.'}{' '}
+            Tap to retry.
           </Text>
         </Pressable>
       ) : null}
@@ -1478,10 +1474,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       >
         {activeTab !== null && !chatModeActive && twoPanes === null ? (
           isDemoMachineId(activeTab.machineId) ? (
-            <DemoTerminalView
-              sessionId={activeTab.ghostexSessionId ?? activeTab.sessionKey}
-              style={styles.terminal}
-            />
+            <DemoTerminalView sessionId={activeTab.ghostexSessionId ?? activeTab.sessionKey} style={styles.terminal} />
           ) : (
             // Only the selected tab's terminal is mounted; the native registry
             // keeps other entries warm across view detach.
@@ -1564,7 +1557,9 @@ export default function TerminalScreen({ navigation, route }: Props) {
         {activeTab !== null && !chatModeActive && twoPanes === null && (
           <TerminalStateOverlay
             tab={activeTab}
-            errorCaption={activeTab.error !== undefined ? summarizeFailure(activeTab.error, activeMachineHasPassword) : null}
+            errorCaption={
+              activeTab.error !== undefined ? summarizeFailure(activeTab.error, activeMachineHasPassword) : null
+            }
             onRetry={() => void reopenTab(activeTab)}
             onReconnect={() => void reopenTab(activeTab)}
             // Laptop pose: Retry and Reconnect above the fold, never on it.

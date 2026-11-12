@@ -82,6 +82,7 @@ import {
   useSubagentRowRenderer,
   useTranscriptTheme,
 } from './transcript';
+import { ForkFromMessageProvider } from './transcript/context';
 import { SaveMarkdownDialog } from './transcript/SaveMarkdownDialog';
 import { ChatToast, type Toast } from './ChatToast';
 import { TabSwipeView, type TabSwipe } from './TabSwipe';
@@ -212,9 +213,7 @@ export default function NativeChatScreen({
   // The chat box's headset (the voice agent, which the top bar held before) needs the same computer capability.
   const voiceAgent = useVoiceCapability(machine);
   const voiceCallable = voiceAgent && sessionId.length > 0 && projectId.length > 0;
-  const machineName = useMachinesStore(
-    (store) => store.machines.find((entry) => entry.id === machine.id)?.name ?? '',
-  );
+  const machineName = useMachinesStore((store) => store.machines.find((entry) => entry.id === machine.id)?.name ?? '');
   // A GBot's chat offers "Call <GBot>" there instead, a call with the GBot about this chat.
   const chatGbot = useGbotOfChat(machine.id, projectId, sessionId);
   // More actions' Session note, while the computer has Session notes on (Settings > Extensions).
@@ -453,54 +452,65 @@ export default function NativeChatScreen({
           keyboardUp,
         );
 
+  // A prompt's or a reply's Fork from here, where this screen forks (More actions' Fork).
+  const forkFromMessage = useMemo(
+    () =>
+      hostActions.includes('forkFromMessage') && onHostAction !== undefined
+        ? (messageId: string) => onHostAction('forkFromMessage', { messageId })
+        : null,
+    [hostActions, onHostAction],
+  );
   const renderSubagentRow = useSubagentRowRenderer(chat);
   // While the subagent viewer is open its modal carries the transcript menu (see `TranscriptMenuSheet`).
   const subagentOpen = document?.subagent !== undefined && document.subagent !== null;
 
   return (
     <NativeChatUiProvider chat={chat}>
-      <DictatedFormBoxes chat={chat} />
-      <ChatPlacementProvider value={placement}>
-        {/* An Expo view takes no `pointerEvents`, so the preloading chat's stays on the view inside. */}
-        <GhostexImageIntakeView
-          style={[styles.root, style, !visible && styles.preloading]}
-          dropTarget={visible && composerShown}
-          onImages={receiveImages}
-          onDropActive={(event) => setDropActive(event.nativeEvent.active)}
-        >
-          <View
-            style={[styles.root, { backgroundColor: theme.background }]}
-            pointerEvents={visible ? 'auto' : 'none'}
-            onLayout={(event) => {
-              const { width, height } = event.nativeEvent.layout;
-              setComposerFrame((now) => ({ ...now, height }));
-              if (inPane)
-                setPaneSize((now) => (now?.width === width && now.height === height ? now : { width, height }));
-            }}
+      <ForkFromMessageProvider value={forkFromMessage}>
+        <DictatedFormBoxes chat={chat} />
+        <ChatPlacementProvider value={placement}>
+          {/* An Expo view takes no `pointerEvents`, so the preloading chat's stays on the view inside. */}
+          <GhostexImageIntakeView
+            style={[styles.root, style, !visible && styles.preloading]}
+            dropTarget={visible && composerShown}
+            onImages={receiveImages}
+            onDropActive={(event) => setDropActive(event.nativeEvent.active)}
           >
-            {chat.state?.error ? <Text style={[styles.error, { color: theme.error }]}>{chat.state.error}</Text> : null}
-            {document ? <SideChatBar chat={chat} document={document} /> : null}
-            <TranscriptSearchBar chat={chat} />
             <View
-              style={styles.transcript}
+              style={[styles.root, { backgroundColor: theme.background }]}
+              pointerEvents={visible ? 'auto' : 'none'}
               onLayout={(event) => {
-                const { y, height } = event.nativeEvent.layout;
-                setComposerFrame((now) => ({ ...now, transcriptTop: y, transcriptBottom: y + height }));
+                const { width, height } = event.nativeEvent.layout;
+                setComposerFrame((now) => ({ ...now, height }));
+                if (inPane)
+                  setPaneSize((now) => (now?.width === width && now.height === height ? now : { width, height }));
               }}
             >
-              <TabSwipeView swipe={tabSwipe}>
-                <NativeTranscript chat={chat} active={visible} />
-                {/* Scroll-to-bottom alone while no card carries it. */}
-                {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
-              </TabSwipeView>
-            </View>
-            {/* The offline computer's card tops the stack, above the working card; it names the
+              {chat.state?.error ? (
+                <Text style={[styles.error, { color: theme.error }]}>{chat.state.error}</Text>
+              ) : null}
+              {document ? <SideChatBar chat={chat} document={document} /> : null}
+              <TranscriptSearchBar chat={chat} />
+              <View
+                style={styles.transcript}
+                onLayout={(event) => {
+                  const { y, height } = event.nativeEvent.layout;
+                  setComposerFrame((now) => ({ ...now, transcriptTop: y, transcriptBottom: y + height }));
+                }}
+              >
+                <TabSwipeView swipe={tabSwipe}>
+                  <NativeTranscript chat={chat} active={visible} />
+                  {/* Scroll-to-bottom alone while no card carries it. */}
+                  {document === null ? null : <LoneScrollBottom document={document} armed={armed} links={links} />}
+                </TabSwipeView>
+              </View>
+              {/* The offline computer's card tops the stack, above the working card; it names the
                 computer itself, so "Reconnecting to …" steps aside while it shows. */}
-            <ComputerCard document={document} onRetry={() => chat.dispatch({ type: 'computerRetry' })} />
-            {document?.computerNotice != null ? null : (
-              <ConnectionLostNotice machine={machine} active={visible} document={document} />
-            )}
-            {/* The dock: what needs the reader, under the transcript and over the working card
+              <ComputerCard document={document} onRetry={() => chat.dispatch({ type: 'computerRetry' })} />
+              {document?.computerNotice != null ? null : (
+                <ConnectionLostNotice machine={machine} active={visible} document={document} />
+              )}
+              {/* The dock: what needs the reader, under the transcript and over the working card
                 (`WorkCards.tsx`).
 
                 CDXC:Coordinators 2026-11-12 DECISION:
@@ -508,144 +518,145 @@ export default function NativeChatScreen({
                 below. That bar needs to be right above the composer. The Needs You part needs to be
                 above it." The gaps are the desktop's stack (`composer.rs` footer: 8 between members,
                 8 above the dock; `WORKING_CARD_GAP` 9 from the working card to the box). */}
-            <WorkDock
-              document={document}
-              chat={chat}
-              projectId={projectId}
-              sessionId={sessionId}
-              typing={composerShown && composerFocused && keyboardUp}
-              {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
-              gapBelow={
-                document === null
-                  ? STACK_GAP - COMPOSER_TOP_PADDING
-                  : workingCardShown(document)
-                    ? STACK_GAP
-                    : chatCardsShown(document)
-                      ? 0
-                      : STACK_GAP - COMPOSER_TOP_PADDING
-              }
-            />
-            {/* The working card in its own row right above the cards and the composer. */}
-            {document === null ? null : <WorkingCard document={document} />}
-            <NativeChatCards chat={chat} onHostAction={hostAction} />
-            {!composerShown ? null : (
-              <View
-                onLayout={(event) => {
-                  const { y: composerTop, height: composerHeight } = event.nativeEvent.layout;
-                  setComposerFrame((now) => ({ ...now, composerTop, composerHeight }));
-                }}
-              >
-                <NativeComposer
-                  projectId={projectId}
-                  sessionId={sessionId}
+              <WorkDock
+                document={document}
+                chat={chat}
+                projectId={projectId}
+                sessionId={sessionId}
+                typing={composerShown && composerFocused && keyboardUp}
+                {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
+                gapBelow={
+                  document === null
+                    ? STACK_GAP - COMPOSER_TOP_PADDING
+                    : workingCardShown(document)
+                      ? STACK_GAP
+                      : chatCardsShown(document)
+                        ? 0
+                        : STACK_GAP - COMPOSER_TOP_PADDING
+                }
+              />
+              {/* The working card in its own row right above the cards and the composer. */}
+              {document === null ? null : <WorkingCard document={document} />}
+              <NativeChatCards chat={chat} onHostAction={hostAction} />
+              {!composerShown ? null : (
+                <View
+                  onLayout={(event) => {
+                    const { y: composerTop, height: composerHeight } = event.nativeEvent.layout;
+                    setComposerFrame((now) => ({ ...now, composerTop, composerHeight }));
+                  }}
+                >
+                  <NativeComposer
+                    projectId={projectId}
+                    sessionId={sessionId}
+                    chat={chat}
+                    onHostAction={hostAction}
+                    hostActions={composerHostActions}
+                    openAccountsRequestId={accountsRequestId}
+                    openModelRequestId={modelRequestId}
+                    openContextRequestId={contextRequestId}
+                    focusRequestId={focusRequestId}
+                    onFocusChange={setComposerFocused}
+                    voiceCallTitle={title}
+                    voiceCallGbotName={chatGbot?.name}
+                    sleeping={sleeping}
+                    voiceAgent={voiceAgent}
+                    {...(composerRoom !== undefined ? { room: composerRoom } : {})}
+                    {...(document !== null
+                      ? {
+                          strip: (
+                            <PillsStrip
+                              chat={chat}
+                              document={document}
+                              menu={pillMenu}
+                              onMenuChange={setPillMenu}
+                              armed={armed}
+                              links={links}
+                              onSessionDetailsPress={openDetails}
+                              {...(sessionId.length > 0 && projectId.length > 0
+                                ? { onStashedPress: () => hostAction('stashedPrompts') }
+                                : {})}
+                              {...(openDelayedActions !== undefined ? { onArmedPress: openDelayedActions } : {})}
+                            />
+                          ),
+                        }
+                      : {})}
+                  />
+                </View>
+              )}
+              {composerShown || document === null ? null : (
+                <QuestionModelSheet chat={chat} document={document} openRequestId={modelRequestId} />
+              )}
+              {document !== null ? (
+                <PillMenuSheet
                   chat={chat}
-                  onHostAction={hostAction}
-                  hostActions={composerHostActions}
-                  openAccountsRequestId={accountsRequestId}
-                  openModelRequestId={modelRequestId}
-                  openContextRequestId={contextRequestId}
-                  focusRequestId={focusRequestId}
-                  onFocusChange={setComposerFocused}
-                  voiceCallTitle={title}
-                  voiceCallGbotName={chatGbot?.name}
-                  sleeping={sleeping}
-                  voiceAgent={voiceAgent}
-                  {...(composerRoom !== undefined ? { room: composerRoom } : {})}
-                  {...(document !== null
-                    ? {
-                        strip: (
-                          <PillsStrip
-                            chat={chat}
-                            document={document}
-                            menu={pillMenu}
-                            onMenuChange={setPillMenu}
-                            armed={armed}
-                            links={links}
-                            onSessionDetailsPress={openDetails}
-                            {...(sessionId.length > 0 && projectId.length > 0
-                              ? { onStashedPress: () => hostAction('stashedPrompts') }
-                              : {})}
-                            {...(openDelayedActions !== undefined ? { onArmedPress: openDelayedActions } : {})}
-                          />
-                        ),
-                      }
-                    : {})}
+                  document={document}
+                  open={pillMenu}
+                  onClose={closePillMenu}
+                  onHost={hostAction}
+                  boardFocus={boardFocus}
                 />
-              </View>
-            )}
-            {composerShown || document === null ? null : (
-              <QuestionModelSheet chat={chat} document={document} openRequestId={modelRequestId} />
-            )}
-            {document !== null ? (
-              <PillMenuSheet
+              ) : null}
+              <RewindDialog chat={chat} />
+              <SaveMarkdownDialog chat={chat} />
+              <TranscriptMenuSheet chat={chat} host={menuHost} enabled={!subagentOpen} />
+              <SavedPromptsSheet
+                visible={savedPromptsOpen}
+                machine={machine}
+                projectId={projectId}
+                sessionId={sessionId}
+                onClose={() => setSavedPromptsOpen(false)}
+                onInsert={(content) => chat.composer?.replace(content)}
+                onChanged={() => chat.dispatch({ type: 'refreshComposerChrome', sessionId })}
+              />
+              <HandoffSheet
+                request={handoff}
+                machine={machine}
+                projectId={projectId}
+                sessionId={sessionId}
+                onClose={() => setHandoff(null)}
+                onFailure={(failure, message) => show(message, true, failure)}
+              />
+              <NativeChatOverlays
+                chat={chat}
+                renderTranscriptItem={renderSubagentRow}
+                subagentMenu={<TranscriptMenuSheet chat={chat} host={menuHost} />}
+              />
+              <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
+              <ResourceSheet chat={chat} document={document} />
+              <SessionDetailsSheet
                 chat={chat}
                 document={document}
-                open={pillMenu}
-                onClose={closePillMenu}
-                onHost={hostAction}
-                boardFocus={boardFocus}
+                visible={detailsOpen}
+                onClose={closeDetails}
+                // The Context sheet's host is the composer, which a question replaces: no row then.
+                {...(composerShown ? { onMoreDetails: openContextDetails } : {})}
+                onDismissed={detailsDismissed}
               />
-            ) : null}
-            <RewindDialog chat={chat} />
-            <SaveMarkdownDialog chat={chat} />
-            <TranscriptMenuSheet chat={chat} host={menuHost} enabled={!subagentOpen} />
-            <SavedPromptsSheet
-              visible={savedPromptsOpen}
-              machine={machine}
-              projectId={projectId}
-              sessionId={sessionId}
-              onClose={() => setSavedPromptsOpen(false)}
-              onInsert={(content) => chat.composer?.replace(content)}
-              onChanged={() => chat.dispatch({ type: 'refreshComposerChrome', sessionId })}
-            />
-            <HandoffSheet
-              request={handoff}
-              machine={machine}
-              projectId={projectId}
-              sessionId={sessionId}
-              onClose={() => setHandoff(null)}
-              onFailure={(failure, message) => show(message, true, failure)}
-            />
-            <NativeChatOverlays
-              chat={chat}
-              renderTranscriptItem={renderSubagentRow}
-              subagentMenu={<TranscriptMenuSheet chat={chat} host={menuHost} />}
-            />
-            <PageSheet chat={chat} machine={machine} page={page} onClose={closePage} onOpenLink={openPageLink} />
-            <ResourceSheet chat={chat} document={document} />
-            <SessionDetailsSheet
-              chat={chat}
-              document={document}
-              visible={detailsOpen}
-              onClose={closeDetails}
-              // The Context sheet's host is the composer, which a question replaces: no row then.
-              {...(composerShown ? { onMoreDetails: openContextDetails } : {})}
-              onDismissed={detailsDismissed}
-            />
-            {gbotSettings !== null ? (
-              <GbotSettingsHost
-                target={machine}
-                botId={gbotSettings.botId}
-                name={gbotNameOn(machine.id, gbotSettings.botId)}
-                initialTab={gbotSettings.tab}
-                onClose={() => setGbotSettings(null)}
-                onSaved={(name) => show('Chats opened from now on start with the changes.', false, `${name} saved`)}
-              />
-            ) : null}
-            <ChatToast toast={toast} />
-            {dropActive ? (
-              <View
-                pointerEvents="none"
-                style={[styles.dropHighlight, { borderColor: theme.ring, backgroundColor: theme.ringGlow }]}
-              >
-                <Text style={[styles.dropLabel, { color: theme.foreground, backgroundColor: theme.cardBackground }]}>
-                  Drop to attach
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </GhostexImageIntakeView>
-      </ChatPlacementProvider>
+              {gbotSettings !== null ? (
+                <GbotSettingsHost
+                  target={machine}
+                  botId={gbotSettings.botId}
+                  name={gbotNameOn(machine.id, gbotSettings.botId)}
+                  initialTab={gbotSettings.tab}
+                  onClose={() => setGbotSettings(null)}
+                  onSaved={(name) => show('Chats opened from now on start with the changes.', false, `${name} saved`)}
+                />
+              ) : null}
+              <ChatToast toast={toast} />
+              {dropActive ? (
+                <View
+                  pointerEvents="none"
+                  style={[styles.dropHighlight, { borderColor: theme.ring, backgroundColor: theme.ringGlow }]}
+                >
+                  <Text style={[styles.dropLabel, { color: theme.foreground, backgroundColor: theme.cardBackground }]}>
+                    Drop to attach
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </GhostexImageIntakeView>
+        </ChatPlacementProvider>
+      </ForkFromMessageProvider>
     </NativeChatUiProvider>
   );
 }

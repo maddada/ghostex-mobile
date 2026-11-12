@@ -34,7 +34,12 @@ import {
 } from '../../chat/session-chat-helpers';
 import { loadHandoffPrefs } from '../../chat/native/composer/handoffPrefsStore';
 import { handoffLastTurns } from '../../contract/handoff/handoff';
-import { createAgentWithFirstInputDraft, machineAgents, projectTitle, stagedHandoffDraft } from '../../chat/native/sessionShell';
+import {
+  createAgentWithFirstInputDraft,
+  machineAgents,
+  projectTitle,
+  stagedHandoffDraft,
+} from '../../chat/native/sessionShell';
 import type { GhostexSession } from '../../contract/mobileSummary';
 import { ProgressCopy, RenameCopy, SessionCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
@@ -243,34 +248,37 @@ export function useTerminalAgentActions({
     });
   }, [agentTarget]);
 
-  const runAgentFork = useCallback(async (): Promise<void> => {
-    const target = agentTarget();
-    if (target === null) return;
-    setAgentOverlay(AGENT_OVERLAY_NONE);
-    const { machine, session } = target;
-    setAgentProgress(ProgressCopy.creatingTerminal(session.projectName));
-    try {
-      const result = await runGhostexCli(machine, forkSessionCommand(session.sessionId));
-      await useInventoryStore.getState().refreshMachine(machine);
-      setAgentProgress(null);
-      const forkedId = createdSessionId(result);
-      if (forkedId === null) return;
-      // Creation-flow parity with the sessions drawer: the fork becomes the
-      // visible session instead of leaving the user on the original.
-      const forked = useInventoryStore
-        .getState()
-        .inventoriesByMachineId[machine.id]?.summary?.sessions.find((entry) => entry.sessionId === forkedId);
-      const sessionKey = await useTerminalStore.getState().attachSession(machine, {
-        sessionId: forkedId,
-        projectId: forked !== undefined && forked.projectId.length > 0 ? forked.projectId : undefined,
-        title: forked?.displayTitle,
-      });
-      useTerminalStore.getState().selectTab(sessionKey);
-    } catch (error) {
-      setAgentProgress(null);
-      reportAgentFailure('Fork Failed', error);
-    }
-  }, [agentTarget, reportAgentFailure]);
+  const runAgentFork = useCallback(
+    async (messageId?: string): Promise<void> => {
+      const target = agentTarget();
+      if (target === null) return;
+      setAgentOverlay(AGENT_OVERLAY_NONE);
+      const { machine, session } = target;
+      setAgentProgress(ProgressCopy.creatingTerminal(session.projectName));
+      try {
+        const result = await runGhostexCli(machine, forkSessionCommand(session.sessionId, messageId));
+        await useInventoryStore.getState().refreshMachine(machine);
+        setAgentProgress(null);
+        const forkedId = createdSessionId(result);
+        if (forkedId === null) return;
+        // Creation-flow parity with the sessions drawer: the fork becomes the
+        // visible session instead of leaving the user on the original.
+        const forked = useInventoryStore
+          .getState()
+          .inventoriesByMachineId[machine.id]?.summary?.sessions.find((entry) => entry.sessionId === forkedId);
+        const sessionKey = await useTerminalStore.getState().attachSession(machine, {
+          sessionId: forkedId,
+          projectId: forked !== undefined && forked.projectId.length > 0 ? forked.projectId : undefined,
+          title: forked?.displayTitle,
+        });
+        useTerminalStore.getState().selectTab(sessionKey);
+      } catch (error) {
+        setAgentProgress(null);
+        reportAgentFailure('Fork Failed', error);
+      }
+    },
+    [agentTarget, reportAgentFailure],
+  );
 
   const runAgentFullReload = useCallback(async (): Promise<void> => {
     const target = agentTarget();
@@ -359,7 +367,11 @@ export function useTerminalAgentActions({
       const sessionId = await createAgentWithFirstInputDraft(machine, {
         projectId,
         agent: machineAgents(machine.id).find((agent) => agent.agentId === agentId) ?? { agentId },
-        draft: await stagedHandoffDraft(machine, { path, sessionTitle, projectTitle: projectTitle(machine.id, projectId) }),
+        draft: await stagedHandoffDraft(machine, {
+          path,
+          sessionTitle,
+          projectTitle: projectTitle(machine.id, projectId),
+        }),
       });
       await useInventoryStore.getState().refreshMachine(machine);
       // Creation-flow parity with Fork: the new conversation becomes the
@@ -671,6 +683,7 @@ export function useTerminalAgentActions({
   }, []);
 
   return {
+    runAgentFork,
     submitAgentRename,
     runDelayedSend,
     cancelDelayedSend,

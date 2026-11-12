@@ -218,6 +218,17 @@ export type TranscriptEnv = {
   queryAsync?: RustChat['queryAsync'];
 };
 
+/**
+ * The screen's Fork from here (a prompt's or a reply's menu row): a new session of the same agent whose conversation
+ * ends at that message, or `null` where the screen cannot fork.
+ */
+const ForkFromMessageContext = createContext<((messageId: string) => void) | null>(null);
+export const ForkFromMessageProvider = ForkFromMessageContext.Provider;
+
+export function useForkFromMessage(): ((messageId: string) => void) | null {
+  return useContext(ForkFromMessageContext);
+}
+
 const EnvContext = createContext<TranscriptEnv | null>(null);
 export const TranscriptEnvProvider = EnvContext.Provider;
 
@@ -243,6 +254,8 @@ export type TranscriptFlags = {
   savedPrompts: { [messageId: string]: Json };
   rewindAvailable: boolean;
   rewindEnabled: boolean;
+  /** The agent's conversation can be cut at a message (Fork from here; core `agent_supports_fork_from_message`). */
+  forkFromMessageAvailable: boolean;
   /** The host can stash (Save prompt on a user row). */
   canSavePrompt: boolean;
   /** The queue's Edit and Delete, which a user row still waiting for the agent offers too. */
@@ -331,6 +344,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   savedPrompts: {},
   rewindAvailable: false,
   rewindEnabled: false,
+  forkFromMessageAvailable: false,
   canSavePrompt: false,
   canEditQueued: false,
   canRemoveQueued: false,
@@ -401,6 +415,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     savedPrompts: obj(document.savedPrompts) === null ? {} : document.savedPrompts,
     rewindAvailable: document.rewindAvailable === true,
     rewindEnabled: document.rewindEnabled === true,
+    forkFromMessageAvailable: document.forkFromMessageAvailable === true,
     canSavePrompt: obj(document.composerActions)?.stash === true,
     canEditQueued: obj(obj(document.queue)?.capabilities)?.canEdit === true,
     canRemoveQueued: obj(obj(document.queue)?.capabilities)?.canRemove === true,

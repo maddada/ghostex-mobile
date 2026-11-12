@@ -13,7 +13,7 @@ import { memo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ProjectedMessage } from '../../rust/document';
-import { useChatLook, useTranscriptEnv, useTranscriptFlags } from './context';
+import { useChatLook, useForkFromMessage, useTranscriptEnv, useTranscriptFlags } from './context';
 import { Glyph } from './icons';
 import { arr, obj, str } from './json';
 import { messageCommands } from './markdown/runCommands';
@@ -99,6 +99,7 @@ export const ReplyActions = memo(function ReplyActions({
 function useReplyActionItems(message: ProjectedMessage): ActionItem[] {
   const { dispatch, main } = useTranscriptEnv();
   const flags = useTranscriptFlags();
+  const forkFromHere = useForkFromHereItem(message);
   const markdown = typeof message.copyText === 'string' ? message.copyText : '';
   const items: ActionItem[] = [];
   if (obj(message.actionContent)?.canSaveMarkdown === true) {
@@ -137,6 +138,7 @@ function useReplyActionItems(message: ProjectedMessage): ActionItem[] {
    * CDXC:VoiceMode 2026-10-20 DECISION: User: a per-message Read aloud action; on the phone it is a row of the message's long-press menu, never a button on the message (CDXC:SessionChat 2026-10-12). On the reply being read it reads Stop reading.
    * CDXC:VoiceMode 2026-10-22 WHY: it shows where the reply actions show (a final reply, `finalIds`) and comes last, as the desktop's hover row has it last before the time (Q24). The subagent viewer never offers it: Read aloud reads only the session's own transcript.
    */
+  if (forkFromHere !== null && hasReplyActions(message, flags.finalIds)) items.push(forkFromHere);
   if (main && flags.readAloudAvailable && hasReplyActions(message, flags.finalIds)) {
     const speaking = flags.readAloudSpeakingId === message.id;
     items.push({
@@ -284,6 +286,7 @@ export const UserActions = memo(function UserActions({
 function useUserActionItems(message: ProjectedMessage): ActionItem[] {
   const { dispatch, main } = useTranscriptEnv();
   const flags = useTranscriptFlags();
+  const forkFromHere = useForkFromHereItem(message);
   const prompt = typeof message.copyText === 'string' ? message.copyText : '';
   if (prompt.length === 0) return [];
   const saved = flags.savedPrompts[message.id];
@@ -327,6 +330,10 @@ function useUserActionItems(message: ProjectedMessage): ActionItem[] {
       run: () => dispatch({ type: 'rewindOpen', messageId: message.id, prompt }),
     });
   }
+  // A message still waiting for the agent is not in its conversation yet.
+  if (forkFromHere !== null && waitingPromptId === null && !queued && !flags.takeBackIds.has(message.id)) {
+    items.push(forkFromHere);
+  }
   if (flags.canSavePrompt) {
     items.push({
       label:
@@ -342,6 +349,19 @@ function useUserActionItems(message: ProjectedMessage): ActionItem[] {
     });
   }
   return items;
+}
+
+/**
+ * Fork from here (desktop `fork_from_here_row` in native_chat/message_actions.rs): a new session of the same agent whose
+ * conversation ends at this message. Only in the session's own transcript, where the core says the agent's
+ * conversation can be cut at a message (Claude Code), and where the screen can fork.
+ */
+function useForkFromHereItem(message: ProjectedMessage): ActionItem | null {
+  const { main } = useTranscriptEnv();
+  const flags = useTranscriptFlags();
+  const fork = useForkFromMessage();
+  if (!main || !flags.forkFromMessageAvailable || fork === null) return null;
+  return { label: 'Fork from here', icon: 'git-branch', run: () => fork(message.id) };
 }
 
 /** The actions a prompt's menu offers after Copy and Add to Chat. */

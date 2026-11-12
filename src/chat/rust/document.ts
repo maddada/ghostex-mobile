@@ -840,6 +840,8 @@ export type ChatDocument = {
   rewindAvailable: boolean;
   /** Whether rewinding is allowed right now. */
   rewindEnabled: boolean;
+  /** Fork from here on a prompt or a reply (absent from an older core, read as false). */
+  forkFromMessageAvailable?: boolean;
   /** Message ids that already have a saved prompt. Desktop: `message_actions.rs`. */
   savedPrompts: { [messageId: string]: Json };
   /** Read aloud's controls (core `read_aloud/document.rs`): the reply row and the ⋯ menu rows. */

@@ -625,9 +625,17 @@ export function restartSessionCommand(sessionId: string): string {
   return `ghostex restart-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
 }
 
-/** Fork: `ghostex fork-session --session-id <id> --json` (daemon-side fork). */
-export function forkSessionCommand(sessionId: string): string {
-  return `ghostex fork-session --session-id ${shellQuote(requireId(sessionId, 'session id'))} --json`;
+/**
+ * Fork: `ghostex fork-session --session-id <id> [--message-id <id>] --json` (daemon-side fork). With a message id the
+ * fork's conversation ends at that message (a chat message's Fork from here, Claude Code only).
+ */
+export function forkSessionCommand(sessionId: string, messageId?: string): string {
+  const base = `ghostex fork-session --session-id ${shellQuote(requireId(sessionId, 'session id'))}`;
+  const atMessage =
+    messageId !== undefined && messageId.length > 0
+      ? ` --message-id ${shellQuote(requireId(messageId, 'message id'))}`
+      : '';
+  return `${base}${atMessage} --json`;
 }
 
 /**
