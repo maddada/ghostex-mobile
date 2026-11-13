@@ -1138,6 +1138,18 @@ export default function TerminalScreen({ navigation, route }: Props) {
         }
         return;
       }
+      if (id === 'beads') {
+        setMenuVisible(false);
+        if (activeTab !== null && activeProject !== null && activeProject.projectId.length > 0) {
+          navigation.navigate('Beads', {
+            machineId: activeTab.machineId,
+            projectId: activeProject.projectId,
+            projectName: activeProject.name ?? '',
+            projectPath: activeProject.path ?? '',
+          });
+        }
+        return;
+      }
       if (id === 'changes') {
         setMenuVisible(false);
         if (activeTab !== null && activeProject !== null && activeProject.projectId.length > 0) {

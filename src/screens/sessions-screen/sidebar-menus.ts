@@ -85,6 +85,8 @@ export type SidebarMenuCommand =
   | { type: 'sessionLinks'; sessionId: string }
   /** The phone's own row: the session's project's Changes screen (`src/screens/ChangesScreen.tsx`). */
   | { type: 'changes'; sessionId: string }
+  /** The phone's own row: the session's project's Beads screen (`src/screens/BeadsScreen.tsx`). */
+  | { type: 'beads'; sessionId: string }
   /**
    * The Unified list's own row: the Actions… list of the session's computer and project, which the Project list
    * opens from the project menu (the Unified list has no project menu).
@@ -923,6 +925,8 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   // CDXC:Changes 2026-10-25 SEE-ALSO: the user's decision in src/screens/ChangesScreen.tsx (the phone's read-only Changes, opened from this menu too).
   if (session.projectId.length > 0) {
     menu.push(row('Changes', 'file-diff', { type: 'changes', sessionId: id }));
+    // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in src/screens/BeadsScreen.tsx (opened from a row beside Changes).
+    menu.push(row('Beads', 'checklist', { type: 'beads', sessionId: id }));
   }
   if (actionsIcon !== undefined) {
     menu.push(row('Actions…', actionsIcon, { type: 'projectActions', sessionId: id }));

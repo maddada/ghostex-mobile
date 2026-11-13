@@ -90,6 +90,13 @@ export type RootStackParamList = {
   /** A project's Changes, read-only: its diff against main or HEAD, as the desktop Changes tab shows it. */
   Changes: { machineId: string; projectId: string; projectName: string };
   /**
+   * A project's beads, as the desktop Beads view's Tree lists them. `projectPath`: the project's folder on the
+   * computer, sent with every read and write as the desktop does; empty when the phone does not know it.
+   */
+  Beads: { machineId: string; projectId: string; projectName: string; projectPath: string };
+  /** One bead of that project, full screen; back returns to the list where it was. */
+  Bead: { machineId: string; projectId: string; projectPath: string; beadId: string };
+  /**
    * One file from the computer, by absolute path. `fragment` scrolls to an anchor
    * (a link such as `other.md#setup`). Files uses the same viewer for rendered documents, source and metadata.
    */

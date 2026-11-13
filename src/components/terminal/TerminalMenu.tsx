@@ -33,7 +33,7 @@ import {
 } from '../sessions/icons';
 import { PaperclipIcon, PencilIcon } from './icons';
 
-import { ChangesCopy, DocsCopy } from '../../copy';
+import { BeadsCopy, ChangesCopy, DocsCopy } from '../../copy';
 import { COMMAND_ICONS } from '../../assets/tablerIcons.generated';
 
 export type TerminalMenuActionId =
@@ -48,6 +48,7 @@ export type TerminalMenuActionId =
   | 'searchConversation'
   | 'docs'
   | 'changes'
+  | 'beads'
   | 'attachPath'
   | 'newTerminal'
   | 'settings'
@@ -234,6 +235,14 @@ export default function TerminalMenu({
       label: ChangesCopy.menuLabel,
       icon: <COMMAND_ICONS.fileDiff size={ICON_SIZE} color={iconColor} />,
       onPress: () => onSelect('changes'),
+    });
+    // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in src/screens/BeadsScreen.tsx (a row beside Changes).
+    items.push({
+      kind: 'item',
+      key: 'beads',
+      label: BeadsCopy.menuLabel,
+      icon: <COMMAND_ICONS.checklist size={ICON_SIZE} color={iconColor} />,
+      onPress: () => onSelect('beads'),
     });
   }
   items.push(
