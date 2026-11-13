@@ -4,6 +4,7 @@ import { forgetRemoteEnvironment } from './commands';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { isDemoMachine } from '../demo/identity';
 import {
+  checkEasyConnectOn,
   easyConnectDialCandidates,
   noteEasyConnectDial,
   refreshEasyConnectAddressesSoon,
@@ -16,6 +17,7 @@ import {
   easyConnectConfig,
   hasEasyConnectRoute,
   setActiveRoute,
+  useEasyConnectOn,
   tailscaleOnPhone,
   withTailscaleHeadStart,
 } from '../machines/easyConnectRoute';
@@ -144,6 +146,9 @@ export function ensureConnected(
       await connectEitherRoute(machine, config, assertCurrent, assertKept);
       await assertKept();
       refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress: null, secondRoute: true });
+      // Whether Easy Connect is still on there, so a computer that turned it off is not dialled
+      // through it next time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
+      setTimeout(() => void checkEasyConnectOn(machine), EASY_CONNECT_CHECK_DELAY_MS);
     } else {
       await GhostexNative.connect(machine.id, config);
     }
@@ -158,6 +163,9 @@ export function ensureConnected(
   return promise;
 }
 
+/** Waits after a connect before asking whether Easy Connect is on there, so the connect's own work goes first. */
+const EASY_CONNECT_CHECK_DELAY_MS = 3_000;
+
 /**
  * Dials a Tailscale or SSH computer that also has Easy Connect: Tailscale first, Easy Connect when
  * it doesn't answer, or Easy Connect first when Tailscale is off on this phone (routeChoice.ts,
@@ -169,6 +177,19 @@ async function connectEitherRoute(
   assertCurrent: () => void,
   assertKept: () => Promise<void>,
 ): Promise<void> {
+  // Easy Connect off there (the computer said so, or named no address to dial): only the route the
+  // person set up, with its full time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
+  const easyConnectUsable =
+    useEasyConnectOn.getState().on[machine.id] !== false &&
+    (await easyConnectConfig(machine, config)) !== null &&
+    (await easyConnectDialCandidates(machine.id)).length > 0;
+  assertCurrent();
+  if (!easyConnectUsable) {
+    await GhostexNative.connect(machine.id, config);
+    await GhostexNative.stopTailcatForward(machine.id).catch(() => undefined);
+    setActiveRoute(machine.id, 'tailscale');
+    return;
+  }
   const order = routeDialOrder(await tailscaleOnPhone());
   assertCurrent();
   let firstError: unknown = null;

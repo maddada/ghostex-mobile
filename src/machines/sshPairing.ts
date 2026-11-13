@@ -31,9 +31,9 @@ import { create } from 'zustand';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { chatMachineLink, onChatLinkCutOff, onChatLinkHandshake, onChatLinkTokenRefused } from '../chat/rust/machine-link';
 import { setHeldAnswerHandler, type RpcAnswer } from '../chat/rust/transport';
-import { approvalIdOf, notePlainApprovals } from '../security/approvals';
+import { approvalIdOf, approvalMode, notePlainApprovals } from '../security/approvals';
 import { SshPairingCopy } from '../copy';
-import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
+import { APPROVER_KEY_ALGORITHM, approverKeyPublic, approverKeySign, hasApproverKey } from '../security/approverKey';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import {
   getDeviceApiToken,
@@ -415,6 +415,35 @@ export async function startSshPairing(
   } finally {
     running.delete(machine.id);
   }
+}
+
+/*
+CDXC:RemotePairing 2026-11-13 DECISION:
+User (Sebastian): Add Easy Connect needs no click on the computer, but the tap sits behind the same
+security as approvals: Face ID or the device's own authentication, honoring the computer's "Require
+Face ID to approve" switch (`requirePresence`), "so nothing turns Easy Connect on without his
+explicit, authenticated action". A computer that can't say how it approves, or a prompt that is
+cancelled or fails, asks for nothing.
+*/
+/** Add Easy Connect on the computer's page: authenticated as an approval would be, then the ask. */
+export async function addEasyConnect(machine: MachineConnectionTarget): Promise<void> {
+  const computer = computerName(machine.id);
+  try {
+    const mode = await approvalMode(machine);
+    if (mode.requirePresence || !mode.plain) {
+      await approverKeySign(`ghostex-add-easy-connect\n${machine.id}`, SshPairingCopy.addEasyConnectReason(computer));
+    }
+  } catch (error) {
+    put({
+      machineId: machine.id,
+      computer,
+      phase: 'failed',
+      words: [],
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  await startSshPairing(machine, { auto: false, easyConnect: true });
 }
 
 /** Whether this phone is paired with `machine` over SSH now. */

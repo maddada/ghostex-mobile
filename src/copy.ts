@@ -2017,6 +2017,8 @@ export const SshPairingCopy = {
   deniedRow: 'Not approved',
   deniedBody: 'Replying, Stop and typing from this phone still wait for approval there each time.',
   failedTitle: "Couldn't ask to pair this phone",
+  /** The Face ID / screen lock prompt before Add Easy Connect asks the computer. */
+  addEasyConnectReason: (computer: string) => `Add Easy Connect for ${computer}`,
   askAgain: 'Ask again',
   hide: 'Hide',
   mismatch: 'The computer named different words from this phone, so pairing stopped. Try again.',

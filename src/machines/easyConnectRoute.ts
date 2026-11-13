@@ -52,6 +52,14 @@ export const useEasyConnectOn = create<EasyConnectOnState>(() => ({ on: {} }));
 export function noteEasyConnectOn(machineId: string, on: boolean): void {
   if (useEasyConnectOn.getState().on[machineId] === on) return;
   useEasyConnectOn.setState((state) => ({ on: { ...state.on, [machineId]: on } }));
+  // Off there: the saved addresses go, so no later launch dials them (CDXC:RemotePairing 2026-11-13
+  // in routeChoice.ts). The list is asked for again after a connect and comes back once it is on.
+  if (!on) {
+    const record = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
+    if (record?.easyConnectPairedAt !== undefined && record.transport !== 'tailcat') {
+      void setEasyConnectAddresses(machineId, '').catch(() => undefined);
+    }
+  }
 }
 
 /** Whether this computer is a Tailscale or SSH one that also has Easy Connect. */

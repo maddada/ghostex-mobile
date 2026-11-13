@@ -26,7 +26,7 @@ import { useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRo
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
-import { signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
+import { addEasyConnect, signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
 import { isMachineEnabled, useMachinesStore, type MachineRecord } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { useRemovalAsksComputer } from '../../notifications/pushStore';
@@ -274,7 +274,7 @@ function ComputerPageBody({
         ) : null}
 
         {/* The way to ask again for Easy Connect after a request that was denied, lapsed or hidden. */}
-        {!twoRoutes && !easyConnect && easyConnectOffered && signsInOverSsh(machine) ? (
+        {!twoRoutes && !easyConnect && easyConnectOffered && easyConnectOn !== false && signsInOverSsh(machine) ? (
           <View style={formStyles.rowsCard}>
             <View style={[formStyles.row, formStyles.rowFirst]}>
               <View style={formStyles.rowMain}>
@@ -284,7 +284,7 @@ function ComputerPageBody({
               <SetupButton
                 small
                 label={copy.routes.add.button}
-                onPress={() => void startSshPairing(machine, { auto: false, easyConnect: true })}
+                onPress={() => void addEasyConnect(machine)}
               />
             </View>
           </View>
