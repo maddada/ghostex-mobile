@@ -31,9 +31,9 @@ import { create } from 'zustand';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { chatMachineLink, onChatLinkCutOff, onChatLinkHandshake, onChatLinkTokenRefused } from '../chat/rust/machine-link';
 import { setHeldAnswerHandler, type RpcAnswer } from '../chat/rust/transport';
-import { approvalIdOf, notePlainApprovals } from '../security/approvals';
+import { approvalIdOf, approvalMode, notePlainApprovals } from '../security/approvals';
 import { SshPairingCopy } from '../copy';
-import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
+import { APPROVER_KEY_ALGORITHM, approverKeyPublic, approverKeySign, hasApproverKey } from '../security/approverKey';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import {
   getDeviceApiToken,
@@ -57,11 +57,13 @@ import { machineDisplayLabel, useMachinesStore } from './store';
 export const PAIR_OVER_SSH_CAPABILITY = 'pairOverSsh';
 
 /**
- * What `ghostex server endpoint` lists when `/api/pairOverSsh` also pairs for Easy Connect, with no
- * click for the owner's own Tailscale device (CDXC:RemotePairing 2026-11-12 in
- * server/src/remote_access/tailnet_owner.rs).
+ * What `ghostex server endpoint` lists when `/api/pairOverSsh` also pairs for Easy Connect when the
+ * person asks for it (Add Easy Connect), and refuses while Easy Connect is off there
+ * (CDXC:RemotePairing 2026-11-13 in server/src/remote_access/tailnet_owner.rs). A computer offering
+ * only 11.6.0's `pairOverSshEasyConnect` gets no Add Easy Connect: it would take the key with Easy
+ * Connect off.
  */
-export const PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY = 'pairOverSshEasyConnect';
+export const PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY = 'pairOverSshEasyConnectOnRequest';
 
 /** What `ghostex server endpoint` lists when the computer takes Approve as one tap (option B). */
 export const PLAIN_APPROVALS_CAPABILITY = 'plainApprovals';
@@ -415,6 +417,35 @@ export async function startSshPairing(
   }
 }
 
+/*
+CDXC:RemotePairing 2026-11-13 DECISION:
+User (Sebastian): Add Easy Connect needs no click on the computer, but the tap sits behind the same
+security as approvals: Face ID or the device's own authentication, honoring the computer's "Require
+Face ID to approve" switch (`requirePresence`), "so nothing turns Easy Connect on without his
+explicit, authenticated action". A computer that can't say how it approves, or a prompt that is
+cancelled or fails, asks for nothing.
+*/
+/** Add Easy Connect on the computer's page: authenticated as an approval would be, then the ask. */
+export async function addEasyConnect(machine: MachineConnectionTarget): Promise<void> {
+  const computer = computerName(machine.id);
+  try {
+    const mode = await approvalMode(machine);
+    if (mode.requirePresence || !mode.plain) {
+      await approverKeySign(`ghostex-add-easy-connect\n${machine.id}`, SshPairingCopy.addEasyConnectReason(computer));
+    }
+  } catch (error) {
+    put({
+      machineId: machine.id,
+      computer,
+      phase: 'failed',
+      words: [],
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  await startSshPairing(machine, { auto: false, easyConnect: true });
+}
+
 /** Whether this phone is paired with `machine` over SSH now. */
 export function pairedOverSsh(machineId: string): boolean {
   return useSshPairings.getState().pairings[machineId]?.phase === 'paired';
@@ -540,16 +571,12 @@ onChatLinkHandshake((machine, capabilities) => {
   const easyConnect = capabilities.includes(PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY) && signsInOverSsh(machine);
   setEasyConnectOffered(machine.id, easyConnect);
   /*
-  CDXC:RemotePairing 2026-11-12 DECISION:
-  User (Q2716 = A, Q2719): the first time a phone added by hand (Tailscale address, user, password
-  or key) signs in, it also pairs for Easy Connect, with no click when it is the owner's own
-  Tailscale device (gxserver checks; anything else gets the usual Approve with the three words),
-  including on a computer that approves plainly, where nothing else asks.
+  CDXC:RemotePairing 2026-11-13 DECISION:
+  Supersedes 2026-11-12 (Q2716 = A, Q2719: a phone added by hand also paired for Easy Connect by
+  itself at its first sign-in). User (Sebastian): "Do not auto force Easy Connect ever. ... We cannot
+  auto promote this from the phone without the users approval ... Just use whatever the user asked to
+  use." A sign-in never asks for Easy Connect; only Add Easy Connect on the computer's page does.
   */
-  if (easyConnect && !hasEasyConnectRoute(machine)) {
-    void startSshPairing(machine, { auto: true, easyConnect: true });
-    return;
-  }
   // A computer that approves plainly lets a phone on its SSH login do everything, approving
   // included, so there is nothing to pair: no "Approve this phone?" there (CDXC:Security 2026-11-10
   // in `security/approvals.ts`).

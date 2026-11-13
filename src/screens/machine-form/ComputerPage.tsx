@@ -21,11 +21,12 @@ import { isDemoMachine } from '../../demo/identity';
 import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
 import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
-import { useMachineRoutes } from '../../machines/easyConnectRoute';
+import { checkEasyConnectOn } from '../../machines/easyConnectDial';
+import { easyConnectOnFor, knownEasyConnectOn, useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
-import { signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
+import { addEasyConnect, signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
 import { isMachineEnabled, useMachinesStore, type MachineRecord } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { useRemovalAsksComputer } from '../../notifications/pushStore';
@@ -42,6 +43,9 @@ const CONNECTED_NOW_WINDOW_MS = 3 * 60 * 1000;
 export type MachineFormSection = 'name' | 'updates' | 'tools' | 'advanced';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList, 'MachineForm'>;
+
+/** How often the page asks again whether Easy Connect is on there, while it isn't known to be. */
+const EASY_CONNECT_RECHECK_MS = 15_000;
 
 export default function ComputerPage({ navigation, machineId }: { navigation: Navigation; machineId: string }) {
   const machine = useMachinesStore((state) => state.machines.find((entry) => entry.id === machineId) ?? null);
@@ -92,6 +96,12 @@ function ComputerPageBody({
   const liveRoute = useMachineRoutes((state) => state.active[machine.id]);
   const viaEasyConnect = easyConnect || (twoRoutes && liveRoute === 'easyConnect');
   const easyConnectOffered = useSshPairings((state) => state.easyConnectOffered[machine.id] === true);
+  // What the computer last said about its Easy Connect; unknown never reads as on (CDXC:RemotePairing
+  // 2026-11-13 in easyConnectRoute.ts).
+  const easyConnectOn = easyConnectOnFor(
+    useEasyConnectOn((state) => state.on[machine.id]),
+    machine.easyConnectPairedAt,
+  );
   const path = useEasyConnectPath(machine.id, connectedNow && viaEasyConnect);
   const update = useAppUpdateStore((state) => state.byMachineId[machine.id]);
   const tools = useMachineToolsStore((state) => state.byMachineId[machine.id]);
@@ -125,6 +135,21 @@ function ComputerPageBody({
     // The record's identity does not change while the page is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reachable, machine.id]);
+
+  // A computer with an Easy Connect route, or one that offers Add Easy Connect: what was last known,
+  // then whether Easy Connect is on there now.
+  useEffect(() => {
+    if (!twoRoutes && !easyConnectOffered) return;
+    void knownEasyConnectOn(machine.id);
+    if (!reachable) return;
+    void checkEasyConnectOn(machine);
+    // Asked again while the page stays open and Easy Connect isn't known to be on, so turning it on
+    // at the computer shows here without leaving the page.
+    if (easyConnectOn === true) return;
+    const timer = setInterval(() => void checkEasyConnectOn(machine), EASY_CONNECT_RECHECK_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reachable, twoRoutes, easyConnectOffered, easyConnectOn, machine.id, machine.easyConnectPairedAt]);
 
   // The computer's "Require Face ID to approve" switch, read when the page opens (null until read).
   useEffect(() => {
@@ -248,7 +273,15 @@ function ComputerPageBody({
                     <StatusDot color={connectedNow && liveRoute === 'easyConnect' ? appearance.connected : appearance.muted} />
                     <Text style={formStyles.rowLabel}>{copy.routes.easyConnect}</Text>
                   </View>
-                  <Text style={formStyles.rowDetail}>{copy.routes.easyConnectDetail(connectedNow && liveRoute === 'easyConnect')}</Text>
+                  <Text style={formStyles.rowDetail}>
+                    {connectedNow && liveRoute === 'easyConnect'
+                      ? copy.routes.easyConnectDetail(true)
+                      : easyConnectOn === true
+                        ? copy.routes.easyConnectDetail(false)
+                        : easyConnectOn === false
+                          ? copy.routes.easyConnectOff(name)
+                          : copy.routes.easyConnectUnknown}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -256,7 +289,7 @@ function ComputerPageBody({
         ) : null}
 
         {/* The way to ask again for Easy Connect after a request that was denied, lapsed or hidden. */}
-        {!twoRoutes && !easyConnect && easyConnectOffered && signsInOverSsh(machine) ? (
+        {!twoRoutes && !easyConnect && easyConnectOffered && easyConnectOn === true && signsInOverSsh(machine) ? (
           <View style={formStyles.rowsCard}>
             <View style={[formStyles.row, formStyles.rowFirst]}>
               <View style={formStyles.rowMain}>
@@ -266,7 +299,7 @@ function ComputerPageBody({
               <SetupButton
                 small
                 label={copy.routes.add.button}
-                onPress={() => void startSshPairing(machine, { auto: false, easyConnect: true })}
+                onPress={() => void addEasyConnect(machine)}
               />
             </View>
           </View>
