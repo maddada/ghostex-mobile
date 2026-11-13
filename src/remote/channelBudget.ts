@@ -98,7 +98,28 @@ export function endConnectionBudget(machineId: string): void {
 
 /** Commands running now through the budget (what the phone let through, not what the computer counts). */
 export function commandsInFlight(machineId: string): number {
-  return budgets.get(machineId)?.inUse ?? 0;
+  return running.get(machineId) ?? 0;
+}
+
+/** Commands and uploads running now on each computer, on every platform (Android's are not budgeted here). */
+const running = new Map<string, number>();
+
+/** Counts `settled` as running on the machine until it settles. */
+function tracked<T>(machineId: string, start: () => Promise<T>): Promise<T> {
+  running.set(machineId, (running.get(machineId) ?? 0) + 1);
+  let settled: Promise<T>;
+  try {
+    settled = start();
+  } catch (error) {
+    settled = Promise.reject(error);
+  }
+  const done = (): void => {
+    const left = (running.get(machineId) ?? 1) - 1;
+    if (left > 0) running.set(machineId, left);
+    else running.delete(machineId);
+  };
+  settled.then(done, done);
+  return settled;
 }
 
 /** Hears every channel the computer refused (`E_CHANNEL_FAILED`), from a command or a terminal. */
@@ -147,19 +168,14 @@ function grantNext(budget: Budget): void {
  * computer refused never ran, so it waits again (after a short pause) while its wait allows.
  */
 export function withCommandChannel<T>(machineId: string, admissionMs: number, run: () => Promise<T>): Promise<T> {
-  if (!budgeted()) return watchRefusal(machineId, run());
+  if (!budgeted()) return watchRefusal(machineId, tracked(machineId, run));
   listenForConnectionEnds();
   const budget = budgetFor(machineId);
   const deadline = Date.now() + Math.max(0, Math.min(admissionMs, MAX_ADMISSION_WAIT_MS));
   return new Promise<T>((resolve, reject) => {
     let retries = 0;
     const attempt = (generation: number): void => {
-      let settled: Promise<T>;
-      try {
-        settled = run();
-      } catch (error) {
-        settled = Promise.reject(error);
-      }
+      const settled = tracked(machineId, run);
       settled.then(
         (value) => {
           release(generation);
@@ -168,11 +184,10 @@ export function withCommandChannel<T>(machineId: string, admissionMs: number, ru
         (error: unknown) => {
           // A refusal from a connection that has since been replaced says nothing about the new one.
           const refused = isChannelRefusal(error) && budget.generation === generation;
-          if (refused) {
-            reportChannelRefused(machineId);
-            budget.coolUntil = Date.now() + REFUSAL_COOL_MS;
-          }
+          if (refused) budget.coolUntil = Date.now() + REFUSAL_COOL_MS;
           release(generation);
+          // Reported once the refused command no longer counts as running, so the reset's guard sees only other work.
+          if (refused) reportChannelRefused(machineId);
           if (refused && retries < REFUSAL_RETRIES && budget.generation === generation && Date.now() < deadline) {
             retries += 1;
             enqueue();
