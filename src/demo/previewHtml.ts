@@ -45,7 +45,7 @@ export function demoPreviewHtml(): string {
     </article>
     <article>
       <h2>Status</h2>
-      <p>This listener is <code>localhost:${DEMO_PREVIEW_PORT}</code> on the sample computer. Opening it here does not forward a port.</p>
+      <p>This listener is <code>localhost:${DEMO_PREVIEW_PORT}</code> in the demo experience. Opening it here does not forward a port.</p>
     </article>
   </main>
 </body>

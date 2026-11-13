@@ -231,7 +231,7 @@ export function sendDemoMessage(sessionId: string, userText: string): string {
   const session = sessionOf(sessionId);
   const text = userText.trim();
   if (session === undefined || text.length === 0) {
-    return "This demo session isn't on the sample computer anymore.";
+    return "This demo session isn't in the demo experience anymore.";
   }
   const stamp = `${session.sessionId}-${session.messages.length + 1}`;
   session.messages = [...session.messages, turn(`${stamp}-user`, 'user', text)];
