@@ -634,16 +634,18 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
     },
 
     detachIdleTerminals: async (machineId, keep) => {
-      const { warmOrder, selectedSessionKey, paneSessionKey, tabs, tabSplit } = get();
-      const split = splitView(
-        tabs.map((tab) => tab.sessionKey),
-        selectedSessionKey,
-        tabSplit,
-      );
-      const beside = split === null ? null : split.focus === 'left' ? split.rightShown : split.leftShown;
-      const onScreen = new Set(
-        [selectedSessionKey, paneSessionKey, beside].filter((key): key is string => key !== null),
-      );
+      // What is on screen now: read again before each detach, since the user may pick a tab while one closes.
+      const onScreen = (): Set<string> => {
+        const { selectedSessionKey, paneSessionKey, tabs, tabSplit } = get();
+        const split = splitView(
+          tabs.map((tab) => tab.sessionKey),
+          selectedSessionKey,
+          tabSplit,
+        );
+        const beside = split === null ? null : split.focus === 'left' ? split.rightShown : split.leftShown;
+        return new Set([selectedSessionKey, paneSessionKey, beside].filter((key): key is string => key !== null));
+      };
+      const { warmOrder, tabs } = get();
       const attached = warmOrder
         .map((key) => tabs.find((tab) => tab.sessionKey === key))
         .filter((tab): tab is TerminalTab => tab !== undefined && tab.machineId === machineId && tab.kind === 'attach')
@@ -651,7 +653,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       let detached = 0;
       for (const tab of attached) {
         if (attached.length - detached <= keep) break;
-        if (onScreen.has(tab.sessionKey) || tabOpenRequests.has(tab.sessionKey)) continue;
+        const current = get().tabs.find((entry) => entry.sessionKey === tab.sessionKey);
+        if (current === undefined || current.state === 'detached' || current.state === 'opening') continue;
+        if (onScreen().has(tab.sessionKey) || tabOpenRequests.has(tab.sessionKey)) continue;
         cancelZmxRefresh(tab.sessionKey);
         zmxRefreshSent.delete(tab.sessionKey);
         forgetAttach(tab.sessionKey);

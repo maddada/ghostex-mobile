@@ -126,18 +126,19 @@ export function isChannelRefusal(error: unknown): boolean {
   return code === 'E_CHANNEL_FAILED' && typeof message === 'string' && /\bfailed to open channel\b/iu.test(message);
 }
 
-/** Lets the next queued command through, unless the budget is cooling after a refusal. */
+/** Lets queued commands through until the slots are full, unless the budget is cooling after a refusal. */
 function grantNext(budget: Budget): void {
-  if (budget.inUse >= COMMAND_CHANNEL_SLOTS || budget.queue.length === 0) return;
-  const wait = budget.coolUntil - Date.now();
-  if (wait > 0) {
-    budget.coolTimer ??= setTimeout(() => {
-      budget.coolTimer = null;
-      grantNext(budget);
-    }, wait);
-    return;
+  while (budget.inUse < COMMAND_CHANNEL_SLOTS && budget.queue.length > 0) {
+    const wait = budget.coolUntil - Date.now();
+    if (wait > 0) {
+      budget.coolTimer ??= setTimeout(() => {
+        budget.coolTimer = null;
+        grantNext(budget);
+      }, wait);
+      return;
+    }
+    budget.queue.shift()?.grant();
   }
-  budget.queue.shift()?.grant();
 }
 
 /**

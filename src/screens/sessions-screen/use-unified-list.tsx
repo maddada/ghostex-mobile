@@ -400,13 +400,19 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   /** One icon per repository: the first of its projects, on any computer, that has one. */
   const repoIcons = useMemo(() => {
     const icons = new Map<string, GhostexProjectIcon>();
+    // A picture the list carries wins over a ref that may not resolve; a ref stays the fallback, its row repainting
+    // once the picture arrives (src/inventory/projectIcons.ts).
+    const byRefOnly = new Map<string, GhostexProjectIcon>();
     for (const row of [...view.drafts, ...view.pinned, ...view.active, ...view.working, ...view.snoozed, ...view.parked]) {
       if (icons.has(row.repo.key)) continue;
       const icon = inventoriesByMachineId[row.machine]?.summary?.projects.find(
         (project) => project.projectId === row.session.projectId,
       )?.icon;
-      if (hasImage(icon)) icons.set(row.repo.key, icon);
+      if (!hasImage(icon)) continue;
+      if (icon.imageDataUrl.length > 0 || icon.discoveredIconDataUrl.length > 0) icons.set(row.repo.key, icon);
+      else if (!byRefOnly.has(row.repo.key)) byRefOnly.set(row.repo.key, icon);
     }
+    for (const [key, icon] of byRefOnly) if (!icons.has(key)) icons.set(key, icon);
     return icons;
   }, [view, inventoriesByMachineId]);
 

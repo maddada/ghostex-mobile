@@ -14,7 +14,7 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ConnectionsCopy } from '../../copy';
+import { ConnectionsCopy, FailureCopy } from '../../copy';
 import { recentDropCount, latestRoundTrip } from '../../machines/connectionHealthModel';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
@@ -104,7 +104,7 @@ export default function ConnectionsSheet({
           </View>
           <Text style={[styles.status, { color }]}>{ConnectionsCopy.status[entry.status]}</Text>
         </View>
-        {problem ? (
+        {problem || entry.busy ? (
           <View style={styles.cardBody}>
             {entry.status === 'failed' ? (
               entry.tailscaleOff ? (
@@ -116,6 +116,8 @@ export default function ConnectionsSheet({
                   {entry.reason}
                 </Text>
               ) : null
+            ) : entry.status !== 'slow' ? (
+              <Text style={styles.why}>{FailureCopy.channelsBusy}</Text>
             ) : (
               <Text style={styles.why}>
                 {entry.health?.slowReason === 'drops' || roundTrip === null

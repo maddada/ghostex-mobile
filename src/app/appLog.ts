@@ -22,6 +22,8 @@ const MAX_ENTRIES = 2_000;
 const MAX_STORED_CHARS = 400_000;
 const STORAGE_KEY = 'app.log.v1';
 const SAVE_DELAY_MS = 2_000;
+/** One event's longest text: an oversized error is cut, never allowed to push the whole log out. */
+const MAX_MESSAGE_CHARS = 4_000;
 
 type AppLogState = {
   entries: AppLogEntry[];
@@ -45,17 +47,33 @@ function bounded(entries: AppLogEntry[]): AppLogEntry[] {
   return kept;
 }
 
+let storedScrubber: ((text: string) => string) | null = null;
+
+/**
+ * Replaces personal details in the copy kept across restarts, with the names known when it is saved, so a computer
+ * renamed or removed later still has its old name replaced there. Installed at startup (src/app/lifecycle.ts) to keep
+ * this module free of the machine store.
+ */
+export function setStoredLogScrubber(scrub: (text: string) => string): void {
+  storedScrubber = scrub;
+}
+
 function scheduleSave(): void {
   if (!hydrated || saveTimer !== null) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(useAppLogStore.getState().entries)).catch(() => undefined);
+    const scrub = storedScrubber;
+    const entries = useAppLogStore
+      .getState()
+      .entries.map((entry) => (scrub === null ? entry : { at: entry.at, message: scrub(entry.message) }));
+    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries)).catch(() => undefined);
   }, SAVE_DELAY_MS);
 }
 
 export function logAppEvent(message: string): void {
-  const trimmed = message.trim();
-  if (trimmed.length === 0) return;
+  const whole = message.trim();
+  if (whole.length === 0) return;
+  const trimmed = whole.length > MAX_MESSAGE_CHARS ? `${whole.slice(0, MAX_MESSAGE_CHARS)}… (cut)` : whole;
   useAppLogStore.setState((state) => ({ entries: bounded([...state.entries, { at: Date.now(), message: trimmed }]) }));
   scheduleSave();
 }
@@ -94,9 +112,9 @@ export function formatLogTime(at: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** Full plain-text export for the clipboard, one "HH:MM:SS message" per line. */
+/** Full plain-text export for the clipboard, one "YYYY-MM-DD HH:MM:SS message" per line: the kept log spans days. */
 export function formatAppLog(entries: AppLogEntry[]): string {
-  return entries.map((entry) => `${formatLogTime(entry.at)} ${entry.message}`).join('\n');
+  return entries.map((entry) => `${formatLogDateTime(entry.at)} ${entry.message}`).join('\n');
 }
 
 /** "2026-11-13 14:03:22", the export's stamp: the kept log spans days. */

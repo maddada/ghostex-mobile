@@ -12,7 +12,9 @@
  * `src/terminal/zmxDisplay.ts`, which watches AppState itself.
  */
 
-import { hydrateAppLog, logAppEvent } from './appLog';
+import { hydrateAppLog, logAppEvent, setStoredLogScrubber } from './appLog';
+import { privateTerms } from '../feedback/crashReports';
+import { scrubPersonalData } from '../feedback/crashReportScrub';
 import { hydrateProjectIcons } from '../inventory/projectIcons';
 import { AppState, type AppStateStatus } from 'react-native';
 
@@ -34,6 +36,7 @@ export function handleAppBecameActive(): void {
 export function initAppLifecycle(): void {
   if (installed) return;
   installed = true;
+  setStoredLogScrubber((text) => scrubPersonalData(text, privateTerms()));
   void hydrateProjectIcons();
   void hydrateAppLog().then(() => logAppEvent(`App: started (${Platform.OS} ${String(Platform.Version)})`));
   let last: AppStateStatus = AppState.currentState as AppStateStatus;

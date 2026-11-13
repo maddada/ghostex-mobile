@@ -14,6 +14,7 @@
  * wording and the view rules change together), server/src/app_update/status.rs (the status shape).
  */
 
+import { FailureCopy } from '../copy';
 import { create } from 'zustand';
 
 import { chatMachineLink, UNREACHABLE_MESSAGE } from '../chat/rust/machine-link';
@@ -201,7 +202,7 @@ async function request(machine: MachineConnectionTarget, method: string, params:
   const route = await link.routeOrRepair();
   // A computer without the endpoint handshake predates these endpoints too.
   if (route === 'legacy') return { error: TOO_OLD_MESSAGE };
-  if (route !== 'socket') return { error: UNREACHABLE_MESSAGE };
+  if (route !== 'socket') return { error: link.routeBusy() ? FailureCopy.channelsBusy : UNREACHABLE_MESSAGE };
   const answer = await link.rpc(method, params, REQUEST_TIMEOUT_MS);
   if (answer.error !== null) {
     // A gxserver from before these endpoints does not know the path.

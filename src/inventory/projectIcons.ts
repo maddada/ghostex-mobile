@@ -105,7 +105,9 @@ async function fetchMissing(
 ): Promise<void> {
   const now = Date.now();
   const held = useProjectIcons.getState().byRef;
+  // Never more than the cache keeps: past that, fetching would only evict what the last fetch stored.
   const wanted = refs
+    .slice(0, MAX_ICONS)
     .filter((ref) => held[ref] === undefined && !inFlight.has(ref) && (missing.get(ref)?.until ?? 0) <= now)
     .slice(0, BATCH_SIZE);
   if (wanted.length === 0) return;

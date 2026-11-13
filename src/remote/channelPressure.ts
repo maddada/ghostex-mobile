@@ -10,6 +10,7 @@
  * 2. Three more refusals within any minute while the shortage lasts (bursts counted once, the detach given a few
  *    seconds to take effect): one planned reset of the connection, but only while no plain shell is open
  *    on that computer, and at most once every five minutes.
+ *    A command or upload still running on the connection defers it to the next refusal.
  * 3. Otherwise nothing resets by itself: the computer's notice offers Reset connection and says what it restarts.
  * Only real refusals from the computer count here, never a command that waited too long for a slot (`E_BUSY`).
  */
@@ -115,12 +116,18 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
   if (pressure.refusals.length < REFUSALS_FOR_RESET) return;
   const shellsOpen = active.openTerminals(machineId).shells > 0;
   const tooSoon = pressure.lastResetAt !== null && now - pressure.lastResetAt < RESET_MIN_GAP_MS;
-  if (shellsOpen || tooSoon) {
+  const running = active.commandsInFlight(machineId);
+  if (shellsOpen || tooSoon || running > 0) {
     logAppEvent(
       `Connection: ${name} keeps refusing channels; not resetting by itself (${
-        shellsOpen ? 'a plain terminal is open' : 'it was reset less than 5 minutes ago'
+        shellsOpen
+          ? 'a plain terminal is open'
+          : tooSoon
+            ? 'it was reset less than 5 minutes ago'
+            : `${running} commands or uploads still running`
       })`,
     );
+    // Work still running defers the reset to the next refusal, which checks again; the button is there meanwhile.
     setNeedsReset(machineId, true);
     return;
   }

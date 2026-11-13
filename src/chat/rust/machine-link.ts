@@ -282,6 +282,8 @@ export function onChatLinkTokenRefused(listener: RefusedTokenListener): () => vo
 
 class ChatMachineLink {
   private state: LinkState = { kind: 'unknown' };
+  /** The last handshake found the computer out of channels (`unavailable`, busy), until the next one settles. */
+  private lastHandshakeBusy = false;
   /** The route the last handshake settled on, so listeners hear only real changes. */
   private lastRoute: ChatRoute | null = null;
   private readonly routeListeners = new Set<(route: ChatRoute) => void>();
@@ -361,6 +363,7 @@ class ChatMachineLink {
       const previous = this.lastRoute;
       this.lastRoute = outcome.route;
       const busy = outcome.route === 'unavailable' && outcome.busy === true;
+      this.lastHandshakeBusy = busy;
       this.state =
         outcome.route === 'socket'
           ? { kind: 'socket', endpoint: outcome.endpoint }
@@ -388,6 +391,11 @@ class ChatMachineLink {
    * link is repaired once (a stale forward, a handshake the computer was too busy for) before the caller says the
    * computer can't be reached.
    */
+  /** Whether an `unavailable` route came from a computer that was only busy (out of channels), not unreachable. */
+  routeBusy(): boolean {
+    return this.state.kind === 'unavailable' && this.lastHandshakeBusy;
+  }
+
   async routeOrRepair(): Promise<ChatRoute> {
     const first = await this.route();
     if (first !== 'unavailable' || isDemoMachine(this.machine)) return first;
