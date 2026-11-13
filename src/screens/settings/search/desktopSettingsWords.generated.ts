@@ -321,13 +321,13 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "markedHandoversEmoji": {
     "title": "Show marker emojis",
-    "subtitle": "Not recommended. Show the marker emoji (❓ ✅ ⚠️ and the rest) at the start of each coloured section, in every style. Off: the colour and the label show the kind. Shown while Marked handovers is on.",
+    "subtitle": "Not recommended. Show the marker emoji (❓ ✅ ⚠️ and the rest) at the start of each coloured section, in every style. Off: the colour and the label show the kind. Shown while Marked handovers is not Off.",
     "options": [],
     "keywords": []
   },
   "markedHandoversStyle": {
     "title": "Marked sections style",
-    "subtitle": "How the chat colours the sections an agent marks: coloured labels, a thin left rule, or a coloured badge in place of the emoji. Shown while Marked handovers is on.",
+    "subtitle": "How the chat colours the sections an agent marks: coloured labels, a thin left rule, or a coloured badge in place of the emoji. Shown while Marked handovers is not Off.",
     "options": [
       "Coloured labels",
       "labels",
