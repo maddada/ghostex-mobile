@@ -385,7 +385,7 @@ function Log({ view, onMore, logLimit }: { view: View_; onMore: () => void; logL
   return (
     <SettingsSection name="settings:autopilot:log">
       <SectionHeader title="Log" />
-      <Caption>Kept 30 days, newest first.</Caption>
+      <Caption>Kept 30 days.</Caption>
       {view.log.length === 0 ? (
         <Caption>Nothing yet. Each time Autopilot acts on a session, or leaves one for you, it shows here.</Caption>
       ) : null}

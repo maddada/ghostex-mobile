@@ -191,7 +191,6 @@ function PresetsSection({ picked, onPicked }: { picked: Picked; onPicked: (dark:
   return (
     <>
       <SectionHeader title="Presets" />
-      <Caption>Sets the colours below together. You can change each of them afterwards.</Caption>
       <ScrollView
         horizontal
         accessibilityLabel="Presets"
@@ -557,7 +556,6 @@ export default function ThemePage() {
       </SettingsSection>
       <SettingsSection name="settings:theme:colours">
         <SectionHeader title="Colours" />
-        <Caption>The colour of the app in each mode.</Caption>
         <AppearanceRow />
         <ColourRow dark picked={picked} onPicked={onPicked} />
         <ColourRow dark={false} picked={picked} onPicked={onPicked} />
