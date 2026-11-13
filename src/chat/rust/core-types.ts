@@ -248,7 +248,11 @@ export type ChatCoreQuery =
    * uploaded paths went in as `[Image #N](path)` references, numbered on from `others` (the form's
    * other boxes). Offsets in UTF-16 code units; answers `{text, caret}`.
    */
-  | 'insertAnswerAttachments';
+  | 'insertAnswerAttachments'
+  /** `attachmentReferencePaths(text)`: the paths of the draft's `[Image #N](path)`-style attachment references. */
+  | 'attachmentReferencePaths'
+  /** `retargetAttachmentReferences(text, [[from, to], …])`: the draft with those references pointing at the copies. */
+  | 'retargetAttachmentReferences';
 
 export class ChatCoreError extends Error {
   readonly code: string;

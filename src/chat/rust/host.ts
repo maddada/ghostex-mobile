@@ -59,6 +59,7 @@ import { readRecord, readRetainedSnapshot, writeRecord, writeRetainedSnapshot } 
 import { chatMachineLink, TOOL_OUTPUT_CUT_CAPABILITY } from './machine-link';
 import { checkComputer, HELD_SEND_METHODS, heldSendRpc, sessionComputer, subscribeSessionComputer } from './computer';
 import { coreUnavailableMessage } from './wasm-core/pageLoad';
+import { AttachmentCarrier } from './carryAttachments';
 import { SessionChatStream, sessionChatRpc, type RpcAnswer } from './transport';
 import { markSessionOpen } from '../../terminal/openTiming';
 import { dictationInserted } from '../native/composer/dictationTarget';
@@ -214,6 +215,10 @@ export class RustChatHost {
   private queue: ChatCoreEvent[] = [];
   private driving = false;
   private disposed = false;
+  /** Pictures a send references on another computer, copied to the session's (`carryAttachments.ts`). */
+  private readonly carrier: AttachmentCarrier;
+  /** A send waiting for those copies. */
+  private carryingSend = false;
   /**
    * The recordings this chat's core is asked to type and has not answered for (`dictate`): this
    * chat owns their requests (`voice/dictation.ts`, `wordsAsked`) and ends each one, with the
@@ -252,6 +257,7 @@ export class RustChatHost {
   private liveReadArrived = false;
 
   constructor(private readonly target: RustChatTarget) {
+    this.carrier = new AttachmentCarrier(target, (name, args) => this.queryAsync(name, args));
     const { machine, projectId, sessionId } = target;
     this.retainedKey = JSON.stringify([machine.id, projectId, sessionId]);
     this.sessionKey = `remote-${machine.id}:${projectId}:${sessionId}`;
@@ -592,10 +598,44 @@ export class RustChatHost {
     selected: (selection: { start: number; end: number }) => this.composer.selected(selection),
     focused: () => this.composer.focused(),
     blurred: () => this.composer.blurred(),
-    submit: (mode: SubmitMode) => this.composer.submit(mode),
+    submit: (mode: SubmitMode) => this.submitCarrying(mode),
     /** Replaces the whole draft (a picked saved prompt), desktop's `insert_prompt`; `caret` when the caller knows where it belongs (a dictation), the end otherwise. */
     replace: (text: string, caret: number | null = null) => this.composer.replace(text, caret, false),
   };
+
+  /**
+   * A send whose picture references point at another computer than the session's waits for their
+   * copies (`carryAttachments.ts`), then goes with the references rewritten; one with no attachment
+   * reference goes at once. A copy that failed keeps the text in the box and says why.
+   */
+  private submitCarrying(mode: SubmitMode): boolean {
+    if (this.carryingSend) return false;
+    const text = this.composer.state.text;
+    if (!this.composer.state.ready || !this.carrier.mayCarry(text)) return this.composer.submit(mode);
+    this.carryingSend = true;
+    void this.carrier
+      .carry(text)
+      .then(async ({ text: carried, error }) => {
+        if (this.disposed) return;
+        // Words typed while the copies ran keep their place; the references still move.
+        const current = this.composer.state.text;
+        const next = current === text ? carried : await this.carrier.retarget(current);
+        if (next !== current) this.composer.replace(next, null, false);
+        if (error !== null) {
+          this.view({ kind: 'toast', level: 'error', title: "Picture wasn't copied", message: error });
+          return;
+        }
+        this.composer.submit(mode);
+      })
+      // A look that broke on its own still sends the message as it was.
+      .catch(() => {
+        if (!this.disposed) this.composer.submit(mode);
+      })
+      .finally(() => {
+        this.carryingSend = false;
+      });
+    return false;
+  }
 
   /**
    * Files the phone picked (image picker, document picker, camera), uploaded to the machine and
@@ -1176,6 +1216,7 @@ export class RustChatHost {
         await uploadSessionChatLocalFile(this.target.machine, file.uri, name, isImagePath(name) ? 'image' : 'file'),
       );
     }
+    this.carrier.noteOnSessionComputer(uploaded);
     return uploaded;
   }
 
