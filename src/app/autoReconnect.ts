@@ -31,7 +31,7 @@ import {
   installChannelPressure,
   offerConnectionReset,
 } from '../remote/channelPressure';
-import { installStallWatch, noteStallWatchConnected } from '../remote/stallWatch';
+import { installStallWatch, resetStallWatch } from '../remote/stallWatch';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
 import { checkStalledConnection, reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
@@ -51,6 +51,7 @@ function foreground(): boolean {
 export function markManualDisconnect(machineId: string): void {
   cancelConnectionAttempt(machineId);
   manualDisconnects.add(machineId);
+  resetStallWatch(machineId);
   cancelRetry(machineId);
   attemptsByMachineId.delete(machineId);
 }
@@ -224,10 +225,11 @@ export function initAutoReconnect(): void {
     check: checkStalledConnection,
     replace: async (machineId, reason) => {
       const target = machineTarget(machineId);
-      if (target === undefined) return;
+      if (target === undefined || !canRecover(machineId)) return;
       await reconnectMachine(target, reason);
-      await restoreAttachTabs(machineId);
+      if (canRecover(machineId)) await restoreAttachTabs(machineId);
     },
+    mayRecover: canRecover,
     plainShells: (machineId) =>
       useTerminalStore
         .getState()
@@ -252,10 +254,9 @@ export function initAutoReconnect(): void {
     logAppEvent(
       `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}${ended}`,
     );
-    if (event.state === 'connected') {
-      clearChannelPressure(event.machineId);
-      noteStallWatchConnected(event.machineId);
-    }
+    // Any change of the connection (up, ending, dialling again) ends what the stall watch held for the one before.
+    resetStallWatch(event.machineId);
+    if (event.state === 'connected') clearChannelPressure(event.machineId);
     if (event.state === 'connecting') {
       permanentFailures.delete(event.machineId);
       return;

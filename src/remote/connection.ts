@@ -26,7 +26,7 @@ import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
 import { endConnectionBudget, isChannelRefusal, withProbeChannel } from './channelBudget';
-import { isSlowOpenFailure, STALL_SUSPECT_MS } from './stallWatch';
+import { isSlowOpenFailure, offerResetInstead, plainShellsOpen, STALL_SUSPECT_MS } from './stallWatch';
 import { channelSnapshot } from './channelPressure';
 import { noteConnected } from './connectionTrace';
 import { whereTheAppIs } from '../app/foregroundClock';
@@ -118,6 +118,19 @@ export function ensureConnected(
       // (CDXC:RemoteMachines 2026-11-13 in src/remote/channelBudget.ts).
       if (probe === 'answered' || probe === 'busy' || probe === 'capacity') return;
       assertCurrent();
+      /**
+       * CDXC:RemoteMachines 2026-11-13 WHY:
+       * The check's echo has its own lane now (src/remote/stallWatch.ts), so a stuck iPhone connection reaches
+       * `stalled` here where it used to come back `busy` and be kept. Replacing it ends every plain shell's program,
+       * so an automatic check (resume, network change, a failed read) follows the stall watch's rule: with a plain
+       * shell open the connection is kept and the computer's Reset connection button shows. The user's Retry or Reset
+       * (`reset: true`) never gets here and still replaces it.
+       */
+      const shells = machine.transport === 'tailcat' ? 0 : plainShellsOpen(machine.id);
+      if (probe === 'stalled' && shells > 0) {
+        offerResetInstead(machine.id, `check ${probe}; ${shells} plain terminals open would end`);
+        return;
+      }
       if (probe === 'stalled' && machine.transport === 'tailcat') {
         /**
          * CDXC:RemotePairing 2026-11-07 WHY:

@@ -63,8 +63,10 @@ const REFUSAL_RETRIES = 2;
  * CDXC:RemoteMachines 2026-11-13 WHY:
  * Right after the iPhone connects, the environment probe, the sessions read, the keep-awake holds, widgets, push
  * registration and the chat handshake all asked at once. That burst is what most often left a packet partly sent,
- * which the iPhone's libssh2 1.11.0 then loses with the next one (src/remote/stallWatch.ts). Until the first command
- * answers, or `WARM_UP_MS` passes, a new command starts only when none runs or `WARM_UP_SPACING_MS` after the last.
+ * which the iPhone's libssh2 1.11.0 then loses with the next one (src/remote/stallWatch.ts). For `WARM_UP_MS` after a
+ * connection's first command, commands start one at a time: the next one starts when the one before answers or
+ * `WARM_UP_SPACING_MS` after it started, whichever is first. An answer lets only the next command through, never the
+ * whole queue.
  */
 const WARM_UP_MS = 5_000;
 const WARM_UP_SPACING_MS = 500;
@@ -197,7 +199,7 @@ export function isChannelRefusal(error: unknown): boolean {
 function grantNext(budget: Budget): void {
   while (budget.inUse < COMMAND_CHANNEL_SLOTS && budget.queue.length > 0) {
     const now = Date.now();
-    const warming = now < budget.warmUntil && budget.inUse > 0;
+    const warming = now < budget.warmUntil;
     const wait = Math.max(budget.coolUntil - now, warming ? budget.lastGrantAt + WARM_UP_SPACING_MS - now : 0);
     if (wait > 0) {
       budget.coolTimer ??= setTimeout(() => {
@@ -259,13 +261,16 @@ export function withCommandChannel<T>(machineId: string, admissionMs: number, ru
     let retries = 0;
     const attempt = (generation: number): void => {
       const startedAt = Date.now();
+      const grantedAt = budget.lastGrantAt;
       const operation = noteOperationStarted(machineId);
       const settled = tracked(machineId, run);
       settled.then(
         (value) => {
           noteOperationEnded(machineId, operation, 'answered');
-          // The connection answered: the warm-up is over.
-          if (budget.generation === generation) budget.warmUntil = 0;
+          // During the warm-up the latest command's answer lets the next one start now (one, not the whole queue).
+          if (budget.generation === generation && Date.now() < budget.warmUntil && grantedAt === budget.lastGrantAt) {
+            budget.lastGrantAt = Math.min(budget.lastGrantAt, Date.now() - WARM_UP_SPACING_MS);
+          }
           release(generation);
           resolve(value);
         },
