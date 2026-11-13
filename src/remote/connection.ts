@@ -123,10 +123,12 @@ export function ensureConnected(
        * The check's echo has its own lane now (src/remote/stallWatch.ts), so a stuck iPhone connection reaches
        * `stalled` here where it used to come back `busy` and be kept. Replacing it ends every plain shell's program,
        * so an automatic check (resume, network change, a failed read) follows the stall watch's rule: with a plain
-       * shell open the connection is kept and the computer's Reset connection button shows. The user's Retry or Reset
+       * shell open the connection is kept and the computer's Reset connection button shows. That holds for Easy
+       * Connect too: it runs the same libssh2 session, and an echo that timed out does not prove its tunnel died. A
+       * check that failed outright (`failed`: the socket is gone) still replaces it, and the user's Retry or Reset
        * (`reset: true`) never gets here and still replaces it.
        */
-      const shells = machine.transport === 'tailcat' ? 0 : plainShellsOpen(machine.id);
+      const shells = plainShellsOpen(machine.id);
       if (probe === 'stalled' && shells > 0) {
         offerResetInstead(machine.id, `check ${probe}; ${shells} plain terminals open would end`);
         return;

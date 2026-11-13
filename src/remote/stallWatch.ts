@@ -110,6 +110,8 @@ export function resetStallWatch(machineId: string): void {
   watch.clearedBefore = Date.now();
   watch.newestAnsweredStart = 0;
   watch.owed = null;
+  // A check still running belongs to the connection before: it settles into nothing and no longer blocks new ones.
+  watch.checking = null;
   if (watch.retry !== null) clearTimeout(watch.retry);
   watch.retry = null;
   for (const operation of watch.operations.values()) clearTimeout(operation.timer);
@@ -253,8 +255,13 @@ function runCheck(machineId: string, watch: Watch, reason: string): Promise<void
     logAppEvent(`Connection: ${machineId} looks stuck (${reason}); replacing it`);
     await active.replace(machineId, `the connection stopped opening channels (${reason})`).catch(() => undefined);
   })().finally(() => {
-    watch.checking = null;
-    if (watch.epoch !== epoch) return;
+    // Only this run's own pointer is cleared: a newer check (after a reset) keeps running.
+    if (watch.checking === run) watch.checking = null;
+    if (watch.epoch !== epoch) {
+      // The connection changed while this check ran (it may have replaced it): what the new one holds is asked now.
+      evaluate(machineId);
+      return;
+    }
     const left = suspectReason(watch, Date.now());
     // Commands younger than the wait keep their own timers.
     if (left !== null) scheduleRetry(machineId, watch, `${left}; checking again`);
