@@ -30,6 +30,19 @@ export async function readAccountsAnswer(machine: MachineConnectionTarget, refre
   return answer.result;
 }
 
+/**
+ * Reads one account's usage again now (`readUsageNow`): a Claude account off Claude Code's own usage screen on the
+ * computer, a Codex account from its usage service; the next `list` then carries it. A computer whose gxserver
+ * predates the operation refuses it, and the caller falls back to a fresh `list`.
+ *
+ * SEE-ALSO: server/src/accounts/usage_screen.rs (`read_now`)
+ */
+export async function readAccountUsageNow(machine: MachineConnectionTarget, accountId: string): Promise<void> {
+  // The read starts Claude Code on the computer, so it gets longer than a list.
+  const answer = await sessionChatRpc(machine, 'agentAccounts', { operation: 'readUsageNow', id: accountId }, 120_000);
+  if (answer.error !== null) throw new Error(answer.error.message);
+}
+
 /** The accounts with core-projected meters at the time of the answer, for the usage pane. */
 export async function readAccountUsage(machine: MachineConnectionTarget, refresh: boolean): Promise<UsageAccount[]> {
   const answer = await readAccountsAnswer(machine, refresh);

@@ -1502,6 +1502,8 @@ export const UsageCopy = {
   title: (computer: string) => `Usage · ${computer}`,
   head: 'Accounts & limits',
   refresh: 'Refresh accounts and usage',
+  /** One account's Refresh now: reads that account's usage again on the computer. */
+  refreshAccount: (name: string) => `Refresh ${name}'s usage now`,
   loading: 'Reading accounts and usage…',
   unavailable: 'Usage is unavailable for this login.',
   /** Opens the Accounts screen on this computer: sign-ins and Reconnect (src/accounts/). */

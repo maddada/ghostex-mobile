@@ -7,7 +7,7 @@
  *
  * The usage is read when the view opens, again every 30 seconds while it stays open (the chat's accounts poll; the
  * computer answers from its last reading while that is under two minutes old) and on Refresh, which asks for a fresh
- * reading. One read at a time: while an answer is out (a computer may take up to a minute), the next poll waits for it
+ * reading; each account's own refresh button reads that one account again on the computer first (Refresh now). One read at a time: while an answer is out (a computer may take up to a minute), the next poll waits for it
  * rather than replacing it, so a slow answer and a failure show when they come. A read that fails keeps what was shown
  * and says why above it. Open means mounted: in a pane while the terminal screen shows the panes (also under a screen
  * opened over it), full screen while the Usage screen is open.
@@ -41,7 +41,7 @@ import type { PaneBarInset } from '../panes/geometry';
 import { machineTargetFor } from '../screens/terminal-screen/session-lookups';
 import { GhostexRadii } from '../theme/palette';
 
-import { readAccountUsage } from './client';
+import { readAccountUsage, readAccountUsageNow } from './client';
 import type { UsageAccount } from './usageMeters';
 
 /** How often the usage is read again while the view is open: the chat Accounts panel's poll. */
@@ -94,6 +94,28 @@ export default function UsageView({ machineId, placement }: { machineId: string;
       );
     },
     [machineId],
+  );
+
+  // Refresh now on one account (CDXC:AgentProviders 2026-11-13 in server/src/accounts/usage_screen.rs): the computer
+  // reads that account again, then the view reads the list. A computer too old for it gets the usual fresh read.
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const refreshAccount = useCallback(
+    (accountId: string) => {
+      const machine = machineTargetFor(machineId);
+      if (machine === null || refreshing !== null) return;
+      setRefreshing(accountId);
+      readAccountUsageNow(machine, accountId).then(
+        () => {
+          setRefreshing(null);
+          read(false);
+        },
+        () => {
+          setRefreshing(null);
+          read(true);
+        },
+      );
+    },
+    [machineId, read, refreshing],
   );
 
   useEffect(() => {
@@ -154,7 +176,12 @@ export default function UsageView({ machineId, placement }: { machineId: string;
           <Text style={styles.paragraph}>{UsageCopy.noAccounts(computer)}</Text>
         ) : null}
         {accounts?.map((account) => (
-          <AccountSection key={`${account.provider}:${account.id}`} account={account} />
+          <AccountSection
+            key={`${account.provider}:${account.id}`}
+            account={account}
+            refreshing={refreshing === account.id}
+            onRefresh={known && refreshing === null ? () => refreshAccount(account.id) : null}
+          />
         ))}
         {known ? (
           <Pressable
@@ -170,7 +197,16 @@ export default function UsageView({ machineId, placement }: { machineId: string;
   );
 }
 
-function AccountSection({ account }: { account: UsageAccount }) {
+function AccountSection({
+  account,
+  refreshing,
+  onRefresh,
+}: {
+  account: UsageAccount;
+  refreshing: boolean;
+  /** Null while another account is being read, or the computer is unknown. */
+  onRefresh: (() => void) | null;
+}) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const meterAppearance = useMemo(() => ({
@@ -187,6 +223,21 @@ function AccountSection({ account }: { account: UsageAccount }) {
         <Text style={styles.email} numberOfLines={1}>
           {account.email}
         </Text>
+        {refreshing ? (
+          <ActivityIndicator size="small" color={appearance.muted} style={styles.accountRefresh} />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={UsageCopy.refreshAccount(account.name)}
+            accessibilityState={{ disabled: onRefresh === null }}
+            disabled={onRefresh === null}
+            hitSlop={10}
+            onPress={onRefresh ?? undefined}
+            style={({ pressed }) => [styles.accountRefresh, pressed && styles.pressed, onRefresh === null && styles.dim]}
+          >
+            <COMMAND_ICONS.refresh size={14} color={appearance.muted} />
+          </Pressable>
+        )}
       </View>
       {account.usageError.length > 0 ? <Text style={styles.paragraph}>{account.usageError}</Text> : null}
       {account.unavailable ? (
@@ -218,6 +269,7 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 20 },
   name: { color: appearance.foreground, fontSize: 14, fontWeight: '600', flexShrink: 1 },
   email: { flex: 1, minWidth: 0, color: appearance.muted, fontSize: 12 },
+  accountRefresh: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   manage: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: GhostexRadii.control, backgroundColor: appearance.neutralFill },
   manageLabel: { color: appearance.foreground, fontSize: 13, fontWeight: '600' },
 });
