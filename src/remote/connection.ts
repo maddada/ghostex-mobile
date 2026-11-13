@@ -16,8 +16,8 @@ import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairing
 import {
   easyConnectConfig,
   hasEasyConnectRoute,
+  knownEasyConnectOn,
   setActiveRoute,
-  useEasyConnectOn,
   tailscaleOnPhone,
   withTailscaleHeadStart,
 } from '../machines/easyConnectRoute';
@@ -177,10 +177,11 @@ async function connectEitherRoute(
   assertCurrent: () => void,
   assertKept: () => Promise<void>,
 ): Promise<void> {
-  // Easy Connect off there (the computer said so, or named no address to dial): only the route the
-  // person set up, with its full time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
+  // Easy Connect only once the computer said its switch is on, checked before any relay is probed;
+  // off or unknown, only the route the person set up, with its full time (CDXC:RemotePairing
+  // 2026-11-13 in machines/routeChoice.ts).
   const easyConnectUsable =
-    useEasyConnectOn.getState().on[machine.id] !== false &&
+    (await knownEasyConnectOn(machine.id)) === true &&
     (await easyConnectConfig(machine, config)) !== null &&
     (await easyConnectDialCandidates(machine.id)).length > 0;
   assertCurrent();

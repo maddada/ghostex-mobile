@@ -6,6 +6,7 @@
  * (`easyconnectaddresses`, as for an Easy Connect computer).
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import { GhostexNative, type SshConfig } from '../../modules/ghostex-native/src';
@@ -40,18 +41,67 @@ export function setActiveRoute(machineId: string, route: MachineRoute | null): v
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
 User (Sebastian): the phone never says Easy Connect is on or set up for a computer unless Easy Connect
-is actually on there; a key the phone holds is not "on". What the computer said last, this launch:
-`true` when it named Easy Connect addresses, `false` when it named none (Easy Connect off there).
-Unknown until it answers, and unknown never reads as on.
+is actually on there; a key the phone holds is not "on". What counts is the computer's own switch:
+`enabled` in its `/api/easyConnectAddresses` answer (an older computer has no such field, and there
+only a list of addresses proves "on", since its helper runs only while the switch is on; an empty
+list there says nothing, the helper may be restarting). The answer is kept per computer across
+launches, tied to the Easy Connect pairing it was given under (`easyConnectPairedAt`), and unknown
+never reads as on: until the computer has said it is on, a Tailscale or SSH computer is never dialled
+through Easy Connect (routeChoice.ts).
 */
+/** `true` on, `false` off (the computer said so); absent when not known for the current pairing. */
 type EasyConnectOnState = { on: Record<string, boolean> };
 
 export const useEasyConnectOn = create<EasyConnectOnState>(() => ({ on: {} }));
 
-/** Notes what the computer's own answer said about its Easy Connect. */
-export function noteEasyConnectOn(machineId: string, on: boolean): void {
+const KNOWN_KEY = (machineId: string) => `easyConnect.enabled.${machineId}`;
+
+/** The Easy Connect pairing the computer's answer belongs to: the route's pairing time, if any. */
+function routePairing(machineId: string): string {
+  const record = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
+  return record?.easyConnectPairedAt ?? '';
+}
+
+/**
+ * What a computer's `/api/easyConnectAddresses` answer says about its switch: its `enabled` field,
+ * or, from an older computer, `true` when it named addresses and nothing otherwise.
+ */
+export function easyConnectOnFromAnswer(result: unknown, addressCount: number): boolean | undefined {
+  const enabled = (result as { enabled?: unknown } | null)?.enabled;
+  if (typeof enabled === 'boolean') return enabled;
+  return addressCount > 0 ? true : undefined;
+}
+
+/** Whether the computer said Easy Connect is on there, for the current pairing; undefined when unknown. */
+export async function knownEasyConnectOn(machineId: string): Promise<boolean | undefined> {
+  const inMemory = useEasyConnectOn.getState().on[machineId];
+  if (inMemory !== undefined) return inMemory;
+  try {
+    const raw = await AsyncStorage.getItem(KNOWN_KEY(machineId));
+    const saved: unknown = raw === null ? null : JSON.parse(raw);
+    const known = saved as { on?: unknown; pairing?: unknown } | null;
+    if (known === null || typeof known.on !== 'boolean' || known.pairing !== routePairing(machineId)) return undefined;
+    setKnown(machineId, known.on);
+    return known.on;
+  } catch {
+    return undefined;
+  }
+}
+
+function setKnown(machineId: string, on: boolean | undefined): void {
   if (useEasyConnectOn.getState().on[machineId] === on) return;
-  useEasyConnectOn.setState((state) => ({ on: { ...state.on, [machineId]: on } }));
+  useEasyConnectOn.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.on;
+    return { on: on === undefined ? rest : { ...rest, [machineId]: on } };
+  });
+}
+
+/** Keeps what the computer's own answer said about its Easy Connect switch, for this pairing. */
+export function noteEasyConnectOn(machineId: string, on: boolean): void {
+  setKnown(machineId, on);
+  void AsyncStorage.setItem(KNOWN_KEY(machineId), JSON.stringify({ on, pairing: routePairing(machineId) })).catch(
+    () => undefined,
+  );
   // Off there: the saved addresses go, so no later launch dials them (CDXC:RemotePairing 2026-11-13
   // in routeChoice.ts). The list is asked for again after a connect and comes back once it is on.
   if (!on) {
@@ -60,6 +110,12 @@ export function noteEasyConnectOn(machineId: string, on: boolean): void {
       void setEasyConnectAddresses(machineId, '').catch(() => undefined);
     }
   }
+}
+
+/** Forgets what a computer said (its Easy Connect route went, or it was paired again). */
+function forgetKnown(machineId: string): void {
+  setKnown(machineId, undefined);
+  void AsyncStorage.removeItem(KNOWN_KEY(machineId)).catch(() => undefined);
 }
 
 /** Whether this computer is a Tailscale or SSH one that also has Easy Connect. */
@@ -116,8 +172,10 @@ export async function saveEasyConnectRoute(
 ): Promise<void> {
   await Promise.all([setEasyConnectSshKey(machineId, key.privateKey), setEasyConnectPublicKey(machineId, key.publicKey)]);
   const named = await saveAddresses();
-  noteEasyConnectOn(machineId, named);
   useMachinesStore.getState().setEasyConnectRoute(machineId, new Date().toISOString());
+  // The computer approves this only while its switch is on (CDXC:RemotePairing 2026-11-13 in
+  // server/src/tailcat/status.rs), so the new pairing starts as on.
+  noteEasyConnectOn(machineId, true);
   logAppEvent(
     named
       ? `Easy Connect: ${machineId} also reaches its computer through Easy Connect now`
@@ -128,10 +186,7 @@ export async function saveEasyConnectRoute(
 /** Drops the route (the computer removed this phone, or the person did). */
 export async function forgetEasyConnectRoute(machineId: string): Promise<void> {
   useMachinesStore.getState().setEasyConnectRoute(machineId, null);
-  useEasyConnectOn.setState((state) => {
-    const { [machineId]: _was, ...rest } = state.on;
-    return { on: rest };
-  });
+  forgetKnown(machineId);
   setActiveRoute(machineId, null);
   await Promise.all([
     setEasyConnectSshKey(machineId, ''),

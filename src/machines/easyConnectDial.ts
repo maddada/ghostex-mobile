@@ -15,8 +15,8 @@ import {
   type MachineConnectionTarget,
 } from './credentials';
 import { tailcatServerKey } from './computerIdentity';
-import { noteEasyConnectOn } from './easyConnectRoute';
-import { samePairing } from './pairingEpoch';
+import { easyConnectOnFromAnswer, noteEasyConnectOn } from './easyConnectRoute';
+import { pairingEpoch, samePairing } from './pairingEpoch';
 import {
   addressesNeedRefresh,
   decodeSavedAddresses,
@@ -192,7 +192,8 @@ export function refreshEasyConnectAddressesSoon(
         const result = answer.result as { addresses?: unknown } | null;
         // Paired again (or edited, or removed) while it asked: the answer is the computer's before.
         if (!samePairing(machine.id, begun.epoch)) return;
-        noteEasyConnectOn(machine.id, readEasyConnectAddresses(result?.addresses).length > 0);
+        const on = easyConnectOnFromAnswer(result, readEasyConnectAddresses(result?.addresses).length);
+        if (on !== undefined) noteEasyConnectOn(machine.id, on);
         await saveEasyConnectAddresses(machine.id, result?.addresses, begun.pairedAddress);
       } catch (error) {
         console.info(
@@ -211,11 +212,14 @@ export function refreshEasyConnectAddressesSoon(
  * easyConnectRoute.ts). Leaves the state unknown when the computer can't answer.
  */
 export async function checkEasyConnectOn(machine: MachineConnectionTarget): Promise<void> {
+  // A late answer from the computer before a re-pair is not this entry's (machines/pairingEpoch.ts).
+  const epoch = pairingEpoch(machine.id);
   try {
     const answer = await chatMachineLink(machine).rpc('easyConnectAddresses', {}, REFRESH_TIMEOUT_MS);
-    if (answer.error !== null) return;
+    if (answer.error !== null || !samePairing(machine.id, epoch)) return;
     const result = answer.result as { addresses?: unknown } | null;
-    noteEasyConnectOn(machine.id, readEasyConnectAddresses(result?.addresses).length > 0);
+    const on = easyConnectOnFromAnswer(result, readEasyConnectAddresses(result?.addresses).length);
+    if (on !== undefined) noteEasyConnectOn(machine.id, on);
   } catch {
     // Unknown stays unknown, which never reads as on.
   }

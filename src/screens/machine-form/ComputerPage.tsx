@@ -22,7 +22,7 @@ import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
 import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import { checkEasyConnectOn } from '../../machines/easyConnectDial';
-import { useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRoute';
+import { knownEasyConnectOn, useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
@@ -130,11 +130,14 @@ function ComputerPageBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reachable, machine.id]);
 
-  // A computer with an Easy Connect route: ask it whether Easy Connect is on there now.
+  // A computer with an Easy Connect route, or one that offers Add Easy Connect: what was last known,
+  // then whether Easy Connect is on there now.
   useEffect(() => {
-    if (reachable && twoRoutes) void checkEasyConnectOn(machine);
+    if (!twoRoutes && !easyConnectOffered) return;
+    void knownEasyConnectOn(machine.id);
+    if (reachable) void checkEasyConnectOn(machine);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reachable, twoRoutes, machine.id]);
+  }, [reachable, twoRoutes, easyConnectOffered, machine.id]);
 
   // The computer's "Require Face ID to approve" switch, read when the page opens (null until read).
   useEffect(() => {
@@ -274,7 +277,7 @@ function ComputerPageBody({
         ) : null}
 
         {/* The way to ask again for Easy Connect after a request that was denied, lapsed or hidden. */}
-        {!twoRoutes && !easyConnect && easyConnectOffered && easyConnectOn !== false && signsInOverSsh(machine) ? (
+        {!twoRoutes && !easyConnect && easyConnectOffered && easyConnectOn === true && signsInOverSsh(machine) ? (
           <View style={formStyles.rowsCard}>
             <View style={[formStyles.row, formStyles.rowFirst]}>
               <View style={formStyles.rowMain}>
