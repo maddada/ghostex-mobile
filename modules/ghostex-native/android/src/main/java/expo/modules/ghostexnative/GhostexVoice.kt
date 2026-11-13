@@ -547,7 +547,7 @@ internal object GhostexVoice {
       wakeLock = null
       wifiLock?.let { if (it.isHeld) it.release() }
       wifiLock = null
-      if (conversationMode) GhostexForegroundService.stopVoiceMode(context)
+      if (conversationMode) GhostexForegroundService.stopVoiceMode()
       finished(this)
       emit(mapOf("sessionId" to id, "mode" to mode, "kind" to "status", "status" to "closed", "message" to reason))
     }
