@@ -22,17 +22,24 @@ import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
 import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import { checkEasyConnectOn } from '../../machines/easyConnectDial';
-import { easyConnectOnFor, knownEasyConnectOn, useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRoute';
+import {
+  easyConnectOnFor,
+  knownEasyConnectOn,
+  useEasyConnectFallback,
+  useEasyConnectOn,
+  useMachineRoutes,
+} from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
-import { addEasyConnect, signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
+import { signsInOverSsh, startSshPairing, useSshPairings } from '../../machines/sshPairing';
 import { isMachineEnabled, useMachinesStore, type MachineRecord } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { useRemovalAsksComputer } from '../../notifications/pushStore';
 import { approvalMode, listApprovals, setRequirePresence, usePlainApprovals } from '../../security/approvals';
 import { useAppearance } from '../../theme/useAppearance';
 import { machineCardStatus, machineCardTitle } from '../machines-screen/machineCardModel';
+import { EasyConnectFallbackSwitch } from './EasyConnectFallbackSwitch';
 import PairedDevicesSection from './PairedDevicesSection';
 import { FormSection } from './SectionBoundary';
 import { useFormStyles } from './styles';
@@ -102,6 +109,8 @@ function ComputerPageBody({
     useEasyConnectOn((state) => state.on[machine.id]),
     machine.easyConnectPairedAt,
   );
+  // The person's answer to Fall back to Easy Connect: a route they didn't choose is not used.
+  const fallsBack = useEasyConnectFallback((state) => state.choices[machine.id] === 'yes');
   const path = useEasyConnectPath(machine.id, connectedNow && viaEasyConnect);
   const update = useAppUpdateStore((state) => state.byMachineId[machine.id]);
   const tools = useMachineToolsStore((state) => state.byMachineId[machine.id]);
@@ -276,7 +285,9 @@ function ComputerPageBody({
                   <Text style={formStyles.rowDetail}>
                     {connectedNow && liveRoute === 'easyConnect'
                       ? copy.routes.easyConnectDetail(true)
-                      : easyConnectOn === true
+                      : !fallsBack
+                        ? copy.routes.easyConnectNotUsed
+                        : easyConnectOn === true
                         ? copy.routes.easyConnectDetail(false)
                         : easyConnectOn === false
                           ? copy.routes.easyConnectOff(name)
@@ -288,22 +299,14 @@ function ComputerPageBody({
           </>
         ) : null}
 
-        {/* The way to ask again for Easy Connect after a request that was denied, lapsed or hidden. */}
-        {!twoRoutes && !easyConnect && easyConnectOffered && easyConnectOn === true && signsInOverSsh(machine) ? (
-          <View style={formStyles.rowsCard}>
-            <View style={[formStyles.row, formStyles.rowFirst]}>
-              <View style={formStyles.rowMain}>
-                <Text style={formStyles.rowLabel}>{copy.routes.add.label}</Text>
-                <Text style={formStyles.rowDetail}>{copy.routes.add.detail(name)}</Text>
-              </View>
-              <SetupButton
-                small
-                label={copy.routes.add.button}
-                onPress={() => void addEasyConnect(machine)}
-              />
-            </View>
-          </View>
-        ) : null}
+        {/* Fall back to Easy Connect: the person's choice, asked once when the phone first connected
+            (CDXC:RemotePairing 2026-11-13 in machines/easyConnectRoute.ts); it hides itself where it can't apply. */}
+        <EasyConnectFallbackSwitch
+          machine={machine}
+          name={name}
+          containerStyle={formStyles.rowsCard}
+          style={[formStyles.row, formStyles.rowFirst]}
+        />
 
         {/* CDXC:RemotePairing 2026-11-09: where a hidden pairing card comes back. Shown while this phone isn't
             approved on this computer (it signs in over SSH and has no device id there); Show brings the card back

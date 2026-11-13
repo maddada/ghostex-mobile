@@ -15,6 +15,7 @@ import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import {
   easyConnectConfig,
+  fallbackChoice,
   hasEasyConnectRoute,
   knownEasyConnectOn,
   setActiveRoute,
@@ -200,10 +201,12 @@ async function connectEitherRoute(
   assertCurrent: () => void,
   assertKept: () => Promise<void>,
 ): Promise<void> {
-  // Easy Connect only once the computer said its switch is on, checked before any relay is probed;
-  // off or unknown, only the route the person set up, with its full time (CDXC:RemotePairing
+  // Easy Connect only where the person chose to fall back to it (CDXC:RemotePairing 2026-11-13 in
+  // machines/easyConnectRoute.ts) and the computer said its switch is on, checked before any relay
+  // is probed; otherwise only the route the person set up, with its full time (CDXC:RemotePairing
   // 2026-11-13 in machines/routeChoice.ts).
   const easyConnectUsable =
+    (await fallbackChoice(machine.id)) === 'yes' &&
     (await knownEasyConnectOn(machine.id)) === true &&
     (await easyConnectConfig(machine, config)) !== null &&
     (await easyConnectDialCandidates(machine.id)).length > 0;

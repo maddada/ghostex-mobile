@@ -31,9 +31,9 @@ import { create } from 'zustand';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { chatMachineLink, onChatLinkCutOff, onChatLinkHandshake, onChatLinkTokenRefused } from '../chat/rust/machine-link';
 import { setHeldAnswerHandler, type RpcAnswer } from '../chat/rust/transport';
-import { approvalIdOf, approvalMode, notePlainApprovals } from '../security/approvals';
+import { approvalIdOf, notePlainApprovals } from '../security/approvals';
 import { SshPairingCopy } from '../copy';
-import { APPROVER_KEY_ALGORITHM, approverKeyPublic, approverKeySign, hasApproverKey } from '../security/approverKey';
+import { APPROVER_KEY_ALGORITHM, approverKeyPublic, hasApproverKey } from '../security/approverKey';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import {
   getDeviceApiToken,
@@ -58,9 +58,9 @@ export const PAIR_OVER_SSH_CAPABILITY = 'pairOverSsh';
 
 /**
  * What `ghostex server endpoint` lists when `/api/pairOverSsh` also pairs for Easy Connect when the
- * person asks for it (Add Easy Connect), and refuses while Easy Connect is off there
+ * person asks for it (Fall back to Easy Connect), and refuses while Easy Connect is off there
  * (CDXC:RemotePairing 2026-11-13 in server/src/remote_access/tailnet_owner.rs). A computer offering
- * only 11.6.0's `pairOverSshEasyConnect` gets no Add Easy Connect: it would take the key with Easy
+ * only 11.6.0's `pairOverSshEasyConnect` is never asked: it would take the key with Easy
  * Connect off.
  */
 export const PAIR_OVER_SSH_EASY_CONNECT_CAPABILITY = 'pairOverSshEasyConnectOnRequest';
@@ -212,7 +212,13 @@ function computerName(machineId: string, fromComputer = ''): string {
   return SshPairingCopy.theComputer;
 }
 
-const running = new Set<string>();
+/** The ask running for each computer, and whether it pairs for Easy Connect too. */
+const running = new Map<string, { easyConnect: boolean; superseded: boolean }>();
+/**
+ * An Easy Connect ask that came while an SSH-only request was waiting for the same computer: it
+ * starts as soon as that one stops (within one poll), instead of being dropped.
+ */
+const nextEasyConnectAsk = new Map<string, MachineConnectionTarget>();
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -233,7 +239,20 @@ export async function startSshPairing(
 ): Promise<void> {
   const easyConnect = options.easyConnect === true && !hasEasyConnectRoute(machine);
   if (!signsInOverSsh(machine) || !hasDeviceKey()) return;
-  if (running.has(machine.id)) {
+  const current = running.get(machine.id);
+  if (current !== undefined) {
+    /*
+    CDXC:RemotePairing 2026-11-13 WHY:
+    The sign-in's own SSH-only ask can wait up to ten minutes for the owner, and a yes to Fall back to
+    Easy Connect during that wait was dropped here without a word. The Easy Connect ask now replaces
+    the waiting one: it stops at its next poll and the new request (which also pairs this phone)
+    starts right after.
+    */
+    if (easyConnect && !current.easyConnect) {
+      current.superseded = true;
+      nextEasyConnectAsk.set(machine.id, machine);
+      return;
+    }
     // Already asking or waiting: an action that waits, or Ask again, shows its card again.
     if (!options.auto && useSshPairings.getState().hidden[machine.id] === true) {
       setHidden(machine.id, false);
@@ -241,7 +260,8 @@ export async function startSshPairing(
     }
     return;
   }
-  running.add(machine.id);
+  const run = { easyConnect, superseded: false };
+  running.set(machine.id, run);
   let saved: SavedPairing = {};
   let computer = computerName(machine.id);
   let autoApproved = false;
@@ -283,7 +303,7 @@ export async function startSshPairing(
     const link = chatMachineLink(machine);
     let pending = live;
     if (pending === null) {
-      put({ machineId: machine.id, computer, phase: 'asking', words: [] });
+      put({ machineId: machine.id, computer, phase: 'asking', words: [], easyConnect });
       const devicePublicKey = await deviceKeyPublic();
       const params: Record<string, unknown> = {
         deviceName: pairingDeviceName(),
@@ -310,7 +330,7 @@ export async function startSshPairing(
           forget(machine.id);
           return;
         }
-        put({ machineId: machine.id, computer, phase: 'failed', words: [], message: started.error.message });
+        put({ machineId: machine.id, computer, phase: 'failed', words: [], message: started.error.message, easyConnect });
         return;
       }
       setReachable(machine.id, true);
@@ -321,7 +341,7 @@ export async function startSshPairing(
       const words = matchWords(nonce, devicePublicKey);
       // A computer naming other words isn't pairing this phone's key; never ask the owner to approve that.
       if (pendingId.length === 0 || !sameWords(words, theirs)) {
-        put({ machineId: machine.id, computer, phase: 'failed', words: [], message: SshPairingCopy.mismatch });
+        put({ machineId: machine.id, computer, phase: 'failed', words: [], message: SshPairingCopy.mismatch, easyConnect });
         return;
       }
       const named = typeof result.computerName === 'string' ? result.computerName.trim() : '';
@@ -332,6 +352,8 @@ export async function startSshPairing(
       );
       pending = { pendingId, words, expiresAtMs };
       autoApproved = result.autoApproved === true;
+      // Replaced while it asked: the Easy Connect ask that replaced it takes over (`nextEasyConnectAsk`).
+      if (run.superseded) return;
       saved = await updateSaved(machine.id, (latest) => ({
         ...latest,
         pendingId,
@@ -350,6 +372,7 @@ export async function startSshPairing(
     let lastTimestamp = 0;
     while (Date.now() < pending.expiresAtMs) {
       if (!autoApproved || lastTimestamp > 0) await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      if (run.superseded) return;
       if (!easyConnect && (await getDeviceApiToken(machine.id))) {
         // Paired another way meanwhile (scanned the computer's code, say).
         forget(machine.id);
@@ -397,13 +420,13 @@ export async function startSshPairing(
           writeSaved(machine.id, null),
         ]);
         setHidden(machine.id, false);
-        put({ machineId: machine.id, computer, phase: 'denied', words });
+        put({ machineId: machine.id, computer, phase: 'denied', words, easyConnect });
         return;
       }
       if (status.status === 'expired') break;
     }
     await updateSaved(machine.id, (latest) => ({ computer: latest.computer, hidden: latest.hidden, lapsedAtMs: Date.now() }));
-    put({ machineId: machine.id, computer, phase: 'lapsed', words: [] });
+    put({ machineId: machine.id, computer, phase: 'lapsed', words: [], easyConnect });
   } catch (error) {
     put({
       machineId: machine.id,
@@ -411,39 +434,34 @@ export async function startSshPairing(
       phase: 'failed',
       words: [],
       message: error instanceof Error ? error.message : String(error),
+      easyConnect,
     });
   } finally {
     running.delete(machine.id);
+    const next = nextEasyConnectAsk.get(machine.id);
+    if (next !== undefined) {
+      nextEasyConnectAsk.delete(machine.id);
+      void startSshPairing(next, { auto: false, easyConnect: true });
+    }
   }
 }
 
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
-Add Easy Connect needs no click on the computer, but the tap sits behind the same security as
-approvals: Face ID or the device's own authentication, honoring the computer's "Require Face ID to
-approve" switch (`requirePresence`), so nothing turns Easy Connect on without the person's
-explicit, authenticated action. A computer that can't say how it approves, or a prompt that is
-cancelled or fails, asks for nothing.
+Supersedes the same day's Face ID / screen lock check before Add Easy Connect. User: "no need for
+face id to confirm, agents can't control your phone anyways". The person's own tap (yes in Fall
+back to Easy Connect?, or turning on its switch on the computer's page) is the opt-in; the computer
+still adds the phone without a click only when it is the owner's own Tailscale device, and only
+while Easy Connect is on there.
 */
-/** Add Easy Connect on the computer's page: authenticated as an approval would be, then the ask. */
+/** Asks the computer to add this phone to its Easy Connect: the person turned the fallback on. */
 export async function addEasyConnect(machine: MachineConnectionTarget): Promise<void> {
-  const computer = computerName(machine.id);
-  try {
-    const mode = await approvalMode(machine);
-    if (mode.requirePresence || !mode.plain) {
-      await approverKeySign(`ghostex-add-easy-connect\n${machine.id}`, SshPairingCopy.addEasyConnectReason(computer));
-    }
-  } catch (error) {
-    put({
-      machineId: machine.id,
-      computer,
-      phase: 'failed',
-      words: [],
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return;
-  }
   await startSshPairing(machine, { auto: false, easyConnect: true });
+}
+
+/** Whether this computer's ask for this phone is still running (asking or waiting for the owner). */
+export function sshPairingRunning(machineId: string): boolean {
+  return running.has(machineId);
 }
 
 /** Whether this phone is paired with `machine` over SSH now. */
@@ -574,7 +592,8 @@ onChatLinkHandshake((machine, capabilities) => {
   CDXC:RemotePairing 2026-11-13 DECISION:
   Supersedes 2026-11-12 (Q2716 = A, Q2719: a phone added by hand also paired for Easy Connect by
   itself at its first sign-in). Easy Connect is strictly opt-in: nothing moves a phone onto it without
-  the person's own ask, and only the route they chose is used. A sign-in never asks for Easy Connect; only Add Easy Connect on the computer's page does.
+  the person's own ask, and only the route they chose is used. A sign-in never asks for Easy Connect by itself; the phone asks the person first
+  (EasyConnectFallbackAsk.tsx), and only their yes, or the switch on the computer's page, asks the computer.
   */
   // A computer that approves plainly lets a phone on its SSH login do everything, approving
   // included, so there is nothing to pair: no "Approve this phone?" there (CDXC:Security 2026-11-10

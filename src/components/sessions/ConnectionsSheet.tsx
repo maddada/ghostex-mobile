@@ -26,6 +26,7 @@ import { CloudGlyph, RefreshGlyph, SettingsGlyph } from './icons';
 import { SpinningLoader } from './MachineTabs';
 import type { ConnectionEntry } from './useConnectionEntries';
 import type { LinkStatus } from '../../machines/linkStatus';
+import { EasyConnectFallbackSwitch } from '../../screens/machine-form/EasyConnectFallbackSwitch';
 
 export type ConnectionsSheetProps = {
   entries: readonly ConnectionEntry[];
@@ -166,6 +167,14 @@ export default function ConnectionsSheet({
             </View>
           </View>
         ) : null}
+        {/* Fall back to Easy Connect for this computer (CDXC:RemotePairing 2026-11-13 in
+            machines/easyConnectRoute.ts); nothing for a computer that can't. */}
+        <EasyConnectFallbackSwitch
+          machine={entry.machine}
+          name={entry.name}
+          containerStyle={styles.fallback}
+          style={styles.fallbackRow}
+        />
       </View>
     );
   };
@@ -291,6 +300,18 @@ const createStyles = (appearance: Appearance) =>
       flexWrap: 'wrap',
       gap: 8,
       marginTop: 10,
+    },
+    fallback: {
+      marginLeft: 30,
+      marginTop: 8,
+      borderTopWidth: GhostexStrokeWidth,
+      borderTopColor: appearance.border,
+    },
+    fallbackRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingTop: 8,
     },
     foot: {
       flexDirection: 'row',

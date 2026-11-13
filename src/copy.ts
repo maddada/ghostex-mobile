@@ -426,6 +426,27 @@ export const RouteNameCopy = {
   sameNetwork: 'Same network',
 } as const;
 
+/**
+ * Fall back to Easy Connect: the dialog the phone shows the first time it connects to a Tailscale or SSH computer that
+ * can offer Easy Connect (src/components/security/EasyConnectFallbackAsk.tsx), and the switch on the computer's page
+ * (CDXC:RemotePairing 2026-11-13 in src/machines/easyConnectRoute.ts). Neither answer is preselected.
+ */
+export const EasyConnectFallbackCopy = {
+  askTitle: 'Fall back to Easy Connect?',
+  askBody: (computer: string) =>
+    `When Tailscale can't reach ${computer}, this phone can connect through Easy Connect instead. Easy Connect also runs on Tailscale's tailcat network. You can change this later on ${computer}'s page in Machines.`,
+  yes: 'Fall back',
+  no: "Don't fall back",
+  label: 'Fall back to Easy Connect',
+  on: "When Tailscale can't reach it, this phone connects through Easy Connect.",
+  off: 'Off. This phone connects over Tailscale only.',
+  undecided: "Not chosen yet. On: when Tailscale can't reach it, this phone connects through Easy Connect.",
+  waiting: (computer: string) => `Asking ${computer} to add this phone to Easy Connect.`,
+  notAdded: (computer: string) => `${computer} hasn't added this phone to Easy Connect yet.`,
+  computerOff: (computer: string) => `Easy Connect is off on ${computer}. Turn it on in Ghostex Settings › Remote there.`,
+  askAgain: 'Ask again',
+} as const;
+
 /** The Connections sheet (src/components/sessions/ConnectionsSheet.tsx) and the Sessions screen's computer icons. */
 export const ConnectionsCopy = {
   title: 'Connections',
@@ -1019,12 +1040,8 @@ export const ComputerPageCopy = {
     easyConnectOff: (computer: string) => `Off on ${computer}. Turn it on in Ghostex Settings › Remote there to use it.`,
     /** The computer hasn't said yet whether Easy Connect is on there. */
     easyConnectUnknown: 'Not checked yet',
-    add: {
-      label: 'Add Easy Connect',
-      detail: (computer: string) =>
-        `Only if you want it: reach ${computer} from any network when Tailscale is off. Easy Connect must be on in Ghostex Settings › Remote on ${computer}. Your own Tailscale phone is added at once; otherwise approve it on the computer.`,
-      button: 'Add',
-    },
+    /** Fall back to Easy Connect is off (or not chosen yet) for this computer. */
+    easyConnectNotUsed: 'Not used: Fall back to Easy Connect is off',
   },
   approvals: 'Approvals',
   approvalsNone: 'Nothing is waiting',
@@ -2109,7 +2126,7 @@ export const SshPairingCopy = {
   pendingSteps: (computer: string) =>
     `This phone isn't approved on ${computer} yet. Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there.`,
   pendingStepsEasyConnect: (computer: string) =>
-    `Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there, and this phone also reaches ${computer} through Easy Connect when Tailscale is off.`,
+    `Ghostex on ${computer} shows “Approve this phone?” with these words. If they match, choose Approve there, and this phone also reaches ${computer} through Easy Connect when Tailscale can't.`,
   pendingStepsMany:
     "This phone isn't approved on these computers yet. Ghostex on each one shows “Approve this phone?” with the words next to its name. If they match, choose Approve there.",
   lapsedSteps: (computer: string) =>
@@ -2125,8 +2142,6 @@ export const SshPairingCopy = {
   deniedRow: 'Not approved',
   deniedBody: 'Replying, Stop and typing from this phone still wait for approval there each time.',
   failedTitle: "Couldn't ask to pair this phone",
-  /** The Face ID / screen lock prompt before Add Easy Connect asks the computer. */
-  addEasyConnectReason: (computer: string) => `Add Easy Connect for ${computer}`,
   askAgain: 'Ask again',
   hide: 'Hide',
   mismatch: 'The computer named different words from this phone, so pairing stopped. Try again.',

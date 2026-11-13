@@ -11,6 +11,7 @@ import { clearLiveActivityBeforeRemoval } from '../notifications/liveActivityPus
 import { unregisterBeforeRemoval } from '../notifications/pushStore';
 import { useSpacesStore } from '../spaces/store';
 import { useWorkspacesStore } from '../workspaces/store';
+import { forgetFallbackChoice } from './easyConnectRoute';
 import { useMachinesStore } from './store';
 
 export async function removeComputerFromPhone(machineId: string): Promise<void> {
@@ -26,4 +27,5 @@ export async function removeComputerFromPhone(machineId: string): Promise<void> 
     // Not connected is fine.
   }
   await useMachinesStore.getState().removeMachine(machineId);
+  forgetFallbackChoice(machineId);
 }

@@ -84,6 +84,7 @@ import UsageScreen from './src/screens/UsageScreen';
 import AccountsScreen from './src/accounts/AccountsScreen';
 import ApprovalsScreen from './src/screens/ApprovalsScreen';
 import SshPairingNotices from './src/components/security/SshPairingNotices';
+import EasyConnectFallbackAsk from './src/components/security/EasyConnectFallbackAsk';
 import { useWebPreviewStore } from './src/webPreview/store';
 import {
   AddProjectCopy,
@@ -373,6 +374,8 @@ export default function App() {
         </VerticalBarArea>
         {/* Pairing this phone with a computer it signs in to over SSH (GitHub #495). */}
         <SshPairingNotices />
+        {/* Whether a Tailscale computer falls back to Easy Connect: asked once per computer. */}
+        <EasyConnectFallbackAsk />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -130,6 +130,64 @@ function forgetKnown(machineId: string): void {
   void AsyncStorage.removeItem(KNOWN_KEY(machineId)).catch(() => undefined);
 }
 
+/*
+CDXC:RemotePairing 2026-11-13 DECISION:
+Whether a Tailscale or SSH computer falls back to Easy Connect is the person's own choice per
+computer: "when some one connects in tailscale we add a toggle that allows falling back to easy
+connect when tailscale disconnects. make it not enabled or disabled by default ... make it a dialog
+actually that asks the user". The phone asks once (EasyConnectFallbackAsk.tsx), the computer's page
+has the switch (Fall back to Easy Connect), and a computer is dialled through Easy Connect only when
+the choice is yes (connection.ts). A route with no choice (one 11.6.0 added by itself at a sign-in)
+is not used until the person says yes.
+*/
+export type FallbackChoice = 'yes' | 'no';
+type FallbackState = { choices: Record<string, FallbackChoice> };
+
+/** Each computer's saved answer to "Fall back to Easy Connect?"; absent until the person answers. */
+export const useEasyConnectFallback = create<FallbackState>(() => ({ choices: {} }));
+
+const FALLBACK_KEY = (machineId: string) => `easyConnect.fallback.${machineId}`;
+/** Computers whose saved answer has been read (or written) this launch. */
+const fallbackRead = new Set<string>();
+
+/** The person's answer for this computer, read from the phone's storage once; undefined when never answered. */
+export async function fallbackChoice(machineId: string): Promise<FallbackChoice | undefined> {
+  const inMemory = useEasyConnectFallback.getState().choices[machineId];
+  if (inMemory !== undefined || fallbackRead.has(machineId)) return inMemory;
+  let saved: FallbackChoice | undefined;
+  try {
+    const raw = await AsyncStorage.getItem(FALLBACK_KEY(machineId));
+    saved = raw === 'yes' || raw === 'no' ? raw : undefined;
+  } catch {
+    saved = undefined;
+  }
+  fallbackRead.add(machineId);
+  // An answer given while this read ran is newer than what it found.
+  const now = useEasyConnectFallback.getState().choices[machineId];
+  if (now !== undefined) return now;
+  if (saved !== undefined) {
+    useEasyConnectFallback.setState((state) => ({ choices: { ...state.choices, [machineId]: saved } }));
+  }
+  return saved;
+}
+
+/** Saves the person's answer for this computer. */
+export function setFallbackChoice(machineId: string, choice: FallbackChoice): void {
+  fallbackRead.add(machineId);
+  useEasyConnectFallback.setState((state) => ({ choices: { ...state.choices, [machineId]: choice } }));
+  void AsyncStorage.setItem(FALLBACK_KEY(machineId), choice).catch(() => undefined);
+}
+
+/** Forgets the answer (the computer was removed from this phone). */
+export function forgetFallbackChoice(machineId: string): void {
+  fallbackRead.delete(machineId);
+  useEasyConnectFallback.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.choices;
+    return { choices: rest };
+  });
+  void AsyncStorage.removeItem(FALLBACK_KEY(machineId)).catch(() => undefined);
+}
+
 /** Whether this computer is a Tailscale or SSH one that also has Easy Connect. */
 export function hasEasyConnectRoute(machine: Pick<MachineConnectionTarget, 'id' | 'transport'>): boolean {
   if (machine.transport === 'tailcat' || machine.transport === 'demo') return false;

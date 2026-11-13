@@ -55,7 +55,9 @@ export default function SshPairingNotices() {
   if (shown.length === 0) return null;
   const askAgain = (machineId: string) => {
     const machine = machines.find((record) => record.id === machineId);
-    if (machine !== undefined) void startSshPairing(machine, { auto: false });
+    // An Easy Connect request asks for Easy Connect again, not only to approve the phone.
+    const easyConnect = pairings[machineId]?.easyConnect === true;
+    if (machine !== undefined) void startSshPairing(machine, { auto: false, easyConnect });
   };
   const hideAll = () => shown.forEach((pairing) => hideSshPairing(pairing.machineId));
   const askAgainButton = (machineId: string) => (

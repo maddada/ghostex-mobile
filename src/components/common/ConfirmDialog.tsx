@@ -32,8 +32,12 @@ export type ConfirmDialogProps = {
   selectableBody?: boolean;
   /** A box under the body, such as "Don't ask again"; the whole line toggles it. */
   checkbox?: { label: string; checked: boolean; onToggle: () => void };
+  /** Both buttons drawn alike, for a question with no answer suggested (the cancel button is the other answer). */
+  equalButtons?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** A tap outside or the back gesture; `onCancel` when omitted. */
+  onDismiss?: () => void;
 };
 
 export default function ConfirmDialog({
@@ -46,16 +50,18 @@ export default function ConfirmDialog({
   destructive = false,
   selectableBody = false,
   checkbox,
+  equalButtons = false,
   onConfirm,
   onCancel,
+  onDismiss = onCancel,
 }: ConfirmDialogProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const bar = useVerticalBarSpace();
   const placement = useFoldCardPlacement({ avoidsKeyboard: false });
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={[styles.backdrop, barPadding(bar, 24), placement.style]} onPress={onCancel}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+      <Pressable style={[styles.backdrop, barPadding(bar, 24), placement.style]} onPress={onDismiss}>
         <Pressable
           style={[styles.card, placement.maxHeight !== null && { maxHeight: placement.maxHeight }]}
           onLayout={placement.onCardLayout}
@@ -99,15 +105,25 @@ export default function ConfirmDialog({
                 <Text style={styles.cancelLabel}>{cancelLabel}</Text>
               </Pressable>
             ) : null}
-            <Pressable
-              accessibilityRole="button"
-              style={[styles.confirmButton, destructive ? styles.confirmButtonDestructive : null]}
-              onPress={onConfirm}
-            >
-              <Text style={[styles.confirmLabel, destructive ? styles.confirmLabelDestructive : null]}>
-                {confirmLabel}
-              </Text>
-            </Pressable>
+            {equalButtons ? (
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelButtonPressed]}
+                onPress={onConfirm}
+              >
+                <Text style={styles.cancelLabel}>{confirmLabel}</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.confirmButton, destructive ? styles.confirmButtonDestructive : null]}
+                onPress={onConfirm}
+              >
+                <Text style={[styles.confirmLabel, destructive ? styles.confirmLabelDestructive : null]}>
+                  {confirmLabel}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </Pressable>
       </Pressable>
