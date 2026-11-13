@@ -51,6 +51,7 @@ import {
   WorkDescription,
   WorkMenuButton,
   WorkMenuList,
+  rowMarkdown,
   workMenuRows,
 } from './workItemParts';
 import { STACK_GAP } from './NativeChatCards';
@@ -648,7 +649,12 @@ function DockRow({
     .filter((button): button is JsonRecord => button !== null);
   const reply = obj(row.reply);
   const needs = isTrue(row, 'needs');
-  const menuRows = workMenuRows(row, str(row, 'mention'), chat.state?.composer.text ?? '');
+  const menuRows = workMenuRows(
+    row,
+    str(row, 'mention'),
+    chat.state?.composer.text ?? '',
+    rowMarkdown(row, chat.state?.document?.questionForms),
+  );
   const chips = arr(row.chips)
     .map(obj)
     .filter((chip): chip is JsonRecord => chip !== null);
@@ -721,6 +727,7 @@ function DockRow({
         accessibilityRole="button"
         accessibilityState={page ? undefined : { expanded: opened }}
         onPress={page ? () => dispatch(row.open as never) : onToggle}
+        onLongPress={menuRows.length > 0 ? () => setMenu(true) : undefined}
         style={({ pressed }) => [
           styles.dockPress,
           opened && styles.dockPressOpen,
@@ -803,6 +810,7 @@ function DockRow({
         <Sheet visible={menu} onClose={() => setMenu(false)} title={str(row, 'title')}>
           <WorkMenuList
             rows={menuRows}
+            onCopied={() => setMenu(false)}
             onPick={(command) => {
               setMenu(false);
               dispatch(command as never);

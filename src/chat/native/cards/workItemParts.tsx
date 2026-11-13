@@ -566,14 +566,85 @@ export type WorkMenuRow = {
   icon: GlyphName;
   command?: JsonRecord;
   snooze?: JsonRecord[];
+  /** Words a pick copies to the clipboard (Copy as Markdown). */
+  copy?: string;
   destructive?: boolean;
 };
 
+/** "Answers: A, B (recommended: A)" for a question's choices, "" for none. */
+function answersLine(choices: JsonRecord[]): string {
+  const labels = choices.map((choice) => str(choice, 'label')).filter((label) => label.length > 0);
+  if (labels.length === 0) return '';
+  const recommended = choices.filter((choice) => isTrue(choice, 'recommended')).map((choice) => str(choice, 'label'));
+  return `Answers: ${labels.join(', ')}${recommended.length > 0 ? ` (recommended: ${recommended.join(', ')})` : ''}`;
+}
+
+/**
+ * What a dock row's Copy as Markdown copies, "" for a row that has none (desktop `row_markdown`,
+ * native_chat/work_cards.rs): a work item ask's or a one-click question's title as a heading, its
+ * detail and its answers line; a form's title and each question it still asks (`forms` is the
+ * document's `questionForms`, the waiting tags `reply.tag`), each with its detail and answers; a
+ * page's title (a link to it when its mention carries one) and the tags it still asks.
+ *
+ * CDXC:Coordinators 2026-11-13 DECISION:
+ * User: a work item ask in the dock needs "Copy as Markdown" in its menu, copying its title and full
+ * detail as Markdown plus its answers; form and page rows copy their title and each open question.
+ */
+export function rowMarkdown(row: JsonRecord, forms: { [id: string]: unknown } | undefined): string {
+  const join = (parts: string[]) =>
+    parts
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+      .join('\n\n');
+  const records = (value: unknown) =>
+    arr(value)
+      .map(obj)
+      .filter((entry): entry is JsonRecord => entry !== null);
+  const title = str(row, 'title').trim();
+  const reply = obj(row.reply);
+  const tags = reply !== null ? str(reply, 'tag') : '';
+  const kind = str(row, 'kind');
+  if (kind === 'ask' || kind === 'question') {
+    return join([`## ${title}`, str(row, 'body'), answersLine(records(row.buttons))]);
+  }
+  if (kind !== 'form') return '';
+  if (isTrue(row, 'page')) {
+    // Its mention is `[Name](url) Q12 Q13` (gx-chat-core `questions_mention`), or the name in quotes
+    // when the page has no address: the heading is the link, else the title.
+    const mention = str(row, 'mention');
+    const link = (tags.length > 0 && mention.endsWith(tags) ? mention.slice(0, -tags.length) : mention).trimEnd();
+    const heading = link.startsWith('[') && link.endsWith(')') ? link : title;
+    return join([`## ${heading}`, tags.length > 0 ? `Open questions: ${tags}` : '']);
+  }
+  const form = obj(forms?.[reply !== null ? str(reply, 'questions') : '']);
+  const waiting = tags.split(/\s+/).filter((tag) => tag.length > 0);
+  const parts = [`## ${title}`];
+  for (const question of records(form?.questions)) {
+    const tag = str(question, 'tag');
+    if (waiting.length > 0 && !waiting.includes(tag)) continue;
+    const name = str(question, 'title').trim();
+    parts.push(
+      join([
+        `### ${tag.length > 0 ? `${tag} ${name}` : name}`,
+        str(question, 'detail'),
+        answersLine(records(question.choices)),
+      ]),
+    );
+  }
+  return join(parts);
+}
+
 /**
  * An item's menu rows from its actions (desktop `row_menu`): Show in chat, Dismiss, Snooze with its
- * lengths, then Mention in chat box, which puts the item, form or page in the chat box.
+ * lengths, Copy as Markdown when `markdown` has words (`rowMarkdown`), then Mention in chat box,
+ * which puts the item, form or page in the chat box.
  */
-export function workMenuRows(actions: JsonRecord | null, mention: string, composerText: string): WorkMenuRow[] {
+export function workMenuRows(
+  actions: JsonRecord | null,
+  mention: string,
+  composerText: string,
+  markdown = '',
+): WorkMenuRow[] {
   if (actions === null) return [];
   const rows: WorkMenuRow[] = [];
   const show = obj(actions.showInChat);
@@ -584,6 +655,7 @@ export function workMenuRows(actions: JsonRecord | null, mention: string, compos
     .map(obj)
     .filter((choice): choice is JsonRecord => choice !== null);
   if (snooze.length > 0) rows.push({ label: 'Snooze', icon: 'clock', snooze });
+  if (markdown.length > 0) rows.push({ label: 'Copy as Markdown', icon: 'copy', copy: markdown });
   if (mention.length > 0) {
     rows.push({
       label: 'Mention in chat box',
@@ -601,10 +673,13 @@ export function workMenuRows(actions: JsonRecord | null, mention: string, compos
 export function WorkMenuList({
   rows,
   onPick,
+  onCopied,
   header,
 }: {
   rows: WorkMenuRow[];
   onPick: (command: JsonRecord) => void;
+  /** After a row that copies (`copy`) put its words on the clipboard: the sheet closes. */
+  onCopied?: () => void;
   header?: ReactNode;
 }) {
   const styles = useStyles();
@@ -643,9 +718,13 @@ export function WorkMenuList({
         <Pressable
           key={row.label}
           accessibilityRole="button"
-          onPress={() =>
-            row.snooze !== undefined ? setSnoozing(row.snooze) : row.command ? onPick(row.command) : undefined
-          }
+          onPress={() => {
+            if (row.snooze !== undefined) setSnoozing(row.snooze);
+            else if (row.copy !== undefined) {
+              void Clipboard.setStringAsync(row.copy);
+              onCopied?.();
+            } else if (row.command) onPick(row.command);
+          }}
           style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
         >
           <Glyph name={row.icon} size={15} color={P.cardMuted} />
