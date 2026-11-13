@@ -37,6 +37,17 @@ type IconsState = { byRef: Record<string, string> };
 export const useProjectIcons = create<IconsState>(() => ({ byRef: {} }));
 
 const missing = new Map<string, { attempt: number; until: number }>();
+/** Pictures the cache had to drop for room (count or bytes): not fetched again for a while, or they would cycle. */
+const EVICTED_WAIT_MS = 30 * 60_000;
+const evicted = new Map<string, number>();
+
+/** Keeps the cache within its bounds and remembers what it dropped. */
+function keepWithin(byRef: Record<string, string>): Record<string, string> {
+  const kept = bounded(byRef);
+  const until = Date.now() + EVICTED_WAIT_MS;
+  for (const ref of Object.keys(byRef)) if (kept[ref] === undefined) evicted.set(ref, until);
+  return kept;
+}
 const inFlight = new Set<string>();
 let hydration: Promise<void> | null = null;
 
@@ -50,7 +61,7 @@ export function hydrateProjectIcons(): Promise<void> {
       for (const [ref, url] of Object.entries(parsed as Record<string, unknown>)) {
         if (typeof url === 'string') stored[ref] = url;
       }
-      useProjectIcons.setState((state) => ({ byRef: bounded({ ...stored, ...state.byRef }) }));
+      useProjectIcons.setState((state) => ({ byRef: keepWithin({ ...stored, ...state.byRef }) }));
     })
     .catch(() => undefined);
   return hydration;
@@ -108,7 +119,13 @@ async function fetchMissing(
   // Never more than the cache keeps: past that, fetching would only evict what the last fetch stored.
   const wanted = refs
     .slice(0, MAX_ICONS)
-    .filter((ref) => held[ref] === undefined && !inFlight.has(ref) && (missing.get(ref)?.until ?? 0) <= now)
+    .filter(
+      (ref) =>
+        held[ref] === undefined &&
+        !inFlight.has(ref) &&
+        (missing.get(ref)?.until ?? 0) <= now &&
+        (evicted.get(ref) ?? 0) <= now,
+    )
     .slice(0, BATCH_SIZE);
   if (wanted.length === 0) return;
   const epoch = pairingEpoch(machine.id);
@@ -132,7 +149,7 @@ async function fetchMissing(
       }
     }
     if (Object.keys(fresh).length === 0) return;
-    useProjectIcons.setState((state) => ({ byRef: bounded({ ...state.byRef, ...fresh }) }));
+    useProjectIcons.setState((state) => ({ byRef: keepWithin({ ...state.byRef, ...fresh }) }));
     save();
   } catch {
     // The next read asks again; a busy or dropped link says so through the list itself.

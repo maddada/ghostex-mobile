@@ -84,7 +84,11 @@ export function logAppEvent(message: string): void {
   const whole = message.trim();
   if (whole.length === 0) return;
   const trimmed = whole.length > MAX_MESSAGE_CHARS ? `${whole.slice(0, MAX_MESSAGE_CHARS)}… (cut)` : whole;
-  useAppLogStore.setState((state) => ({ entries: bounded([...state.entries, { at: Date.now(), message: trimmed }]) }));
+  const entry: AppLogEntry = { at: Date.now(), message: trimmed };
+  // Scrubbed for the kept copy now, with the names known as it is logged: a rename before the save can't leak it.
+  const scrub = storedScrubber;
+  if (scrub !== null) storedText.set(entry, scrub(trimmed));
+  useAppLogStore.setState((state) => ({ entries: bounded([...state.entries, entry]) }));
   scheduleSave();
 }
 
