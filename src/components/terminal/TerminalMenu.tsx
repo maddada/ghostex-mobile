@@ -74,6 +74,8 @@ export type TerminalMenuProps = {
   searchConversationEnabled: boolean;
   /** Docs and Changes need the session's project (its id and folder on the computer). */
   docsEnabled: boolean;
+  /** Beads needs the session's project and the computer's Beads extension on (`beads/featureSwitch.ts`). */
+  beadsEnabled: boolean;
   /** Attach needs an open terminal (or, in chat mode, a chat-capable session). */
   attachEnabled: boolean;
   /** Disconnect needs a tab to close. */
@@ -108,6 +110,7 @@ export default function TerminalMenu({
   sessionNoteEnabled,
   searchConversationEnabled,
   docsEnabled,
+  beadsEnabled,
   attachEnabled,
   disconnectEnabled,
   killSessionEnabled,
@@ -236,7 +239,9 @@ export default function TerminalMenu({
       icon: <COMMAND_ICONS.fileDiff size={ICON_SIZE} color={iconColor} />,
       onPress: () => onSelect('changes'),
     });
-    // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in src/screens/BeadsScreen.tsx (a row beside Changes).
+  }
+  // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in src/screens/BeadsScreen.tsx (a row beside Changes), shown only while the computer's Beads extension is on (src/beads/featureSwitch.ts).
+  if (docsEnabled && beadsEnabled) {
     items.push({
       kind: 'item',
       key: 'beads',

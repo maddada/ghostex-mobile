@@ -31,6 +31,7 @@ import {
   useBeadsPolling,
   type BeadsBinding,
 } from '../beads/store';
+import { useBeadsOn } from '../beads/featureSwitch';
 import { Glyph } from '../chat/native/transcript/icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
 import SegmentedStrip from '../components/common/SegmentedStrip';
@@ -49,7 +50,20 @@ type Item =
 /** What the filter strip and the folds were, per project, so reopening Beads keeps them. */
 const viewState = new Map<string, { filter: BeadsFilter; showDone: boolean; openDone: Set<string>; collapsed: Set<string> }>();
 
-export default function BeadsScreen({ navigation, route }: Props) {
+/**
+ * The screen only while the computer's Beads extension is on (`beads/featureSwitch.ts`): otherwise
+ * it closes without mounting the view, so nothing reads, polls or syncs that computer's beads.
+ */
+export default function BeadsScreen(props: Props) {
+  const { navigation, route } = props;
+  const beadsOn = useBeadsOn(route.params.machineId);
+  useEffect(() => {
+    if (!beadsOn && navigation.canGoBack()) navigation.goBack();
+  }, [beadsOn, navigation]);
+  return beadsOn ? <BeadsScreenView {...props} /> : null;
+}
+
+function BeadsScreenView({ navigation, route }: Props) {
   const { machineId, projectId, projectName, projectPath } = route.params;
   const project = useMemo(() => ({ projectId, projectPath }), [projectId, projectPath]);
   const key = beadsKey(machineId, projectId);

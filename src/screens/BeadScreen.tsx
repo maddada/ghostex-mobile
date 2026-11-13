@@ -38,6 +38,7 @@ import {
   useBeadsPolling,
   type BeadsBinding,
 } from '../beads/store';
+import { useBeadsOn } from '../beads/featureSwitch';
 import { onPairingChanged } from '../machines/pairingEpoch';
 import { Glyph } from '../chat/native/transcript/icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
@@ -63,7 +64,20 @@ type Prompt = {
   submit: (value: string) => void;
 } | null;
 
-export default function BeadScreen({ navigation, route }: Props) {
+/**
+ * The screen only while the computer's Beads extension is on (`beads/featureSwitch.ts`): otherwise
+ * it closes without mounting the view, so nothing reads, polls or syncs that computer's beads.
+ */
+export default function BeadScreen(props: Props) {
+  const { navigation, route } = props;
+  const beadsOn = useBeadsOn(route.params.machineId);
+  useEffect(() => {
+    if (!beadsOn && navigation.canGoBack()) navigation.goBack();
+  }, [beadsOn, navigation]);
+  return beadsOn ? <BeadScreenView {...props} /> : null;
+}
+
+function BeadScreenView({ navigation, route }: Props) {
   const { machineId, projectId, projectPath, beadId } = route.params;
   const project = useMemo(() => ({ projectId, projectPath }), [projectId, projectPath]);
   const entry = useBeadsEntry(beadsKey(machineId, projectId));

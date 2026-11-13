@@ -10,6 +10,7 @@
 
 import { sessionChatRpc } from '../chat/rust/transport';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { beadsOnFor } from './featureSwitch';
 import { snapshotFrom, type BeadsSnapshot } from './model';
 
 /** A bd write can wait on a busy Dolt server; a sync can take longer. */
@@ -19,6 +20,16 @@ const SYNC_TIMEOUT_MS = 180_000;
 
 /** The computer's Ghostex predates the phone's Beads view (or its SSH bridge does). */
 export class BeadsUnsupportedError extends Error {}
+
+/**
+ * The computer has its Beads extension off (or is too old to say it is on): no call is sent
+ * (`featureSwitch.ts`).
+ */
+export class BeadsOffError extends Error {
+  constructor() {
+    super('Beads is turned off on this computer. Turn it on in Settings > Extensions there.');
+  }
+}
 
 /** The project a Beads read or write is for: the fields the desktop's Tree sends. */
 export type BeadsProject = { projectId: string; projectPath: string };
@@ -49,6 +60,7 @@ export async function readBeadsView(
   project: BeadsProject,
   options: { knownRevision?: string; refresh?: boolean },
 ): Promise<BeadsSnapshot> {
+  if (!beadsOnFor(machine.id)) throw new BeadsOffError();
   const params: Record<string, unknown> = { ...scope(project) };
   if (options.knownRevision !== undefined && options.knownRevision.length > 0) params.knownRevision = options.knownRevision;
   if (options.refresh === true) params.refresh = true;
@@ -77,6 +89,7 @@ export async function runBeadsAction(
   params: Record<string, unknown>,
   workspaceKey: string,
 ): Promise<BeadsActionReply> {
+  if (!beadsOnFor(machine.id)) throw new BeadsOffError();
   const action = typeof params.action === 'string' ? params.action : '';
   // The workspace the screen read this bead from; gxserver refuses the call if the project now
   // points at another one.

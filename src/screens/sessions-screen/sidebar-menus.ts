@@ -451,6 +451,8 @@ export type SessionMenuInput = {
   voiceCall?: boolean;
   /** The computer has Session notes on (`sessions/sessionNotesSwitch.ts`), so the menu offers Note. */
   sessionNotes?: boolean;
+  /** The computer has its Beads extension on (`beads/featureSwitch.ts`), so the menu offers Beads. Off when absent. */
+  beads?: boolean;
   /** The menu offers Snooze (or Unsnooze), as the desktop's does, run through gxserver directly. */
   snooze?: boolean;
   /**
@@ -926,7 +928,7 @@ export function buildSessionMenu(input: SessionMenuInput): SidebarMenuItem[] {
   if (session.projectId.length > 0) {
     menu.push(row('Changes', 'file-diff', { type: 'changes', sessionId: id }));
     // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in src/screens/BeadsScreen.tsx (opened from a row beside Changes).
-    menu.push(row('Beads', 'checklist', { type: 'beads', sessionId: id }));
+    if (input.beads === true) menu.push(row('Beads', 'checklist', { type: 'beads', sessionId: id }));
   }
   if (actionsIcon !== undefined) {
     menu.push(row('Actions…', actionsIcon, { type: 'projectActions', sessionId: id }));

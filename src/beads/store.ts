@@ -13,6 +13,7 @@ import { create } from 'zustand';
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { findMachineRecord } from '../cloudBoxes/store';
 import { BeadsUnsupportedError, readBeadsView, runBeadsAction, type BeadsActionReply, type BeadsProject } from './client';
+import { useBeadsOn } from './featureSwitch';
 import { mergeSnapshot, type BeadsSnapshot } from './model';
 
 /** The desktop polls every 2s; the phone pays for each read over SSH, so a little slower. */
@@ -171,7 +172,9 @@ export function useBeadsPolling(machineId: string, project: BeadsProject): void 
     const subscription = AppState.addEventListener('change', (state) => setForeground(state === 'active'));
     return () => subscription.remove();
   }, []);
-  const active = focused && foreground;
+  // No reads at all for a computer whose Beads extension is off (featureSwitch.ts).
+  const beadsOn = useBeadsOn(machineId);
+  const active = focused && foreground && beadsOn;
   useEffect(() => {
     if (!active) return undefined;
     const key = beadsKey(machineId, projectId);

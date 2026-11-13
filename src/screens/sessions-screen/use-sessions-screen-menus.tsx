@@ -159,6 +159,7 @@ import { callVoiceAbout } from '../../voice/callAbout';
 import { VOICE_SUPPORTED } from '../../voice/conversation';
 import { voiceAgentOnFor } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
+import { beadsOnIn } from '../../beads/featureSwitch';
 import {
   buildProjectMenu,
   buildSessionMenu,
@@ -803,6 +804,7 @@ export function useSessionsScreenMenus({
         case 'beads': {
           const ctx = scope.session;
           if (ctx === undefined) throw new Error('Beads need a session.');
+          if (!beadsOnIn(summaryFor(machine.id))) throw new Error('Beads is turned off on this computer.');
           const { session } = ctx.item;
           const project = summaryFor(machine.id)?.projects.find((entry) => entry.projectId === session.projectId);
           setOverlay(NONE);
@@ -914,6 +916,7 @@ export function useSessionsScreenMenus({
         chatMachineLink(ctx.machine).capabilities()?.includes('voiceAgent') === true &&
         voiceAgentOnFor(ctx.machine.id),
       sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
+      beads: beadsOnIn(summaryFor(ctx.machine.id)),
       // Both lists offer Snooze, as both desktop sidebars do (the Project list's Snoozed section, contract/grouping.ts).
       snooze: true,
       tagListItems: summaryFor(ctx.machine.id)?.sessionTagListItems,

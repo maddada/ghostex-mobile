@@ -113,6 +113,7 @@ import { summarizeFailure } from '../inventory/client';
 import { hasPassword } from '../machines/credentials';
 import { useInventoryStore } from '../inventory/store';
 import { sessionNotesOnIn } from '../sessions/sessionNotesSwitch';
+import { beadsOnFor, useBeadsOn } from '../beads/featureSwitch';
 import type { RootStackParamList } from '../navigation/types';
 import { contextSessionFor } from '../files/sessionContext';
 import { FORK_AGENT_ICONS, renameInitialTitle } from '../sessions/sessionCommands';
@@ -318,6 +319,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
     ),
   );
   // Session Note in the menu and the chat's More actions only while the computer has Session notes on.
+  const beadsOn = useBeadsOn(activeTab?.machineId);
   const sessionNotesOn = useInventoryStore((state) =>
     activeTab === null ? true : sessionNotesOnIn(state.inventoriesByMachineId[activeTab.machineId]?.summary),
   );
@@ -1140,7 +1142,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
       }
       if (id === 'beads') {
         setMenuVisible(false);
-        if (activeTab !== null && activeProject !== null && activeProject.projectId.length > 0) {
+        if (activeTab !== null && beadsOnFor(activeTab.machineId) && activeProject !== null && activeProject.projectId.length > 0) {
           navigation.navigate('Beads', {
             machineId: activeTab.machineId,
             projectId: activeProject.projectId,
@@ -1982,6 +1984,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         sessionNoteEnabled={sessionNotesOn && chatCapable && (activeSession?.agentSessionId.length ?? 0) > 0}
         searchConversationEnabled={chatModeActive}
         docsEnabled={docsEnabled}
+        beadsEnabled={beadsOn}
         attachEnabled={uploadEnabled && !uploading}
         disconnectEnabled={activeTab !== null}
         killSessionEnabled={activeTab !== null && activeSession !== null}
