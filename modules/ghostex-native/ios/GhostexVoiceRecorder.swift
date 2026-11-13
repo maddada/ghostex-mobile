@@ -19,6 +19,8 @@ import Foundation
 enum GhostexVoiceRecorder {
     /// How often the header's sizes are brought up to date while recording.
     private static let headerEvery: TimeInterval = 2
+    /// 50 ms of 24 kHz audio: one `level` event each (the pill's waveform).
+    private static let levelWindow = 1_200
 
     /// Set by the module; a microphone failure after the start goes through it.
     static var emitter: (([String: Any?]) -> Void)?
@@ -34,6 +36,10 @@ enum GhostexVoiceRecorder {
         var dataBytes: Int64 = 0
         var lastHeader = Date()
         var engine: GhostexVoiceEngine?
+        /// The level meter: energy and samples of the window so far, and the smoothed level.
+        var levelEnergy: Double = 0
+        var levelCount = 0
+        var level: Double = 0
 
         init(id: String, url: URL, createdAt: Int64, output: FileHandle) {
             self.id = id
@@ -85,14 +91,48 @@ enum GhostexVoiceRecorder {
 
     private static func append(_ recording: Active, _ chunk: Data) {
         lock.lock()
-        defer { lock.unlock() }
-        guard active === recording else { return }
+        guard active === recording else {
+            lock.unlock()
+            return
+        }
         recording.output.write(chunk)
         recording.dataBytes += Int64(chunk.count)
         if Date().timeIntervalSince(recording.lastHeader) >= headerEvery {
             recording.lastHeader = Date()
             writeSizes(recording.output, dataBytes: recording.dataBytes)
         }
+        let levels = meter(recording, chunk)
+        lock.unlock()
+        for level in levels {
+            emitter?(["sessionId": recording.id, "mode": "dictation", "kind": "level", "level": level])
+        }
+    }
+
+    /// The levels `chunk` completes, 0 to 1: each 50 ms window's RMS × 4, rising fast (75 ms) and
+    /// falling slower (200 ms), as the desktop's meter (`level_meter.rs`) and the JavaScript file
+    /// reader (`src/voice/dictationLevel.ts`) make them.
+    ///
+    /// CDXC:Dictate 2026-11-13 DECISION: User (Q2920): "do both. We take out the JS one when native becomes live in the app." This sends the pill's level from the recorder itself; JavaScript uses it as soon as it arrives and reads the file only on builds without it.
+    private static func meter(_ recording: Active, _ chunk: Data) -> [Double] {
+        var levels: [Double] = []
+        chunk.withUnsafeBytes { raw in
+            let count = raw.count / 2
+            for index in 0..<count {
+                let sample = Int16(littleEndian: raw.loadUnaligned(fromByteOffset: index * 2, as: Int16.self))
+                let value = Double(sample) / 32_768
+                recording.levelEnergy += value * value
+                recording.levelCount += 1
+                guard recording.levelCount >= levelWindow else { continue }
+                let target = min(1, (recording.levelEnergy / Double(recording.levelCount)).squareRoot() * 4)
+                let timeConstant = target > recording.level ? 0.075 : 0.2
+                let decay = exp(-(Double(recording.levelCount) / 24_000) / timeConstant)
+                recording.level = target + (recording.level - target) * decay
+                levels.append(recording.level)
+                recording.levelEnergy = 0
+                recording.levelCount = 0
+            }
+        }
+        return levels
     }
 
     /// Stops recording and closes the file. Answers the finished recording, or nil if none ran.
