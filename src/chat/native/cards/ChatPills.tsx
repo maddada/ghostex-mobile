@@ -438,8 +438,13 @@ function QuestionsSection({
   );
 }
 
+/** The coordinator model warning's pill (gx-chat-core `extras/coordinator_quality.rs`), drawn in amber. */
+const QUALITY_PILL = 'coordinatorQuality';
+const QUALITY_COLOR = '#f5a524';
+
 /** The glyph of a panel pill (desktop `chat_pills.rs` `pill_icon`). */
 function pillGlyph(id: string) {
+  if (id === QUALITY_PILL) return 'alert-triangle';
   return id === 'tasks'
     ? 'list-check'
     : id === 'background'
@@ -483,6 +488,7 @@ export function Pill({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const label = collapsed ? '' : pill.label;
+  const warning = pill.id === QUALITY_PILL;
   return (
     <Pressable
       accessibilityRole={pill.switch !== undefined ? 'switch' : 'button'}
@@ -493,12 +499,13 @@ export function Pill({
       style={({ pressed }) => [
         styles.pill,
         label.length === 0 && styles.pillNoLabel,
+        warning && styles.warningPill,
         (pressed || open) && styles.pillPressed,
       ]}
     >
-      <Glyph name={pillGlyph(pill.id)} size={14} color={P.cardMuted} />
+      <Glyph name={pillGlyph(pill.id)} size={14} color={warning ? QUALITY_COLOR : P.cardMuted} />
       {/* Blocked has no word, like the ? pill: its glyph and red dot (gx-chat-core `blocked_pill`). */}
-      {label.length > 0 ? <Text style={styles.label}>{label}</Text> : null}
+      {label.length > 0 ? <Text style={[styles.label, warning && styles.warningLabel]}>{label}</Text> : null}
       {/* Autopilot on: a green dot after its label (desktop chat_pills.rs `AUTOPILOT_ON_COLOR`). */}
       {pill.switch === true ? <View style={styles.switchOnDot} /> : null}
       {(pill.dots ?? []).length > 0 && (collapsed || pill.id !== 'board') ? (
@@ -706,6 +713,7 @@ export function PillMenuSheet({
   /** The card a board pill in the chat asked to see, which the Board sheet scrolls to. */
   boardFocus?: BoardFocus | null;
 }) {
+  const styles = useStyles();
   const questions = open === 'resources' && (document.openQuestions?.total ?? 0) > 0;
   const [filtersOpen, setFiltersOpen] = useState(false);
   useEffect(() => {
@@ -770,7 +778,9 @@ export function PillMenuSheet({
           ? (coordinatorIntro(document)?.title ?? shown?.label ?? '')
           : open === 'autopilot'
             ? 'Autopilot'
-            : (shown?.label ?? (open === 'board' ? 'Work' : ''))
+            : open === QUALITY_PILL
+              ? 'Coordinator quality'
+              : (shown?.label ?? (open === 'board' ? 'Work' : ''))
       }
       subtitle={open === 'approvals' && shown !== undefined ? approvalsWaitingLine(document) : undefined}
       accessory={
@@ -802,6 +812,21 @@ export function PillMenuSheet({
               key={`${index}:${typeof row.label === 'string' ? row.label : 'row'}`}
               row={row}
               onRun={runAutopilotRow}
+              onOpen={() => undefined}
+            />
+          ))}
+        </View>
+      ) : open === QUALITY_PILL ? (
+        <View>
+          <Text style={styles.qualityAdvice}>{shown?.label}. {shown?.meta}</Text>
+          {(shown?.menu ?? []).map((row, index) => (
+            <MenuRowView
+              key={`${index}:${typeof row.label === 'string' ? row.label : 'row'}`}
+              row={row}
+              onRun={(command) => {
+                chat.dispatch(command as UserAction);
+                close();
+              }}
               onOpen={() => undefined}
             />
           ))}
@@ -867,6 +892,19 @@ const useStyles = themedStyles((P) => ({
   },
   pillPressed: {
     backgroundColor: P.ink(0.08),
+  },
+  warningPill: {
+    borderColor: 'rgba(245, 165, 36, 0.45)',
+  },
+  warningLabel: {
+    color: QUALITY_COLOR,
+  },
+  qualityAdvice: {
+    color: P.cardMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   /** A pill with its label dropped: a pixel less each side, as the desktop's. */
   pillNoLabel: {
