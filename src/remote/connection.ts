@@ -148,7 +148,10 @@ export function ensureConnected(
       refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress: null, secondRoute: true });
       // Whether Easy Connect is still on there, so a computer that turned it off is not dialled
       // through it next time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
-      setTimeout(() => void checkEasyConnectOn(machine), EASY_CONNECT_CHECK_DELAY_MS);
+      setTimeout(() => {
+        // Paired again or edited meanwhile: the answer would be another computer's.
+        if (samePairing(machine.id, epoch)) void checkEasyConnectOn(machine);
+      }, EASY_CONNECT_CHECK_DELAY_MS);
     } else {
       await GhostexNative.connect(machine.id, config);
     }

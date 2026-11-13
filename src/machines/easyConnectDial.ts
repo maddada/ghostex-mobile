@@ -220,6 +220,9 @@ export async function checkEasyConnectOn(machine: MachineConnectionTarget): Prom
     const result = answer.result as { addresses?: unknown } | null;
     const on = easyConnectOnFromAnswer(result, readEasyConnectAddresses(result?.addresses).length);
     if (on !== undefined) noteEasyConnectOn(machine.id, on);
+    // On again after an Off dropped the saved list: keep the list it named, so the next connect
+    // can use Easy Connect without waiting for the hourly refresh.
+    if (on === true) await saveEasyConnectAddresses(machine.id, result?.addresses, null);
   } catch {
     // Unknown stays unknown, which never reads as on.
   }

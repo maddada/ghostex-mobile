@@ -49,8 +49,9 @@ launches, tied to the Easy Connect pairing it was given under (`easyConnectPaire
 never reads as on: until the computer has said it is on, a Tailscale or SSH computer is never dialled
 through Easy Connect (routeChoice.ts).
 */
-/** `true` on, `false` off (the computer said so); absent when not known for the current pairing. */
-type EasyConnectOnState = { on: Record<string, boolean> };
+/** What each computer said (`on`), with the Easy Connect pairing it was said under (`pairing`). */
+type KnownOn = { on: boolean; pairing: string };
+type EasyConnectOnState = { on: Record<string, KnownOn> };
 
 export const useEasyConnectOn = create<EasyConnectOnState>(() => ({ on: {} }));
 
@@ -60,6 +61,14 @@ const KNOWN_KEY = (machineId: string) => `easyConnect.enabled.${machineId}`;
 function routePairing(machineId: string): string {
   const record = useMachinesStore.getState().machines.find((entry) => entry.id === machineId);
   return record?.easyConnectPairedAt ?? '';
+}
+
+/**
+ * `known` when it was said under `easyConnectPairedAt` (the entry's pairing now); undefined
+ * otherwise, so what another pairing (an edited address, say) said never shows for this one.
+ */
+export function easyConnectOnFor(known: KnownOn | undefined, easyConnectPairedAt: string | undefined): boolean | undefined {
+  return known !== undefined && known.pairing === (easyConnectPairedAt ?? '') ? known.on : undefined;
 }
 
 /**
@@ -74,32 +83,35 @@ export function easyConnectOnFromAnswer(result: unknown, addressCount: number): 
 
 /** Whether the computer said Easy Connect is on there, for the current pairing; undefined when unknown. */
 export async function knownEasyConnectOn(machineId: string): Promise<boolean | undefined> {
+  const pairing = routePairing(machineId);
   const inMemory = useEasyConnectOn.getState().on[machineId];
-  if (inMemory !== undefined) return inMemory;
+  if (inMemory !== undefined && inMemory.pairing === pairing) return inMemory.on;
   try {
     const raw = await AsyncStorage.getItem(KNOWN_KEY(machineId));
     const saved: unknown = raw === null ? null : JSON.parse(raw);
     const known = saved as { on?: unknown; pairing?: unknown } | null;
-    if (known === null || typeof known.on !== 'boolean' || known.pairing !== routePairing(machineId)) return undefined;
-    setKnown(machineId, known.on);
+    if (known === null || typeof known.on !== 'boolean' || known.pairing !== pairing) return undefined;
+    setKnown(machineId, { on: known.on, pairing });
     return known.on;
   } catch {
     return undefined;
   }
 }
 
-function setKnown(machineId: string, on: boolean | undefined): void {
-  if (useEasyConnectOn.getState().on[machineId] === on) return;
+function setKnown(machineId: string, known: KnownOn | undefined): void {
+  const was = useEasyConnectOn.getState().on[machineId];
+  if (was?.on === known?.on && was?.pairing === known?.pairing) return;
   useEasyConnectOn.setState((state) => {
     const { [machineId]: _was, ...rest } = state.on;
-    return { on: on === undefined ? rest : { ...rest, [machineId]: on } };
+    return { on: known === undefined ? rest : { ...rest, [machineId]: known } };
   });
 }
 
 /** Keeps what the computer's own answer said about its Easy Connect switch, for this pairing. */
 export function noteEasyConnectOn(machineId: string, on: boolean): void {
-  setKnown(machineId, on);
-  void AsyncStorage.setItem(KNOWN_KEY(machineId), JSON.stringify({ on, pairing: routePairing(machineId) })).catch(
+  const pairing = routePairing(machineId);
+  setKnown(machineId, { on, pairing });
+  void AsyncStorage.setItem(KNOWN_KEY(machineId), JSON.stringify({ on, pairing })).catch(
     () => undefined,
   );
   // Off there: the saved addresses go, so no later launch dials them (CDXC:RemotePairing 2026-11-13
