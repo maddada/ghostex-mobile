@@ -107,6 +107,10 @@ export type ActionFields = {
   jumpToQuestion: { id: string };
   /** "For later" (`later: true`) or "Back to unanswered" on a question form or page (gx-chat-core `questions/later.rs`). */
   questionForLater: { id: string; later: boolean };
+  /** A page card's or sheet's Export: the page's exported file comes back as the `pageExported` host action (gx-chat-core `questions/page_export.rs`). */
+  exportPage: { pageId: string };
+  /** An exported page's answers JSON, picked or pasted: gxserver gives them to the agent (gx-chat-core `questions/page_import.rs`). */
+  importPageAnswers: { text: string };
   /** The X on a For later row: removes a form or page without answering it; it reads Canceled (gx-chat-core `questions/later.rs`). */
   questionRemove: { id: string };
   /** A form or chart of the Resources list opens in the sheet and the chat stays where it is (gx-chat-core `questions/resource_modal.rs`). */

@@ -66,6 +66,7 @@ import { WorkDock, dockHeightCap, workDockShown } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
 import { SessionDetailsSheet } from './cards/SessionDetailsSheet';
+import { readExportedPage, shareExportedPage } from './cards/pageExport';
 import { ConnectionLostNotice } from './cards/ConnectionLostNotice';
 import { ComputerCard } from './cards/ComputerCard';
 import type { BoardFocus } from './cards/CoordinatorBoard';
@@ -874,6 +875,22 @@ function useChatViewRequests(
             return;
           case 'hostAction': {
             if (request.action === 'switchToTerminal' || request.action === 'terminalView') onSwitchToTerminal();
+            // A page's Export (gx-chat-core `questions/page_export.rs`): shared on the iPhone, saved on Android.
+            else if (request.action === 'pageExported') {
+              const page = readExportedPage(request.params);
+              if (page !== null)
+                void shareExportedPage(page).then(
+                  (done) => {
+                    if (done !== null) show(done, false, 'Page exported');
+                  },
+                  (failure: unknown) =>
+                    show(
+                      failure instanceof Error ? failure.message : String(failure),
+                      true,
+                      'Could not export the page',
+                    ),
+                );
+            }
             // Copy Report's last step (gx-chat-core `extras/report.rs`): Send Bug / Feedback with its agent switch on.
             // The "GBot added" card's Open settings (gx-chat-core `gbot_cards.rs`): the bot is on this chat's computer.
             else if (request.action === 'openGbotSettings') {
