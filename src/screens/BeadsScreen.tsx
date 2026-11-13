@@ -81,6 +81,7 @@ export default function BeadsScreen({ navigation, route }: Props) {
   // screen while the next is worked out.
   const [tree, setTree] = useState<BeadsTree | null>(null);
   const [treeError, setTreeError] = useState<string | null>(null);
+  const [treeAttempt, setTreeAttempt] = useState(0);
   useEffect(() => {
     if (snapshot?.beads == null) {
       setTree(null);
@@ -105,7 +106,7 @@ export default function BeadsScreen({ navigation, route }: Props) {
     return () => {
       current = false;
     };
-  }, [snapshot, filter, showDone, query, openDone, collapsed]);
+  }, [snapshot, filter, showDone, query, openDone, collapsed, treeAttempt]);
 
   const toggle = (set: Set<string>, value: string) => {
     const next = new Set(set);
@@ -278,7 +279,12 @@ export default function BeadsScreen({ navigation, route }: Props) {
       </SwitchRow>
       <View style={styles.headerGap} />
       {tree !== null && !tree.readinessOk ? <Text style={styles.note}>{BeadsCopy.readinessPaused}</Text> : null}
-      {treeError !== null ? <NoticeCard notice={{ title: BeadsCopy.loadFailed, message: BeadsCopy.treeFailed, details: treeError }} /> : null}
+      {treeError !== null ? (
+        <NoticeCard
+          notice={{ title: BeadsCopy.listFailedTitle, message: BeadsCopy.coreFailed, details: treeError }}
+          action={{ label: BeadsCopy.retry, onPress: () => setTreeAttempt((attempt) => attempt + 1) }}
+        />
+      ) : null}
       {entry.notice !== null ? <NoticeCard notice={entry.notice} onDismiss={() => dismissBeadsNotice(machineId, projectId)} /> : null}
       {syncCard !== null && snapshot?.sync.lastResult?.at !== dismissedSyncAt ? (
         <NoticeCard
@@ -293,6 +299,15 @@ export default function BeadsScreen({ navigation, route }: Props) {
   let body: React.ReactNode = null;
   if (entry.unsupported) {
     body = <StateBlock title={BeadsCopy.oldComputerTitle} body={BeadsCopy.oldComputer} />;
+  } else if (snapshot?.beads != null && tree === null && treeError !== null) {
+    body = (
+      <StateBlock
+        title={BeadsCopy.listFailedTitle}
+        body={BeadsCopy.coreFailed}
+        details={treeError}
+        action={{ label: BeadsCopy.retry, onPress: () => setTreeAttempt((attempt) => attempt + 1) }}
+      />
+    );
   } else if (snapshot === null) {
     body =
       entry.error !== null ? (
@@ -335,9 +350,13 @@ export default function BeadsScreen({ navigation, route }: Props) {
           renderItem={renderItem}
           ListHeaderComponent={header}
           ListEmptyComponent={
-            <Text style={[styles.muted, styles.empty]}>
-              {(snapshot?.beads?.length ?? 0) === 0 ? BeadsCopy.emptyAll : BeadsCopy.emptyFiltered}
-            </Text>
+            tree === null ? (
+              <ActivityIndicator color={theme.muted} style={styles.empty} />
+            ) : (
+              <Text style={[styles.muted, styles.empty]}>
+                {(snapshot?.beads?.length ?? 0) === 0 ? BeadsCopy.emptyAll : BeadsCopy.emptyFiltered}
+              </Text>
+            )
           }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

@@ -10,6 +10,7 @@ import { AppState } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { create } from 'zustand';
 
+import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { useMachinesStore } from '../machines/store';
 import { BeadsUnsupportedError, readBeadsView, runBeadsAction, type BeadsActionReply, type BeadsProject } from './client';
 import { mergeSnapshot, type BeadsSnapshot } from './model';
@@ -21,6 +22,8 @@ export type BeadsNotice = { title: string; message: string; details: string | nu
 
 export type BeadsEntry = {
   snapshot: BeadsSnapshot | null;
+  /** The computer's pairing epoch the snapshot was read under (machines/pairingEpoch.ts). */
+  epoch: number;
   loading: boolean;
   error: string | null;
   /** The computer's Ghostex has no Beads view for the phone. */
@@ -29,7 +32,7 @@ export type BeadsEntry = {
   writes: number;
 };
 
-const EMPTY: BeadsEntry = { snapshot: null, loading: false, error: null, unsupported: false, notice: null, writes: 0 };
+const EMPTY: BeadsEntry = { snapshot: null, epoch: -1, loading: false, error: null, unsupported: false, notice: null, writes: 0 };
 
 type BeadsState = {
   entries: Record<string, BeadsEntry>;
@@ -54,25 +57,50 @@ function machineFor(machineId: string) {
   return useMachinesStore.getState().machines.find((candidate) => candidate.id === machineId);
 }
 
-/** Who the phone reaches for this computer: a re-pair or a moved address is another computer. */
-export function machinePairing(machineId: string): string | null {
-  const machine = machineFor(machineId);
-  if (machine === undefined) return null;
-  return [machine.transport ?? 'ssh', machine.host, machine.port, machine.username].join('\u0000');
-}
+/** Reads in flight per project, so a poll never stacks a second one and none can stay latched. */
+const inFlight = new Set<string>();
 
 /**
- * What an action was opened for: the workspace the screen had read and the computer as it was
- * paired. A write runs only while both still hold, and gxserver gets that workspace's key, never
- * whatever the newest read says, so a write opened for one workspace can't land in another.
+ * A computer paired again (another key, an edited address, removed): everything the phone read
+ * from it belongs to the old pairing, so its projects' entries are emptied and their reads in
+ * flight are disowned (their generation moves on).
  */
-export type BeadsBinding = { workspaceKey: string; pairing: string };
+onPairingChanged((machineId) => {
+  const prefix = beadsKey(machineId, '');
+  const { entries, patch } = useBeadsStore.getState();
+  for (const key of Object.keys(entries)) {
+    if (!key.startsWith(prefix)) continue;
+    generations.set(key, (generations.get(key) ?? 0) + 1);
+    inFlight.delete(key);
+    patch(key, { ...EMPTY, writes: 0 });
+  }
+});
 
+/**
+ * What an action was opened for: the workspace the screen had read and the pairing epoch that read
+ * came from. A write runs only while both still hold, and gxserver gets that workspace's key,
+ * never whatever the newest read says, so a write opened for one workspace or pairing can't land
+ * in another.
+ */
+export type BeadsBinding = { workspaceKey: string; epoch: number };
+
+export function bindingKey(binding: BeadsBinding | null): string {
+  return binding !== null ? `${binding.workspaceKey}\u0000${binding.epoch}` : '';
+}
+
+/** The binding of the project's current snapshot; none when it was read under an older pairing. */
 export function currentBinding(machineId: string, projectId: string): BeadsBinding | null {
-  const key = useBeadsStore.getState().entries[beadsKey(machineId, projectId)]?.snapshot?.workspace.key ?? '';
-  const pairing = machinePairing(machineId);
-  if (key.length === 0 || pairing === null) return null;
-  return { workspaceKey: key, pairing };
+  const entry = useBeadsStore.getState().entries[beadsKey(machineId, projectId)];
+  const key = entry?.snapshot?.workspace.key ?? '';
+  if (entry === undefined || key.length === 0 || machineFor(machineId) === undefined) return null;
+  if (!samePairing(machineId, entry.epoch)) return null;
+  return { workspaceKey: key, epoch: entry.epoch };
+}
+
+/** Whether `binding` still describes the project's current snapshot. */
+export function bindingHolds(machineId: string, projectId: string, binding: BeadsBinding | null): boolean {
+  const now = currentBinding(machineId, projectId);
+  return binding !== null && now !== null && bindingKey(now) === bindingKey(binding);
 }
 
 /** The card for an action whose workspace or computer changed after it was opened. */
@@ -91,29 +119,39 @@ export async function fetchBeads(machineId: string, project: BeadsProject, refre
     patch(key, { error: 'This computer is no longer saved on this phone.', loading: false });
     return;
   }
-  const pairing = machinePairing(machineId);
+  const epoch = pairingEpoch(machineId);
   const generation = (generations.get(key) ?? 0) + 1;
   generations.set(key, generation);
-  const previous = entries[key]?.snapshot ?? null;
+  inFlight.add(key);
+  const owned = () => generations.get(key) === generation && samePairing(machineId, epoch);
+  // The revision only means something for a snapshot read under this pairing.
+  const previous = entries[key]?.epoch === epoch ? (entries[key]?.snapshot ?? null) : null;
   patch(key, { loading: true });
   try {
     const next = await readBeadsView(machine, project, {
       knownRevision: refresh ? undefined : previous?.revision,
       refresh,
     });
-    // An answer from before a re-pair is the old computer's.
-    if (generations.get(key) !== generation || machinePairing(machineId) !== pairing) return;
-    const current = useBeadsStore.getState().entries[key]?.snapshot ?? null;
+    // An answer for a newer read, or from before a re-pair, is not this entry's any more.
+    if (!owned()) return;
+    const entry = useBeadsStore.getState().entries[key];
+    const current = entry?.epoch === epoch ? (entry.snapshot ?? null) : null;
     // A key change means another workspace: forget what the phone knew.
     const base = current !== null && current.workspace.key === next.workspace.key ? current : null;
-    patch(key, { snapshot: mergeSnapshot(base, next), loading: false, error: null, unsupported: false });
+    patch(key, { snapshot: mergeSnapshot(base, next), epoch, loading: false, error: null, unsupported: false });
   } catch (failure) {
-    if (generations.get(key) !== generation) return;
+    if (!owned()) return;
     if (failure instanceof BeadsUnsupportedError) {
       patch(key, { unsupported: true, loading: false, error: null });
       return;
     }
     patch(key, { loading: false, error: failure instanceof Error ? failure.message : String(failure) });
+  } finally {
+    // Only the newest read clears the marks; a disowned one never leaves them set.
+    if (generations.get(key) === generation) {
+      inFlight.delete(key);
+      if (useBeadsStore.getState().entries[key]?.loading === true) patch(key, { loading: false });
+    }
   }
 }
 
@@ -145,7 +183,7 @@ export function useBeadsPolling(machineId: string, project: BeadsProject): void 
       watchers.set(key, {
         count: 1,
         timer: setInterval(() => {
-          if (useBeadsStore.getState().entries[key]?.loading !== true) void fetchBeads(machineId, target);
+          if (!inFlight.has(key)) void fetchBeads(machineId, target);
         }, POLL_MS),
       });
     }
@@ -195,14 +233,7 @@ export async function runBeads(
   const { patch } = useBeadsStore.getState();
   const machine = machineFor(machineId);
   const isWrite = params.action !== 'show';
-  const now = currentBinding(machineId, project.projectId);
-  if (
-    machine === undefined ||
-    binding === null ||
-    now === null ||
-    now.workspaceKey !== binding.workspaceKey ||
-    now.pairing !== binding.pairing
-  ) {
+  if (machine === undefined || binding === null || !bindingHolds(machineId, project.projectId, binding)) {
     if (isWrite) patch(key, { notice: STALE_ACTION_NOTICE(failureTitle) });
     return null;
   }
@@ -210,6 +241,8 @@ export async function runBeads(
   if (isWrite) patch(key, { writes: entry.writes + 1, notice: null });
   try {
     const reply = await runBeadsAction(machine, project, params, binding.workspaceKey);
+    // Re-paired while the call ran: the answer is the old computer's.
+    if (!samePairing(machineId, binding.epoch)) return null;
     if (isWrite && !reply.ok) patch(key, { notice: writeFailure(failureTitle, reply) });
     return reply;
   } catch (failure) {

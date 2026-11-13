@@ -30,14 +30,15 @@ import { beadPage, type BeadPage } from '../beads/tree';
 import { NoticeCard, PriorityTag, StatusMark } from '../beads/parts';
 import {
   beadsKey,
+  bindingKey as keyOfBinding,
+  currentBinding,
   dismissBeadsNotice,
-  machinePairing,
   runBeads,
   useBeadsEntry,
   useBeadsPolling,
   type BeadsBinding,
 } from '../beads/store';
-import { useMachinesStore } from '../machines/store';
+import { onPairingChanged } from '../machines/pairingEpoch';
 import { Glyph } from '../chat/native/transcript/icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
@@ -75,28 +76,47 @@ export default function BeadScreen({ navigation, route }: Props) {
   const row = useMemo(() => (rows ?? []).find((candidate) => candidate.id === beadId) ?? null, [rows, beadId]);
   const canEditLinks = entry.snapshot?.capabilities.includes(BEADS_LINKS_CAPABILITY) === true;
 
-  // What every action on this screen is bound to: the workspace it read and the computer as paired.
-  const workspaceKey = entry.snapshot?.workspace.key ?? '';
-  const pairing = useMachinesStore(() => machinePairing(machineId));
-  const binding = useMemo<BeadsBinding | null>(
-    () => (workspaceKey.length > 0 && pairing !== null ? { workspaceKey, pairing } : null),
-    [pairing, workspaceKey],
+  // What every action on this screen is bound to: the workspace of the snapshot on screen and the
+  // pairing epoch that snapshot was read under (none for a snapshot from an older pairing).
+  const [pairingTick, setPairingTick] = useState(0);
+  useEffect(
+    () =>
+      onPairingChanged((changed) => {
+        if (changed === machineId) setPairingTick((tick) => tick + 1);
+      }),
+    [machineId],
   );
-  const bindingKey = binding !== null ? `${binding.workspaceKey}\u0000${binding.pairing}` : '';
+  const binding = useMemo<BeadsBinding | null>(
+    () => currentBinding(machineId, projectId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed when the snapshot or the pairing changes
+    [entry.snapshot, entry.epoch, machineId, projectId, pairingTick],
+  );
+  const bindingKey = keyOfBinding(binding);
+  const liveBinding = useRef(bindingKey);
+  liveBinding.current = bindingKey;
 
   // The bead's row words, its epic and progress, from the desktop's rules in the phone's core.
   const [page, setPage] = useState<BeadPage | null>(null);
+  /** The core could not lay out this bead (an older core without the call, a refused answer). */
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageAttempt, setPageAttempt] = useState(0);
   const readiness = entry.snapshot?.readiness ?? 'ok';
   useEffect(() => {
     if (rows === null) return undefined;
     let current = true;
     beadPage(rows, readiness, beadId)
-      .then((next) => current && setPage(next))
-      .catch(() => current && setPage(null));
+      .then((next) => {
+        if (!current) return;
+        setPage(next);
+        setPageError(null);
+      })
+      .catch((failure: unknown) => {
+        if (current) setPageError(failure instanceof Error ? failure.message : String(failure));
+      });
     return () => {
       current = false;
     };
-  }, [rows, readiness, beadId]);
+  }, [rows, readiness, beadId, pageAttempt]);
   const epic = page?.epic ?? null;
 
   const [details, setDetails] = useState<BeadDetails | null>(null);
@@ -114,24 +134,28 @@ export default function BeadScreen({ navigation, route }: Props) {
     setToast({ id: toastId.current, message, error, title });
   }, []);
 
-  // Another workspace or a re-paired computer: nothing opened before applies any more.
+  const detailsRequest = useRef(0);
+  // Another workspace, a re-paired computer or no read at all: nothing opened before applies any
+  // more, and every details read already sent is disowned at once.
   const shownBinding = useRef(bindingKey);
   useEffect(() => {
     if (shownBinding.current === bindingKey) return;
     shownBinding.current = bindingKey;
+    detailsRequest.current += 1;
     setSheet(null);
     setPrompt(null);
     setDetails(null);
+    setDetailsError(null);
     setDetailsLoading(true);
   }, [bindingKey]);
 
-  const detailsRequest = useRef(0);
   const loadDetails = useCallback(async () => {
     detailsRequest.current += 1;
     const request = detailsRequest.current;
+    const sentFor = keyOfBinding(binding);
     const reply = await runBeads(machineId, project, { action: 'show', issueId: beadId }, BeadsCopy.failed.show, binding);
-    // A slower answer from before a later request, another bead, workspace or pairing is dropped.
-    if (request !== detailsRequest.current) return;
+    // An answer for an older request, or for a binding the screen no longer shows, is dropped.
+    if (request !== detailsRequest.current || sentFor !== liveBinding.current) return;
     if (reply === null) {
       setDetailsLoading(false);
       return;
@@ -172,15 +196,26 @@ export default function BeadScreen({ navigation, route }: Props) {
     });
   }, [epic, navigation, theme]);
 
+  if (row !== null && page === null && pageError !== null) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.cardWrap}>
+          <NoticeCard
+            notice={{ title: BeadsCopy.pageFailedTitle, message: BeadsCopy.coreFailed, details: pageError }}
+            action={{ label: BeadsCopy.retry, onPress: () => setPageAttempt((attempt) => attempt + 1) }}
+          />
+          <Pressable accessibilityRole="button" onPress={() => navigation.goBack()} style={styles.backLink}>
+            <Text style={styles.link}>{BeadsCopy.backToList}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   if (row === null || page === null) {
     return (
       <View style={styles.screen}>
         <View style={styles.centered}>
-          {rows === null || (row !== null && page === null) ? (
-            <ActivityIndicator color={theme.muted} />
-          ) : (
-            <Text style={styles.muted}>{BeadsCopy.beadGone}</Text>
-          )}
+          {rows === null || row !== null ? <ActivityIndicator color={theme.muted} /> : <Text style={styles.muted}>{BeadsCopy.beadGone}</Text>}
         </View>
       </View>
     );
@@ -586,6 +621,8 @@ const useStyles = themedStyles((t) => ({
   content: { paddingHorizontal: 16, paddingTop: 12 },
   noticeWrap: { marginHorizontal: -12 },
   centered: { alignItems: 'center', gap: 10, paddingHorizontal: 28, paddingTop: 56 },
+  cardWrap: { paddingTop: 16, gap: 8 },
+  backLink: { alignSelf: 'center', paddingVertical: 8 },
   idLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   id: { color: t.foreground, fontFamily: MONO_FONT, fontSize: 13 },
   iconButton: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
