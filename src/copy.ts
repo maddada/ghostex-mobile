@@ -1256,6 +1256,7 @@ export const BeadsCopy = {
   filters: 'Filter beads',
   loading: 'Reading this project’s beads…',
   loadFailed: 'Couldn’t read the beads',
+  staleList: 'This is the list from the last read. Try again; Details has what went wrong.',
   retry: 'Retry',
   reload: 'Reload',
   oldComputer: 'Update Ghostex on that computer to see its beads from the phone.',

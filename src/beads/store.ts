@@ -11,7 +11,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { create } from 'zustand';
 
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
-import { useMachinesStore } from '../machines/store';
+import { findMachineRecord } from '../cloudBoxes/store';
 import { BeadsUnsupportedError, readBeadsView, runBeadsAction, type BeadsActionReply, type BeadsProject } from './client';
 import { mergeSnapshot, type BeadsSnapshot } from './model';
 
@@ -53,8 +53,9 @@ export function useBeadsEntry(key: string): BeadsEntry {
 
 const generations = new Map<string, number>();
 
+/** A saved computer, or a Cloud Box's hidden machine (never saved, but its sessions have Beads too). */
 function machineFor(machineId: string) {
-  return useMachinesStore.getState().machines.find((candidate) => candidate.id === machineId);
+  return findMachineRecord(machineId) ?? undefined;
 }
 
 /** Reads in flight per project, so a poll never stacks a second one and none can stay latched. */
@@ -239,13 +240,16 @@ export async function runBeads(
   }
   const entry = useBeadsStore.getState().entries[key] ?? EMPTY;
   if (isWrite) patch(key, { writes: entry.writes + 1, notice: null });
+  // A re-pair while the call runs empties the entry and starts it over; this call then owns
+  // nothing there, and its answer, card and write count must not touch the new one.
+  const owned = () => samePairing(machineId, binding.epoch);
   try {
     const reply = await runBeadsAction(machine, project, params, binding.workspaceKey);
-    // Re-paired while the call ran: the answer is the old computer's.
-    if (!samePairing(machineId, binding.epoch)) return null;
+    if (!owned()) return null;
     if (isWrite && !reply.ok) patch(key, { notice: writeFailure(failureTitle, reply) });
     return reply;
   } catch (failure) {
+    if (!owned()) return null;
     if (failure instanceof BeadsUnsupportedError) {
       patch(key, { notice: { title: failureTitle, message: 'Update Ghostex on that computer to change beads from the phone.', details: null } });
     } else if (isWrite) {
@@ -253,7 +257,7 @@ export async function runBeads(
     }
     return null;
   } finally {
-    if (isWrite) {
+    if (isWrite && owned()) {
       const writes = useBeadsStore.getState().entries[key]?.writes ?? 1;
       patch(key, { writes: Math.max(0, writes - 1) });
       void fetchBeads(machineId, project);

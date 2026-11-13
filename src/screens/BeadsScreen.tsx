@@ -285,6 +285,13 @@ export default function BeadsScreen({ navigation, route }: Props) {
           action={{ label: BeadsCopy.retry, onPress: () => setTreeAttempt((attempt) => attempt + 1) }}
         />
       ) : null}
+      {entry.error !== null ? (
+        // The list on screen is the last one read; a later read failed (the computer went away, a timeout).
+        <NoticeCard
+          notice={{ title: BeadsCopy.loadFailed, message: BeadsCopy.staleList, details: entry.error }}
+          action={{ label: BeadsCopy.retry, onPress: refresh }}
+        />
+      ) : null}
       {entry.notice !== null ? <NoticeCard notice={entry.notice} onDismiss={() => dismissBeadsNotice(machineId, projectId)} /> : null}
       {syncCard !== null && snapshot?.sync.lastResult?.at !== dismissedSyncAt ? (
         <NoticeCard

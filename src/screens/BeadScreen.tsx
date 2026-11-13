@@ -125,6 +125,10 @@ export default function BeadScreen({ navigation, route }: Props) {
   const [comment, setComment] = useState('');
   /** The binding the comment being typed was started under; it is sent only while that still holds. */
   const commentBinding = useRef<BeadsBinding | null>(null);
+  /** A comment is on its way: Comment is off until it is answered, so it can't go twice. */
+  const [commentSending, setCommentSending] = useState(false);
+  const commentText = useRef('');
+  commentText.current = comment;
   const [sheet, setSheet] = useState<Sheet>(null);
   const [prompt, setPrompt] = useState<Prompt>(null);
   const [toast, setToast] = useState<Notice | null>(null);
@@ -348,11 +352,18 @@ export default function BeadScreen({ navigation, route }: Props) {
   const sendComment = () => {
     const text = comment.trim();
     if (text.length === 0) return;
-    void act(commentBinding.current, { action: 'comment', comment: text }, BeadsCopy.failed.comment, () => {
-      setComment('');
-      commentBinding.current = null;
+    if (commentSending) return;
+    const sentBinding = commentBinding.current;
+    const sentDraft = comment;
+    setCommentSending(true);
+    void act(sentBinding, { action: 'comment', comment: text }, BeadsCopy.failed.comment, () => {
+      // Only the draft that was sent is cleared; anything typed since stays, with its own binding.
+      if (commentText.current === sentDraft) {
+        setComment('');
+        commentBinding.current = null;
+      }
       void loadDetails();
-    });
+    }).finally(() => setCommentSending(false));
   };
 
   const assignee = details?.assignee || row.assignee;
@@ -540,7 +551,11 @@ export default function BeadScreen({ navigation, route }: Props) {
           style={styles.commentInput}
         />
         <View style={styles.commentActions}>
-          <ActionButton label={BeadsCopy.comment} onPress={sendComment} disabled={comment.trim().length === 0} />
+          <ActionButton
+            label={BeadsCopy.comment}
+            onPress={sendComment}
+            disabled={commentSending || comment.trim().length === 0}
+          />
         </View>
       </ScrollView>
       <ActionSheet
