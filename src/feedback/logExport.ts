@@ -17,7 +17,7 @@ import * as Updates from 'expo-updates';
 import { Platform, Share } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
-import { formatLogDateTime, logEntryText, type AppLogEntry } from '../app/appLog';
+import { formatLogDateTime, logEntryBuild, logEntryText, type AppLogEntry } from '../app/appLog';
 import { formatDuration, whereTheAppIs } from '../app/foregroundClock';
 import { isCloudBoxMachineId } from '../cloudBoxes/types';
 import { isDemoMachine } from '../demo/identity';
@@ -116,15 +116,21 @@ export const EXPORT_LIMITS = [
   "computer's side is the evidence: sample its SSH sessions during a session and line them up with this file by time.",
 ].join(' ');
 
-/** The exported text: the header, one "YYYY-MM-DD HH:MM:SS message" line per entry, then what logs can't tell. */
+/** Splits the texts scrubbed in one pass back apart; the scrub never touches this character. */
+const ENTRY_SEPARATOR = '\n\u0000\n';
+
+/**
+ * The exported text: the header, one "YYYY-MM-DD HH:MM:SS message" line per entry, then what logs can't tell. The
+ * build lines (the header's and each `App: started`'s) go in after the scrub: an update id has the shape of a key.
+ */
 export function exportedLogText(entries: readonly AppLogEntry[], context: ExportContext, now = Date.now()): string {
-  const lines = entries.map((entry) => `${formatLogDateTime(entry.at)} ${logEntryText(entry)}`);
-  const body = scrubLogText(
-    [...exportHeader(context, now), '', ...lines, '', EXPORT_LIMITS].join('\n'),
-    context.machines,
+  const header = scrubLogText(exportHeader(context, now).join('\n'), context.machines).split('\n');
+  const texts = scrubLogText(entries.map(logEntryText).join(ENTRY_SEPARATOR), context.machines).split(ENTRY_SEPARATOR);
+  const lines = entries.map(
+    (entry, index) => `${formatLogDateTime(entry.at)} ${texts[index] ?? ''}${logEntryBuild(entry)}`,
   );
-  const [title, ...rest] = body.split('\n');
-  return `${[title, `App: ${appBuildLine()}`, ...rest].join('\n')}\n`;
+  const [title, ...rest] = header;
+  return `${[title, `App: ${appBuildLine()}`, ...rest, '', ...lines, '', EXPORT_LIMITS].join('\n')}\n`;
 }
 
 /** Shares the log; settles once the share sheet is closed, shared or not, and throws when it couldn't be shown. */

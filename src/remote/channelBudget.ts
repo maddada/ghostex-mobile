@@ -66,11 +66,22 @@ function budgetFor(machineId: string): Budget {
   return budget;
 }
 
+const endingListeners = new Set<(machineId: string) => void>();
+
+/** Hears a connection that dropped (`disconnected`, `failed`) just before its waiting commands are refused. */
+export function onConnectionEnding(listener: (machineId: string) => void): () => void {
+  endingListeners.add(listener);
+  return () => endingListeners.delete(listener);
+}
+
 function listenForConnectionEnds(): void {
   if (listening) return;
   listening = true;
   GhostexNative.addListener('onConnectionState', (event) => {
     if (event.state === 'connected') return;
+    if (event.state === 'disconnected' || event.state === 'failed') {
+      for (const listener of endingListeners) listener(event.machineId);
+    }
     endConnectionBudget(event.machineId);
   });
 }

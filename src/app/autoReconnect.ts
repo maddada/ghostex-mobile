@@ -24,7 +24,12 @@ import { isDemoMachineId } from '../demo/identity';
 import { useSettingsStore } from '../settings/store';
 import { restoreAttachTabs, useTerminalStore } from '../terminal/sessions';
 import { commandsInFlight } from '../remote/channelBudget';
-import { channelSnapshot, clearChannelPressure, installChannelPressure } from '../remote/channelPressure';
+import {
+  channelSnapshot,
+  channelSnapshotAtEnd,
+  clearChannelPressure,
+  installChannelPressure,
+} from '../remote/channelPressure';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
 import { reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
@@ -195,7 +200,6 @@ export function initAutoReconnect(): void {
   if (installed) return;
   installed = true;
   installChannelPressure({
-    label: (machineId) => machineTarget(machineId)?.name || machineId,
     detachIdleTerminals: (machineId, keep) => useTerminalStore.getState().detachIdleTerminals(machineId, keep),
     openTerminals: (machineId) => {
       const open = useTerminalStore
@@ -223,7 +227,9 @@ export function initAutoReconnect(): void {
   );
   GhostexNative.addListener('onConnectionState', (event) => {
     const ended =
-      event.state === 'disconnected' || event.state === 'failed' ? `, ${noteConnectionEnded(event.machineId)}` : '';
+      event.state === 'disconnected' || event.state === 'failed'
+        ? `, ${noteConnectionEnded(event.machineId)}. ${channelSnapshotAtEnd(event.machineId)}`
+        : '';
     logAppEvent(
       `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}${ended}`,
     );

@@ -38,7 +38,7 @@ export function initAppLifecycle(): void {
   installed = true;
   setStoredLogScrubber((text) => scrubLogText(text));
   void hydrateProjectIcons();
-  void hydrateAppLog().then(() => logAppEvent(`App: started (${appBuildLine()})`));
+  void hydrateAppLog().then(() => logAppEvent('App: started', appBuildLine()));
   let last: AppStateStatus = AppState.currentState as AppStateStatus;
   AppState.addEventListener('change', (next) => {
     const cameFromBackground = last === 'background' || last === 'inactive';

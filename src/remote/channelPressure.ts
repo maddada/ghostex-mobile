@@ -18,7 +18,7 @@
 import { create } from 'zustand';
 
 import { logAppEvent } from '../app/appLog';
-import { commandsWaiting, onChannelRefused } from './channelBudget';
+import { commandsWaiting, onChannelRefused, onConnectionEnding } from './channelBudget';
 
 const REFUSALS_FOR_RESET = 3;
 const REFUSAL_WINDOW_MS = 60_000;
@@ -31,8 +31,6 @@ const BURST_MS = 2_000;
 export const TERMINALS_KEPT_AFTER_REFUSAL = 4;
 
 export type ChannelPressureHandlers = {
-  /** The computer's name for log lines. */
-  label(machineId: string): string;
   /** Detaches off-screen agent terminals of this computer down to `keep`; returns how many it detached. */
   detachIdleTerminals(machineId: string, keep: number): Promise<number>;
   /** Terminals this phone holds open on the computer: agent terminals and plain shells. */
@@ -63,11 +61,13 @@ const refusedThisRun = new Map<string, number>();
 
 /**
  * The log's channel snapshot of one computer: what this phone admitted there, which is not the computer's own count
- * (a channel whose close never reached it still counts there).
+ * (a channel whose close never reached it still counts there). Lines name the computer by its id, which the export
+ * turns into a stable "computer 7f3a": a name could be too short for the scrub ("pi") or turn two computers into the
+ * same "<private>".
  */
 export function channelSnapshot(machineId: string): string {
   const active = handlers;
-  const name = active?.label(machineId) ?? machineId;
+  const name = machineId;
   const terminals = active?.openTerminals(machineId) ?? { agents: 0, shells: 0 };
   return (
     `Channels: ${name}, admitted by this phone: ${terminals.agents} agent terminals, ${terminals.shells} plain ` +
@@ -76,9 +76,28 @@ export function channelSnapshot(machineId: string): string {
   );
 }
 
+/** Snapshots taken as a connection dropped, before its waiting commands were refused; read once, shortly after. */
+const endSnapshots = new Map<string, { at: number; text: string }>();
+const END_SNAPSHOT_FRESH_MS = 1_000;
+
 export function installChannelPressure(next: ChannelPressureHandlers): void {
-  if (handlers === null) onChannelRefused((machineId) => void noteChannelRefusal(machineId));
+  if (handlers === null) {
+    onChannelRefused((machineId) => void noteChannelRefusal(machineId));
+    onConnectionEnding((machineId) =>
+      endSnapshots.set(machineId, { at: Date.now(), text: channelSnapshot(machineId) }),
+    );
+  }
   handlers = next;
+}
+
+/**
+ * The snapshot of a connection that just dropped: the one taken before its waiting commands were refused when that
+ * already happened, else a fresh one (nothing was cleared yet). Logging only.
+ */
+export function channelSnapshotAtEnd(machineId: string, now = Date.now()): string {
+  const taken = endSnapshots.get(machineId);
+  endSnapshots.delete(machineId);
+  return taken !== undefined && now - taken.at <= END_SNAPSHOT_FRESH_MS ? taken.text : channelSnapshot(machineId);
 }
 
 function setNeedsReset(machineId: string, needed: boolean): void {
@@ -109,7 +128,7 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
     pressure = { stageOneAt: null, lastRefusalAt: null, refusals: [], lastResetAt: null };
     pressures.set(machineId, pressure);
   }
-  const name = active.label(machineId);
+  const name = machineId;
   refusedThisRun.set(machineId, (refusedThisRun.get(machineId) ?? 0) + 1);
   logAppEvent(`Connection: ${name} refused a new channel. ${channelSnapshot(machineId)}`);
   // The detach stands while the shortage lasts; it ends on a new connection (`clearChannelPressure`) or when the

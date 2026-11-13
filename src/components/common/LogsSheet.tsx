@@ -19,7 +19,7 @@ import { useFoldSheetMaxHeight } from './foldAvoidance';
 import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
-import { formatAppLog, formatLogTime, logEntryText, useAppLogStore } from '../../app/appLog';
+import { formatAppLog, formatLogTime, logEntryBuild, logEntryText, useAppLogStore } from '../../app/appLog';
 import { LogsCopy, SendLogsCopy } from '../../copy';
 import SendLogsReview from './SendLogsReview';
 import { exportLogs } from '../../feedback/logExport';
@@ -152,7 +152,7 @@ export default function LogsSheet({ visible, onClose, exportNow = false }: LogsS
                       <View key={`${entry.at}-${index}`} style={styles.row}>
                         <Text style={styles.rowTime}>{formatLogTime(entry.at)}</Text>
                         <Text selectable style={styles.rowMessage}>
-                          {logEntryText(entry)}
+                          {`${logEntryText(entry)}${logEntryBuild(entry)}`}
                         </Text>
                       </View>
                     ))

@@ -23,6 +23,7 @@ import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
 import { endConnectionBudget, isChannelRefusal, withCommandChannel } from './channelBudget';
+import { channelSnapshot } from './channelPressure';
 import { noteConnected } from './connectionTrace';
 import { whereTheAppIs } from '../app/foregroundClock';
 
@@ -141,7 +142,10 @@ export function ensureConnected(
     const dialStartedAt = Date.now();
     if (replaceExisting) {
       if (await GhostexNative.isConnected(machine.id).catch(() => false)) {
-        logAppEvent(`Connection: ${machine.id} replaced by the phone (${replacedBecause}; app ${whereTheAppIs()})`);
+        // Before `endConnectionBudget` below refuses what waits on the old connection.
+        logAppEvent(
+          `Connection: ${machine.id} replaced by the phone (${replacedBecause}; app ${whereTheAppIs()}). ${channelSnapshot(machine.id)}`,
+        );
       }
       forgetRemoteEnvironment(machine.id);
       endConnectionBudget(machine.id);
