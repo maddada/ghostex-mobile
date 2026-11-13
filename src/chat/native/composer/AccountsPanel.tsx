@@ -133,7 +133,17 @@ function SessionBlocks({
       {recovery !== null ? (
         <View style={styles.alert} accessibilityRole="summary">
           <Text style={styles.strong}>{str(recovery, 'reason')}</Text>
+          {/* While every account is full the box says what the limit card says (Q2977 A, the chat core's
+              questions/account_wait.rs) and offers its "Continue with … on …" (Q2978 A). */}
+          {str(recovery, 'detail').length > 0 ? <Text style={styles.paragraph}>{str(recovery, 'detail')}</Text> : null}
           {str(recovery, 'next').length > 0 ? <Text style={styles.paragraph}>{str(recovery, 'next')}</Text> : null}
+          {obj(recovery.action) !== null ? (
+            <FilledButton
+              label={str(obj(recovery.action), 'label')}
+              disabled={busy}
+              onPress={() => onCommand({ type: 'accounts', request: obj(obj(recovery.action)?.request) ?? {} }, false)}
+            />
+          ) : null}
           <FilledButton
             label="Stop automatic recovery"
             disabled={busy}

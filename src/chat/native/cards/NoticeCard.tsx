@@ -304,6 +304,19 @@ export function NoticeCard({
       );
     }
   }
+  // An action the chat core marks `primary` ("Continue with Opus 5.5 on ST", questions/account_wait.rs) leads the
+  // footer filled, and Switch account sits beside it as a secondary button (Q2978 A, notice.rs).
+  const lead = collapsed ? undefined : arr(notice.actions).find((action) => obj(action)?.primary === true);
+  if (lead !== undefined) {
+    actions.push(
+      <ToneButton
+        key={`action:${str(lead, 'id')}`}
+        kind="primary"
+        label={str(lead, 'label')}
+        onPress={() => dispatch({ type: 'answer', answer: asJson(obj(lead)?.answer) })}
+      />,
+    );
+  }
   // Only sign-in and usage-limit notices offer the account panel (notice.rs).
   const kind = str(notice, 'kind');
   if (
@@ -315,7 +328,7 @@ export function NoticeCard({
     actions.push(
       <ToneButton
         key="switch-account"
-        kind="primary"
+        kind={lead !== undefined ? 'secondary' : 'primary'}
         icon="switch-horizontal"
         label="Switch account"
         onPress={() => onHostAction('switchAccount')}
@@ -324,6 +337,7 @@ export function NoticeCard({
   }
   for (const action of arr(notice.actions)) {
     if (collapsed && str(action, 'kind') !== 'trustAndRemember') continue;
+    if (obj(action)?.primary === true) continue;
     if (str(action, 'kind') === 'switchToTerminal') {
       if (onHostAction) {
         actions.push(
