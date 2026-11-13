@@ -1,6 +1,6 @@
 /**
  * The ⋯ button of a Ghostex form card, a page card and the page sheet's bar, and the menu it opens
- * (`MenuSheet`): Snooze with its lengths (the dock's 1 hour, 6 hours and 24 hours, gx-chat-core
+ * (`MenuSheet`): Snooze first (User: "put snooze as top option here"), with its lengths (the dock's 1 hour, 6 hours and 24 hours, gx-chat-core
  * `questions/later.rs` `snooze`) and, for a page, Export page and Import answers (`pageExport.ts`),
  * as the desktop page window's ⋯ menu holds them.
  *

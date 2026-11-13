@@ -385,7 +385,7 @@ export function PageSheet({ chat, machine, page, onClose, onHide, onOpenLink }: 
           {pageId !== null ? (
             // Export page, Import answers and Snooze (`CardMoreMenu.tsx`); a snoozed page's sheet closes.
             <CardMoreMenu
-              rows={[...pageRows(pageId), snoozeRow(pageId)]}
+              rows={[snoozeRow(pageId), ...pageRows(pageId)]}
               dispatch={chat.dispatch}
               color={P.primary}
               onSnoozed={close}

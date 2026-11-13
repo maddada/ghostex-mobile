@@ -213,7 +213,7 @@ function PageCardBody({
           {pageId.length > 0 ? (
             // Export page, Import answers and, while it waits, Snooze (`cards/CardMoreMenu.tsx`).
             <CardMoreMenu
-              rows={[...pageRows(pageId), ...(waiting ? [snoozeRow(pageId)] : [])]}
+              rows={[...(waiting ? [snoozeRow(pageId)] : []), ...pageRows(pageId)]}
               dispatch={dispatch}
               color={theme.foreground}
             />
