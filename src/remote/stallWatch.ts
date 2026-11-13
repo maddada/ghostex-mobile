@@ -163,9 +163,12 @@ export function noteOperationEnded(machineId: string, id: number, outcome: 'answ
   }
 }
 
-/** Whether a "Failed to open channel" took long enough to be this stall rather than the computer refusing. */
+/**
+ * Whether a "Failed to open channel" took long enough to be this stall rather than the computer refusing. iPhone only:
+ * Android has no such stall, so its refusals keep the refusal path whatever they took.
+ */
 export function isSlowOpenFailure(startedAt: number, now = Date.now()): boolean {
-  return now - startedAt >= STALL_SUSPECT_MS;
+  return Platform.OS === 'ios' && now - startedAt >= STALL_SUSPECT_MS;
 }
 
 /** A channel open failed only after `STALL_SUSPECT_MS`: not a refusal until the check says what it was. */
@@ -227,12 +230,14 @@ function runCheck(machineId: string, watch: Watch, reason: string): Promise<void
     let outcome = await active.check(machineId).catch((): StallCheckOutcome => 'failed');
     logAppEvent(`Connection: ${machineId} stall check (${reason}): ${outcome} in ${Date.now() - startedAt}ms`);
     if (watch.epoch !== epoch) return;
-    if ((outcome === 'stalled' || outcome === 'failed') && watch.newestAnsweredStart >= startedAt) {
+    if (outcome === 'stalled' && watch.newestAnsweredStart >= startedAt) {
       // A command that opened its channel after this check began came back: new channels open.
       logAppEvent(`Connection: ${machineId} kept: a newer command answered while the check waited`);
       outcome = 'answered';
     }
-    if (outcome === 'answered' || outcome === 'capacity') {
+    // `failed` (a wrong answer, an error that is not a timeout) does not show opens stuck: a socket that really closed
+    // is the native disconnect's business, which reconnects on its own.
+    if (outcome === 'answered' || outcome === 'capacity' || outcome === 'failed') {
       // The echo's channel opened when the check began; later opens are not covered by it.
       watch.clearedBefore = Math.max(watch.clearedBefore, startedAt);
       return;

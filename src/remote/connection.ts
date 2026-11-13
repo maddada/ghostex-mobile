@@ -25,7 +25,7 @@ import {
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
-import { endConnectionBudget, isChannelRefusal, withProbeChannel } from './channelBudget';
+import { endConnectionBudget, isChannelRefusal, reportChannelRefused, withProbeChannel } from './channelBudget';
 import { isSlowOpenFailure, offerResetInstead, plainShellsOpen, STALL_SUSPECT_MS } from './stallWatch';
 import { channelSnapshot } from './channelPressure';
 import { noteConnected } from './connectionTrace';
@@ -355,6 +355,9 @@ async function probeConnection(machineId: string, since: number, timeoutMs = PRO
     if (isChannelRefusal(error) && isSlowOpenFailure(startedAt)) return 'stalled';
     if (isChannelRefusal(error)) {
       if (!(await GhostexNative.isConnected(machineId).catch(() => false))) return 'failed';
+      // The echo's lane is outside the command budget, which reported refusals for it before; the escape path
+      // (src/remote/channelPressure.ts) still needs to hear a fast one.
+      reportChannelRefused(machineId);
       const http = await askKnownGxserver(machineId);
       logAppEvent(`Connection: ${machineId} refused the check's channel; gxserver over the forward: ${http}`);
       return 'capacity';
