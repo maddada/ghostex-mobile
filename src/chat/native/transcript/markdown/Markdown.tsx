@@ -29,6 +29,7 @@ import { fitTableColumns } from './tableLayout';
 import { RIGHT_TO_LEFT_TEXT, startsRightToLeft } from './textDirection';
 import { MarkedSection, useMarkedEmoji, useMarkedStyle } from './MarkedSections';
 import { SessionPill } from '../SessionPill';
+import type { MentionTarget } from '../mentionedSession';
 import { openQuestionReply } from '../QuestionReply';
 
 /** One `markdownReferences` entry; `record` is the whole entry (a `session` pill reads its logo and state). */
@@ -38,8 +39,8 @@ type InlineContext = {
   theme: TranscriptTheme;
   references: Map<string, Reference>;
   openLink(href: string): void;
-  /** A long press on a link: the transcript menu's reference rows. */
-  longPressLink: ((href: string) => void) | undefined;
+  /** A long press on a link: the transcript menu's reference rows (and a session pill's card, `mention`). */
+  longPressLink: ((href: string, mention?: MentionTarget) => void) | undefined;
   /** Whether prose and code take the platform's own text selection (see `TranscriptMenu.tsx`). */
   selectable: boolean;
   /** Transcript search's word highlight for the row this text is in (`searchHighlight.tsx`). */
@@ -240,7 +241,14 @@ function renderInlines(
                 pill={reference.record}
                 onOpen={() => context.openLink(inline.href)}
                 {...(context.longPressLink !== undefined
-                  ? { onLongPress: () => context.longPressLink?.(inline.href) }
+                  ? {
+                      // A session's pill shows its card above the link's rows (CDXC:SessionChat 2026-11-13 in MentionCard.tsx).
+                      onLongPress: () =>
+                        context.longPressLink?.(
+                          inline.href,
+                          reference.kind === 'session' ? { globalRef: inline.href } : undefined,
+                        ),
+                    }
                   : {})}
               />
             </Text>
@@ -1126,7 +1134,8 @@ export const Markdown = memo(function Markdown({
       theme,
       references: referencesMap,
       openLink,
-      longPressLink: (href: string) => openTranscriptMenu({ href }),
+      longPressLink: (href: string, mention?: MentionTarget) =>
+        openTranscriptMenu(mention !== undefined ? { href, mention } : { href }),
       selectable,
       find,
       strips,

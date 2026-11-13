@@ -6,6 +6,8 @@
 
 import { create } from 'zustand';
 
+import type { MentionTarget } from './mentionedSession';
+
 /**
  * A message's own action, offered under the core's Copy and Add to Chat rows (Edit, Back to
  * composer, Rewind, Save prompt, Save to md...). `icon` is a glyph name `MenuSheet` can draw.
@@ -21,6 +23,8 @@ export type MenuRequest = {
   selection: string;
   actions: MessageMenuAction[];
   selectedWords: string | null;
+  /** A session pill was held: its card tops the menu (`MentionCard.tsx`). */
+  mention: MentionTarget | null;
 };
 
 export const useTranscriptMenuStore = create<{
@@ -31,20 +35,29 @@ export const useTranscriptMenuStore = create<{
 
 /**
  * A long press on a message (`selection` is its text, `actions` its own buttons, `selectedWords` the
- * words selected when it came from the selection bar's More) or on a link (`href`, no selection).
+ * words selected when it came from the selection bar's More), on a link (`href`, no selection), or on
+ * a session pill (`mention`, with its link's `href` when it has one).
  */
 export function openTranscriptMenu(request: {
   href?: string;
   selection?: string;
   actions?: MessageMenuAction[];
   selectedWords?: string;
+  mention?: MentionTarget;
 }): void {
   const href = request.href !== undefined && request.href.length > 0 ? request.href : null;
   const selection = (request.selection ?? '').trim();
-  if (href === null && selection.length === 0) return;
+  const mention = request.mention ?? null;
+  if (href === null && selection.length === 0 && mention === null) return;
   const words = (request.selectedWords ?? '').trim();
   useTranscriptMenuStore.setState({
-    request: { href, selection, actions: request.actions ?? [], selectedWords: words.length > 0 ? words : null },
+    request: {
+      href,
+      selection,
+      actions: request.actions ?? [],
+      selectedWords: words.length > 0 ? words : null,
+      mention,
+    },
   });
 }
 

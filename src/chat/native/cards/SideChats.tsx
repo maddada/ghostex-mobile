@@ -163,7 +163,7 @@ export function SideChatBar({ chat, document }: { chat: RustChat; document: Chat
       <Text style={styles.barLabel}>Side chat of</Text>
       <View style={styles.barParent}>
         <TranscriptEnvProvider value={env}>
-          <SessionPill pill={obj(bar.parentPill) ?? {}} textStyle={styles.barParentText} />
+          <SessionPill pill={obj(bar.parentPill) ?? {}} textStyle={styles.barParentText} plain />
         </TranscriptEnvProvider>
       </View>
       <IconButton

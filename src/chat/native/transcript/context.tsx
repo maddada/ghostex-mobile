@@ -54,6 +54,11 @@ export type NativeChatUi = {
    * appended (the document's `issueLinkBase`); null without a GitHub remote, whose links stay text.
    */
   issueLinkBase: string | null;
+  /**
+   * The phone's id of the computer this chat runs on, which a session pill compares a session's
+   * computer with (`mentionedSession.ts`); null while the chat has no target.
+   */
+  homeMachineId: string | null;
 };
 
 const UiContext = createContext<NativeChatUi | null>(null);
@@ -132,9 +137,11 @@ export function NativeChatUiProvider({
       });
   }, []);
   const issueLinkBase = chat.state?.document?.issueLinkBase ?? null;
+  const homeMachineId = chat.machine?.id ?? null;
   const value = useMemo<NativeChatUi>(
     () => ({
       issueLinkBase,
+      homeMachineId,
       disclosures,
       demand,
       dictationTargets,
@@ -148,6 +155,7 @@ export function NativeChatUiProvider({
       demand,
       dictationTargets,
       disclosures,
+      homeMachineId,
       issueLinkBase,
       requestImage,
       renderVisual,
@@ -186,6 +194,11 @@ export function DictatedFormBoxes({ chat }: { chat: RustChat }): null {
 /** The chat screen's shared drawing state, or null outside `NativeChatScreen` (Markdown in a card). */
 export function useOptionalNativeChatUi(): NativeChatUi | null {
   return useContext(UiContext);
+}
+
+/** The computer this chat runs on (`NativeChatUi.homeMachineId`), or null outside a chat screen. */
+export function useHomeMachineId(): string | null {
+  return useContext(UiContext)?.homeMachineId ?? null;
 }
 
 /** The chat screen's shared drawing state. Throws outside `NativeChatScreen`. */

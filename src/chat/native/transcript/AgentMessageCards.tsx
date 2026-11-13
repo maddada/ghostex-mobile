@@ -143,7 +143,7 @@ const AgentCard = memo(function AgentCard({
             <Text style={[SINGLE_LINE_TITLE, styles.fixed, { color: theme.foreground }]} numberOfLines={1}>
               {str(pill, 'prefix')}
             </Text>
-            <SessionPill pill={pill} textStyle={[SINGLE_LINE_TITLE, { color: theme.foreground }]} />
+            <SessionPill pill={pill} />
           </View>
         ) : (
           <Text style={[SINGLE_LINE_TITLE, styles.name, { color: theme.foreground }]} numberOfLines={1}>
@@ -191,10 +191,7 @@ const AgentCard = memo(function AgentCard({
                     <Mark card={recipient} />
                     {obj(recipient.pill) !== null ? (
                       <View style={styles.recipientName}>
-                        <SessionPill
-                          pill={obj(recipient.pill) ?? {}}
-                          textStyle={[styles.recipientText, { color: theme.foreground }]}
-                        />
+                        <SessionPill pill={obj(recipient.pill) ?? {}} />
                       </View>
                     ) : (
                       <Text
@@ -336,8 +333,8 @@ const styles = StyleSheet.create({
    * session's name shortens, with an ellipsis (`SessionPill`'s label).
    */
   fixed: { flexShrink: 0 },
-  // An ordinary word space between `Message to` and the session's name.
-  pillTitle: { flexDirection: 'row', alignItems: 'center', gap: Math.round(SINGLE_LINE_CARD.titleSize * 0.27) },
+  // `Message to`, then the session's framed pill (`SessionPill`), a little apart.
+  pillTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   small: { fontSize: 12, lineHeight: 16 },
   opened: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10, gap: 6 },
   recipients: { gap: 4, paddingBottom: 4 },
@@ -352,7 +349,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   recipientName: { flexShrink: 1, minWidth: 0, fontSize: 13 },
-  recipientText: { fontSize: 13 },
   failure: {
     flexDirection: 'row',
     flexWrap: 'wrap',

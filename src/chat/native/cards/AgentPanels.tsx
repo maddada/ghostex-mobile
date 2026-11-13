@@ -7,12 +7,14 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { UserAction } from '../../rust/actions';
 import type { RustChat } from '../../rust/useRustChat';
 import { SidebarPalette } from '../../../theme/palette';
+import { CoordinatorGlyph } from '../../../components/sessions/icons';
+import { AgentMark } from './agentMark';
 import { Glyph } from './icons';
 import { arr, asJson, isTrue, num, obj, str } from './json';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
@@ -208,15 +210,8 @@ function ThreadRow({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone
       </View>
       <View style={styles.threadText}>
         <View style={styles.threadTitleLine}>
-          <Text style={styles.threadTitle} numberOfLines={1}>
-            {title}
-          </Text>
+          <WorkerPill row={row} title={title} remote={computer !== null} />
           {isTrue(row, 'needsApproval') ? <Text style={styles.approvalTag}>{NEEDS_APPROVAL_LABEL}</Text> : null}
-          {computer !== null ? (
-            <Text style={styles.threadComputer} numberOfLines={1}>
-              {computer}
-            </Text>
-          ) : null}
         </View>
         {detail.length > 0 || branch.length > 0 ? (
           <Text style={styles.threadDetail} numberOfLines={1}>
@@ -226,6 +221,34 @@ function ThreadRow({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone
         <WorkItemPills row={row} chat={chat} />
       </View>
     </Pressable>
+  );
+}
+
+/**
+ * A worker's name as the session pill a mention draws (`SessionPill`): its agent's logo when the core
+ * names it, its title, and the computer's icon for a worker on another computer (the name is in the
+ * row's label and the notice a tap gives). The row's own dot left of it is its state, so the pill
+ * has none.
+ *
+ * CDXC:SessionChat 2026-11-13 DECISION: User, answering the session-mention design page: Q3063 "the same look spreads to message cards and the Workers popover, where they name a session", and Q3060's "for a session on another computer, show only that computer's icon, not its whole name". Supersedes the plain title followed by the computer's name.
+ */
+function WorkerPill({ row, title, remote }: { row: unknown; title: string; remote: boolean }) {
+  const styles = useStyles();
+  const theme = useTranscriptTheme();
+  const icon = str(row, 'agentIcon');
+  const coordinator = isTrue(row, 'coordinator');
+  return (
+    <View style={styles.workerPill}>
+      {coordinator ? (
+        <CoordinatorGlyph size={12} color={theme.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
+      ) : icon.length > 0 ? (
+        <AgentMark icon={icon} size={12} />
+      ) : null}
+      <Text style={styles.threadTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      {remote ? <Glyph name="device-desktop" size={11} color={theme.muted} /> : null}
+    </View>
   );
 }
 
@@ -568,17 +591,25 @@ const useStyles = themedStyles((P) => ({
     alignItems: 'center',
     gap: 6,
   },
+  /** A worker's name as a session pill (`WorkerPill`, `SessionPill`'s frame). */
+  workerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 4,
+    paddingHorizontal: 6,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: P.ink(0.14),
+    backgroundColor: P.ink(0.03),
+  },
   threadTitle: {
     flexShrink: 1,
     color: P.foreground,
-    fontSize: PROSE_SIZE,
-  },
-  /** The computer a worker on another computer runs on, after its title: muted, like the branch. */
-  threadComputer: {
-    flexShrink: 0,
-    maxWidth: 120,
-    color: P.cardMuted,
-    fontSize: PROSE_SIZE - 2,
+    fontSize: PROSE_SIZE - 1,
+    fontWeight: '500',
   },
   /** One line under the title: muted, a step under it so the title still leads. */
   threadDetail: {

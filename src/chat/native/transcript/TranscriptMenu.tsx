@@ -27,6 +27,7 @@ import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { MenuSheet, type MenuRow } from '../composer/MenuSheet';
 import { arr, obj, str } from './json';
+import { MentionCard } from './MentionCard';
 import { ReplySheet, type ReplyAction } from './ReplySheet';
 import { closeTranscriptMenu, replySelection, useTranscriptMenuStore } from './transcriptMenuStore';
 
@@ -63,9 +64,11 @@ export function TranscriptMenuSheet({
   const { query, queryAsync } = chat;
   const rows = useMemo<MenuRow[] | null>(() => {
     if (request === null || !enabled) return null;
-    const answer = arr(
-      query('transcriptMenu', [{ href: request.href, selection: request.selection, questionActive: active }]),
-    );
+    // A card's session name has no link and no text of its own: its card alone.
+    const answer =
+      request.href === null && request.selection.length === 0
+        ? []
+        : arr(query('transcriptMenu', [{ href: request.href, selection: request.selection, questionActive: active }]));
     const served = answer
       .map((row) => obj(row))
       .filter((row): row is MenuRow => {
@@ -81,8 +84,10 @@ export function TranscriptMenuSheet({
       command: { type: 'messageAction', index },
     }));
     const all = own.length > 0 ? [...served, ...(served.length > 0 ? [{ separator: true }] : []), ...own] : served;
-    return all.length > 0 ? all : null;
+    return all.length > 0 || request.mention !== null ? all : null;
   }, [active, enabled, host, query, request]);
+  const homeMachineId = chat.machine?.id ?? null;
+  const mention = request?.mention ?? null;
   // The menu belongs to the chat on screen; leaving it drops a request still pending.
   useEffect(() => closeTranscriptMenu, []);
   const composerText = chat.state?.composer.text ?? '';
@@ -172,7 +177,13 @@ export function TranscriptMenuSheet({
   );
   return (
     <>
-      <MenuSheet rows={rows} onClose={closeTranscriptMenu} onCommand={onCommand} onDismissed={onMenuDismissed} />
+      <MenuSheet
+        rows={rows}
+        onClose={closeTranscriptMenu}
+        onCommand={onCommand}
+        onDismissed={onMenuDismissed}
+        {...(mention !== null ? { header: <MentionCard target={mention} homeMachineId={homeMachineId} /> } : {})}
+      />
       <ReplySheet quote={replyQuote} onClose={() => setReplyQuote(null)} onReply={onReply} />
     </>
   );
