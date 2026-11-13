@@ -48,6 +48,11 @@ function bounded(entries: AppLogEntry[]): AppLogEntry[] {
 }
 
 let storedScrubber: ((text: string) => string) | null = null;
+/**
+ * Each entry's stored text, fixed at its first save: scrubbed with the names known then, so a later rename or
+ * removal (whose old name the scrubber no longer knows) never writes the original back.
+ */
+const storedText = new WeakMap<AppLogEntry, string>();
 
 /**
  * Replaces personal details in the copy kept across restarts, with the names known when it is saved, so a computer
@@ -63,9 +68,14 @@ function scheduleSave(): void {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     const scrub = storedScrubber;
-    const entries = useAppLogStore
-      .getState()
-      .entries.map((entry) => (scrub === null ? entry : { at: entry.at, message: scrub(entry.message) }));
+    const entries = useAppLogStore.getState().entries.map((entry) => {
+      let message = storedText.get(entry);
+      if (message === undefined) {
+        message = scrub === null ? entry.message : scrub(entry.message);
+        if (scrub !== null) storedText.set(entry, message);
+      }
+      return { at: entry.at, message };
+    });
     void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries)).catch(() => undefined);
   }, SAVE_DELAY_MS);
 }
@@ -98,6 +108,8 @@ export async function hydrateAppLog(): Promise<void> {
     // An unreadable copy starts the log over.
   }
   hydrated = true;
+  // What earlier runs kept is already scrubbed.
+  for (const entry of stored) storedText.set(entry, entry.message);
   useAppLogStore.setState((state) => ({ entries: bounded([...stored, ...state.entries]) }));
   scheduleSave();
 }

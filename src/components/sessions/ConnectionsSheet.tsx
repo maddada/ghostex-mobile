@@ -116,7 +116,7 @@ export default function ConnectionsSheet({
                   {entry.reason}
                 </Text>
               ) : null
-            ) : entry.status !== 'slow' ? (
+            ) : entry.busy || entry.status !== 'slow' ? (
               <Text style={styles.why}>{FailureCopy.channelsBusy}</Text>
             ) : (
               <Text style={styles.why}>
