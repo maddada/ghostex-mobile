@@ -28,6 +28,7 @@ import { MessageRow } from './MessageRow';
 import { foldPart, keptParts, lineCards, type QuietLines } from './quietLines';
 import { QuietLine, QuietStatusMark, type QuietSegment } from './quietWork';
 import { useRowGap } from './messageSpacing';
+import { AnswersUnderQuietLine } from './PageAnswersCard';
 import { useDisclosure } from './state';
 import { BoxedToolCards } from './ToolCard';
 import { TranscriptItemView } from './TranscriptItemRow';
@@ -273,7 +274,7 @@ function AnswersLine({ card, children }: { card: QuietAnswers; children: ReactNo
         expandable
         onPress={toggle}
       />
-      {open ? children : null}
+      {open ? <AnswersUnderQuietLine.Provider value>{children}</AnswersUnderQuietLine.Provider> : null}
     </View>
   );
 }

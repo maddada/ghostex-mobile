@@ -165,6 +165,7 @@ export function TranscriptScope({ chat, main, children }: { chat: RustChat; main
       : JSON.stringify([
           document.finalIds,
           document.answeredPages,
+          document.answersBelow,
           document.withdrawnPages,
           document.laterQuestions,
           document.openQuestions?.sections,

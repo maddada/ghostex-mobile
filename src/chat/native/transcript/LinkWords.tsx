@@ -39,6 +39,7 @@ export function LinkWords({
   runs,
   color,
   style,
+  numberOfLines,
 }: {
   /** The words as plain text, drawn as they are when `runs` is not an array. */
   text: string;
@@ -46,12 +47,19 @@ export function LinkWords({
   /** The text's colour, which its links keep. */
   color: string;
   style: StyleProp<TextStyle>;
+  /** Cuts the words to this many lines (the answers card's one-line question). */
+  numberOfLines?: number;
 }) {
   const { dispatch } = useTranscriptEnv();
   const issueLinkBase = useIssueLinkBase();
-  if (!Array.isArray(runs)) return <Text style={[style, { color }]}>{text}</Text>;
+  if (!Array.isArray(runs))
+    return (
+      <Text numberOfLines={numberOfLines} style={[style, { color }]}>
+        {text}
+      </Text>
+    );
   return (
-    <Text style={[style, { color }]}>
+    <Text numberOfLines={numberOfLines} style={[style, { color }]}>
       {arr(runs).map((run, index) => {
         const words = str(run, 'text');
         const issue = str(run, 'issue');

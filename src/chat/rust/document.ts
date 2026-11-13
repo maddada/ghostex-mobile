@@ -605,6 +605,9 @@ export type ChatDocument = {
   finalIds: string[];
   /** Pages published with `ghostex show` whose answers arrived (gx-chat-core `page_answers.rs`). */
   answeredPages?: string[];
+  /** Forms and pages whose answers card is the next row after the reply asking them, so their own
+   * Answered line is left out (gx-chat-core `page_answers.rs` `answers_below`, Q2995). */
+  answersBelow?: string[];
   /** Question pages not answered whose questions were withdrawn, some or all, by page id
    * (gx-chat-core `open_questions.rs` `withdrawn_pages`). */
   withdrawnPages?: { [pageId: string]: { tags: string[]; total: number } };

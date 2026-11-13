@@ -257,6 +257,8 @@ export type TranscriptFlags = {
   finalIds: ReadonlySet<string>;
   /** Pages whose answers arrived, so their cards read Answered (desktop `visual.rs`). */
   answeredPages: ReadonlySet<string>;
+  /** Forms and pages whose answers card sits right under them, so they draw nothing (Q2995). */
+  answersBelow: ReadonlySet<string>;
   /** Question pages whose questions were withdrawn, some or all (desktop `page_card.rs`). */
   withdrawnPages: { [pageId: string]: { tags: string[]; total: number } };
   /** Question pages and forms still unanswered, which offer For later (gx-chat-core `questions/later.rs`). */
@@ -353,6 +355,7 @@ export function hiddenWork(look: ChatLook): boolean {
 const EMPTY_FLAGS: TranscriptFlags = {
   finalIds: new Set(),
   answeredPages: new Set(),
+  answersBelow: new Set(),
   withdrawnPages: {},
   unansweredQuestions: new Set(),
   laterQuestions: new Set(),
@@ -416,6 +419,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
   return {
     finalIds: new Set(arr(document.finalIds).filter((id): id is string => typeof id === 'string')),
     answeredPages: new Set(arr(document.answeredPages).filter((id): id is string => typeof id === 'string')),
+    answersBelow: new Set(arr(document.answersBelow).filter((id): id is string => typeof id === 'string')),
     withdrawnPages: obj(document.withdrawnPages) === null ? {} : (document.withdrawnPages ?? {}),
     unansweredQuestions: new Set(
       (document.openQuestions?.sections ?? [])

@@ -36,7 +36,7 @@ import {
 
 import { useLaptopFold } from '../../../components/common/verticalBar/laptopFold';
 import type { Json } from '../../rust/document';
-import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
+import { useOptionalNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
 import { useRevealFocusedField } from './fieldReveal';
 import { useEchoedText } from '../cards/useEchoedText';
 import { ErrorLine } from '../cards/ErrorLine';
@@ -162,8 +162,13 @@ function placeholder(question: JsonRecord | null, draft: JsonRecord | null): str
 /** The form, outlined for a moment when the Previous question pill or a Q-tag link lands on it. */
 export function QuestionForm({ id, source }: { id: string; source: string }) {
   const { theme } = useTranscriptEnv();
+  const { answersBelow } = useTranscriptFlags();
+  const state = useQuestionFormState(id);
   // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs `card_tags`).
-  if (useQuestionFormState(id)?.coveredByCard === true) return null;
+  if (state?.coveredByCard === true) return null;
+  // Answered, with the reader's answers card right under it, which names it (Q2995, desktop
+  // `answers_right_below`).
+  if (state?.state === 'answered' && answersBelow.has(id)) return null;
   return (
     <QuestionFlashFrame target={id} light={theme.light}>
       <QuestionFormCard id={id} source={source} />

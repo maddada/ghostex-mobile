@@ -107,6 +107,9 @@ function PageCardBody({
     return () => clearTimeout(timer);
   }, [dispatch, pageId, retryInMs, revision]);
 
+  // Answered, with the reader's answers card right under it, which names the page and opens it
+  // again (Q2995, desktop `answers_right_below`).
+  if (answered && flags.answersBelow.has(pageId)) return null;
   const open = () => dispatch({ type: 'openMarkdownLink', href: url, external: false });
   const picture = entry?.png ?? null;
   const detail = file.length > 0 ? `Ghostex page · ${file}` : 'Ghostex page';
