@@ -111,7 +111,6 @@ export function DictationBar({
   onCancel,
   onRetry,
   onFix,
-  onFinish,
   retrying = false,
   onShare,
 }: {
@@ -132,8 +131,6 @@ export function DictationBar({
   onCancel: () => void;
   onRetry: () => void;
   onFix: () => void;
-  /** ✓: stops the recording and transcribes it, as the microphone's Stop does. */
-  onFinish: () => void;
   /** The computer never answered: the recording goes again on its own. */
   retrying?: boolean;
   /** Shares the recording's audio; absent when this phone can't. */
@@ -244,9 +241,9 @@ export function DictationBar({
     );
   }
   /*
-   * CDXC:Dictate 2026-11-13 DECISION: The recording pill reads like the reference app's: ✕ cancel on the left, the
-   * clock and the waveform in the middle, a filled ✓ that finishes on the right (the brief for Q2918), and "Can't hear
-   * you" in place of the engine after 3 seconds of near-silence (Q2919).
+   * CDXC:Dictate 2026-11-13 DECISION: The recording pill: ✕ cancel on the left, the clock and the waveform, and "Can't
+   * hear you" in place of the engine after 3 seconds of near-silence (Q2919). User (Q2918 "pill"): no ✓ finish in it;
+   * the microphone's Stop finishes.
    */
   return (
     <View style={[styles.pill, styles.pillRecording]} accessibilityRole="summary">
@@ -263,15 +260,6 @@ export function DictationBar({
           {short}
         </Text>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Finish and transcribe"
-        hitSlop={6}
-        onPress={onFinish}
-        style={({ pressed }) => [styles.finish, pressed ? styles.finishPressed : null]}
-      >
-        <Glyph name="check" size={15} color={P.background} />
-      </Pressable>
     </View>
   );
 }
@@ -353,8 +341,8 @@ const useStyles = themedStyles((P) => ({
   },
   // Transcribing: the spinner starts 15pt in; the ✕'s 14pt mark, centred in its 28pt button, ends 15pt in.
   pillPlain: { paddingLeft: 15, paddingRight: 8 },
-  // Recording: the ✕ and the ✓ are 28pt buttons 5pt from each end, so both ends are inset alike.
-  pillRecording: { paddingHorizontal: 5, gap: 8 },
+  // Recording: the ✕'s 14pt mark, centred in its 28pt button 5pt in, starts 12pt in; the last word ends 12pt in.
+  pillRecording: { paddingLeft: 5, paddingRight: 12, gap: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' },
   clock: { color: P.primary, fontSize: 13, fontVariant: ['tabular-nums'] },
   engine: { color: P.muted, fontSize: 12.5, flexShrink: 0, maxWidth: 90 },
@@ -363,15 +351,6 @@ const useStyles = themedStyles((P) => ({
   body: { color: P.cardMuted, fontSize: 13, lineHeight: 18 },
   close: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   pressed: { backgroundColor: P.border },
-  finish: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: P.controlPrimary,
-  },
-  finishPressed: { opacity: 0.85 },
   card: {
     borderRadius: 18,
     borderWidth: 1,

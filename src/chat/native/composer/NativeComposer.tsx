@@ -797,7 +797,6 @@ export function NativeComposer({
             recordingId={dictation.recordingId}
             notice={dictation.notice}
             failureCode={dictation.failureCode}
-            onFinish={() => void dictation.toggle()}
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
             onFix={() => {
