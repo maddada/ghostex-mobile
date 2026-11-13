@@ -8,7 +8,7 @@ export const DemoCopy = {
   entryButton: 'Open demo',
   welcomeButton: 'Try demo experience',
   banner:
-    'Sample computer on this phone. Nothing here is a real machine, and nothing is sent over the network.',
+    'Sample sessions on this phone. None of them run on a real computer, and nothing is sent over the network.',
   cardDetail: 'Sample projects on this phone. No network.',
   chatNote: 'Demo chat. Replies are written in advance and stay on this phone.',
   terminalNote: 'Demo terminal. The output is a recording, not a live shell.',
