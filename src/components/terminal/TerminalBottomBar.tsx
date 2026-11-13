@@ -23,7 +23,7 @@ import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { Alert, Platform, Pressable, StyleSheet, ToastAndroid, View } from 'react-native';
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
-import { DictationBar } from '../../chat/native/composer/DictationBar';
+import { DictationBar, unavailableProblem } from '../../chat/native/composer/DictationBar';
 import { Glyph, ModeGlyph, type GlyphName } from '../../chat/native/composer/icons';
 import { useDictation, type DictationChat } from '../../chat/native/composer/useDictation';
 import type { UserAction } from '../../chat/rust/actions';
@@ -144,7 +144,8 @@ export default function TerminalBottomBar({
     glyph: GlyphName,
     label: string,
     onPress: () => void,
-    options: { selected?: boolean; disabled?: boolean } = {},
+    /** `dimmed`: shown greyed but still pressed (a Dictate that can't transcribe yet says why). */
+    options: { selected?: boolean; disabled?: boolean; dimmed?: boolean } = {},
   ) => (
     <Pressable
       accessibilityRole="button"
@@ -156,7 +157,7 @@ export default function TerminalBottomBar({
       style={({ pressed }) => [
         styles.control,
         pressed || options.selected === true ? { backgroundColor: pressedWash } : null,
-        options.disabled === true ? styles.dim : null,
+        options.disabled === true || options.dimmed === true ? styles.dim : null,
       ]}
     >
       <Glyph name={glyph} size={GLYPH_SIZE} color={glyphColor} />
@@ -169,30 +170,21 @@ export default function TerminalBottomBar({
       style={[styles.root, { paddingBottom: 8 + bottomInset }, covered ? styles.covered : null]}
       onLayout={onHeightChange === undefined ? undefined : (event) => onHeightChange(event.nativeEvent.layout.height)}
     >
-      {dictation.phase !== 'idle' ? (
-        <View
-          style={[
-            styles.dictation,
-            {
-              backgroundColor: colorWithOpacity(chrome.ink, TRACK_TINT_ALPHA * 100),
-              borderColor: colorWithOpacity(chrome.ink, 12),
-            },
-          ]}
-        >
-          <DictationBar
-            phase={dictation.phase}
-            elapsedMs={dictation.phase === 'waiting' ? dictation.waitingMs : dictation.elapsedMs}
-            failure={dictation.failure}
-            retrying={dictation.retrying}
-            onShare={dictation.canShare ? () => void dictation.share() : undefined}
-            engine={dictation.engine?.label ?? null}
-            fix={dictation.fix}
-            onCancel={() => void dictation.cancel()}
-            onRetry={() => void dictation.retry()}
-            onFix={openVoiceSettings}
-          />
-        </View>
-      ) : null}
+      {/* The pill and cards draw their own surface, as above the chat box. */}
+      <DictationBar
+        phase={dictation.phase}
+        elapsedMs={dictation.phase === 'waiting' ? dictation.waitingMs : dictation.elapsedMs}
+        failure={dictation.failure}
+        retrying={dictation.retrying}
+        onShare={dictation.canShare ? () => void dictation.share() : undefined}
+        engine={dictation.engine?.label ?? null}
+        fix={dictation.fix}
+        problem={unavailableProblem(dictation.unavailable, machine?.name ?? null)}
+        recordingId={dictation.recordingId}
+        onCancel={() => void dictation.cancel()}
+        onRetry={() => void dictation.retry()}
+        onFix={openVoiceSettings}
+      />
       {/* The bar's empty room is the keyboard's too; its buttons take their own taps. Not an accessibility element
           itself, so VoiceOver and TalkBack reach each button (the keyboard button is the bar's Show the keyboard). */}
       <Pressable
@@ -253,11 +245,13 @@ export default function TerminalBottomBar({
                 dictation.listening ? 'player-stop' : 'microphone',
                 dictation.listening
                   ? 'Stop dictating'
-                  : dictation.engine !== null
-                    ? `Dictate · ${dictation.engine.label}`
-                    : 'Dictate',
+                  : !dictation.ready
+                    ? "Dictate isn't ready on this computer"
+                    : dictation.engine !== null
+                      ? `Dictate · ${dictation.engine.label}`
+                      : 'Dictate',
                 () => void dictation.toggle(),
-                { selected: dictation.listening },
+                { selected: dictation.listening, dimmed: !dictation.ready && !dictation.listening },
               )
             : null}
           <Pressable
@@ -284,12 +278,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_MARGIN,
     paddingTop: 6,
     gap: 6,
-  },
-  dictation: {
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   bar: {
     height: BAR_HEIGHT,

@@ -23,6 +23,7 @@ import { Text, View } from 'react-native';
 import type { Json } from '../../rust/document';
 import { GbotIcon } from '../../../components/sessions/gbotIcons';
 import { ToneButton, ToneCard } from '../cards/ToneCard';
+import { ErrorLine } from '../cards/ErrorLine';
 import { CARD_TEXT_SIZE } from '../cards/primitives';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { cardStackMargin } from './cardSpacing';
@@ -124,11 +125,7 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
             {note}
           </Text>
         ) : null,
-        error.length > 0 ? (
-          <Text key="error" style={styles.error}>
-            {error}
-          </Text>
-        ) : null,
+        error.length > 0 ? <ErrorLine key="error" message={error} /> : null,
       ]}
       footerEnd={
         undone
@@ -203,9 +200,5 @@ const useStyles = themedStyles((P) => ({
     color: P.muted,
     fontSize: 12.5,
     lineHeight: 17,
-  },
-  error: {
-    color: '#ef9999',
-    fontSize: 12.5,
   },
 }));

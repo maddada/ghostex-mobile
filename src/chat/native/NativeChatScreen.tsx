@@ -62,6 +62,7 @@ import type { GbotSettingsTab } from '../../screens/sessions-screen/GbotSettings
 import { useKeyboardTop } from '../../components/common/keyboard/keyboardFrame';
 import { useArmedActions } from './armedActions';
 import { NativeChatCards, NativeChatOverlays, PageSheet, ResourceSheet, questionReplacesComposer } from './cards';
+import { ErrorLine } from './cards/ErrorLine';
 import { WorkDock, dockHeightCap, workDockShown } from './cards/WorkCards';
 import { ChatPlacementProvider, type ChatPlacement } from './chatPlacement';
 import { PillMenuSheet } from './cards/ChatPills';
@@ -575,9 +576,7 @@ export default function NativeChatScreen({
                   setPaneSize((now) => (now?.width === width && now.height === height ? now : { width, height }));
               }}
             >
-              {chat.state?.error ? (
-                <Text style={[styles.error, { color: theme.error }]}>{chat.state.error}</Text>
-              ) : null}
+              {chat.state?.error ? <ErrorLine message={chat.state.error} style={styles.error} /> : null}
               {document ? <SideChatBar chat={chat} document={document} /> : null}
               <TranscriptSearchBar chat={chat} />
               <View
@@ -1180,7 +1179,7 @@ const TRANSCRIPT_KEPT_IN_VIEW = 48;
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   transcript: { flex: 1, minHeight: 0 },
-  error: { padding: 16, fontSize: 14 },
+  error: { paddingHorizontal: 16, paddingVertical: 12 },
   preloading: { position: 'absolute', top: -2, left: -2, width: 1, height: 1, opacity: 0 },
   /** A warm chat out of sight keeps its size, so its rows and its scroll position stay laid out (`WarmChats.tsx`). */
   parked: { opacity: 0 },

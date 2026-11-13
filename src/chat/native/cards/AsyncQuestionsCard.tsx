@@ -11,6 +11,7 @@ import type { ChatDocument } from '../../rust/document';
 import { useChatViewSize } from '../chatPlacement';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
+import { ErrorLine } from './ErrorLine';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { CardButton, ChoiceRow, Spinner } from './primitives';
 import { useEchoedText } from './useEchoedText';
@@ -95,7 +96,7 @@ export function AsyncQuestionsCard({ chat, document }: { chat: RustChat; documen
             placeholder={options.length > 0 ? 'Or write your own answer…' : 'Write your answer…'}
             placeholderTextColor={P.placeholder}
           />
-          {state.error.length > 0 ? <Text style={styles.error}>{state.error}</Text> : null}
+          {state.error.length > 0 ? <ErrorLine message={state.error} /> : null}
           {state.canSend === false ? (
             <Text style={styles.readOnly}>Answers are unavailable while this chat is read-only or disconnected.</Text>
           ) : null}
@@ -232,10 +233,6 @@ const useStyles = themedStyles((P) => ({
     paddingHorizontal: 10,
     paddingVertical: 8,
     textAlignVertical: 'top',
-  },
-  error: {
-    color: '#ef4444',
-    fontSize: 13,
   },
   readOnly: {
     color: P.muted,

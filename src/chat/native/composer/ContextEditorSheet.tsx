@@ -11,6 +11,7 @@ import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text
 
 import type { UserAction } from '../../rust/actions';
 import { Glyph } from './icons';
+import { ErrorLine } from '../cards/ErrorLine';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
@@ -141,7 +142,7 @@ export function ContextEditorSheet({
               ))}
             </ReorderList>
           </View>
-          {error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
+          {error.length > 0 ? <ErrorLine message={error} /> : null}
         </DragLockContext.Provider>
       </ScrollView>
       <View style={styles.footer}>
@@ -341,7 +342,6 @@ const useStyles = themedStyles((P) => ({
   chipText: { color: P.foreground, fontSize: 12.5 },
   grip: { width: 18, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   dragging: { backgroundColor: P.menu, opacity: 0.9 },
-  error: { color: P.error, fontSize: 13 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -33,9 +33,16 @@ async function call<T>(machine: MachineConnectionTarget, method: string, params:
   }
 }
 
-/** What will transcribe on `machine` (cheap: gxserver scans no disk), or null when it can't say. */
-export async function readDictateEngine(machine: MachineConnectionTarget): Promise<DictateEngine | null> {
-  const answer = await call<DictateEngine>(machine, 'readDictateEngine', {});
+/**
+ * What will transcribe on `machine` (cheap: gxserver scans no disk), or null when it can't say.
+ * `prepare` (the microphone was pressed) lets the computer open a closed Hex while the user speaks;
+ * computers before it ignore it.
+ */
+export async function readDictateEngine(
+  machine: MachineConnectionTarget,
+  prepare = false,
+): Promise<DictateEngine | null> {
+  const answer = await call<DictateEngine>(machine, 'readDictateEngine', prepare ? { prepare: true } : {});
   return answer.ok && typeof answer.value.label === 'string' ? answer.value : null;
 }
 

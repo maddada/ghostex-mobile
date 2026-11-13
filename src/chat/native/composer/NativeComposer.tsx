@@ -69,7 +69,7 @@ import { SendControl } from './SendControl';
 import { StatusLine, statusLineReserved } from './StatusLine';
 import { Suggestions } from './Suggestions';
 import { useComposerMotion } from './useComposerMotion';
-import { DictationBar } from './DictationBar';
+import { DictationBar, unavailableProblem } from './DictationBar';
 import { dictationClock, useDictation } from './useDictation';
 import { engineStatusLine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
@@ -793,10 +793,12 @@ export function NativeComposer({
             onShare={dictation.canShare ? () => void dictation.share() : undefined}
             engine={dictation.engine?.label ?? null}
             fix={dictation.fix}
+            problem={unavailableProblem(dictation.unavailable, machineLabel)}
+            recordingId={dictation.recordingId}
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
             onFix={() => {
-              // Set up Hex: the computer's Voice settings, where Install Hex and its steps are.
+              // Open settings: the computer's Voice settings, where the engine, Install Hex and the keys are.
               if (chat.machine !== null) host('voiceSettings', { machineId: chat.machine.id });
             }}
           />
@@ -984,10 +986,13 @@ export function NativeComposer({
                           label={
                             dictation.listening
                               ? 'Stop dictating'
-                              : dictation.engine !== null
-                                ? `Dictate · ${dictation.engine.label}`
-                                : 'Dictate'
+                              : !dictation.ready
+                                ? "Dictate isn't ready on this computer"
+                                : dictation.engine !== null
+                                  ? `Dictate · ${dictation.engine.label}`
+                                  : 'Dictate'
                           }
+                          dimmed={!dictation.ready && !dictation.listening}
                           pressed={dictation.listening}
                           onPress={() => performComposerAction('dictate')}
                           onLongPress={openDictationMenu}
@@ -1076,6 +1081,7 @@ function ToolbarButton({
   badge = null,
   disabled = false,
   tint = null,
+  dimmed = false,
 }: {
   glyph: GlyphName;
   label: string;
@@ -1087,6 +1093,8 @@ function ToolbarButton({
   disabled?: boolean;
   /** A glyph colour that carries meaning (the Terminal View button's readiness light). */
   tint?: string | null;
+  /** Greyed but still pressed: Dictate can't transcribe yet, and a press says why. */
+  dimmed?: boolean;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -1101,7 +1109,9 @@ function ToolbarButton({
       {...(onLongPress !== undefined ? { onLongPress } : {})}
       style={({ pressed: touching }) => [styles.control, pressed || touching ? styles.controlPressed : null]}
     >
-      <Glyph name={glyph} size={18} color={tint ?? (pressed ? P.controlPrimary : P.primary)} />
+      <View style={dimmed ? styles.dimmed : null}>
+        <Glyph name={glyph} size={18} color={tint ?? (pressed ? P.controlPrimary : P.primary)} />
+      </View>
       {badge !== null ? (
         <View style={badge.length === 0 ? styles.dot : styles.badge}>
           {badge.length > 0 ? <Text style={styles.badgeText}>{badge}</Text> : null}
@@ -1159,6 +1169,7 @@ const useStyles = themedStyles((P) => ({
     justifyContent: 'center',
   },
   controlPressed: { backgroundColor: P.border },
+  dimmed: { opacity: 0.38 },
   reportPill: {
     height: CONTROL_WIDTH,
     paddingHorizontal: 10,

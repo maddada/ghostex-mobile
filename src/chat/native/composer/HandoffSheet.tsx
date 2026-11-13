@@ -72,6 +72,7 @@ import {
 import { handoffComputersFor } from './handoffComputers';
 import { loadHandoffPrefs, saveHandoffPrefs } from './handoffPrefsStore';
 import { Glyph, type GlyphName } from './icons';
+import { ErrorLine } from '../cards/ErrorLine';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Sheet } from './Sheet';
 
@@ -604,7 +605,7 @@ export function HandoffSheet({
             ))}
           </View>
         ) : null}
-        {stage.kind === 'failed' ? <Text style={styles.error}>{stage.message}</Text> : null}
+        {stage.kind === 'failed' ? <ErrorLine message={stage.message} /> : null}
         {showResult && stage.kind === 'done' ? (
           <View style={styles.result}>
             <View style={styles.resultTitle}>
@@ -888,7 +889,6 @@ const useStyles = themedStyles((P) => ({
   agentList: { borderRadius: 12, borderWidth: 1, borderColor: P.menuBorder, paddingVertical: 4 },
   agentOption: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 12 },
   agentOptionText: { flex: 1, minWidth: 0, color: P.foreground, fontSize: 15 },
-  error: { color: P.error, fontSize: 13, lineHeight: 18 },
   result: { gap: 6, borderRadius: 12, borderWidth: 1, borderColor: P.border, padding: 12 },
   resultTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   resultTitleText: { color: P.foreground, fontSize: 14, fontWeight: '600' },

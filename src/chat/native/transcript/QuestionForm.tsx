@@ -39,6 +39,7 @@ import type { Json } from '../../rust/document';
 import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
 import { useRevealFocusedField } from './fieldReveal';
 import { useEchoedText } from '../cards/useEchoedText';
+import { ErrorLine } from '../cards/ErrorLine';
 import { AskCard, AskHead, AskOption, PrimaryButton, SoftButton, answeredColor, askColor } from '../cards/askCard';
 import { arr, obj, str, type JsonRecord } from './json';
 import { Glyph } from './icons';
@@ -294,7 +295,7 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
     return (
       <AskCard head={head}>
         <View style={styles.errorBody}>
-          <Text style={{ color: theme.error }}>These questions could not be shown: {error}</Text>
+          <ErrorLine message={`These questions couldn't be shown: ${error}`} />
           {form.resent === true ? (
             // Desktop question_form.rs RESENT_NOTE: gxserver asked the agent to send them again.
             <Text style={[styles.detail, { color: theme.cardMuted }]}>

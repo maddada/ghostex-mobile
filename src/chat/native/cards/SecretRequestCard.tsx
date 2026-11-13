@@ -14,6 +14,7 @@ import { Text, TextInput, View } from 'react-native';
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { Glyph } from './icons';
+import { ErrorLine } from './ErrorLine';
 import { arr, isTrue, str, type JsonRecord, obj } from './json';
 import { CARD_TEXT_SIZE } from './primitives';
 import { ToneButton, ToneCard } from './ToneCard';
@@ -80,11 +81,7 @@ function SecretRequestCard({ chat, card }: { chat: RustChat; card: JsonRecord })
           placeholderTextColor={P.placeholder}
           accessibilityLabel={str(card, 'label')}
         />,
-        error.length > 0 ? (
-          <Text key="error" style={styles.error}>
-            {error}
-          </Text>
-        ) : null,
+        error.length > 0 ? <ErrorLine key="error" message={error} /> : null,
         <View key="note" style={styles.note}>
           <Glyph name="shield-check" size={13} color={P.muted} />
           <Text style={styles.noteText}>{str(card, 'note')}</Text>
@@ -126,10 +123,6 @@ const useStyles = themedStyles((P) => ({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: P.background,
-  },
-  error: {
-    color: '#ef9999',
-    fontSize: 12.5,
   },
   note: {
     flexDirection: 'row',
