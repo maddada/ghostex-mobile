@@ -107,8 +107,10 @@ export default function ConnectionsSheet({
         {problem || entry.busy ? (
           <View style={styles.cardBody}>
             {/* Out of channels while it also failed for another reason: its button is Reset connection, so say what that
-              does once (a busy list error already says it). */}
-            {entry.status === 'failed' && entry.busy && entry.reason !== FailureCopy.channelsBusy ? (
+              does once (a busy list error already says it, unless the Tailscale line takes its place). */}
+            {entry.status === 'failed' &&
+            entry.busy &&
+            (entry.tailscaleOff || entry.reason !== FailureCopy.channelsBusy) ? (
               <Text style={styles.why}>{FailureCopy.channelsBusy}</Text>
             ) : null}
             {entry.status === 'failed' ? (
