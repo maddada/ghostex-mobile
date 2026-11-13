@@ -136,6 +136,15 @@ export function endConnectionBudget(machineId: string): void {
   }
 }
 
+/**
+ * Which connection the computer's budget counts now: it moves on whenever the connection ends, dials again or is
+ * replaced. What settles under an older number belongs to a connection that is gone (`probeConnection`).
+ */
+export function connectionGeneration(machineId: string): number {
+  listenForConnectionEnds();
+  return budgetFor(machineId).generation;
+}
+
 /** Commands running now through the budget (what the phone let through, not what the computer counts). */
 export function commandsInFlight(machineId: string): number {
   return running.get(machineId) ?? 0;

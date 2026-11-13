@@ -25,8 +25,20 @@ import {
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
-import { endConnectionBudget, isChannelRefusal, reportChannelRefused, withProbeChannel } from './channelBudget';
-import { isSlowOpenFailure, offerResetInstead, plainShellsOpen, STALL_SUSPECT_MS } from './stallWatch';
+import {
+  connectionGeneration,
+  endConnectionBudget,
+  isChannelRefusal,
+  reportChannelRefused,
+  withProbeChannel,
+} from './channelBudget';
+import {
+  isSlowOpenFailure,
+  offerResetInstead,
+  plainShellsOpen,
+  STALL_SUSPECT_MS,
+  type StallCheckOutcome,
+} from './stallWatch';
 import { channelSnapshot } from './channelPressure';
 import { noteConnected } from './connectionTrace';
 import { whereTheAppIs } from '../app/foregroundClock';
@@ -332,7 +344,8 @@ async function connectEasyConnect(
  *   nothing about SSH. The refusal itself already went to the escape path (`channelPressure.ts`).
  * - `stalled`: the echo went out and got no answer in time, or its channel failed to open only after
  *   `STALL_SUSPECT_MS` (the iPhone's stuck open, not the computer refusing).
- * - `failed`: any other error, a wrong answer, or a channel refused on a connection that is gone.
+ * - `failed`: any other error, a wrong answer, or a channel refused on a connection that is gone or was replaced
+ *   while the echo waited (that refusal is the old connection's and is reported against nothing).
  * It never runs the chat handshake or dials: it asks only what already exists, so it cannot wait on the
  * `ensureConnected` it runs inside.
  */
@@ -341,6 +354,7 @@ export type ProbeOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'faile
 async function probeConnection(machineId: string, since: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<ProbeOutcome> {
   if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
   const startedAt = Date.now();
+  const generation = connectionGeneration(machineId);
   try {
     // echo is understood by POSIX shells, Windows cmd and PowerShell.
     const probe = await withProbeChannel(machineId, () =>
@@ -354,7 +368,11 @@ async function probeConnection(machineId: string, since: number, timeoutMs = PRO
     if (code === 'E_BUSY') return 'busy';
     if (isChannelRefusal(error) && isSlowOpenFailure(startedAt)) return 'stalled';
     if (isChannelRefusal(error)) {
+      // Native isConnected names the computer, not the connection: a replacement that came up while the echo waited
+      // answers true, so the generation is compared before and after asking.
+      if (connectionGeneration(machineId) !== generation) return 'failed';
       if (!(await GhostexNative.isConnected(machineId).catch(() => false))) return 'failed';
+      if (connectionGeneration(machineId) !== generation) return 'failed';
       // The echo's lane is outside the command budget, which reported refusals for it before; the escape path
       // (src/remote/channelPressure.ts) still needs to hear a fast one.
       reportChannelRefused(machineId);
@@ -397,9 +415,18 @@ async function askKnownGxserver(machineId: string): Promise<'answered' | 'no ans
 
 const PROBE_TIMEOUT_MS = 5_000;
 
-/** The stall watch's check (src/remote/stallWatch.ts): the same echo, bounded by `STALL_SUSPECT_MS`. */
-export function checkStalledConnection(machineId: string): Promise<ProbeOutcome> {
-  return probeConnection(machineId, Date.now(), STALL_SUSPECT_MS);
+/**
+ * The stall watch's check (src/remote/stallWatch.ts): the same echo, bounded by `STALL_SUSPECT_MS`. A `failed` check
+ * whose connection native now reports closed, with no newer connection since, is `lost`: the iPhone's SSH marks a
+ * dead socket without sending a disconnect event, so nothing else would replace it.
+ */
+export async function checkStalledConnection(machineId: string): Promise<StallCheckOutcome> {
+  const generation = connectionGeneration(machineId);
+  const outcome = await probeConnection(machineId, Date.now(), STALL_SUSPECT_MS);
+  if (outcome !== 'failed' || connectionGeneration(machineId) !== generation) return outcome;
+  const connected = await GhostexNative.isConnected(machineId).catch(() => null);
+  if (connected !== false || connectionGeneration(machineId) !== generation) return outcome;
+  return 'lost';
 }
 
 export function reconnectMachine(machine: MachineConnectionTarget, reason = 'Retry'): Promise<void> {

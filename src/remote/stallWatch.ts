@@ -35,7 +35,11 @@ const SILENT_TIMEOUTS_FOR_CHECK = 2;
 /** How often a check that could not run is tried again while a suspect remains. */
 const RETRY_MS = 2_000;
 
-export type StallCheckOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed';
+/**
+ * The check's answer (`ProbeOutcome` in src/remote/connection.ts), plus `lost`: the check failed and the iPhone's SSH
+ * now reports this same connection closed. It sends no disconnect event for that, so the watch replaces it.
+ */
+export type StallCheckOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed' | 'lost';
 
 export type StallWatchHandlers = {
   /** One bounded check in the probe lane. */
@@ -235,11 +239,18 @@ function runCheck(machineId: string, watch: Watch, reason: string): Promise<void
       logAppEvent(`Connection: ${machineId} kept: a newer command answered while the check waited`);
       outcome = 'answered';
     }
-    // `failed` (a wrong answer, an error that is not a timeout) does not show opens stuck: a socket that really closed
-    // is the native disconnect's business, which reconnects on its own.
+    // `failed` (a wrong answer, an error that is not a timeout, on a connection native still reports up) does not
+    // show opens stuck. A socket that really closed comes back `lost` instead.
     if (outcome === 'answered' || outcome === 'capacity' || outcome === 'failed') {
       // The echo's channel opened when the check began; later opens are not covered by it.
       watch.clearedBefore = Math.max(watch.clearedBefore, startedAt);
+      return;
+    }
+    if (outcome === 'lost') {
+      // Nothing moves on a closed socket, a transfer included, and the plain shells' programs already ended with it.
+      if (!active.mayRecover(machineId)) return;
+      logAppEvent(`Connection: ${machineId} is closed on the phone (${reason}); replacing it`);
+      await active.replace(machineId, `the connection closed (${reason})`).catch(() => undefined);
       return;
     }
     if (outcome === 'busy') {
