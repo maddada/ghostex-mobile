@@ -1,6 +1,6 @@
 /**
  * The sheet a chat page card (`ghostex show`) opens on the phone: the published page over the whole
- * screen with a slim bar for its title, Refresh, Export (`pageExport.ts`), Hide and Close, the phone form of the desktop's floating
+ * screen with a slim bar for its title, Refresh, a ⋯ menu (`CardMoreMenu.tsx`), Hide and Close, the phone form of the desktop's floating
  * page window. The page comes from the computer's gxserver through the chat's own forward
  * (`webPreview/machineLinks.ts`) and wears the chat's theme from its first paint. Like the desktop's
  * window it closes once the page's answers are sent (CDXC:SessionChat 2026-10-11 on
@@ -42,6 +42,7 @@ import type { RustChat } from '../../rust/useRustChat';
 import { chatIsLightNow, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { Glyph } from './icons';
 import { ImageViewerModal, type ImageViewerList } from './ImageViewer';
+import { CardMoreMenu, pageRows, snoozeRow } from './CardMoreMenu';
 import { keepUnsavedDraft, sendUnsavedDraft } from './pageDrafts';
 import { PAGE_SCRIPT, PENDING_DRAFT_SCRIPT, pageIdOfPath, readPageMessage } from './pageSheetScript';
 
@@ -382,16 +383,13 @@ export function PageSheet({ chat, machine, page, onClose, onHide, onOpenLink }: 
             </Pressable>
           ) : null}
           {pageId !== null ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Export page"
-              accessibilityHint="One file anyone can open and answer in a browser"
-              onPress={() => chat.dispatch({ type: 'exportPage', pageId })}
-              hitSlop={6}
-              style={({ pressed }) => [styles.close, pressed && { backgroundColor: P.input }]}
-            >
-              <Glyph name="download" size={18} color={P.primary} />
-            </Pressable>
+            // Export page, Import answers and Snooze (`CardMoreMenu.tsx`); a snoozed page's sheet closes.
+            <CardMoreMenu
+              rows={[...pageRows(pageId), snoozeRow(pageId)]}
+              dispatch={chat.dispatch}
+              color={P.primary}
+              onSnoozed={close}
+            />
           ) : null}
           {onHide !== undefined ? (
             <Pressable

@@ -21,7 +21,7 @@ import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { Glyph } from './icons';
 import { str, type JsonRecord } from './json';
 import { answeredColor } from './PageAnswersCard';
-import { pickExportedAnswers } from '../cards/pageExport';
+import { CardMoreMenu, pageRows, snoozeRow } from '../cards/CardMoreMenu';
 import { askedPageThumbnail, usePageThumbnailStore } from './pageThumbnails';
 import { QuestionFlashFrame } from './OpenQuestions';
 import { VerticalFade } from './verticalFade';
@@ -108,17 +108,6 @@ function PageCardBody({
   }, [dispatch, pageId, retryInMs, revision]);
 
   const open = () => dispatch({ type: 'openMarkdownLink', href: url, external: false });
-  // Export and Import answers (`cards/pageExport.ts`): the file comes back as the core's `pageExported`, and picked
-  // answers go to the core's import, which says how it went.
-  const exportPage = () => dispatch({ type: 'exportPage', pageId });
-  const importAnswers = () => {
-    void pickExportedAnswers().then(
-      (text) => {
-        if (text !== null) dispatch({ type: 'importPageAnswers', text });
-      },
-      () => undefined,
-    );
-  };
   const picture = entry?.png ?? null;
   const detail = file.length > 0 ? `Ghostex page · ${file}` : 'Ghostex page';
   const good = answeredColor(theme.light);
@@ -222,36 +211,12 @@ function PageCardBody({
             </Pressable>
           ) : null}
           {pageId.length > 0 ? (
-            <>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.later,
-                  { backgroundColor: `${theme.foreground}${pressed ? '26' : '1a'}` },
-                ]}
-                onPress={importAnswers}
-                accessibilityRole="button"
-                accessibilityLabel="Import answers"
-                accessibilityHint="Pick the answers someone exported from this page"
-                hitSlop={4}
-              >
-                <Text style={[styles.laterText, { color: theme.foreground }]}>Import answers</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.later,
-                  styles.withIcon,
-                  { backgroundColor: `${theme.foreground}${pressed ? '26' : '1a'}` },
-                ]}
-                onPress={exportPage}
-                accessibilityRole="button"
-                accessibilityLabel="Export page"
-                accessibilityHint="One file anyone can open and answer in a browser"
-                hitSlop={4}
-              >
-                <Glyph name="download" size={13} color={theme.foreground} />
-                <Text style={[styles.laterText, { color: theme.foreground }]}>Export</Text>
-              </Pressable>
-            </>
+            // Export page, Import answers and, while it waits, Snooze (`cards/CardMoreMenu.tsx`).
+            <CardMoreMenu
+              rows={[...pageRows(pageId), ...(waiting ? [snoozeRow(pageId)] : [])]}
+              dispatch={dispatch}
+              color={theme.foreground}
+            />
           ) : null}
         </View>
       ) : null}
@@ -306,7 +271,7 @@ const styles = StyleSheet.create({
   answeredText: { fontSize: 11, fontWeight: '600' },
   open: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 28, paddingHorizontal: 11, borderRadius: 8 },
   openText: { fontSize: 12.5, fontWeight: '600' },
-  /** For later / Back to unanswered, Import answers and Export, under the footer: the phone's card is too narrow for more buttons beside Open. */
+  /** For later / Back to unanswered and the ⋯ menu, under the footer: the phone's card is too narrow for more buttons beside Open. */
   laterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -317,6 +282,5 @@ const styles = StyleSheet.create({
     paddingBottom: VISUAL.footerPaddingY,
   },
   later: { height: 28, paddingHorizontal: 11, borderRadius: 8, justifyContent: 'center' },
-  withIcon: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   laterText: { fontSize: 12.5, fontWeight: '500' },
 });

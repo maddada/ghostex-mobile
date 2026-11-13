@@ -40,6 +40,7 @@ import { useOptionalNativeChatUi, useTranscriptEnv } from './context';
 import { useRevealFocusedField } from './fieldReveal';
 import { useEchoedText } from '../cards/useEchoedText';
 import { ErrorLine } from '../cards/ErrorLine';
+import { CardMoreMenu, snoozeRow } from '../cards/CardMoreMenu';
 import { AskCard, AskHead, AskOption, PrimaryButton, SoftButton, answeredColor, askColor } from '../cards/askCard';
 import { arr, obj, str, type JsonRecord } from './json';
 import { Glyph } from './icons';
@@ -336,6 +337,10 @@ export function QuestionFormCard({ id, source }: { id: string; source: string })
         // Nothing to report: the (i) icon holds the sentence about blank questions, in the status' place.
         <InfoSlot />
       )}
+      {enabled ? (
+        // Snooze (a clock under ⋯, `cards/CardMoreMenu.tsx`).
+        <CardMoreMenu rows={[snoozeRow(id)]} dispatch={dispatch} color={theme.foreground} />
+      ) : null}
       {enabled ? (
         <SoftButton
           tight
@@ -649,7 +654,8 @@ function FormBox({
               ]),
             );
           } while (textRef.current !== asked);
-          if (typeof inserted?.text !== 'string') throw new Error('The image reference could not be inserted. Please paste it again.');
+          if (typeof inserted?.text !== 'string')
+            throw new Error('The image reference could not be inserted. Please paste it again.');
           // The box's own edit, made here: reported with its caret like a typed one (`onChange`).
           const at = typeof inserted.caret === 'number' ? inserted.caret : inserted.text.length;
           hand(inserted.text, at);
@@ -658,7 +664,10 @@ function FormBox({
           setStatus(null);
         })
         .catch((error: unknown) =>
-          setStatus({ text: error instanceof Error ? error.message : 'The pasted image could not be saved.', error: true }),
+          setStatus({
+            text: error instanceof Error ? error.message : 'The pasted image could not be saved.',
+            error: true,
+          }),
         );
     },
     [core, edit, formId, forms, hand, queryAsync, setText, slot, uploadFiles],
@@ -765,7 +774,12 @@ function FormQuestion({
               {...(Array.isArray(obj(choice)?.detailRuns)
                 ? {
                     renderDetail: (style: StyleProp<TextStyle>) => (
-                      <LinkWords text={str(choice, 'detail')} runs={obj(choice)?.detailRuns} color={theme.muted} style={style} />
+                      <LinkWords
+                        text={str(choice, 'detail')}
+                        runs={obj(choice)?.detailRuns}
+                        color={theme.muted}
+                        style={style}
+                      />
                     ),
                   }
                 : {})}
