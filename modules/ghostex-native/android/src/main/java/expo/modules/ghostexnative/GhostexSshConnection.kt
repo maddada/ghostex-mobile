@@ -286,14 +286,28 @@ class GhostexSshConnection(
   /**
    * Run [command] in its own non-interactive session channel, collecting stdout/stderr off
    * the channel while waiting so large outputs cannot stall the remote window.
+   *
+   * CDXC:PhoneMemory 2026-11-13 WHY: each stream keeps at most [MAX_EXEC_OUTPUT_BYTES]. A phone ran
+   * out of its 256 MB heap while connected (#586), and the collected output had no limit at all, so
+   * one runaway command could fill the heap on its own. Past the limit the channel is closed, so the
+   * computer stops sending, and the command fails with a plain error instead of growing the buffer.
    */
   fun exec(command: String, timeoutMs: Long, input: String? = null): ExecOutcome {
     val ssh = client ?: throw notConnectedException(machineId)
+    val outputCut = AtomicBoolean(false)
     try {
       ssh.startSession().use { session ->
         val cmd = session.exec(command)
-        val stdout = StreamCollector(cmd.inputStream)
-        val stderr = StreamCollector(cmd.errorStream)
+        val stopSending = {
+          outputCut.set(true)
+          try {
+            cmd.close()
+          } catch (ignored: Exception) {
+            // Closing is best effort; the exec fails below either way.
+          }
+        }
+        val stdout = StreamCollector(cmd.inputStream, stopSending)
+        val stderr = StreamCollector(cmd.errorStream, stopSending)
         if (input != null) {
           cmd.outputStream.use { it.write(input.toByteArray(Charsets.UTF_8)) }
         }
@@ -302,6 +316,7 @@ class GhostexSshConnection(
         cmd.join(timeoutMs, TimeUnit.MILLISECONDS)
         stdout.await(STREAM_DRAIN_TIMEOUT_MS)
         stderr.await(STREAM_DRAIN_TIMEOUT_MS)
+        if (outputCut.get()) throw outputTooLarge()
         val exitStatus = cmd.exitStatus
           ?: throw GhostexException(
             GhostexErrorCode.TIMEOUT,
@@ -310,8 +325,18 @@ class GhostexSshConnection(
         return ExecOutcome(stdout.text(), stderr.text(), exitStatus)
       }
     } catch (error: Exception) {
+      // Closing the channel can fail the write or the wait first; the limit is the real reason.
+      if (outputCut.get()) throw outputTooLarge()
       throw mapSshError(error, fallbackCode = GhostexErrorCode.CHANNEL_FAILED)
     }
+  }
+
+  private fun outputTooLarge(): GhostexException {
+    Log.w(LOG_TAG, "exec output passed ${MAX_EXEC_OUTPUT_BYTES / (1024 * 1024)} MB on $machineId; channel closed")
+    return GhostexException(
+      GhostexErrorCode.CHANNEL_FAILED,
+      "The command's answer passed ${MAX_EXEC_OUTPUT_BYTES / (1024 * 1024)} MB, more than the phone keeps, so it was stopped."
+    )
   }
 
   /**
@@ -579,9 +604,15 @@ class GhostexSshConnection(
     }
   }
 
-  private class StreamCollector(stream: InputStream?) {
+  /**
+   * Reads [stream] on its own thread, keeping at most [MAX_EXEC_OUTPUT_BYTES]. Past that it calls
+   * [onOverflow] once and stops reading when one is given (exec closes the channel); without one it
+   * keeps reading and drops the rest, so the remote is never stalled.
+   */
+  private class StreamCollector(stream: InputStream?, private val onOverflow: (() -> Unit)? = null) {
     private val output = java.io.ByteArrayOutputStream()
     private val done = CountDownLatch(1)
+    private var kept = 0L
 
     init {
       if (stream == null) {
@@ -593,7 +624,16 @@ class GhostexSshConnection(
             while (true) {
               val count = stream.read(buffer)
               if (count == -1) break
+              val room = (MAX_EXEC_OUTPUT_BYTES - kept).coerceAtLeast(0L).toInt()
+              if (count > room) {
+                if (room > 0) synchronized(output) { output.write(buffer, 0, room) }
+                kept = MAX_EXEC_OUTPUT_BYTES
+                val stop = onOverflow ?: continue
+                stop()
+                break
+              }
               synchronized(output) { output.write(buffer, 0, count) }
+              kept += count
             }
           } catch (ignored: Exception) {
             // Channel teardown interrupts the read; keep whatever was collected.
@@ -629,6 +669,13 @@ class GhostexSshConnection(
     private const val MIN_KEEP_ALIVE_INTERVAL_SECONDS = 10
     private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
+
+    /**
+     * The most a command's stdout (or stderr) may hand the phone. Above the largest answer the app
+     * asks for: a 32 MB transcript read as base64 is about 43 MB (TRANSCRIPT_CARRY_MAX_BYTES in
+     * src/chat/native/sessionShell.ts); far below the 256 MB a phone gives the app.
+     */
+    private const val MAX_EXEC_OUTPUT_BYTES = 48L * 1024 * 1024
     private const val OWNER_READ_WRITE_PERMISSIONS = 0b110_000_000 // 0600
 
     /** OpenSSH's default `MaxSessions` (10) less the seven warm terminals `MAX_WARM_SESSIONS` allows. */
