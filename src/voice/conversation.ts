@@ -760,7 +760,7 @@ export function initVoice(): void {
     }
     if (event.mode !== 'conversation' || event.sessionId !== nativeSessionId) return;
     if (event.kind === 'frame') onFrame(event.json);
-    else onStatus(event);
+    else if (event.kind === 'status') onStatus(event);
   });
   void GhostexNative.voiceStatus()
     .then((status) => {

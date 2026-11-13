@@ -795,6 +795,9 @@ export function NativeComposer({
             fix={dictation.fix}
             problem={unavailableProblem(dictation.unavailable, machineLabel)}
             recordingId={dictation.recordingId}
+            notice={dictation.notice}
+            failureCode={dictation.failureCode}
+            onFinish={() => void dictation.toggle()}
             onCancel={() => void dictation.cancel()}
             onRetry={() => void dictation.retry()}
             onFix={() => {

@@ -218,7 +218,7 @@ export async function forgetRecording(id: string): Promise<void> {
 
 /**
  * Hands the computer every phone recording it may not have yet. A dismissed one is the computer's to
- * keep (Dictation history) and leaves the phone once it is there; one still waiting for its words
+ * keep (Past recordings) and leaves the phone once it is there; one still waiting for its words
  * stays on the phone until they are in a chat box.
  */
 export async function sendUnsent(machine: MachineConnectionTarget): Promise<void> {
@@ -264,7 +264,7 @@ function outcome(answer: { result: Record<string, unknown> } | { error: string }
       : {
           kind: 'nothing',
           id: dictation.id || id,
-          message: 'No words were heard in the recording. It is kept on your computer in Settings › Dictation › Dictation history.',
+          message: 'No words were heard in the recording. It is kept on your computer in Settings > Dictation > Past recordings.',
         };
   }
   return {
@@ -304,7 +304,7 @@ export async function saveAndTranscribe(
     onServerId(id);
     if (isCancelled()) {
       const dismissed = await rpc(machine, 'dismissDictation', { id }, SHORT_TIMEOUT_MS);
-      // The computer keeps it as dismissed (Dictation history); the phone's copy is no longer needed.
+      // The computer keeps it as dismissed (Past recordings); the phone's copy is no longer needed.
       if (!('error' in dismissed) && kept.kind === 'local') await GhostexNative.dictationForget(kept.recording.path).catch(() => undefined);
       return null;
     }

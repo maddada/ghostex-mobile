@@ -7,9 +7,10 @@
  * (`apps/desktop/src/app/voice_agent/recorder.rs` `LevelMeter`).
  *
  * CDXC:Dictate 2026-11-13 WHY: The user asked for a live waveform so they can tell their voice is
- * reaching the recording, on the phone and the desktop. The phone's recorder sends no level
- * events, and adding them is a native change that would block updates to installed phones, so the
- * level is read in JavaScript from the file being written and ships over the air.
+ * reaching the recording, on the phone and the desktop. The phones installed today send no level
+ * events, and adding them is a native change that would block updates to them, so the level is
+ * read in JavaScript from the file being written and ships over the air.
+ * CDXC:Dictate 2026-11-13 DECISION: User (Q2920): "do both. We take out the JS one when native becomes live in the app." A native build that sends `level` voice events (branch `native-dictation-levels`) is used as soon as its first event arrives, and the file reader stops; removing the file reader later is deleting `readLevelsFromFile` and its call.
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
@@ -57,9 +58,27 @@ function loudness(bytes: string): number {
 
 /**
  * Calls `onLevel` about every [LEVEL_EVERY_MS] with recording `id`'s level until the returned stop
- * is called. Quiet stretches and a recorder that has written nothing yet read as 0.
+ * is called: the native recorder's own level events when this app's build sends them, else the
+ * level read from the recording's file. Quiet stretches read as 0.
  */
 export function watchDictationLevel(id: string, onLevel: (level: number) => void): () => void {
+  let fileReader: (() => void) | null = readLevelsFromFile(id, onLevel);
+  const native = GhostexNative.addListener('onVoiceEvent', (event) => {
+    if (event.kind !== 'level' || event.mode !== 'dictation' || event.sessionId !== id) return;
+    if (fileReader !== null) {
+      fileReader();
+      fileReader = null;
+    }
+    onLevel(event.level);
+  });
+  return () => {
+    fileReader?.();
+    native.remove();
+  };
+}
+
+/** The level of recording `id` read back from its file (phones whose build sends no level events). */
+function readLevelsFromFile(id: string, onLevel: (level: number) => void): () => void {
   const path = recordingPath(id);
   if (path === null) return () => undefined;
   let offset = WAV_HEADER_BYTES;

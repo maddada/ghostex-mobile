@@ -181,6 +181,9 @@ export default function TerminalBottomBar({
         fix={dictation.fix}
         problem={unavailableProblem(dictation.unavailable, machine?.name ?? null)}
         recordingId={dictation.recordingId}
+            notice={dictation.notice}
+            failureCode={dictation.failureCode}
+            onFinish={() => void dictation.toggle()}
         onCancel={() => void dictation.cancel()}
         onRetry={() => void dictation.retry()}
         onFix={openVoiceSettings}

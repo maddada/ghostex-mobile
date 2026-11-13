@@ -344,6 +344,13 @@ export type VoiceEvent =
    * gave. Never audio or words. A native build from before it sends none.
    */
   | { sessionId: string; mode: VoiceMode; kind: 'log'; message: string }
+  /**
+   * Dictate's microphone level while it records (`sessionId` is the recording's id), 0 to 1, about
+   * 20 times a second, smoothed like the desktop's meter. Only native builds from the
+   * `native-dictation-levels` work send it; without it the level is read from the recording's
+   * file in JavaScript (`src/voice/dictationLevel.ts`).
+   */
+  | { sessionId: string; mode: VoiceMode; kind: 'level'; level: number }
   | {
       sessionId: string;
       mode: VoiceMode;

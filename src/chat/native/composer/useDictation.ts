@@ -73,7 +73,16 @@ const DICTATION_ENABLED = true;
  * `waiting`: a recording on this phone still waits for its words (offered with Transcribe).
  * `unavailable`: the computer said its engine can't transcribe yet, so nothing was recorded.
  */
-export type DictationPhase = 'idle' | 'starting' | 'recording' | 'transcribing' | 'failed' | 'waiting' | 'unavailable';
+export type DictationPhase =
+  | 'idle'
+  | 'starting'
+  | 'recording'
+  | 'transcribing'
+  | 'failed'
+  | 'waiting'
+  | 'unavailable'
+  /** Something no button retries: the microphone couldn't start, no words were heard, nothing waited. */
+  | 'notice';
 
 /** Why the computer's engine can't transcribe, as the unavailable card says it. */
 export type DictationProblem = { code: string; message: string };
@@ -164,6 +173,12 @@ export function useDictation(
   engineRef.current = engine;
   /** The engine answer that kept the microphone from recording (`unavailable`). */
   const [unavailable, setUnavailable] = useState<DictateEngine | null>(null);
+  /**
+   * What the `notice` card says.
+   *
+   * CDXC:Dictate 2026-11-13 DECISION: User (Q2916 "card"): a refused microphone and "nothing heard" show as the Dictate card above the chat box, which stays until dismissed, instead of a toast that is gone in seconds.
+   */
+  const [notice, setNotice] = useState<DictationProblem | null>(null);
   /** The recording the microphone is writing, for the waveform. */
   const [liveRecording, setLiveRecording] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(0);
@@ -301,8 +316,11 @@ export function useDictation(
         setPhase('idle');
         insert(result.text, result.id);
       } else if (result.kind === 'nothing') {
-        setPhase('idle');
-        if (result.message) callbacks.current.onError(result.message);
+        if (result.message) {
+          const heard = result.message.startsWith('No words');
+          setNotice({ code: heard ? 'nothingHeard' : 'nothingWaiting', message: result.message });
+          setPhase('notice');
+        } else setPhase('idle');
       } else {
         setFailure({ kept: result.kept, message: result.message, code: result.code });
         setPhase('failed');
@@ -423,6 +441,7 @@ export function useDictation(
     setFailure(null);
     setWaiting(null);
     setUnavailable(null);
+    setNotice(null);
     setPhase('starting');
     // What transcribes may have changed on the computer since the chat opened; the press also lets
     // it open a closed Hex while the user speaks.
@@ -448,8 +467,8 @@ export function useDictation(
       if (phaseRef.current === 'recording') void stop();
     });
     if ('error' in started) {
-      setPhase('idle');
-      callbacks.current.onError(started.error);
+      setNotice({ code: 'micUnavailable', message: started.error });
+      setPhase('notice');
       return;
     }
     recordingId.current = started.id;
@@ -496,8 +515,7 @@ export function useDictation(
   /** The microphone button: start, or stop and transcribe. */
   const toggle = useCallback(async () => {
     if (phaseRef.current === 'recording') await stop();
-    else if (phaseRef.current === 'idle' || phaseRef.current === 'failed' || phaseRef.current === 'unavailable')
-      await start();
+    else if (['idle', 'failed', 'unavailable', 'notice'].includes(phaseRef.current)) await start();
   }, [start, stop]);
 
   /** ✕: a recording stops and is kept as dismissed; a transcription is dismissed; a failure or waiting recording is set aside the same way. */
@@ -512,6 +530,7 @@ export function useDictation(
     setFailure(null);
     setWaiting(null);
     setUnavailable(null);
+    setNotice(null);
     setLiveRecording(null);
     if (machine === null) return;
     if (was === 'recording') {
@@ -540,7 +559,7 @@ export function useDictation(
   }, [failure, waiting, transcribeKept]);
 
   const transcribePrevious = useCallback(async () => {
-    if (phaseRef.current !== 'idle' && phaseRef.current !== 'failed') return;
+    if (!['idle', 'failed', 'notice', 'unavailable'].includes(phaseRef.current)) return;
     await transcribeKept(null);
   }, [transcribeKept]);
 
@@ -586,6 +605,9 @@ export function useDictation(
     ready: engine === null || engine.ready,
     /** The answer that kept the microphone from recording, while the unavailable card shows. */
     unavailable: phase === 'unavailable' ? unavailable : null,
+    notice: phase === 'notice' ? notice : null,
+    /** gxserver's code for the failure; null when the computer never answered. */
+    failureCode: failure?.code ?? null,
     recordingId: phase === 'recording' ? liveRecording : null,
     fix,
     toggle,
