@@ -6,7 +6,7 @@
  * come from the core; these only lay them out.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
@@ -223,8 +223,101 @@ function ThreadRow({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone
             {[detail, branch].filter((part) => part.length > 0).join(' · ')}
           </Text>
         ) : null}
+        <WorkItemPills row={row} chat={chat} />
       </View>
     </Pressable>
+  );
+}
+
+/**
+ * A worker row's work items (gx-chat-core `coordinator_threads.rs` `attach_items`, where the user's
+ * decision lives, CDXC:Coordinators 2026-11-13): a pill per item, two then "+N", under the row's
+ * line, the finished ones dimmed. A tap shows the item's card under the pills (Q3022), whose Show in
+ * Work opens the Work sheet at it (`jumpToWorkCard`; NativeChatScreen turns the focus into the
+ * sheet). A thread on no item shows nothing.
+ */
+function WorkItemPills({ row, chat }: { row: unknown; chat: RustChat }) {
+  const styles = useStyles();
+  const theme = useTranscriptTheme();
+  const [shown, setShown] = useState<string | null>(null);
+  const items = arr(obj(row)?.items);
+  if (items.length === 0) return null;
+  const more = str(row, 'moreItems');
+  const open = items.find((item) => str(item, 'ref') === shown) ?? null;
+  return (
+    <View style={styles.itemsBlock}>
+      <View style={styles.itemsLine}>
+        {items.map((item) => {
+          const reference = str(item, 'ref');
+          return (
+            <Pressable
+              key={reference}
+              accessibilityRole="button"
+              accessibilityLabel={`${reference} ${str(item, 'title')}, show its card`}
+              accessibilityState={{ expanded: shown === reference }}
+              onPress={() => setShown((was) => (was === reference ? null : reference))}
+              style={[
+                styles.itemPill,
+                shown === reference ? styles.itemPillOpen : null,
+                isTrue(item, 'done') ? styles.itemPillDone : null,
+              ]}
+            >
+              <Glyph name="layout-board-split" size={12} color={theme.reference.board} />
+              <Text style={styles.itemRef}>{reference}</Text>
+              <Text style={styles.itemTitle} numberOfLines={1}>
+                {str(item, 'title')}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {more.length > 0 ? (
+          <View style={styles.itemPill} accessibilityLabel={str(row, 'moreItemsTooltip')}>
+            <Text style={styles.itemMore}>{more}</Text>
+          </View>
+        ) : null}
+      </View>
+      {open !== null ? <WorkItemCard item={open} chat={chat} /> : null}
+    </View>
+  );
+}
+
+/** A work item pill's card: its title, status and steps, where it stands, its open asks and the thread's last report. */
+function WorkItemCard({ item, chat }: { item: unknown; chat: RustChat }) {
+  const styles = useStyles();
+  const status = [str(item, 'statusLabel'), str(item, 'steps')].filter((part) => part.length > 0).join(' · ');
+  const now = str(item, 'now');
+  const report = str(item, 'report');
+  const command = obj(item)?.command;
+  return (
+    <View style={styles.itemCard}>
+      <Text style={styles.itemCardTitle}>
+        <Text style={styles.itemRef}>{str(item, 'ref')} </Text>
+        {str(item, 'title')}
+      </Text>
+      {status.length > 0 ? <Text style={styles.itemCardMuted}>{status}</Text> : null}
+      {now.length > 0 ? <Text style={styles.itemCardText}>{now}</Text> : null}
+      {arr(obj(item)?.asks).map((ask, index) => (
+        <Text key={str(ask, 'tag') || String(index)} style={styles.itemCardText}>
+          {str(ask, 'tag').length > 0 ? <Text style={styles.itemCardMuted}>{str(ask, 'tag')} </Text> : null}
+          {str(ask, 'text')}
+        </Text>
+      ))}
+      {report.length > 0 ? (
+        <Text style={styles.itemCardText}>
+          <Text style={styles.itemCardMuted}>Last report · </Text>
+          {report}
+        </Text>
+      ) : null}
+      {obj(command) !== null ? (
+        <Text
+          accessibilityRole="button"
+          style={styles.itemCardAction}
+          onPress={() => chat.dispatch(command as UserAction)}
+        >
+          Show in Work
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -273,12 +366,7 @@ export function AgentFleetMenu({ document, onOpen }: { document: ChatDocument; o
       ) : null}
       <ScrollView style={styles.menuRows} contentContainerStyle={styles.rows} nestedScrollEnabled>
         {rows.map((row, index) => (
-          <FleetRow
-            key={str(row, 'key') || String(index)}
-            row={row}
-            nameWidth={nameWidth}
-            onOpen={onOpen}
-          />
+          <FleetRow key={str(row, 'key') || String(index)} row={row} nameWidth={nameWidth} onOpen={onOpen} />
         ))}
       </ScrollView>
     </View>
@@ -496,6 +584,77 @@ const useStyles = themedStyles((P) => ({
   threadDetail: {
     color: P.cardMuted,
     fontSize: PROSE_SIZE - 1,
+  },
+  /** A worker's work item pills and the card a tap opens (desktop `items_line`). */
+  itemsBlock: {
+    gap: 6,
+    marginTop: 4,
+  },
+  itemsLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    overflow: 'hidden',
+  },
+  itemPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    gap: 4,
+    maxWidth: 150,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: P.ink(0.1),
+  },
+  itemPillOpen: {
+    backgroundColor: P.ink(0.08),
+  },
+  itemPillDone: {
+    opacity: 0.55,
+  },
+  itemRef: {
+    color: P.foreground,
+    fontSize: PROSE_SIZE - 2,
+    fontWeight: '600',
+  },
+  itemTitle: {
+    flexShrink: 1,
+    color: P.cardMuted,
+    fontSize: PROSE_SIZE - 2,
+  },
+  itemMore: {
+    color: P.muted,
+    fontSize: PROSE_SIZE - 2,
+  },
+  itemCard: {
+    gap: 4,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: P.border,
+    backgroundColor: P.cardPanel,
+  },
+  itemCardTitle: {
+    color: P.foreground,
+    fontSize: PROSE_SIZE - 1,
+    fontWeight: '600',
+  },
+  itemCardText: {
+    color: P.cardMuted,
+    fontSize: PROSE_SIZE - 1,
+  },
+  itemCardMuted: {
+    color: P.muted,
+    fontSize: PROSE_SIZE - 2,
+  },
+  itemCardAction: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    color: P.foreground,
+    fontSize: PROSE_SIZE - 1,
+    fontWeight: '600',
   },
   /** The Threads sheet's "N more" step and empty line, the summary line's size. */
   threadsFold: {
