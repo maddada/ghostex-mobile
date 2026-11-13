@@ -1015,10 +1015,14 @@ export const ComputerPageCopy = {
     tailscaleDetail: (address: string, inUse: boolean) =>
       inUse ? `${address} · In use` : `${address} · Tried first`,
     easyConnectDetail: (inUse: boolean) => (inUse ? 'In use' : 'When Tailscale doesn\'t answer'),
+    /** Easy Connect is off on the computer: this phone can't use it, whatever key it holds. */
+    easyConnectOff: (computer: string) => `Off on ${computer}. Turn it on in Ghostex Settings › Remote there to use it.`,
+    /** The computer hasn't said yet whether Easy Connect is on there. */
+    easyConnectUnknown: 'Not checked yet',
     add: {
       label: 'Add Easy Connect',
       detail: (computer: string) =>
-        `Reach ${computer} from any network when Tailscale is off. Your own Tailscale phone is added at once; otherwise approve it on the computer.`,
+        `Only if you want it: reach ${computer} from any network when Tailscale is off. Easy Connect must be on in Ghostex Settings › Remote on ${computer}. Your own Tailscale phone is added at once; otherwise approve it on the computer.`,
       button: 'Add',
     },
   },

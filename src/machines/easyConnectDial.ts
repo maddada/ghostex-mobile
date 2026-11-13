@@ -15,6 +15,7 @@ import {
   type MachineConnectionTarget,
 } from './credentials';
 import { tailcatServerKey } from './computerIdentity';
+import { noteEasyConnectOn } from './easyConnectRoute';
 import { samePairing } from './pairingEpoch';
 import {
   addressesNeedRefresh,
@@ -191,6 +192,7 @@ export function refreshEasyConnectAddressesSoon(
         const result = answer.result as { addresses?: unknown } | null;
         // Paired again (or edited, or removed) while it asked: the answer is the computer's before.
         if (!samePairing(machine.id, begun.epoch)) return;
+        noteEasyConnectOn(machine.id, readEasyConnectAddresses(result?.addresses).length > 0);
         await saveEasyConnectAddresses(machine.id, result?.addresses, begun.pairedAddress);
       } catch (error) {
         console.info(
@@ -201,4 +203,20 @@ export function refreshEasyConnectAddressesSoon(
       }
     })();
   }, REFRESH_DELAY_MS);
+}
+
+/**
+ * Asks a Tailscale or SSH computer with an Easy Connect route whether Easy Connect is on there now
+ * (it names addresses only while it is), for its page (CDXC:RemotePairing 2026-11-13 in
+ * easyConnectRoute.ts). Leaves the state unknown when the computer can't answer.
+ */
+export async function checkEasyConnectOn(machine: MachineConnectionTarget): Promise<void> {
+  try {
+    const answer = await chatMachineLink(machine).rpc('easyConnectAddresses', {}, REFRESH_TIMEOUT_MS);
+    if (answer.error !== null) return;
+    const result = answer.result as { addresses?: unknown } | null;
+    noteEasyConnectOn(machine.id, readEasyConnectAddresses(result?.addresses).length > 0);
+  } catch {
+    // Unknown stays unknown, which never reads as on.
+  }
 }

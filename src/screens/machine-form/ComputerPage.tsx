@@ -21,7 +21,8 @@ import { isDemoMachine } from '../../demo/identity';
 import { useInventoryStore } from '../../inventory/store';
 import { APP_UPDATE_FRESH_MS, appUpdateCardLine, appUpdateView, refreshAppUpdate, useAppUpdateStore } from '../../machines/appUpdate';
 import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
-import { useMachineRoutes } from '../../machines/easyConnectRoute';
+import { checkEasyConnectOn } from '../../machines/easyConnectDial';
+import { useEasyConnectOn, useMachineRoutes } from '../../machines/easyConnectRoute';
 import { refreshMachineTools, useMachineToolsStore } from '../../machines/machineTools';
 import { agentCliRow, toolRow } from '../../machines/machineToolsView';
 import { removeComputerFromPhone } from '../../machines/removeComputer';
@@ -92,6 +93,9 @@ function ComputerPageBody({
   const liveRoute = useMachineRoutes((state) => state.active[machine.id]);
   const viaEasyConnect = easyConnect || (twoRoutes && liveRoute === 'easyConnect');
   const easyConnectOffered = useSshPairings((state) => state.easyConnectOffered[machine.id] === true);
+  // What the computer last said about its Easy Connect; unknown never reads as on (CDXC:RemotePairing
+  // 2026-11-13 in easyConnectRoute.ts).
+  const easyConnectOn = useEasyConnectOn((state) => state.on[machine.id]);
   const path = useEasyConnectPath(machine.id, connectedNow && viaEasyConnect);
   const update = useAppUpdateStore((state) => state.byMachineId[machine.id]);
   const tools = useMachineToolsStore((state) => state.byMachineId[machine.id]);
@@ -125,6 +129,12 @@ function ComputerPageBody({
     // The record's identity does not change while the page is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reachable, machine.id]);
+
+  // A computer with an Easy Connect route: ask it whether Easy Connect is on there now.
+  useEffect(() => {
+    if (reachable && twoRoutes) void checkEasyConnectOn(machine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reachable, twoRoutes, machine.id]);
 
   // The computer's "Require Face ID to approve" switch, read when the page opens (null until read).
   useEffect(() => {
@@ -248,7 +258,15 @@ function ComputerPageBody({
                     <StatusDot color={connectedNow && liveRoute === 'easyConnect' ? appearance.connected : appearance.muted} />
                     <Text style={formStyles.rowLabel}>{copy.routes.easyConnect}</Text>
                   </View>
-                  <Text style={formStyles.rowDetail}>{copy.routes.easyConnectDetail(connectedNow && liveRoute === 'easyConnect')}</Text>
+                  <Text style={formStyles.rowDetail}>
+                    {connectedNow && liveRoute === 'easyConnect'
+                      ? copy.routes.easyConnectDetail(true)
+                      : easyConnectOn === true
+                        ? copy.routes.easyConnectDetail(false)
+                        : easyConnectOn === false
+                          ? copy.routes.easyConnectOff(name)
+                          : copy.routes.easyConnectUnknown}
+                  </Text>
                 </View>
               </View>
             </View>

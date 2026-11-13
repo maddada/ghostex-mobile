@@ -37,6 +37,23 @@ export function setActiveRoute(machineId: string, route: MachineRoute | null): v
   });
 }
 
+/*
+CDXC:RemotePairing 2026-11-13 DECISION:
+User (Sebastian): the phone never says Easy Connect is on or set up for a computer unless Easy Connect
+is actually on there; a key the phone holds is not "on". What the computer said last, this launch:
+`true` when it named Easy Connect addresses, `false` when it named none (Easy Connect off there).
+Unknown until it answers, and unknown never reads as on.
+*/
+type EasyConnectOnState = { on: Record<string, boolean> };
+
+export const useEasyConnectOn = create<EasyConnectOnState>(() => ({ on: {} }));
+
+/** Notes what the computer's own answer said about its Easy Connect. */
+export function noteEasyConnectOn(machineId: string, on: boolean): void {
+  if (useEasyConnectOn.getState().on[machineId] === on) return;
+  useEasyConnectOn.setState((state) => ({ on: { ...state.on, [machineId]: on } }));
+}
+
 /** Whether this computer is a Tailscale or SSH one that also has Easy Connect. */
 export function hasEasyConnectRoute(machine: Pick<MachineConnectionTarget, 'id' | 'transport'>): boolean {
   if (machine.transport === 'tailcat' || machine.transport === 'demo') return false;
@@ -91,6 +108,7 @@ export async function saveEasyConnectRoute(
 ): Promise<void> {
   await Promise.all([setEasyConnectSshKey(machineId, key.privateKey), setEasyConnectPublicKey(machineId, key.publicKey)]);
   const named = await saveAddresses();
+  noteEasyConnectOn(machineId, named);
   useMachinesStore.getState().setEasyConnectRoute(machineId, new Date().toISOString());
   logAppEvent(
     named
@@ -102,6 +120,10 @@ export async function saveEasyConnectRoute(
 /** Drops the route (the computer removed this phone, or the person did). */
 export async function forgetEasyConnectRoute(machineId: string): Promise<void> {
   useMachinesStore.getState().setEasyConnectRoute(machineId, null);
+  useEasyConnectOn.setState((state) => {
+    const { [machineId]: _was, ...rest } = state.on;
+    return { on: rest };
+  });
   setActiveRoute(machineId, null);
   await Promise.all([
     setEasyConnectSshKey(machineId, ''),
