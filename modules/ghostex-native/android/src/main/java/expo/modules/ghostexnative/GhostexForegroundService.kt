@@ -11,8 +11,11 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -36,11 +39,23 @@ import kotlin.math.abs
  *
  * CDXC:VoiceMode 2026-10-20 DECISION: User: on the phone, auto-read keeps working while the phone is locked or Ghostex is in the background, through an Android foreground service with a "Voice mode on" notification.
  * CDXC:VoiceMode 2026-10-22 WHY: Auto-read reuses this service and notification (spec 6.3): turning it on adds the `mediaPlayback` type, from the ⋯ menu while the app is in front as Android requires; the notification reads "Reading <session> aloud" with Pause / Resume while a reply plays and Stop, which stops the speech and turns Auto-read off, and tapping it opens that chat. A voice agent call and Auto-read share the one notification: the call's line wins while both run and the service keeps both types. The expanded view keeps the session rows.
+ *
+ * CDXC:PersistentNotification 2026-11-13 WHY: Android 12+ refuses `startForeground` while the app is
+ * in the background unless the service was started with `startForegroundService` from a state that
+ * allows it (ForegroundServiceStartNotAllowedException, "mAllowStartForeground false"). A phone crashed
+ * on that in `onCreate` (#585): the service had been created by a plain start in the background, and
+ * the type fallback below threw the same refusal again. So an "off" request (Persistent off, Voice
+ * off, Read aloud off) goes straight to the running service instead of through `startService`, which
+ * could create a new one there, and a service Android will not let into the foreground stops itself
+ * instead of crashing the app (a running one keeps its notification).
  */
 class GhostexForegroundService : Service() {
 
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
+
+  /** Whether `startForeground` has succeeded for this service. */
+  private var inForeground = false
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -49,14 +64,16 @@ class GhostexForegroundService : Service() {
     instance = this
     isRunning = true
     setupNotificationChannel()
-    enterForeground()
+    if (!enterForeground()) stopSelf()
   }
 
   /**
    * (Re)enters the foreground with the service types the current mode needs: `specialUse` for the
-   * session notification, plus `microphone` while a voice conversation runs.
+   * session notification, plus `microphone` while a voice conversation runs. Returns whether the
+   * service is in the foreground afterwards: false only when Android refuses a service that never
+   * got there, which must then stop.
    */
-  private fun enterForeground() {
+  private fun enterForeground(): Boolean {
     var types = if (android.os.Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
     if (voiceLine != null && android.os.Build.VERSION.SDK_INT >= 30 &&
       ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -71,8 +88,17 @@ class GhostexForegroundService : Service() {
     } catch (error: RuntimeException) {
       // The microphone and media types are refused from the background; keep the notification.
       val background = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-      ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), types and background.inv())
+      try {
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), types and background.inv())
+      } catch (refused: RuntimeException) {
+        // The app is in the background, where Android lets no service into the foreground (#585).
+        Log.w(LOG_TAG, "Android refused the foreground (inForeground=$inForeground)", refused)
+        if (inForeground) refreshNotification()
+        return inForeground
+      }
     }
+    inForeground = true
+    return true
   }
 
   /** Rebuild + repost the ongoing notification (thread-safe). */
@@ -82,7 +108,13 @@ class GhostexForegroundService : Service() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    when (intent?.action) {
+    handle(intent?.action)
+    return START_NOT_STICKY
+  }
+
+  /** One request, from a start intent (notification buttons, turning a mode on) or [deliver]. Main thread. */
+  internal fun handle(action: String?) {
+    when (action) {
       ACTION_STOP -> {
         // Exit ends everything, a voice conversation and Auto-read included.
         if (voiceLine != null) GhostexVoice.end("conversation")
@@ -105,33 +137,31 @@ class GhostexForegroundService : Service() {
       }
       ACTION_READ_ALOUD_PAUSE -> {
         GhostexSpeech.togglePauseByUser()
-        return START_NOT_STICKY
+        return
       }
       ACTION_VOICE_HANG_UP -> {
         GhostexVoice.end("conversation")
-        return START_NOT_STICKY
+        return
       }
       ACTION_VOICE_MUTE -> {
         GhostexVoice.setMuted(!voiceMuted)
-        return START_NOT_STICKY
+        return
       }
       ACTION_VOICE_TALK -> {
         GhostexVoice.toggleTalking()
-        return START_NOT_STICKY
+        return
       }
       ACTION_WAKE_LOCK -> acquireLocks()
       ACTION_WAKE_UNLOCK -> releaseLocks()
     }
     setupNotificationChannel()
-    enterForeground()
-    return START_NOT_STICKY
+    if (!enterForeground()) shutDown()
   }
 
-  private fun shutDown(): Int {
+  private fun shutDown() {
     releaseLocks()
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
-    return START_NOT_STICKY
   }
 
   override fun onDestroy() {
@@ -416,6 +446,7 @@ class GhostexForegroundService : Service() {
   // endregion
 
   companion object {
+    private const val LOG_TAG = "GhostexService"
     const val NOTIFICATION_ID = 1337
     const val CHANNEL_ID = "ghostex_notification_channel"
     const val CHANNEL_NAME = "Ghostex App"
@@ -505,6 +536,17 @@ class GhostexForegroundService : Service() {
     @Volatile
     private var instance: GhostexForegroundService? = null
 
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+
+    /**
+     * Hands [action] to the running service on the main thread, where its start intents run too.
+     * Never `startService`: in the background that can create a new service Android will not let
+     * into the foreground (#585), and with no service running an "off" request has nothing to do.
+     */
+    private fun deliver(action: String) {
+      mainHandler.post { instance?.handle(action) }
+    }
+
     fun start(context: Context) {
       persistentWanted = true
       ContextCompat.startForegroundService(
@@ -513,14 +555,9 @@ class GhostexForegroundService : Service() {
       )
     }
 
-    fun stop(context: Context) {
-      if (!isRunning) {
-        persistentWanted = false
-        return
-      }
-      context.startService(
-        Intent(context, GhostexForegroundService::class.java).setAction(ACTION_PERSISTENT_OFF)
-      )
+    fun stop() {
+      persistentWanted = false
+      deliver(ACTION_PERSISTENT_OFF)
     }
 
     /** Switches the notification to "Voice mode on" and takes the microphone service type. */
@@ -547,18 +584,12 @@ class GhostexForegroundService : Service() {
     }
 
     /** Back to the session notification (or no service at all when none is wanted). */
-    fun stopVoiceMode(context: Context) {
+    fun stopVoiceMode() {
       if (voiceLine == null) return
       voiceLine = null
       voiceMuted = false
       voiceTalking = false
-      if (!isRunning) return
-      try {
-        context.startService(Intent(context, GhostexForegroundService::class.java).setAction(ACTION_VOICE_OFF))
-      } catch (_: IllegalStateException) {
-        // In the background a plain start is refused; the running service just redraws.
-        update()
-      }
+      deliver(ACTION_VOICE_OFF)
     }
 
     /**
@@ -584,17 +615,12 @@ class GhostexForegroundService : Service() {
     }
 
     /** Back to the session notification (or no service at all when none is wanted). */
-    fun stopReadAloudMode(context: Context) {
+    fun stopReadAloudMode() {
       if (readAloud == null) return
       readAloud = null
       readAloudSpeaking = false
       readAloudPaused = false
-      if (!isRunning) return
-      try {
-        context.startService(Intent(context, GhostexForegroundService::class.java).setAction(ACTION_READ_ALOUD_OFF))
-      } catch (_: IllegalStateException) {
-        update()
-      }
+      deliver(ACTION_READ_ALOUD_OFF)
     }
 
     /** What the speaker is doing, for Pause / Resume and the line. */

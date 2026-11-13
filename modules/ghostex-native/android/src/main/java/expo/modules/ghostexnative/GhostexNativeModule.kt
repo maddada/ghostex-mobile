@@ -661,7 +661,7 @@ class GhostexNativeModule : Module() {
     AsyncFunction("setPersistentNotificationEnabled") { enabled: Boolean ->
       val context = requireAndroidContext().applicationContext
       if (enabled) GhostexForegroundService.start(context)
-      else GhostexForegroundService.stop(context)
+      else GhostexForegroundService.stop()
     }
 
     AsyncFunction("updatePersistentNotification") { rows: List<NotificationSessionRecord> ->
@@ -826,7 +826,7 @@ class GhostexNativeModule : Module() {
     }
 
     AsyncFunction("readAloudModeStop") {
-      GhostexForegroundService.stopReadAloudMode(requireAndroidContext())
+      GhostexForegroundService.stopReadAloudMode()
     }
 
     AsyncFunction("readAloudModeEnded") { title: String, text: String ->
