@@ -21,6 +21,8 @@ import {
 } from '../machines/easyConnectRoute';
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
+import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
+import { endConnectionBudget, withCommandChannel } from './channelBudget';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -34,6 +36,7 @@ export function cancelConnectionAttempt(machineId: string): void {
 
 /** Ends a computer's connection and its Easy Connect tunnel; never throws. */
 async function dropConnection(machineId: string): Promise<void> {
+  endConnectionBudget(machineId);
   await GhostexNative.disconnect(machineId).catch(() => undefined);
   await GhostexNative.stopTailcatForward(machineId).catch(() => undefined);
 }
@@ -93,8 +96,12 @@ export function ensureConnected(
     if (!replaceExisting && (await GhostexNative.isConnected(machine.id))) {
       assertCurrent();
       if (!options.verify) return;
-      const probe = await probeConnection(machine.id, Date.now());
-      if (probe === 'answered') return;
+      const startedAt = Date.now();
+      const probe = await probeConnection(machine.id, startedAt);
+      logAppEvent(`Connection: ${machine.id} check ${probe} in ${Date.now() - startedAt}ms`);
+      // Busy or out of channels is a working connection: replacing it would only end what runs on it
+      // (CDXC:RemoteMachines 2026-11-13 in src/remote/channelBudget.ts).
+      if (probe === 'answered' || probe === 'busy' || probe === 'capacity') return;
       assertCurrent();
       if (probe === 'stalled' && machine.transport === 'tailcat') {
         /**
@@ -122,6 +129,7 @@ export function ensureConnected(
     }
     if (replaceExisting) {
       forgetRemoteEnvironment(machine.id);
+      endConnectionBudget(machine.id);
       await GhostexNative.disconnect(machine.id);
     }
     assertCurrent();
@@ -249,25 +257,63 @@ async function connectEasyConnect(
 }
 
 /**
- * Whether the shared connection still answers: `answered`, `stalled` (no answer within the probe's
- * time) or `failed` (an error or a wrong answer). While a heavy transfer is under way the probe
- * would only queue behind it, so the transfer's own outcome answers first: anything that comes back
- * after `since` counts as `answered`, and only a link left idle is probed (CDXC:RemoteMachines
- * 2026-11-10 in src/remote/linkActivity.ts).
+ * Whether the shared connection still answers, in order of precedence:
+ * - `answered`: the echo came back (or, while a heavy transfer is under way, anything came back after `since`: the
+ *   probe would only queue behind it; CDXC:RemoteMachines 2026-11-10 in src/remote/linkActivity.ts).
+ * - `busy`: the echo never got a slot on the phone (`E_BUSY`); it never left, so it says nothing.
+ * - `capacity`: the computer refused the echo's channel while the connection is up. A known gxserver forward is asked
+ *   for the log only: its answer proves the link alive, and its silence (gxserver down, forwarding off) proves
+ *   nothing about SSH. The refusal itself already went to the escape path (`channelPressure.ts`).
+ * - `stalled`: the echo went out and got no answer in time.
+ * - `failed`: any other error, a wrong answer, or a channel refused on a connection that is gone.
+ * It never runs the chat handshake or dials: it asks only what already exists, so it cannot wait on the
+ * `ensureConnected` it runs inside.
  */
-async function probeConnection(machineId: string, since: number): Promise<'answered' | 'stalled' | 'failed'> {
+export type ProbeOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed';
+
+async function probeConnection(machineId: string, since: number): Promise<ProbeOutcome> {
   if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
   try {
-    // echo is understood by POSIX shells, Windows cmd and PowerShell.
-    const probe = await GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', PROBE_TIMEOUT_MS);
+    // echo is understood by POSIX shells, Windows cmd and PowerShell. Its 5 s start once it has a slot.
+    const probe = await withCommandChannel(machineId, PROBE_ADMISSION_MS, () =>
+      GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', PROBE_TIMEOUT_MS),
+    );
     const answered = probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
     if (answered) noteLinkProgress(machineId);
     return answered ? 'answered' : 'failed';
   } catch (error) {
-    return (error as { code?: unknown } | null)?.code === 'E_TIMEOUT' ? 'stalled' : 'failed';
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === 'E_BUSY') return 'busy';
+    if (code === 'E_CHANNEL_FAILED') {
+      if (!(await GhostexNative.isConnected(machineId).catch(() => false))) return 'failed';
+      const http = await askKnownGxserver(machineId);
+      logAppEvent(`Connection: ${machineId} refused the check's channel; gxserver over the forward: ${http}`);
+      return 'capacity';
+    }
+    return code === 'E_TIMEOUT' ? 'stalled' : 'failed';
   }
 }
 
+/** `GET /api/health` over a forward the chat link already opened, or `no forward`; never opens a connection. */
+async function askKnownGxserver(machineId: string): Promise<'answered' | 'no answer' | 'no forward'> {
+  const port = knownGxserverPort(machineId);
+  if (port === null) return 'no forward';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const { localPort } = await GhostexNative.startPortForward(machineId, port, GXSERVER_FORWARD_HOST);
+    const response = await fetch(`http://127.0.0.1:${localPort}/api/health`, { signal: controller.signal });
+    await response.text();
+    return 'answered';
+  } catch {
+    return 'no answer';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** How long the probe waits for a slot behind other commands before it says `busy`. */
+const PROBE_ADMISSION_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
 
 export function reconnectMachine(machine: MachineConnectionTarget): Promise<void> {

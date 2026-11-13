@@ -57,9 +57,19 @@ function projectFlag(projectId?: string): string {
   return trimmed.length === 0 ? '' : ` --project-id ${shellQuote(trimmed)}`;
 }
 
-/** Inventory list: `ghostex sessions --json --mobile-summary`. */
+/**
+ * Inventory list: `ghostex sessions --json --mobile-summary --icon-refs`. A computer whose Ghostex predates
+ * `--icon-refs` ignores the flag and sends its icons in the list as before; a newer one sends a ref per icon, which
+ * `projectIconsCommand` resolves once (src/inventory/projectIcons.ts).
+ */
 export function sessionsListCommand(): string {
-  return 'ghostex sessions --json --mobile-summary';
+  return 'ghostex sessions --json --mobile-summary --icon-refs';
+}
+
+/** The pictures behind icon refs a summary named: `ghostex sessions --json --project-icons <ref,…>`. */
+export function projectIconsCommand(refs: readonly string[]): string {
+  const clean = refs.filter((ref) => /^[0-9a-f]{8,64}$/u.test(ref));
+  return `ghostex sessions --json --project-icons ${shellQuote(clean.join(','))}`;
 }
 
 /** Attach: `ghostex attach --session-id <id> [--project-id <id>]`. */

@@ -198,7 +198,7 @@ type Answer = { status: AppUpdateStatus } | { error: string };
 /** One `/api/appUpdate*` request through the computer's gxserver forward. */
 async function request(machine: MachineConnectionTarget, method: string, params: unknown): Promise<Answer> {
   const link = chatMachineLink(machine);
-  const route = await link.route();
+  const route = await link.routeOrRepair();
   // A computer without the endpoint handshake predates these endpoints too.
   if (route === 'legacy') return { error: TOO_OLD_MESSAGE };
   if (route !== 'socket') return { error: UNREACHABLE_MESSAGE };

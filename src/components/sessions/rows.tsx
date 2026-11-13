@@ -12,6 +12,7 @@
  * is the only thing separating them from a session title of the same size.
  */
 
+import { useDiscoveredIconUri } from '../../inventory/projectIcons';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { SvgXml } from 'react-native-svg';
@@ -351,12 +352,8 @@ export function ProjectIcon({
   title: string;
   size?: number;
 }) {
-  const imageUri =
-    icon.imageDataUrl.length > 0
-      ? icon.imageDataUrl
-      : icon.discoveredIconDataUrl.length > 0
-        ? icon.discoveredIconDataUrl
-        : '';
+  const discoveredUri = useDiscoveredIconUri(icon);
+  const imageUri = icon.imageDataUrl.length > 0 ? icon.imageDataUrl : discoveredUri;
   const [failedUri, setFailedUri] = useState('');
   const svgXml = useMemo(() => svgXmlFromDataUrl(imageUri), [imageUri]);
   const ink = useSidebarInk();

@@ -132,7 +132,7 @@ export default function ConnectionsSheet({
                 small
                 variant={entry.status === 'failed' && !entry.tailscaleOff ? 'primary' : 'secondary'}
                 busy={entry.retrying}
-                label={ConnectionsCopy.retry}
+                label={entry.busy ? ConnectionsCopy.resetConnection : ConnectionsCopy.retry}
                 icon={
                   <RefreshGlyph
                     size={13}

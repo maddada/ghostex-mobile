@@ -177,7 +177,7 @@ function sessionItemOf(machineId: string, session: GhostexSession, summary: Ghos
 }
 
 function hasImage(icon: GhostexProjectIcon | undefined): icon is GhostexProjectIcon {
-  return icon !== undefined && (icon.imageDataUrl.length > 0 || icon.discoveredIconDataUrl.length > 0);
+  return icon !== undefined && (icon.imageDataUrl.length > 0 || icon.discoveredIconDataUrl.length > 0 || icon.discoveredIconRef.length > 0);
 }
 
 /** Counts working time each second, otherwise ages each half minute, only while the Unified list is in front. */

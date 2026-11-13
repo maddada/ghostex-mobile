@@ -1019,7 +1019,7 @@ export function buildDrawerItems(input: DrawerBuildInput): DrawerItem[] {
     const icon: GhostexProjectIcon =
       project !== null
         ? project.icon
-        : { imageDataUrl: '', discoveredIconDataUrl: '', glyph: '', glyphColor: '', isWorktree: false };
+        : { imageDataUrl: '', discoveredIconDataUrl: '', discoveredIconRef: '', glyph: '', glyphColor: '', isWorktree: false };
 
     const namedGroups = groupsForProject(summary, projectId);
     const groupedSessionIds = new Set(namedGroups.flatMap((group) => group.sessionIds));

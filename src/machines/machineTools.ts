@@ -93,7 +93,7 @@ type Answer<T> = { result: T } | { error: string };
 
 async function call<T>(machine: MachineConnectionTarget, method: string, params: unknown): Promise<Answer<T>> {
   const link = chatMachineLink(machine);
-  const route = await link.route();
+  const route = await link.routeOrRepair();
   if (route === 'legacy') return { error: TOO_OLD_MESSAGE };
   if (route !== 'socket') return { error: UNREACHABLE_MESSAGE };
   const answer = await link.rpc(method, params, READ_TIMEOUT_MS);

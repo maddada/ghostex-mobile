@@ -12,6 +12,8 @@
  * `src/terminal/zmxDisplay.ts`, which watches AppState itself.
  */
 
+import { hydrateAppLog, logAppEvent } from './appLog';
+import { hydrateProjectIcons } from '../inventory/projectIcons';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { Platform } from 'react-native';
@@ -32,14 +34,21 @@ export function handleAppBecameActive(): void {
 export function initAppLifecycle(): void {
   if (installed) return;
   installed = true;
+  void hydrateProjectIcons();
+  void hydrateAppLog().then(() => logAppEvent(`App: started (${Platform.OS} ${String(Platform.Version)})`));
   let last: AppStateStatus = AppState.currentState as AppStateStatus;
   AppState.addEventListener('change', (next) => {
     const cameFromBackground = last === 'background' || last === 'inactive';
+    if (next !== last && (next === 'active' || next === 'background'))
+      logAppEvent(`App: ${next === 'active' ? 'in front' : 'in the background'}`);
     last = next;
     if (next === 'active' && cameFromBackground) handleAppBecameActive();
   });
   if (networkChangesHeard(Platform.OS, GhostexNative)) {
-    GhostexNative.addListener('onNetworkChanged', () => recoverConnections());
+    GhostexNative.addListener('onNetworkChanged', () => {
+      logAppEvent('App: the network changed');
+      recoverConnections();
+    });
   }
   // Runs for the app's lifetime, like the listeners above. The handle type is whatever the platform's timer
   // returns (React Native's `setInterval` is overloaded, so it is named here rather than inferred).

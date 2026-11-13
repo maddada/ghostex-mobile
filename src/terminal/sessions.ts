@@ -34,6 +34,9 @@ import {
 import { warmPoolOverBudget } from './warmBudget';
 import { forgetAttach, noteAttachOpened } from './zmxDisplay';
 import { isDemoMachineId } from '../demo/identity';
+import { logAppEvent } from '../app/appLog';
+import { FailureCopy } from '../copy';
+import { isChannelRefusal, reportChannelRefused } from '../remote/channelBudget';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 /** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
@@ -52,6 +55,23 @@ function scrollbackRowsForNewTerminal(sessionKey: string): number {
  * in the background instead and replaced only when it no longer answers, which recovers a wedged
  * transport the way the old teardown did.
  */
+function errorCodeOf(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : 'error';
+}
+
+/**
+ * A terminal the computer refused a channel for says so in plain words, and the refusal goes to the escape path
+ * (src/remote/channelPressure.ts); any other failure keeps its own message.
+ */
+function terminalOpenError(machineId: string, error: unknown): string {
+  if (isChannelRefusal(error)) {
+    reportChannelRefused(machineId);
+    return FailureCopy.channelsBusy;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function verifyAfterFailedOpen(machine: MachineConnectionTarget): void {
   void ensureConnected(machine, { verify: true }).catch(() => undefined);
 }
@@ -219,6 +239,12 @@ type TerminalState = {
   /** Kill/sleep actions must also drop the warm surface for that session. */
   closeWarmSessionFor: (machineId: string, sessionId: string) => Promise<void>;
   /**
+   * Frees channels on a computer that refused one: detaches its off-screen agent terminals, least recently used first,
+   * until `keep` stay attached there. Their tabs stay and attach again when shown; plain shells and terminals on screen
+   * are never touched. Returns how many it detached (src/remote/channelPressure.ts).
+   */
+  detachIdleTerminals: (machineId: string, keep: number) => Promise<number>;
+  /**
    * Re-run the open flow for a failed/closed tab. Shared by the Terminal
    * screen's Retry/Reconnect buttons and the app-resume auto-reattach.
    */
@@ -354,10 +380,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           await GhostexNative.closeTerminal(tab.sessionKey);
         }
       } catch (error) {
-        patchTab(tab.sessionKey, {
-          state: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-        });
+        patchTab(tab.sessionKey, { state: 'failed', error: terminalOpenError(machine.id, error) });
         dropWarm(tab.sessionKey);
         if (connected) verifyAfterFailedOpen(machine);
         throw error;
@@ -610,6 +633,36 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       }
     },
 
+    detachIdleTerminals: async (machineId, keep) => {
+      const { warmOrder, selectedSessionKey, paneSessionKey, tabs, tabSplit } = get();
+      const split = splitView(
+        tabs.map((tab) => tab.sessionKey),
+        selectedSessionKey,
+        tabSplit,
+      );
+      const beside = split === null ? null : split.focus === 'left' ? split.rightShown : split.leftShown;
+      const onScreen = new Set(
+        [selectedSessionKey, paneSessionKey, beside].filter((key): key is string => key !== null),
+      );
+      const attached = warmOrder
+        .map((key) => tabs.find((tab) => tab.sessionKey === key))
+        .filter((tab): tab is TerminalTab => tab !== undefined && tab.machineId === machineId && tab.kind === 'attach')
+        .filter((tab) => tab.state === 'open' || tab.state === 'failed' || tab.state === 'closed');
+      let detached = 0;
+      for (const tab of attached) {
+        if (attached.length - detached <= keep) break;
+        if (onScreen.has(tab.sessionKey) || tabOpenRequests.has(tab.sessionKey)) continue;
+        cancelZmxRefresh(tab.sessionKey);
+        zmxRefreshSent.delete(tab.sessionKey);
+        forgetAttach(tab.sessionKey);
+        dropWarm(tab.sessionKey);
+        patchTab(tab.sessionKey, { state: 'detached', error: undefined });
+        await GhostexNative.closeTerminal(tab.sessionKey).catch(() => undefined);
+        detached += 1;
+      }
+      return detached;
+    },
+
     closeWarmSessionFor: async (machineId, sessionId) => {
       const sessionKey = attachSessionKey(machineId, sessionId);
       if (get().tabs.some((tab) => tab.sessionKey === sessionKey) || get().warmOrder.includes(sessionKey)) {
@@ -685,10 +738,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
           }
           await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
         } catch (error) {
-          patchTab(sessionKey, {
-            state: 'failed',
-            error: error instanceof Error ? error.message : String(error),
-          });
+          patchTab(sessionKey, { state: 'failed', error: terminalOpenError(tab.machineId, error) });
+          logAppEvent(`Terminal: ${tab.machineId}: reopening ${tab.kind} tab failed (${errorCodeOf(error)})`);
           if (connected) verifyAfterFailedOpen(target);
         }
       });

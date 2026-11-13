@@ -62,6 +62,8 @@ function failureTitle(code: FailureReasonCode, name: string): string {
     // SSH worked but the computer's Ghostex did not answer yet; the store retries on its own.
     case 'ghostexNotAnswering':
       return MachineNoticeCopy.reconnecting(name);
+    case 'channelsBusy':
+      return MachineNoticeCopy.busy(name);
     default:
       return MachineNoticeCopy.cannotReach(name);
   }

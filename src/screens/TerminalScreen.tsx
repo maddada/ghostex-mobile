@@ -1793,6 +1793,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
             }
             onRetry={() => void reopenTab(activeTab)}
             onReconnect={() => void reopenTab(activeTab)}
+            onResetConnection={() => void useInventoryStore.getState().retryMachine(activeTab.machineId)}
             // Laptop pose: Retry and Reconnect above the fold, never on it.
             contentBottom={foldAboveAreaBottom}
           />

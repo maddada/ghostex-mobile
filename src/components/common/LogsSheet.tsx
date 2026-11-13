@@ -16,8 +16,9 @@ import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
 import { formatAppLog, formatLogTime, useAppLogStore } from '../../app/appLog';
-import { SendLogsCopy } from '../../copy';
+import { LogsCopy, SendLogsCopy } from '../../copy';
 import SendLogsReview from './SendLogsReview';
+import { exportLogs } from '../../feedback/logExport';
 import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 
 export type LogsSheetProps = {
@@ -27,6 +28,8 @@ export type LogsSheetProps = {
   sending?: boolean;
 };
 
+const SHOWN_LINES = 300;
+
 export default function LogsSheet({ visible, onClose, sending = false }: LogsSheetProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
@@ -35,6 +38,9 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
   const entries = useAppLogStore((state) => state.entries);
   const [copied, setCopied] = useState(false);
   const [reviewing, setReviewing] = useState(sending);
+  const [exporting, setExporting] = useState(false);
+  // The sheet draws the newest lines only; Copy, Export and Send take the whole kept log.
+  const shown = entries.length > SHOWN_LINES ? entries.slice(-SHOWN_LINES) : entries;
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -50,6 +56,14 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
       if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const exportLog = (): void => {
+    if (exporting) return;
+    setExporting(true);
+    void exportLogs(entries)
+      .catch(() => undefined)
+      .finally(() => setExporting(false));
   };
 
   return (
@@ -79,6 +93,16 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
                   <Pressable
                     accessibilityRole="button"
                     style={({ pressed }) => [styles.copyButton, styles.sendButton, pressed && styles.copyButtonPressed]}
+                    disabled={entries.length === 0 || exporting}
+                    onPress={exportLog}
+                  >
+                    <Text style={[styles.copyButtonLabel, entries.length === 0 ? styles.copyButtonDisabled : null]}>
+                      {exporting ? LogsCopy.exporting : LogsCopy.export}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.copyButton, styles.sendButton, pressed && styles.copyButtonPressed]}
                     disabled={entries.length === 0}
                     onPress={() => setReviewing(true)}
                   >
@@ -87,12 +111,16 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
                     </Text>
                   </Pressable>
                 </View>
-                <Text style={styles.subtitle}>Recent connection and status events on this phone.</Text>
+                <Text style={styles.subtitle}>
+                  {entries.length > shown.length
+                    ? LogsCopy.subtitleNewest(shown.length, entries.length)
+                    : 'Recent connection and status events on this phone.'}
+                </Text>
                 <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
                   {entries.length === 0 ? (
                     <Text style={styles.emptyText}>No log entries yet.</Text>
                   ) : (
-                    entries.map((entry, index) => (
+                    shown.map((entry, index) => (
                       <View key={`${entry.at}-${index}`} style={styles.row}>
                         <Text style={styles.rowTime}>{formatLogTime(entry.at)}</Text>
                         <Text selectable style={styles.rowMessage}>

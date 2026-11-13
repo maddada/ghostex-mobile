@@ -8,6 +8,7 @@
 
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ConnectionsCopy, FailureCopy } from '../../copy';
 import type { TerminalTab } from '../../terminal/sessions';
 import { GhostexPalette, GhostexRadii, neutralButtonFills } from '../../theme/palette';
 import { useTerminalColours } from '../../theme/useTerminalColours';
@@ -19,6 +20,8 @@ export type TerminalStateOverlayProps = {
   errorCaption: string | null;
   onRetry: () => void;
   onReconnect: () => void;
+  /** Replaces the computer's connection; offered while the computer is out of channels for this tab. */
+  onResetConnection?: () => void;
   /** Points at the area's bottom the content keeps clear of (the laptop pose's lower half); 0 elsewhere. */
   contentBottom?: number;
 };
@@ -28,6 +31,7 @@ export default function TerminalStateOverlay({
   errorCaption,
   onRetry,
   onReconnect,
+  onResetConnection,
   contentBottom = 0,
 }: TerminalStateOverlayProps) {
   const { chrome } = useTerminalColours();
@@ -35,6 +39,8 @@ export default function TerminalStateOverlay({
   const fills = neutralButtonFills(chrome.light);
   const muted = { color: chrome.muted };
   const ink = { color: chrome.foreground };
+  // The computer refused this terminal a channel: it is busy, not unreachable (src/remote/channelPressure.ts).
+  const busy = tab.state === 'failed' && tab.error === FailureCopy.channelsBusy;
 
   return (
     <View
@@ -50,7 +56,7 @@ export default function TerminalStateOverlay({
       {tab.state === 'failed' && (
         <View style={styles.stack}>
           <WarningTriangleIcon size={40} color={GhostexPalette.DANGER} />
-          <Text style={[styles.headline, ink]}>Connection Failed</Text>
+          <Text style={[styles.headline, ink]}>{busy ? 'Computer is busy' : 'Connection Failed'}</Text>
           {errorCaption !== null && errorCaption.length > 0 && (
             <Text style={[styles.caption, muted]}>{errorCaption}</Text>
           )}
@@ -61,6 +67,15 @@ export default function TerminalStateOverlay({
           >
             <Text style={[styles.buttonLabel, ink]}>Retry</Text>
           </Pressable>
+          {busy && onResetConnection !== undefined ? (
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.button, { backgroundColor: pressed ? fills.pressed : fills.rest }]}
+              onPress={onResetConnection}
+            >
+              <Text style={[styles.buttonLabel, ink]}>{ConnectionsCopy.resetConnection}</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
       {tab.state === 'closed' && (

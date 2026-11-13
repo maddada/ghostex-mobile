@@ -13,6 +13,8 @@ import {
   windowsProcess,
 } from './powershell';
 import { noteLinkAnswer, trackLinkTransfer } from './linkActivity';
+import { MAX_ADMISSION_WAIT_MS, withCommandChannel } from './channelBudget';
+import { logAppEvent } from '../app/appLog';
 
 export type RemoteEnvironment = { kind: 'posix' } | { kind: 'powershell' } | { kind: 'wsl'; distribution: string };
 
@@ -23,11 +25,41 @@ const PROBE_TIMEOUT = 15000;
 
 /** A command over the machine's connection; its answer proves the connection alive (`linkActivity.ts`). */
 function exec(machineId: string, command: string, timeoutMs: number): Promise<ExecResult> {
-  return noteLinkAnswer(machineId, GhostexNative.exec(machineId, command, timeoutMs));
+  return logFailedCommand(
+    machineId,
+    command,
+    withCommandChannel(machineId, timeoutMs, () =>
+      noteLinkAnswer(machineId, GhostexNative.exec(machineId, command, timeoutMs)),
+    ),
+  );
 }
 
 function execWithInput(machineId: string, command: string, input: string, timeoutMs: number): Promise<ExecResult> {
-  return noteLinkAnswer(machineId, GhostexNative.execWithInput(machineId, command, input, timeoutMs));
+  return logFailedCommand(
+    machineId,
+    command,
+    withCommandChannel(machineId, timeoutMs, () =>
+      noteLinkAnswer(machineId, GhostexNative.execWithInput(machineId, command, input, timeoutMs)),
+    ),
+  );
+}
+
+/** The verb of a command for the log (`ghostex sessions`), never its arguments. */
+function commandVerb(command: string): string {
+  const ghostex = /\bghostex(?:\.exe)?\s+([a-z][a-z-]*)/u.exec(command);
+  if (ghostex !== null) return `ghostex ${ghostex[1]}`;
+  return command.trim().split(/\s+/u)[0]?.slice(0, 24) ?? 'command';
+}
+
+function logFailedCommand<T>(machineId: string, command: string, settled: Promise<T>): Promise<T> {
+  return settled.catch((error: unknown) => {
+    const code = (error as { code?: unknown } | null)?.code;
+    const text = error instanceof Error ? error.message : String(error);
+    logAppEvent(
+      `Command: ${machineId}: ${commandVerb(command)} failed (${typeof code === 'string' ? code : 'error'}: ${text.slice(0, 120)})`,
+    );
+    throw error;
+  });
 }
 
 /** The longest an upload keeps a quiet link from being judged; a dead link fails it natively long before. */
@@ -38,8 +70,10 @@ const UPLOAD_TRANSFER_MAX_MS = 10 * 60_000;
  * runs, a quiet link is busy, not lost, so no liveness check tears the connection down under it.
  */
 export function uploadOverLink(machineId: string, localPath: string, remotePath: string): Promise<void> {
-  return trackLinkTransfer(machineId, UPLOAD_TRANSFER_MAX_MS, () =>
-    GhostexNative.uploadFile(machineId, localPath, remotePath),
+  return withCommandChannel(machineId, MAX_ADMISSION_WAIT_MS, () =>
+    trackLinkTransfer(machineId, UPLOAD_TRANSFER_MAX_MS, () =>
+      GhostexNative.uploadFile(machineId, localPath, remotePath),
+    ),
   );
 }
 

@@ -23,6 +23,10 @@ import { cancelConnectionAttempt, ensureConnected } from '../remote/connection';
 import { isDemoMachineId } from '../demo/identity';
 import { useSettingsStore } from '../settings/store';
 import { restoreAttachTabs, useTerminalStore } from '../terminal/sessions';
+import { commandsInFlight } from '../remote/channelBudget';
+import { clearChannelPressure, installChannelPressure } from '../remote/channelPressure';
+import { reconnectMachine } from '../remote/connection';
+import { logAppEvent } from './appLog';
 
 const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 30_000];
 let installed = false;
@@ -78,16 +82,17 @@ function scheduleReconnect(machineId: string): void {
     machineId,
     setTimeout(() => {
       retryTimers.delete(machineId);
-      void recoverMachine(machineId, true);
+      void recoverMachine(machineId, true, `retry ${attempt + 1}`);
     }, delay),
   );
 }
 
-function recoverMachine(machineId: string, verify = false): Promise<void> {
+function recoverMachine(machineId: string, verify = false, reason = 'retry'): Promise<void> {
   const existing = recovering.get(machineId);
   if (existing) return existing;
   const target = machineTarget(machineId);
   if (!target || !canRecover(machineId)) return Promise.resolve();
+  logAppEvent(`Connection: ${machineId} recovering (${reason}${verify ? ', checking first' : ''})`);
   cancelRetry(machineId);
   // Global Actions are shown and run only from a summary read over the recovered connection; a list read already
   // under way is discarded, and the read that follows in the foreground brings them back.
@@ -180,14 +185,38 @@ export function redialAfterServerStop(machineId: string): void {
 /** Validate existing sockets after resume or route changes, then resume bounded retries. */
 export function recoverConnections(): void {
   for (const machine of enabledMachines(useMachinesStore.getState())) {
-    void recoverMachine(machine.id, true);
+    void recoverMachine(machine.id, true, 'back in front or network changed');
   }
 }
 
 export function initAutoReconnect(): void {
   if (installed) return;
   installed = true;
+  installChannelPressure({
+    label: (machineId) => machineTarget(machineId)?.name || machineId,
+    detachIdleTerminals: (machineId, keep) => useTerminalStore.getState().detachIdleTerminals(machineId, keep),
+    openTerminals: (machineId) => {
+      const open = useTerminalStore
+        .getState()
+        .tabs.filter((tab) => tab.machineId === machineId && (tab.state === 'open' || tab.state === 'opening'));
+      return {
+        agents: open.filter((tab) => tab.kind === 'attach').length,
+        shells: open.filter((tab) => tab.kind !== 'attach').length,
+      };
+    },
+    commandsInFlight,
+    reset: async (machineId) => {
+      const target = machineTarget(machineId);
+      if (target === undefined) return;
+      await reconnectMachine(target);
+      await restoreAttachTabs(machineId);
+    },
+  });
   GhostexNative.addListener('onConnectionState', (event) => {
+    logAppEvent(
+      `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}`,
+    );
+    if (event.state === 'connected') clearChannelPressure(event.machineId);
     if (event.state === 'connecting') {
       permanentFailures.delete(event.machineId);
       return;
@@ -197,7 +226,7 @@ export function initAutoReconnect(): void {
       attemptsByMachineId.delete(event.machineId);
       manualDisconnects.delete(event.machineId);
       permanentFailures.delete(event.machineId);
-      if (canRecover(event.machineId)) void recoverMachine(event.machineId);
+      if (canRecover(event.machineId)) void recoverMachine(event.machineId, false, 'connected');
       return;
     }
     if (event.state !== 'disconnected' && event.state !== 'failed') return;
@@ -225,13 +254,13 @@ export function initAutoReconnect(): void {
       const code = inventory.lastErrorCode;
       if (code === null || code === previous.inventoriesByMachineId[machineId]?.lastErrorCode) continue;
       if (!CONNECTION_FAILURES.has(code)) continue;
-      if (canRecover(machineId)) void recoverMachine(machineId, true);
+      if (canRecover(machineId)) void recoverMachine(machineId, true, `sessions list failed: ${code}`);
     }
   });
   // An open chat that went silent is the earliest sign of a stalled tunnel (CDXC:RemoteMachines 2026-11-07 in
   // chat/rust/machine-link.ts): check and replace the connection now, as the Sessions poll's failure would later.
   onChatLinkCutOff((machineId) => {
-    if (canRecover(machineId)) void recoverMachine(machineId, true);
+    if (canRecover(machineId)) void recoverMachine(machineId, true, 'chat went silent');
   });
 }
 
