@@ -38,7 +38,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "autopilotApprovals": {
     "title": "Answer approval cards",
-    "subtitle": "Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. Off by default: only your click answers them.",
+    "subtitle": "Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. On by default; a read-only thread's cards always wait for you, and while it is off only your click answers them.",
     "options": [],
     "keywords": []
   },
