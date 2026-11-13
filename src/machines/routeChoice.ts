@@ -4,8 +4,8 @@
  *
  * CDXC:RemotePairing 2026-11-13 DECISION:
  * Supersedes 2026-11-12 (Q2716 = A, Q2717 = move-back: Tailscale first with a short head start, then
- * Easy Connect, for every computer with an Easy Connect route) where Easy Connect is off. User
- * (Sebastian): "Just use whatever the user asked to use", and the phone never adds or dials Easy
+ * Easy Connect, for every computer with an Easy Connect route) where Easy Connect is off. Only the
+ * route the person chose is used, and the phone never adds or dials Easy
  * Connect for a computer whose Easy Connect is off: it connects over the route the person set up
  * (SSH over Tailscale) with its full time, no head start. Where Easy Connect is on, the 2026-11-12
  * order stands: one saved computer with two routes, Tailscale first and Easy Connect when Tailscale

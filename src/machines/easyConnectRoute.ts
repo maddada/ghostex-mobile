@@ -40,7 +40,7 @@ export function setActiveRoute(machineId: string, route: MachineRoute | null): v
 
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
-User (Sebastian): the phone never says Easy Connect is on or set up for a computer unless Easy Connect
+The phone never says Easy Connect is on or set up for a computer unless Easy Connect
 is actually on there; a key the phone holds is not "on". What counts is the computer's own switch:
 `enabled` in its `/api/easyConnectAddresses` answer (an older computer has no such field, and there
 only a list of addresses proves "on", since its helper runs only while the switch is on; an empty

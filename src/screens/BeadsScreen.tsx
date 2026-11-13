@@ -6,7 +6,7 @@
  * (`BeadScreen`); back returns here where the list was.
  *
  * CDXC:ProjectBoard 2026-11-13 DECISION:
- * Sebastian chose the phone's Beads view as option B: the Tree, the scrolled filters, the sync pill
+ * The phone's Beads view is option B: the Tree, the scrolled filters, the sync pill
  * and its menu, and a full-screen bead with back and its Links row (editable only where the computer
  * advertises links); no Board and no New bead on the phone. It opens from a menu row beside Changes,
  * not a new tab.

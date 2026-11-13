@@ -419,10 +419,10 @@ export async function startSshPairing(
 
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
-User (Sebastian): Add Easy Connect needs no click on the computer, but the tap sits behind the same
-security as approvals: Face ID or the device's own authentication, honoring the computer's "Require
-Face ID to approve" switch (`requirePresence`), "so nothing turns Easy Connect on without his
-explicit, authenticated action". A computer that can't say how it approves, or a prompt that is
+Add Easy Connect needs no click on the computer, but the tap sits behind the same security as
+approvals: Face ID or the device's own authentication, honoring the computer's "Require Face ID to
+approve" switch (`requirePresence`), so nothing turns Easy Connect on without the person's
+explicit, authenticated action. A computer that can't say how it approves, or a prompt that is
 cancelled or fails, asks for nothing.
 */
 /** Add Easy Connect on the computer's page: authenticated as an approval would be, then the ask. */
@@ -573,9 +573,8 @@ onChatLinkHandshake((machine, capabilities) => {
   /*
   CDXC:RemotePairing 2026-11-13 DECISION:
   Supersedes 2026-11-12 (Q2716 = A, Q2719: a phone added by hand also paired for Easy Connect by
-  itself at its first sign-in). User (Sebastian): "Do not auto force Easy Connect ever. ... We cannot
-  auto promote this from the phone without the users approval ... Just use whatever the user asked to
-  use." A sign-in never asks for Easy Connect; only Add Easy Connect on the computer's page does.
+  itself at its first sign-in). Easy Connect is strictly opt-in: nothing moves a phone onto it without
+  the person's own ask, and only the route they chose is used. A sign-in never asks for Easy Connect; only Add Easy Connect on the computer's page does.
   */
   // A computer that approves plainly lets a phone on its SSH login do everything, approving
   // included, so there is nothing to pair: no "Approve this phone?" there (CDXC:Security 2026-11-10
