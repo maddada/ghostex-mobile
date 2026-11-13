@@ -70,6 +70,7 @@ export default function SessionPane({ sessionKey, view, covered, active }: Sessi
         errorCaption={tab.error !== undefined ? summarizeFailure(tab.error, true) : null}
         onRetry={() => void useTerminalStore.getState().reopenTab(sessionKey)}
         onReconnect={() => void useTerminalStore.getState().reopenTab(sessionKey)}
+        onResetConnection={() => void useInventoryStore.getState().retryMachine(tab.machineId)}
       />
     </>
   );

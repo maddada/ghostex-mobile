@@ -38,6 +38,8 @@ import type { RpcAnswer } from './transport';
 import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress } from '../../remote/linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../../machines/pairingEpoch';
 import { FrameInflater } from '../../remote/inflate';
+import { logAppEvent } from '../../app/appLog';
+import { isChannelRefusal } from '../../remote/channelBudget';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
 const PROTOCOL_VERSION = 1;
@@ -67,6 +69,8 @@ const FAILED_OPENS_BEFORE_RECHECK = 3;
 const LEGACY_RECHECK_MS = 10 * 60_000;
 /** How long "Ghostex is not answering" is kept before the handshake runs again. */
 const UNAVAILABLE_RECHECK_MS = 5_000;
+/** A handshake the computer was too busy to answer (out of channels) is asked again this soon. */
+const BUSY_RECHECK_MS = 1_500;
 /** The socket stays open this long after its last chat closes, so the next chat reuses it. */
 const IDLE_CLOSE_MS = 30_000;
 /** How long a socket that survived the background has to answer its fresh subscribes. */
@@ -278,6 +282,8 @@ export function onChatLinkTokenRefused(listener: RefusedTokenListener): () => vo
 
 class ChatMachineLink {
   private state: LinkState = { kind: 'unknown' };
+  /** The last handshake found the computer out of channels (`unavailable`, busy), until the next one settles. */
+  private lastHandshakeBusy = false;
   /** The route the last handshake settled on, so listeners hear only real changes. */
   private lastRoute: ChatRoute | null = null;
   private readonly routeListeners = new Set<(route: ChatRoute) => void>();
@@ -356,19 +362,46 @@ class ChatMachineLink {
     const done = this.handshake().then((outcome) => {
       const previous = this.lastRoute;
       this.lastRoute = outcome.route;
+      const busy = outcome.route === 'unavailable' && outcome.busy === true;
+      this.lastHandshakeBusy = busy;
       this.state =
         outcome.route === 'socket'
           ? { kind: 'socket', endpoint: outcome.endpoint }
           : {
               kind: outcome.route,
-              until: Date.now() + (outcome.route === 'legacy' ? LEGACY_RECHECK_MS : UNAVAILABLE_RECHECK_MS),
+              until:
+                Date.now() +
+                (outcome.route === 'legacy' ? LEGACY_RECHECK_MS : busy ? BUSY_RECHECK_MS : UNAVAILABLE_RECHECK_MS),
             };
+      if (outcome.route !== previous || busy) {
+        logAppEvent(
+          `Chat link: ${this.machine.id} route ${outcome.route}${busy ? ' (computer busy, asking again soon)' : ''}`,
+        );
+      }
       if (outcome.route !== previous) for (const listener of this.routeListeners) listener(outcome.route);
       if (outcome.route === 'socket') this.ensureSocket();
       return outcome.route;
     });
     this.state = { kind: 'probing', done };
     return done;
+  }
+
+  /**
+   * The route for a user's own read of this computer (its updates, tools and skills): when it reads `unavailable`, the
+   * link is repaired once (a stale forward, a handshake the computer was too busy for) before the caller says the
+   * computer can't be reached.
+   */
+  /** Whether an `unavailable` route came from a computer that was only busy (out of channels), not unreachable. */
+  routeBusy(): boolean {
+    return this.state.kind === 'unavailable' && this.lastHandshakeBusy;
+  }
+
+  async routeOrRepair(): Promise<ChatRoute> {
+    const first = await this.route();
+    if (first !== 'unavailable' || isDemoMachine(this.machine)) return first;
+    this.forgetRoute();
+    await this.repair();
+    return this.route();
   }
 
   /**
@@ -559,7 +592,9 @@ class ChatMachineLink {
 
   // ---- the handshake -----------------------------------------------------------------------------
 
-  private async handshake(): Promise<{ route: 'socket'; endpoint: Endpoint } | { route: 'legacy' | 'unavailable' }> {
+  private async handshake(): Promise<
+    { route: 'socket'; endpoint: Endpoint } | { route: 'legacy' } | { route: 'unavailable'; busy?: boolean }
+  > {
     if (isCloudBoxMachineId(this.machine.id)) return this.boxHandshake();
     // An answer read over the connection of a pairing the entry no longer has is that computer's
     // endpoint and token, not this entry's (machines/pairingEpoch.ts).
@@ -582,7 +617,10 @@ class ChatMachineLink {
       };
     } catch (error) {
       // An sshd with `AllowTcpForwarding no` will never carry the link; anything else may pass.
-      return { route: errorCode(error) === 'E_FORWARDING_PROHIBITED' ? 'legacy' : 'unavailable' };
+      const code = errorCode(error);
+      if (code === 'E_FORWARDING_PROHIBITED') return { route: 'legacy' };
+      // Out of channels, or the phone's own slots full: the computer is there, just busy (src/remote/channelBudget.ts).
+      return { route: 'unavailable', busy: isChannelRefusal(error) || code === 'E_BUSY' };
     }
   }
 

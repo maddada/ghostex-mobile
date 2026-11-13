@@ -196,7 +196,8 @@ function ensureStream(machine: MachineConnectionTarget): void {
 }
 
 function open(machineId: string, stream: Stream, localPort: number, authToken: string, deflate: boolean): void {
-  const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionsList${deflate ? '&encoding=deflate' : ''}`;
+  // `iconRefs=1` names project icons by ref (src/inventory/projectIcons.ts); a Ghostex without it ignores the option.
+  const url = `ws://127.0.0.1:${localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=sessionsList&iconRefs=1${deflate ? '&encoding=deflate' : ''}`;
   // React Native's WebSocket takes headers, so the token never travels in the URL.
   const socket = new (WebSocket as unknown as HeaderWebSocket)(url, undefined, {
     headers: { Authorization: `Bearer ${authToken}`, [PROTOCOL_HEADER]: String(PROTOCOL_VERSION) },

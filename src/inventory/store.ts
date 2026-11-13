@@ -7,6 +7,7 @@
  * - Fingerprint change-skip avoids re-rendering identical summaries.
  */
 
+import { loadSummaryIcons, summaryIconRefs } from './projectIcons';
 import { create } from 'zustand';
 
 import { reportClientHello } from '../analytics/clientHello';
@@ -32,6 +33,29 @@ import {
 } from './optimistic';
 
 export const INVENTORY_POLL_INTERVAL_MS = 5000;
+
+/**
+ * While a computer is out of channels (`channelsBusy`), the poll waits 2, 5, 10, then 20 s between reads instead of
+ * adding a read every 5 s to what already fills them; the list on screen stays (CDXC:RemoteMachines 2026-11-13 in
+ * src/remote/channelBudget.ts).
+ */
+const BUSY_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000];
+const busyBackoff = new Map<string, { attempt: number; until: number }>();
+
+function noteBusy(machineId: string, busy: boolean): void {
+  if (!busy) {
+    busyBackoff.delete(machineId);
+    return;
+  }
+  const attempt = (busyBackoff.get(machineId)?.attempt ?? -1) + 1;
+  const delay = BUSY_RETRY_DELAYS_MS[Math.min(attempt, BUSY_RETRY_DELAYS_MS.length - 1)]!;
+  busyBackoff.set(machineId, { attempt, until: Date.now() + delay });
+}
+
+function waitingOutBusy(machineId: string): boolean {
+  const backoff = busyBackoff.get(machineId);
+  return backoff !== undefined && Date.now() < backoff.until;
+}
 /**
  * While a computer's Ghostex is not answering, its list is read again this soon rather than on the
  * next 5 s poll (CDXC:Sidebar 2026-10-08 in `packages/gx-core/src/sidebar_view/daemon_wait.rs`):
@@ -262,6 +286,11 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           const previousPending = get().pendingMutationsByMachineId[machine.id] ?? [];
           const reconciled = reconcileOptimisticMutations(serverSummary, previousPending, refreshRevision);
           notAnsweringSince.delete(machine.id);
+          noteBusy(machine.id, false);
+          loadSummaryIcons(machine, serverSummary, () => {
+            const current = get().inventoriesByMachineId[machine.id]?.serverSummary;
+            return current == null ? summaryIconRefs(serverSummary) : summaryIconRefs(current);
+          });
           useMachinesStore.getState().markConnected(machine.id);
           reportClientHello(machine);
           // Log only connect transitions (first load or recovery), not every poll.
@@ -316,6 +345,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
           if (refreshRevisions.get(machine.id) !== refreshRevision) return;
           if (pairedAgain()) return;
           const failure = summarizeFailureDetailed(error, machineHasPassword);
+          noteBusy(machine.id, failure.reasonCode === 'channelsBusy');
           if (failure.reasonCode === 'ghostexNotAnswering') {
             const since = notAnsweringSince.get(machine.id) ?? Date.now();
             notAnsweringSince.set(machine.id, since);
@@ -421,7 +451,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       // hidden machine costs no SSH connection and no poll.
       const machines = enabledMachines(useMachinesStore.getState()).filter((machine) => {
         const failure = get().inventoriesByMachineId[machine.id]?.lastErrorCode;
-        return failure !== 'authFailed' && failure !== 'hostKeyChanged';
+        return failure !== 'authFailed' && failure !== 'hostKeyChanged' && !waitingOutBusy(machine.id);
       });
       await Promise.all(machines.map((machine) => get().refreshMachine(machine)));
       // Each computer's Cloud Boxes and their sessions ride the same poll (cloudBoxes/sync.ts).

@@ -18,6 +18,12 @@ export type GhostexProjectIcon = {
   imageDataUrl: string;
   /** The repository's own favicon/app icon, discovered by gxserver. */
   discoveredIconDataUrl: string;
+  /**
+   * The content ref of that icon when the summary was asked for refs (`--icon-refs`): the picture itself comes once
+   * from the computer and is kept on the phone (src/inventory/projectIcons.ts). "" when the summary carried the
+   * picture itself, or the project has none.
+   */
+  discoveredIconRef: string;
   /** SIDEBAR_COMMAND_ICON_IDS glyph name, or "" when none is set. */
   glyph: string;
   /** "#rrggbb" tint for the glyph, or "" for the default foreground. */

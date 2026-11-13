@@ -451,6 +451,7 @@ export const ConnectionsCopy = {
   slowHint: 'If it stays slow, send the logs so the developer can see why.',
   openTailscale: 'Open Tailscale',
   retry: 'Retry',
+  resetConnection: 'Reset connection',
   remoteSettings: 'Remote Settings',
   sendLogs: 'Send logs',
   logs: 'Logs',
@@ -466,6 +467,15 @@ export const ConnectionsCopy = {
   computers: 'Computers',
   noComputers: 'No computers yet.',
   troubleshooting: 'Troubleshooting',
+} as const;
+
+/** The Logs sheet (src/components/common/LogsSheet.tsx). */
+export const LogsCopy = {
+  export: 'Export',
+  exporting: 'Exporting…',
+  exportFailed: "Couldn't export",
+  subtitleNewest: (shown: number, total: number) =>
+    `The newest ${shown} of ${total} events on this phone. Copy, Export and Send take them all.`,
 } as const;
 
 /** Logs › Send to developer (src/components/common/SendLogsReview.tsx, src/feedback/logReport.ts). */
@@ -515,6 +525,9 @@ export const FailureCopy = {
   /** The SSH socket closed under a running command (libssh2's socket errors, "Exec read failed: -43"). */
   connectionDropped:
     'The connection to the computer dropped. Ghostex reconnects by itself; if it keeps dropping, check that the computer is awake and on the network.',
+  /** The computer refused a new channel on a working connection, or the phone's own slots were full. */
+  channelsBusy:
+    "Ghostex is busy on the computer and tries again by itself. If it stays busy, Reset connection frees it up; programs running in terminals that aren't agents end, and those terminals need opening again.",
   /** The sessions list's line while Ghostex on the computer starts; the store sets it there. */
   ghostexNotAnswering: "They'll appear in a moment.",
   /** Any other action that failed because Ghostex on the computer didn't answer. */
@@ -788,6 +801,7 @@ export const MachineNoticeCopy = {
   cannotSignIn: (name: string) => `Can't sign in to ${name}`,
   setupNeeded: (name: string) => `${name} needs remote setup`,
   reconnecting: (name: string) => `Waiting for Ghostex on ${name}`,
+  busy: (name: string) => `Ghostex is busy on ${name}`,
   /** Unified, more than one computer not connected. */
   several: (count: number) => `${count} computers aren't connected`,
   /** After the title while the list is the copy read before the failure. */

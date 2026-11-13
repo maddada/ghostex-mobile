@@ -111,6 +111,7 @@ function parseProjectIcon(entry: Record<string, unknown>): GhostexProjectIcon {
       trimmedValue(entry, 'iconDataUrl'),
     ),
     discoveredIconDataUrl: trimmedValue(entry, 'discoveredIconDataUrl'),
+    discoveredIconRef: trimmedValue(entry, 'discoveredIconRef'),
     glyph: kind === 'tabler' && icon !== null ? trimmedValue(icon, 'icon') : '',
     glyphColor: kind === 'tabler' && icon !== null ? normalizedHexColor(trimmedValue(icon, 'color')) : '',
     isWorktree:

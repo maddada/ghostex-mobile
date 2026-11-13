@@ -3,6 +3,7 @@
  * its status, its live route, and for a problem the plain reason.
  */
 
+import { useChannelPressure } from '../../remote/channelPressure';
 import { useMemo } from 'react';
 
 import { useInventoryStore } from '../../inventory/store';
@@ -27,6 +28,8 @@ export type ConnectionEntry = {
   tailscaleOff: boolean;
   health?: MachineHealth;
   retrying: boolean;
+  /** Out of channels on the computer: its Retry is Reset connection (src/remote/channelPressure.ts). */
+  busy: boolean;
 };
 
 /**
@@ -43,6 +46,7 @@ export function useConnectionEntries(
   const paths = useConnectionHealth((state) => state.paths);
   const routes = useMachineRoutes((state) => state.active);
   const iconFacts = useComputerIconsStore((state) => state.facts);
+  const needsReset = useChannelPressure((state) => state.needsReset);
   return useMemo(() => {
     const entries = machines.map((machine): ConnectionEntry => {
       const inventory = inventories[machine.id];
@@ -63,9 +67,10 @@ export function useConnectionEntries(
           !isDemoMachine(machine),
         health: machineHealth,
         retrying: inventory?.retrying === true,
+        busy: inventory?.lastErrorCode === 'channelsBusy' || needsReset[machine.id] === true,
       };
     });
     if (!sorted) return entries;
     return [...entries].sort((a, b) => LINK_STATUS_ORDER.indexOf(a.status) - LINK_STATUS_ORDER.indexOf(b.status));
-  }, [machines, inventories, health, paths, routes, iconFacts, tailscaleConnected, sorted]);
+  }, [machines, inventories, health, paths, routes, iconFacts, needsReset, tailscaleConnected, sorted]);
 }

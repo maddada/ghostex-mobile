@@ -14,7 +14,7 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ConnectionsCopy } from '../../copy';
+import { ConnectionsCopy, FailureCopy } from '../../copy';
 import { recentDropCount, latestRoundTrip } from '../../machines/connectionHealthModel';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
@@ -104,8 +104,15 @@ export default function ConnectionsSheet({
           </View>
           <Text style={[styles.status, { color }]}>{ConnectionsCopy.status[entry.status]}</Text>
         </View>
-        {problem ? (
+        {problem || entry.busy ? (
           <View style={styles.cardBody}>
+            {/* Out of channels while it also failed for another reason: its button is Reset connection, so say what that
+              does once (a busy list error already says it, unless the Tailscale line takes its place). */}
+            {entry.status === 'failed' &&
+            entry.busy &&
+            (entry.tailscaleOff || entry.reason !== FailureCopy.channelsBusy) ? (
+              <Text style={styles.why}>{FailureCopy.channelsBusy}</Text>
+            ) : null}
             {entry.status === 'failed' ? (
               entry.tailscaleOff ? (
                 <Text style={styles.why}>
@@ -116,6 +123,8 @@ export default function ConnectionsSheet({
                   {entry.reason}
                 </Text>
               ) : null
+            ) : entry.busy || entry.status !== 'slow' ? (
+              <Text style={styles.why}>{FailureCopy.channelsBusy}</Text>
             ) : (
               <Text style={styles.why}>
                 {entry.health?.slowReason === 'drops' || roundTrip === null
@@ -132,7 +141,7 @@ export default function ConnectionsSheet({
                 small
                 variant={entry.status === 'failed' && !entry.tailscaleOff ? 'primary' : 'secondary'}
                 busy={entry.retrying}
-                label={ConnectionsCopy.retry}
+                label={entry.busy ? ConnectionsCopy.resetConnection : ConnectionsCopy.retry}
                 icon={
                   <RefreshGlyph
                     size={13}

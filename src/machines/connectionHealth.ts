@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 
+import { withCommandChannel } from '../remote/channelBudget';
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { logAppEvent } from '../app/appLog';
 import { chatMachineLink, onChatLinkCutOff } from '../chat/rust/machine-link';
@@ -96,7 +97,15 @@ async function roundTrip(machine: MachineRecord): Promise<number | null> {
         });
       }
     }
-    return await timed(() => GhostexNative.exec(machine.id, 'echo __GHOSTEX_CONNECTED__', CHECK_TIMEOUT_MS));
+    // Timed from when the echo gets its slot; the slot is held until the echo itself settles. A check that never got
+    // one (`E_BUSY`) is no sample, like any other failed check below.
+    return await new Promise<number>((resolve, reject) => {
+      withCommandChannel(machine.id, CHECK_TIMEOUT_MS, () => {
+        const echo = GhostexNative.exec(machine.id, 'echo __GHOSTEX_CONNECTED__', CHECK_TIMEOUT_MS);
+        timed(() => echo).then(resolve, reject);
+        return echo;
+      }).catch(reject);
+    });
   } catch {
     // A check that failed outright is the list poll's to report, not a slow link.
     return null;

@@ -903,10 +903,17 @@ export class RustChatHost {
       case 'checkComputer':
         void checkComputer(this.target.machine);
         return;
-      case 'reconnectComputer':
+      case 'reconnectComputer': {
         this.poll.restart();
-        void checkComputer(this.target.machine);
+        // The card's Retry rebuilds the link (forward, connection check, handshake) before it checks again, so a
+        // forward that died under the chat is not what the check finds.
+        const machine = this.target.machine;
+        void chatMachineLink(machine)
+          .gxserverLink({ repair: true })
+          .catch(() => null)
+          .then(() => checkComputer(machine));
         return;
+      }
       case 'attachmentReferences':
         this.composer.insertAttachments(fields.paths);
         return;
