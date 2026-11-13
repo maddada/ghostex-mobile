@@ -474,7 +474,6 @@ function formatIdentifier(value: string): string {
     codex: 'Codex',
     copilot: 'Copilot',
     'cursor-cli': 'Cursor CLI',
-    gemini: 'Gemini',
     opencode: 'OpenCode',
     pi: 'Pi',
     terminal: 'Terminal',

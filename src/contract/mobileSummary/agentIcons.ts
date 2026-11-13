@@ -85,7 +85,6 @@ export const AGENT_NAME_ALIASES: Readonly<Record<string, AgentIconId>> = {
   π: 'pi',
   opencode: 'opencode',
   'open code': 'opencode',
-  gemini: 'gemini',
   copilot: 'copilot',
   'github copilot': 'copilot',
   droid: 'factory-droid',

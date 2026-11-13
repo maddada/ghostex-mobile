@@ -12,7 +12,6 @@ const ACCENTS: Record<string, string> = {
   devin: '#3ea6ff',
   empryo: '#1fa31d',
   'factory-droid': '#ff7a1a',
-  gemini: '#8b9aff',
   'grok-build': '#ffffff',
   'hermes-agent': '#f3c46b',
   kimi: '#7b6cf6',
