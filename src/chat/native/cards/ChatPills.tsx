@@ -489,6 +489,11 @@ export function Pill({
   const P = useTranscriptTheme();
   const label = collapsed ? '' : pill.label;
   const warning = pill.id === QUALITY_PILL;
+  // GitHub #597: the Approvals pill, shown while a thread's relayed card waits on the user, takes
+  // the sidebar's approval red for its border, glyph and label (desktop chat_pills.rs `chat_pill`
+  // has the why), as the model warning's pill takes amber.
+  const approval = pill.id === 'approvals' && pill.waiting === 'approval';
+  const alert = warning ? QUALITY_COLOR : approval ? SidebarPalette.ROW_APPROVAL : undefined;
   return (
     <Pressable
       accessibilityRole={pill.switch !== undefined ? 'switch' : 'button'}
@@ -500,12 +505,13 @@ export function Pill({
         styles.pill,
         label.length === 0 && styles.pillNoLabel,
         warning && styles.warningPill,
+        approval && styles.approvalPill,
         (pressed || open) && styles.pillPressed,
       ]}
     >
-      <Glyph name={pillGlyph(pill.id)} size={14} color={warning ? QUALITY_COLOR : P.cardMuted} />
+      <Glyph name={pillGlyph(pill.id)} size={14} color={alert ?? P.cardMuted} />
       {/* Blocked has no word, like the ? pill: its glyph and red dot (gx-chat-core `blocked_pill`). */}
-      {label.length > 0 ? <Text style={[styles.label, warning && styles.warningLabel]}>{label}</Text> : null}
+      {label.length > 0 ? <Text style={[styles.label, alert !== undefined && { color: alert }]}>{label}</Text> : null}
       {/* Autopilot on: a green dot after its label (desktop chat_pills.rs `AUTOPILOT_ON_COLOR`). */}
       {pill.switch === true ? <View style={styles.switchOnDot} /> : null}
       {(pill.dots ?? []).length > 0 && (collapsed || pill.id !== 'board') ? (
@@ -896,8 +902,8 @@ const useStyles = themedStyles((P) => ({
   warningPill: {
     borderColor: 'rgba(245, 165, 36, 0.45)',
   },
-  warningLabel: {
-    color: QUALITY_COLOR,
+  approvalPill: {
+    borderColor: 'rgba(239, 68, 68, 0.45)',
   },
   qualityAdvice: {
     color: P.cardMuted,
