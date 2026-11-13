@@ -34,6 +34,9 @@ struct SshConfigRecord: Record {
     @Field var tailcatToken: String = ""
     /// `none` authenticates with the SSH "none" method only (Tailscale SSH); else `credentials`.
     @Field var authMethod: String = "credentials"
+    /// Seconds the TCP connect may take before this connect gives up; 0 keeps the default. Only the
+    /// connect: the SSH handshake and login keep their own time (`supportsDialTimeout`).
+    @Field var dialTimeoutSec: Int = 0
 }
 
 struct OpenTerminalOptionsRecord: Record {
@@ -216,7 +219,8 @@ public class GhostexNativeModule: Module {
                 credentials: credentials,
                 keepAliveEnabled: config.keepAliveEnabled,
                 keepAliveIntervalSec: config.keepAliveIntervalSec,
-                tailcatToken: config.tailcatToken
+                tailcatToken: config.tailcatToken,
+                dialTimeout: TimeInterval(max(0, config.dialTimeoutSec))
             )
 
             self.sendConnectionState(machineId, state: "connecting")
@@ -279,6 +283,12 @@ public class GhostexNativeModule: Module {
 
         // This build sends onNetworkChanged (an older iOS build has neither, so JS checks; src/app/networkChanges.ts).
         Function("emitsNetworkChanges") { () -> Bool in
+            true
+        }
+
+        // This build takes `dialTimeoutSec` on connect (an older build has no such function, so JS checks;
+        // src/machines/routeChoice.ts).
+        Function("supportsDialTimeout") { () -> Bool in
             true
         }
 

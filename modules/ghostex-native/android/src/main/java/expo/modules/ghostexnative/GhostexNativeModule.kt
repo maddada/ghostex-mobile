@@ -198,6 +198,10 @@ class GhostexNativeModule : Module() {
       promise.resolve(null)
     }
 
+    // This build takes `dialTimeoutSec` on connect (an older build has no such function, so JS checks;
+    // src/machines/routeChoice.ts).
+    Function("supportsDialTimeout") { true }
+
     AsyncFunction("isConnected") { machineId: String ->
       connections[machineId]?.isConnected() ?: false
     }
@@ -661,7 +665,7 @@ class GhostexNativeModule : Module() {
     AsyncFunction("setPersistentNotificationEnabled") { enabled: Boolean ->
       val context = requireAndroidContext().applicationContext
       if (enabled) GhostexForegroundService.start(context)
-      else GhostexForegroundService.stop(context)
+      else GhostexForegroundService.stop()
     }
 
     AsyncFunction("updatePersistentNotification") { rows: List<NotificationSessionRecord> ->
@@ -826,7 +830,7 @@ class GhostexNativeModule : Module() {
     }
 
     AsyncFunction("readAloudModeStop") {
-      GhostexForegroundService.stopReadAloudMode(requireAndroidContext())
+      GhostexForegroundService.stopReadAloudMode()
     }
 
     AsyncFunction("readAloudModeEnded") { title: String, text: String ->

@@ -21,6 +21,11 @@ class SshConfigRecord : Record {
   @Field var tailcatToken: String = ""
   /** `none` authenticates with the SSH "none" method only (Tailscale SSH); else `credentials`. */
   @Field var authMethod: String = "credentials"
+  /**
+   * Seconds the TCP connect may take before this connect gives up; 0 keeps the default. Only the
+   * connect: the SSH greeting and login keep their own time (`supportsDialTimeout`).
+   */
+  @Field var dialTimeoutSec: Int = 0
 }
 
 /** Mirrors `OpenTerminalOptions` in GhostexNative.types.ts. */

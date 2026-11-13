@@ -2,7 +2,9 @@
  * What the Live Activity switches control, drawn once with sample agents (the
  * design's preview, so that it is clear what the switches control). A picture of
  * the Lock Screen card, not live data: the real one is rendered by the widget extension
- * (modules/ghostex-live-activity/ios/Extension/GhostexActivityViews.swift), whose colours and words it repeats.
+ * (modules/ghostex-live-activity/ios/Extension/GhostexActivityViews.swift), whose colours and layout it repeats:
+ * glyph and number on the top line, and in each row the time and then the state's glyph at the right edge, no state
+ * words.
  * `showSessionNames` is the "Show session names" switch: on, a row leads with its agent's mark and its session's
  * sample name, since the mark is then what tells the agent, as on the real card; off, it is drawn as before the
  * switch, with the agent's name and no mark.
@@ -23,22 +25,19 @@ type PreviewState = (typeof LiveActivityCopy.previewRows)[number]['state'];
 type PreviewIcon = (typeof LiveActivityCopy.previewRows)[number]['icon'];
 
 /** Glyphs of the design (24-unit paths), so colour never carries the state alone. */
-const GLYPHS: Record<PreviewState, { path: string; color: string; word: string }> = {
-  working: { path: 'M12 3a9 9 0 1 1-9 9', color: SidebarPalette.ROW_WORKING, word: LiveActivityCopy.working },
+const GLYPHS: Record<PreviewState, { path: string; color: string }> = {
+  working: { path: 'M12 3a9 9 0 1 1-9 9', color: SidebarPalette.ROW_WORKING },
   waiting: {
     path: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7.5V12l3 2',
     color: SidebarPalette.ROW_ATTENTION,
-    word: LiveActivityCopy.waiting,
   },
   question: {
     path: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM9.5 9.5a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.6M12 17h.01',
     color: SidebarPalette.ROW_QUESTION,
-    word: LiveActivityCopy.question,
   },
   finished: {
     path: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM8 12.5l2.7 2.7L16 10',
     color: GhostexPalette.MUTED,
-    word: LiveActivityCopy.finished,
   },
 };
 
@@ -92,15 +91,11 @@ export default function LiveActivityPreview({ showSessionNames }: { showSessionN
         <View style={styles.head}>
           <View style={styles.count}>
             <Glyph state="working" size={14} />
-            <Text style={styles.headText}>
-              <Text style={styles.number}>1</Text> {LiveActivityCopy.working}
-            </Text>
+            <Text style={[styles.headText, styles.number]}>1</Text>
           </View>
           <View style={styles.count}>
             <Glyph state="waiting" size={14} />
-            <Text style={styles.headText}>
-              <Text style={styles.number}>2</Text> {LiveActivityCopy.waiting}
-            </Text>
+            <Text style={[styles.headText, styles.number]}>2</Text>
           </View>
           <Text style={styles.more}>{LiveActivityCopy.more(1)}</Text>
         </View>
@@ -115,11 +110,10 @@ export default function LiveActivityPreview({ showSessionNames }: { showSessionN
                 {row.project}
               </Text>
             </View>
+            <Text style={styles.time}>{row.time}</Text>
             <View style={styles.state}>
               <Glyph state={row.state} size={13} />
-              <Text style={styles.stateText}>{GLYPHS[row.state].word}</Text>
             </View>
-            <Text style={styles.time}>{row.time}</Text>
           </View>
         ))}
       </View>
@@ -203,15 +197,10 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     fontSize: 13,
     flexShrink: 1,
   },
+  /** The glyph's own column at the right edge, so the rows' glyphs line up whatever the time's length. */
   state: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  stateText: {
-    color: appearance.foreground,
-    fontSize: 12,
-    fontWeight: '600',
+    width: 14,
+    alignItems: 'flex-end',
   },
   time: {
     width: 38,
