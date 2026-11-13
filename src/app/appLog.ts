@@ -161,9 +161,17 @@ export function formatLogTime(at: number): string {
 }
 
 /** An entry's own text with its count: "… (×12, last 14:09:22)"; the build is apart (`logEntryBuild`). */
-export function logEntryText(entry: AppLogEntry): string {
-  if (entry.repeats === undefined || entry.repeats < 2) return entry.message;
-  return `${entry.message} (×${entry.repeats}${entry.lastAt === undefined ? '' : `, last ${formatLogTime(entry.lastAt)}`})`;
+export function logEntryText(entry: AppLogEntry, message = entry.message): string {
+  if (entry.repeats === undefined || entry.repeats < 2) return message;
+  return `${message} (×${entry.repeats}${entry.lastAt === undefined ? '' : `, last ${formatLogTime(entry.lastAt)}`})`;
+}
+
+/**
+ * `logEntryText` over the copy scrubbed when the entry was logged (the kept copy's text), so a computer renamed or
+ * removed since, whose old name today's scrub no longer knows, is still replaced in an export.
+ */
+export function logEntryScrubbedText(entry: AppLogEntry): string {
+  return logEntryText(entry, storedText.get(entry) ?? entry.message);
 }
 
 /** " (Ghostex 11.6.0 (110600), update …)" after an `App: started` line, else nothing. */
