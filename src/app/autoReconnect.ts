@@ -24,7 +24,13 @@ import { isDemoMachineId } from '../demo/identity';
 import { useSettingsStore } from '../settings/store';
 import { restoreAttachTabs, useTerminalStore } from '../terminal/sessions';
 import { commandsInFlight } from '../remote/channelBudget';
-import { clearChannelPressure, installChannelPressure } from '../remote/channelPressure';
+import {
+  channelSnapshot,
+  channelSnapshotAtEnd,
+  clearChannelPressure,
+  installChannelPressure,
+} from '../remote/channelPressure';
+import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
 import { reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
 
@@ -99,7 +105,7 @@ function recoverMachine(machineId: string, verify = false, reason = 'retry'): Pr
   useInventoryStore.getState().dropGlobalQuickActions(machineId);
   const request = (async () => {
     try {
-      await ensureConnected(target, { verify });
+      await ensureConnected(target, { verify, reason });
       if (!canRecover(machineId)) return;
       if (!foreground()) {
         // Voice mode: the chat link reconnects on `connected`; the rest waits for the foreground.
@@ -146,6 +152,7 @@ const RESTART_REDIAL_DELAYS_MS = [2_500, 2_000, 2_500, 3_000, 5_000, 8_000];
  * Tailscale computer that is on its Easy Connect route at the time.
  */
 export function redialAfterServerStop(machineId: string): void {
+  logAppEvent(`gxserver: ${machineId} says it is stopping`);
   const target = machineTarget(machineId);
   if (target === undefined || !canRecover(machineId)) return;
   // A Tailscale computer on its Easy Connect route rides the same helper (`easyConnectRoute.ts`).
@@ -169,7 +176,7 @@ export function redialAfterServerStop(machineId: string): void {
         void (async () => {
           try {
             if (attempt === 0) await GhostexNative.stopTailcatForward(machineId).catch(() => undefined);
-            await ensureConnected(current, { reset: true });
+            await ensureConnected(current, { reset: true, reason: 'its gxserver said it is stopping' });
             attemptsByMachineId.delete(machineId);
             await recoverMachine(machineId);
           } catch {
@@ -183,9 +190,9 @@ export function redialAfterServerStop(machineId: string): void {
 }
 
 /** Validate existing sockets after resume or route changes, then resume bounded retries. */
-export function recoverConnections(): void {
+export function recoverConnections(reason = 'back in front'): void {
   for (const machine of enabledMachines(useMachinesStore.getState())) {
-    void recoverMachine(machine.id, true, 'back in front or network changed');
+    void recoverMachine(machine.id, true, reason);
   }
 }
 
@@ -193,7 +200,6 @@ export function initAutoReconnect(): void {
   if (installed) return;
   installed = true;
   installChannelPressure({
-    label: (machineId) => machineTarget(machineId)?.name || machineId,
     detachIdleTerminals: (machineId, keep) => useTerminalStore.getState().detachIdleTerminals(machineId, keep),
     openTerminals: (machineId) => {
       const open = useTerminalStore
@@ -208,13 +214,24 @@ export function initAutoReconnect(): void {
     reset: async (machineId) => {
       const target = machineTarget(machineId);
       if (target === undefined) return;
-      await reconnectMachine(target);
+      await reconnectMachine(target, 'the computer kept refusing channels');
       await restoreAttachTabs(machineId);
     },
   });
+  startChannelSnapshots(
+    () =>
+      enabledMachines(useMachinesStore.getState())
+        .map((machine) => machine.id)
+        .filter((machineId) => !isDemoMachineId(machineId)),
+    channelSnapshot,
+  );
   GhostexNative.addListener('onConnectionState', (event) => {
+    const ended =
+      event.state === 'disconnected' || event.state === 'failed'
+        ? `, ${noteConnectionEnded(event.machineId)}. ${channelSnapshotAtEnd(event.machineId)}`
+        : '';
     logAppEvent(
-      `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}`,
+      `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}${ended}`,
     );
     if (event.state === 'connected') clearChannelPressure(event.machineId);
     if (event.state === 'connecting') {

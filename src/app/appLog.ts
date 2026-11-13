@@ -15,6 +15,15 @@ export type AppLogEntry = {
   /** Epoch milliseconds when the event was recorded. */
   at: number;
   message: string;
+  /** How many times the same line came in a row (absent means once); `at` is the first, `lastAt` the latest. */
+  repeats?: number;
+  lastAt?: number;
+  /**
+   * The app build and over-the-air update this run started on (`App: started` only), written by the app itself and
+   * kept apart from `message` so the scrub, which takes an update id for a key, never replaces it: an export after an
+   * update still says which update an older drop happened on.
+   */
+  build?: string;
 };
 
 const MAX_ENTRIES = 2_000;
@@ -74,17 +83,37 @@ function scheduleSave(): void {
         message = scrub === null ? entry.message : scrub(entry.message);
         if (scrub !== null) storedText.set(entry, message);
       }
-      return { at: entry.at, message };
+      return {
+        at: entry.at,
+        message,
+        ...(entry.repeats === undefined ? {} : { repeats: entry.repeats, lastAt: entry.lastAt }),
+        ...(entry.build === undefined ? {} : { build: entry.build }),
+      };
     });
     void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries)).catch(() => undefined);
   }, SAVE_DELAY_MS);
 }
 
-export function logAppEvent(message: string): void {
+export function logAppEvent(message: string, build?: string): void {
   const whole = message.trim();
   if (whole.length === 0) return;
   const trimmed = whole.length > MAX_MESSAGE_CHARS ? `${whole.slice(0, MAX_MESSAGE_CHARS)}… (cut)` : whole;
-  const entry: AppLogEntry = { at: Date.now(), message: trimmed };
+  const now = Date.now();
+  const entries = useAppLogStore.getState().entries;
+  const last = entries[entries.length - 1];
+  /**
+   * CDXC:RemoteMachines 2026-11-13 WHY: a minute's channel snapshot or a quiet chat's check repeats the same line for
+   * hours; the same line in a row becomes one with a count ("×N") so the kept 2,000 lines still cover a long day.
+   */
+  if (last !== undefined && last.message === trimmed && last.build === build) {
+    const repeated: AppLogEntry = { ...last, repeats: (last.repeats ?? 1) + 1, lastAt: now };
+    const kept = storedText.get(last);
+    if (kept !== undefined) storedText.set(repeated, kept);
+    useAppLogStore.setState({ entries: [...entries.slice(0, -1), repeated] });
+    scheduleSave();
+    return;
+  }
+  const entry: AppLogEntry = build === undefined ? { at: now, message: trimmed } : { at: now, message: trimmed, build };
   // Scrubbed for the kept copy now, with the names known as it is logged: a rename before the save can't leak it.
   const scrub = storedScrubber;
   if (scrub !== null) storedText.set(entry, scrub(trimmed));
@@ -105,7 +134,10 @@ export async function hydrateAppLog(): Promise<void> {
           typeof entry === 'object' &&
           entry !== null &&
           typeof (entry as AppLogEntry).at === 'number' &&
-          typeof (entry as AppLogEntry).message === 'string',
+          typeof (entry as AppLogEntry).message === 'string' &&
+          ((entry as AppLogEntry).repeats === undefined || typeof (entry as AppLogEntry).repeats === 'number') &&
+          ((entry as AppLogEntry).lastAt === undefined || typeof (entry as AppLogEntry).lastAt === 'number') &&
+          ((entry as AppLogEntry).build === undefined || typeof (entry as AppLogEntry).build === 'string'),
       );
     }
   } catch {
@@ -128,9 +160,30 @@ export function formatLogTime(at: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+/** An entry's own text with its count: "… (×12, last 14:09:22)"; the build is apart (`logEntryBuild`). */
+export function logEntryText(entry: AppLogEntry, message = entry.message): string {
+  if (entry.repeats === undefined || entry.repeats < 2) return message;
+  return `${message} (×${entry.repeats}${entry.lastAt === undefined ? '' : `, last ${formatLogTime(entry.lastAt)}`})`;
+}
+
+/**
+ * `logEntryText` over the copy scrubbed when the entry was logged (the kept copy's text), so a computer renamed or
+ * removed since, whose old name today's scrub no longer knows, is still replaced in an export.
+ */
+export function logEntryScrubbedText(entry: AppLogEntry): string {
+  return logEntryText(entry, storedText.get(entry) ?? entry.message);
+}
+
+/** " (Ghostex 11.6.0 (110600), update …)" after an `App: started` line, else nothing. */
+export function logEntryBuild(entry: AppLogEntry): string {
+  return entry.build === undefined ? '' : ` (${entry.build})`;
+}
+
 /** Full plain-text export for the clipboard, one "YYYY-MM-DD HH:MM:SS message" per line: the kept log spans days. */
 export function formatAppLog(entries: AppLogEntry[]): string {
-  return entries.map((entry) => `${formatLogDateTime(entry.at)} ${entry.message}`).join('\n');
+  return entries
+    .map((entry) => `${formatLogDateTime(entry.at)} ${logEntryText(entry)}${logEntryBuild(entry)}`)
+    .join('\n');
 }
 
 /** "2026-11-13 14:03:22", the export's stamp: the kept log spans days. */

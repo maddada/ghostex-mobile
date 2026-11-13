@@ -14,6 +14,10 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { homeCloudBoxesRpc } from './boxLink';
+import { logAppEvent } from '../app/appLog';
+
+/** Computers whose Cloud Boxes refusal is already in this run's log. */
+const cloudKitOffLogged = new Set<string>();
 
 /** `CloudKit` (the TypeScript twin is `GxserverCloudKit` in packages/shared). */
 export type CloudKit = {
@@ -103,7 +107,14 @@ export async function syncCloudKit(machineId: string, force = false): Promise<vo
   readAt.set(machineId, Date.now());
   const answer = await homeCloudBoxesRpc(machineId, 'cloudKit');
   if (answer.error !== null) {
-    if (answer.error.code === 'cloudKitOff') await forgetCloudKit(machineId);
+    if (answer.error.code === 'cloudKitOff') {
+      // Not a drop: the computer has Cloud Boxes off. Said once per run so the log can tell it from one.
+      if (!cloudKitOffLogged.has(machineId)) {
+        cloudKitOffLogged.add(machineId);
+        logAppEvent(`gxserver: ${machineId} has Cloud Boxes off (cloudKitOff from /api/cloudBoxes); not a drop`);
+      }
+      await forgetCloudKit(machineId);
+    }
     // Unreachable, or an older Ghostex without the action: keep what the phone has.
     return;
   }

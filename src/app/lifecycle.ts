@@ -13,8 +13,6 @@
  */
 
 import { hydrateAppLog, logAppEvent, setStoredLogScrubber } from './appLog';
-import { privateTerms } from '../feedback/crashReports';
-import { scrubPersonalData } from '../feedback/crashReportScrub';
 import { hydrateProjectIcons } from '../inventory/projectIcons';
 import { AppState, type AppStateStatus } from 'react-native';
 
@@ -26,6 +24,8 @@ import { selectedMachine, useMachinesStore } from '../machines/store';
 import { startConnectionHealth } from '../machines/connectionHealth';
 import { recoverConnections } from './autoReconnect';
 import { networkChangesHeard } from './networkChanges';
+import { formatDuration, noteAppState } from './foregroundClock';
+import { appBuildLine, scrubLogText } from '../feedback/logExport';
 
 let installed = false;
 
@@ -36,21 +36,26 @@ export function handleAppBecameActive(): void {
 export function initAppLifecycle(): void {
   if (installed) return;
   installed = true;
-  setStoredLogScrubber((text) => scrubPersonalData(text, privateTerms()));
+  setStoredLogScrubber((text) => scrubLogText(text));
   void hydrateProjectIcons();
-  void hydrateAppLog().then(() => logAppEvent(`App: started (${Platform.OS} ${String(Platform.Version)})`));
+  void hydrateAppLog().then(() => logAppEvent('App: started', appBuildLine()));
   let last: AppStateStatus = AppState.currentState as AppStateStatus;
   AppState.addEventListener('change', (next) => {
     const cameFromBackground = last === 'background' || last === 'inactive';
+    const away = noteAppState(next);
     if (next !== last && (next === 'active' || next === 'background'))
-      logAppEvent(`App: ${next === 'active' ? 'in front' : 'in the background'}`);
+      logAppEvent(
+        next === 'active'
+          ? `App: in front${away === null ? '' : ` after ${formatDuration(away)} in the background`}`
+          : 'App: in the background',
+      );
     last = next;
     if (next === 'active' && cameFromBackground) handleAppBecameActive();
   });
   if (networkChangesHeard(Platform.OS, GhostexNative)) {
     GhostexNative.addListener('onNetworkChanged', () => {
       logAppEvent('App: the network changed');
-      recoverConnections();
+      recoverConnections('the network changed');
     });
   }
   // Runs for the app's lifetime, like the listeners above. The handle type is whatever the platform's timer

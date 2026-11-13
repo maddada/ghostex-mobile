@@ -39,6 +39,7 @@ import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress }
 import { onPairingChanged, pairingEpoch, samePairing } from '../../machines/pairingEpoch';
 import { FrameInflater } from '../../remote/inflate';
 import { logAppEvent } from '../../app/appLog';
+import { readGxserverVersion, routeLabel } from '../../remote/connectionTrace';
 import { isChannelRefusal } from '../../remote/channelBudget';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
@@ -85,6 +86,8 @@ const QUIET_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
 /** How often a watched link looks at how long it has been quiet. */
 const QUIET_CHECK_MS = 2_500;
+/** A silence check answered slower than this gets its own log line with the time. */
+const SLOW_QUIET_ANSWER_MS = 1_000;
 /**
  * How long a snapshot the socket asked for may take to arrive before the link counts as idle again.
  * Until then a quiet socket is loading it, not lost (CDXC:RemoteMachines 2026-11-10 in
@@ -359,6 +362,7 @@ class ChatMachineLink {
     const known = this.current();
     if (known !== null) return Promise.resolve(known);
     if (this.state.kind === 'probing') return this.state.done;
+    const handshakeAt = Date.now();
     const done = this.handshake().then((outcome) => {
       const previous = this.lastRoute;
       this.lastRoute = outcome.route;
@@ -373,11 +377,12 @@ class ChatMachineLink {
                 Date.now() +
                 (outcome.route === 'legacy' ? LEGACY_RECHECK_MS : busy ? BUSY_RECHECK_MS : UNAVAILABLE_RECHECK_MS),
             };
-      if (outcome.route !== previous || busy) {
-        logAppEvent(
-          `Chat link: ${this.machine.id} route ${outcome.route}${busy ? ' (computer busy, asking again soon)' : ''}`,
-        );
-      }
+      // Every handshake, with its time and the connection's route: a slow or failing one is part of a drop's story.
+      logAppEvent(
+        `Chat link: ${this.machine.id} handshake ${outcome.route} in ${Date.now() - handshakeAt}ms over ${routeLabel(this.machine)}${
+          busy ? ' (computer busy, asking again soon)' : ''
+        }`,
+      );
       if (outcome.route !== previous) for (const listener of this.routeListeners) listener(outcome.route);
       if (outcome.route === 'socket') this.ensureSocket();
       return outcome.route;
@@ -526,6 +531,15 @@ class ChatMachineLink {
     const generation = this.socketGeneration;
     void this.probe(state.endpoint).then((answered) => {
       this.probing = false;
+      // A quick answer is written the same way each time so a long quiet chat collapses to one line ("×N").
+      const tookMs = Date.now() - askedAt;
+      logAppEvent(
+        answered && tookMs < SLOW_QUIET_ANSWER_MS
+          ? `Chat link: ${this.machine.id} quiet, gxserver check answered`
+          : `Chat link: ${this.machine.id} quiet ${Math.round((askedAt - lastProgress) / 1000)} s, gxserver check ${
+              answered ? `answered in ${tookMs}ms` : 'got no answer'
+            }`,
+      );
       if (answered) this.heard();
       // A socket replaced meanwhile, or a frame that came in while the question hung, says nothing about now.
       else if (
@@ -606,7 +620,9 @@ class ChatMachineLink {
       if (answer.kind === 'failed') return { route: 'unavailable' };
       // A computer on another wire protocol keeps the exec path, whose CLI speaks its own daemon's.
       if (answer.protocolVersion !== PROTOCOL_VERSION) return { route: 'legacy' };
-      await GhostexNative.startPortForward(this.machine.id, answer.port, GXSERVER_FORWARD_HOST);
+      const forward = await GhostexNative.startPortForward(this.machine.id, answer.port, GXSERVER_FORWARD_HOST);
+      // Once per connection (a new one runs this handshake again): the computer's version, for the log only.
+      void readGxserverVersion(this.machine.id, forward.localPort);
       const sendLedger = answer.capabilities.includes('sendRequestLedger');
       const machine = this.machine;
       // After this handshake settles, so a listener's own requests don't wait on it.
@@ -692,7 +708,7 @@ class ChatMachineLink {
         else await GhostexNative.stopPortForward(this.machine.id, state.endpoint.port).catch(() => undefined);
       }
       if (!isCloudBoxMachineId(this.machine.id)) {
-        await ensureConnected(this.machine, { verify: true }).catch(() => undefined);
+        await ensureConnected(this.machine, { verify: true, reason: 'the chat link repair' }).catch(() => undefined);
       }
       await this.route();
     })().finally(() => {

@@ -69,7 +69,7 @@ async function check(force: boolean): Promise<void> {
         // Still on Easy Connect (nothing else moved it meanwhile): dial again, Tailscale first.
         if (useMachineRoutes.getState().active[machine.id] !== 'easyConnect') return;
         logAppEvent(`Connection: ${machine.id} moves back to Tailscale`);
-        await ensureConnected(machine, { reset: true });
+        await ensureConnected(machine, { reset: true, reason: 'moving back to Tailscale' });
       } catch (error) {
         logAppEvent(
           `Connection: ${machine.id} could not move back to Tailscale (${error instanceof Error ? error.message : String(error)})`,

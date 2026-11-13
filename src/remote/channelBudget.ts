@@ -66,11 +66,22 @@ function budgetFor(machineId: string): Budget {
   return budget;
 }
 
+const endingListeners = new Set<(machineId: string) => void>();
+
+/** Hears a connection that dropped (`disconnected`, `failed`) just before its waiting commands are refused. */
+export function onConnectionEnding(listener: (machineId: string) => void): () => void {
+  endingListeners.add(listener);
+  return () => endingListeners.delete(listener);
+}
+
 function listenForConnectionEnds(): void {
   if (listening) return;
   listening = true;
   GhostexNative.addListener('onConnectionState', (event) => {
     if (event.state === 'connected') return;
+    if (event.state === 'disconnected' || event.state === 'failed') {
+      for (const listener of endingListeners) listener(event.machineId);
+    }
     endConnectionBudget(event.machineId);
   });
 }
@@ -99,6 +110,11 @@ export function endConnectionBudget(machineId: string): void {
 /** Commands running now through the budget (what the phone let through, not what the computer counts). */
 export function commandsInFlight(machineId: string): number {
   return running.get(machineId) ?? 0;
+}
+
+/** Commands waiting for one of the phone's slots on the computer (iPhone only; Android's connection queues its own). */
+export function commandsWaiting(machineId: string): number {
+  return budgets.get(machineId)?.queue.length ?? 0;
 }
 
 /** Commands and uploads running now on each computer, on every platform (Android's are not budgeted here). */

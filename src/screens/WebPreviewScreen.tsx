@@ -565,7 +565,7 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
         const machineTarget = machineRef.current;
         if (gxserverPortsRef.current.has(target.remotePort)) {
           if (machineTarget !== undefined)
-            await ensureConnected(machineTarget, { verify: true }).catch(() => undefined);
+            await ensureConnected(machineTarget, { verify: true, reason: 'a web preview' }).catch(() => undefined);
         } else if (heldPortsRef.current.delete(target.remotePort)) {
           await releaseComputerForward(machineId, target.remotePort);
         }
