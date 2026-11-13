@@ -31,6 +31,7 @@ import type { OptimisticInventoryChange } from '../../inventory/optimistic';
 import { lifecycleMutation, parkMutation, pinMutation, tagMutation } from '../../sessions/sessionCommands';
 import type { MachineRecord } from '../../machines/store';
 import type { ExportedTranscript } from '../terminal-screen/session-lookups';
+import type { NewCoordinatorPick } from './NewCoordinatorSheet';
 import { isRunningSession } from './sidebar-menus';
 
 /** `unified`: opened from the Unified list, whose menu also offers Snooze and the project's Actions…. */
@@ -71,6 +72,8 @@ export type Overlay =
    */
   | { kind: 'newSessionProject'; currentMachineId: string; purpose: 'agentMenu' | 'start' }
   | { kind: 'newCoordinator'; ctx: ProjectContext }
+  /** The New Coordinator form's agent step (its Next): the agent menu as "Pick the coordinator's agent". */
+  | { kind: 'coordinatorAgentMenu'; ctx: ProjectContext; pick: NewCoordinatorPick; token: number }
   | { kind: 'actionsMenu'; ctx: ProjectContext }
   | { kind: 'collectionMenu'; ctx: CollectionContext; view: 'root' | 'colors' }
   | { kind: 'collectionRename'; ctx: CollectionContext; error: string | null }

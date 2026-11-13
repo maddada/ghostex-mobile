@@ -8,7 +8,7 @@
  */
 
 import { snoozeWakeAt } from '../../contract/unified/snooze';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
@@ -63,7 +63,6 @@ import {
   coordinatorOptionsCommand,
   createAgentCommand,
   createCoordinatorCommand,
-  type CreateCoordinatorInput,
   createSessionCommand,
   exportSessionTranscriptCommand,
   forkSessionCommand,
@@ -146,12 +145,7 @@ import {
   type SessionContext,
 } from './session-actions';
 import { coordinatorsClosingLine } from './close-confirm';
-import {
-  NEW_ORCHESTRATOR_BENEFITS,
-  parseCoordinatorOptions,
-  type CoordinatorOptions,
-  type NewCoordinatorRefusal,
-} from './NewCoordinatorSheet';
+import { NEW_ORCHESTRATOR_BENEFITS, coordinatorAgentWarnings, type NewCoordinatorPick } from './NewCoordinatorSheet';
 import type { CreationRefusal } from './use-sessions-screen-actions';
 import {
   parseCoordinatorDetails,
@@ -179,7 +173,7 @@ type SessionsNavigation = NativeStackScreenProps<RootStackParamList, 'Sessions'>
 
 /**
  * The session id in `ghostex coordinator create`'s "Created coordinator <ref>, but its agent did not start" refusal
- * (server/src/ghostex_cli/coordinator/command.rs): the coordinator exists, so the form opens it rather than making
+ * (server/src/ghostex_cli/coordinator/command.rs): the coordinator exists, so the phone opens it rather than making
  * another. Null for any other refusal.
  */
 export function createdButNotStartedSessionId(reason: string): string | null {
@@ -1753,6 +1747,89 @@ export function useSessionsScreenMenus({
     ];
   };
 
+  /** One agent's row (brand icon, name, chat marker), as the agent menu and the coordinator's agent step draw it. */
+  const agentRow = (
+    agent: GhostexAgentLauncher,
+    selected: boolean,
+    onPress: () => void,
+    info?: string,
+  ): ContextMenuItem => {
+    const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+    const iconId = resolveAgentIconId(agent.icon, name);
+    const artId = resolveAgentArtId(agent.icon, name);
+    const Icon = AGENT_ICONS[artId] ?? AGENT_ICONS.terminal;
+    const supportsChat = isSessionChatSupportedAgent(agent.agentId) || isSessionChatSupportedAgent(iconId);
+    return {
+      kind: 'item' as const,
+      key: agent.agentId,
+      label: name,
+      icon: <Icon size={14} color={agentIconTint(artId)} />,
+      selected,
+      selectedPresentation: 'emphasis' as const,
+      trailingIcon: supportsChat ? <MessageCircleGlyph size={14} color={appearance.mutedGlyph} /> : undefined,
+      trailingIconLabel: supportsChat ? 'Supports chat' : undefined,
+      ...(info !== undefined ? { info } : {}),
+      onPress,
+    };
+  };
+
+  /**
+   * The New Coordinator form's warnings for the agent step, by agent id, once the computer's
+   * `ghostex coordinator options` has been read for that opening (`token`).
+   */
+  const [coordinatorWarnings, setCoordinatorWarnings] = useState<{
+    token: number;
+    warnings: Record<string, string>;
+  } | null>(null);
+  const coordinatorStepToken = useRef(0);
+
+  /**
+   * The New Coordinator form's Next: the agent menu as "Pick the coordinator's agent", its rows'
+   * warnings read from the computer once it has answered.
+   */
+  const openCoordinatorAgentStep = (ctx: ProjectContext, pick: NewCoordinatorPick): void => {
+    coordinatorStepToken.current += 1;
+    const token = coordinatorStepToken.current;
+    setCoordinatorWarnings(null);
+    setOverlay({ kind: 'coordinatorAgentMenu', ctx, pick, token });
+    void runGhostexCli(ctx.machine, coordinatorOptionsCommand()).then(
+      (result) => {
+        if (coordinatorStepToken.current === token)
+          setCoordinatorWarnings({ token, warnings: coordinatorAgentWarnings(result.json) });
+      },
+      () => undefined,
+    );
+  };
+
+  /**
+   * The coordinator's agent step: every agent of the project but Claude (cloud) (a coordinator runs the `ghostex` CLI
+   * on the computer), each weak-model agent with its warning behind the (i), and a note saying what the (i) means.
+   */
+  const coordinatorAgentMenuItems = (ctx: ProjectContext, pick: NewCoordinatorPick, token: number): ContextMenuItem[] => {
+    const warnings = coordinatorWarnings?.token === token ? coordinatorWarnings.warnings : {};
+    const agents = ctx.header.agents.filter((agent) => agent.agentId !== 'claude-cloud');
+    const warned = agents.some((agent) => warnings[agent.agentId] !== undefined);
+    return [
+      ...(warned
+        ? [
+            {
+              kind: 'note' as const,
+              key: 'coordinator-quality-note',
+              label: 'An agent with ⓘ starts on a model a coordinator may work worse on.',
+            },
+          ]
+        : []),
+      ...agents.map((agent) =>
+        agentRow(
+          agent,
+          false,
+          () => closeAgentMenuThen(() => void createCoordinatorOn(ctx, pick, agent)),
+          warnings[agent.agentId],
+        ),
+      ),
+    ];
+  };
+
   const agentMenuItems = (ctx: ProjectContext): ContextMenuItem[] => {
     const selected = resolvePrimaryAgent(ctx.header);
     const newCoordinator: ContextMenuItem[] =
@@ -1771,24 +1848,11 @@ export function useSessionsScreenMenus({
         : [];
     return [
       ...newCoordinator,
-      ...ctx.header.agents.map((agent): ContextMenuItem => {
-        const name = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
-        const iconId = resolveAgentIconId(agent.icon, name);
-        const artId = resolveAgentArtId(agent.icon, name);
-        const Icon = AGENT_ICONS[artId] ?? AGENT_ICONS.terminal;
-        const supportsChat = isSessionChatSupportedAgent(agent.agentId) || isSessionChatSupportedAgent(iconId);
-        return {
-          kind: 'item' as const,
-          key: agent.agentId,
-          label: name,
-          icon: <Icon size={14} color={agentIconTint(artId)} />,
-          selected: selected !== null && selected.agentId === agent.agentId,
-          selectedPresentation: 'emphasis' as const,
-          trailingIcon: supportsChat ? <MessageCircleGlyph size={14} color={appearance.mutedGlyph} /> : undefined,
-          trailingIconLabel: supportsChat ? 'Supports chat' : undefined,
-          onPress: () => closeAgentMenuThen(() => launchAgent(ctx.machine, ctx.header, agent)),
-        };
-      }),
+      ...ctx.header.agents.map((agent) =>
+        agentRow(agent, selected !== null && selected.agentId === agent.agentId, () =>
+          closeAgentMenuThen(() => launchAgent(ctx.machine, ctx.header, agent)),
+        ),
+      ),
     ];
   };
 
@@ -1806,85 +1870,36 @@ export function useSessionsScreenMenus({
   };
 
   /**
-   * The New Coordinator form's Create: the coordinator opens in chat, where its reports read best (as on the desktop).
-   * It starts in the folder the form's Folder row picked (a project cloned twice on this computer), else the
-   * project's own. The form stays open until the computer has created it, and a refusal comes back to the form: a
-   * plain sentence, the computer's words behind Details. When the computer made the coordinator but its agent did not
-   * start (`ghostex coordinator create` says so), the form offers to open that one instead of creating another.
+   * The coordinator's agent step's pick: `ghostex coordinator create` on that agent, in the folder the form's Folder
+   * row picked (a project cloned twice on this computer), else the project's own; gxserver gives it its start model
+   * and effort and sends its first message. It opens in chat, where its reports read best (as on the desktop). A
+   * refusal shows as a notice; when the computer made the coordinator but its agent did not start (`ghostex
+   * coordinator create` says so), that one is opened instead of making another.
    */
-  const createCoordinator = async (
+  const createCoordinatorOn = async (
     ctx: ProjectContext,
-    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
-    stillOpen: () => boolean,
-  ): Promise<NewCoordinatorRefusal | null> => {
-    const projectId = input.projectId ?? ctx.header.projectId;
+    pick: NewCoordinatorPick,
+    agent: GhostexAgentLauncher,
+  ): Promise<void> => {
+    const projectId = pick.projectId ?? ctx.header.projectId;
     const summary = summaryFor(ctx.machine.id);
     if (!(summary?.projects ?? []).some((project) => project.projectId === projectId)) {
-      return { message: 'That folder is no longer open. Pick another.' };
+      setTransientStatus('That folder is no longer open. Open New Coordinator again.', {
+        title: 'Coordinator not created',
+      });
+      return;
     }
-    // The project's coordinators before Create, so one the computer made despite a failure is found after it.
-    const before = new Set(
-      (summary?.sessions ?? [])
-        .filter((session) => session.projectId === projectId)
-        .map((session) => session.sessionId),
-    );
-    const launcher = ctx.header.agents.find((agent) => agent.agentId === input.agentId);
-    const iconId = resolveAgentIconId(launcher?.icon, input.agentName);
-    const title = input.title.trim().length > 0 ? input.title.trim() : 'Coordinator';
+    const agentName = agent.name !== undefined && agent.name.length > 0 ? agent.name : agent.agentId;
+    const iconId = resolveAgentIconId(agent.icon, agentName);
+    const title = pick.title.length > 0 ? pick.title : 'Coordinator';
     const refusal = await runCreationFlow(
       ctx.machine,
-      createCoordinatorCommand({ ...input, projectId }),
+      createCoordinatorCommand({ projectId, agentId: agent.agentId, title: pick.title, model: '', effort: '' }),
       ProgressCopy.startingCoordinator(ctx.header.title),
       { agentId: iconId, projectId, title },
-      { keepOverlay: true, stillOpen, createdSessionIdOf: createdButNotStartedSessionId },
+      { createdSessionIdOf: createdButNotStartedSessionId },
     );
-    if (refusal === null) return null;
-    const notStarted = (open: () => void): NewCoordinatorRefusal => ({
-      message: "Coordinator created, but it didn't start. Open it to start it.",
-      details: refusal.raw,
-      open,
-    });
-    if (refusal.open !== undefined) {
-      const open = refusal.open;
-      return notStarted(() => void open());
-    }
-    // Not recognised: check the computer's list before calling it not created, so Create never makes a second one.
-    // The list must be one read after the failure (a refresh already running when it came back may predate it, so a
-    // second one follows), and the read must have worked.
-    const askedAt = Date.now();
-    const uncertain: NewCoordinatorRefusal = {
-      message: "Couldn't tell whether the coordinator was created. Check this project's list before trying again.",
-      details: refusal.raw,
-      uncertain: true,
-    };
-    try {
-      await refreshMachine(ctx.machine);
-      await refreshMachine(ctx.machine);
-    } catch {
-      return uncertain;
-    }
-    const inventory = useInventoryStore.getState().inventoriesByMachineId[ctx.machine.id];
-    if (inventory === undefined || inventory.lastError !== null || (inventory.loadedAt ?? 0) < askedAt) {
-      return uncertain;
-    }
-    // A coordinator new in the list may be another client's, so it is never offered as this one: only a create that
-    // names its coordinator (above) gets Open coordinator.
-    const appeared = (summaryFor(ctx.machine.id)?.sessions ?? []).some(
-      (session) => session.projectId === projectId && session.isCoordinator && !before.has(session.sessionId),
-    );
-    if (appeared) {
-      return {
-        message: "The coordinator may have been created. Check this project's list before trying again.",
-        details: refusal.raw,
-        uncertain: true,
-      };
-    }
-    return { message: 'Coordinator not created. Try again, or pick another folder.', details: refusal.raw };
-  };
-
-  const loadCoordinatorOptions = async (ctx: ProjectContext): Promise<CoordinatorOptions> => {
-    const result = await runGhostexCli(ctx.machine, coordinatorOptionsCommand());
-    return parseCoordinatorOptions(result.json);
+    if (refusal?.open !== undefined) void refusal.open();
   };
 
   /** Actions menu: the project's actions, then the computer's Global Actions, check on the last run. */
@@ -1999,8 +2014,8 @@ export function useSessionsScreenMenus({
     startNewSessionAt,
     closeAgentMenuThen,
     onAgentMenuDismissed,
-    createCoordinator,
-    loadCoordinatorOptions,
+    openCoordinatorAgentStep,
+    coordinatorAgentMenuItems,
     loadCoordinatorDetails,
     loadCoordinatorPlaybook,
     saveCoordinatorDetails,

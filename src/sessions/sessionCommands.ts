@@ -19,34 +19,13 @@ import type { GhostexSession } from '../contract/mobileSummary';
 export const FORK_AGENT_ICONS = ['codex', 'claude', 'pi', 'empryo'];
 
 /**
- * The agents an orchestrator can run on: a copy of `COORDINATOR_AGENT_FAMILIES` in
- * packages/gx-protocol/src/coordinator.rs (gxserver and the desktop read that list; the phone cannot
- * link the crate), so change both together.
+ * True when gxserver can make a session of this agent icon (or agent id) a coordinator: any agent
+ * since the user's Q2980 decision (COORDINATOR_AGENT_FAMILIES in packages/gx-protocol/src/coordinator.rs
+ * of the Ghostex main repo; `coordinator_agent_family_supported`). A computer from before 2026-11-13
+ * still refuses the agents outside its own list, and the phone says why.
  */
-const COORDINATOR_AGENT_FAMILIES = [
-  'claude',
-  'codex',
-  'zcode',
-  'cursor',
-  'grok',
-  'copilot',
-  'antigravity',
-  'pi',
-  'omp',
-  'opencode',
-  'dsh',
-];
-
-/** The icons whose name is not their agent's id (gx-core `default_agent_id_for_icon`). */
-const COORDINATOR_ICON_FAMILIES: Record<string, string> = {
-  'cursor-cli': 'cursor',
-  'grok-build': 'grok',
-  'antigravity-cli': 'antigravity',
-};
-
-/** True when gxserver can make a session of this agent icon (or agent id) an orchestrator. */
 export function isCoordinatorAgent(agentIcon: string): boolean {
-  return COORDINATOR_AGENT_FAMILIES.includes(COORDINATOR_ICON_FAMILIES[agentIcon] ?? agentIcon);
+  return agentIcon.trim().length > 0;
 }
 
 const remoteMutationQueues = new Map<string, Promise<void>>();

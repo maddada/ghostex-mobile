@@ -883,8 +883,8 @@ export default function SessionsScreen({ navigation }: Props) {
     startNewSessionAt,
     closeAgentMenuThen,
     onAgentMenuDismissed,
-    createCoordinator,
-    loadCoordinatorOptions,
+    openCoordinatorAgentStep,
+    coordinatorAgentMenuItems,
     loadCoordinatorDetails,
     loadCoordinatorPlaybook,
     saveCoordinatorDetails,
@@ -2192,6 +2192,20 @@ export default function SessionsScreen({ navigation }: Props) {
         onDismissed={onAgentMenuDismissed}
       />
 
+      {/* The New Coordinator form's agent step; a pick creates the coordinator once the menu has gone (iOS). */}
+      <ContextMenu
+        visible={overlay.kind === 'coordinatorAgentMenu'}
+        title="Pick the coordinator's agent"
+        subtitle={overlay.kind === 'coordinatorAgentMenu' ? overlay.ctx.header.title : undefined}
+        items={
+          overlay.kind === 'coordinatorAgentMenu'
+            ? coordinatorAgentMenuItems(overlay.ctx, overlay.pick, overlay.token)
+            : []
+        }
+        onClose={() => setOverlay(NONE)}
+        onDismissed={onAgentMenuDismissed}
+      />
+
       {/*
         The agent menu's project row (a pick opens the menu again there) and the header's New session
         (a pick starts there); either runs once the sheet has gone (iOS).
@@ -2245,8 +2259,7 @@ export default function SessionsScreen({ navigation }: Props) {
           projectTitle={overlay.ctx.header.title}
           copies={overlay.ctx.header.copies}
           defaultProjectId={overlay.ctx.header.defaultCopyProjectId}
-          loadOptions={() => loadCoordinatorOptions(overlay.ctx)}
-          onCreate={(input, stillOpen) => createCoordinator(overlay.ctx, input, stillOpen)}
+          onNext={(pick) => openCoordinatorAgentStep(overlay.ctx, pick)}
           onCancel={() => setOverlay(NONE)}
         />
       ) : null}

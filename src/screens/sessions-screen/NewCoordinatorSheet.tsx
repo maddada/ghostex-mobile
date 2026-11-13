@@ -1,46 +1,38 @@
 /**
- * The phone's New Coordinator form, opened from a project's agent menu: name the orchestrator, pick
- * its agent, model and effort, and see the locked line its first message starts with.
+ * The phone's New Coordinator form, opened from a project's agent menu: name the coordinator, pick
+ * its folder when the project is cloned twice, and see the locked line its first message starts
+ * with. Next opens the agent menu as "Pick the coordinator's agent", and the pick creates it
+ * (use-sessions-screen-menus.tsx `coordinatorAgentMenuItems`).
  *
- * The desktop's dialog is apps/desktop/src/app/window/new_coordinator_modal.rs; the copy and the
- * defaults match it. The choices come from `ghostex coordinator options` and the orchestrator is
- * created by `ghostex coordinator create`, so the agent list, the Claude-on-Opus-5.5 default, the
- * Low/Medium/High/XHigh efforts with High first choice and each agent's skill line are gxserver's
- * (server/src/ghostex_cli/coordinator/command.rs), and an unnamed orchestrator gets gxserver's
- * placeholder title. Half folded like a laptop the card keeps off the fold (`useFoldCardPlacement`).
+ * The desktop's dialog is apps/desktop/src/app/window/new_coordinator_modal.rs; the copy matches
+ * it. The coordinator is created by `ghostex coordinator create`, so its start model and effort
+ * (Opus 5.5 at High on Claude) and an unnamed coordinator's placeholder title are gxserver's
+ * (server/src/ghostex_cli/coordinator/command.rs). Half folded like a laptop the card keeps off the
+ * fold (`useFoldCardPlacement`).
  *
  * CDXC:Coordinators 2026-11-09 WHY:
- * The contributor (sebastianarena, PR #542) chose this, from his own "Can I choose where the coordinator runs?": A project cloned twice on this computer (the list merges the copies, contract/grouping.ts) gets a Folder row between Name and Agent, each folder named by the end of its path, starting on the folder with the project's newest session (else the project's own); the form stays open until the coordinator is created and shows a refusal itself. One folder shows no row.
+ * The contributor (sebastianarena, PR #542) chose this, from his own "Can I choose where the coordinator runs?": A project cloned twice on this computer (the list merges the copies, contract/grouping.ts) gets a Folder row under Name, each folder named by the end of its path, starting on the folder with the project's newest session (else the project's own). One folder shows no row.
  * SEE-ALSO: apps/desktop/src/app/window/new_coordinator_computer.rs (the desktop's Computer field, which also offers other computers).
  *
  * CDXC:Coordinators 2026-10-17 DECISION:
- * User: "let's please allow picking more cli agents here ... we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]", and for the phone: "phone too". No Goal or First request field; the first message is shown locked.
+ * User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]", and for the phone: "phone too". No Goal or First request field; the first message is shown locked.
+ *
+ * CDXC:Coordinators 2026-11-13 DECISION:
+ * User (Q2980 "Build it: auto-send + remind on drift"): the form drops its Agent, Model and Effort fields; Next opens the normal agent picker titled "Pick the coordinator's agent", where any agent may be picked, and the pick starts the coordinator and sends its first message. Agents whose start model may make a weaker coordinator carry the warning on their row.
  */
 
-import { useMemo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { CreateCoordinatorInput } from '../../commands/ghostexCli';
 import type { ProjectCopy } from '../../contract/grouping';
 import { useFoldCardPlacement } from '../../components/common/foldAvoidance';
 import KeyboardAvoidingContainer from '../../components/common/keyboard/KeyboardAvoidingContainer';
 import { LockGlyph } from '../../components/onboarding/SetupIcons';
 import KeyboardAwareScrollView from '../../components/common/keyboard/KeyboardAwareScrollView';
 import { GhostexStrokeWidth } from '../../theme/palette';
-
-type Choice = { value: string; label: string };
-type CoordinatorModel = Choice & { efforts: Choice[]; defaultEffort: string };
-type CoordinatorAgent = {
-  agentId: string;
-  name: string;
-  models: CoordinatorModel[];
-  defaultModel: string;
-  /** The locked first line ("Read and adhere to this skill: …"); '' from a computer before 2026-10-17. */
-  skillLine: string;
-};
-export type CoordinatorOptions = { agents: CoordinatorAgent[]; defaultEffort: string };
+import { coordinatorQualityWarning } from '../../sessions/coordinatorQuality';
 
 /**
  * The (i) text beside "New Orchestrator…" in the agent menu.
@@ -52,71 +44,8 @@ export const NEW_ORCHESTRATOR_BENEFITS = `Recommended
 • It keeps improving as it saves memories about your project
 • Needs a very good model, e.g. Opus 5.5 at high or xhigh`;
 
-/** A lineup longer than this gets a search field above its Model chips (OpenCode lists hundreds). */
-const MODEL_SEARCH_THRESHOLD = 12;
-/** How many matching Model chips the search shows at once. */
-const MODEL_SEARCH_LIMIT = 24;
-
-/**
- * The Model chips a long lineup shows: the models whose label or id has every typed word, at most
- * MODEL_SEARCH_LIMIT of them, with the picked one always among them.
- */
-function searchedModels(models: CoordinatorModel[], query: string, picked: string): CoordinatorModel[] {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((term) => term.length > 0);
-  const matches = models.filter((model) => {
-    const haystack = `${model.label} ${model.value}`.toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
-  const shown = matches.slice(0, MODEL_SEARCH_LIMIT);
-  const selected = models.find((model) => model.value === picked);
-  if (selected !== undefined && !shown.includes(selected)) shown.unshift(selected);
-  return shown;
-}
-
-/** Claude's model families, in the order every list of Claude's models shows them. */
-const CLAUDE_FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku'];
-
-/** A Claude model name's place in CLAUDE_FAMILY_ORDER (-1 for another family) and its version numbers. */
-function claudeFamilyAndVersion(label: string): { rank: number; version: number[] } {
-  const words = label.toLowerCase().split(/[\s-]+/);
-  const rank = CLAUDE_FAMILY_ORDER.findIndex((family) => words.includes(family));
-  const versionWord = words.find((word) => /^\d+(\.\d+)*$/.test(word));
-  return { rank, version: versionWord === undefined ? [] : versionWord.split('.').map(Number) };
-}
-
-function compareVersions(left: number[], right: number[]): number {
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? -1) - (right[index] ?? -1);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
-
-/**
- * CDXC:AgentModelCatalog 2026-11-11 DECISION:
- * User: "on desktorp and mobile switch order so fable is always top then opus then sonnet then haiku". Claude's models by family (Fable, Opus, Sonnet, Haiku, then any other in the computer's order), newest version first, with each family's older versions (the Legacy models) after the current ones, as the chat core orders them. Sorted here too so the form keeps the order against a computer built before gxserver sorted the lineup it serves (11.4.0 and older); the options carry no group, so a row is legacy when its family has a newer one.
- * SEE-ALSO: packages/gx-chat-core/src/menus/catalog.rs in the Ghostex main repo (`order_claude_models`).
- */
-function orderClaudeModels(models: CoordinatorModel[]): CoordinatorModel[] {
-  const keyed = models.map((model, index) => ({ model, index, ...claudeFamilyAndVersion(model.label) }));
-  const older = (entry: (typeof keyed)[number]) =>
-    entry.rank >= 0 &&
-    keyed.some((other) => other.rank === entry.rank && compareVersions(other.version, entry.version) > 0);
-  const rank = (entry: (typeof keyed)[number]) => (entry.rank < 0 ? CLAUDE_FAMILY_ORDER.length : entry.rank);
-  return keyed
-    .map((entry) => ({ ...entry, older: older(entry) }))
-    .sort(
-      (left, right) =>
-        Number(left.older) - Number(right.older) ||
-        rank(left) - rank(right) ||
-        (left.rank < 0 ? 0 : compareVersions(right.version, left.version)) ||
-        left.index - right.index,
-    )
-    .map((entry) => entry.model);
-}
+/** The locked first line before the agent is picked: the skill by its name, which each agent's first message writes its own way. */
+const FIRST_LINE = 'Read and adhere to this skill: ghostex-coordinator';
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -128,62 +57,31 @@ function records(value: unknown): Record<string, unknown>[] {
     : [];
 }
 
-function choices(value: unknown): Choice[] {
-  return records(value)
-    .map((entry) => ({ value: text(entry.value), label: text(entry.label) || text(entry.value) }))
-    .filter((choice) => choice.value.length > 0);
-}
-
-/** `ghostex coordinator options --json`, as the form reads it. */
-export function parseCoordinatorOptions(json: unknown): CoordinatorOptions {
-  const root = typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : {};
-  const agents = records(root.agents)
-    .map((agent) => ({
-      family: text(agent.family),
-      agentId: text(agent.agentId),
-      name: text(agent.name) || text(agent.agentId),
-      defaultModel: text(agent.defaultModel),
-      skillLine: text(agent.skillLine),
-      models: records(agent.models)
-        .map((model) => ({
-          value: text(model.value),
-          label: text(model.label) || text(model.value),
-          efforts: choices(model.efforts),
-          defaultEffort: text(model.defaultEffort),
-        }))
-        // OpenCode's first row ("OpenCode's default") has no value: it keeps OpenCode's own model.
-        .filter((model) => model.value.length > 0 || model.label.length > 0),
-    }))
-    .map(({ family, ...agent }) => (family === 'claude' ? { ...agent, models: orderClaudeModels(agent.models) } : agent))
-    .filter((agent) => agent.agentId.length > 0);
-  return { agents, defaultEffort: text(root.defaultEffort) };
-}
-
 /**
- * The effort a model starts on: the one already picked when it takes it, else the model's own
- * default (its highest orchestrator level), else the form's default, else its last.
+ * `ghostex coordinator options --json`, read for the agent step's warnings: each listed agent's
+ * warning by the model and effort it starts a coordinator on. A computer from before 2026-11-13
+ * lists only the agents a coordinator could run on then.
  */
-function effortFor(model: CoordinatorModel | undefined, picked: string, fallback: string): string {
-  const efforts = model?.efforts ?? [];
-  if (efforts.some((effort) => effort.value === picked)) return picked;
-  const preferred = [model?.defaultEffort ?? '', fallback];
-  return (
-    (
-      preferred
-        .map((value) => efforts.find((effort) => effort.value === value))
-        .find((effort) => effort !== undefined) ?? efforts[efforts.length - 1]
-    )?.value ?? ''
-  );
+export function coordinatorAgentWarnings(json: unknown): Record<string, string> {
+  const root = typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : {};
+  const warnings: Record<string, string> = {};
+  for (const agent of records(root.agents)) {
+    const agentId = text(agent.agentId);
+    if (agentId.length === 0) continue;
+    const models = records(agent.models);
+    const startValue = text(agent.defaultModel);
+    const start = models.find((model) => text(model.value) === startValue);
+    const warning = coordinatorQualityWarning(
+      { value: startValue, label: start === undefined ? '' : text(start.label) },
+      start === undefined ? undefined : text(start.defaultEffort),
+    );
+    if (warning !== null) warnings[agentId] = warning;
+  }
+  return warnings;
 }
 
-/** Why Create did not make the coordinator: a plain sentence, the computer's words (behind Details), and `open` when it made one that did not start. */
-export type NewCoordinatorRefusal = {
-  message: string;
-  details?: string;
-  open?: () => void;
-  /** The computer's answer was not understood and its list could not be read: Create stays off. */
-  uncertain?: boolean;
-};
+/** What Next hands on: the name ('' leaves it unnamed) and, for a project cloned twice, the folder. */
+export type NewCoordinatorPick = { title: string; projectId?: string };
 
 export type NewCoordinatorSheetProps = {
   projectTitle: string;
@@ -191,15 +89,7 @@ export type NewCoordinatorSheetProps = {
   copies?: ProjectCopy[];
   /** The folder the Folder row starts on: one of `copies`. */
   defaultProjectId?: string;
-  loadOptions: () => Promise<CoordinatorOptions>;
-  /**
-   * Resolves to why it was not created, or null once it is (the form is closed then). `stillOpen` says whether this
-   * form is still the one on screen, so a late answer never closes a newer one.
-   */
-  onCreate: (
-    input: Omit<CreateCoordinatorInput, 'projectId'> & { agentName: string; projectId?: string },
-    stillOpen: () => boolean,
-  ) => Promise<NewCoordinatorRefusal | null>;
+  onNext: (pick: NewCoordinatorPick) => void;
   onCancel: () => void;
 };
 
@@ -207,132 +97,18 @@ export default function NewCoordinatorSheet({
   projectTitle,
   copies,
   defaultProjectId,
-  loadOptions,
-  onCreate,
+  onNext,
   onCancel,
 }: NewCoordinatorSheetProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const [options, setOptions] = useState<CoordinatorOptions | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [agentId, setAgentId] = useState('');
-  const [model, setModel] = useState('');
-  const [effort, setEffort] = useState('');
   const [name, setName] = useState('');
-  const [modelQuery, setModelQuery] = useState('');
   const folders = copies !== undefined && copies.length > 1 ? copies : null;
   const [folder, setFolder] = useState(
     () => folders?.find((copy) => copy.projectId === defaultProjectId)?.projectId ?? folders?.[0]?.projectId ?? '',
   );
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<NewCoordinatorRefusal | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
 
-  useEffect(() => {
-    let cancelled = false;
-    loadOptions().then(
-      (loaded) => {
-        if (cancelled) return;
-        setOptions(loaded);
-        const first = loaded.agents[0];
-        if (first !== undefined) pickAgent(first, loaded, '');
-      },
-      (error: unknown) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-    // The options load once per opening of the form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const pickAgent = (agent: CoordinatorAgent, loaded: CoordinatorOptions, pickedEffort: string): void => {
-    const startModel = agent.models.find((entry) => entry.value === agent.defaultModel) ?? agent.models[0];
-    setAgentId(agent.agentId);
-    setModelQuery('');
-    setModel(startModel?.value ?? '');
-    setEffort(effortFor(startModel, pickedEffort, loaded.defaultEffort));
-  };
-
-  const agent = options?.agents.find((entry) => entry.agentId === agentId);
-  const selectedModel = agent?.models.find((entry) => entry.value === model);
-  // A coordinator made but not started is opened, never created again.
-  const createdAlready = createError?.open !== undefined || createError?.uncertain === true;
-  const canCreate = agent !== undefined && !creating && !createdAlready;
-  // While Create runs (and once a coordinator was made) the choices it sent are fixed, so the form never shows
-  // a folder, name or agent other than the ones the computer is acting on.
-  const locked = creating || createdAlready;
-
-  const create = (): void => {
-    if (agent === undefined || creating || createdAlready) return;
-    setCreating(true);
-    setCreateError(null);
-    setDetailsOpen(false);
-    void onCreate(
-      {
-        agentId: agent.agentId,
-        agentName: agent.name,
-        title: name,
-        model,
-        effort,
-        ...(folders !== null ? { projectId: folder } : {}),
-      },
-      () => mounted.current,
-    ).then(
-      (refused) => {
-        if (!mounted.current) return;
-        setCreating(false);
-        setCreateError(refused);
-      },
-      (error: unknown) => {
-        if (!mounted.current) return;
-        setCreating(false);
-        setCreateError({
-          message: 'Coordinator not created. Try again.',
-          details: error instanceof Error ? error.message : String(error),
-        });
-      },
-    );
-  };
-
-  const chipRow = (
-    label: string,
-    items: Choice[],
-    selected: string,
-    onPick: (value: string) => void,
-    header?: ReactNode,
-  ) => (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {header}
-      <View accessibilityRole="radiogroup" style={styles.chips}>
-        {items.map((item) => {
-          const isSelected = item.value === selected;
-          return (
-            <Pressable
-              key={item.value || 'default'}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: isSelected, disabled: locked }}
-              disabled={locked}
-              style={[styles.chip, isSelected ? styles.chipSelected : null]}
-              onPress={() => onPick(item.value)}
-            >
-              <Text style={[styles.chipLabel, isSelected ? styles.chipLabelSelected : null]}>{item.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
+  const next = (): void => onNext({ title: name.trim(), ...(folders !== null ? { projectId: folder } : {}) });
 
   const placement = useFoldCardPlacement({ avoidsKeyboard: true, belowSafeAreaTop: true });
   return (
@@ -350,119 +126,55 @@ export default function NewCoordinatorSheet({
                 <TextInput
                   keyboardAppearance={appearance.light ? 'light' : 'dark'}
                   accessibilityLabel="Name"
-                  editable={!locked}
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
                   placeholder="e.g. Checkout redesign"
                   placeholderTextColor={appearance.muted}
+                  returnKeyType="next"
+                  onSubmitEditing={next}
                 />
                 <Text style={styles.hint}>
                   Shown in the sidebar so you can find this coordinator later. It keeps this name.
                 </Text>
               </View>
-              {folders !== null
-                ? chipRow(
-                    'Folder',
-                    folders.map((copy) => ({ value: copy.projectId, label: copy.label })),
-                    folder,
-                    (value) => {
-                      if (locked) return;
-                      setFolder(value);
-                      setCreateError(null);
-                    },
-                  )
-                : null}
-              {folders !== null ? <Text style={styles.hint}>Where the coordinator runs.</Text> : null}
-              {options === null ? (
-                loadError === null ? (
-                  <ActivityIndicator style={styles.loading} color={appearance.muted} />
-                ) : (
-                  <Text style={styles.error}>{loadError}</Text>
-                )
-              ) : options.agents.length === 0 ? (
-                <Text style={styles.error}>
-                  No agent a coordinator can run on is set up on this computer: Claude, Codex, ZCode, Cursor, Grok,
-                  Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek Harness.
-                </Text>
-              ) : (
-                <>
-                  {chipRow(
-                    'Agent',
-                    options.agents.map((entry) => ({ value: entry.agentId, label: entry.name })),
-                    agentId,
-                    (value) => {
-                      const next = options.agents.find((entry) => entry.agentId === value);
-                      if (next !== undefined) pickAgent(next, options, '');
-                    },
-                  )}
-                  {agent !== undefined && agent.models.length > 0
-                    ? chipRow(
-                        'Model',
-                        agent.models.length > MODEL_SEARCH_THRESHOLD
-                          ? searchedModels(agent.models, modelQuery, model)
-                          : agent.models,
-                        model,
-                        (value) => {
-                          setModel(value);
-                          setEffort(
-                            effortFor(
-                              agent.models.find((entry) => entry.value === value),
-                              effort,
-                              options.defaultEffort,
-                            ),
-                          );
-                        },
-                        agent.models.length > MODEL_SEARCH_THRESHOLD ? (
-                          <TextInput
-                            keyboardAppearance={appearance.light ? 'light' : 'dark'}
-                            accessibilityLabel="Search models"
-                            style={[styles.input, styles.modelSearch]}
-                            value={modelQuery}
-                            onChangeText={setModelQuery}
-                            placeholder={`Search ${agent.models.length} models`}
-                            placeholderTextColor={appearance.muted}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                          />
-                        ) : undefined,
-                      )
-                    : null}
-                  {selectedModel !== undefined && selectedModel.efforts.length > 0
-                    ? chipRow('Effort', selectedModel.efforts, effort, setEffort)
-                    : null}
-                </>
-              )}
-              {agent !== undefined && agent.skillLine.length > 0 ? (
+              {folders !== null ? (
                 <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>First message</Text>
-                  <View accessibilityLabel={`First message, locked: ${agent.skillLine}`} style={styles.lockedLine}>
-                    <LockGlyph size={14} color={appearance.muted} />
-                    <Text style={styles.lockedText} selectable>
-                      {agent.skillLine}
-                    </Text>
+                  <Text style={styles.fieldLabel}>Folder</Text>
+                  <View accessibilityRole="radiogroup" style={styles.chips}>
+                    {folders.map((copy) => {
+                      const isSelected = copy.projectId === folder;
+                      return (
+                        <Pressable
+                          key={copy.projectId}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                          style={[styles.chip, isSelected ? styles.chipSelected : null]}
+                          onPress={() => setFolder(copy.projectId)}
+                        >
+                          <Text style={[styles.chipLabel, isSelected ? styles.chipLabelSelected : null]}>
+                            {copy.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                  <Text style={styles.hint}>
-                    Every coordinator starts with this line, which loads its playbook. Write your first request in its
-                    chat.
+                  <Text style={styles.hint}>Where the coordinator runs.</Text>
+                </View>
+              ) : null}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>First message</Text>
+                <View accessibilityLabel={`First message, locked: ${FIRST_LINE}`} style={styles.lockedLine}>
+                  <LockGlyph size={14} color={appearance.muted} />
+                  <Text style={styles.lockedText} selectable>
+                    {FIRST_LINE}
                   </Text>
                 </View>
-              ) : null}
-              {createError !== null ? (
-                <View>
-                  <Text style={styles.error}>{createError.message}</Text>
-                  {createError.details !== undefined && createError.details.length > 0 ? (
-                    <Pressable accessibilityRole="button" onPress={() => setDetailsOpen((open) => !open)}>
-                      <Text style={styles.hint}>{detailsOpen ? 'Hide details' : 'Details'}</Text>
-                    </Pressable>
-                  ) : null}
-                  {detailsOpen && createError.details !== undefined ? (
-                    <Text style={styles.hint} selectable>
-                      {createError.details}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
+                <Text style={styles.hint}>
+                  Every coordinator starts with this line, which loads its playbook, written the way its agent runs a
+                  skill. Write your first request in its chat.
+                </Text>
+              </View>
               <View style={styles.buttonRow}>
                 <Pressable
                   accessibilityRole="button"
@@ -471,20 +183,14 @@ export default function NewCoordinatorSheet({
                 >
                   <Text style={styles.cancelLabel}>Cancel</Text>
                 </Pressable>
-                {createError?.open !== undefined ? (
-                  <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={createError.open}>
-                    <Text style={styles.primaryLabel}>Open coordinator</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!canCreate}
-                    style={[styles.primaryButton, !canCreate ? styles.buttonDisabled : null]}
-                    onPress={create}
-                  >
-                    <Text style={styles.primaryLabel}>{creating ? 'Creating…' : 'Create'}</Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityHint="Opens the list of agents to pick the coordinator's"
+                  style={styles.primaryButton}
+                  onPress={next}
+                >
+                  <Text style={styles.primaryLabel}>Next</Text>
+                </Pressable>
               </View>
             </KeyboardAwareScrollView>
           </Pressable>
@@ -568,9 +274,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
   },
-  modelSearch: {
-    marginBottom: 8,
-  },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -596,15 +299,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     color: appearance.foreground,
     fontWeight: '600',
   },
-  loading: {
-    marginTop: 16,
-  },
-  error: {
-    color: appearance.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 14,
-  },
   buttonRow: {
     flexDirection: 'row',
     marginTop: 16,
@@ -616,9 +310,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     backgroundColor: appearance.accent,
     alignItems: 'center',
     paddingVertical: 10,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
   },
   primaryLabel: {
     color: appearance.accentForeground,
