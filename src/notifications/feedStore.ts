@@ -479,6 +479,7 @@ function ensureStream(machineId: string): void {
           source.setStreamed(machineId, false);
         },
         () => redialAfterServerStop(machineId),
+        () => logAppEvent(`gxserver: ${machineId} says it started`),
       );
       streams.set(machineId, close);
       source.setStreamed(machineId, true);

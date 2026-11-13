@@ -1,9 +1,13 @@
 /**
  * Logs bottom sheet, opened from the Sessions ☰ menu, the Connections sheet and Settings › Connection: the
  * in-app event log (appLog.ts) as selectable timestamped lines, newest last,
- * with a Copy button that puts the full plain-text log on the clipboard, and Send to developer, which opens its
- * review step (SendLogsReview.tsx) in the same sheet. Half folded like a laptop it starts
- * below the fold and the log scrolls inside.
+ * with a Copy button that puts the full plain-text log on the clipboard, Export, which shares it as a .txt file
+ * (logExport.ts), and Send to developer, which opens its review step (SendLogsReview.tsx) in the same sheet and is the
+ * only path that files a GitHub issue. Half folded like a laptop it starts below the fold and the log scrolls inside.
+ *
+ * CDXC:RemoteMachines 2026-11-13 DECISION: the Connections sheet's Send logs opens Export (the share sheet with the
+ * file), not the GitHub review: Sebastian wants a file he can save or send. The sheet opens under it so a failed
+ * export says "Couldn't export" on its button.
  */
 
 import { useMemo, useEffect, useRef, useState } from 'react';
@@ -15,7 +19,7 @@ import { useFoldSheetMaxHeight } from './foldAvoidance';
 import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import * as Clipboard from 'expo-clipboard';
 
-import { formatAppLog, formatLogTime, useAppLogStore } from '../../app/appLog';
+import { formatAppLog, formatLogTime, logEntryText, useAppLogStore } from '../../app/appLog';
 import { LogsCopy, SendLogsCopy } from '../../copy';
 import SendLogsReview from './SendLogsReview';
 import { exportLogs } from '../../feedback/logExport';
@@ -24,20 +28,22 @@ import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
 export type LogsSheetProps = {
   visible: boolean;
   onClose: () => void;
-  /** Opens on the Send to developer review (the Connections sheet's Send logs). */
-  sending?: boolean;
+  /** Starts Export as it opens (the Connections sheet's Send logs). */
+  exportNow?: boolean;
 };
 
 const SHOWN_LINES = 300;
+/** The Modal's fade takes about 300 ms. */
+const EXPORT_ON_OPEN_DELAY_MS = 450;
 
-export default function LogsSheet({ visible, onClose, sending = false }: LogsSheetProps) {
+export default function LogsSheet({ visible, onClose, exportNow = false }: LogsSheetProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const bar = useVerticalBarSpace();
   const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: false });
   const entries = useAppLogStore((state) => state.entries);
   const [copied, setCopied] = useState(false);
-  const [reviewing, setReviewing] = useState(sending);
+  const [reviewing, setReviewing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
   // The sheet draws the newest lines only; Copy, Export and Send take the whole kept log.
@@ -74,6 +80,19 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
       })
       .finally(() => setExporting(false));
   };
+
+  const exportedOnOpen = useRef(false);
+  useEffect(() => {
+    if (!exportNow || !visible || exportedOnOpen.current) return;
+    // After the sheet's own fade-in: iOS shows the share sheet only from a screen that is done presenting.
+    const timer = setTimeout(() => {
+      exportedOnOpen.current = true;
+      exportLog();
+    }, EXPORT_ON_OPEN_DELAY_MS);
+    return () => clearTimeout(timer);
+    // Once per opening; `exportLog` reads the entries of the moment it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportNow, visible]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -133,7 +152,7 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
                       <View key={`${entry.at}-${index}`} style={styles.row}>
                         <Text style={styles.rowTime}>{formatLogTime(entry.at)}</Text>
                         <Text selectable style={styles.rowMessage}>
-                          {entry.message}
+                          {logEntryText(entry)}
                         </Text>
                       </View>
                     ))

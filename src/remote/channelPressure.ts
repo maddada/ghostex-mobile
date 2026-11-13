@@ -18,7 +18,7 @@
 import { create } from 'zustand';
 
 import { logAppEvent } from '../app/appLog';
-import { onChannelRefused } from './channelBudget';
+import { commandsWaiting, onChannelRefused } from './channelBudget';
 
 const REFUSALS_FOR_RESET = 3;
 const REFUSAL_WINDOW_MS = 60_000;
@@ -58,6 +58,23 @@ export const useChannelPressure = create<{ needsReset: Record<string, true> }>((
 
 const pressures = new Map<string, Pressure>();
 let handlers: ChannelPressureHandlers | null = null;
+/** Channels each computer refused in this app run, for the log's snapshots. */
+const refusedThisRun = new Map<string, number>();
+
+/**
+ * The log's channel snapshot of one computer: what this phone admitted there, which is not the computer's own count
+ * (a channel whose close never reached it still counts there).
+ */
+export function channelSnapshot(machineId: string): string {
+  const active = handlers;
+  const name = active?.label(machineId) ?? machineId;
+  const terminals = active?.openTerminals(machineId) ?? { agents: 0, shells: 0 };
+  return (
+    `Channels: ${name}, admitted by this phone: ${terminals.agents} agent terminals, ${terminals.shells} plain ` +
+    `terminals, ${active?.commandsInFlight(machineId) ?? 0} commands running, ${commandsWaiting(machineId)} waiting; ` +
+    `${refusedThisRun.get(machineId) ?? 0} refused this run`
+  );
+}
 
 export function installChannelPressure(next: ChannelPressureHandlers): void {
   if (handlers === null) onChannelRefused((machineId) => void noteChannelRefusal(machineId));
@@ -93,11 +110,8 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
     pressures.set(machineId, pressure);
   }
   const name = active.label(machineId);
-  const terminals = active.openTerminals(machineId);
-  logAppEvent(
-    `Connection: ${name} refused a new channel (this phone holds ${terminals.agents} agent terminals, ` +
-      `${terminals.shells} plain terminals, ${active.commandsInFlight(machineId)} commands)`,
-  );
+  refusedThisRun.set(machineId, (refusedThisRun.get(machineId) ?? 0) + 1);
+  logAppEvent(`Connection: ${name} refused a new channel. ${channelSnapshot(machineId)}`);
   // The detach stands while the shortage lasts; it ends on a new connection (`clearChannelPressure`) or when the
   // computer has refused nothing for a while. Only the refusals after it roll off with the minute.
   const shortageOver = pressure.lastRefusalAt === null || now - pressure.lastRefusalAt > SHORTAGE_OVER_MS;

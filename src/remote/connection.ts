@@ -23,6 +23,8 @@ import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
 import { endConnectionBudget, isChannelRefusal, withCommandChannel } from './channelBudget';
+import { noteConnected } from './connectionTrace';
+import { whereTheAppIs } from '../app/foregroundClock';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -59,7 +61,12 @@ onPairingChanged((machineId) => {
  */
 export function ensureConnected(
   machine: MachineConnectionTarget,
-  options: { verify?: boolean; reset?: boolean } = {},
+  options: {
+    verify?: boolean;
+    reset?: boolean;
+    /** Why the caller asks, for the log line written when this replaces a connection. */
+    reason?: string;
+  } = {},
 ): Promise<void> {
   // A Cloud Box has no SSH: its chat link reaches it through `cloudBoxes/boxLink.ts`.
   // The demo computer has no SSH either: its inventory is bundled on the phone.
@@ -67,7 +74,9 @@ export function ensureConnected(
   const existing = attempts.get(machine.id);
   if (existing && (!options.reset || existing.reset)) {
     return options.verify && !existing.verify && !existing.reset
-      ? existing.promise.then(() => ensureConnected(machine, { verify: true }))
+      ? existing.promise.then(() =>
+          ensureConnected(machine, { verify: true, ...(options.reason ? { reason: options.reason } : {}) }),
+        )
       : existing.promise;
   }
   const revision = (revisions.get(machine.id) ?? 0) + 1;
@@ -93,6 +102,7 @@ export function ensureConnected(
   };
   const promise = (async () => {
     let replaceExisting = options.reset === true;
+    let replacedBecause = options.reason ?? 'reset';
     if (!replaceExisting && (await GhostexNative.isConnected(machine.id))) {
       assertCurrent();
       if (!options.verify) return;
@@ -126,8 +136,13 @@ export function ensureConnected(
        * until the app was killed.
        */
       replaceExisting = true;
+      replacedBecause = `its check ${probe}${options.reason ? `, asked by ${options.reason}` : ''}`;
     }
+    const dialStartedAt = Date.now();
     if (replaceExisting) {
+      if (await GhostexNative.isConnected(machine.id).catch(() => false)) {
+        logAppEvent(`Connection: ${machine.id} replaced by the phone (${replacedBecause}; app ${whereTheAppIs()})`);
+      }
       forgetRemoteEnvironment(machine.id);
       endConnectionBudget(machine.id);
       await GhostexNative.disconnect(machine.id);
@@ -148,6 +163,7 @@ export function ensureConnected(
       await GhostexNative.connect(machine.id, config);
     }
     await assertKept();
+    noteConnected(machine, Date.now() - dialStartedAt);
   })();
   const attempt = { promise, reset: options.reset === true, verify: options.verify === true };
   attempts.set(machine.id, attempt);
@@ -327,6 +343,6 @@ async function askKnownGxserver(machineId: string): Promise<'answered' | 'no ans
 const PROBE_ADMISSION_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
 
-export function reconnectMachine(machine: MachineConnectionTarget): Promise<void> {
-  return ensureConnected(machine, { reset: true });
+export function reconnectMachine(machine: MachineConnectionTarget, reason = 'Retry'): Promise<void> {
+  return ensureConnected(machine, { reset: true, reason });
 }

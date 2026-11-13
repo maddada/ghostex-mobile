@@ -34,6 +34,7 @@ export function openFeedStream(
   onChanged: () => void,
   onClosed: () => void,
   onStopping?: () => void,
+  onStarted?: () => void,
 ): () => void {
   const url = `ws://127.0.0.1:${link.localPort}/api/events?protocolVersion=${PROTOCOL_VERSION}&stream=notifications`;
   // React Native's WebSocket takes headers, so the token never travels in the URL. The cast holds: React
@@ -54,6 +55,7 @@ export function openFeedStream(
       // A restarted gxserver may have written rows while it came up; read the feed again then too.
       if (frame?.type === 'notificationFeedChanged' || frame?.type === 'serverStarted') onChanged();
       else if (frame?.type === 'serverStopping') onStopping?.();
+      if (frame?.type === 'serverStarted') onStarted?.();
     } catch {
       // Not a frame of this stream.
     }

@@ -95,7 +95,7 @@ export type Overlay =
     }
   | { kind: 'recentProjects'; machine: MachineRecord }
   | { kind: 'recovery'; machine: MachineRecord | null }
-  | { kind: 'logs'; sending?: boolean }
+  | { kind: 'logs'; exportNow?: boolean }
   /** Every computer's connection (src/components/sessions/ConnectionsSheet.tsx). */
   | { kind: 'connections' };
 

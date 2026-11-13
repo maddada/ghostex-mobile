@@ -101,6 +101,11 @@ export function commandsInFlight(machineId: string): number {
   return running.get(machineId) ?? 0;
 }
 
+/** Commands waiting for one of the phone's slots on the computer (iPhone only; Android's connection queues its own). */
+export function commandsWaiting(machineId: string): number {
+  return budgets.get(machineId)?.queue.length ?? 0;
+}
+
 /** Commands and uploads running now on each computer, on every platform (Android's are not budgeted here). */
 const running = new Map<string, number>();
 

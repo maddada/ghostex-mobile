@@ -73,7 +73,7 @@ function terminalOpenError(machineId: string, error: unknown): string {
 }
 
 function verifyAfterFailedOpen(machine: MachineConnectionTarget): void {
-  void ensureConnected(machine, { verify: true }).catch(() => undefined);
+  void ensureConnected(machine, { verify: true, reason: 'a terminal that failed to open' }).catch(() => undefined);
 }
 
 function trackTabOpen<T>(sessionKey: string, work: () => Promise<T>): Promise<T> {
@@ -461,7 +461,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         }
         if (select) set({ selectedSessionKey: sessionKey });
         touchWarm(sessionKey);
-        await ensureConnected(machine, { verify: true });
+        await ensureConnected(machine, { verify: true, reason: 'opening an agent terminal' });
         const opening = tabOpenRequests.get(sessionKey);
         if (opening) await opening;
         const current = get().tabs.find((tab) => tab.sessionKey === sessionKey);

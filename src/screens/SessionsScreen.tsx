@@ -2346,7 +2346,7 @@ export default function SessionsScreen({ navigation }: Props) {
       ) : null}
 
       {overlay.kind === 'logs' ? (
-        <LogsSheet visible sending={overlay.sending === true} onClose={() => setOverlay(NONE)} />
+        <LogsSheet visible exportNow={overlay.exportNow === true} onClose={() => setOverlay(NONE)} />
       ) : null}
       {overlay.kind === 'connections' ? (
         <ConnectionsSheet
@@ -2361,7 +2361,7 @@ export default function SessionsScreen({ navigation }: Props) {
             setOverlay(NONE);
             navigation.navigate('MachineForm', { machineId });
           }}
-          onLogs={(machineId) => setOverlay({ kind: 'logs', sending: machineId !== null })}
+          onLogs={(machineId) => setOverlay({ kind: 'logs', exportNow: machineId !== null })}
           onConnectionSettings={() => {
             setOverlay(NONE);
             navigation.navigate('SettingsPage', { page: 'connection' });
