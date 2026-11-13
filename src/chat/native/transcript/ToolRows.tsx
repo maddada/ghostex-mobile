@@ -197,10 +197,15 @@ function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; bo
           </Text>
         </Pressable>
         {simpleOpen ? (
-          <View style={[styles.cardBody, { borderTopColor: theme.ink(SINGLE_LINE_CARD.borderAlpha) }]}>
-            <DisclosureBody onCollapse={toggleSimple} label="Collapse tool calls" gap={ROW_GAP}>
-              {rows(visible)}
-            </DisclosureBody>
+          // CDXC:SessionChat 2026-11-13 DECISION: User, of the thin line beside the rows of an opened
+          // "1 tool call" card in a Quiet View line: "no need for this line here and widen the tool
+          // call inside to take up the space when that line is gone". The card's rows carry no rail
+          // and take its full width; every other open tool group keeps its `DisclosureBody` rail.
+          // SEE-ALSO: the desktop's `unboxed_tool_rows` in native_chat/tool_run.rs.
+          <View
+            style={[styles.cardBody, styles.column, { borderTopColor: theme.ink(SINGLE_LINE_CARD.borderAlpha) }]}
+          >
+            {rows(visible)}
           </View>
         ) : (message.readImages ?? []).length > 0 ? (
           <View style={styles.cardPictures}>
