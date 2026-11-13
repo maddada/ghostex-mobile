@@ -12,6 +12,7 @@ export type MobileView =
   | 'mobile_add_project'
   | 'mobile_browser'
   | 'mobile_changes'
+  | 'mobile_beads'
   | 'mobile_files'
   | 'mobile_find'
   | 'mobile_machines'
@@ -26,6 +27,8 @@ const VIEW_BY_ROUTE: Record<string, MobileView> = {
   Docs: 'mobile_files',
   DocViewer: 'mobile_files',
   Changes: 'mobile_changes',
+  Beads: 'mobile_beads',
+  Bead: 'mobile_beads',
   FindPrompts: 'mobile_find',
   FindPrompt: 'mobile_find',
   WebPreviewPorts: 'mobile_browser',
