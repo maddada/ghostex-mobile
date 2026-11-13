@@ -25,6 +25,9 @@ internal object GhostexVoiceRecorder {
   /** How often the header's sizes are brought up to date while recording. */
   private const val HEADER_EVERY_MS = 2_000L
 
+  /** 50 ms of 24 kHz audio: one `level` event each (the pill's waveform). */
+  private const val LEVEL_WINDOW = 1_200
+
   /** Set by the module; a microphone failure after the start goes through it. */
   @Volatile var emitter: ((Map<String, Any?>) -> Unit)? = null
 
@@ -35,6 +38,10 @@ internal object GhostexVoiceRecorder {
     var dataBytes = 0L
     var lastHeader = System.currentTimeMillis()
     var capture: GhostexVoiceAudio.Capture? = null
+    /** The level meter: energy and samples of the window so far, and the smoothed level. */
+    var levelEnergy = 0.0
+    var levelCount = 0
+    var level = 0.0
   }
 
   private fun folder(context: Context): File = File(context.filesDir, "dictation-recordings").apply { mkdirs() }
@@ -60,7 +67,7 @@ internal object GhostexVoiceRecorder {
   }
 
   private fun append(recording: Active, chunk: ByteArray) {
-    synchronized(lock) {
+    val levels = synchronized(lock) {
       if (active !== recording) return
       try {
         recording.output.write(chunk)
@@ -73,7 +80,39 @@ internal object GhostexVoiceRecorder {
       } catch (error: Exception) {
         Log.w(TAG, "recording write failed: ${error.message}")
       }
+      meter(recording, chunk)
     }
+    for (level in levels) {
+      emitter?.invoke(mapOf("sessionId" to recording.id, "mode" to "dictation", "kind" to "level", "level" to level))
+    }
+  }
+
+  /**
+   * The levels `chunk` completes, 0 to 1: each 50 ms window's RMS × 4, rising fast (75 ms) and
+   * falling slower (200 ms), as the desktop's meter (`level_meter.rs`) and the JavaScript file
+   * reader (`src/voice/dictationLevel.ts`) make them.
+   *
+   * CDXC:Dictate 2026-11-13 DECISION: User (Q2920): "do both. We take out the JS one when native becomes live in the app." This sends the pill's level from the recorder itself; JavaScript uses it as soon as it arrives and reads the file only on builds without it.
+   */
+  private fun meter(recording: Active, chunk: ByteArray): List<Double> {
+    val levels = ArrayList<Double>(2)
+    var index = 0
+    while (index + 1 < chunk.size) {
+      val sample = ((chunk[index].toInt() and 0xFF) or (chunk[index + 1].toInt() shl 8)).toShort()
+      val value = sample / 32_768.0
+      recording.levelEnergy += value * value
+      recording.levelCount += 1
+      index += 2
+      if (recording.levelCount < LEVEL_WINDOW) continue
+      val target = minOf(1.0, Math.sqrt(recording.levelEnergy / recording.levelCount) * 4)
+      val timeConstant = if (target > recording.level) 0.075 else 0.2
+      val decay = Math.exp(-(recording.levelCount / 24_000.0) / timeConstant)
+      recording.level = target + (recording.level - target) * decay
+      levels.add(recording.level)
+      recording.levelEnergy = 0.0
+      recording.levelCount = 0
+    }
+    return levels
   }
 
   /** Stops recording and closes the file. Answers the finished recording, or null if none ran. */
