@@ -17,8 +17,6 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type LayoutChangeEvent,
-  type ScrollViewInstance,
 } from 'react-native';
 
 import type { ChatDocument, WorkingCard as WorkingCardValue } from '../../rust/document';
@@ -189,37 +187,14 @@ export function dockHeightCap(space: number, keyboardUp: boolean): number {
   return Math.min(DOCK_MAX_HEIGHT, Math.max(0, space) * (keyboardUp ? 0.5 : 0.45));
 }
 
-/** How long after a tap an opened row is still followed into view (desktop `dock_row_reveal`). */
-const REVEAL_FOR_MS = 1500;
-
-/**
- * How far to scroll the dock's rows down so an opened row's end shows above their visible bottom,
- * never so far that its top (its title) leaves their visible top: the transcript's arithmetic for a
- * fold opened by a reader scrolled up (desktop `disclosure_reveal.rs` `reveal_distance`). `room` is
- * what must stay visible above `top`. Never negative: a row that already fits moves nothing.
- *
- * CDXC:Coordinators 2026-11-12 DECISION:
- * User: when a docked row opens while the dock is at its height cap, scroll the dock so the opened
- * card shows fully (to its answer buttons) without pushing its title off the top, as the desktop
- * does (`work_cards.rs` `dock_row_reveal`).
- */
-export function revealDistance(viewTop: number, viewBottom: number, top: number, end: number, room: number): number {
-  const hidden = end - viewBottom;
-  if (hidden <= 0) return 0;
-  return Math.min(hidden, Math.max(0, top - room - viewTop));
-}
-
-/** Which dock row is open, per chat, kept outside the component so a new document keeps it. */
-const openRows = new WeakMap<object, string>();
-
 /**
  * The dock directly on the chat box (gx-chat-core `work_cards::dock`, which holds the user's
  * decisions; desktop `render_work_dock`): one surface with a header bar, then compact rows, what
  * needs him first, then blocked work and what the newest turn finished. The header counts what
  * needs him, what is blocked and what is in progress, opens the Work sheet, and collapses the dock to
  * itself; a collapsed dock opens by itself when something new needs him (the core's `hidden`). At
- * most `phoneLimit` rows show, then "N more need you", which opens the rest in place. A tap opens a
- * row into its own card, one at a time. It sits outside the transcript, so it carries the
+ * most `phoneLimit` rows show, then "N more need you", which opens the rest in place. A tap shows a
+ * row's ask in a sheet (`DockRow` with `onClose`). It sits outside the transcript, so it carries the
  * transcript's flags (Text strength) and an env for the description's Markdown.
  *
  * CDXC:Coordinators 2026-11-11 DECISION:
@@ -275,32 +250,9 @@ export function WorkDock({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const dispatch = chat.dispatch;
-  const [openKey, setOpenKey] = useState<string | null>(() => openRows.get(dispatch) ?? null);
+  // The row whose ask is shown in its sheet (`DockRow` with `onClose`), by key.
+  const [sheetKey, setSheetKey] = useState<string | null>(null);
   const [all, setAll] = useState(false);
-  // A row just opened past the height cap scrolls into view (`revealDistance`): the rows' scroller,
-  // where it stands, how tall it shows, and each row's place in it as last laid out.
-  const rowsScroll = useRef<ScrollViewInstance | null>(null);
-  const scrollTop = useRef(0);
-  const viewHeight = useRef(0);
-  const rowFrames = useRef(new Map<string, { y: number; height: number }>());
-  const reveal = useRef<{ key: string; at: number } | null>(null);
-  const tryReveal = () => {
-    const pending = reveal.current;
-    if (pending === null) return;
-    // Followed while the row and the dock settle; one opened longer ago is left where he puts it.
-    if (Date.now() - pending.at > REVEAL_FOR_MS) {
-      reveal.current = null;
-      return;
-    }
-    const frame = rowFrames.current.get(pending.key);
-    if (frame === undefined || viewHeight.current <= 0) return;
-    const top = scrollTop.current;
-    const distance = revealDistance(top, top + viewHeight.current, frame.y, frame.y + frame.height, 0);
-    if (distance > 0.5) {
-      scrollTop.current = top + distance;
-      rowsScroll.current?.scrollTo({ y: top + distance, animated: true });
-    }
-  };
   const env = useMemo<TranscriptEnv>(
     () => ({
       dispatch,
@@ -354,21 +306,14 @@ export function WorkDock({
   const limit = typeof dock?.phoneLimit === 'number' ? dock.phoneLimit : 3;
   const hidden = Math.max(0, rows.length - limit);
   const shown = all && hidden > 0 ? rows : rows.slice(0, limit);
-  // A row opening into its card, or shutting back to its line, eases as the chat's folds do.
+  // A tap on a row shows its ask in a sheet over the chat (desktop `dock_ask_modal`): the dock's
+  // rows never open in place. The sheet goes when the row does (answered, dismissed, snoozed).
   //
-  // CDXC:Coordinators 2026-11-12 DECISION: User: opening and closing each docked card animated,
-  // quickly, the way the chat's folds ease open and shut (desktop `work_cards.rs` `dock_row`).
-  const toggle = (key: string) => {
-    animateNextFold();
-    setOpenKey((was) => {
-      // One row open at a time: opening this one shuts the one that was open.
-      const next = was === key ? null : key;
-      reveal.current = next === null ? null : { key: next, at: Date.now() };
-      if (next === null) openRows.delete(dispatch);
-      else openRows.set(dispatch, next);
-      return next;
-    });
-  };
+  // CDXC:Coordinators 2026-11-14 DECISION:
+  // User: "i want when i click on a thing like this one to open modal instead of expanding like
+  // accordion because accordion is annoying pls fix". Supersedes the rows opening in place
+  // (2026-11-12, opening and closing each docked card animated).
+  const sheetRow = sheetKey === null ? null : (rows.find((row) => str(row, 'key') === sheetKey) ?? null);
   return (
     <TranscriptFlagsProvider value={flags}>
       <TranscriptEnvProvider value={env}>
@@ -403,33 +348,11 @@ export function WorkDock({
                 }}
                 contentContainerStyle={styles.dockRows}
                 nestedScrollEnabled
-                ref={rowsScroll}
-                scrollEventThrottle={16}
-                onScroll={(event) => {
-                  scrollTop.current = event.nativeEvent.contentOffset.y;
-                }}
-                onLayout={(event: LayoutChangeEvent) => {
-                  viewHeight.current = event.nativeEvent.layout.height;
-                  tryReveal();
-                }}
               >
                 {shown.map((row) => (
-                  <View
-                    key={str(row, 'key')}
-                    onLayout={(event: LayoutChangeEvent) => {
-                      const { y, height } = event.nativeEvent.layout;
-                      rowFrames.current.set(str(row, 'key'), { y, height });
-                      if (reveal.current?.key === str(row, 'key')) tryReveal();
-                    }}
-                  >
+                  <View key={str(row, 'key')}>
                     <QuestionFlashFrame target={str(row, 'key')} light={P.light}>
-                      <DockRow
-                        row={row}
-                        chat={chat}
-                        scope={scope}
-                        open={openKey === str(row, 'key')}
-                        onToggle={() => toggle(str(row, 'key'))}
-                      />
+                      <DockRow row={row} chat={chat} scope={scope} onShow={() => setSheetKey(str(row, 'key'))} />
                     </QuestionFlashFrame>
                   </View>
                 ))}
@@ -449,6 +372,13 @@ export function WorkDock({
             )}
           </View>
         </View>
+        <Sheet visible={sheetRow !== null} onClose={() => setSheetKey(null)} maxHeight="85%">
+          {sheetRow !== null ? (
+            <ScrollView style={styles.askSheet} contentContainerStyle={styles.askSheetContent}>
+              <DockRow row={sheetRow} chat={chat} scope={scope} onClose={() => setSheetKey(null)} />
+            </ScrollView>
+          ) : null}
+        </Sheet>
       </TranscriptEnvProvider>
     </TranscriptFlagsProvider>
   );
@@ -617,32 +547,40 @@ function DockHeader({
 }
 
 /**
- * One dock row (desktop `dock_row`). Closed: its mark, its question (two lines at most), its age and
- * the ⋯ that opens its menu, then its answers and Reply on one line. Opened: its own card, a little
- * lighter than the dock, with the title whole, the work it belongs to, its whole description, where
- * it stands, its links, then its answers with Reply after a divider. A page's row never opens: a
- * tap opens the page.
+ * One dock row (desktop `dock_row`): its mark, its question (two lines at most), its age and the ⋯
+ * that opens its menu, then its answers and Reply on one line; a tap shows it in its sheet
+ * (`onShow`). In the sheet (`onClose`, desktop `dock_ask_modal`): the title whole, the work it
+ * belongs to, its whole description, where it stands, its links, then its answers with Reply after
+ * a divider; an answer, Open, Reply or a menu pick closes the sheet as it goes. A page's row never
+ * opens: a tap opens the page.
  */
 function DockRow({
   row,
   chat,
   scope,
-  open,
-  onToggle,
+  onShow,
+  onClose,
 }: {
   row: JsonRecord;
   chat: RustChat;
   scope: ReplyDraftScope | null;
-  open: boolean;
-  onToggle: () => void;
+  onShow?: () => void;
+  onClose?: () => void;
 }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const body = useBodyColor();
   const [menu, setMenu] = useState(false);
-  const dispatch = chat.dispatch;
   const page = isTrue(row, 'page') && obj(row.open) !== null;
-  const opened = open && !page;
+  const opened = onClose !== undefined && !page;
+  // In the sheet, whatever a row's buttons send closes it first.
+  const dispatch: RustChat['dispatch'] =
+    onClose === undefined
+      ? chat.dispatch
+      : (((action: never) => {
+          onClose();
+          chat.dispatch(action);
+        }) as RustChat['dispatch']);
   const busy = isTrue(row, 'busy');
   const answers = arr(row.buttons)
     .map(obj)
@@ -710,6 +648,7 @@ function DockRow({
           question={str(row, 'title')}
           scope={scope}
           dispatch={dispatch as never}
+          before={onClose === undefined ? undefined : () => onClose()}
           pills={pills}
           logos={logos}
           logosWidth={logosWidth}
@@ -722,18 +661,17 @@ function DockRow({
       </View>
     ) : null;
   return (
-    <View style={opened ? styles.dockRowOpen : null}>
+    <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={page ? undefined : { expanded: opened }}
-        onPress={page ? () => dispatch(row.open as never) : onToggle}
+        accessibilityHint={page || opened ? undefined : 'Shows the whole ask'}
+        disabled={opened}
+        onPress={page ? () => dispatch(row.open as never) : onShow}
         onLongPress={menuRows.length > 0 ? () => setMenu(true) : undefined}
         style={({ pressed }) => [
           styles.dockPress,
           opened && styles.dockPressOpen,
-          // Opened too: the title line is what shuts the row (user, 2026-11-12: "show bg hover
-          // effect change when i hover the title of this so i know clicking collapses it").
-          pressed && { backgroundColor: P.ink(0.04) },
+          pressed && !opened && { backgroundColor: P.ink(0.04) },
         ]}
       >
         <View style={styles.dockRow}>
@@ -1355,13 +1293,9 @@ const useStyles = themedStyles((P) => ({
   dockDetailAreaAnswers: { paddingBottom: OPENED_ROW_GAP },
   dockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   // An opened row is its own card, a little lighter than the dock (desktop `dock_row`).
-  dockRowOpen: {
-    marginVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: P.ink(0.1),
-    backgroundColor: P.light ? 'rgba(255,255,255,0.6)' : P.ink(0.055),
-  },
+  // A dock row's ask in its sheet (`DockRow` with `onClose`): the sheet's own panel is its card.
+  askSheet: { flexGrow: 0 },
+  askSheetContent: { paddingHorizontal: 8, paddingBottom: 8 },
   dockIcon: { height: PROSE_LINE, justifyContent: 'center' },
   dockMain: { flex: 1, minWidth: 0, gap: 2 },
   dockTitle: { fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
