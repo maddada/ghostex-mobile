@@ -112,8 +112,18 @@ export function reportChannelRefused(machineId: string): void {
   for (const listener of refusalListeners) listener(machineId);
 }
 
+/**
+ * Whether the computer refused to open a channel, so the command or terminal never started. The native code
+ * `E_CHANNEL_FAILED` alone does not say so: the iPhone also uses it for a socket that failed while a command's output
+ * was being read, a refused shell request and a cancellation, after which the command may well have run. Only its
+ * open failure carries the words "Failed to open channel" (SSHError.channelOpenFailed, the same in 11.2.1), so that
+ * is what counts; `E_CHANNEL_REFUSED` is accepted too for a native build that names the refusal itself.
+ */
 export function isChannelRefusal(error: unknown): boolean {
-  return (error as { code?: unknown } | null)?.code === 'E_CHANNEL_FAILED';
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code === 'E_CHANNEL_REFUSED') return true;
+  return code === 'E_CHANNEL_FAILED' && typeof message === 'string' && /\bfailed to open channel\b/iu.test(message);
 }
 
 /** Lets the next queued command through, unless the budget is cooling after a refusal. */
@@ -155,10 +165,11 @@ export function withCommandChannel<T>(machineId: string, admissionMs: number, ru
           resolve(value);
         },
         (error: unknown) => {
-          const refused = isChannelRefusal(error);
+          // A refusal from a connection that has since been replaced says nothing about the new one.
+          const refused = isChannelRefusal(error) && budget.generation === generation;
           if (refused) {
             reportChannelRefused(machineId);
-            if (budget.generation === generation) budget.coolUntil = Date.now() + REFUSAL_COOL_MS;
+            budget.coolUntil = Date.now() + REFUSAL_COOL_MS;
           }
           release(generation);
           if (refused && retries < REFUSAL_RETRIES && budget.generation === generation && Date.now() < deadline) {

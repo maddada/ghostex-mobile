@@ -39,6 +39,7 @@ import { beginLinkTransfer, linkProgressAt, linkTransferring, noteLinkProgress }
 import { onPairingChanged, pairingEpoch, samePairing } from '../../machines/pairingEpoch';
 import { FrameInflater } from '../../remote/inflate';
 import { logAppEvent } from '../../app/appLog';
+import { isChannelRefusal } from '../../remote/channelBudget';
 
 /** `GXSERVER_PROTOCOL_VERSION`: the only wire this client speaks. */
 const PROTOCOL_VERSION = 1;
@@ -611,7 +612,7 @@ class ChatMachineLink {
       const code = errorCode(error);
       if (code === 'E_FORWARDING_PROHIBITED') return { route: 'legacy' };
       // Out of channels, or the phone's own slots full: the computer is there, just busy (src/remote/channelBudget.ts).
-      return { route: 'unavailable', busy: code === 'E_CHANNEL_FAILED' || code === 'E_BUSY' };
+      return { route: 'unavailable', busy: isChannelRefusal(error) || code === 'E_BUSY' };
     }
   }
 

@@ -473,6 +473,7 @@ export const ConnectionsCopy = {
 export const LogsCopy = {
   export: 'Export',
   exporting: 'Exporting…',
+  exportFailed: "Couldn't export",
   subtitleNewest: (shown: number, total: number) =>
     `The newest ${shown} of ${total} events on this phone. Copy, Export and Send take them all.`,
 } as const;
@@ -526,7 +527,7 @@ export const FailureCopy = {
     'The connection to the computer dropped. Ghostex reconnects by itself; if it keeps dropping, check that the computer is awake and on the network.',
   /** The computer refused a new channel on a working connection, or the phone's own slots were full. */
   channelsBusy:
-    "Ghostex is busy on the computer and tries again by itself. If it stays busy, Reset connection frees it up; terminals that aren't agents restart.",
+    "Ghostex is busy on the computer and tries again by itself. If it stays busy, Reset connection frees it up; programs running in terminals that aren't agents end, and those terminals need opening again.",
   /** The sessions list's line while Ghostex on the computer starts; the store sets it there. */
   ghostexNotAnswering: "They'll appear in a moment.",
   /** Any other action that failed because Ghostex on the computer didn't answer. */

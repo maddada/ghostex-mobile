@@ -1,3 +1,4 @@
+import { isChannelRefusal } from '../remote/channelBudget';
 import { execRemoteCommand } from '../remote/commands';
 import { ensureConnected } from '../remote/connection';
 export { ensureConnected } from '../remote/connection';
@@ -241,7 +242,7 @@ function classifyFailure(error: unknown, hasPassword: boolean): Pick<FailureSumm
   // Out of channels is not a dropped connection, whatever the words say (CDXC:RemoteMachines 2026-11-13 in
   // src/remote/channelBudget.ts): it must not start a reconnect.
   const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
-  if (code === 'E_CHANNEL_FAILED' || code === 'E_BUSY' || text === FailureCopy.channelsBusy) {
+  if (isChannelRefusal(error) || code === 'E_BUSY' || text === FailureCopy.channelsBusy) {
     return { message: FailureCopy.channelsBusy, reasonCode: 'channelsBusy' };
   }
 

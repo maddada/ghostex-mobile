@@ -22,7 +22,7 @@ import {
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
-import { endConnectionBudget, withCommandChannel } from './channelBudget';
+import { endConnectionBudget, isChannelRefusal, withCommandChannel } from './channelBudget';
 
 type Attempt = { promise: Promise<void>; reset: boolean; verify: boolean };
 const attempts = new Map<string, Attempt>();
@@ -284,7 +284,7 @@ async function probeConnection(machineId: string, since: number): Promise<ProbeO
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code;
     if (code === 'E_BUSY') return 'busy';
-    if (code === 'E_CHANNEL_FAILED') {
+    if (isChannelRefusal(error)) {
       if (!(await GhostexNative.isConnected(machineId).catch(() => false))) return 'failed';
       const http = await askKnownGxserver(machineId);
       logAppEvent(`Connection: ${machineId} refused the check's channel; gxserver over the forward: ${http}`);
@@ -294,19 +294,30 @@ async function probeConnection(machineId: string, since: number): Promise<ProbeO
   }
 }
 
-/** `GET /api/health` over a forward the chat link already opened, or `no forward`; never opens a connection. */
+/**
+ * `GET /api/health` over the gxserver port a handshake already learned, or `no forward` when none did. It may open a
+ * local listener for that port (never a new SSH connection or a handshake), and the whole question, the native
+ * listener included, is bounded by `PROBE_TIMEOUT_MS`. It only feeds the log.
+ */
 async function askKnownGxserver(machineId: string): Promise<'answered' | 'no answer' | 'no forward'> {
   const port = knownGxserverPort(machineId);
   if (port === null) return 'no forward';
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
-  try {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<'no answer'>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve('no answer');
+    }, PROBE_TIMEOUT_MS);
+  });
+  const asked = (async (): Promise<'answered'> => {
     const { localPort } = await GhostexNative.startPortForward(machineId, port, GXSERVER_FORWARD_HOST);
     const response = await fetch(`http://127.0.0.1:${localPort}/api/health`, { signal: controller.signal });
     await response.text();
     return 'answered';
-  } catch {
-    return 'no answer';
+  })().catch((): 'no answer' => 'no answer');
+  try {
+    return await Promise.race([asked, timedOut]);
   } finally {
     clearTimeout(timer);
   }

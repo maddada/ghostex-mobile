@@ -22,6 +22,7 @@ import type { GhostexMobileSummary } from '../contract/mobileSummary';
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import { execRemoteCommand } from '../remote/commands';
+import { scanJsonObjects } from '../contract/mobileSummary/jsonScan';
 
 const STORAGE_KEY = 'projectIcons.v1';
 const MAX_ICONS = 200;
@@ -114,12 +115,11 @@ async function fetchMissing(
     const result = await execRemoteCommand(machine.id, projectIconsCommand(wanted), FETCH_TIMEOUT_MS);
     if (!samePairing(machine.id, epoch) || result.exitCode !== 0) return;
     const icons = readIcons(result.stdout);
-    // A Ghostex that cannot resolve refs answers without `icons`; it never sent refs, so this is not reached there.
-    if (icons === null) return;
     const current = new Set(currentRefs());
     const fresh: Record<string, string> = {};
     for (const ref of wanted) {
-      const url = icons[ref];
+      // An answer without `icons` resolves nothing: every ref asked waits out the back-off like a missing one.
+      const url = icons?.[ref];
       if (typeof url === 'string' && url.startsWith('data:')) {
         missing.delete(ref);
         if (current.has(ref)) fresh[ref] = url;
@@ -139,21 +139,25 @@ async function fetchMissing(
   }
 }
 
+/**
+ * The `icons` object of the answer: the CLI prints pretty JSON over several lines, after whatever the login shell
+ * printed, so the last complete object holding `icons` is the answer. Null when there is none (a Ghostex that
+ * cannot resolve refs prints its plain list instead).
+ */
 function readIcons(stdout: string): Record<string, unknown> | null {
-  const lines = `${stdout}`.trim().split('\n').reverse();
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('{')) continue;
+  let icons: Record<string, unknown> | null = null;
+  scanJsonObjects<null>(`${stdout}`, (text, start) => {
     try {
-      const parsed = JSON.parse(trimmed) as { icons?: unknown };
-      return typeof parsed.icons === 'object' && parsed.icons !== null
-        ? (parsed.icons as Record<string, unknown>)
-        : null;
+      const parsed = JSON.parse(text) as { icons?: unknown };
+      if (typeof parsed.icons === 'object' && parsed.icons !== null && !Array.isArray(parsed.icons)) {
+        icons = parsed.icons as Record<string, unknown>;
+      }
     } catch {
-      // not the answer line
+      // not the answer
     }
-  }
-  return null;
+    return { done: false, nextIndex: start + text.length };
+  });
+  return icons;
 }
 
 /** The picture a project icon shows from its repository: the one the summary carried, else the one kept by ref. */

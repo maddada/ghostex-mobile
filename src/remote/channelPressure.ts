@@ -7,7 +7,8 @@
  * come back while the connection lives. The escape is bounded:
  * 1. On a refusal, off-screen agent terminals are detached (their tabs stay and attach again when shown; the agent
  *    keeps running in its zmx session). Plain shells are never closed: their programs end with the channel.
- * 2. Three more refusals within a minute (bursts counted once, the detach given a few seconds to take effect): one planned reset of the connection, but only while no plain shell is open
+ * 2. Three more refusals within any minute while the shortage lasts (bursts counted once, the detach given a few
+ *    seconds to take effect): one planned reset of the connection, but only while no plain shell is open
  *    on that computer, and at most once every five minutes.
  * 3. Otherwise nothing resets by itself: the computer's notice offers Reset connection and says what it restarts.
  * Only real refusals from the computer count here, never a command that waited too long for a slot (`E_BUSY`).
@@ -41,7 +42,15 @@ export type ChannelPressureHandlers = {
   reset(machineId: string): Promise<void>;
 };
 
-type Pressure = { stageOneAt: number | null; refusals: number[]; lastResetAt: number | null };
+type Pressure = {
+  stageOneAt: number | null;
+  lastRefusalAt: number | null;
+  refusals: number[];
+  lastResetAt: number | null;
+};
+
+/** Refusals this far apart mean the shortage ended: the next one starts again from the detach. */
+const SHORTAGE_OVER_MS = 5 * 60_000;
 
 /** Computers whose refusals need the user's Reset connection (the automatic reset did not, or may not, run). */
 export const useChannelPressure = create<{ needsReset: Record<string, true> }>(() => ({ needsReset: {} }));
@@ -68,6 +77,7 @@ export function clearChannelPressure(machineId: string): void {
   const pressure = pressures.get(machineId);
   if (pressure !== undefined) {
     pressure.stageOneAt = null;
+    pressure.lastRefusalAt = null;
     pressure.refusals = [];
   }
   setNeedsReset(machineId, false);
@@ -78,7 +88,7 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
   if (active === null) return;
   let pressure = pressures.get(machineId);
   if (pressure === undefined) {
-    pressure = { stageOneAt: null, refusals: [], lastResetAt: null };
+    pressure = { stageOneAt: null, lastRefusalAt: null, refusals: [], lastResetAt: null };
     pressures.set(machineId, pressure);
   }
   const name = active.label(machineId);
@@ -87,7 +97,11 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
     `Connection: ${name} refused a new channel (this phone holds ${terminals.agents} agent terminals, ` +
       `${terminals.shells} plain terminals, ${active.commandsInFlight(machineId)} commands)`,
   );
-  if (pressure.stageOneAt === null || now - pressure.stageOneAt > REFUSAL_WINDOW_MS) {
+  // The detach stands while the shortage lasts; it ends on a new connection (`clearChannelPressure`) or when the
+  // computer has refused nothing for a while. Only the refusals after it roll off with the minute.
+  const shortageOver = pressure.lastRefusalAt === null || now - pressure.lastRefusalAt > SHORTAGE_OVER_MS;
+  pressure.lastRefusalAt = now;
+  if (pressure.stageOneAt === null || shortageOver) {
     pressure.stageOneAt = now;
     pressure.refusals = [];
     const detached = await active.detachIdleTerminals(machineId, TERMINALS_KEPT_AFTER_REFUSAL);
@@ -112,6 +126,7 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
   }
   pressure.lastResetAt = now;
   pressure.stageOneAt = null;
+  pressure.lastRefusalAt = null;
   pressure.refusals = [];
   logAppEvent(`Connection: freeing up the connection to ${name}`);
   await active.reset(machineId).catch(() => undefined);

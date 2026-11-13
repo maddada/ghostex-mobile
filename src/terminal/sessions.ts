@@ -851,6 +851,10 @@ export function initTerminalEvents(): void {
     const tab = store.tabs.find((entry) => entry.sessionKey === event.sessionKey);
     if (tab === undefined) return;
     if (event.state === 'closed' && tab.state === 'opening' && tabOpenRequests.has(event.sessionKey)) return;
+    // A detached tab has no terminal: a close or failure arriving now is the end of the one it gave up on purpose
+    // (`detachIdleTerminals`), and the tab stays detached so it attaches when shown instead of reading Disconnected
+    // and being reopened by the next recovery.
+    if (tab.state === 'detached' && event.state !== 'open') return;
     useTerminalStore.setState({
       tabs: store.tabs.map((entry) =>
         entry.sessionKey === event.sessionKey ? { ...entry, state: event.state, error: event.error } : entry,

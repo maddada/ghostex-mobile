@@ -39,13 +39,16 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
   const [copied, setCopied] = useState(false);
   const [reviewing, setReviewing] = useState(sending);
   const [exporting, setExporting] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
   // The sheet draws the newest lines only; Copy, Export and Send take the whole kept log.
   const shown = entries.length > SHOWN_LINES ? entries.slice(-SHOWN_LINES) : entries;
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () => () => {
       if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      if (exportTimer.current !== null) clearTimeout(exportTimer.current);
     },
     [],
   );
@@ -61,8 +64,14 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
   const exportLog = (): void => {
     if (exporting) return;
     setExporting(true);
+    setExportFailed(false);
     void exportLogs(entries)
-      .catch(() => undefined)
+      .catch(() => {
+        // The button says so for a moment instead of looking like it did nothing.
+        setExportFailed(true);
+        if (exportTimer.current !== null) clearTimeout(exportTimer.current);
+        exportTimer.current = setTimeout(() => setExportFailed(false), 3000);
+      })
       .finally(() => setExporting(false));
   };
 
@@ -97,7 +106,7 @@ export default function LogsSheet({ visible, onClose, sending = false }: LogsShe
                     onPress={exportLog}
                   >
                     <Text style={[styles.copyButtonLabel, entries.length === 0 ? styles.copyButtonDisabled : null]}>
-                      {exporting ? LogsCopy.exporting : LogsCopy.export}
+                      {exporting ? LogsCopy.exporting : exportFailed ? LogsCopy.exportFailed : LogsCopy.export}
                     </Text>
                   </Pressable>
                   <Pressable
