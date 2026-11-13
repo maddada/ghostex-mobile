@@ -1915,11 +1915,6 @@ export const LiveActivityCopy = {
   /** The same preview while "Show session names" is on: each row's session, and the agent its mark shows. */
   previewLabelWithSessionNames:
     'Preview of the Live Activity: 1 working, 2 waiting, one more agent. Widget refresh, Claude Code, in ghostex-mobile has a question. Backup script, Codex, in homeserver is waiting. Release notes, Codex, in ghostex-mobile is working. Sidebar search, omp, in Ghostex finished.',
-  working: 'working',
-  waiting: 'waiting',
-  question: 'has a question',
-  finished: 'finished',
-  count: (count: number, word: string) => `${count} ${word}`,
   more: (count: number) => `+${count} more`,
   /**
    * Sample rows of the preview: agent, its artwork, session name, project, state and time, as the design's Lock

@@ -23,11 +23,11 @@ struct GhostexLiveActivityWidget: Widget {
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          CountLabel(kind: .working, count: context.state.counts.working, showsWord: true)
+          CountLabel(kind: .working, count: context.state.counts.working, showsWord: false)
             .padding(.leading, 6)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          CountLabel(kind: .waiting, count: context.state.counts.waiting, showsWord: true)
+          CountLabel(kind: .waiting, count: context.state.counts.waiting, showsWord: false)
             .padding(.trailing, 6)
         }
         DynamicIslandExpandedRegion(.bottom) {
