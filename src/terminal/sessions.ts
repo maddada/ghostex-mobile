@@ -37,6 +37,7 @@ import { isDemoMachineId } from '../demo/identity';
 import { logAppEvent } from '../app/appLog';
 import { FailureCopy } from '../copy';
 import { isChannelRefusal, reportChannelRefused } from '../remote/channelBudget';
+import { isSlowOpenFailure, noteSlowOpenFailure } from '../remote/stallWatch';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 /** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
@@ -62,9 +63,15 @@ function errorCodeOf(error: unknown): string {
 
 /**
  * A terminal the computer refused a channel for says so in plain words, and the refusal goes to the escape path
- * (src/remote/channelPressure.ts); any other failure keeps its own message.
+ * (src/remote/channelPressure.ts); any other failure keeps its own message. An open that failed only after the stall
+ * watch's wait is the iPhone's stuck connection, not a refusal: it goes to the stall watch instead
+ * (src/remote/stallWatch.ts), so terminals are not detached for it.
  */
-function terminalOpenError(machineId: string, error: unknown): string {
+function terminalOpenError(machineId: string, error: unknown, openStartedAt: number | null): string {
+  if (isChannelRefusal(error) && openStartedAt !== null && isSlowOpenFailure(openStartedAt)) {
+    noteSlowOpenFailure(machineId, Date.now() - openStartedAt);
+    return error instanceof Error ? error.message : String(error);
+  }
   if (isChannelRefusal(error)) {
     reportChannelRefused(machineId);
     return FailureCopy.channelsBusy;
@@ -357,6 +364,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       touchWarm(tab.sessionKey);
       await evictExcessWarmEntries();
       let connected = false;
+      let openStartedAt: number | null = null;
       try {
         await ensureConnected(machine);
         connected = true;
@@ -375,12 +383,13 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             ? await remoteTerminalCommand(machine.id, command)
             : await remoteShellCommand(machine.id, tab.cwd);
         if (remoteCommand !== null) opts.command = remoteCommand;
+        openStartedAt = Date.now();
         await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
           await GhostexNative.closeTerminal(tab.sessionKey);
         }
       } catch (error) {
-        patchTab(tab.sessionKey, { state: 'failed', error: terminalOpenError(machine.id, error) });
+        patchTab(tab.sessionKey, { state: 'failed', error: terminalOpenError(machine.id, error, openStartedAt) });
         dropWarm(tab.sessionKey);
         if (connected) verifyAfterFailedOpen(machine);
         throw error;
@@ -708,6 +717,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         await evictExcessWarmEntries();
         if (!get().tabs.some((entry) => entry.sessionKey === sessionKey)) return;
         let connected = false;
+        let openStartedAt: number | null = null;
         try {
           if (isDemoMachineId(tab.machineId)) {
             patchTab(sessionKey, { state: 'open', error: undefined });
@@ -740,9 +750,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             const command = await remoteShellCommand(tab.machineId, tab.cwd);
             if (command !== null) opts.command = command;
           }
+          openStartedAt = Date.now();
           await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
         } catch (error) {
-          patchTab(sessionKey, { state: 'failed', error: terminalOpenError(tab.machineId, error) });
+          patchTab(sessionKey, { state: 'failed', error: terminalOpenError(tab.machineId, error, openStartedAt) });
           logAppEvent(`Terminal: ${tab.machineId}: reopening ${tab.kind} tab failed (${errorCodeOf(error)})`);
           if (connected) verifyAfterFailedOpen(target);
         }

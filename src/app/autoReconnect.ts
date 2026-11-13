@@ -29,9 +29,11 @@ import {
   channelSnapshotAtEnd,
   clearChannelPressure,
   installChannelPressure,
+  offerConnectionReset,
 } from '../remote/channelPressure';
+import { installStallWatch, noteStallWatchConnected } from '../remote/stallWatch';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
-import { reconnectMachine } from '../remote/connection';
+import { checkStalledConnection, reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
 
 const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 30_000];
@@ -218,6 +220,23 @@ export function initAutoReconnect(): void {
       await restoreAttachTabs(machineId);
     },
   });
+  installStallWatch({
+    check: checkStalledConnection,
+    replace: async (machineId, reason) => {
+      const target = machineTarget(machineId);
+      if (target === undefined) return;
+      await reconnectMachine(target, reason);
+      await restoreAttachTabs(machineId);
+    },
+    plainShells: (machineId) =>
+      useTerminalStore
+        .getState()
+        .tabs.filter(
+          (tab) =>
+            tab.machineId === machineId && tab.kind !== 'attach' && (tab.state === 'open' || tab.state === 'opening'),
+        ).length,
+    offerReset: offerConnectionReset,
+  });
   startChannelSnapshots(
     () =>
       enabledMachines(useMachinesStore.getState())
@@ -233,7 +252,10 @@ export function initAutoReconnect(): void {
     logAppEvent(
       `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}${ended}`,
     );
-    if (event.state === 'connected') clearChannelPressure(event.machineId);
+    if (event.state === 'connected') {
+      clearChannelPressure(event.machineId);
+      noteStallWatchConnected(event.machineId);
+    }
     if (event.state === 'connecting') {
       permanentFailures.delete(event.machineId);
       return;

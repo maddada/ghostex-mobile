@@ -100,6 +100,11 @@ export function channelSnapshotAtEnd(machineId: string, now = Date.now()): strin
   return taken !== undefined && now - taken.at <= END_SNAPSHOT_FRESH_MS ? taken.text : channelSnapshot(machineId);
 }
 
+/** Shows the computer's Reset connection button (the stall watch's answer while a plain shell is open). */
+export function offerConnectionReset(machineId: string): void {
+  setNeedsReset(machineId, true);
+}
+
 function setNeedsReset(machineId: string, needed: boolean): void {
   const current = useChannelPressure.getState().needsReset;
   if ((current[machineId] === true) === needed) return;

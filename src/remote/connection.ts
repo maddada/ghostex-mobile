@@ -25,7 +25,8 @@ import {
 import { routeDialOrder, triesOtherRoute } from '../machines/routeChoice';
 import { logAppEvent } from '../app/appLog';
 import { GXSERVER_FORWARD_HOST, knownGxserverPort } from '../chat/rust/serverEndpoint';
-import { endConnectionBudget, isChannelRefusal, withCommandChannel } from './channelBudget';
+import { endConnectionBudget, isChannelRefusal, withProbeChannel } from './channelBudget';
+import { isSlowOpenFailure, STALL_SUSPECT_MS } from './stallWatch';
 import { channelSnapshot } from './channelPressure';
 import { noteConnected } from './connectionTrace';
 import { whereTheAppIs } from '../app/foregroundClock';
@@ -308,23 +309,27 @@ async function connectEasyConnect(
  * Whether the shared connection still answers, in order of precedence:
  * - `answered`: the echo came back (or, while a heavy transfer is under way, anything came back after `since`: the
  *   probe would only queue behind it; CDXC:RemoteMachines 2026-11-10 in src/remote/linkActivity.ts).
- * - `busy`: the echo never got a slot on the phone (`E_BUSY`); it never left, so it says nothing.
+ * - `busy`: another check holds the probe lane (`E_BUSY`); this echo never left, so it says nothing. The echo runs in
+ *   its own lane, never behind the command slots: three slow commands used to make every check `busy`, which kept an
+ *   iPhone connection whose opens were stuck (src/remote/stallWatch.ts).
  * - `capacity`: the computer refused the echo's channel while the connection is up. A known gxserver forward is asked
  *   for the log only: its answer proves the link alive, and its silence (gxserver down, forwarding off) proves
  *   nothing about SSH. The refusal itself already went to the escape path (`channelPressure.ts`).
- * - `stalled`: the echo went out and got no answer in time.
+ * - `stalled`: the echo went out and got no answer in time, or its channel failed to open only after
+ *   `STALL_SUSPECT_MS` (the iPhone's stuck open, not the computer refusing).
  * - `failed`: any other error, a wrong answer, or a channel refused on a connection that is gone.
  * It never runs the chat handshake or dials: it asks only what already exists, so it cannot wait on the
  * `ensureConnected` it runs inside.
  */
 export type ProbeOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed';
 
-async function probeConnection(machineId: string, since: number): Promise<ProbeOutcome> {
+async function probeConnection(machineId: string, since: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<ProbeOutcome> {
   if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
+  const startedAt = Date.now();
   try {
-    // echo is understood by POSIX shells, Windows cmd and PowerShell. Its 5 s start once it has a slot.
-    const probe = await withCommandChannel(machineId, PROBE_ADMISSION_MS, () =>
-      GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', PROBE_TIMEOUT_MS),
+    // echo is understood by POSIX shells, Windows cmd and PowerShell.
+    const probe = await withProbeChannel(machineId, () =>
+      GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', timeoutMs),
     );
     const answered = probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
     if (answered) noteLinkProgress(machineId);
@@ -332,6 +337,7 @@ async function probeConnection(machineId: string, since: number): Promise<ProbeO
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code;
     if (code === 'E_BUSY') return 'busy';
+    if (isChannelRefusal(error) && isSlowOpenFailure(startedAt)) return 'stalled';
     if (isChannelRefusal(error)) {
       if (!(await GhostexNative.isConnected(machineId).catch(() => false))) return 'failed';
       const http = await askKnownGxserver(machineId);
@@ -371,9 +377,12 @@ async function askKnownGxserver(machineId: string): Promise<'answered' | 'no ans
   }
 }
 
-/** How long the probe waits for a slot behind other commands before it says `busy`. */
-const PROBE_ADMISSION_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
+
+/** The stall watch's check (src/remote/stallWatch.ts): the same echo, bounded by `STALL_SUSPECT_MS`. */
+export function checkStalledConnection(machineId: string): Promise<ProbeOutcome> {
+  return probeConnection(machineId, Date.now(), STALL_SUSPECT_MS);
+}
 
 export function reconnectMachine(machine: MachineConnectionTarget, reason = 'Retry'): Promise<void> {
   return ensureConnected(machine, { reset: true, reason });
