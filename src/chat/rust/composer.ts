@@ -142,12 +142,15 @@ export class ComposerModel {
   }
 
   /**
-   * Where Dictate's words go in the field as it is now: at the caret, or after the text when the
-   * field has no keyboard (it has no caret the reader chose then).
+   * Where Dictate's words go in the field as it is now: over the selection (at the caret when
+   * nothing is selected), or after the text when the field has no keyboard (it has no caret the
+   * reader chose then).
    */
-  dictationPoint(): { text: string; caret: number } {
+  dictationPoint(): { text: string; start: number; end: number } {
     const { text, selection } = this.state;
-    return { text, caret: this.hasKeyboard ? Math.min(selection.end, text.length) : text.length };
+    if (!this.hasKeyboard) return { text, start: text.length, end: text.length };
+    const start = Math.min(selection.start, selection.end, text.length);
+    return { text, start, end: Math.min(Math.max(selection.start, selection.end), text.length) };
   }
 
   /**

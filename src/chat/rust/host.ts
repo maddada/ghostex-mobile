@@ -222,6 +222,13 @@ export class RustChatHost {
    * first, each with the moment its wait for an answer began (`watchDictations`), in `elapsedMs`.
    */
   private readonly dictating = new Map<string, number>();
+  /**
+   * The chat box as it was when the running recording started (`dictationAnchor`): its words go
+   * over that selection, or at that caret, while the text is unchanged when they arrive.
+   *
+   * CDXC:Dictate 2026-11-13 DECISION: User: "when we dictate with the caret in the middle or some text selected, we should enter the text to replace what's selected or insert it at the caret." The place is the one the recording started with: moving the caret while it records or transcribes does not move the words, but typing in the box meanwhile does (they then go where the caret is when they arrive, as the text they were aimed into is gone). Same rule on the desktop (`aim_dictation` in native_chat/dictation.rs) and for question form boxes (`dictationTarget.ts`).
+   */
+  private dictationAnchor: { text: string; start: number; end: number } | null = null;
   /** Runs until the oldest request in `dictating` has waited long enough (`watchDictations`). */
   private dictationDeadline: ReturnType<typeof setTimeout> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -481,6 +488,8 @@ export class RustChatHost {
   /** One user gesture, as desktop's view sends it. */
   dispatch(action: UserAction): void {
     if (action.type === 'insertDictation') this.dictate(action);
+    else if (action.type === 'dictationAnchor')
+      this.dictationAnchor = action.clear === true ? null : this.composer.dictationPoint();
     else this.enqueue({ type: 'action', action });
   }
 
@@ -965,8 +974,13 @@ export class RustChatHost {
       this.dictating.set(id, elapsedMs());
       this.watchDictations();
     }
-    const { text, caret } = this.composer.dictationPoint();
-    this.enqueue({ type: 'action', action: { ...action, draft: text, start: caret, end: caret } });
+    const now = this.composer.dictationPoint();
+    const anchor = this.dictationAnchor;
+    this.dictationAnchor = null;
+    // The caret or selection the recording started with, while the text is still what it was then;
+    // after an edit, where the reader is now.
+    const at = anchor !== null && anchor.text === now.text ? anchor : now;
+    this.enqueue({ type: 'action', action: { ...action, draft: now.text, start: at.start, end: at.end } });
   }
 
   /**
@@ -1065,7 +1079,7 @@ export class RustChatHost {
       this.endDictationRequest(id);
       return;
     }
-    const { text, caret } = this.composer.dictationPoint();
+    const { text, start, end } = this.composer.dictationPoint();
     if (result.supersedes.includes(text)) {
       this.composer.replace(result.content, result.caret, false);
       if (id !== null) this.dictationAccepted(id);
@@ -1078,8 +1092,8 @@ export class RustChatHost {
           spacing: result.spacing,
           ...(id === null ? {} : { id }),
           draft: text,
-          start: caret,
-          end: caret,
+          start,
+          end,
         },
       });
     } else if (id !== null) {

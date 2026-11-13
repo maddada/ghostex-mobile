@@ -61,8 +61,8 @@ export function dictationInserted(params: unknown): DictationInserted | null {
  * sheet's) or not at all (its row is outside the list's window).
  */
 export type DrawnBox = {
-  /** Its text and caret now. */
-  shown(): { text: string; caret: number };
+  /** Its text and selection now (start equals end at a caret). */
+  shown(): Shown;
   /**
    * The core says the box's draft is now `result.content`. A copy showing one of the texts that
    * supersedes takes it, without reporting it as an edit; a copy showing anything else holds an
@@ -71,11 +71,16 @@ export type DrawnBox = {
   show(result: DictationInserted): void;
 };
 
+/** A box's text as drawn, and its selection in UTF-16 offsets. */
+export type Shown = { text: string; start: number; end: number };
+
 const keyOf = (box: DictationBox): string => `${box.form}:${box.slot}`;
 
 export class DictationTargets {
   private focused: { box: DictationBox; copy: DrawnBox } | null = null;
   private aimed: DictationBox | null = null;
+  /** The aimed box as its focused copy showed it when the recording started (`placeIn`). */
+  private anchor: Shown | null = null;
   private readonly drawn = new Map<string, Set<DrawnBox>>();
   private readonly listeners = new Set<() => void>();
 
@@ -101,11 +106,13 @@ export class DictationTargets {
 
   /** A recording starts: its words go to the box that has the keyboard now, or to the chat box. */
   aimAtFocused(): void {
+    this.anchor = this.focused?.copy.shown() ?? null;
     this.aim(this.focused?.box ?? null);
   }
 
   /** The run is over, or its words come later: the chat box takes what still arrives. */
   release(): void {
+    this.anchor = null;
     this.aim(null);
   }
 
@@ -118,8 +125,19 @@ export class DictationTargets {
     return this.aimed !== null && keyOf(this.aimed) === keyOf(box);
   }
 
+  /**
+   * Where the words go in `box`: the selection the recording started with while the box still
+   * shows the text it had then (CDXC:Dictate 2026-11-13 in host.ts), else the box as a drawn copy
+   * shows it now; null when none is drawn.
+   */
+  placeIn(box: DictationBox): Shown | null {
+    const now = this.shownBy(box);
+    const anchor = this.isTarget(box) ? this.anchor : null;
+    return now !== null && anchor !== null && anchor.text === now.text ? anchor : now;
+  }
+
   /** `box` as a drawn copy shows it now (the one with the keyboard first); null when none is drawn. */
-  shownBy(box: DictationBox): { text: string; caret: number } | null {
+  shownBy(box: DictationBox): Shown | null {
     const copies = this.drawn.get(keyOf(box));
     const focused = this.focused?.copy;
     const copy = focused !== undefined && copies?.has(focused) ? focused : copies?.values().next().value;

@@ -543,9 +543,17 @@ function FormBox({
   // there by its form and slot; this view is one drawn copy of it.
   const targets = useOptionalNativeChatUi()?.dictationTargets ?? null;
   const [drawn] = useState<DrawnBox>(() => {
-    const caret = (current: string) => Math.min(selection.current?.end ?? current.length, current.length);
+    const shown = () => {
+      const current = textRef.current;
+      const { start, end } = selection.current ?? { start: current.length, end: current.length };
+      return {
+        text: current,
+        start: Math.min(start, end, current.length),
+        end: Math.min(Math.max(start, end), current.length),
+      };
+    };
     return {
-      shown: () => ({ text: textRef.current, caret: caret(textRef.current) }),
+      shown,
       show: (result) => {
         // Another core's draft: this field goes with the document that brings it.
         if (result.core !== core) return;

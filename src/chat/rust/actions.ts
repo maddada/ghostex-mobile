@@ -249,6 +249,12 @@ export type ActionFields = {
     shownStart?: number;
     shownEnd?: number;
   };
+  /**
+   * Phone host only, never sent to the core: a recording starts (or, with `clear`, is cancelled).
+   * The host keeps the chat box's text and selection as they are now, and the recording's words
+   * go there if the text is still the same when they arrive (`dictate` in host.ts).
+   */
+  dictationAnchor: { clear?: boolean };
   inlineAnswer: { form: string; choice: number };
   inlineAnswerChange: { form: string };
   /** The reader's own words as a one-click question's answer: by its form, or its tag alone. */

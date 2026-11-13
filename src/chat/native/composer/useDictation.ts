@@ -278,14 +278,14 @@ export function useDictation(
       // The question form box the recording started in; the core checks that it still takes text.
       // The host adds the chat box as it is now, which takes the words when the form box does not.
       const box = targets?.target() ?? null;
-      const shown = box === null ? null : (targets?.shownBy(box) ?? null);
+      const shown = box === null ? null : (targets?.placeIn(box) ?? null);
       dispatch({
         type: 'insertDictation',
         text: words,
         // Transcribe previous can come back without the recording's id: nothing is kept for it then.
         ...(id.length > 0 ? { id } : {}),
         ...(box === null ? {} : { form: box.form, slot: box.slot }),
-        ...(shown === null ? {} : { shown: shown.text, shownStart: shown.caret, shownEnd: shown.caret }),
+        ...(shown === null ? {} : { shown: shown.text, shownStart: shown.start, shownEnd: shown.end }),
       });
     },
     [dispatch, targets],
@@ -416,8 +416,10 @@ export function useDictation(
     if (machine === null) return;
     const current = { cancelled: false, serverId: null };
     run.current = current;
-    // Decided now, at the press: a box touched while it records does not move the words.
+    // Decided now, at the press: a box touched while it records does not move the words, and they
+    // go over the selection (or at the caret) the box has now while its text stays the same.
     targets?.aimAtFocused();
+    dispatch({ type: 'dictationAnchor' });
     setFailure(null);
     setWaiting(null);
     setUnavailable(null);
@@ -489,7 +491,7 @@ export function useDictation(
       });
       setPhase('failed');
     });
-  }, [machine, stop, refreshEngine, targets, dismissKeptLocal]);
+  }, [machine, stop, refreshEngine, targets, dismissKeptLocal, dispatch]);
 
   /** The microphone button: start, or stop and transcribe. */
   const toggle = useCallback(async () => {
@@ -505,6 +507,7 @@ export function useDictation(
     const failed = failure;
     const offered = waiting;
     current.cancelled = true;
+    dispatch({ type: 'dictationAnchor', clear: true });
     setPhase('idle');
     setFailure(null);
     setWaiting(null);
@@ -529,7 +532,7 @@ export function useDictation(
     }
     // The row is free again: the next recording still waiting shows at once, not only when the chat opens again.
     await refreshWaiting();
-  }, [machine, failure, waiting, dismissKeptLocal, refreshWaiting]);
+  }, [machine, failure, waiting, dismissKeptLocal, refreshWaiting, dispatch]);
 
   const retry = useCallback(async () => {
     if (failure !== null) await transcribeKept(failure.kept);
