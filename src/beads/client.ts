@@ -31,10 +31,15 @@ function scope(project: BeadsProject): Record<string, unknown> {
   };
 }
 
+/**
+ * A computer whose Ghostex has no Beads view for the phone: an older CLI's own words over SSH, or
+ * an older gxserver's `notFound` for the endpoint. A `notFound` naming something that "does not
+ * exist" (a project removed or moved) is that project's error, not an old computer.
+ */
 function unsupported(error: { code?: string | null; message: string }): boolean {
+  if (error.code === 'notFound') return !/does not exist/u.test(error.message);
   return (
     error.code === 'unsupportedClient' ||
-    error.code === 'notFound' ||
     /Unknown session chat method|Unknown command: session-chat-rpc|Unsupported Beads action/u.test(error.message)
   );
 }
@@ -70,12 +75,12 @@ export async function runBeadsAction(
   machine: MachineConnectionTarget,
   project: BeadsProject,
   params: Record<string, unknown>,
-  workspaceKey: string | null,
+  workspaceKey: string,
 ): Promise<BeadsActionReply> {
   const action = typeof params.action === 'string' ? params.action : '';
-  const sent: Record<string, unknown> = { ...params, ...scope(project) };
-  // The workspace this write is meant for; gxserver refuses it if the project now points at another one.
-  if (workspaceKey !== null && workspaceKey.length > 0 && action !== 'show') sent.expectedWorkspaceKey = workspaceKey;
+  // The workspace the screen read this bead from; gxserver refuses the call if the project now
+  // points at another one.
+  const sent: Record<string, unknown> = { ...params, ...scope(project), expectedWorkspaceKey: workspaceKey };
   const timeout = action === 'doltPull' || action === 'doltPush' ? SYNC_TIMEOUT_MS : action === 'show' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS;
   const answer = await sessionChatRpc(machine, 'runBeadsAction', sent, timeout);
   if (answer.error !== null) {

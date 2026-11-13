@@ -13,17 +13,28 @@
  * SEE-ALSO: apps/desktop/src/app/native_beads/, packages/gx-core/src/beads_view/tree.rs, src/beads/
  */
 
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BEADS_FILTERS, BEADS_SYNC_CAPABILITY, buildTree, type BeadRowModel, type BeadsFilter, type BeadsSection } from '../beads/model';
+import { BEADS_SYNC_CAPABILITY } from '../beads/model';
+import { beadsTree, type BeadRowModel, type BeadsFilter, type BeadsSection, type BeadsTree } from '../beads/tree';
 import { NoticeCard, PriorityTag, StatusMark, SyncPill, SyncSheet, syncFailure } from '../beads/parts';
-import { beadsKey, dismissBeadsNotice, fetchBeads, runBeads, useBeadsEntry, useBeadsPolling } from '../beads/store';
+import {
+  beadsKey,
+  currentBinding,
+  dismissBeadsNotice,
+  fetchBeads,
+  runBeads,
+  useBeadsEntry,
+  useBeadsPolling,
+  type BeadsBinding,
+} from '../beads/store';
 import { Glyph } from '../chat/native/transcript/icons';
-import { themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
+import { MONO_FONT, themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
 import SegmentedStrip from '../components/common/SegmentedStrip';
+import { SwitchRow } from '../components/common/SwitchRow';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { BeadsCopy } from '../copy';
 import type { RootStackParamList } from '../navigation/types';
@@ -36,7 +47,7 @@ type Item =
   | { type: 'done'; key: string; section: BeadsSection };
 
 /** What the filter strip and the folds were, per project, so reopening Beads keeps them. */
-const viewState = new Map<string, { filter: BeadsFilter; openDone: Set<string>; collapsed: Set<string> }>();
+const viewState = new Map<string, { filter: BeadsFilter; showDone: boolean; openDone: Set<string>; collapsed: Set<string> }>();
 
 export default function BeadsScreen({ navigation, route }: Props) {
   const { machineId, projectId, projectName, projectPath } = route.params;
@@ -49,23 +60,52 @@ export default function BeadsScreen({ navigation, route }: Props) {
   const listEdges = useScrollToBarEdges();
   useBeadsPolling(machineId, project);
 
-  const saved = viewState.get(key) ?? { filter: 'all' as BeadsFilter, openDone: new Set<string>(), collapsed: new Set<string>() };
+  const saved = viewState.get(key) ?? {
+    filter: 'all' as BeadsFilter,
+    showDone: false,
+    openDone: new Set<string>(),
+    collapsed: new Set<string>(),
+  };
   const [filter, setFilterState] = useState<BeadsFilter>(saved.filter);
+  const [showDone, setShowDone] = useState(saved.showDone);
   const [openDone, setOpenDone] = useState<Set<string>>(saved.openDone);
   const [collapsed, setCollapsed] = useState<Set<string>>(saved.collapsed);
   const [query, setQuery] = useState('');
-  const [syncOpen, setSyncOpen] = useState(false);
+  /** The sheet's binding: Pull and Push run for the workspace the sheet opened on. */
+  const [syncOpen, setSyncOpen] = useState<BeadsBinding | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  viewState.set(key, { filter, openDone, collapsed });
+  viewState.set(key, { filter, showDone, openDone, collapsed });
 
   const snapshot = entry.snapshot;
-  const tree = useMemo(
-    () =>
-      snapshot?.beads != null
-        ? buildTree(snapshot.beads, snapshot.readiness, { filter, query, openDone, collapsed })
-        : null,
-    [snapshot, filter, query, openDone, collapsed],
-  );
+  // The tree comes from the desktop's rules in the phone's WebAssembly core; the last one stays on
+  // screen while the next is worked out.
+  const [tree, setTree] = useState<BeadsTree | null>(null);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  useEffect(() => {
+    if (snapshot?.beads == null) {
+      setTree(null);
+      return undefined;
+    }
+    let current = true;
+    beadsTree(snapshot.beads, snapshot.readiness, {
+      filter,
+      showDone,
+      query,
+      openDone: [...openDone],
+      collapsed: [...collapsed],
+    })
+      .then((next) => {
+        if (!current) return;
+        setTree(next);
+        setTreeError(null);
+      })
+      .catch((failure: unknown) => {
+        if (current) setTreeError(failure instanceof Error ? failure.message : String(failure));
+      });
+    return () => {
+      current = false;
+    };
+  }, [snapshot, filter, showDone, query, openDone, collapsed]);
 
   const toggle = (set: Set<string>, value: string) => {
     const next = new Set(set);
@@ -98,12 +138,19 @@ export default function BeadsScreen({ navigation, route }: Props) {
   }, [machineId, project]);
 
   const startSync = useCallback(
-    (kind: 'pull' | 'push') => {
-      setSyncOpen(false);
-      void runBeads(machineId, project, { action: kind === 'push' ? 'doltPush' : 'doltPull' }, kind === 'push' ? BeadsCopy.pushFailed : BeadsCopy.pullFailed);
+    (kind: 'pull' | 'push', binding: BeadsBinding | null) => {
+      setSyncOpen(null);
+      void runBeads(
+        machineId,
+        project,
+        { action: kind === 'push' ? 'doltPush' : 'doltPull' },
+        kind === 'push' ? BeadsCopy.pushFailed : BeadsCopy.pullFailed,
+        binding,
+      );
     },
     [machineId, project],
   );
+  const openSync = useCallback(() => setSyncOpen(currentBinding(machineId, projectId)), [machineId, projectId]);
 
   const canSync = snapshot !== null && snapshot.workspace.state === 'ready' && snapshot.capabilities.includes(BEADS_SYNC_CAPABILITY);
 
@@ -113,9 +160,9 @@ export default function BeadsScreen({ navigation, route }: Props) {
       headerStyle: { backgroundColor: theme.background },
       headerTintColor: theme.foreground,
       contentStyle: { backgroundColor: theme.background },
-      headerRight: canSync && snapshot !== null ? () => <SyncPill sync={snapshot.sync} onPress={() => setSyncOpen(true)} /> : undefined,
+      headerRight: canSync && snapshot !== null ? () => <SyncPill sync={snapshot.sync} onPress={openSync} /> : undefined,
     });
-  }, [canSync, navigation, projectName, snapshot, theme]);
+  }, [canSync, navigation, openSync, projectName, snapshot, theme]);
 
   const syncCard = snapshot !== null ? syncFailure(snapshot.sync.lastResult) : null;
   const [dismissedSyncAt, setDismissedSyncAt] = useState<string | null>(null);
@@ -221,17 +268,22 @@ export default function BeadsScreen({ navigation, route }: Props) {
       </View>
       <SegmentedStrip
         accessibilityLabel={BeadsCopy.filters}
-        selected={filter}
+        selected={tree?.filter ?? filter}
         onSelect={setFilterState}
-        items={BEADS_FILTERS.map((item) => ({ key: item.key, label: item.label, count: tree?.counts[item.key] }))}
+        items={tree?.filters ?? [{ key: 'all', label: 'All' }]}
       />
+      <SwitchRow label={BeadsCopy.showDone} value={showDone} onValueChange={setShowDone} style={styles.switchRow}>
+        <Text style={styles.switchLabel}>{BeadsCopy.showDone}</Text>
+        <Switch value={showDone} onValueChange={setShowDone} />
+      </SwitchRow>
       <View style={styles.headerGap} />
       {tree !== null && !tree.readinessOk ? <Text style={styles.note}>{BeadsCopy.readinessPaused}</Text> : null}
+      {treeError !== null ? <NoticeCard notice={{ title: BeadsCopy.loadFailed, message: BeadsCopy.treeFailed, details: treeError }} /> : null}
       {entry.notice !== null ? <NoticeCard notice={entry.notice} onDismiss={() => dismissBeadsNotice(machineId, projectId)} /> : null}
       {syncCard !== null && snapshot?.sync.lastResult?.at !== dismissedSyncAt ? (
         <NoticeCard
           notice={syncCard}
-          action={syncCard.pullNow ? { label: BeadsCopy.pull, onPress: () => startSync('pull') } : undefined}
+          action={syncCard.pullNow ? { label: BeadsCopy.pull, onPress: () => startSync('pull', currentBinding(machineId, projectId)) } : undefined}
           onDismiss={() => setDismissedSyncAt(snapshot?.sync.lastResult?.at ?? null)}
         />
       ) : null}
@@ -265,7 +317,8 @@ export default function BeadsScreen({ navigation, route }: Props) {
     body = (
       <StateBlock
         title={BeadsCopy.failedTitle}
-        body={snapshot.workspace.message ?? snapshot.error ?? BeadsCopy.loadFailed}
+        body={BeadsCopy.failedBody}
+        details={snapshot.workspace.message ?? snapshot.error}
         action={{ label: BeadsCopy.retry, onPress: refresh }}
       />
     );
@@ -294,20 +347,45 @@ export default function BeadsScreen({ navigation, route }: Props) {
         />
       )}
       {snapshot !== null ? (
-        <SyncSheet visible={syncOpen} sync={snapshot.sync} onSync={startSync} onClose={() => setSyncOpen(false)} />
+        <SyncSheet
+          visible={syncOpen !== null}
+          sync={snapshot.sync}
+          onSync={(kind) => startSync(kind, syncOpen)}
+          onClose={() => setSyncOpen(null)}
+        />
       ) : null}
     </View>
   );
 }
 
-function StateBlock({ title, body, action }: { title: string; body: string; action?: { label: string; onPress: () => void } }) {
+function StateBlock({
+  title,
+  body,
+  details,
+  action,
+}: {
+  title: string;
+  body: string;
+  /** What bd or the computer said, behind Details. */
+  details?: string | null;
+  action?: { label: string; onPress: () => void };
+}) {
   const styles = useStyles();
+  const [open, setOpen] = useState(false);
   return (
     <View style={styles.centered}>
       <Text style={styles.stateTitle}>{title}</Text>
-      <Text style={styles.muted} selectable>
-        {body}
-      </Text>
+      <Text style={styles.muted}>{body}</Text>
+      {open && details != null ? (
+        <Text style={styles.stateDetails} selectable>
+          {details}
+        </Text>
+      ) : null}
+      {details != null ? (
+        <Pressable accessibilityRole="button" onPress={() => setOpen((value) => !value)} style={styles.stateButton}>
+          <Text style={styles.stateButtonText}>{open ? BeadsCopy.hideDetails : BeadsCopy.details}</Text>
+        </Pressable>
+      ) : null}
       {action !== undefined ? (
         <Pressable accessibilityRole="button" onPress={action.onPress} style={styles.stateButton}>
           <Text style={styles.stateButtonText}>{action.label}</Text>
@@ -334,7 +412,15 @@ const useStyles = themedStyles((t) => ({
     backgroundColor: t.input,
   },
   search: { flex: 1, color: t.foreground, fontSize: 14.5, paddingVertical: 0 },
-  headerGap: { height: 10 },
+  headerGap: { height: 4 },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  switchLabel: { color: t.foreground, fontSize: 14 },
   note: { color: t.muted, fontSize: 12.5, paddingHorizontal: 14, paddingBottom: 8 },
   sectionHeader: {
     flexDirection: 'row',
@@ -368,6 +454,7 @@ const useStyles = themedStyles((t) => ({
   doneText: { color: t.muted, fontSize: 13 },
   pressed: { opacity: 0.6 },
   centered: { alignItems: 'center', gap: 10, paddingHorizontal: 28, paddingTop: 56 },
+  stateDetails: { color: t.muted, fontSize: 12, lineHeight: 17, fontFamily: MONO_FONT, alignSelf: 'stretch' },
   stateTitle: { color: t.foreground, fontSize: 15, fontWeight: '600', textAlign: 'center' },
   muted: { color: t.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   empty: { paddingTop: 32 },

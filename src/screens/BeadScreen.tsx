@@ -19,22 +19,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BEADS_LINKS_CAPABILITY,
   detailsFrom,
-  epicOf,
-  epicSummary,
-  glyphOf,
-  isClosed,
-  isEpic,
   isWebLink,
   linkLabel,
   localDateAfter,
   parseBdTime,
   relativeAgo,
-  statusLabel,
-  typeLabel,
   type BeadDetails,
 } from '../beads/model';
+import { beadPage, type BeadPage } from '../beads/tree';
 import { NoticeCard, PriorityTag, StatusMark } from '../beads/parts';
-import { beadsKey, dismissBeadsNotice, runBeads, useBeadsEntry, useBeadsPolling } from '../beads/store';
+import {
+  beadsKey,
+  dismissBeadsNotice,
+  machinePairing,
+  runBeads,
+  useBeadsEntry,
+  useBeadsPolling,
+  type BeadsBinding,
+} from '../beads/store';
+import { useMachinesStore } from '../machines/store';
 import { Glyph } from '../chat/native/transcript/icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../chat/native/transcript/theme';
 import ActionSheet, { type ActionSheetItem } from '../components/common/ActionSheet';
@@ -69,15 +72,39 @@ export default function BeadScreen({ navigation, route }: Props) {
   useBeadsPolling(machineId, project);
 
   const rows = entry.snapshot?.beads ?? null;
-  const byId = useMemo(() => new Map((rows ?? []).map((row) => [row.id, row])), [rows]);
-  const row = byId.get(beadId) ?? null;
-  const epic = row !== null ? epicOf(row, byId) : null;
+  const row = useMemo(() => (rows ?? []).find((candidate) => candidate.id === beadId) ?? null, [rows, beadId]);
   const canEditLinks = entry.snapshot?.capabilities.includes(BEADS_LINKS_CAPABILITY) === true;
+
+  // What every action on this screen is bound to: the workspace it read and the computer as paired.
+  const workspaceKey = entry.snapshot?.workspace.key ?? '';
+  const pairing = useMachinesStore(() => machinePairing(machineId));
+  const binding = useMemo<BeadsBinding | null>(
+    () => (workspaceKey.length > 0 && pairing !== null ? { workspaceKey, pairing } : null),
+    [pairing, workspaceKey],
+  );
+  const bindingKey = binding !== null ? `${binding.workspaceKey}\u0000${binding.pairing}` : '';
+
+  // The bead's row words, its epic and progress, from the desktop's rules in the phone's core.
+  const [page, setPage] = useState<BeadPage | null>(null);
+  const readiness = entry.snapshot?.readiness ?? 'ok';
+  useEffect(() => {
+    if (rows === null) return undefined;
+    let current = true;
+    beadPage(rows, readiness, beadId)
+      .then((next) => current && setPage(next))
+      .catch(() => current && setPage(null));
+    return () => {
+      current = false;
+    };
+  }, [rows, readiness, beadId]);
+  const epic = page?.epic ?? null;
 
   const [details, setDetails] = useState<BeadDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(true);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [comment, setComment] = useState('');
+  /** The binding the comment being typed was started under; it is sent only while that still holds. */
+  const commentBinding = useRef<BeadsBinding | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [prompt, setPrompt] = useState<Prompt>(null);
   const [toast, setToast] = useState<Notice | null>(null);
@@ -87,8 +114,24 @@ export default function BeadScreen({ navigation, route }: Props) {
     setToast({ id: toastId.current, message, error, title });
   }, []);
 
+  // Another workspace or a re-paired computer: nothing opened before applies any more.
+  const shownBinding = useRef(bindingKey);
+  useEffect(() => {
+    if (shownBinding.current === bindingKey) return;
+    shownBinding.current = bindingKey;
+    setSheet(null);
+    setPrompt(null);
+    setDetails(null);
+    setDetailsLoading(true);
+  }, [bindingKey]);
+
+  const detailsRequest = useRef(0);
   const loadDetails = useCallback(async () => {
-    const reply = await runBeads(machineId, project, { action: 'show', issueId: beadId }, BeadsCopy.failed.show);
+    detailsRequest.current += 1;
+    const request = detailsRequest.current;
+    const reply = await runBeads(machineId, project, { action: 'show', issueId: beadId }, BeadsCopy.failed.show, binding);
+    // A slower answer from before a later request, another bead, workspace or pairing is dropped.
+    if (request !== detailsRequest.current) return;
     if (reply === null) {
       setDetailsLoading(false);
       return;
@@ -101,18 +144,20 @@ export default function BeadScreen({ navigation, route }: Props) {
     }
     setDetailsError(null);
     setDetails(shown);
-  }, [beadId, machineId, project]);
+  }, [beadId, binding, machineId, project]);
 
   // Read the bead's description, links and comments again whenever bd says it changed.
   const updatedAt = row?.updatedAt ?? '';
   const commentCount = row?.commentCount ?? 0;
   useEffect(() => {
+    if (binding === null) return;
     void loadDetails();
-  }, [loadDetails, updatedAt, commentCount]);
+  }, [binding, loadDetails, updatedAt, commentCount]);
 
+  /** One write for this bead, bound to `opened`: the binding when its sheet, prompt or draft opened. */
   const act = useCallback(
-    async (params: Record<string, unknown>, failure: string, after?: () => void) => {
-      const reply = await runBeads(machineId, project, { issueId: beadId, ...params }, failure);
+    async (opened: BeadsBinding | null, params: Record<string, unknown>, failure: string, after?: () => void) => {
+      const reply = await runBeads(machineId, project, { issueId: beadId, ...params }, failure, opened);
       if (reply?.ok === true) after?.();
     },
     [beadId, machineId, project],
@@ -127,21 +172,25 @@ export default function BeadScreen({ navigation, route }: Props) {
     });
   }, [epic, navigation, theme]);
 
-  if (row === null) {
+  if (row === null || page === null) {
     return (
       <View style={styles.screen}>
         <View style={styles.centered}>
-          {rows === null ? <ActivityIndicator color={theme.muted} /> : <Text style={styles.muted}>{BeadsCopy.beadGone}</Text>}
+          {rows === null || (row !== null && page === null) ? (
+            <ActivityIndicator color={theme.muted} />
+          ) : (
+            <Text style={styles.muted}>{BeadsCopy.beadGone}</Text>
+          )}
         </View>
       </View>
     );
   }
 
-  const closed = isClosed(row);
+  const closed = page.row.closed;
   const deferred = row.status === 'deferred';
-  const claimable = !closed && row.assignee === null && !isEpic(row);
-  const members = isEpic(row) ? (rows ?? []).filter((candidate) => epicOf(candidate, byId)?.id === row.id) : [];
-  const parentEpicMembers = epic !== null ? (rows ?? []).filter((candidate) => epicOf(candidate, byId)?.id === epic.id) : [];
+  const claimable = page.row.claimable;
+  /** The binding a sheet or prompt opens with; its rows write only there. */
+  const opened = binding;
 
   const openDefer = () =>
     setSheet({
@@ -154,7 +203,7 @@ export default function BeadScreen({ navigation, route }: Props) {
     });
   const deferUntil = (until: string | null) => {
     setSheet(null);
-    void act({ action: 'defer', ...(until !== null ? { until } : {}) }, BeadsCopy.failed.defer);
+    void act(opened, { action: 'defer', ...(until !== null ? { until } : {}) }, BeadsCopy.failed.defer);
   };
 
   const openPriority = () =>
@@ -165,7 +214,7 @@ export default function BeadScreen({ navigation, route }: Props) {
         label: `P${priority}${row.priority === priority ? '  ✓' : ''}`,
         onPress: () => {
           setSheet(null);
-          if (row.priority !== priority) void act({ action: 'updatePriority', priority: String(priority) }, BeadsCopy.failed.priority);
+          if (row.priority !== priority) void act(opened, { action: 'updatePriority', priority: String(priority) }, BeadsCopy.failed.priority);
         },
       })),
     });
@@ -177,7 +226,7 @@ export default function BeadScreen({ navigation, route }: Props) {
       confirm: BeadsCopy.addLabel,
       submit: (value) => {
         const label = value.trim();
-        if (label.length > 0) void act({ action: 'addLabel', label }, BeadsCopy.failed.label);
+        if (label.length > 0) void act(opened, { action: 'addLabel', label }, BeadsCopy.failed.label);
       },
     });
 
@@ -191,7 +240,7 @@ export default function BeadScreen({ navigation, route }: Props) {
           destructive: true,
           onPress: () => {
             setSheet(null);
-            void act({ action: 'removeLabel', label }, BeadsCopy.failed.label);
+            void act(opened, { action: 'removeLabel', label }, BeadsCopy.failed.label);
           },
         },
       ],
@@ -211,7 +260,7 @@ export default function BeadScreen({ navigation, route }: Props) {
   };
 
   const setLink = (kind: LinkKind, value: string) =>
-    void act({ action: 'update', [kind]: value.trim() }, BeadsCopy.failed.link, () => void loadDetails());
+    void act(opened, { action: 'update', [kind]: value.trim() }, BeadsCopy.failed.link, () => void loadDetails());
 
   const editLink = (kind: LinkKind, current: string) =>
     setPrompt({
@@ -257,22 +306,23 @@ export default function BeadScreen({ navigation, route }: Props) {
       multiline: true,
       confirm: BeadsCopy.respond,
       submit: (value) => {
-        if (value.trim().length > 0) void act({ action: 'humanRespond', response: value.trim() }, BeadsCopy.failed.respond);
+        if (value.trim().length > 0) void act(opened, { action: 'humanRespond', response: value.trim() }, BeadsCopy.failed.respond);
       },
     });
 
   const sendComment = () => {
     const text = comment.trim();
     if (text.length === 0) return;
-    void act({ action: 'comment', comment: text }, BeadsCopy.failed.comment, () => {
+    void act(commentBinding.current, { action: 'comment', comment: text }, BeadsCopy.failed.comment, () => {
       setComment('');
+      commentBinding.current = null;
       void loadDetails();
     });
   };
 
   const assignee = details?.assignee || row.assignee;
-  const summary = isEpic(row) ? epicSummary(members, entry.snapshot?.readiness === 'ok') : null;
-  const epicProgress = epic !== null ? epicSummary(parentEpicMembers, entry.snapshot?.readiness === 'ok') : null;
+  const summary = page.summary;
+  const epicProgress = epic?.summary ?? null;
 
   return (
     <View style={styles.screen}>
@@ -290,7 +340,7 @@ export default function BeadScreen({ navigation, route }: Props) {
           <Text style={styles.id} selectable>
             {row.id}
           </Text>
-          <Text style={styles.muted}>· {typeLabel(row.issueType)}</Text>
+          <Text style={styles.muted}>· {page.row.meta[0] ?? ''}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={BeadsCopy.copyId}
@@ -302,8 +352,8 @@ export default function BeadScreen({ navigation, route }: Props) {
           </Pressable>
           <View style={styles.spacer} />
           <View style={styles.statusChip}>
-            <StatusMark glyph={glyphOf(row)} size={12} />
-            <Text style={styles.statusText}>{statusLabel(row.status)}</Text>
+            <StatusMark glyph={page.row.glyph} size={12} />
+            <Text style={styles.statusText}>{page.status}</Text>
           </View>
         </View>
         <Text style={styles.title} selectable>
@@ -312,16 +362,16 @@ export default function BeadScreen({ navigation, route }: Props) {
 
         <View style={styles.actions}>
           {closed ? (
-            <ActionButton label={BeadsCopy.reopen} onPress={() => void act({ action: 'reopen' }, BeadsCopy.failed.reopen)} primary />
+            <ActionButton label={BeadsCopy.reopen} onPress={() => void act(opened, { action: 'reopen' }, BeadsCopy.failed.reopen)} primary />
           ) : (
-            <ActionButton label={BeadsCopy.close} icon="check" onPress={() => void act({ action: 'close' }, BeadsCopy.failed.close)} primary />
+            <ActionButton label={BeadsCopy.close} icon="check" onPress={() => void act(opened, { action: 'close' }, BeadsCopy.failed.close)} primary />
           )}
           {!closed && (deferred ? (
-            <ActionButton label={BeadsCopy.bringBack} onPress={() => void act({ action: 'undefer' }, BeadsCopy.failed.undefer)} />
+            <ActionButton label={BeadsCopy.bringBack} onPress={() => void act(opened, { action: 'undefer' }, BeadsCopy.failed.undefer)} />
           ) : (
             <ActionButton label={BeadsCopy.defer} icon="clock" onPress={openDefer} />
           ))}
-          {claimable ? <ActionButton label={BeadsCopy.claim} onPress={() => void act({ action: 'claim' }, BeadsCopy.failed.claim)} /> : null}
+          {claimable ? <ActionButton label={BeadsCopy.claim} onPress={() => void act(opened, { action: 'claim' }, BeadsCopy.failed.claim)} /> : null}
         </View>
 
         {row.needsDecision && !closed ? (
@@ -331,7 +381,7 @@ export default function BeadScreen({ navigation, route }: Props) {
               <ActionButton label={BeadsCopy.respond} onPress={answerDecision} primary />
               <ActionButton
                 label={BeadsCopy.dismissDecision}
-                onPress={() => void act({ action: 'humanDismiss' }, BeadsCopy.failed.dismiss)}
+                onPress={() => void act(opened, { action: 'humanDismiss' }, BeadsCopy.failed.dismiss)}
               />
             </View>
           </View>
@@ -445,7 +495,10 @@ export default function BeadScreen({ navigation, route }: Props) {
         })}
         <TextInput
           value={comment}
-          onChangeText={setComment}
+          onChangeText={(text) => {
+            if (comment.trim().length === 0 || commentBinding.current === null) commentBinding.current = binding;
+            setComment(text);
+          }}
           placeholder={BeadsCopy.addComment}
           placeholderTextColor={theme.placeholder}
           multiline

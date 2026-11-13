@@ -5,7 +5,9 @@
  * phone holds so an unchanged workspace answers without its rows (the desktop's `fetch_now`).
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { create } from 'zustand';
 
 import { useMachinesStore } from '../machines/store';
@@ -52,6 +54,34 @@ function machineFor(machineId: string) {
   return useMachinesStore.getState().machines.find((candidate) => candidate.id === machineId);
 }
 
+/** Who the phone reaches for this computer: a re-pair or a moved address is another computer. */
+export function machinePairing(machineId: string): string | null {
+  const machine = machineFor(machineId);
+  if (machine === undefined) return null;
+  return [machine.transport ?? 'ssh', machine.host, machine.port, machine.username].join('\u0000');
+}
+
+/**
+ * What an action was opened for: the workspace the screen had read and the computer as it was
+ * paired. A write runs only while both still hold, and gxserver gets that workspace's key, never
+ * whatever the newest read says, so a write opened for one workspace can't land in another.
+ */
+export type BeadsBinding = { workspaceKey: string; pairing: string };
+
+export function currentBinding(machineId: string, projectId: string): BeadsBinding | null {
+  const key = useBeadsStore.getState().entries[beadsKey(machineId, projectId)]?.snapshot?.workspace.key ?? '';
+  const pairing = machinePairing(machineId);
+  if (key.length === 0 || pairing === null) return null;
+  return { workspaceKey: key, pairing };
+}
+
+/** The card for an action whose workspace or computer changed after it was opened. */
+export const STALE_ACTION_NOTICE = (title: string): BeadsNotice => ({
+  title,
+  message: 'This project now uses another Beads folder, so nothing was changed. Try again on the refreshed list.',
+  details: null,
+});
+
 /** One read; `refresh` asks gxserver to look for the workspace again (pull to refresh). */
 export async function fetchBeads(machineId: string, project: BeadsProject, refresh = false): Promise<void> {
   const key = beadsKey(machineId, project.projectId);
@@ -61,6 +91,7 @@ export async function fetchBeads(machineId: string, project: BeadsProject, refre
     patch(key, { error: 'This computer is no longer saved on this phone.', loading: false });
     return;
   }
+  const pairing = machinePairing(machineId);
   const generation = (generations.get(key) ?? 0) + 1;
   generations.set(key, generation);
   const previous = entries[key]?.snapshot ?? null;
@@ -70,7 +101,8 @@ export async function fetchBeads(machineId: string, project: BeadsProject, refre
       knownRevision: refresh ? undefined : previous?.revision,
       refresh,
     });
-    if (generations.get(key) !== generation) return;
+    // An answer from before a re-pair is the old computer's.
+    if (generations.get(key) !== generation || machinePairing(machineId) !== pairing) return;
     const current = useBeadsStore.getState().entries[key]?.snapshot ?? null;
     // A key change means another workspace: forget what the phone knew.
     const base = current !== null && current.workspace.key === next.workspace.key ? current : null;
@@ -88,9 +120,21 @@ export async function fetchBeads(machineId: string, project: BeadsProject, refre
 /** Polls while a screen showing this project is open; several screens share one poll. */
 const watchers = new Map<string, { count: number; timer: ReturnType<typeof setInterval> }>();
 
+/**
+ * Polls while `active` (the screen is focused and the app in the foreground); several screens
+ * share one poll, and a screen under another one, or the app in the background, polls nothing.
+ */
 export function useBeadsPolling(machineId: string, project: BeadsProject): void {
   const { projectId, projectPath } = project;
+  const focused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
   useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => setForeground(state === 'active'));
+    return () => subscription.remove();
+  }, []);
+  const active = focused && foreground;
+  useEffect(() => {
+    if (!active) return undefined;
     const key = beadsKey(machineId, projectId);
     const target = { projectId, projectPath };
     const existing = watchers.get(key);
@@ -114,7 +158,7 @@ export function useBeadsPolling(machineId: string, project: BeadsProject): void 
         watchers.delete(key);
       }
     };
-  }, [machineId, projectId, projectPath]);
+  }, [active, machineId, projectId, projectPath]);
 }
 
 /** A failed write's card, in the desktop's words (`native_beads/cards.rs` `write_failure`). */
@@ -136,24 +180,36 @@ function writeFailure(title: string, reply: BeadsActionReply): BeadsNotice {
 }
 
 /**
- * One write (or `show`) for this project, sent with the workspace key the phone last read. A
- * failure leaves a card on the screen; every write reads the snapshot again.
+ * One write (or `show`) for this project, bound to the workspace and pairing it was opened for
+ * (`binding`). When either changed since, nothing is sent and the write leaves a card; a write
+ * without a read workspace is never sent. A failure leaves a card; every write reads again.
  */
 export async function runBeads(
   machineId: string,
   project: BeadsProject,
   params: Record<string, unknown>,
   failureTitle: string,
+  binding: BeadsBinding | null,
 ): Promise<BeadsActionReply | null> {
   const key = beadsKey(machineId, project.projectId);
   const { patch } = useBeadsStore.getState();
   const machine = machineFor(machineId);
-  if (machine === undefined) return null;
   const isWrite = params.action !== 'show';
+  const now = currentBinding(machineId, project.projectId);
+  if (
+    machine === undefined ||
+    binding === null ||
+    now === null ||
+    now.workspaceKey !== binding.workspaceKey ||
+    now.pairing !== binding.pairing
+  ) {
+    if (isWrite) patch(key, { notice: STALE_ACTION_NOTICE(failureTitle) });
+    return null;
+  }
   const entry = useBeadsStore.getState().entries[key] ?? EMPTY;
   if (isWrite) patch(key, { writes: entry.writes + 1, notice: null });
   try {
-    const reply = await runBeadsAction(machine, project, params, entry.snapshot?.workspace.key ?? null);
+    const reply = await runBeadsAction(machine, project, params, binding.workspaceKey);
     if (isWrite && !reply.ok) patch(key, { notice: writeFailure(failureTitle, reply) });
     return reply;
   } catch (failure) {

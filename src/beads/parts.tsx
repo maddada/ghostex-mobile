@@ -12,7 +12,8 @@ import { Glyph } from '../chat/native/transcript/icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme, type TranscriptTheme } from '../chat/native/transcript/theme';
 import ActionSheet from '../components/common/ActionSheet';
 import { BeadsCopy } from '../copy';
-import { parseBdTime, relativeAgo, type BeadGlyph, type BeadsSync, type BeadsSyncResult } from './model';
+import { parseBdTime, relativeAgo, type BeadsSync, type BeadsSyncResult } from './model';
+import type { BeadGlyph } from './tree';
 import type { BeadsNotice } from './store';
 
 function glyphColor(glyph: BeadGlyph, theme: TranscriptTheme): string {
