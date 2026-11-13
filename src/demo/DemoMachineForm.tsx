@@ -1,5 +1,5 @@
 /**
- * Edit machine for the demo computer: an explanation and Remove, never SSH fields.
+ * Edit machine for the demo experience: an explanation and Remove, never SSH fields.
  */
 
 import { useState } from 'react';
@@ -14,7 +14,7 @@ import { useSpacesStore } from '../spaces/store';
 import { useAppearance } from '../theme/useAppearance';
 import { useWorkspacesStore } from '../workspaces/store';
 import { DemoCopy } from './copy';
-import { DEMO_MACHINE_ID } from './identity';
+import { DEMO_MACHINE_ID, DEMO_MACHINE_NAME } from './identity';
 
 export default function DemoMachineForm({ onRemoved }: { onRemoved: () => void }) {
   const appearance = useAppearance();
@@ -43,9 +43,9 @@ export default function DemoMachineForm({ onRemoved }: { onRemoved: () => void }
       {confirming ? (
         <ConfirmDialog
           visible
-          title="Remove the demo computer?"
+          title="Remove the demo experience?"
           body="The sample projects leave this phone. A computer you paired is not affected."
-          targetLine="Demo computer"
+          targetLine={DEMO_MACHINE_NAME}
           confirmLabel="Remove"
           destructive
           onConfirm={() => void remove()}

@@ -1,19 +1,25 @@
 /**
- * The first screen: app mark and headline over the connect steps (ConnectStart), Scan the code, and the small
- * links (other ways to connect, the demo computer, which App Review needs reachable without a computer). Shown only
- * while no machine is saved (App.tsx), so there is no skip affordance.
+ * The first screen: app mark and headline over the connect steps (ConnectStart), then two equal buttons, Scan the
+ * code and Use Tailscale, and one small link to the demo experience (App Review needs it reachable without a
+ * computer). Paste a code stays one tap away on the Scan the code screen. Shown only while no machine is saved
+ * (App.tsx), so there is no skip affordance.
+ *
+ * CDXC:RemotePairing 2026-11-13 DECISION:
+ * Q3050 picked "Two equal buttons": Use Tailscale sits under Scan the code at the same size instead of hiding under
+ * "Other ways to connect", so someone already on Tailscale skips the code in one tap. Add a computer keeps the
+ * single button and the sheet (ConnectActions).
  */
 
 import { useMemo } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ConnectActions, ConnectSteps } from '../components/onboarding/ConnectStart';
-import { TerminalGlyph } from '../components/onboarding/SetupIcons';
-import { useSetupText } from '../components/onboarding/SetupPrimitives';
-import { WelcomeCopy } from '../copy';
+import { ConnectSteps } from '../components/onboarding/ConnectStart';
+import { CameraGlyph, ShieldGlyph, TerminalGlyph } from '../components/onboarding/SetupIcons';
+import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
+import { ConnectStartCopy, WelcomeCopy } from '../copy';
 import { DemoCopy } from '../demo/copy';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
@@ -42,12 +48,27 @@ export default function WelcomeScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.footer}>
-        <ConnectActions
-          onScan={() => navigation.navigate('ScanCode')}
-          onPaste={() => navigation.navigate('ScanCode', { startWith: 'paste' })}
-          onTailscale={() => navigation.navigate('TailscaleForm')}
-          extraLink={{ label: DemoCopy.welcomeButton, onPress: () => useMachinesStore.getState().addDemoComputer() }}
+        <SetupButton
+          variant="primary"
+          large
+          label={ConnectStartCopy.scanButton}
+          icon={<CameraGlyph size={18} color={appearance.accentForeground} />}
+          onPress={() => navigation.navigate('ScanCode')}
         />
+        <SetupButton
+          large
+          label={ConnectStartCopy.otherWaysSheet.tailscale.title}
+          icon={<ShieldGlyph size={18} color={appearance.foreground} />}
+          onPress={() => navigation.navigate('TailscaleForm')}
+        />
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          style={styles.demoLink}
+          onPress={() => useMachinesStore.getState().addDemoComputer()}
+        >
+          <Text style={styles.demoLinkText}>{DemoCopy.welcomeButton}</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -99,5 +120,16 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
+    gap: 10,
+  },
+  demoLink: {
+    alignSelf: 'center',
+    marginTop: 4,
+  },
+  demoLinkText: {
+    color: appearance.accent,
+    fontSize: 14,
+    fontWeight: '500',
+    paddingVertical: 4,
   },
 });

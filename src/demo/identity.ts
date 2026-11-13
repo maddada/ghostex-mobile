@@ -1,5 +1,5 @@
 /**
- * The offline demo computer: one saved machine whose inventory, chat, terminal
+ * The offline demo experience: one saved machine whose inventory, chat, terminal
  * and preview never leave the phone. A stable id so removal, settings and the
  * command router all name the same record.
  */
@@ -9,7 +9,7 @@ import type { MachineRecord } from '../machines/store';
 /** Persisted id of the sample machine. Never reused for a paired computer. */
 export const DEMO_MACHINE_ID = 'demo-computer';
 
-export const DEMO_MACHINE_NAME = 'Demo computer';
+export const DEMO_MACHINE_NAME = 'Demo experience';
 
 export function isDemoMachineId(machineId: string | null | undefined): boolean {
   return machineId === DEMO_MACHINE_ID;

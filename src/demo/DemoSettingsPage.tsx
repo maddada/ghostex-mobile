@@ -1,5 +1,5 @@
 /**
- * Settings › Demo computer: what the sample machine is, and the way to remove it.
+ * Settings › Demo experience: what the sample machine is, and the way to remove it.
  */
 
 import { useNavigation } from '@react-navigation/native';
@@ -15,7 +15,7 @@ import { useSpacesStore } from '../spaces/store';
 import { useWorkspacesStore } from '../workspaces/store';
 import { Caption, SettingsScreenLayout } from '../screens/settings/SettingsControls';
 import { DemoCopy } from './copy';
-import { DEMO_MACHINE_ID } from './identity';
+import { DEMO_MACHINE_ID, DEMO_MACHINE_NAME } from './identity';
 
 export default function DemoSettingsPage() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -38,9 +38,9 @@ export default function DemoSettingsPage() {
       {confirming ? (
         <ConfirmDialog
           visible
-          title="Remove the demo computer?"
+          title="Remove the demo experience?"
           body="The sample projects leave this phone. A computer you paired is not affected."
-          targetLine="Demo computer"
+          targetLine={DEMO_MACHINE_NAME}
           confirmLabel="Remove"
           destructive
           onConfirm={() => void remove()}

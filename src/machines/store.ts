@@ -32,7 +32,7 @@ import { migrateMachineData } from './machineDataMigration';
 import { noteDuplicateEntries } from './duplicateNotice';
 import { notePairingChanged } from './pairingEpoch';
 import { forgetProvenServerKeys, loadMachineProofs, PROVEN_SERVER_KEYS_STORAGE_KEY } from './provenComputer';
-import { demoMachineRecord, DEMO_MACHINE_ID, isDemoMachine } from '../demo/identity';
+import { demoMachineRecord, DEMO_MACHINE_ID, DEMO_MACHINE_NAME, isDemoMachine } from '../demo/identity';
 import { resetDemoWorld } from '../demo/world';
 
 /** How old a machine's `lastConnectedAt` gets before a read that answered writes a new one (`markConnected`). */
@@ -142,7 +142,7 @@ export type MachineSaveResult = { ok: true; machine: MachineRecord } | { ok: fal
  * back to the username and is always tagged with the transport.
  */
 export function machineDisplayLabel(machine: MachineRecord): string {
-  if (machine.transport === 'demo') return machine.name.length > 0 ? machine.name : 'Demo computer';
+  if (machine.transport === 'demo') return machine.name.length > 0 ? machine.name : DEMO_MACHINE_NAME;
   if (machine.transport === 'tailcat') {
     const base = machine.name.length > 0 ? machine.name : machine.username;
     return `${base} · ${EASY_CONNECT_LABEL}`;
@@ -443,7 +443,12 @@ export const useMachinesStore = create<MachinesState>()((set, get) => ({
 
   hydrate: async () => {
     if (get().hydrated) return;
-    const machines = await healDuplicateComputers(await loadPersistedMachines());
+    // The demo record carries its name, so one saved as "Demo computer" takes the current name.
+    const machines = (await healDuplicateComputers(await loadPersistedMachines())).map((machine) =>
+      isDemoMachine(machine) && (machine.name !== DEMO_MACHINE_NAME || machine.computerName !== DEMO_MACHINE_NAME)
+        ? { ...machine, name: DEMO_MACHINE_NAME, computerName: DEMO_MACHINE_NAME }
+        : machine,
+    );
     // Read after the heal, which may have moved the selection to the record it kept.
     const selectedId = await AsyncStorage.getItem(SELECTED_MACHINE_STORAGE_KEY);
     const selectedMachineId = resolveSelectedMachineId(machines, selectedId);

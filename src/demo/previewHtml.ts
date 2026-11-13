@@ -1,5 +1,5 @@
 /**
- * The Web Preview page for the demo computer. Inlined so Metro ships it inside
+ * The Web Preview page for the demo experience. Inlined so Metro ships it inside
  * the JavaScript bundle (the binary and over-the-air updates). It loads no
  * images, fonts, or hosts.
  */

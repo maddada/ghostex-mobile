@@ -1,5 +1,5 @@
 /**
- * In-memory demo computer. The session list, chats and terminal scripts start
+ * In-memory demo experience. The session list, chats and terminal scripts start
  * from bundled fixtures and change only while the app is open. Removing the
  * demo machine resets them. Nothing here performs I/O.
  */

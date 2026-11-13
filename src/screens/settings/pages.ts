@@ -5,6 +5,7 @@
  */
 
 import { ANDROID_SELF_UPDATE_ENABLED } from '../../config/featureFlags';
+import { DemoCopy } from '../../demo/copy';
 import { LicencesCopy, LiveActivityCopy, NotificationsCopy, ShortRepliesCopy } from '../../copy';
 import { OTA_ENABLED } from '../../updates/overTheAir';
 import { LIVE_ACTIVITY_SUPPORTED } from '../../notifications/liveActivity';
@@ -52,7 +53,7 @@ export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; de
   autopilot: { title: 'Autopilot', description: 'Keep sessions going while you are away, and what it did.' },
   collab: { title: 'Collab', description: 'An extension: share a chat through a link that opens it in a browser.' },
   advanced: { title: 'Advanced', description: 'Older settings most people never change.' },
-  demo: { title: 'Demo computer', description: 'The sample computer on this phone, and how to remove it.' },
+  demo: { title: DemoCopy.settingsTitle, description: DemoCopy.settingsDescription },
   licences: { title: LicencesCopy.pageTitle, description: LicencesCopy.pageDescription },
   // Opened from Settings › Chat's Read aloud rows, not listed on the Settings home.
   readAloudVoice: { title: 'Read aloud voice', description: "Which of this phone's voices reads replies aloud." },
