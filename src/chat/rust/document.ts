@@ -708,6 +708,12 @@ export type ChatDocument = {
   noticeVisible: boolean;
   /** The failed queue row the visible card stands for, whose own line then gives way to the card. */
   sendFailureCardPromptId?: string | null;
+  /**
+   * The card under each waiting or failed message, by its `startupDelivery.promptId`: `{ promptId, level, icon, title, sentence,
+   * buttons, menu }` (`level` is `working`, `needs` or `failed`; each button or row is `{ id, label, icon?, primary?, command }`).
+   * Core: `composer/delivery_card.rs`. Absent from an older core.
+   */
+  deliveryCards?: { [promptId: string]: Json };
   noticeError?: string | null;
   /**
    * The approval answer the drawn notice or approval card waits on (`card` is `notice` or `prompt`): the card stays dimmed and held

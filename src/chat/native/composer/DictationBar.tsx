@@ -276,7 +276,7 @@ function warnHue(light: boolean): string {
  *
  * CDXC:Dictate 2026-11-13 DECISION: User, of the phone's Hex errors: "they're huge", and "the padding from the left side is not the same as the padding from the right side for the Hex row". The cards are compact (no tile, header band or footer band) and every Dictate row keeps 15pt to its first mark on the left and to its last on the right. Then (Q2913, Other): "when I hover, it's shown on the top right or top left corner, just like we do for Settings": the desktop shows the round ✕ on the card's corner while the pointer is over it; a phone has no hover, so its round ✕ sits on the card's top-right corner all the time, where a phone's close buttons go.
  */
-function DictationCard({
+export function DictationCard({
   icon,
   hue,
   title,

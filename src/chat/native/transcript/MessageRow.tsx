@@ -191,7 +191,6 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
   }
   return (
     <View style={styles.message} accessibilityLabel={`user message: ${body.slice(0, 2000)}`}>
-      <StartupDelivery message={message} waitingLine={false} />
       <ImageRow images={message.images} user />
       <View style={styles.userColumn}>
         <View style={styles.bubbleRow}>
@@ -206,6 +205,8 @@ function UserMessage({ message }: { message: ProjectedMessage }) {
             )
           ) : null}
         </View>
+        {/* What became of a message that has not reached the agent sits under its bubble, as on the desktop (it drew above it). */}
+        <StartupDelivery message={message} waitingLine={false} />
         <UserActions message={message} />
       </View>
     </View>

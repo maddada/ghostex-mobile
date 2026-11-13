@@ -17,7 +17,7 @@ import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme
 import { CARD_LINE_HEIGHT, CARD_TEXT_SIZE, ChatButton, StatusCard, useCardText } from './primitives';
 import type { CardHostAction } from './types';
 
-const NOT_READY_HEADLINE = 'Message not sent. Your draft was restored.';
+const NOT_READY_HEADLINE = 'Not sent. Your message is back in the chat box.';
 
 export function composerNotReady(document: ChatDocument): boolean {
   return document.operationErrorCode === 'composerNotReady' && typeof document.operationError === 'string';

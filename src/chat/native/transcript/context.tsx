@@ -277,6 +277,8 @@ export type TranscriptFlags = {
   canRemoveQueued: boolean;
   /** The failed row whose card is showing, so its own line only says it was not sent. */
   sendFailureCardPromptId: string | null;
+  /** The card under each waiting or failed message, by its delivery's promptId (core `composer/delivery_card.rs`). */
+  deliveryCards: { [promptId: string]: Json };
   /** Messages the agent itself queued, which Back to composer takes back into the composer. */
   takeBackIds: ReadonlySet<string>;
   /** The message a Back to composer is taking back right now. */
@@ -363,6 +365,7 @@ const EMPTY_FLAGS: TranscriptFlags = {
   canEditQueued: false,
   canRemoveQueued: false,
   sendFailureCardPromptId: null,
+  deliveryCards: {},
   takeBackIds: new Set(),
   takeBackBusy: null,
   attaching: new Map(),
@@ -435,6 +438,7 @@ export function transcriptFlags(document: ChatDocument | null): TranscriptFlags 
     canRemoveQueued: obj(obj(document.queue)?.capabilities)?.canRemove === true,
     sendFailureCardPromptId:
       typeof document.sendFailureCardPromptId === 'string' ? document.sendFailureCardPromptId : null,
+    deliveryCards: obj(document.deliveryCards) === null ? {} : (document.deliveryCards as { [promptId: string]: Json }),
     takeBackIds: new Set(arr(document.queueTakeBackIds).filter((id): id is string => typeof id === 'string')),
     takeBackBusy: typeof document.queueTakeBackBusy === 'string' ? document.queueTakeBackBusy : null,
     attaching: new Map(

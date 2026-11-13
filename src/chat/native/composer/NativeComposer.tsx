@@ -69,7 +69,8 @@ import { SendControl } from './SendControl';
 import { StatusLine, statusLineReserved } from './StatusLine';
 import { Suggestions } from './Suggestions';
 import { useComposerMotion } from './useComposerMotion';
-import { DictationBar, unavailableProblem } from './DictationBar';
+import { DictationBar, DictationCard, unavailableProblem } from './DictationBar';
+import { toneLook } from '../cards/ToneCard';
 import { dictationClock, useDictation } from './useDictation';
 import { engineStatusLine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
@@ -252,6 +253,14 @@ export function NativeComposer({
   const [text, setText] = useState(model?.text ?? '');
   const [caret, setCaret] = useState(0);
   const [menu, setMenu] = useState<OpenMenu>(null);
+  /**
+   * A picture or file that could not be added, said on a card above the chat box until dismissed.
+   *
+   * CDXC:SessionChat 2026-11-13 DECISION: Q2947, the user chose to move the phone's attachment and paste failures from system
+   * pop-ups ("Attachment failed") and toasts to the card above the chat box, in the Dictate card's shape, like every other error
+   * in the chat.
+   */
+  const [attachError, setAttachError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const pendingPick = useRef<AttachSource | null>(null);
   /** A `/`, `@` or `+` the send menu chose, typed into the draft when the menu has closed. */
@@ -527,10 +536,7 @@ export function NativeComposer({
       pickAttachments(source)
         .then((files) => chat.attachFiles(files))
         .catch((error: unknown) => {
-          Alert.alert(
-            'Attachment failed',
-            error instanceof Error ? error.message : 'The attachment could not be added.',
-          );
+          setAttachError(error instanceof Error ? error.message : 'The attachment could not be added.');
         });
     },
     [chat],
@@ -538,8 +544,8 @@ export function NativeComposer({
   // The keyboard's images and Paste's join the draft the way a picked photo does.
   const receiveImages = useCallback(
     (event: { nativeEvent: unknown }) =>
-      attachIntakeImages(chat, event.nativeEvent, (message) => onHostAction?.('toast', { message, level: 'error' })),
-    [chat, onHostAction],
+      attachIntakeImages(chat, event.nativeEvent, setAttachError),
+    [chat],
   );
   /** An image pasted with the Attach sheet's Paste control joins the draft like a picked photo. */
   const attachPastedImage = useCallback(
@@ -548,7 +554,7 @@ export function NativeComposer({
       savePastedImage(dataUri)
         .then((file) => chat.attachFiles([file]))
         .catch((error: unknown) => {
-          Alert.alert('Attachment failed', error instanceof Error ? error.message : 'The image could not be added.');
+          setAttachError(error instanceof Error ? error.message : 'The image could not be added.');
         });
     },
     [chat],
@@ -785,6 +791,16 @@ export function NativeComposer({
           {document !== null ? <FilesLinksCard filesLinks={document.filesLinks} dispatch={dispatch} /> : null}
           {document?.suggestions ? <Suggestions data={document.suggestions} dispatch={dispatch} /> : null}
           {document?.runLocation ? <RunLocationRow row={document.runLocation} dispatch={dispatch} /> : null}
+          {attachError !== null ? (
+            <DictationCard
+              icon="alert-circle"
+              hue={toneLook('error', P.light).hue}
+              title="Couldn't attach"
+              text={attachError}
+              onDismiss={() => setAttachError(null)}
+              dismissLabel="Dismiss"
+            />
+          ) : null}
           <DictationBar
             phase={dictation.phase}
             elapsedMs={dictation.phase === 'waiting' ? dictation.waitingMs : dictation.elapsedMs}

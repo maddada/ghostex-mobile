@@ -16,6 +16,7 @@ import { Glyph, type GlyphName } from './icons';
 import { arr, obj, str, type JsonRecord } from './json';
 import { useDisclosure } from './state';
 import { SubagentMessageCard, toneColor } from './AgentMessageCards';
+import { DeliveryCard } from './DeliveryCard';
 import { Markdown } from './markdown/Markdown';
 import {
   SINGLE_LINE_CARD,
@@ -538,9 +539,13 @@ export function StartupDelivery({
   end?: boolean;
 }) {
   const { theme, dispatch } = useTranscriptEnv();
-  const { canRemoveQueued, sendFailureCardPromptId } = useTranscriptFlags();
+  const { canRemoveQueued, sendFailureCardPromptId, deliveryCards } = useTranscriptFlags();
   const delivery = message.startupDelivery;
   if (delivery === undefined || delivery === null) return null;
+  // A plain message's delivery is the chat core's card under it (`DeliveryCard.tsx`); the note below stays for the cards that
+  // draw their own (from another agent, page answers) and for an older core.
+  const card = obj(deliveryCards[delivery.promptId] ?? null);
+  if (card !== null) return <DeliveryCard card={card} end={end} />;
   // A message held on another computer while the session's computer is offline (gx-chat-core
   // `session/computer.rs`; desktop: startup_delivery.rs): "Will send when Windows PC is back" and
   // Cancel, which puts it back in the chat box. Its delivery shows "Sending to …" with no Cancel.

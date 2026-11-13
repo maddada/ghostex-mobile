@@ -1,7 +1,7 @@
 /**
- * The tone card the notices and approvals above the composer are drawn in: a faint wash of the
- * card's tone, a tinted icon tile beside a title and a muted detail line, the body, and a footer
- * with one primary action and neutral filled secondary buttons. Port of desktop
+ * The tone card the notices and approvals above the composer are drawn in: the tone's icon beside
+ * a title and a muted detail line, the body, and the buttons, one primary and the rest neutral
+ * filled. Port of desktop
  * `tone_card.rs`; the decision is on `notice_tone` in
  * `packages/gx-chat-core/src/questions/notice_tone.rs`.
  */
@@ -11,7 +11,6 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View, type LayoutChange
 
 import { Glyph, type GlyphName } from './icons';
 import { MONO_FONT, themedStyles, useTranscriptTheme } from '../transcript/theme';
-import { VerticalFade } from '../transcript/verticalFade';
 
 /** `packages/gx-chat-core/visual/notice-tone.json`. */
 const TONES: Record<string, { icon: GlyphName; dark: string | null; light: string | null }> = {
@@ -26,30 +25,16 @@ const SHELL = {
   radius: 14,
   padX: 14,
   padY: 12,
-  tile: 28,
-  tileRadius: 8,
   tileIcon: 15,
   headerGap: 10,
   titleSize: 13.5,
   titleLineHeight: 18,
   detailSize: 12,
   detailLineHeight: 16,
-  washDark: 0.05,
-  washLight: 0.04,
-  tileFill: 0.12,
-  tileRing: 0.2,
-  footerShadeDark: 0.14,
-  footerShadeLight: 0.025,
   buttonHeight: 28,
   buttonRadius: 8,
   buttonTextSize: 13,
 };
-
-/** `#rrggbb` at `alpha`. */
-function withAlpha(hex: string, alpha: number): string {
-  const value = parseInt(hex.slice(1), 16);
-  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
-}
 
 export type ToneLook = { hue: string | null; icon: GlyphName };
 
@@ -104,7 +89,6 @@ export function ToneCard({
   const start = (footerStart ?? []).filter(Boolean);
   const end = (footerEnd ?? []).filter(Boolean);
   const hasFooter = start.length > 0 || footerNote !== undefined || end.length > 0;
-  const washOpacity = P.light ? SHELL.washLight : SHELL.washDark;
   // The footer width these actions were last seen taking more than one line at (`at` is -1 until the footer is measured). A new
   // set of actions in the same card measures afresh.
   const actionsKey = end.map((item, index) => (isValidElement(item) && item.key !== null ? item.key : index)).join('|');
@@ -123,17 +107,8 @@ export function ToneCard({
   };
   const headerContent = (
     <>
-      <View
-        style={[
-          styles.tile,
-          look.hue === null
-            ? { backgroundColor: P.light ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)', borderColor: P.controlBorder }
-            : {
-                backgroundColor: withAlpha(look.hue, SHELL.tileFill),
-                borderColor: withAlpha(look.hue, SHELL.tileRing),
-              },
-        ]}
-      >
+      {/* CDXC:SessionChat 2026-11-13 DECISION: Q2944 "the icon's colour only": the card's mark is its icon alone, with no tinted tile, no wash down the card and no shaded footer band (desktop `tone_tile`, tone_card.rs). */}
+      <View style={styles.tile}>
         {tileGlyph !== undefined ? (
           tileGlyph(SHELL.tileIcon, look.hue ?? P.muted)
         ) : (
@@ -153,9 +128,6 @@ export function ToneCard({
   );
   return (
     <View style={[styles.card, { backgroundColor: P.cardPanel }]}>
-      {look.hue !== null ? (
-        <VerticalFade id="tone-wash" color={look.hue} from={washOpacity} to={0} style={styles.wash} />
-      ) : null}
       {onPressHeader === undefined ? (
         <View style={styles.header}>{headerContent}</View>
       ) : (
@@ -172,10 +144,7 @@ export function ToneCard({
       {hasFooter ? (
         <View
           onLayout={measureFooter}
-          style={[
-            styles.footer,
-            { backgroundColor: `rgba(0,0,0,${P.light ? SHELL.footerShadeLight : SHELL.footerShadeDark})` },
-          ]}
+          style={[styles.footer, bodyItems.length === 0 && styles.footerAfterHeader]}
         >
           {start}
           {footerNote !== undefined ? <Text style={styles.footerNote}>{footerNote}</Text> : null}
@@ -319,13 +288,6 @@ const useStyles = themedStyles((P) => ({
     borderRadius: SHELL.radius,
     overflow: 'hidden',
   },
-  wash: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 96,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -334,10 +296,6 @@ const useStyles = themedStyles((P) => ({
     paddingVertical: SHELL.padY,
   },
   tile: {
-    width: SHELL.tile,
-    height: SHELL.tile,
-    borderRadius: SHELL.tileRadius,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -367,10 +325,9 @@ const useStyles = themedStyles((P) => ({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: SHELL.padX,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: P.controlBorder,
+    paddingBottom: 12,
   },
+  footerAfterHeader: { paddingTop: 0 },
   actions: {
     flexGrow: 1,
     flexShrink: 1,

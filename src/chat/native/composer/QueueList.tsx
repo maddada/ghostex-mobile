@@ -16,6 +16,21 @@ import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 const ROW_HEIGHT = 34;
 const ROW_GAP = 4;
 
+/**
+ * A failed row's line, in the chat's one wording for a message that did not go out (core `composer/delivery_card.rs`
+ * `plain_reason`): the reason without the instructions written into it, since the row's buttons say what to do.
+ */
+function notSent(reason: string | null | undefined): string {
+  let text = (reason ?? '').trim();
+  for (const lead of ['Not sent.', 'Not sent:', 'Not delivered:']) {
+    if (text.startsWith(lead)) text = text.slice(lead.length).trimStart();
+  }
+  for (const tail of [' Retry, or open Terminal view to check it.', ' Open Terminal view to check it.', ' Send it again.']) {
+    if (text.endsWith(tail)) text = text.slice(0, -tail.length).trimEnd();
+  }
+  return text.length > 0 ? `Not sent: ${text}` : 'Not sent.';
+}
+
 export function QueueList({ document, dispatch }: { document: ChatDocument; dispatch: (action: UserAction) => void }) {
   const styles = useStyles();
   const prompts = document.queue.prompts.filter((prompt) => prompt.startupSend !== true);
@@ -176,7 +191,7 @@ function QueueRow({
         <View style={styles.error}>
           <Glyph name="alert-triangle" size={13} color={P.error} />
           <Text style={styles.errorText} numberOfLines={1}>
-            {`Not delivered: ${prompt.errorMessage ?? 'the send failed.'}`}
+            {notSent(prompt.errorMessage)}
           </Text>
         </View>
       ) : null}
@@ -221,10 +236,10 @@ const useStyles = themedStyles((P) => ({
   grip: { width: 26, height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   gripInert: { opacity: 0.35 },
   text: { flex: 1, minWidth: 64, color: P.muted, fontSize: 13 },
-  textFailed: { color: P.error },
+  textFailed: { color: P.muted },
   textSending: { opacity: 0.7 },
   error: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, maxWidth: '45%' },
-  errorText: { color: P.error, fontSize: 11.5, flexShrink: 1 },
+  errorText: { color: P.cardMuted, fontSize: 11.5, flexShrink: 1 },
   waitReason: { color: P.muted, fontSize: 11.5, paddingLeft: 26, paddingRight: 8 },
   action: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   actionPressed: { backgroundColor: P.controlPressed },

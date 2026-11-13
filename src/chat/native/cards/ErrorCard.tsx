@@ -28,14 +28,6 @@ function tint(tone: string, theme: TranscriptTheme): string {
   return theme.light ? '#dc2626' : '#ef4444';
 }
 
-/** A hex colour at `alpha`, for the tile's soft wash. */
-function wash(hex: string, alpha: number): string {
-  const value = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${value}`;
-}
-
 export function ErrorCard({ card, actions }: { card: ErrorCardValue; actions?: ReactNode }) {
   const theme = useTranscriptTheme();
   const [open, setOpen] = useState(false);
@@ -54,14 +46,15 @@ export function ErrorCard({ card, actions }: { card: ErrorCardValue; actions?: R
         accessibilityState={expandable ? { expanded: shown } : undefined}
         style={({ pressed }) => [styles.row, pressed && expandable && singleLinePressed(theme)]}
       >
-        <View style={[styles.tile, { backgroundColor: wash(color, 0.14) }]}>
+        {/* Only the icon carries the colour (`ToneCard.tsx`, CDXC:SessionChat 2026-11-13): no tinted tile, a muted chip. */}
+        <View style={styles.tile}>
           <Glyph name={wait ? 'alert-triangle' : 'alert-circle'} size={SINGLE_LINE_CARD.tile.glyphSize} color={color} />
         </View>
         <Text style={[SINGLE_LINE_TITLE, styles.title, { color: theme.foreground }]} numberOfLines={1}>
           {card.title}
         </Text>
         {card.chip.length > 0 ? (
-          <SingleLinePill icon={wait ? 'clock' : 'alert-triangle'} label={card.chip} color={color} />
+          <SingleLinePill icon={wait ? 'clock' : 'alert-triangle'} label={card.chip} color={theme.muted} />
         ) : null}
       </Pressable>
       {shown ? (
