@@ -77,6 +77,7 @@ import ScanCodeScreen from './src/screens/ScanCodeScreen';
 import CantReachScreen from './src/screens/CantReachScreen';
 import AttentionListScreen from './src/screens/AttentionListScreen';
 import ChangesScreen from './src/screens/ChangesScreen';
+import BeadsScreen from './src/screens/BeadsScreen';
 import DocsScreen from './src/screens/DocsScreen';
 import DocViewerScreen from './src/screens/DocViewerScreen';
 import SshAccessHelpScreen from './src/screens/SshAccessHelpScreen';
@@ -88,6 +89,7 @@ import { useWebPreviewStore } from './src/webPreview/store';
 import {
   AddProjectCopy,
   ApprovalsCopy,
+  BeadsCopy,
   ChangesCopy,
   ConnectStartCopy,
   DocsCopy,
@@ -302,6 +304,7 @@ export default function App() {
                   <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
                   <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
                   <Stack.Screen name="Changes" component={ChangesScreen} options={{ title: ChangesCopy.title }} />
+                  <Stack.Screen name="Beads" component={BeadsScreen} options={{ title: BeadsCopy.title }} />
                   <Stack.Screen
                     name="AttentionList"
                     component={AttentionListScreen}

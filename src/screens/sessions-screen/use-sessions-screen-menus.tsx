@@ -800,6 +800,20 @@ export function useSessionsScreenMenus({
           });
           return;
         }
+        case 'beads': {
+          const ctx = scope.session;
+          if (ctx === undefined) throw new Error('Beads need a session.');
+          const { session } = ctx.item;
+          const project = summaryFor(machine.id)?.projects.find((entry) => entry.projectId === session.projectId);
+          setOverlay(NONE);
+          navigation.navigate('Beads', {
+            machineId: machine.id,
+            projectId: session.projectId,
+            projectName: project?.name ?? session.projectName,
+            projectPath: project?.path ?? '',
+          });
+          return;
+        }
         case 'projectActions': {
           const ctx = scope.session;
           if (ctx === undefined) throw new Error('Actions… needs a session.');
