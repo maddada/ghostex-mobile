@@ -23,20 +23,28 @@ import { renderMarkdownDocument } from './markdownDocument';
 import { computerFileUrl, type ViewerProject } from './mediaStream';
 import { remotePathFromFileUrl } from './openDoc';
 import {
+  docPageContentPolicy,
+  mayCopyForPage,
+  mirrorScopeFor,
+  newScriptNonce,
+  withPagePolicy,
+  withPagePolicyBase64,
+  type MirrorScope,
+} from './pageRules';
+import {
   baseName,
-  dirName,
   extensionOf,
+  MIRROR_FOLDER,
   mirrorSegments,
   normalizeRemotePath,
   previewKindForPath,
-  remotePathFromMirrorSegments,
+  remotePathForMirrorUrl,
   resolveRemoteReference,
   type PreviewKind,
 } from './paths';
 import { renderImageDocument, renderMediaDocument, renderSourceDocument, renderTextDocument } from './plainDocument';
 import { decodeBase64Utf8, readRemoteFiles } from './remoteFiles';
 
-export const MIRROR_FOLDER = 'ghostex-docs-view';
 const DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
 /** A WebView lays out a few megabytes of wrapped monospace slowly; logs past this stay on the computer. */
 const TEXT_MAX_BYTES = 2 * 1024 * 1024;
@@ -54,8 +62,13 @@ export type DocPage =
       kind: PreviewKind;
       /** What the WebView loads. */
       uri: string;
-      /** The mirror folder; iOS needs read access widened to it for the page's sibling files. */
+      /** The mirror folder. */
       rootUri: string;
+      /**
+       * The mirror of the folder the page copies from (`mirrorScopeFor`): iOS widens the page's
+       * read access to it for the page's sibling files, and no further.
+       */
+      readAccessUri: string;
       title: string;
       /** Referenced files that were missing, too large, or over the page budget. */
       skippedAssets: number;
@@ -69,8 +82,8 @@ export type DocPage =
 type DocMirror = {
   machine: MachineConnectionTarget;
   rootUri: string;
-  /** The computer folder every copied file must sit in (`mirrorScopeFor`). */
-  scope: string;
+  /** The computer folder every copied file must sit in, and where dot-folders count from (`mirrorScopeFor`). */
+  scope: MirrorScope;
   /** Remote paths already copied, found missing, or refused; never read twice. */
   settled: Set<string>;
   /** Remote paths now in the mirror. */
@@ -113,34 +126,6 @@ function writeMirrorFile(uri: string, content: string, encoding: 'base64' | 'utf
   const file = new File(uri);
   file.create({ intermediates: true, overwrite: true });
   file.writeSync(content, { encoding });
-}
-
-/**
- * The remote path a URL inside the mirror stands for, or null for any other URL. Matched on the
- * mirror folder's name rather than the full root, because WebKit may report `/private/var/…` for a
- * page loaded as `/var/…`.
- */
-export function remotePathForMirrorUrl(url: string): { remotePath: string; fragment: string } | null {
-  if (!url.startsWith('file://')) return null;
-  const hashIndex = url.indexOf('#');
-  const fragment = hashIndex >= 0 ? url.slice(hashIndex + 1) : '';
-  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
-  const queryIndex = withoutHash.indexOf('?');
-  const pathPart = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
-  const marker = `/${MIRROR_FOLDER}/`;
-  const markerIndex = pathPart.indexOf(marker);
-  if (markerIndex < 0) return null;
-  try {
-    const segments = pathPart
-      .slice(markerIndex + marker.length)
-      .split('/')
-      .filter((segment) => segment.length > 0)
-      .map((segment) => decodeURIComponent(segment));
-    const remotePath = remotePathFromMirrorSegments(segments);
-    return remotePath === null ? null : { remotePath, fragment };
-  } catch {
-    return null;
-  }
 }
 
 const MIRROR_PATH_IN_TEXT = new RegExp(`(?:file://)?/[^\\s"'\`()<>]*/${MIRROR_FOLDER}/[^\\s"'\`()<>#?]+`, 'gu');
@@ -262,37 +247,18 @@ function isScannable(remotePath: string): boolean {
 
 // Scope -----------------------------------------------------------------------------------------
 
-/**
- * The computer folder a page may copy files from: its project when it sits in one, otherwise its
- * own folder.
- *
+/*
  * CDXC:Docs 2026-10-25 WHY:
  * A page's own script can name any computer path or loopback address for the viewer to fetch, and it runs with file access in the WebView, so a Markdown or HTML file from a cloned repository could copy ~/.ssh keys or the gxserver token into the mirror, read them and send them out, or get a forward to the computer's gxserver (security audit 2026-10-25, user decision Q6). Copies now stay inside the page's project (or folder) and skip hidden files and folders, and forwards go only to loopback ports the page's own markup names, never gxserver's (DocViewerScreen.tsx).
+ *
+ * CDXC:Docs 2026-11-14 DECISION:
+ * User (Q3120, "P1 to P3 now, P5 checked"), with the desktop's Files page rules (CDXC:Docs 2026-11-14 in apps/desktop/src/app/helpers/manage_embed_page_rules.rs) as the model, the rules now in `pageRules.ts`:
+ * - P1, narrow Docs page reads: an HTML page copies plain files from its own folder and below only, never dot-files or dot-folders (counted from the project root), whether its markup names them or its script asks while it runs; the computer refuses a file whose resolved folder is a dot-folder too (`remoteFiles.ts`). A Markdown page keeps its project, because its policy runs none of the file's own script.
+ * - P2, no network for the page: a content policy `<meta>` written first in the mirrored page lets it load only from the mirror, the desktop's library CDNs and the viewer's phone forwards, and connect only to the mirror and those CDNs; frames take `blob:` only.
+ * - P3, ask before leaving a Docs page: a navigation the user did not tap asks first, and another app's link always asks; a tap on an ordinary link opens as before (DocViewerScreen.tsx).
+ * - P4, known limit: a loopback port the page's markup names is forwarded, so that server on the computer can still receive the page's requests (loads only, now: the policy refuses `fetch`, sockets and forms there), and a page can load from any phone loopback port.
+ * - P5, checked, not changed here: on Android the page runs with `allowFileAccessFromFileURLs`, so it can read the app's own files under `file://` (AsyncStorage's database, chat snapshots, other pages' mirrors); P2 keeps what it reads from leaving, and the full fix is native (the next app build).
  */
-export function mirrorScopeFor(documentPath: string, project: ViewerProject | null): string {
-  const document = normalizeRemotePath(documentPath);
-  const projectPath = project === null ? null : normalizeRemotePath(project.projectPath).replace(/\/+$/u, '');
-  if (projectPath !== null && projectPath.length > 0 && isWithin(projectPath, document)) return projectPath;
-  return dirName(document);
-}
-
-function samePathText(path: string): string {
-  // Windows drive and UNC paths are case-insensitive.
-  return /^(?:[a-z]:\/|\/\/)/iu.test(path) ? path.toLowerCase() : path;
-}
-
-function isWithin(folder: string, path: string): boolean {
-  const base = samePathText(folder.replace(/\/+$/u, ''));
-  const candidate = samePathText(path);
-  return candidate === base || candidate.startsWith(`${base}/`);
-}
-
-/** Whether a resolved computer path may be copied for this page: inside its scope, not hidden. */
-function inMirrorScope(mirror: DocMirror, path: string): boolean {
-  if (!isWithin(mirror.scope, path)) return false;
-  const rest = path.slice(mirror.scope.replace(/\/+$/u, '').length);
-  return !rest.split('/').some((segment) => segment.startsWith('.'));
-}
 
 const LOOPBACK_URL =
   /\b(https?):\/\/(?:[^\s\/?#@"'<>]*@)?(?:localhost|[^\s\/?#:"'<>]+\.localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::(\d{1,5}))?(?=[\/?#"'\s<>)]|$)/giu;
@@ -330,7 +296,7 @@ async function mirrorAssets(
     });
     pending = [];
     // Left settled, so a page that keeps asking for an out-of-scope file is not asked about again.
-    const allowed = level.filter((path) => inMirrorScope(mirror, path));
+    const allowed = level.filter((path) => mayCopyForPage(mirror.scope, path));
     for (let start = 0; start < allowed.length; start += ASSET_BATCH_SIZE) {
       if (isCancelled()) return skipped;
       const batch = allowed.slice(start, start + ASSET_BATCH_SIZE);
@@ -343,7 +309,7 @@ async function mirrorAssets(
       let reads: Awaited<ReturnType<typeof readRemoteFiles>>;
       try {
         // The computer also checks the scope after resolving links (remoteFiles.ts).
-        reads = await readRemoteFiles(mirror.machine, batch, ASSET_MAX_BYTES, mirror.scope);
+        reads = await readRemoteFiles(mirror.machine, batch, ASSET_MAX_BYTES, mirror.scope.folder);
       } catch (error) {
         // The computer could not be asked; a later ask (or Reload) tries these files again.
         batch.forEach((path) => mirror.settled.delete(path));
@@ -459,7 +425,8 @@ export async function buildDocPage(
   const documentUri = mirrorUri(rootUri, documentPath);
   if (documentUri === null) throw new Error(`Not a full path on the computer: ${remotePath}`);
   const title = baseName(documentPath);
-  const scope = mirrorScopeFor(documentPath, project);
+  const scope = mirrorScopeFor(documentPath, project, kind === 'html' || kind === 'markdown' ? kind : 'other');
+  const readAccessUri = mirrorFolderUri(rootUri, scope.folder);
   // Beside the file, so a Markdown page's relative images and a picture's own name resolve there.
   const pageUri = `${documentUri}.ghostex-view.html`;
 
@@ -471,6 +438,7 @@ export async function buildDocPage(
       kind,
       uri: pageUri,
       rootUri,
+      readAccessUri,
       title,
       skippedAssets: 0,
       mirror: emptyMirror(machine, rootUri, documentPath, scope),
@@ -506,6 +474,7 @@ export async function buildDocPage(
       kind,
       uri: pageUri,
       rootUri,
+      readAccessUri,
       title,
       skippedAssets: 0,
       mirror: emptyMirror(machine, rootUri, documentPath, scope),
@@ -520,6 +489,7 @@ export async function buildDocPage(
       kind,
       uri: pageUri,
       rootUri,
+      readAccessUri,
       title,
       skippedAssets: 0,
       mirror: emptyMirror(machine, rootUri, documentPath, scope),
@@ -532,22 +502,49 @@ export async function buildDocPage(
     [...references].map((reference) => resolveRemoteReference(documentPath, reference));
 
   if (kind === 'html') {
-    writeMirrorFile(documentUri, read.base64, 'base64');
+    // The page's bytes as authored, with its content policy written first (`pageRules.ts`).
+    writeMirrorFile(documentUri, withPagePolicyBase64(read.base64, docPageContentPolicy()), 'base64');
     const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(text)), isCancelled, true);
-    return { kind, uri: documentUri, rootUri, title, skippedAssets, mirror, loopbackPorts: loopbackPortsIn(text) };
+    return {
+      kind,
+      uri: documentUri,
+      rootUri,
+      readAccessUri,
+      title,
+      skippedAssets,
+      mirror,
+      loopbackPorts: loopbackPortsIn(text),
+    };
   }
 
-  const html = renderMarkdownDocument(text, title, appearance);
-  writeMirrorFile(pageUri, html, 'utf8');
+  const markdownScriptNonce = newScriptNonce();
+  const html = renderMarkdownDocument(text, title, appearance, markdownScriptNonce);
+  writeMirrorFile(pageUri, withPagePolicy(html, docPageContentPolicy({ markdownScriptNonce })), 'utf8');
   const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(html)), isCancelled, true);
-  return { kind, uri: pageUri, rootUri, title, skippedAssets, mirror, loopbackPorts: loopbackPortsIn(html) };
+  return {
+    kind,
+    uri: pageUri,
+    rootUri,
+    readAccessUri,
+    title,
+    skippedAssets,
+    mirror,
+    loopbackPorts: loopbackPortsIn(html),
+  };
+}
+
+/** The `file://` URI of a computer folder's mirror, ending in `/`; the mirror root when it has none. */
+function mirrorFolderUri(rootUri: string, folder: string): string {
+  const segments = mirrorSegments(folder);
+  if (segments === null || segments.length === 0) return rootUri;
+  return `${rootUri}${segments.map(encodeURIComponent).join('/')}/`;
 }
 
 function emptyMirror(
   machine: MachineConnectionTarget,
   rootUri: string,
   documentPath: string,
-  scope: string,
+  scope: MirrorScope,
 ): DocMirror {
   return {
     machine,

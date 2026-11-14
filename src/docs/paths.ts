@@ -252,3 +252,34 @@ export function remotePathFromMirrorSegments(segments: readonly string[]): strin
   if (drive !== null) return `${drive[1]}:/${rest.join('/')}`;
   return null;
 }
+
+/** The phone folder (under the app's cache) the Docs viewer mirrors computer files into (`page.ts`). */
+export const MIRROR_FOLDER = 'ghostex-docs-view';
+
+/**
+ * The remote path a URL inside the mirror stands for, or null for any other URL. Matched on the
+ * mirror folder's name rather than the full root, because WebKit may report `/private/var/…` for a
+ * page loaded as `/var/…`.
+ */
+export function remotePathForMirrorUrl(url: string): { remotePath: string; fragment: string } | null {
+  if (!url.startsWith('file://')) return null;
+  const hashIndex = url.indexOf('#');
+  const fragment = hashIndex >= 0 ? url.slice(hashIndex + 1) : '';
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const queryIndex = withoutHash.indexOf('?');
+  const pathPart = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+  const marker = `/${MIRROR_FOLDER}/`;
+  const markerIndex = pathPart.indexOf(marker);
+  if (markerIndex < 0) return null;
+  try {
+    const segments = pathPart
+      .slice(markerIndex + marker.length)
+      .split('/')
+      .filter((segment) => segment.length > 0)
+      .map((segment) => decodeURIComponent(segment));
+    const remotePath = remotePathFromMirrorSegments(segments);
+    return remotePath === null ? null : { remotePath, fragment };
+  } catch {
+    return null;
+  }
+}

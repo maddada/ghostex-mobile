@@ -28,7 +28,18 @@ import { useAppearance, type Appearance } from '../theme/useAppearance';
 import * as Clipboard from 'expo-clipboard';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewInstance,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
@@ -43,15 +54,9 @@ import { CopyGlyph, PencilGlyph, ShareGlyph } from '../components/sessions/icons
 import { DocsCopy } from '../copy';
 import { agentationInjectionScript, parseDocPageMessage } from '../docs/agentation';
 import { assetLoaderAnswerScript, assetLoaderInjectionScript, parseDocAssetsMessage } from '../docs/assetLoader';
-import {
-  buildDocPage,
-  mirrorPathsToRemote,
-  mirrorRequestedAssets,
-  remotePathForMirrorUrl,
-  type DocPage,
-} from '../docs/page';
+import { buildDocPage, mirrorPathsToRemote, mirrorRequestedAssets, type DocPage } from '../docs/page';
+import { docNavigationFor, navigationWasTapped, type DocNavigation } from '../docs/pageRules';
 import { viewerProject } from '../docs/mediaStream';
-import { remotePathFromFileUrl } from '../docs/openDoc';
 import { openComputerFile } from '../docs/openComputerFile';
 import { baseName, docKindForPath, extensionOf, normalizeRemotePath } from '../docs/paths';
 import { FileKindIcon } from '../files/FileRows';
@@ -305,36 +310,69 @@ export default function DocViewerScreen({ navigation, route }: Props) {
     [machineId, navigation, projectId, showNotice],
   );
 
+  /*
+   * When the user last touched the page. The app sees the touch itself (React Native's touch events
+   * on the page's container), so a page's script cannot fake one (CDXC:Docs 2026-11-14 in docs/page.ts).
+   */
+  const lastTouchAt = useRef<number | null>(null);
+  const noteTouch = useCallback(() => {
+    lastTouchAt.current = Date.now();
+  }, []);
+  // One question at a time: a page that keeps navigating while one is open is refused meanwhile.
+  const askingRef = useRef(false);
+
+  const openNavigation = useCallback(
+    (link: Exclude<DocNavigation, { kind: 'stay' | 'refuse' }>): void => {
+      if (link.kind === 'file') openLinkedFile(link.path, link.fragment);
+      else if (link.kind === 'web') {
+        if (machineRef.current !== undefined) openMachineLink(machineRef.current.id, link.url);
+      } else void Linking.openURL(link.url).catch(() => undefined);
+    },
+    [openLinkedFile, openMachineLink],
+  );
+
+  /**
+   * Ask before leaving a Docs page (`pageRules.ts`): a tap on an ordinary link opens it as before;
+   * a navigation the user did not tap, or another app's link, shows its whole target first and
+   * opens only on Open (Cancel is the default), as the desktop's "Open a link in another app?".
+   */
   const handleShouldStartLoad = useCallback(
     (request: ShouldStartLoadRequest): boolean => {
-      // Frames load what their page asks for; only the page's own navigations are routed.
+      // A frame's own navigations stay in the frame, which the page's policy limits to `blob:`.
       if (request.isTopFrame === false) return true;
-      const url = request.url;
       if (page === null) return false;
-      if (/^(about|data|blob|javascript):/iu.test(url)) return true;
-      if (/^https?:\/\//iu.test(url)) {
-        if (machineRef.current !== undefined) openMachineLink(machineRef.current.id, url);
+      const tapped = navigationWasTapped(lastTouchAt.current, Date.now(), request.navigationType, Platform.OS);
+      const link = docNavigationFor(request.url, remotePath, tapped);
+      if (link.kind === 'stay') return true;
+      if (link.kind === 'refuse') return false;
+      if (link.ask === null) {
+        openNavigation(link);
         return false;
       }
-      const mirrored = remotePathForMirrorUrl(url);
-      if (mirrored === null) {
-        /*
-         * An absolute path the page wrote (`/Users/…`, `file:///…`, `C:/…`) resolved against the
-         * phone's own file system; it names a file on the computer.
-         */
-        const file = remotePathFromFileUrl(url);
-        if (file !== null) openLinkedFile(file.path, file.fragment ?? '');
-        else if (/^[a-z]:\//iu.test(url)) openLinkedFile(decodeFragment(url.split(/[?#]/u)[0] ?? ''), '');
-        else void Linking.openURL(url).catch(() => undefined);
-        return false;
-      }
-      const target = normalizeRemotePath(mirrored.remotePath);
-      // The page itself, including a jump to one of its own anchors.
-      if (target === remotePath || target === `${remotePath}.ghostex-view.html`) return true;
-      openLinkedFile(target, mirrored.fragment);
+      if (askingRef.current) return false;
+      askingRef.current = true;
+      const done = () => {
+        askingRef.current = false;
+      };
+      const shown = link.kind === 'file' ? link.path : link.url;
+      Alert.alert(
+        DocsCopy.linkAskTitle[link.ask],
+        DocsCopy.linkAskDetail(shown.length > 600 ? `${shown.slice(0, 600)}…` : shown, link.ask),
+        [
+          { text: DocsCopy.linkAskCancel, style: 'cancel', onPress: done },
+          {
+            text: DocsCopy.linkAskOpen,
+            onPress: () => {
+              done();
+              openNavigation(link);
+            },
+          },
+        ],
+        { cancelable: true, onDismiss: done },
+      );
       return false;
     },
-    [openLinkedFile, openMachineLink, page, remotePath],
+    [openNavigation, page, remotePath],
   );
 
   /*
@@ -429,7 +467,13 @@ export default function DocViewerScreen({ navigation, route }: Props) {
         style={styles.area}
         onLayout={() => measureInWindow(areaRef, (frame) => setAreaBottom(frame.y + frame.height))}
       >
-        <View testID="doc-content" style={[styles.area, contentInset > 0 && { marginBottom: contentInset }]}>
+        <View
+          testID="doc-content"
+          style={[styles.area, contentInset > 0 && { marginBottom: contentInset }]}
+          onTouchStart={noteTouch}
+          onTouchEnd={noteTouch}
+          onTouchCancel={noteTouch}
+        >
       {info !== null ? (
         <ScrollView style={infoEdges.scroll} contentContainerStyle={[styles.infoContent, infoEdges.content]}>
           <View style={styles.info}>
@@ -483,8 +527,9 @@ export default function DocViewerScreen({ navigation, route }: Props) {
           accessibilityLabel={isSource ? DocsCopy.sourceView(baseName(remotePath)) : undefined}
           javaScriptEnabled={!isSource}
           originWhitelist={isSource ? ['about:blank'] : ['*']}
-          // Source is inline escaped text, not an authored page with access to sibling assets.
-          allowingReadAccessToURL={page.kind === 'source' ? undefined : page.rootUri}
+          // Source is inline escaped text, not an authored page with access to sibling assets. A page
+          // reads its own folder's mirror (its project's, for Markdown), not other pages' copies.
+          allowingReadAccessToURL={page.kind === 'source' ? undefined : page.readAccessUri}
           allowFileAccess={!isSource}
           allowFileAccessFromFileURLs={!isSource}
           // A player page names the computer's stream through a phone forward, which is not the page's to report.

@@ -9,7 +9,9 @@ import { Marked, type Tokens } from 'marked';
 import { isLightBackground, type SidebarAppearance } from '../theme/sidebarAppearance';
 import { documentAppearanceStyles } from './plainDocument';
 
-const MERMAID_MODULE_URL = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';
+/** Mermaid's folder on the CDN, which loads its diagram chunks from beside the module. */
+export const MERMAID_MODULE_FOLDER = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/';
+const MERMAID_MODULE_URL = `${MERMAID_MODULE_FOLDER}mermaid.esm.min.mjs`;
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/gu, (character) => {
@@ -52,7 +54,16 @@ function splitFrontMatter(source: string): { frontMatter: string | null; body: s
   return { frontMatter: match[1] ?? '', body: source.slice(match[0].length) };
 }
 
-export function renderMarkdownDocument(source: string, title: string, appearance: SidebarAppearance): string {
+/**
+ * `scriptNonce` marks the viewer's own Mermaid script, the only one the page's content policy runs
+ * (`pageRules.ts`): script written in the Markdown file never runs.
+ */
+export function renderMarkdownDocument(
+  source: string,
+  title: string,
+  appearance: SidebarAppearance,
+  scriptNonce: string,
+): string {
   const slug = slugger();
   const marked = new Marked({ gfm: true, breaks: false });
   marked.use({
@@ -82,13 +93,13 @@ export function renderMarkdownDocument(source: string, title: string, appearance
 <article class="markdown-body">
 ${front}${rendered}
 </article>
-${usesMermaid ? mermaidScript(isLightBackground(appearance.background)) : ''}
+${usesMermaid ? mermaidScript(isLightBackground(appearance.background), scriptNonce) : ''}
 </body>
 </html>`;
 }
 
-function mermaidScript(light: boolean): string {
-  return `<script type="module">
+function mermaidScript(light: boolean, nonce: string): string {
+  return `<script type="module" nonce="${nonce}">
 import mermaid from ${JSON.stringify(MERMAID_MODULE_URL)};
 const blocks = [...document.querySelectorAll('pre > code.language-mermaid')];
 mermaid.initialize({ startOnLoad: false, theme: '${light ? 'default' : 'dark'}', securityLevel: 'loose' });

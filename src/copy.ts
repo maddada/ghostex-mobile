@@ -1458,6 +1458,15 @@ export const DocsCopy = {
   annotationsCopied: 'Annotations copied',
   annotationsCopiedHint: 'Paste them into a session’s chat or terminal.',
   agentationFailed: 'Agentation could not load. It needs an internet connection on this phone.',
+  // Ask before leaving a Docs page (CDXC:Docs 2026-11-14 in docs/page.ts); the other-app question is the
+  // desktop's (CDXC:Navigation 2026-11-05 in session_chat/runnable_links.rs).
+  linkAskTitle: { otherApp: 'Open a link in another app?', notTapped: 'Open a link from this page?' },
+  linkAskDetail: (target: string, ask: 'otherApp' | 'notTapped') =>
+    ask === 'otherApp'
+      ? `${target}\n\nThis link comes from the page. Another app on this phone opens it, so open it only if you trust where it came from.`
+      : `${target}\n\nThe page asked to open this without a tap. Open it only if you trust where the page came from.`,
+  linkAskCancel: 'Cancel',
+  linkAskOpen: 'Open',
   skippedAssets: (count: number) =>
     count === 1
       ? 'One file this page uses was too large to copy to the phone.'

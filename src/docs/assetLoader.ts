@@ -14,6 +14,9 @@
  * the phone itself (CDXC:RemoteMachines 2026-10-16 in `webPreview/machineLinks.ts`): the viewer
  * copies the file into the mirror or opens a forward to the port, and answers with the URL to load
  * instead, which the script puts on the element.
+ * Anyone's script can post that report, so what it may name is decided in the app, never here: an
+ * HTML page's own folder and below, no dot-files or dot-folders (CDXC:Docs 2026-11-14 in `page.ts`,
+ * `mayCopyForPage` in `pageRules.ts`), and only loopback ports its markup names.
  * SEE-ALSO: apps/mobile/app/src/docs/page.ts (`mirrorRequestedAssets`),
  * apps/mobile/app/src/screens/DocViewerScreen.tsx
  */

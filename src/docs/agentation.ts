@@ -14,6 +14,8 @@
 
 const AGENTATION_VERSION = '3.1.2';
 const AGENTATION_REACT_VERSION = '18.2.0';
+/** Where the phone loads Agentation from; a Docs page's content policy allows it for scripts (`pageRules.ts`). */
+export const AGENTATION_ORIGIN = 'https://esm.sh';
 const AGENTATION_PACKAGE_URL = `https://esm.sh/agentation@${AGENTATION_VERSION}?bundle&deps=react@${AGENTATION_REACT_VERSION},react-dom@${AGENTATION_REACT_VERSION}`;
 const AGENTATION_REACT_URL = `https://esm.sh/react@${AGENTATION_REACT_VERSION}`;
 const AGENTATION_REACT_DOM_CLIENT_URL = `https://esm.sh/react-dom@${AGENTATION_REACT_VERSION}/client?deps=react@${AGENTATION_REACT_VERSION}`;

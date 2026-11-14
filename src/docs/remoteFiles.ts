@@ -27,6 +27,9 @@ const READ_EXEC_TIMEOUT_MS = 60_000;
  * computer itself now resolves the file's real folder (`pwd -P`, or every parent's reparse point on
  * Windows) and answers `missing` for a file that is itself a link or whose real folder is outside
  * the scope's real folder.
+ * Since 2026-11-14 (CDXC:Docs in page.ts, Q3120) it also answers `missing` when a folder between the
+ * scope and the file is a dot-folder once resolved, so a link `assets -> .secrets` inside the page's
+ * folder reads nothing.
  */
 
 /** Runs under `sh`, whatever the account's login shell is (a fish login cannot parse `f() {}`). */
@@ -40,8 +43,9 @@ function posixReadScript(paths: readonly string[], maximumBytes: number, scope: 
     '  [ -n "$gx_scope_real" ] || return 1',
     '  [ ! -L "$1" ] || return 1',
     '  gx_dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || return 1',
-    '  case "$gx_dir/" in "$gx_scope_real"/*) return 0 ;; esac',
-    '  return 1',
+    '  case "$gx_dir/" in "$gx_scope_real"/*) ;; *) return 1 ;; esac',
+    '  case "${gx_dir#"$gx_scope_real"}/" in */.*) return 1 ;; esac',
+    '  return 0',
     '}',
     'gx_read() {',
     '  if ! gx_inside "$1"; then printf \'missing\\n\'; return; fi',
@@ -71,6 +75,7 @@ function GxInside($gxFile) {
   $gxDir=$gxFile.Directory
   while ($gxDir -ne $null -and $gxDir.FullName.Length -gt $gxScopeFull.Length) {
     if ($gxDir.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+    if ($gxDir.Name.StartsWith('.')) { return $false }
     $gxDir=$gxDir.Parent
   }
   return $true
