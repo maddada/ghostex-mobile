@@ -7,7 +7,8 @@
  * transcript follows the finger a little, then pages out and the next chat slides in; at the first or last tab it
  * gives a little and springs back. Never:
  * - from a screen edge (a margin at each edge is left to the system's Back swipe and the terminal's own edges),
- * - a vertical scroll (a mostly vertical drag is never claimed, and the list taking it cancels this one),
+ * - a vertical scroll (a drag steeper than 30 degrees is never claimed, and a list that started scrolling first keeps
+ *   the drag),
  * - a sideways scroll inside a code block, a table or a wide card (their native scroll view takes the drag at its own
  *   small slop and cancels this one, on Android and on iOS),
  * - while text is selected: a hold (where selecting words starts) arms nothing, and the next touch after a hold
@@ -16,6 +17,14 @@
  * CDXC:SessionChat 2026-11-12 WHY: React Native's responder (as `EdgeSwipeZones`), not a gesture-handler pan: a JS
  * responder is cancelled by any native scroll view that starts scrolling, which is exactly the "never steal a
  * scroll" rule; a gesture-handler pan at the root would win against those native scroll views instead.
+ *
+ * CDXC:SessionChat 2026-11-14 DECISION:
+ * User: swiping sideways between tabs was hard, "if the finger moves even a little down while swiping sideways, the
+ * swipe gets cancelled". A drag within 30 degrees of horizontal is claimed after a short sideways travel, early
+ * enough that the list's own vertical slop (about 8 to 10 points) has not started it scrolling yet; once claimed it
+ * stays a tab swipe however the finger drifts (the swipe never hands the touch on, and while it holds the touch React
+ * Native keeps the scroll views inside it still on iOS and Android). A drag steeper than 30 degrees is never claimed
+ * and scrolls as before.
  */
 
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
@@ -30,9 +39,14 @@ import {
 
 /** The strip at each screen edge where a swipe never starts. */
 const EDGE_MARGIN = 28;
-/** Sideways travel before the transcript takes the drag, and how much more sideways than vertical it must be. */
-const CLAIM_DISTANCE = 18;
-const CLAIM_RATIO = 2;
+/**
+ * Sideways travel before the transcript takes the drag: past a tap's slop, but short of the vertical list's own slop
+ * at the steepest claimed angle. A code block's sideways scroll still starts first, at its native slop.
+ */
+const CLAIM_DISTANCE = 12;
+/** The steepest drag (degrees from horizontal) still claimed: its downward travel over its sideways travel. */
+const CLAIM_MAX_ANGLE_DEG = 30;
+const CLAIM_SLOPE = Math.tan((CLAIM_MAX_ANGLE_DEG * Math.PI) / 180);
 /** A press held this long without travelling is a hold (selection, the message menu), never a swipe. */
 const HOLD_MS = 380;
 /** Travel under this is a tap or a hold, not a drag. */
@@ -138,7 +152,7 @@ export function TabSwipeView({
         const now = touch.current;
         if (swipeRef.current === null || !now.eligible) return false;
         if (event.nativeEvent.timestamp - now.at > HOLD_MS) return false;
-        if (Math.abs(gesture.dx) < CLAIM_DISTANCE || Math.abs(gesture.dx) < CLAIM_RATIO * Math.abs(gesture.dy)) {
+        if (Math.abs(gesture.dx) < CLAIM_DISTANCE || Math.abs(gesture.dy) > CLAIM_SLOPE * Math.abs(gesture.dx)) {
           return false;
         }
         const delta: -1 | 1 = gesture.dx < 0 ? 1 : -1;
@@ -188,8 +202,9 @@ export function TabSwipeView({
         target.current = null;
         settle();
       },
-      // A native scroll view or the system may take the drag back; it springs home then.
-      onPanResponderTerminationRequest: () => true,
+      // Once claimed the drag stays a tab swipe even as the finger drifts down: the list asking for it is refused.
+      // The system can still take it (a native gesture does not ask); it springs home then.
+      onPanResponderTerminationRequest: () => false,
     });
     return responder.panHandlers;
   }, [opacity, translateX]);
