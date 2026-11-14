@@ -1766,15 +1766,19 @@ actor SSHConnection {
             return false
         }
         let silent = now.timeIntervalSince(lastInboundAt) >= interval
+        var checkSent = false
         if ioTask == nil {
             let unread = Self.socketHasUnreadBytes(socket)
             let serviceDue = lastServiceAt.map { now.timeIntervalSince($0) >= Self.idleServiceSeconds } ?? true
             if (silent && keepAliveSentAt == nil) || (unread && serviceDue && !harnessSkipIdleService) {
                 lastServiceAt = now
-                startServiceOpen(session)
-                if silent, keepAliveSentAt == nil { keepAliveSentAt = now }
+                checkSent = startServiceOpen(session)
+                if checkSent, silent, keepAliveSentAt == nil { keepAliveSentAt = now }
             }
-        } else if silent, keepAliveSentAt == nil {
+        }
+        // With the io loop running, or another opener holding the claim (an upload's SCP startup reads while it
+        // waits), the check is an SSH keep-alive: the deadline is armed only for a check that really went out.
+        if !checkSent, silent, keepAliveSentAt == nil {
             var secondsToNext: Int32 = 0
             let result = libssh2_keepalive_send(session, &secondsToNext)
             if result != 0 {
@@ -1802,23 +1806,25 @@ actor SSHConnection {
      * Opens a session channel that runs nothing and closes it, only so libssh2 reads (and answers) what the computer
      * sent. It takes the channel-open claim like any opener; when another open holds it, that open reads instead.
      */
-    private func startServiceOpen(_ session: OpaquePointer) {
+    /// True when the open went out (its confirmation is then the answer); false when another opener holds the claim.
+    private func startServiceOpen(_ session: OpaquePointer) -> Bool {
         let owner = UUID()
-        guard claimChannelOpen(owner) else { return }
+        guard claimChannelOpen(owner) else { return false }
         if let channel = Self.openSessionChannel(session) {
             releaseChannelOpen(owner)
             retireChannel(channel)
-            return
+            return true
         }
         let lastError = libssh2_session_last_errno(session)
         guard lastError == LIBSSH2_ERROR_EAGAIN else {
             releaseChannelOpen(owner)
             noteTransportError(Int(lastError))
-            return
+            return false
         }
         abandonOpen(AbandonedChannelOpen(owner: owner, holdsCommandSlot: false, what: "a liveness check") { session in
             Self.openSessionChannel(session)
         })
+        return true
     }
 
     /// Whether the computer sent bytes nobody has read yet (peeked, never consumed).
