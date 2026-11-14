@@ -30,7 +30,7 @@ import { DisclosureBody, DisclosureHeading, FoldPlaceProvider } from './Disclosu
 import { cardEdge, ReadImageStrip } from './Images';
 import { CompletedFilesFold } from './FileChanges';
 import { gapAbove } from './cardSpacing';
-import { useInnerGap, useRowGap } from './messageSpacing';
+import { useCardStackGap, useInnerGap } from './messageSpacing';
 import { arr, obj } from './json';
 import { MessageRow } from './MessageRow';
 import { SentAgentMessageCards } from './AgentMessageCards';
@@ -198,7 +198,7 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
   const foldAbove = !open && (item.readImages ?? []).length === 0 && folded.kept.length === 0;
   const hasQuestions = arr(folded.tailQuestions).length > 0;
   const hasSent = arr(folded.tailSent).some((sent) => obj(obj(sent)?.card) !== null);
-  const rowGap = useRowGap();
+  const rowGap = useCardStackGap(); // The rail's gap on an opened Quiet View line.
   const partGap = useInnerGap(COMPLETED_PART_GAP);
   // Inside an opened Quiet View line (gx-chat-core `QuietTurnLook`, where the user's decision is):
   // its calls straight on that line's rail with no card, or its card titled by its calls.

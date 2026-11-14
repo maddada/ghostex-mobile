@@ -15,7 +15,7 @@ import { gapAbove } from './cardSpacing';
 import { obj } from './json';
 import { MessageRow } from './MessageRow';
 import { FoldPlaceProvider } from './Disclosure';
-import { useRowGap } from './messageSpacing';
+import { useCardStackGap } from './messageSpacing';
 
 const OUT_OF_FOLD = { inWorkFold: false, hideFileChanges: true };
 
@@ -59,7 +59,7 @@ export function foldsCards(split: FoldedSplit): boolean {
 
 /** The folded cards, one stack, each a row gap under the one above. */
 export function FoldedCards({ split, columnGap = 0 }: { split: FoldedSplit; columnGap?: number }) {
-  const rowGap = useRowGap();
+  const rowGap = useCardStackGap(); // The rail's gap on an opened Quiet View line.
   if (!foldsCards(split)) return null;
   const cardGap = gapAbove(true, true, columnGap, rowGap);
   return (

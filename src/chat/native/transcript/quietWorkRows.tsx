@@ -20,7 +20,7 @@ import { FileChangeStack } from './FileChanges';
 import { FoldedCards, foldsCards, splitFolded } from './foldedCards';
 import { ReadImageStrip } from './Images';
 import { arr, num, obj, str, type JsonRecord } from './json';
-import { useInnerGap, useRowGap } from './messageSpacing';
+import { useCardStackGap, useInnerGap } from './messageSpacing';
 import { MessageRow } from './MessageRow';
 import {
   countSegments,
@@ -192,7 +192,7 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
  */
 export function QuietTail({ tails, firstGap }: { tails: readonly WorkTail[]; firstGap?: number }) {
   const { workflowCards, gbotCardStates } = useTranscriptFlags();
-  const rowGap = useRowGap();
+  const rowGap = useCardStackGap(); // The rail's gap on an opened Quiet View line.
   const partGap = useInnerGap(PART_GAP);
   const parts: { key: string; node: ReactNode; card: boolean }[] = [];
   const row = (message: ProjectedMessage) => ({
