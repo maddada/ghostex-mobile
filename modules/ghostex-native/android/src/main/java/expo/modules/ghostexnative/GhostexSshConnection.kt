@@ -279,29 +279,75 @@ class GhostexSshConnection(
    * Run [work], which opens one short-lived session channel, inside a command slot. It waits up to
    * [waitMs] for a free slot; a wait that runs out fails this call only, never the connection.
    */
-  fun <T> withCommandChannel(waitMs: Long, work: () -> T): T {
+  fun <T> withCommandChannel(waitMs: Long, work: () -> T): T = withCommandChannel(waitMs, null, work)
+
+  /**
+   * As above; with [handle], the slot is given back only when sshj detaches its channel (GhostexSshExecChannel.kt),
+   * which can be after [work] returned: a close the computer has not answered keeps it.
+   */
+  internal fun <T> withCommandChannel(waitMs: Long, handle: GhostexExecHandle?, work: () -> T): T {
     if (!commandChannelSlots.tryAcquire(waitMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)) {
       throw GhostexException(
         GhostexErrorCode.CHANNEL_FAILED,
-        "The computer is still busy with other commands. Try again in a moment."
+        "The computer is still busy with other commands. Try again in a moment." + stuckSuffix()
       )
     }
     try {
       return work()
     } finally {
-      commandChannelSlots.release()
+      releaseWhenDetached(handle) { commandChannelSlots.release() }
     }
   }
 
+  /** Command channels whose work ended but whose close the computer has not answered (their slot is still held). */
+  private val closingHandles = ConcurrentHashMap.newKeySet<GhostexExecHandle>()
+
+  private fun releaseWhenDetached(handle: GhostexExecHandle?, release: () -> Unit) {
+    if (handle == null) {
+      release()
+      return
+    }
+    closingHandles.add(handle)
+    handle.releaseWhenDetached {
+      closingHandles.remove(handle)
+      release()
+    }
+  }
+
+  class ChannelStats(
+    val commandsRunning: Int,
+    val commandsClosing: Int,
+    val stuckCommandCloses: Int,
+    val oldestStuckCloseMs: Long
+  )
+
+  /** What the phone's planned reset reads (`sshChannelStats`), the same shape as the iPhone's. */
+  fun channelStats(now: Long = System.currentTimeMillis()): ChannelStats {
+    val closing = closingHandles.filter { it.holdsSlot }
+    val stuck = closing.filter { it.closeSentAt > 0 && now - it.closeSentAt >= STUCK_CLOSE_MS }
+    val used = COMMAND_CHANNEL_SLOTS - commandChannelSlots.availablePermits() + (1 - probeChannelSlot.availablePermits())
+    return ChannelStats(
+      commandsRunning = (used - closing.size).coerceAtLeast(0),
+      commandsClosing = closing.size,
+      stuckCommandCloses = stuck.size,
+      oldestStuckCloseMs = stuck.maxOfOrNull { now - it.closeSentAt } ?: 0L
+    )
+  }
+
+  private fun stuckSuffix(): String {
+    val stuck = channelStats().stuckCommandCloses
+    return if (stuck > 0) " (stuck=$stuck)" else ""
+  }
+
   /** Run [work] in the connection check's lane; a second check while one runs answers E_BUSY at once. */
-  fun <T> withProbeChannel(work: () -> T): T {
+  internal fun <T> withProbeChannel(handle: GhostexExecHandle?, work: () -> T): T {
     if (!probeChannelSlot.tryAcquire()) {
       throw GhostexException(GhostexErrorCode.BUSY, "A connection check is already running.")
     }
     try {
       return work()
     } finally {
-      probeChannelSlot.release()
+      releaseWhenDetached(handle) { probeChannelSlot.release() }
     }
   }
 
@@ -323,7 +369,8 @@ class GhostexSshConnection(
     val ssh = client ?: throw notConnectedException(machineId)
     val outputCut = AtomicBoolean(false)
     try {
-      openOwnedSession(ssh, handle).use { session ->
+      val session = openOwnedSession(ssh, handle)
+      try {
         val cmd = session.exec(command)
         val stopSending = {
           outputCut.set(true)
@@ -350,6 +397,9 @@ class GhostexSshConnection(
             "Command did not finish within ${timeoutMs}ms on $machineId."
           )
         return ExecOutcome(stdout.text(), stderr.text(), exitStatus)
+      } finally {
+        handle.markClosed()
+        closeChannelQuietly(session, handle)
       }
     } catch (error: Exception) {
       // Closing the channel can fail the write or the wait first; the limit is the real reason.
@@ -367,37 +417,44 @@ class GhostexSshConnection(
     handle.channel = channel
     handle.closeLater = { owned ->
       try {
-        workExecutor.execute { closeChannelQuietly(owned) }
+        workExecutor.execute { closeChannelQuietly(owned, handle) }
       } catch (ignored: RejectedExecutionException) {
         // The connection is closing; its channels go with it.
+      }
+    }
+    // Bounded on its own: an open stuck writing its request never reaches sshj's timed wait.
+    handle.openBound = GhostexSshTask.deadline(ssh.connection.timeoutMs + GhostexExecHandle.LATE_OPEN_GRACE_MS) {
+      if (!handle.openIsSettled) {
+        Log.w(LOG_TAG, "a channel open on $machineId never got an answer; ending the connection")
+        abortTransport()
       }
     }
     try {
       channel.open()
     } catch (error: Exception) {
       if (causeIsOpenFailure(error) || !isConnected()) throw error
-      // sshj stopped waiting, but the channel is still attached: a late answer is still taken (and closed) here.
-      if (handle.awaitLateOpen(GhostexExecHandle.LATE_OPEN_GRACE_MS)) {
-        if (handle.confirmed) closeChannelQuietly(channel)
-      } else {
-        Log.w(LOG_TAG, "a channel open on $machineId never got an answer; ending the connection")
-        abortTransport()
+      // sshj stopped waiting, but the channel is still attached: a late answer is still taken (and closed) here; with
+      // none, the open's own bound ends the transport.
+      if (handle.awaitLateOpen(GhostexExecHandle.LATE_OPEN_GRACE_MS) && handle.confirmed) {
+        closeChannelQuietly(channel, handle)
       }
       throw GhostexException(GhostexErrorCode.TIMEOUT, "Opening a channel on the computer timed out.", error)
     }
     if (!handle.markOpen()) {
-      // The caller's deadline passed while it opened: nobody waits for this command any more.
-      closeChannelQuietly(channel)
+      // The caller's deadline passed while it opened: the command is never sent, the channel only closed.
+      closeChannelQuietly(channel, handle)
       throw GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out.")
     }
     return channel
   }
 
-  private fun closeChannelQuietly(channel: GhostexOwnedSessionChannel) {
+  private fun closeChannelQuietly(channel: GhostexOwnedSessionChannel, handle: GhostexExecHandle) {
+    if (handle.closeSentAt == 0L) handle.closeSentAt = System.currentTimeMillis()
     try {
       channel.close()
     } catch (ignored: Exception) {
-      // A close the computer does not answer gives up after sshj's timeout; the transport check handles the rest.
+      // A close the computer does not answer stops waiting after sshj's timeout; its slot stays held until sshj
+      // detaches the channel (GhostexSshExecChannel.kt).
     }
   }
 
@@ -761,6 +818,9 @@ class GhostexSshConnection(
 
     /** OpenSSH's default `MaxSessions` (10) less the seven warm terminals `MAX_WARM_SESSIONS` allows. */
     private const val COMMAND_CHANNEL_SLOTS = 3
+
+    /** A command close the computer has not answered this long after ours went out is stuck (`channelStats`). */
+    private const val STUCK_CLOSE_MS = 30_000L
 
     /** tailcat forwards listen on loopback only; the tunnel itself carries the traffic. */
     private const val TAILCAT_LOOPBACK_HOST = "127.0.0.1"

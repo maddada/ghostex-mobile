@@ -22,7 +22,7 @@ internal object GhostexSshTask {
    * (`GhostexSshConnection.withCommandChannel`); the deadline starts once it has one, so waiting
    * behind other commands never tears the transport down.
    */
-  fun <T> run(
+  internal fun <T> run(
     connection: GhostexSshConnection,
     timeoutMs: Long,
     success: (T) -> Unit,
@@ -30,16 +30,19 @@ internal object GhostexSshTask {
     commandChannel: Boolean = false,
     probeChannel: Boolean = false,
     onDeadline: () -> Unit = { connection.abortTransport() },
+    handle: GhostexExecHandle? = null,
     work: () -> T
   ) {
     val settled = AtomicBoolean(false)
     val bounded: () -> T = {
       val deadline = deadlines.schedule({
-        if (settled.compareAndSet(false, true)) {
-          // Settle before teardown: transport callbacks may also report this failure.
-          failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
-          // A command ends only itself (GhostexSshExecChannel.kt); a connect still closes its socket.
+        if (!settled.get()) {
+          // The operation learns it was abandoned before the timeout is published, so a command whose channel opens
+          // late is never sent (GhostexSshExecChannel.kt); a connect still closes its socket here.
           onDeadline()
+          if (settled.compareAndSet(false, true)) {
+            failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
+          }
         }
       }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
       try {
@@ -52,8 +55,8 @@ internal object GhostexSshTask {
       connection.workExecutor.execute {
         try {
           val result = when {
-            probeChannel -> connection.withProbeChannel(bounded)
-            commandChannel -> connection.withCommandChannel(timeoutMs, bounded)
+            probeChannel -> connection.withProbeChannel(handle, bounded)
+            commandChannel -> connection.withCommandChannel(timeoutMs, handle, bounded)
             else -> bounded()
           }
           if (settled.compareAndSet(false, true)) success(result)

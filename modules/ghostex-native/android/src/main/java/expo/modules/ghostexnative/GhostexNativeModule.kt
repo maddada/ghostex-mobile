@@ -206,6 +206,20 @@ class GhostexNativeModule : Module() {
     // JS turns the Android stall checks on only when it is true (src/remote/channelBudget.ts).
     Function("probeLane") { true }
 
+    // Command channels whose close the computer has not answered, for the phone's planned reset
+    // (src/remote/channelPressure.ts); the same shape as the iPhone's. Absent on older builds, so JS checks.
+    AsyncFunction("sshChannelStats") { machineId: String ->
+      val stats = connections[machineId]?.channelStats() ?: return@AsyncFunction null
+      mapOf(
+        "commandsRunning" to stats.commandsRunning,
+        "commandsClosing" to stats.commandsClosing,
+        "stuckCommandCloses" to stats.stuckCommandCloses,
+        "oldestStuckCloseMs" to stats.oldestStuckCloseMs,
+        "stuckOtherCloses" to 0,
+        "queuedSendBytes" to 0
+      )
+    }
+
     AsyncFunction("isConnected") { machineId: String ->
       connections[machineId]?.isConnected() ?: false
     }
@@ -994,7 +1008,7 @@ class GhostexNativeModule : Module() {
         retireConnection(connection, "disconnected", coded)
       }
       promise.reject(coded)
-    }, commandChannel = !probe, probeChannel = probe, onDeadline = { handle.abandon() }) {
+    }, commandChannel = !probe, probeChannel = probe, onDeadline = { handle.abandon() }, handle = handle) {
       connection.exec(command, timeout, input, handle)
     }
   }
