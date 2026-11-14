@@ -18,7 +18,7 @@
 
 import { logAppEvent } from '../app/appLog';
 
-/** Dial failures that keep today's quick retries before the wait starts. */
+/** Unanswered dials that start the wait: the first is retried as today, the second starts the 30 s wait. */
 const QUICK_FAILURES = 2;
 /** The wait after each further failure; the last one repeats. */
 export const DIAL_BACKOFF_STEPS_MS = [30_000, 60_000, 120_000, 240_000, 300_000];
@@ -45,7 +45,7 @@ export function unansweredDialCode(error: unknown): string | null {
 /** A dial to `machineId` got no answer. */
 export function noteDialFailure(machineId: string, code: string, message: string): void {
   const failures = (backoffs.get(machineId)?.failures ?? 0) + 1;
-  const step = failures - QUICK_FAILURES - 1;
+  const step = failures - QUICK_FAILURES; // 0 at the second failure
   const wait = step < 0 ? 0 : DIAL_BACKOFF_STEPS_MS[Math.min(step, DIAL_BACKOFF_STEPS_MS.length - 1)]!;
   backoffs.set(machineId, { failures, until: wait === 0 ? 0 : Date.now() + wait, code, message });
   if (wait > 0) {

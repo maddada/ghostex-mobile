@@ -397,11 +397,17 @@ const PROBE_GRACE_MS = 2_000;
 
 async function probeConnection(machineId: string, since: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<ProbeOutcome> {
   const startedAt = Date.now();
+  // Set once the deadline answered: a check still waiting for a transfer then sends no echo, so it cannot take the
+  // probe lane of a connection that replaced this one meanwhile.
+  const expired = { value: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<'unknown'>((resolve) => {
-    timer = setTimeout(() => resolve('unknown'), timeoutMs + PROBE_GRACE_MS);
+    timer = setTimeout(() => {
+      expired.value = true;
+      resolve('unknown');
+    }, timeoutMs + PROBE_GRACE_MS);
   });
-  const checked = runProbe(machineId, since, timeoutMs);
+  const checked = runProbe(machineId, since, timeoutMs, expired);
   // What the abandoned check finds later is no longer anyone's answer.
   checked.catch(() => undefined);
   try {
@@ -417,8 +423,15 @@ async function probeConnection(machineId: string, since: number, timeoutMs = PRO
   }
 }
 
-async function runProbe(machineId: string, since: number, timeoutMs: number): Promise<ProbeOutcome> {
+async function runProbe(
+  machineId: string,
+  since: number,
+  timeoutMs: number,
+  expired: { value: boolean },
+): Promise<ProbeOutcome> {
+  const generation = connectionGeneration(machineId);
   if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
+  if (expired.value || connectionGeneration(machineId) !== generation) return 'unknown';
   const outcome = await echoProbe(machineId, timeoutMs);
   // Uploads tell JavaScript nothing until they end, so an echo queued behind one proves nothing stuck.
   return outcome === 'stalled' && linkTransferring(machineId) ? 'unknown' : outcome;

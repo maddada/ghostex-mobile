@@ -256,7 +256,8 @@ type TerminalState = {
    * Re-run the open flow for a failed/closed tab. Shared by the Terminal
    * screen's Retry/Reconnect buttons and the app-resume auto-reattach.
    */
-  reopenTab: (sessionKey: string) => Promise<void>;
+  /** `dialNow` (default true) dials a computer waiting after unanswered dials; the automatic restore passes false. */
+  reopenTab: (sessionKey: string, options?: { dialNow?: boolean }) => Promise<void>;
   setFontSizeForSession: (sessionKey: string, size: number) => void;
   /** Drop all pinch-zoom overrides and re-apply the global default everywhere. */
   clearFontSizeOverrides: () => void;
@@ -686,7 +687,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       }
     },
 
-    reopenTab: (sessionKey) => {
+    reopenTab: (sessionKey, options) => {
       const existing = tabOpenRequests.get(sessionKey);
       if (existing)
         return existing.then(
@@ -734,7 +735,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
            * the exited process.
            */
           await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
-          await ensureConnected(target, { dialNow: true, reason: 'reconnecting a terminal' });
+          await ensureConnected(target, { dialNow: options?.dialNow ?? true, reason: 'reconnecting a terminal' });
           connected = true;
           const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
             fontSize: initialFontSize(sessionKey),
@@ -842,7 +843,7 @@ export function restoreAttachTabs(machineId: string): Promise<void> {
       if (AppState.currentState === 'background' || AppState.currentState === 'inactive') break;
       const current = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === tab.sessionKey);
       if (current?.state === 'closed' || current?.state === 'failed') {
-        await useTerminalStore.getState().reopenTab(tab.sessionKey);
+        await useTerminalStore.getState().reopenTab(tab.sessionKey, { dialNow: false });
       }
     }
   })();
