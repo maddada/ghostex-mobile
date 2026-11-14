@@ -20,6 +20,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import net.schmizz.keepalive.KeepAliveProvider
+import net.schmizz.keepalive.KeepAliveRunner
 import net.schmizz.sshj.AndroidConfig
 import net.schmizz.sshj.Config
 import net.schmizz.sshj.SSHClient
@@ -64,6 +65,9 @@ class GhostexSshConnection(
   @Volatile
   private var client: SSHClient? = null
 
+  /** Notices a path that stopped moving, uploads included (`GhostexSshLiveness`). */
+  private val liveness = GhostexSshLiveness(machineId)
+
   private val lifecycleLock = Any()
   private val cleanupStarted = AtomicBoolean(false)
   @Volatile private var closed = false
@@ -103,6 +107,7 @@ class GhostexSshConnection(
   fun connect() {
     ensureBundledBouncyCastleProvider()
     val ssh = SSHClient(createSshConfig())
+    ssh.socketFactory = liveness.socketFactory
     // A shorter TCP connect when asked (a Tailscale head start before Easy Connect); never longer.
     ssh.connectTimeout =
       if (config.dialTimeoutSec > 0) minOf(config.dialTimeoutSec * 1_000, CONNECT_TIMEOUT_MS) else CONNECT_TIMEOUT_MS
@@ -138,6 +143,7 @@ class GhostexSshConnection(
       ssh.socket.soTimeout = 0
       installPortForwardTeardownOnTransportDeath(ssh)
       if (!isConnected()) throw notConnectedException(machineId)
+      if (config.keepAliveEnabled) startLiveness(ssh)
     } catch (error: Exception) {
       try {
         ssh.socket?.close()
@@ -266,12 +272,26 @@ class GhostexSshConnection(
     workExecutor.shutdown()
   }
 
+  /**
+   * sshj's keep-alive gives up after two unanswered ones (it was five: 150-180 s at 30 s), and the liveness watchdog
+   * closes the socket after twice the interval plus 5 s with nothing moving, which also covers a blocked upload that
+   * sshj's keep-alive cannot see (CDXC:RemoteMachines 2026-11-14 in GhostexSshLiveness.kt).
+   */
+  private fun startLiveness(ssh: SSHClient) {
+    (ssh.connection.keepAlive as? KeepAliveRunner)?.maxAliveCount = KEEP_ALIVE_MAX_UNANSWERED
+    val interval = ssh.connection.keepAlive.keepAliveInterval
+    liveness.start(GhostexSshLiveness.limitMs(interval), stillOpen = { !closed && client === ssh }) {
+      if (client === ssh) abortTransport()
+    }
+  }
+
   /** Close TCP without waiting for SSH channel acknowledgements or the forwarding lock. */
   fun abortTransport(): SSHClient? {
     val ssh = synchronized(lifecycleLock) {
       closed = true
       client
     }
+    liveness.stop()
     try {
       ssh?.socket?.close()
     } catch (_: Exception) {
@@ -850,6 +870,8 @@ class GhostexSshConnection(
     private const val UPLOAD_TIMEOUT_MS = 120_000L
     private const val MIN_KEEP_ALIVE_INTERVAL_SECONDS = 10
     private const val MAX_KEEP_ALIVE_INTERVAL_SECONDS = 120
+    /** Unanswered keep-alives before sshj ends the transport (sshj's default is five). */
+    private const val KEEP_ALIVE_MAX_UNANSWERED = 2
     private const val STREAM_DRAIN_TIMEOUT_MS = 2_000L
 
     /**
