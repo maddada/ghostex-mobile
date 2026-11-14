@@ -129,7 +129,8 @@ export type ActionFields = {
   /** The list closed: back to its first page. */
   questionListReset: {};
   /** A session name's pill on an agent message card: the other session, focused. Desktop: `inter_agent_message.rs`. */
-  openAgentSession: { projectId: string; sessionId: string };
+  /** `serverId` names the session's computer (its Global Ref's first part); the core passes it to the host when it is not the chat's own. */
+  openAgentSession: { projectId: string; sessionId: string; serverId?: string };
   /** A command in a reply, run in the project's Commands panel terminal (gx-chat-core `run_command.rs`). */
   runInTerminal: { command: string };
   /** The same, typed into that terminal without pressing Enter. */

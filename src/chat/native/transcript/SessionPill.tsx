@@ -77,6 +77,8 @@ export function SessionPill({
             type: 'openAgentSession',
             projectId: str(session, 'projectId'),
             sessionId: str(session, 'sessionId'),
+            // The session's computer: the core hands it on when it is not the chat's own.
+            ...(str(session, 'serverId').length > 0 ? { serverId: str(session, 'serverId') } : {}),
           })
       : undefined);
   const icon = str(pill, 'agentIcon');

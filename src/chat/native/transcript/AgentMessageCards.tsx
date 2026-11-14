@@ -178,6 +178,7 @@ const AgentCard = memo(function AgentCard({
                         type: 'openAgentSession',
                         projectId: str(target, 'projectId'),
                         sessionId: str(target, 'sessionId'),
+                        ...(str(target, 'serverId').length > 0 ? { serverId: str(target, 'serverId') } : {}),
                       });
                     }}
                     accessibilityRole={target !== null ? 'button' : undefined}
