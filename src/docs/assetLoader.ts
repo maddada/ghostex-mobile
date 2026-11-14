@@ -46,7 +46,8 @@ export function assetLoaderInjectionScript(): string {
   if (window.__GHOSTEX_DOCS_ASSETS__) return;
   // What the viewer can place: a mirror file, any other file path, a Windows path (read as a
   // one-letter scheme), and the loopback addresses that name the computer.
-  var computerUrl = /^(?:file:|[a-z]:\/|https?:\/\/(?:[^\/?#@]*@)?(?:localhost|[^\/?#:]+\.localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\]|\[::ffff:(?:127\.0\.0\.1|7f00:1)\])(?::\d+)?(?:[\/?#]|$))/i;
+  // Backslashes are doubled: this is a template literal, which would drop a single one.
+  var computerUrl = /^(?:file:|[a-z]:\\/|https?:\\/\\/(?:[^\\/?#@]*@)?(?:localhost|[^\\/?#:]+\\.localhost|127(?:\\.\\d{1,3}){3}|0\\.0\\.0\\.0|\\[::1\\]|\\[::ffff:(?:127\\.0\\.0\\.1|7f00:1)\\])(?::\\d+)?(?:[\\/?#]|$))/i;
   var waiting = {};
   // URLs the viewer answered with: a phone-side forward is on the phone, never asked about again.
   var produced = {};
