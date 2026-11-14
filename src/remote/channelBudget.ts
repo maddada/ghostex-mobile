@@ -22,6 +22,7 @@
 import { Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { nativeProbeLane } from './probeLane';
 import { isSlowOpenFailure, noteOperationEnded, noteOperationStarted, noteSlowOpenFailure } from './stallWatch';
 
 /** OpenSSH's default `MaxSessions` (10) less the seven warm terminals, as on Android. */
@@ -229,11 +230,12 @@ function operationOutcome(error: unknown): 'timeout' | 'failed' {
 
 /**
  * Runs the connection check in its own lane, outside the three command slots, so it never waits behind slow commands
- * (src/remote/stallWatch.ts). One check runs at a time; a second is `E_BUSY`. iPhone only: Android's native connection
- * keeps its own three slots, and a fourth exec there waits on them.
+ * (src/remote/stallWatch.ts). One check runs at a time; a second is `E_BUSY`. iPhone, and Android builds whose native
+ * connection has the lane (`nativeProbeLane`); older Android builds keep their three slots, and a fourth exec there
+ * waits on them.
  */
 export function withProbeChannel<T>(machineId: string, run: () => Promise<T>): Promise<T> {
-  if (!budgeted()) return run();
+  if (!budgeted() && !nativeProbeLane()) return run();
   listenForConnectionEnds();
   const budget = budgetFor(machineId);
   if (budget.probeBusy) return Promise.reject(new ChannelBusyError('A connection check is already running.'));
@@ -258,7 +260,17 @@ export function withProbeChannel<T>(machineId: string, run: () => Promise<T>): P
  * computer refused never ran, so it waits again (after a short pause) while its wait allows.
  */
 export function withCommandChannel<T>(machineId: string, admissionMs: number, run: () => Promise<T>): Promise<T> {
-  if (!budgeted()) return watchRefusal(machineId, tracked(machineId, run));
+  if (!budgeted()) {
+    // Android: its native connection keeps the slots; with the lane, the stall watch still times each command.
+    if (!nativeProbeLane()) return watchRefusal(machineId, tracked(machineId, run));
+    const operation = noteOperationStarted(machineId);
+    const settled = watchRefusal(machineId, tracked(machineId, run));
+    settled.then(
+      () => noteOperationEnded(machineId, operation, 'answered'),
+      (error: unknown) => noteOperationEnded(machineId, operation, operationOutcome(error)),
+    );
+    return settled;
+  }
   listenForConnectionEnds();
   const budget = budgetFor(machineId);
   if (budget.warmedGeneration !== budget.generation) {

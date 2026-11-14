@@ -32,6 +32,7 @@ import {
   reportChannelRefused,
   withProbeChannel,
 } from './channelBudget';
+import { nativeProbeLane } from './probeLane';
 import {
   isSlowOpenFailure,
   offerResetInstead,
@@ -358,7 +359,10 @@ async function probeConnection(machineId: string, since: number, timeoutMs = PRO
   try {
     // echo is understood by POSIX shells, Windows cmd and PowerShell.
     const probe = await withProbeChannel(machineId, () =>
-      GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', timeoutMs),
+      // Android builds with the native lane run the check outside the command slots (src/remote/probeLane.ts).
+      nativeProbeLane()
+        ? GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', timeoutMs, 'probe')
+        : GhostexNative.exec(machineId, 'echo __GHOSTEX_CONNECTED__', timeoutMs),
     );
     const answered = probe.exitCode === 0 && probe.stdout.includes('__GHOSTEX_CONNECTED__');
     if (answered) noteLinkProgress(machineId);

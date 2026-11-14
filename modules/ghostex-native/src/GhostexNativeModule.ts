@@ -120,8 +120,15 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    */
   sshChannelStats?(machineId: string): Promise<SshChannelStats | null>;
 
+  /**
+   * True when `exec` takes `lane: 'probe'` (the connection check's own lane, outside the command slots) and a command
+   * past its deadline ends alone. Android builds from the command-cancel change on; absent elsewhere, so callers check.
+   */
+  probeLane?(): boolean;
+
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
-  exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;
+  // `lane` is passed only when `probeLane()` is true: older builds take exactly three arguments.
+  exec(machineId: string, command: string, timeoutMs?: number, lane?: 'probe'): Promise<ExecResult>;
   /** `exec` with `input` written to the command's stdin, then EOF (Windows scripts; both platforms). */
   execWithInput(machineId: string, command: string, input: string, timeoutMs?: number): Promise<ExecResult>;
 

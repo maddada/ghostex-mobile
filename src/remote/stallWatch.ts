@@ -27,6 +27,7 @@ import { Platform } from 'react-native';
 
 import { logAppEvent } from '../app/appLog';
 import { linkTransferring } from './linkActivity';
+import { nativeProbeLane } from './probeLane';
 
 /** How long a command runs, or a channel open takes, before the connection is checked. */
 export const STALL_SUSPECT_MS = 8_000;
@@ -78,9 +79,12 @@ export function installStallWatch(next: StallWatchHandlers): void {
   handlers = next;
 }
 
-/** Only the iPhone has this stall (Android's sshj sends each packet whole); Android keeps today's behaviour. */
+/**
+ * The iPhone has this stall (Android's sshj sends each packet whole). Android builds with the native check lane
+ * (`nativeProbeLane`) get the same watch for commands that hang; older Android builds keep today's behaviour.
+ */
 function watching(): boolean {
-  return Platform.OS === 'ios' && handlers !== null;
+  return (Platform.OS === 'ios' || nativeProbeLane()) && handlers !== null;
 }
 
 function watchFor(machineId: string): Watch {
