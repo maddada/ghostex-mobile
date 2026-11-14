@@ -13,6 +13,14 @@
  *    A command or upload still running on the connection defers it to the next refusal.
  * 3. Otherwise nothing resets by itself: the computer's notice offers Reset connection and says what it restarts.
  * Only real refusals from the computer count here, never a command that waited too long for a slot (`E_BUSY`).
+ *
+ * CDXC:RemoteMachines 2026-11-13 WHY:
+ * A command whose close the computer never answers (its program still runs there) holds a channel on the computer
+ * and, in iPhone builds with the SSH send queue, one of the phone's native command slots, however well the connection
+ * answers checks. Those builds report it (`sshChannelStats`, read every `STUCK_CHECK_EVERY_MS` while the app is in
+ * front): once one has been stuck `STUCK_CLOSE_RESET_MS`, the same planned reset as step 2 runs under the same rules
+ * (no plain shell open, no command running, at most once every five minutes), else the Reset connection button shows.
+ * Only a new connection frees the computer's side. Builds without the call never run this.
  */
 
 import { create } from 'zustand';
@@ -38,8 +46,17 @@ export type ChannelPressureHandlers = {
   /** Commands the phone runs there right now. */
   commandsInFlight(machineId: string): number;
   /** Replaces the computer's connection. */
-  reset(machineId: string): Promise<void>;
+  reset(machineId: string, reason: string): Promise<void>;
+  /** Stuck command closes the native layer reports, or null where it cannot (older builds, Android, no connection). */
+  stuckCloses?(machineId: string): Promise<StuckCloses | null>;
 };
+
+/** What `sshChannelStats` says about command closes the computer has not answered. */
+export type StuckCloses = { stuckCommandCloses: number; oldestStuckCloseMs: number };
+
+/** A stuck command close this old leads to the planned reset. */
+const STUCK_CLOSE_RESET_MS = 60_000;
+const STUCK_CHECK_EVERY_MS = 15_000;
 
 type Pressure = {
   stageOneAt: number | null;
@@ -128,11 +145,7 @@ export function clearChannelPressure(machineId: string): void {
 export async function noteChannelRefusal(machineId: string, now = Date.now()): Promise<void> {
   const active = handlers;
   if (active === null) return;
-  let pressure = pressures.get(machineId);
-  if (pressure === undefined) {
-    pressure = { stageOneAt: null, lastRefusalAt: null, refusals: [], lastResetAt: null };
-    pressures.set(machineId, pressure);
-  }
+  const pressure = pressureFor(machineId);
   const name = machineId;
   refusedThisRun.set(machineId, (refusedThisRun.get(machineId) ?? 0) + 1);
   logAppEvent(`Connection: ${name} refused a new channel. ${channelSnapshot(machineId)}`);
@@ -152,12 +165,35 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
   if (last !== undefined && now - last < BURST_MS) return;
   pressure.refusals = [...pressure.refusals.filter((at) => now - at <= REFUSAL_WINDOW_MS), now];
   if (pressure.refusals.length < REFUSALS_FOR_RESET) return;
+  await plannedReset(machineId, pressure, now, 'keeps refusing channels', 'the computer kept refusing channels');
+}
+
+function pressureFor(machineId: string): Pressure {
+  let pressure = pressures.get(machineId);
+  if (pressure === undefined) {
+    pressure = { stageOneAt: null, lastRefusalAt: null, refusals: [], lastResetAt: null };
+    pressures.set(machineId, pressure);
+  }
+  return pressure;
+}
+
+/** Step 2's reset, shared with stuck closes: the same guards, the same five-minute gap. */
+async function plannedReset(
+  machineId: string,
+  pressure: Pressure,
+  now: number,
+  what: string,
+  reason: string,
+): Promise<void> {
+  const active = handlers;
+  if (active === null) return;
+  const name = machineId;
   const shellsOpen = active.openTerminals(machineId).shells > 0;
   const tooSoon = pressure.lastResetAt !== null && now - pressure.lastResetAt < RESET_MIN_GAP_MS;
   const running = active.commandsInFlight(machineId);
   if (shellsOpen || tooSoon || running > 0) {
     logAppEvent(
-      `Connection: ${name} keeps refusing channels; not resetting by itself (${
+      `Connection: ${name} ${what}; not resetting by itself (${
         shellsOpen
           ? 'a plain terminal is open'
           : tooSoon
@@ -165,7 +201,7 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
             : `${running} commands or uploads still running`
       })`,
     );
-    // Work still running defers the reset to the next refusal, which checks again; the button is there meanwhile.
+    // Work still running defers the reset to the next trigger, which checks again; the button is there meanwhile.
     setNeedsReset(machineId, true);
     return;
   }
@@ -174,5 +210,28 @@ export async function noteChannelRefusal(machineId: string, now = Date.now()): P
   pressure.lastRefusalAt = null;
   pressure.refusals = [];
   logAppEvent(`Connection: freeing up the connection to ${name}`);
-  await active.reset(machineId).catch(() => undefined);
+  await active.reset(machineId, reason).catch(() => undefined);
+}
+
+/** One look at a computer's stuck command closes; a close stuck `STUCK_CLOSE_RESET_MS` leads to the planned reset. */
+export async function checkStuckCloses(machineId: string, now = Date.now()): Promise<void> {
+  const read = handlers?.stuckCloses;
+  if (read === undefined) return;
+  const stats = await read(machineId).catch(() => null);
+  if (stats === null || stats.stuckCommandCloses === 0 || stats.oldestStuckCloseMs < STUCK_CLOSE_RESET_MS) return;
+  const what =
+    `has ${stats.stuckCommandCloses} commands whose close it has not answered ` +
+    `(oldest ${Math.round(stats.oldestStuckCloseMs / 1000)} s)`;
+  await plannedReset(machineId, pressureFor(machineId), now, what, 'commands the computer never finished closing');
+}
+
+let stuckTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Reads the stuck closes of `machineIds()` every `STUCK_CHECK_EVERY_MS` while `inFront()`. */
+export function startStuckCloseChecks(machineIds: () => string[], inFront: () => boolean): void {
+  if (stuckTimer !== null) return;
+  stuckTimer = setInterval(() => {
+    if (!inFront()) return;
+    for (const machineId of machineIds()) void checkStuckCloses(machineId);
+  }, STUCK_CHECK_EVERY_MS);
 }

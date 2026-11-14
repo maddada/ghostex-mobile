@@ -30,6 +30,7 @@ import {
   clearChannelPressure,
   installChannelPressure,
   offerConnectionReset,
+  startStuckCloseChecks,
 } from '../remote/channelPressure';
 import { installStallWatch, resetStallWatch } from '../remote/stallWatch';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
@@ -214,11 +215,17 @@ export function initAutoReconnect(): void {
       };
     },
     commandsInFlight,
-    reset: async (machineId) => {
+    reset: async (machineId, reason) => {
       const target = machineTarget(machineId);
       if (target === undefined) return;
-      await reconnectMachine(target, 'the computer kept refusing channels');
+      await reconnectMachine(target, reason);
       await restoreAttachTabs(machineId);
+    },
+    // iPhone builds with the SSH send queue only (`sshChannelStats`); elsewhere nothing is read.
+    stuckCloses: async (machineId) => {
+      const read = GhostexNative.sshChannelStats;
+      if (typeof read !== 'function') return null;
+      return read.call(GhostexNative, machineId);
     },
   });
   installStallWatch({
@@ -245,6 +252,13 @@ export function initAutoReconnect(): void {
         .map((machine) => machine.id)
         .filter((machineId) => !isDemoMachineId(machineId)),
     channelSnapshot,
+  );
+  startStuckCloseChecks(
+    () =>
+      enabledMachines(useMachinesStore.getState())
+        .map((machine) => machine.id)
+        .filter((machineId) => !isDemoMachineId(machineId)),
+    () => AppState.currentState === 'active',
   );
   GhostexNative.addListener('onConnectionState', (event) => {
     const ended =
