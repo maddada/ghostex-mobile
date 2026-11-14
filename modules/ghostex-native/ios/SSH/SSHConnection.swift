@@ -282,6 +282,8 @@ actor SSHConnection {
     private var lastInboundAt = Date()
     private var lastInboundEvidence = 0
     private var keepAliveSentAt: Date?
+    /// When an idle connection was last serviced (`startServiceOpen`).
+    private var lastServiceAt: Date?
     private var execRequests: [UUID: ExecRequest] = [:]
     /// Commands whose output ended and whose result waits for the computer's CLOSE (exit status comes before it).
     private var closingExecRequests: [UUID: ExecRequest] = [:]
@@ -695,6 +697,10 @@ actor SSHConnection {
     nonisolated(unsafe) static var harnessSendBufferCap: Int32 = 0
     /// Harness only: a shorter bound on a forward's channel open.
     nonisolated(unsafe) static var harnessDirectOpenTimeout: TimeInterval = 0
+    /// Harness only: idle connections are not serviced (to let unread bytes pile up).
+    nonisolated(unsafe) static var harnessNoIdleService = false
+    /// Harness only: a shorter bound on an abandoned open.
+    nonisolated(unsafe) static var harnessAbandonedOpenLimit: TimeInterval = 0
     #endif
 
     /// libssh2's blocking mode, mirrored to the send queue, which drains itself in blocking sections.
@@ -1729,11 +1735,16 @@ actor SSHConnection {
     /**
      * CDXC:RemoteMachines 2026-11-14 WHY:
      * False once the transport is gone, which ends the loop. Besides the socket's own error, the computer has to be
-     * heard from: after `keepAliveIntervalSeconds` with no byte from it (libssh2's reads, counted by the receive
-     * callback, or bytes waiting unread on an idle socket), one SSH keep-alive that wants a reply goes out through the
-     * send queue, and if nothing arrives within another interval the transport is dead (about a minute by default).
-     * A loopback socket (an Easy Connect tunnel) or data the computer never acknowledges keeps TCP's own checks quiet
-     * forever. Sent through the queue, the keep-alive can no longer leave a packet half sent (SSHSendQueue.swift).
+     * heard from: only bytes libssh2 actually read count (the receive callback), never bytes left waiting in the
+     * socket, which may be old. After `keepAliveIntervalSeconds` with nothing read, a check goes out, and if nothing is
+     * read within another interval the transport is dead (about a minute by default). A loopback socket (an Easy
+     * Connect tunnel) or data the computer never acknowledges keeps TCP's own checks quiet forever.
+     * - With the io loop running, the check is one SSH keep-alive through the send queue (the loop reads its reply).
+     * - With the connection idle, nothing reads at all: libssh2 has no public call that reads without a channel. So
+     *   the check opens a session channel and closes it again (`startServiceOpen`): its open and close read and
+     *   answer everything the computer sent meanwhile (its own keep-alives, a rekey), and its confirmation is fresh
+     *   proof the computer answers. The same runs whenever an idle connection has unread bytes, at most once per
+     *   `idleServiceSeconds`, so the computer's requests are answered while the phone is idle.
      */
     func checkLiveness(now: Date = Date()) -> Bool {
         guard isActive, !transportDead, socket >= 0, let session = libssh2Session else { return false }
@@ -1742,21 +1753,28 @@ actor SSHConnection {
             markTransportDead(problem)
             return false
         }
-        guard config.keepAliveEnabled else { return !transportDead }
-        let waiting = Self.bytesWaiting(socket)
-        let evidence = sessionContext.inboundBytes + waiting
-        if evidence != lastInboundEvidence {
-            lastInboundEvidence = evidence
+        let inbound = sessionContext.inboundBytes
+        if inbound != lastInboundEvidence {
+            lastInboundEvidence = inbound
             lastInboundAt = now
             keepAliveSentAt = nil
         }
+        guard config.keepAliveEnabled else { return !transportDead }
         let interval = TimeInterval(keepAliveIntervalSeconds)
-        if let sent = keepAliveSentAt {
-            if now.timeIntervalSince(sent) >= interval {
-                markTransportDead("no answer from the computer for \(Int(now.timeIntervalSince(lastInboundAt))) s")
-                return false
+        if let sent = keepAliveSentAt, now.timeIntervalSince(sent) >= interval {
+            markTransportDead("no answer from the computer for \(Int(now.timeIntervalSince(lastInboundAt))) s")
+            return false
+        }
+        let silent = now.timeIntervalSince(lastInboundAt) >= interval
+        if ioTask == nil {
+            let unread = Self.socketHasUnreadBytes(socket)
+            let serviceDue = lastServiceAt.map { now.timeIntervalSince($0) >= Self.idleServiceSeconds } ?? true
+            if (silent && keepAliveSentAt == nil) || (unread && serviceDue && !harnessSkipIdleService) {
+                lastServiceAt = now
+                startServiceOpen(session)
+                if silent, keepAliveSentAt == nil { keepAliveSentAt = now }
             }
-        } else if now.timeIntervalSince(lastInboundAt) >= interval, waiting < Self.unreadEvidenceCap {
+        } else if silent, keepAliveSentAt == nil {
             var secondsToNext: Int32 = 0
             let result = libssh2_keepalive_send(session, &secondsToNext)
             if result != 0 {
@@ -1769,15 +1787,44 @@ actor SSHConnection {
         return !transportDead
     }
 
-    /// Unread bytes past this mean the computer keeps sending to an idle connection: no keep-alive is needed.
-    private static let unreadEvidenceCap = 16 * 1024
+    /// How often an idle connection with unread bytes from the computer is serviced at most.
+    private static let idleServiceSeconds: TimeInterval = 5
 
-    /// Bytes the computer sent that nobody has read yet (an idle connection's io loop is not running).
-    /// Peeked, not read (Swift has no `ioctl`), and counted up to `unreadEvidenceCap`.
-    static func bytesWaiting(_ socket: Int32) -> Int {
-        var buffer = [UInt8](repeating: 0, count: unreadEvidenceCap)
-        let peeked = recv(socket, &buffer, buffer.count, MSG_PEEK | MSG_DONTWAIT)
-        return max(0, peeked)
+    private var harnessSkipIdleService: Bool {
+        #if GHOSTEX_SSH_HARNESS
+        return Self.harnessNoIdleService
+        #else
+        return false
+        #endif
+    }
+
+    /**
+     * Opens a session channel that runs nothing and closes it, only so libssh2 reads (and answers) what the computer
+     * sent. It takes the channel-open claim like any opener; when another open holds it, that open reads instead.
+     */
+    private func startServiceOpen(_ session: OpaquePointer) {
+        let owner = UUID()
+        guard claimChannelOpen(owner) else { return }
+        if let channel = Self.openSessionChannel(session) {
+            releaseChannelOpen(owner)
+            retireChannel(channel)
+            return
+        }
+        let lastError = libssh2_session_last_errno(session)
+        guard lastError == LIBSSH2_ERROR_EAGAIN else {
+            releaseChannelOpen(owner)
+            noteTransportError(Int(lastError))
+            return
+        }
+        abandonOpen(AbandonedChannelOpen(owner: owner, holdsCommandSlot: false, what: "a liveness check") { session in
+            Self.openSessionChannel(session)
+        })
+    }
+
+    /// Whether the computer sent bytes nobody has read yet (peeked, never consumed).
+    static func socketHasUnreadBytes(_ socket: Int32) -> Bool {
+        var byte: UInt8 = 0
+        return recv(socket, &byte, 1, MSG_PEEK | MSG_DONTWAIT) > 0
     }
 
     /// An error or end-of-stream waiting on the socket, without consuming any byte.

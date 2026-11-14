@@ -17,6 +17,7 @@ final class AbandonedChannelOpen {
     /// The same libssh2 call the opener made, with the same arguments (libssh2 resumes the session's open state).
     let resume: (OpaquePointer) -> OpaquePointer?
     let what: String
+    let startedAt = Date()
 
     init(owner: UUID, holdsCommandSlot: Bool, what: String, resume: @escaping (OpaquePointer) -> OpaquePointer?) {
         self.owner = owner
@@ -35,12 +36,14 @@ extension SSHConnection {
      * next opener (maybe of another type) adopted the old open: it could wait the old open's timeout, get the old
      * channel, and the late channel was never closed. The caller still settles at once; the open itself is handed
      * here, keeps the claim (and a command's native slot), and is driven by the io loop with the same libssh2 call
-     * until it settles: a channel that opens late is closed without running anything, a failure just ends it. libssh2's
-     * own read timeout (60 s) bounds it.
+     * until it settles: a channel that opens late is closed without running anything, a failure just ends it.
+     * An abandoned open that has not settled after `abandonedOpenLimit` ends the transport instead: a resumed call is
+     * not always bounded by libssh2 (an SCP upload's startup waits for the remote scp's acknowledgement, which a stuck
+     * remote never sends), and an eternal claim would stop every later terminal, command and forward.
      * SEE-ALSO: SSHConnection.swift (`finishExecRequest`, the uploads), SSHPortForward.swift (`openDirectChannel`).
      */
     func abandonOpen(_ open: AbandonedChannelOpen) {
-        logger.info("channel open for \(open.what, privacy: .public) abandoned by its caller; finishing it")
+        logger.info("finishing the channel open for \(open.what, privacy: .public) in the background")
         abandonedOpens.append(open)
         startIOLoop()
     }
@@ -49,7 +52,13 @@ extension SSHConnection {
     func driveAbandonedOpens() -> Bool {
         guard !abandonedOpens.isEmpty, let session = libssh2Session else { return false }
         var moved = false
+        let now = Date()
         for open in abandonedOpens {
+            if now.timeIntervalSince(open.startedAt) >= Self.abandonedOpenLimit {
+                settleAbandonedOpen(open)
+                markTransportDead("the channel open for \(open.what) did not finish in \(Int(Self.abandonedOpenLimit)) s")
+                return true
+            }
             if let channel = open.resume(session) {
                 settleAbandonedOpen(open)
                 retireChannel(channel, holdsCommandSlot: open.holdsCommandSlot)
@@ -60,6 +69,14 @@ extension SSHConnection {
             }
         }
         return moved
+    }
+
+    /// libssh2's own open timeout; past it an abandoned open is not going to settle.
+    static var abandonedOpenLimit: TimeInterval {
+        #if GHOSTEX_SSH_HARNESS
+        if harnessAbandonedOpenLimit > 0 { return harnessAbandonedOpenLimit }
+        #endif
+        return 60
     }
 
     private func settleAbandonedOpen(_ open: AbandonedChannelOpen) {
