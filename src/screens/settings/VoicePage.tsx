@@ -200,11 +200,14 @@ function DictateSection({ machine }: { machine: MachineRecord }) {
       <Caption>{engineCaption(overview, name)}</Caption>
       {settings.engine === 'hex' ? <HexBlock machine={machine} /> : null}
       <Caption>{phoneDictationNote(name)}</Caption>
-      <LinkRow
-        title="Language"
-        description={languageLabel(overview.languages, settings.language)}
-        onPress={() => navigation.navigate('SettingsPage', { page: 'dictateLanguage' })}
-      />
+      {/* Superwhisper dictates in the language set in Superwhisper on the computer. */}
+      {settings.engine === 'superwhisper' ? null : (
+        <LinkRow
+          title="Language"
+          description={languageLabel(overview.languages, settings.language)}
+          onPress={() => navigation.navigate('SettingsPage', { page: 'dictateLanguage' })}
+        />
+      )}
       {problem !== null ? <Caption>{problem}</Caption> : null}
     </SettingsSection>
   );

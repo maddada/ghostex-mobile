@@ -64,6 +64,10 @@ export function unavailableTitle(code: string): string {
       return 'Hex has no model ready';
     case 'hexUnsupported':
       return "Hex can't run here";
+    case 'superwhisperNotInstalled':
+      return "Superwhisper isn't installed";
+    case 'superwhisperUnsupported':
+      return "Superwhisper can't run here";
     case 'noKey':
       return 'No API key added';
     case 'keyUnreadable':

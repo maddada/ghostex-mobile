@@ -128,6 +128,8 @@ const SETTINGS_CODES: ReadonlySet<string> = new Set([
   'hexModelNotReady',
   'hexVersion',
   'hexUnsupported',
+  'superwhisperNotInstalled',
+  'superwhisperUnsupported',
   'noKey',
   'keyUnreadable',
   'badKey',

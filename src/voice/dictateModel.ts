@@ -1,6 +1,7 @@
 /**
  * Dictate's settings as each computer's gxserver keeps them (`/api/readDictateSettings`): the
- * engine that transcribes (Hex 3 on that computer, or the OpenAI or xAI key) and the language.
+ * engine that transcribes (Hex 3 or Superwhisper on that computer, or the OpenAI or xAI key) and the
+ * language.
  * The phone only reads and writes them; the microphone is the phone's own. Kept free of React Native so its rules are
  * testable under `bun test`.
  *
@@ -10,7 +11,7 @@
  */
 
 /** `local` only from a computer whose Ghostex predates Hex replacing the local engine. */
-export type DictateEngineId = 'local' | 'openai' | 'xai' | 'hex';
+export type DictateEngineId = 'local' | 'openai' | 'xai' | 'hex' | 'superwhisper';
 
 export type DictateSettings = {
   engine: DictateEngineId;
@@ -51,6 +52,17 @@ export type HexView = {
   downloadUrl: string;
 };
 
+/**
+ * Superwhisper on a computer (`superwhisper` in `/api/readDictateSettings`, from gxserver's
+ * `speech/superwhisper.rs`): offered where it is installed (Linux; Omarchy comes with it).
+ */
+export type SuperwhisperView = {
+  available: boolean;
+  state: 'unsupported' | 'notInstalled' | 'installed';
+  ready: boolean;
+  problem: { code: string; message: string } | null;
+};
+
 export type DictateOverview = {
   settings: DictateSettings;
   engine: DictateEngine;
@@ -58,6 +70,8 @@ export type DictateOverview = {
   languages: { code: string; label: string }[];
   /** Missing on a computer whose Ghostex predates the Hex engine. */
   hex?: HexView;
+  /** Missing on a computer whose Ghostex predates the Superwhisper engine. */
+  superwhisper?: SuperwhisperView;
 };
 
 export const DICTATE_ENGINES: readonly { value: DictateEngineId; label: string }[] = [
@@ -67,14 +81,29 @@ export const DICTATE_ENGINES: readonly { value: DictateEngineId; label: string }
 
 /**
  * The engines the picker offers for a computer: Hex first, as the recommended engine, where Hex 3
- * ships for it (gxserver says), then OpenAI and xAI.
+ * ships for it (gxserver says), then Superwhisper where it is installed there (or already picked),
+ * then OpenAI and xAI.
  *
  * CDXC:Dictate 2026-11-07 DECISION: User: Hex wherever the dictation engine is chosen, shown only on systems Hex 3 supports (macOS on Apple silicon, Windows, Linux), with the row saying where the user stands in plain words. Since 2026-11-08 it leads the list (the local engine is gone).
+ * CDXC:Dictate 2026-11-14 DECISION: User (Q21): the phone's engine picker and caption show Superwhisper too, as the desktop's Settings › Dictation does on a Linux computer that has it.
  */
 export function dictateEngines(
-  overview: Pick<DictateOverview, 'hex'> | null,
+  overview: (Pick<DictateOverview, 'hex' | 'superwhisper'> & { settings?: Pick<DictateSettings, 'engine'> }) | null,
 ): readonly { value: DictateEngineId; label: string }[] {
-  return overview?.hex?.available === true ? [{ value: 'hex', label: 'Hex' }, ...DICTATE_ENGINES] : DICTATE_ENGINES;
+  const hex: { value: DictateEngineId; label: string }[] =
+    overview?.hex?.available === true ? [{ value: 'hex', label: 'Hex' }] : [];
+  const superwhisper: { value: DictateEngineId; label: string }[] =
+    overview?.superwhisper?.available === true || overview?.settings?.engine === 'superwhisper'
+      ? [{ value: 'superwhisper', label: 'Superwhisper' }]
+      : [];
+  return [...hex, ...superwhisper, ...DICTATE_ENGINES];
+}
+
+/** The engine row's caption while Superwhisper is the engine: what transcribes, or what is missing. */
+export function superwhisperCaption(superwhisper: SuperwhisperView | undefined, computer: string): string {
+  if (superwhisper?.available !== true)
+    return `Superwhisper isn't installed on ${computer}. Install it there, or pick another engine.`;
+  return `Superwhisper on ${computer} transcribes, in the language, tone and vocabulary set in Superwhisper there.`;
 }
 
 /** Why the phone's dictation goes through the computer, so Hex there is what transcribes it. */
@@ -136,6 +165,10 @@ export function engineStatusLine(engine: DictateEngine, computer: string): strin
     case 'hexNoModels':
     case 'hexModelNotReady':
       return `Hex on ${computer} has no ready model for Dictate. Download one in Hex there, or pick another in Voice settings.`;
+    case 'superwhisperNotInstalled':
+      return `Superwhisper isn't installed on ${computer}. Install it there, or pick another engine in Voice settings.`;
+    case 'superwhisperUnsupported':
+      return `Superwhisper works with Ghostex on Linux only. Pick another engine in Voice settings.`;
     case 'noKey':
       return `${computer} has no key for it yet. Add it in Ghostex Settings › Dictation there.`;
     case 'keyUnreadable':
@@ -152,11 +185,12 @@ export function isUnknownRoute(error: { code?: string | null; message: string })
 
 /** The engine row's caption on the phone: what transcribes, and what is missing for it. */
 export function engineCaption(
-  overview: Pick<DictateOverview, 'engine' | 'keys' | 'settings' | 'hex'>,
+  overview: Pick<DictateOverview, 'engine' | 'keys' | 'settings' | 'hex' | 'superwhisper'>,
   computer: string,
 ): string {
   const { engine, keys } = overview;
   if (engine.engine === 'hex') return hexCaption(overview.hex, computer);
+  if (engine.engine === 'superwhisper') return superwhisperCaption(overview.superwhisper, computer);
   if (engine.engine === 'local')
     return `${computer} still dictates with Ghostex's own speech model, which newer Ghostex replaces with Hex. Update Ghostex on ${computer}, or pick another engine.`;
   const provider = engine.engine === 'xai' ? 'xAI' : 'OpenAI';
