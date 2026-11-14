@@ -13,6 +13,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
+import type { SessionRevealPlan } from '../../contract/draftArrivals';
+
 const DISCLOSURE_STORAGE_KEY = 'drawer.disclosure.v2';
 
 type PersistedMachineDisclosure = {
@@ -78,6 +80,11 @@ type CollapseState = {
    * (CDXC:Drafts 2026-11-02 in gx-core sidebar_view/draft_arrivals.rs).
    */
   openDrafts: (machineId: string, projectKey: string) => void;
+  /**
+   * Opens what hides a session the phone just opened: its collection, project, session group and
+   * heading, leaving everything else as it is (CDXC:Sidebar 2026-11-14 in contract/draftArrivals.ts).
+   */
+  openSession: (machineId: string, plan: SessionRevealPlan) => void;
   /** Projects-section bulk disclosure (desktop Collapse All / Expand). */
   collapseAllProjects: (machineId: string) => void;
   expandAllProjects: (machineId: string, projectKeys: string[], collectionIds: string[]) => void;
@@ -253,6 +260,49 @@ export const useCollapseStore = create<CollapseState>()((set, get) => {
           : { ...projects, [machineId]: [...(projects[machineId] ?? []), projectKey] },
       });
       if (!projectOpen) persist();
+    },
+
+    openSession: (machineId, plan) => {
+      const state = get();
+      const opened = (list: readonly string[] | undefined, key: string | null): string[] | null =>
+        key === null || (list ?? []).includes(key) ? null : [...(list ?? []), key];
+      const update: Partial<CollapseState> = {};
+      let persisted = false;
+      const project = opened(state.expandedProjectsByMachine[machineId], plan.projectKey);
+      if (project !== null) {
+        update.expandedProjectsByMachine = { ...state.expandedProjectsByMachine, [machineId]: project };
+        persisted = true;
+      }
+      const collection = opened(state.expandedCollectionsByMachine[machineId], plan.collectionId);
+      if (collection !== null) {
+        update.expandedCollectionsByMachine = { ...state.expandedCollectionsByMachine, [machineId]: collection };
+        persisted = true;
+      }
+      const group = opened(state.expandedGroupsByMachine[machineId], plan.groupCollapseKey);
+      if (group !== null) {
+        update.expandedGroupsByMachine = { ...state.expandedGroupsByMachine, [machineId]: group };
+        persisted = true;
+      }
+      // The heading, with the same three lists `toggleSessionKind` keeps.
+      const kind = plan.kindCollapseKey;
+      if (kind.endsWith('|drafts')) {
+        const drafts = opened(state.expandedDraftSessionKeysByMachine[machineId], kind);
+        if (drafts !== null)
+          update.expandedDraftSessionKeysByMachine = { ...state.expandedDraftSessionKeysByMachine, [machineId]: drafts };
+      } else if (/\|(parked|working|snoozed)$/u.test(kind)) {
+        const folded = opened(state.expandedParkedSessionKeysByMachine[machineId], kind);
+        if (folded !== null)
+          update.expandedParkedSessionKeysByMachine = { ...state.expandedParkedSessionKeysByMachine, [machineId]: folded };
+      } else if ((state.collapsedSessionKindsByMachine[machineId] ?? []).includes(kind)) {
+        update.collapsedSessionKindsByMachine = {
+          ...state.collapsedSessionKindsByMachine,
+          [machineId]: (state.collapsedSessionKindsByMachine[machineId] ?? []).filter((key) => key !== kind),
+        };
+        persisted = true;
+      }
+      if (Object.keys(update).length === 0) return;
+      set(update);
+      if (persisted) persist();
     },
 
     toggleMachine: (machineId) => {
