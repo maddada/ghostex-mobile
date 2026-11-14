@@ -16,6 +16,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -24,6 +25,7 @@ import {
 } from 'react-native';
 
 import { AGENT_ICONS } from '../../../assets/agentIcons.generated';
+import { SwitchRow } from '../../../components/common/SwitchRow';
 import type { UserAction } from '../../rust/actions';
 import { agentAccent } from './agentColors';
 import { Glyph, ModeGlyph } from './icons';
@@ -492,6 +494,33 @@ function ModeChoices({ rows, onChoose }: { rows: JsonRecord[]; onChoose: (comman
         const command = obj(row.command);
         const off = isTrue(row, 'disabled') || command === null;
         const description = str(row, 'description');
+        // A row that turns something on or off (the core's `toggle`, "Restart in Bypass when idle"
+        // under a greyed Bypass): the whole row and its switch send the row's command, which
+        // already says on or off (gx-chat-core menus/mode_restart.rs).
+        if (isTrue(row, 'toggle')) {
+          const on = isTrue(row, 'checked');
+          const flip = () => {
+            if (command !== null) onChoose(command);
+          };
+          return (
+            <SwitchRow
+              key={`${index}:${str(row, 'id')}`}
+              value={on}
+              disabled={off}
+              onValueChange={flip}
+              label={str(row, 'label')}
+              style={[styles.modeChoice, off ? styles.modeOff : null]}
+            >
+              <View style={styles.modeChoiceText}>
+                <Text style={styles.modeTitle} numberOfLines={1}>
+                  {str(row, 'label')}
+                </Text>
+                {description.length > 0 ? <Text style={styles.modeDescription}>{description}</Text> : null}
+              </View>
+              <Switch value={on} disabled={off} onValueChange={flip} />
+            </SwitchRow>
+          );
+        }
         return (
           <Pressable
             key={`${index}:${str(row, 'id')}`}
