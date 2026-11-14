@@ -371,6 +371,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     page: 'chat',
     section: 'settings:chat:claude-code',
     group: 'Claude Code',
+    title: 'Compact workers before a coordinator returns to them',
+    description:
+      'Compacts a big worker that sat idle past its prompt cache before its coordinator messages it, to save tokens.',
+    catalog: 'compactWorkersBeforeReturn',
+  },
+  {
+    page: 'chat',
+    section: 'settings:chat:claude-code',
+    group: 'Claude Code',
     title: 'Use a 1-hour prompt cache',
     description: "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry.",
     catalog: 'claudeOneHourPromptCache',

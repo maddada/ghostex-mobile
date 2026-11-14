@@ -43,6 +43,8 @@ type Values = {
   claudeIdleCompaction: boolean;
   claudeIdleCompactAbove: OnlyAbove;
   claudeOneHourPromptCache: boolean;
+  /** Null: the computer's Ghostex predates the switch, so the row is not shown. */
+  compactWorkersBeforeReturn: boolean | null;
 };
 
 type Loaded = { kind: 'loading' } | { kind: 'values'; values: Values } | { kind: 'failed'; message: string };
@@ -69,6 +71,8 @@ async function readValues(machine: MachineRecord): Promise<Loaded> {
       claudeIdleCompaction: result.idleCompaction !== false,
       claudeIdleCompactAbove: onlyAbove(result.idleCompactAbove),
       claudeOneHourPromptCache: result.oneHourPromptCache === true,
+      compactWorkersBeforeReturn:
+        typeof result.compactWorkersBeforeReturn === 'boolean' ? result.compactWorkersBeforeReturn : null,
     },
   };
 }
@@ -167,6 +171,14 @@ export function ClaudeCompactionRows() {
             value={loaded.values.claudeIdleCompactAbove}
             onChange={(next) => change({ claudeIdleCompactAbove: next })}
           />
+          {/* CDXC:Coordinators 2026-11-15 DECISION in server/src/carry_on_compaction.rs: on by default. */}
+          {loaded.values.compactWorkersBeforeReturn !== null ? (
+            <ToggleRow
+              label="Compact workers before a coordinator returns to them"
+              value={loaded.values.compactWorkersBeforeReturn}
+              onValueChange={(next) => change({ compactWorkersBeforeReturn: next })}
+            />
+          ) : null}
           <ToggleRow
             label="Use a 1-hour prompt cache"
             value={loaded.values.claudeOneHourPromptCache}

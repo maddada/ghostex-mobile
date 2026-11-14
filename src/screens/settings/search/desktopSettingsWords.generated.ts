@@ -149,6 +149,12 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     "options": [],
     "keywords": []
   },
+  "compactWorkersBeforeReturn": {
+    "title": "Compact workers before a coordinator returns to them",
+    "subtitle": "When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.",
+    "options": [],
+    "keywords": []
+  },
   "completionSound": {
     "title": "Agent finished sound",
     "subtitle": "The sound when an agent finishes a task or needs you, or Off.",
