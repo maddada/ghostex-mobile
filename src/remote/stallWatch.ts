@@ -26,7 +26,7 @@
 import { Platform } from 'react-native';
 
 import { logAppEvent } from '../app/appLog';
-import { linkTransferring } from './linkActivity';
+import { linkTransferring, transferDefers } from './linkActivity';
 import { nativeProbeLane } from './probeLane';
 
 /** How long a command runs, or a channel open takes, before the connection is checked. */
@@ -40,7 +40,7 @@ const RETRY_MS = 2_000;
  * The check's answer (`ProbeOutcome` in src/remote/connection.ts), plus `lost`: the check failed and the iPhone's SSH
  * now reports this same connection closed. It sends no disconnect event for that, so the watch replaces it.
  */
-export type StallCheckOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed' | 'lost';
+export type StallCheckOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed' | 'unknown' | 'lost';
 
 export type StallWatchHandlers = {
   /** One bounded check in the probe lane. */
@@ -208,8 +208,9 @@ function evaluate(machineId: string): void {
   if (watch.checking !== null) return; // the running check re-evaluates when it ends
   const reason = suspectReason(watch, Date.now());
   if (reason === null) return;
-  if (linkTransferring(machineId)) {
-    // A heavy transfer holds the link; its own outcome decides. Asked again once it may have ended.
+  if (transferDefers(machineId)) {
+    // A heavy transfer that still delivers holds the link; its own outcome decides. Asked again once it may have
+    // ended, or gone quiet for 15 s (linkActivity.ts `TRANSFER_SILENCE_MS`).
     scheduleRetry(machineId, watch, `${reason}; a large transfer is under way`);
     return;
   }
@@ -257,7 +258,8 @@ function runCheck(machineId: string, watch: Watch, reason: string): Promise<void
       await active.replace(machineId, `the connection closed (${reason})`).catch(() => undefined);
       return;
     }
-    if (outcome === 'busy') {
+    // `unknown`: the check found nothing by its deadline, or ran during a transfer; it proves nothing either way.
+    if (outcome === 'busy' || outcome === 'unknown') {
       watch.owed ??= reason;
       return;
     }

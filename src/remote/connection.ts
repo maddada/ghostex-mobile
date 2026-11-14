@@ -11,7 +11,7 @@ import {
 } from '../machines/easyConnectDial';
 import { noteConnectedThrough } from '../machines/duplicateComputers';
 import { applyEasyConnectLinkKey } from '../machines/easyConnectLinkKeyState';
-import { noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
+import { linkTransferring, noteLinkProgress, waitForLinkProgressOrIdle } from './linkActivity';
 import { onPairingChanged, pairingEpoch, samePairing } from '../machines/pairingEpoch';
 import {
   easyConnectConfig,
@@ -41,6 +41,7 @@ import {
   type StallCheckOutcome,
 } from './stallWatch';
 import { channelSnapshot } from './channelPressure';
+import { clearDialBackoff, dialWaitError, noteDialFailure, noteDialSuccess, unansweredDialCode } from './dialBackoff';
 import { noteConnected } from './connectionTrace';
 import { whereTheAppIs } from '../app/foregroundClock';
 
@@ -69,6 +70,7 @@ async function dropConnection(machineId: string): Promise<void> {
  */
 onPairingChanged((machineId) => {
   cancelConnectionAttempt(machineId);
+  clearDialBackoff(machineId, 'paired again');
   void dropConnection(machineId);
 });
 
@@ -84,11 +86,15 @@ export function ensureConnected(
     reset?: boolean;
     /** Why the caller asks, for the log line written when this replaces a connection. */
     reason?: string;
+    /** The person asked for this: it dials even while the computer waits after unanswered dials (dialBackoff.ts). */
+    dialNow?: boolean;
   } = {},
 ): Promise<void> {
   // A Cloud Box has no SSH: its chat link reaches it through `cloudBoxes/boxLink.ts`.
   // The demo computer has no SSH either: its inventory is bundled on the phone.
   if (isCloudBoxMachineId(machine.id) || isDemoMachine(machine)) return Promise.resolve();
+  if (options.reset === true || options.dialNow === true)
+    clearDialBackoff(machine.id, options.reason ?? 'asked by the person');
   const existing = attempts.get(machine.id);
   if (existing && (!options.reset || existing.reset)) {
     return options.verify && !existing.verify && !existing.reset
@@ -129,7 +135,7 @@ export function ensureConnected(
       logAppEvent(`Connection: ${machine.id} check ${probe} in ${Date.now() - startedAt}ms`);
       // Busy or out of channels is a working connection: replacing it would only end what runs on it
       // (CDXC:RemoteMachines 2026-11-13 in src/remote/channelBudget.ts).
-      if (probe === 'answered' || probe === 'busy' || probe === 'capacity') return;
+      if (probe === 'answered' || probe === 'busy' || probe === 'capacity' || probe === 'unknown') return;
       assertCurrent();
       /**
        * CDXC:RemoteMachines 2026-11-13 WHY:
@@ -171,6 +177,9 @@ export function ensureConnected(
       replaceExisting = true;
       replacedBecause = `its check ${probe}${options.reason ? `, asked by ${options.reason}` : ''}`;
     }
+    // A computer that did not answer its last dials is not dialled again before its wait ends (dialBackoff.ts).
+    const waiting = dialWaitError(machine.id);
+    if (waiting !== null) throw waiting;
     const dialStartedAt = Date.now();
     if (replaceExisting) {
       if (await GhostexNative.isConnected(machine.id).catch(() => false)) {
@@ -187,24 +196,16 @@ export function ensureConnected(
     const config = await resolveSshConfig(machine);
     assertCurrent();
     forgetRemoteEnvironment(machine.id);
-    if (machine.transport === 'tailcat') {
-      const pairedAddress = await connectEasyConnect(machine, config, assertCurrent, assertKept);
-      await assertKept();
-      refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress });
-    } else if (hasEasyConnectRoute(machine)) {
-      await connectEitherRoute(machine, config, assertCurrent, assertKept);
-      await assertKept();
-      refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress: null, secondRoute: true });
-      // Whether Easy Connect is still on there, so a computer that turned it off is not dialled
-      // through it next time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
-      setTimeout(() => {
-        // Paired again or edited meanwhile: the answer would be another computer's.
-        if (samePairing(machine.id, epoch)) void checkEasyConnectOn(machine);
-      }, EASY_CONNECT_CHECK_DELAY_MS);
-    } else {
-      await GhostexNative.connect(machine.id, config);
+    try {
+      await dial(machine, config, epoch, assertCurrent, assertKept);
+    } catch (error) {
+      const code = unansweredDialCode(error);
+      if (code !== null && samePairing(machine.id, epoch)) {
+        noteDialFailure(machine.id, code, error instanceof Error ? error.message : String(error));
+      }
+      throw error;
     }
-    await assertKept();
+    noteDialSuccess(machine.id);
     noteConnected(machine, Date.now() - dialStartedAt);
   })();
   const attempt = { promise, reset: options.reset === true, verify: options.verify === true };
@@ -214,6 +215,34 @@ export function ensureConnected(
   };
   void promise.then(clear, clear);
   return promise;
+}
+
+/** Dials `machine` over the route it is set up for; throws the dial's failure. */
+async function dial(
+  machine: MachineConnectionTarget,
+  config: SshConfig,
+  epoch: number,
+  assertCurrent: () => void,
+  assertKept: () => Promise<void>,
+): Promise<void> {
+  if (machine.transport === 'tailcat') {
+    const pairedAddress = await connectEasyConnect(machine, config, assertCurrent, assertKept);
+    await assertKept();
+    refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress });
+  } else if (hasEasyConnectRoute(machine)) {
+    await connectEitherRoute(machine, config, assertCurrent, assertKept);
+    await assertKept();
+    refreshEasyConnectAddressesSoon(machine, { epoch, pairedAddress: null, secondRoute: true });
+    // Whether Easy Connect is still on there, so a computer that turned it off is not dialled
+    // through it next time (CDXC:RemotePairing 2026-11-13 in machines/routeChoice.ts).
+    setTimeout(() => {
+      // Paired again or edited meanwhile: the answer would be another computer's.
+      if (samePairing(machine.id, epoch)) void checkEasyConnectOn(machine);
+    }, EASY_CONNECT_CHECK_DELAY_MS);
+  } else {
+    await GhostexNative.connect(machine.id, config);
+  }
+  await assertKept();
 }
 
 /** Waits after a connect before asking whether Easy Connect is on there, so the connect's own work goes first. */
@@ -347,13 +376,55 @@ async function connectEasyConnect(
  *   `STALL_SUSPECT_MS` (the iPhone's stuck open, not the computer refusing).
  * - `failed`: any other error, a wrong answer, or a channel refused on a connection that is gone or was replaced
  *   while the echo waited (that refusal is the old connection's and is reported against nothing).
+ * - `unknown`: the check found nothing by its own deadline (`PROBE_GRACE_MS` past the echo's), or the echo got no
+ *   answer while a heavy transfer was under way. It never replaces a connection by itself.
  * It never runs the chat handshake or dials: it asks only what already exists, so it cannot wait on the
  * `ensureConnected` it runs inside.
  */
-export type ProbeOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed';
+export type ProbeOutcome = 'answered' | 'busy' | 'capacity' | 'stalled' | 'failed' | 'unknown';
+
+/**
+ * How long past the echo's own bound the whole check may take before it answers `unknown`.
+ *
+ * CDXC:RemoteMachines 2026-11-14 WHY:
+ * The check had no deadline of its own: it waited for heavy transfers to end, and on the iPhone the echo's native
+ * timeout needs the connection's actor, which a terminal's start can hold for up to 20 s. Exports showed a 5 s check
+ * answering after 30 to 50 s. Now the check settles by its deadline whatever native does; `unknown` keeps the
+ * connection, and the echo keeps the probe lane until its native call really ends, so a check that follows meanwhile
+ * answers `busy` at once.
+ */
+const PROBE_GRACE_MS = 2_000;
 
 async function probeConnection(machineId: string, since: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<ProbeOutcome> {
+  const startedAt = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'unknown'>((resolve) => {
+    timer = setTimeout(() => resolve('unknown'), timeoutMs + PROBE_GRACE_MS);
+  });
+  const checked = runProbe(machineId, since, timeoutMs);
+  // What the abandoned check finds later is no longer anyone's answer.
+  checked.catch(() => undefined);
+  try {
+    const outcome = await Promise.race([checked, late]);
+    if (outcome === 'unknown') {
+      logAppEvent(
+        `Connection: ${machineId} check unknown after ${Date.now() - startedAt}ms (${linkTransferring(machineId) ? 'a large transfer is under way' : 'no answer by its deadline'}). ${channelSnapshot(machineId)}`,
+      );
+    }
+    return outcome;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runProbe(machineId: string, since: number, timeoutMs: number): Promise<ProbeOutcome> {
   if ((await waitForLinkProgressOrIdle(machineId, since)) === 'progress') return 'answered';
+  const outcome = await echoProbe(machineId, timeoutMs);
+  // Uploads tell JavaScript nothing until they end, so an echo queued behind one proves nothing stuck.
+  return outcome === 'stalled' && linkTransferring(machineId) ? 'unknown' : outcome;
+}
+
+async function echoProbe(machineId: string, timeoutMs: number): Promise<ProbeOutcome> {
   const startedAt = Date.now();
   const generation = connectionGeneration(machineId);
   try {

@@ -366,7 +366,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       let connected = false;
       let openStartedAt: number | null = null;
       try {
-        await ensureConnected(machine);
+        await ensureConnected(machine, { dialNow: true, reason: 'opening a terminal' });
         connected = true;
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
         if (isDemoMachineId(machine.id)) {
@@ -470,7 +470,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         }
         if (select) set({ selectedSessionKey: sessionKey });
         touchWarm(sessionKey);
-        await ensureConnected(machine, { verify: true, reason: 'opening an agent terminal' });
+        await ensureConnected(machine, { verify: true, dialNow: true, reason: 'opening an agent terminal' });
         const opening = tabOpenRequests.get(sessionKey);
         if (opening) await opening;
         const current = get().tabs.find((tab) => tab.sessionKey === sessionKey);
@@ -731,7 +731,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
            * the exited process.
            */
           await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
-          await ensureConnected(target);
+          await ensureConnected(target, { dialNow: true, reason: 'reconnecting a terminal' });
           connected = true;
           const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
             fontSize: initialFontSize(sessionKey),

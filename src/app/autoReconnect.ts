@@ -33,6 +33,7 @@ import {
   startStuckCloseChecks,
 } from '../remote/channelPressure';
 import { installStallWatch, resetStallWatch } from '../remote/stallWatch';
+import { clearDialBackoff, dialWaitMs } from '../remote/dialBackoff';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
 import { checkStalledConnection, reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
@@ -87,7 +88,11 @@ function scheduleReconnect(machineId: string): void {
   if (retryTimers.has(machineId) || !canRecover(machineId)) return;
   const attempt = attemptsByMachineId.get(machineId) ?? 0;
   attemptsByMachineId.set(machineId, attempt + 1);
-  const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+  // A computer that did not answer its last dials is tried again when its wait ends (dialBackoff.ts), not before.
+  const delay = Math.max(
+    RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)]!,
+    dialWaitMs(machineId),
+  );
   retryTimers.set(
     machineId,
     setTimeout(() => {
@@ -196,6 +201,8 @@ export function redialAfterServerStop(machineId: string): void {
 /** Validate existing sockets after resume or route changes, then resume bounded retries. */
 export function recoverConnections(reason = 'back in front'): void {
   for (const machine of enabledMachines(useMachinesStore.getState())) {
+    // Back in front, a network change or a new start may reach a computer that did not answer before.
+    clearDialBackoff(machine.id, reason);
     void recoverMachine(machine.id, true, reason);
   }
 }
