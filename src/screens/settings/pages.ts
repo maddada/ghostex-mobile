@@ -48,7 +48,7 @@ export const SETTINGS_PAGES: Readonly<Record<SettingsPageId, { title: string; de
   shortReplies: { title: ShortRepliesCopy.pageTitle, description: ShortRepliesCopy.pageDescription },
   notifications: { title: NotificationsCopy.title, description: NotificationsCopy.settings.pageDescription },
   liveActivity: { title: LiveActivityCopy.pageTitle, description: LiveActivityCopy.pageDescription },
-  connection: { title: 'Connection', description: 'Your computers, their routes, reconnecting and logs.' },
+  connection: { title: 'Connection', description: 'Your computers, their routes, reconnecting, memory and logs.' },
   sync: { title: 'Sync', description: 'Carrying Spaces and settings between your computers.' },
   autopilot: { title: 'Autopilot', description: 'Keep sessions going while you are away, and what it did.' },
   collab: { title: 'Collab', description: 'An extension: share a chat through a link that opens it in a browser.' },

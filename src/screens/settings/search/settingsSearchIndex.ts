@@ -597,6 +597,23 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     page: 'connection',
     section: '',
+    group: 'Memory',
+    title: 'Stop sessions that run the computer out of memory',
+    description: 'When the computer is about to run out of memory, Ghostex stops what an agent started that uses the most.',
+    catalog: 'memoryGuardEnabled',
+    keywords: ['memory guard', 'out of memory', 'ram', 'oom'],
+  },
+  {
+    page: 'connection',
+    section: '',
+    group: 'Memory',
+    title: 'Notify me when it steps in',
+    description: 'A notification whenever Ghostex stops or restarts something to free memory. Shown while the memory guard is on.',
+    catalog: 'memoryGuardNotify',
+  },
+  {
+    page: 'connection',
+    section: '',
     title: 'Logs',
     description: 'Recent connection and status events on this phone. Copy them, or send them to the developer.',
     keywords: ['log', 'debug', 'send logs'],

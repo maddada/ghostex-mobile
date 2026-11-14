@@ -361,6 +361,18 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     ],
     "keywords": []
   },
+  "memoryGuardEnabled": {
+    "title": "Stop sessions that run the computer out of memory",
+    "subtitle": "When this computer is about to run out of memory, Ghostex stops the build, test run or dev server an agent started that uses the most, restarts an agent that grew too big, and as a last step stops the session so you can resume it. Apps outside Ghostex are never touched.",
+    "options": [],
+    "keywords": []
+  },
+  "memoryGuardNotify": {
+    "title": "Notify me when it steps in",
+    "subtitle": "A notification on this computer and your phone whenever Ghostex stops or restarts something to free memory. Needs Stop sessions that run the computer out of memory.",
+    "options": [],
+    "keywords": []
+  },
   "pinnedSessionOrder": {
     "title": "Pinned order",
     "subtitle": "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Applies to both sidebars and the phone. Also in the sidebar's Sort & Filter menu.",

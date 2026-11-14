@@ -1,5 +1,6 @@
 /**
- * Settings › Connection: every computer with its live route and status, Auto-reconnect, and Logs.
+ * Settings › Connection: every computer with its live route and status, Auto-reconnect, the memory guard
+ * (MemoryGuardRows.tsx), and Logs.
  *
  * CDXC:RemoteMachines 2026-11-12 DECISION:
  * User (Q2732 note): the route is not shown on the Sessions screen while things work; "when it's connected he can see
@@ -20,6 +21,7 @@ import { tailscaleOnPhone } from '../../machines/easyConnectRoute';
 import { isMachineEnabled, useMachinesStore } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { useAppearance } from '../../theme/useAppearance';
+import { MemoryGuardRows } from './MemoryGuardRows';
 import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 import { Caption, LinkRow, SectionHeader, SettingsScreenLayout, SettingToggle, useSettingsStyles } from './SettingsControls';
 
@@ -75,6 +77,7 @@ export default function ConnectionPage() {
       <SectionHeader title="Options" />
       <SettingToggle settingKey="autoReconnect" label="Auto-reconnect on disconnect" />
       <Caption>Reconnects when the connection to your computer drops, and reopens interrupted agent terminals.</Caption>
+      <MemoryGuardRows />
       <SectionHeader title={ConnectionsCopy.troubleshooting} />
       <LinkRow
         title={ConnectionsCopy.logs}
