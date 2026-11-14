@@ -85,6 +85,64 @@ const HARD_LIMITS: readonly { key: string; label: string; detail: string }[] = [
   { key: 'postPublicly', label: 'Post publicly', detail: 'Post on Discord or X, comment on GitHub, or send email.' },
 ];
 
+/*
+ * CDXC:Autopilot 2026-11-14 DECISION: User, on the Autopilot design page: layout C (Off / Careful / Full
+ * presets over one row per situation, Q3030), the level merged into those rows (Q3031), Safe steps' words
+ * fixed (Q3032), hard limits only with All but limits (Q3033), what Every session leaves out listed (Q3036),
+ * the supervisor and the sweep under Advanced (Q3037), and the phone the same as the desktop (Q3038).
+ * SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/autopilot.rs (the same preset table),
+ * server/src/autopilot/config.rs (`Tier`).
+ */
+type Preset = 'off' | 'careful' | 'full' | 'custom';
+type QuestionChoice = 'wait' | '5' | '10' | '15';
+type PermissionChoice = 'wait' | 'safe' | 'all';
+
+/** When it asks a question; an old saved Heal level answers nothing (the computer reads it that way too). */
+function questionChoice(config: Config): QuestionChoice {
+  if (!config.answerQuestions || config.tier === 'heal') return 'wait';
+  return config.answerAfterMinutes === 5 ? '5' : config.answerAfterMinutes === 15 ? '15' : '10';
+}
+
+function permissionChoice(config: Config): PermissionChoice {
+  if (!config.answerApprovals || config.tier === 'heal') return 'wait';
+  return config.tier === 'decide' ? 'safe' : 'all';
+}
+
+/** The hard limits do not count: Careful never crosses one, and on Full they are extras. */
+function presetOf(config: Config): Preset {
+  if (!config.enabled) return 'off';
+  const question = questionChoice(config);
+  const permission = permissionChoice(config);
+  if (question === '15' && permission === 'safe') return 'careful';
+  if (question === '10' && permission === 'all') return 'full';
+  return 'custom';
+}
+
+function presetPatch(preset: Preset): Partial<Config> {
+  switch (preset) {
+    case 'off':
+      return { enabled: false };
+    case 'careful':
+      return { enabled: true, answerQuestions: true, answerAfterMinutes: 15, answerApprovals: true, tier: 'decide' };
+    case 'full':
+      return { enabled: true, answerQuestions: true, answerAfterMinutes: 10, answerApprovals: true, tier: 'everything' };
+    default:
+      return { enabled: true };
+  }
+}
+
+const PRESET_LINE: Record<Exclude<Preset, 'off'>, string> = {
+  careful: 'Careful: answers questions after 15 minutes and approves safe steps after a minute.',
+  full: 'Full: answers questions after 10 minutes and approves anything that is not a hard limit after a minute.',
+  custom: 'Custom: your own choices below.',
+};
+
+const PERMISSION_LINE: Record<PermissionChoice, string> = {
+  wait: 'Permission prompts, Connectors cards and folder trust wait for you.',
+  safe: "After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread's cards always wait for you.",
+  all: "After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread's cards always wait for you.",
+};
+
 async function call(
   machine: MachineRecord,
   params: Record<string, unknown>,
@@ -222,25 +280,42 @@ function AutopilotBody({
   logLimit: number;
 }) {
   const { config } = view;
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const minutes = Math.round(config.sweepSeconds / 60);
+  const preset = presetOf(config);
+  const question = questionChoice(config);
+  const permission = permissionChoice(config);
   const nameCount = (name: string) =>
     view.projects.filter((project) => project.name.toLowerCase() === name.toLowerCase()).length;
+  // Projects I pick lists every project; Every session only the ones taken out (Q3036).
+  const projectRows =
+    config.scope === 'projects'
+      ? view.projects
+      : config.scope === 'all'
+        ? view.projects.filter((project) => !project.in)
+        : [];
   return (
     <>
       <SettingsSection name="settings:autopilot:switch">
         <SectionHeader title="Autopilot" />
-        <ToggleRow
+        <SegmentedRow
           label="Autopilot"
-          detail={
-            config.enabled
-              ? `On since ${when(config.enabledAt)}, keeping ${view.watching.covered === 1 ? '1 session' : `${view.watching.covered} sessions`} going.`
-              : 'Carries on stopped sessions, interrupts hung commands, reloads frozen ones, switches account at a limit.'
-          }
-          value={config.enabled}
-          onValueChange={(enabled) => set({ enabled })}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'careful', label: 'Careful' },
+            { value: 'full', label: 'Full' },
+            { value: 'custom', label: 'Custom' },
+          ]}
+          value={preset}
+          onChange={(next) => set(presetPatch(next))}
         />
+        <Caption>
+          {preset === 'off'
+            ? 'Carries on stopped sessions, interrupts hung commands, reloads frozen ones, switches account at a limit. Careful and Full also answer for you.'
+            : `${PRESET_LINE[preset]} On since ${when(config.enabledAt)}, keeping ${view.watching.covered === 1 ? '1 session' : `${view.watching.covered} sessions`} going.`}
+        </Caption>
         {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): while Autopilot is off its page is
-            the switch (and what it did); every choice under it shows once it is on. */}
+            this choice (and what it did); every choice under it shows once it is on. */}
         {config.enabled ? (
           <>
             <SegmentedRow
@@ -253,30 +328,36 @@ function AutopilotBody({
               value={config.scope}
               onChange={(scope) => set({ scope })}
             />
-            {config.scope === 'projects'
-              ? view.projects.map((project) => (
-                  <ToggleRow
-                    key={project.projectId}
-                    label={project.name}
-                    detail={nameCount(project.name) > 1 ? project.path : undefined}
-                    value={project.in}
-                    onValueChange={(on) => void send({ op: 'setProject', projectId: project.projectId, on })}
-                  />
-                ))
-              : null}
-            {config.scope === 'sessions'
-              ? view.sessions.map((session) => (
-                  <ToggleRow
-                    key={`${session.projectId}:${session.sessionId}`}
-                    label={session.title}
-                    detail={session.project}
-                    value={session.on}
-                    onValueChange={(on) =>
-                      void send({ op: 'setSession', projectId: session.projectId, sessionId: session.sessionId, on })
-                    }
-                  />
-                ))
-              : null}
+            {projectRows.map((project) => (
+              <ToggleRow
+                key={project.projectId}
+                label={project.name}
+                detail={
+                  nameCount(project.name) > 1
+                    ? project.path
+                    : config.scope === 'all'
+                      ? 'Left out, with its worktrees. Switch on to put it back.'
+                      : undefined
+                }
+                value={project.in}
+                onValueChange={(on) => void send({ op: 'setProject', projectId: project.projectId, on })}
+              />
+            ))}
+            {view.sessions.map((session) => (
+              <ToggleRow
+                key={`${session.projectId}:${session.sessionId}`}
+                label={session.title}
+                detail={
+                  config.scope === 'all' && !session.on
+                    ? `${session.project}. Left out from its chat's Autopilot pill.`
+                    : session.project
+                }
+                value={session.on}
+                onValueChange={(on) =>
+                  void send({ op: 'setSession', projectId: session.projectId, sessionId: session.sessionId, on })
+                }
+              />
+            ))}
             {config.scope === 'sessions' && view.sessions.length === 0 ? (
               <Caption>Put a session in with the Autopilot pill in its chat.</Caption>
             ) : null}
@@ -287,85 +368,109 @@ function AutopilotBody({
       {config.enabled ? (
         <>
           <SettingsSection name="settings:autopilot:allowed">
-            <SectionHeader title="What it may do" />
-            <SegmentedRow
-              label="On its own"
-              options={[
-                { value: 'heal', label: 'Heal' },
-                { value: 'decide', label: 'Heal and decide' },
-                { value: 'everything', label: 'Everything' },
-              ]}
-              value={config.tier}
-              onChange={(tier) => set({ tier })}
-            />
-            {/* Heal leaves questions and approvals for you, so their switches show only above Heal. */}
-            {config.tier !== 'heal' ? (
-              <>
-                <ToggleRow
-                  label="Answer questions for me"
-                  detail="When you don't answer in time, it picks each question's recommended choice."
-                  value={config.answerQuestions}
-                  onValueChange={(answerQuestions) => set({ answerQuestions })}
-                />
-                {config.answerQuestions ? (
-                  <SegmentedRow
-                    label="Wait for me first"
-                    options={[
-                      { value: '5', label: '5 min' },
-                      { value: '10', label: '10 min' },
-                      { value: '15', label: '15 min' },
-                    ]}
-                    value={String(config.answerAfterMinutes) as '5' | '10' | '15'}
-                    onChange={(wait) => set({ answerAfterMinutes: Number(wait) })}
-                  />
-                ) : null}
-                <ToggleRow
-                  label="Answer approval cards"
-                  detail="Permission prompts, Connectors cards and folder trust. While this is off, only you answer them."
-                  value={config.answerApprovals}
-                  onValueChange={(answerApprovals) => set({ answerApprovals })}
-                />
-              </>
-            ) : null}
-          </SettingsSection>
-          <SettingsSection name="settings:autopilot:limits">
-            <SectionHeader title="Hard limits it may cross" />
-            {HARD_LIMITS.map((limit) => (
-              <ToggleRow
-                key={limit.key}
-                label={limit.label}
-                detail={limit.detail}
-                value={config.limits[limit.key] === true}
-                onValueChange={(on) => set({ limits: { [limit.key]: on } })}
-              />
-            ))}
+            <SectionHeader title="What it does" />
             <Caption>
-              Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note.
+              Stuck sessions: it carries on, interrupts a hung command, reloads, switches account and restarts an ended
+              terminal. Always.
             </Caption>
           </SettingsSection>
-          <SettingsSection name="settings:autopilot:supervisor">
-            <SectionHeader title="Supervisor" />
-            <ChoiceRow
-              label="Claude Opus 5.5 · Medium"
-              selected={config.supervisor === 'opusMedium'}
-              onPress={() => set({ supervisor: 'opusMedium' })}
+          <SettingsSection name="settings:autopilot:questions">
+            <SectionHeader title="When it asks a question" />
+            <SegmentedRow
+              label="When it asks a question"
+              options={[
+                { value: 'wait', label: 'Wait for me' },
+                { value: '5', label: '5 min' },
+                { value: '10', label: '10 min' },
+                { value: '15', label: '15 min' },
+              ]}
+              value={question}
+              onChange={(next) =>
+                set(
+                  next === 'wait'
+                    ? { answerQuestions: false }
+                    : { answerQuestions: true, answerAfterMinutes: Number(next) },
+                )
+              }
             />
-            <ChoiceRow
-              label="Codex GPT 6.1 Sol · High"
-              selected={config.supervisor === 'solHigh'}
-              onPress={() => set({ supervisor: 'solHigh' })}
-            />
-            <StepperRow
-              label={`Look at every session every ${minutes} min`}
-              value={`${minutes}`}
-              canDecrease={minutes > 1}
-              canIncrease={minutes < 10}
-              onStep={(delta) => set({ sweepSeconds: (minutes + delta) * 60 })}
-            />
+            <Caption>
+              {question === 'wait'
+                ? 'Questions wait for you.'
+                : `After ${question} minutes without your answer, it picks each question's recommended choice. A question with none goes to the supervisor.`}
+            </Caption>
           </SettingsSection>
+          <SettingsSection name="settings:autopilot:permission">
+            <SectionHeader title="When it asks permission" />
+            <SegmentedRow
+              label="When it asks permission"
+              options={[
+                { value: 'wait', label: 'Wait for me' },
+                { value: 'safe', label: 'Safe steps' },
+                { value: 'all', label: 'All but limits' },
+              ]}
+              value={permission}
+              onChange={(next) =>
+                set(
+                  next === 'wait'
+                    ? { answerApprovals: false }
+                    : { answerApprovals: true, tier: next === 'safe' ? 'decide' : 'everything' },
+                )
+              }
+            />
+            <Caption>{PERMISSION_LINE[permission]}</Caption>
+          </SettingsSection>
+          {/* The hard limits show and count only with All but limits (Q3033). */}
+          {permission === 'all' ? (
+            <SettingsSection name="settings:autopilot:limits">
+              <SectionHeader title="Hard limits it may cross" />
+              {HARD_LIMITS.map((limit) => (
+                <ToggleRow
+                  key={limit.key}
+                  label={limit.label}
+                  detail={limit.detail}
+                  value={config.limits[limit.key] === true}
+                  onValueChange={(on) => set({ limits: { [limit.key]: on } })}
+                />
+              ))}
+              <Caption>
+                Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note.
+              </Caption>
+            </SettingsSection>
+          ) : null}
         </>
       ) : null}
       <Log view={view} onMore={onMore} logLimit={logLimit} />
+      {config.enabled ? (
+        <SettingsSection name="settings:autopilot:advanced">
+          <SectionHeader title="Advanced" />
+          <LinkRow
+            title={advancedOpen ? 'Hide the supervisor and the sweep' : 'Supervisor and sweep'}
+            onPress={() => setAdvancedOpen((open) => !open)}
+          />
+          {advancedOpen ? (
+            <>
+              <ChoiceRow
+                label="Claude Opus 5.5 · Medium"
+                selected={config.supervisor === 'opusMedium'}
+                onPress={() => set({ supervisor: 'opusMedium' })}
+              />
+              <ChoiceRow
+                label="Codex GPT 6.1 Sol · High"
+                selected={config.supervisor === 'solHigh'}
+                onPress={() => set({ supervisor: 'solHigh' })}
+              />
+              <Caption>The supervisor wakes only for judgment calls, on whichever of your accounts has room.</Caption>
+              <StepperRow
+                label={`Look at every session every ${minutes} min`}
+                value={`${minutes}`}
+                canDecrease={minutes > 1}
+                canIncrease={minutes < 10}
+                onStep={(delta) => set({ sweepSeconds: (minutes + delta) * 60 })}
+              />
+            </>
+          ) : null}
+        </SettingsSection>
+      ) : null}
     </>
   );
 }
