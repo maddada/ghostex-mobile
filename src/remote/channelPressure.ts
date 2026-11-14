@@ -27,6 +27,7 @@ import { create } from 'zustand';
 
 import { logAppEvent } from '../app/appLog';
 import { commandsWaiting, connectionGeneration, onChannelRefused, onConnectionEnding } from './channelBudget';
+import { linkTransferring } from './linkActivity';
 
 const REFUSALS_FOR_RESET = 3;
 const REFUSAL_WINDOW_MS = 60_000;
@@ -198,7 +199,10 @@ async function plannedReset(
   const tooSoon = pressure.lastResetAt !== null && now - pressure.lastResetAt < RESET_MIN_GAP_MS;
   const running = active.commandsInFlight(machineId);
   const recoveryOff = active.mayRecover !== undefined && !active.mayRecover(machineId);
-  if (recoveryOff || shellsOpen || tooSoon || running > 0) {
+  // A heavy transfer (a chat snapshot, a large read over the forward) is not a command, but a reset would cut it too;
+  // the stall watch waits for it the same way.
+  const transferring = linkTransferring(machineId);
+  if (recoveryOff || shellsOpen || tooSoon || running > 0 || transferring) {
     logAppEvent(
       `Connection: ${name} ${what}; not resetting by itself (${
         recoveryOff
@@ -207,7 +211,9 @@ async function plannedReset(
             ? 'a plain terminal is open'
             : tooSoon
               ? 'it was reset less than 5 minutes ago'
-              : `${running} commands or uploads still running`
+              : transferring
+                ? 'a large transfer is under way'
+                : `${running} commands or uploads still running`
       })`,
     );
     // Work still running defers the reset to the next trigger, which checks again; the button is there meanwhile.
