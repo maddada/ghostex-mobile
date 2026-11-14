@@ -326,7 +326,7 @@ function SectionCard({
   const styles = useStyles();
   const P = useTranscriptTheme();
   const id = str(section, 'id');
-  // A card the core pins open (Context, Agent) has no fold; nor does one with nothing to fold.
+  // A card the core pins open (Agent) has no fold; nor does one with nothing to fold.
   const foldable = obj(section)?.foldable !== false && !isTrue(section, 'pinnedOpen');
   const collapsed = foldable && isTrue(section, 'collapsed');
   useEaseOnChange(collapsed);
@@ -361,15 +361,11 @@ function SectionCard({
         {trailing}
       </View>
       {id === 'context' ? <ContextSummary section={fields} details={details} /> : null}
-      {collapsed ? null : (
-        <SectionBody
-          id={id}
-          section={fields}
-          details={details}
-          act={act}
-          onCompact={onCompact}
-        />
-      )}
+      {collapsed ? null : <SectionBody id={id} section={fields} details={details} act={act} />}
+      {/* Compact context stays under the bar while the breakdown is folded, as on the desktop (`context_compact`). */}
+      {id === 'context' && obj(fields.compact) !== null ? (
+        <CompactButton compact={obj(fields.compact)!} onCompact={onCompact} />
+      ) : null}
     </View>
   );
 }
@@ -379,18 +375,16 @@ function SectionBody({
   section,
   details,
   act,
-  onCompact,
 }: {
   id: string;
   section: JsonRecord;
   details: JsonRecord | null;
   act: Act;
-  onCompact: () => void;
 }) {
   if (isTrue(section, 'loading')) return <Skeleton rows={num(section, 'skeletonRows') ?? 2} />;
   switch (id) {
     case 'context':
-      return <ContextBody section={section} act={act} onCompact={onCompact} />;
+      return <ContextBody section={section} act={act} />;
     case 'tasks':
       return <TasksBody section={section} act={act} />;
     case 'connectors':
@@ -574,15 +568,7 @@ function ContextSummary({ section, details }: { section: JsonRecord; details: Js
   );
 }
 
-function ContextBody({
-  section,
-  act,
-  onCompact,
-}: {
-  section: JsonRecord;
-  act: Act;
-  onCompact: () => void;
-}) {
+function ContextBody({ section, act }: { section: JsonRecord; act: Act }) {
   const styles = useStyles();
   const P = useTranscriptTheme();
   const messages = arr(section.messages);
@@ -650,7 +636,6 @@ function ContextBody({
       {status.length > 0 ? (
         <Text style={[styles.status, isTrue(section, 'statusError') ? { color: P.error } : null]}>{status}</Text>
       ) : null}
-      {obj(section.compact) !== null ? <CompactButton compact={obj(section.compact)!} onCompact={onCompact} /> : null}
     </View>
   );
 }
