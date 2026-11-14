@@ -20,6 +20,8 @@ import { arr, asJson, isTrue, num, obj, str } from './json';
 import { PROSE_SIZE, themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { PulseDot, Spinner } from './primitives';
 import { remoteWorkerComputer, remoteWorkerNotice } from './remoteWorker';
+import { ComputerIconGlyph } from '../../../components/sessions/ComputerIconGlyph';
+import { useServerComputerDrawing } from '../transcript/mentionedSession';
 
 /** A sheet's first line under its title: the panel's muted detail and an optional ornament. */
 function MenuMeta({ meta, trailing }: { meta: string; trailing?: ReactNode }) {
@@ -237,6 +239,8 @@ function WorkerPill({ row, title, remote }: { row: unknown; title: string; remot
   const theme = useTranscriptTheme();
   const icon = str(row, 'agentIcon');
   const coordinator = isTrue(row, 'coordinator');
+  // That computer's own icon (CDXC:SessionChat 2026-11-14, `SessionPill`).
+  const computerDrawing = useServerComputerDrawing(remote ? str(row, 'serverId') : '');
   return (
     <View style={styles.workerPill}>
       {coordinator ? (
@@ -247,7 +251,7 @@ function WorkerPill({ row, title, remote }: { row: unknown; title: string; remot
       <Text style={styles.threadTitle} numberOfLines={1}>
         {title}
       </Text>
-      {remote ? <Glyph name="device-desktop" size={11} color={theme.muted} /> : null}
+      {remote ? <ComputerIconGlyph drawing={computerDrawing} size={11} color={theme.muted} /> : null}
     </View>
   );
 }

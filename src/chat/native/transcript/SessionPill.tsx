@@ -1,11 +1,17 @@
 /**
  * Another session's agent pill (gx-chat-core `transcript/session_mentions.rs`, where the user's
  * decision lives): a hairline rounded frame around the agent's logo and the session's title, then
- * its state dot and, for a session on another computer than the chat's, that computer's icon (no
- * name). The same look desktop draws (`session_pill_link` in markdown_links.rs). The dot and the
- * computer are read live from the phone's session list (`mentionedSession.ts`). A card's pill (the
- * core marks it `logo: false`) sits beside the card's own agent tile and leaves the logo to it
- * (CDXC:SessionChat 2026-10-28 on `card_pill`). A tap switches to that session; a long press shows
+ * its state dot and, for a session on another computer than the chat's, that computer's own icon
+ * (no name), the one its session rows draw (machines/computerIcons.ts). The same look desktop draws
+ * (`session_pill_link` in markdown_links.rs). The dot and the computer are read live from the
+ * phone's session list (`mentionedSession.ts`). A card's pill (the core marks it `logo: false`)
+ * sits beside the card's own agent tile and leaves the logo to it (CDXC:SessionChat 2026-10-28 on
+ * `card_pill`), except a coordinator's, whose tile is the crown: its pill draws the agent's logo
+ * (CDXC:SessionChat 2026-11-14 on `titled_pill` in gx-chat-core agent_message_card.rs).
+ *
+ * CDXC:SessionChat 2026-11-14 SEE-ALSO: the user's "i believe we agreed to show the logo of the
+ * machine here?" (desktop gx_chat/session_directory.rs `computer_icon`): the computer mark is that
+ * computer's own icon, the plain computer only while its icon is unknown. A tap switches to that session; a long press shows
  * its card (`MentionCard.tsx`); a session that is gone draws muted and does nothing.
  *
  * CDXC:SessionChat 2026-11-13 DECISION:
@@ -18,6 +24,7 @@
 
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
+import { ComputerIconGlyph } from '../../../components/sessions/ComputerIconGlyph';
 import { CoordinatorGlyph } from '../../../components/sessions/icons';
 import { colorWithOpacity, SidebarPalette } from '../../../theme/palette';
 import { AgentMark } from '../cards/agentMark';
@@ -26,7 +33,7 @@ import { useHomeMachineId, useTranscriptEnv, useTranscriptFlags } from './contex
 import { dottedUnderline } from './LinkWords';
 import { obj, str, type JsonRecord } from './json';
 import { MentionStateDot } from './MentionCard';
-import { useMentionedSession, type MentionTarget } from './mentionedSession';
+import { useComputerIconDrawing, useMentionedSession, type MentionTarget } from './mentionedSession';
 import { openTranscriptMenu } from './transcriptMenuStore';
 
 /** How far the side chat bar's name's pressed fill reaches past it (desktop `CARD_PILL_PAD`). */
@@ -88,6 +95,8 @@ export function SessionPill({
         : null;
   const homeMachineId = useHomeMachineId();
   const live = useMentionedSession(missing ? null : target, homeMachineId);
+  // The computer's own icon, the plain computer while it is unknown.
+  const computerDrawing = useComputerIconDrawing(live?.machineId ?? '');
   const longPress =
     onLongPress ?? (target !== null && live !== null ? () => openTranscriptMenu({ mention: target }) : undefined);
   if (plain) {
@@ -150,7 +159,7 @@ export function SessionPill({
       </Text>
       {live !== null ? <MentionStateDot state={live.state} theme={theme} /> : null}
       {live !== null && live.computer.length > 0 ? (
-        <Glyph name="device-desktop" size={11} color={theme.muted} />
+        <ComputerIconGlyph drawing={computerDrawing} size={11} color={theme.muted} />
       ) : null}
     </Pressable>
   );

@@ -13,6 +13,7 @@
 
 import { useInventoryStore } from '../../../inventory/store';
 import { machineDisplayLabel, useMachinesStore } from '../../../machines/store';
+import { computerIconDrawing, useComputerIconsStore } from '../../../machines/computerIcons';
 import type { GhostexSession } from '../../../contract/mobileSummary/session';
 
 export type MentionState = 'Working' | 'Needs you' | 'Idle' | 'Sleeping';
@@ -24,6 +25,8 @@ export type MentionedSession = {
   state: MentionState;
   /** The computer's name, for a session on another computer than the chat's; '' on the chat's own. */
   computer: string;
+  /** That computer's machine id, which its icon is read for; '' on the chat's own. */
+  machineId: string;
 };
 
 /** The server part of a Global Ref (`S90` of `S90:P3lv0:G7hgi`); '' for anything else. */
@@ -120,6 +123,7 @@ export function useMentionedSession(
     projectName,
     state,
     computer: machineId.length === 0 ? '' : machine !== undefined ? machineDisplayLabel(machine) : 'Another computer',
+    machineId,
   };
 }
 
@@ -128,4 +132,27 @@ export function mentionMeta(session: MentionedSession): string {
   return [session.agentName, session.projectName, session.computer || 'This computer']
     .filter((part) => part.length > 0)
     .join(' · ');
+}
+
+/**
+ * The drawing of the computer whose gxserver is `serverId` (a Workers row's `serverId`): its own
+ * icon (machines/computerIcons.ts), else the plain computer.
+ */
+export function useServerComputerDrawing(serverId: string): string {
+  const machineId = useInventoryStore((store) => {
+    if (serverId.length === 0) return '';
+    for (const [machineId, inventory] of Object.entries(store.inventoriesByMachineId)) {
+      if ((inventory?.summary?.sessions ?? []).some((session) => serverOfRef(session.globalRef) === serverId)) {
+        return machineId;
+      }
+    }
+    return '';
+  });
+  return useComputerIconDrawing(machineId);
+}
+
+/** The drawing of the computer `machineId` names: its own icon, else the plain computer. */
+export function useComputerIconDrawing(machineId: string): string {
+  const facts = useComputerIconsStore((state) => (machineId.length > 0 ? state.facts[machineId] : undefined));
+  return facts !== undefined ? computerIconDrawing(facts) : 'desktop';
 }
