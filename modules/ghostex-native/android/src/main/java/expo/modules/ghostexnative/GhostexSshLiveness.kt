@@ -1,5 +1,6 @@
 package expo.modules.ghostexnative
 
+import android.os.SystemClock
 import android.util.Log
 import java.io.FilterInputStream
 import java.io.FilterOutputStream
@@ -21,11 +22,13 @@ import javax.net.SocketFactory
  * closed from this thread, which needs no sshj lock and frees a blocked writer too. The disconnect listener then reports
  * the drop as before. A healthy idle link reads the computer's keep-alive replies every interval; a slow upload keeps
  * crossing 64 KB. Small writes alone (a keep-alive into a dead path is accepted by the kernel) never count.
+ * Every time here is `SystemClock.elapsedRealtime()`, a monotonic clock: a wall-clock correction must neither close a
+ * healthy link nor postpone noticing a dead one.
  * SEE-ALSO: modules/ghostex-native/ios/SSH/SSHConnection.swift (`checkLiveness`), GhostexSshConnection.kt (`connect`).
  */
 internal class GhostexSshLiveness(private val machineId: String) {
-  private val lastReadAt = AtomicLong(System.currentTimeMillis())
-  private val lastWriteProgressAt = AtomicLong(System.currentTimeMillis())
+  private val lastReadAt = AtomicLong(SystemClock.elapsedRealtime())
+  private val lastWriteProgressAt = AtomicLong(SystemClock.elapsedRealtime())
   private val writtenBytes = AtomicLong(0)
 
   @Volatile private var watchdog: Thread? = null
@@ -55,7 +58,7 @@ internal class GhostexSshLiveness(private val machineId: String) {
     }
 
   /** Milliseconds since the path last proved it moves. */
-  fun silentMs(now: Long = System.currentTimeMillis()): Long =
+  fun silentMs(now: Long = SystemClock.elapsedRealtime()): Long =
     now - maxOf(lastReadAt.get(), lastWriteProgressAt.get())
 
   /**
@@ -64,7 +67,7 @@ internal class GhostexSshLiveness(private val machineId: String) {
    */
   fun start(limitMs: Long, stillOpen: () -> Boolean, abort: (String) -> Unit) {
     if (watchdog != null) return
-    val now = System.currentTimeMillis()
+    val now = SystemClock.elapsedRealtime()
     lastReadAt.set(now)
     lastWriteProgressAt.set(now)
     watchdog =
@@ -99,14 +102,14 @@ internal class GhostexSshLiveness(private val machineId: String) {
   }
 
   private fun noteRead(count: Int) {
-    if (count > 0) lastReadAt.set(System.currentTimeMillis())
+    if (count > 0) lastReadAt.set(SystemClock.elapsedRealtime())
   }
 
   private fun noteWritten(count: Int) {
     if (count <= 0) return
     val before = writtenBytes.getAndAdd(count.toLong())
     if ((before + count) / WRITE_PROGRESS_BYTES != before / WRITE_PROGRESS_BYTES) {
-      lastWriteProgressAt.set(System.currentTimeMillis())
+      lastWriteProgressAt.set(SystemClock.elapsedRealtime())
     }
   }
 
