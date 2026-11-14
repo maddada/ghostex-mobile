@@ -21,7 +21,14 @@ import { DisclosureBody, DisclosureHeading, useFoldPlace } from './Disclosure';
 import { Glyph, toolGlyph } from './icons';
 import { ToolBody } from './ToolBody';
 import { BoxedToolCards, LINE_OUTPUT_LINES, Shimmer, ShowAllLines, ToolCard } from './ToolCard';
-import { SINGLE_LINE_CARD, SINGLE_LINE_HEADER_HEIGHT, singleLineShell, singleLinePressed } from './singleLineCard';
+import {
+  SINGLE_LINE_CARD,
+  SINGLE_LINE_HEADER_HEIGHT,
+  SINGLE_LINE_TITLE,
+  SingleLineTile,
+  singleLineShell,
+  singleLinePressed,
+} from './singleLineCard';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { FOLDED_CALLS_INSET, ReadImageStrip, ReadImages } from './Images';
 import { highlightLabel, useRowFind } from './searchHighlight';
@@ -196,8 +203,13 @@ function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; bo
           accessibilityState={{ expanded: simpleOpen }}
           style={({ pressed }) => [styles.cardHeader, pressed && singleLinePressed(theme)]}
         >
-          <FoldChevron open={simpleOpen} size={14} color={theme.primary} />
-          <Text numberOfLines={1} style={[styles.cardHeaderText, { color: theme.primary }]}>
+          {/* CDXC:SessionChat 2026-11-14 DECISION: User, of a shut "5 tool calls" card in an opened
+              Reports line drawn with a chevron and no icon beside "Work item added …" and "Message
+              from …": make it match them. A one-line card like they are: the tools icon in the
+              neutral tile, the card's title type, no chevron; the whole card opens and shuts.
+              SEE-ALSO: `boxed_card_heading` in the desktop's native_chat/tool_run.rs. */}
+          <SingleLineTile glyph="tool" />
+          <Text numberOfLines={1} style={[SINGLE_LINE_TITLE, styles.cardHeaderText, { color: theme.foreground }]}>
             {str(message, 'simpleToolLabel')}
           </Text>
         </Pressable>
@@ -741,12 +753,12 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 10,
     paddingHorizontal: SINGLE_LINE_CARD.paddingX,
     height: SINGLE_LINE_HEADER_HEIGHT,
     minWidth: 0,
   },
-  cardHeaderText: { flexShrink: 1, minWidth: 0, fontSize: PROSE_SIZE, lineHeight: PROSE_LINE },
+  cardHeaderText: { flexShrink: 1, minWidth: 0 },
   cardBody: { borderTopWidth: StyleSheet.hairlineWidth, padding: 4 },
   cardPictures: { paddingHorizontal: SINGLE_LINE_CARD.paddingX, paddingBottom: 8 },
   flushTrigger: {
