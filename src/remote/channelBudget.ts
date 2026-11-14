@@ -4,11 +4,14 @@
  * CDXC:RemoteMachines 2026-11-13 WHY:
  * OpenSSH refuses a session channel past `MaxSessions` (10 by default) on one connection. Up to seven warm
  * terminals each hold one (`MAX_WARM_SESSIONS` in src/terminal/sessions.ts), and every command opens another. The
- * Android connection has kept commands to three slots since 2026-10-06; the iPhone opened one for every command, so
+ * Android connection has kept commands to a few slots since 2026-10-06; the iPhone opened one for every command, so
  * a few reads at once (the Sessions poll, the keep-awake renewal, the round-trip check) got "Failed to open channel",
  * which read as a dropped connection: the phone tore down a working connection about once a minute, terminal Retry
  * was refused the same way, and the computer's update and skills reads found no route. On the iPhone every command
- * now waits here for one of three slots.
+ * now waits here for one of two slots.
+ * - Two, not three (2026-11-14, CodeRabbit on #45): the connection check's lane opens a session too, and 7 terminals
+ *   + 3 commands + the check came to 11 against `MaxSessions` 10, so the check (or a command) was refused on a healthy
+ *   connection. 7 + 2 + 1 fits. Both platforms use the same numbers.
  * - A wait is finite and ends with `E_BUSY` (never `E_TIMEOUT`): a command that never left the phone says nothing
  *   about the connection, so it must not count as a stall or as a refusal.
  * - A slot is given back only when the native call settles, not when its caller stops waiting.
@@ -22,9 +25,11 @@
 import { Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
+import { nativeProbeLane } from './probeLane';
+import { isSlowOpenFailure, noteOperationEnded, noteOperationStarted, noteSlowOpenFailure } from './stallWatch';
 
-/** OpenSSH's default `MaxSessions` (10) less the seven warm terminals, as on Android. */
-export const COMMAND_CHANNEL_SLOTS = 3;
+/** OpenSSH's default `MaxSessions` (10) less the seven warm terminals and the connection check's lane, as on Android. */
+export const COMMAND_CHANNEL_SLOTS = 2;
 /** The longest a command waits for a slot, however long its own run may take. */
 export const MAX_ADMISSION_WAIT_MS = 20_000;
 
@@ -43,6 +48,12 @@ type Budget = {
   queue: Waiter[];
   coolUntil: number;
   coolTimer: ReturnType<typeof setTimeout> | null;
+  /** Until this time, or the first answer on the connection, commands start one at a time (`WARM_UP_MS`). */
+  warmUntil: number;
+  /** The generation whose warm-up started (with its first command). */
+  warmedGeneration: number;
+  lastGrantAt: number;
+  probeBusy: boolean;
 };
 
 /**
@@ -52,6 +63,17 @@ type Budget = {
 const REFUSAL_COOL_MS = 750;
 /** A refused command never ran, so it is tried again (after the pause, within its own wait for a slot) this often. */
 const REFUSAL_RETRIES = 2;
+/**
+ * CDXC:RemoteMachines 2026-11-13 WHY:
+ * Right after the iPhone connects, the environment probe, the sessions read, the keep-awake holds, widgets, push
+ * registration and the chat handshake all asked at once. That burst is what most often left a packet partly sent,
+ * which the iPhone's libssh2 1.11.0 then loses with the next one (src/remote/stallWatch.ts). For `WARM_UP_MS` after a
+ * connection's first command, commands start one at a time: the next one starts when the one before answers or
+ * `WARM_UP_SPACING_MS` after it started, whichever is first. An answer lets only the next command through, never the
+ * whole queue.
+ */
+const WARM_UP_MS = 5_000;
+const WARM_UP_SPACING_MS = 500;
 
 const budgets = new Map<string, Budget>();
 const refusalListeners = new Set<(machineId: string) => void>();
@@ -60,7 +82,17 @@ let listening = false;
 function budgetFor(machineId: string): Budget {
   let budget = budgets.get(machineId);
   if (budget === undefined) {
-    budget = { inUse: 0, generation: 0, queue: [], coolUntil: 0, coolTimer: null };
+    budget = {
+      inUse: 0,
+      generation: 0,
+      queue: [],
+      coolUntil: 0,
+      coolTimer: null,
+      warmUntil: 0,
+      warmedGeneration: -1,
+      lastGrantAt: 0,
+      probeBusy: false,
+    };
     budgets.set(machineId, budget);
   }
   return budget;
@@ -86,7 +118,7 @@ function listenForConnectionEnds(): void {
   });
 }
 
-/** Whether commands wait for a slot here: the iPhone only, Android's connection keeps its own three. */
+/** Whether commands wait for a slot here: the iPhone only, Android's connection keeps its own two. */
 function budgeted(): boolean {
   return Platform.OS === 'ios';
 }
@@ -101,10 +133,20 @@ export function endConnectionBudget(machineId: string): void {
   budget.generation += 1;
   budget.inUse = 0;
   budget.coolUntil = 0;
+  budget.probeBusy = false;
   const queue = budget.queue.splice(0);
   for (const waiter of queue) {
     waiter.refuse(new ChannelBusyError('The connection to the computer was replaced before this could run.'));
   }
+}
+
+/**
+ * Which connection the computer's budget counts now: it moves on whenever the connection ends, dials again or is
+ * replaced. What settles under an older number belongs to a connection that is gone (`probeConnection`).
+ */
+export function connectionGeneration(machineId: string): number {
+  listenForConnectionEnds();
+  return budgetFor(machineId).generation;
 }
 
 /** Commands running now through the budget (what the phone let through, not what the computer counts). */
@@ -163,10 +205,15 @@ export function isChannelRefusal(error: unknown): boolean {
   return code === 'E_CHANNEL_FAILED' && typeof message === 'string' && /\bfailed to open channel\b/iu.test(message);
 }
 
-/** Lets queued commands through until the slots are full, unless the budget is cooling after a refusal. */
+/**
+ * Lets queued commands through until the slots are full, unless the budget is cooling after a refusal or the
+ * connection is still warming up (one at a time, spaced).
+ */
 function grantNext(budget: Budget): void {
   while (budget.inUse < COMMAND_CHANNEL_SLOTS && budget.queue.length > 0) {
-    const wait = budget.coolUntil - Date.now();
+    const now = Date.now();
+    const warming = now < budget.warmUntil;
+    const wait = Math.max(budget.coolUntil - now, warming ? budget.lastGrantAt + WARM_UP_SPACING_MS - now : 0);
     if (wait > 0) {
       budget.coolTimer ??= setTimeout(() => {
         budget.coolTimer = null;
@@ -174,8 +221,40 @@ function grantNext(budget: Budget): void {
       }, wait);
       return;
     }
+    budget.lastGrantAt = now;
     budget.queue.shift()?.grant();
   }
+}
+
+/** The stall watch's view of a command's end. */
+function operationOutcome(error: unknown): 'timeout' | 'failed' {
+  return (error as { code?: unknown } | null)?.code === 'E_TIMEOUT' ? 'timeout' : 'failed';
+}
+
+/**
+ * Runs the connection check in its own lane, outside the two command slots, so it never waits behind slow commands
+ * (src/remote/stallWatch.ts). One check runs at a time; a second is `E_BUSY`. iPhone, and Android builds whose native
+ * connection has the lane (`nativeProbeLane`); older Android builds keep their three slots, and a fourth exec there
+ * waits on them.
+ */
+export function withProbeChannel<T>(machineId: string, run: () => Promise<T>): Promise<T> {
+  if (!budgeted() && !nativeProbeLane()) return run();
+  listenForConnectionEnds();
+  const budget = budgetFor(machineId);
+  if (budget.probeBusy) return Promise.reject(new ChannelBusyError('A connection check is already running.'));
+  budget.probeBusy = true;
+  const generation = budget.generation;
+  let settled: Promise<T>;
+  try {
+    settled = run();
+  } catch (error) {
+    settled = Promise.reject(error);
+  }
+  const release = (): void => {
+    if (budget.generation === generation) budget.probeBusy = false;
+  };
+  settled.then(release, release);
+  return settled;
 }
 
 /**
@@ -184,22 +263,49 @@ function grantNext(budget: Budget): void {
  * computer refused never ran, so it waits again (after a short pause) while its wait allows.
  */
 export function withCommandChannel<T>(machineId: string, admissionMs: number, run: () => Promise<T>): Promise<T> {
-  if (!budgeted()) return watchRefusal(machineId, tracked(machineId, run));
+  if (!budgeted()) {
+    // Android: its native connection keeps the slots; with the lane, the stall watch still times each command.
+    if (!nativeProbeLane()) return watchRefusal(machineId, tracked(machineId, run));
+    const operation = noteOperationStarted(machineId);
+    const settled = watchRefusal(machineId, tracked(machineId, run));
+    settled.then(
+      () => noteOperationEnded(machineId, operation, 'answered'),
+      (error: unknown) => noteOperationEnded(machineId, operation, operationOutcome(error)),
+    );
+    return settled;
+  }
   listenForConnectionEnds();
   const budget = budgetFor(machineId);
+  if (budget.warmedGeneration !== budget.generation) {
+    budget.warmedGeneration = budget.generation;
+    budget.warmUntil = Date.now() + WARM_UP_MS;
+  }
   const deadline = Date.now() + Math.max(0, Math.min(admissionMs, MAX_ADMISSION_WAIT_MS));
   return new Promise<T>((resolve, reject) => {
     let retries = 0;
     const attempt = (generation: number): void => {
+      const startedAt = Date.now();
+      const grantedAt = budget.lastGrantAt;
+      const operation = noteOperationStarted(machineId);
       const settled = tracked(machineId, run);
       settled.then(
         (value) => {
+          noteOperationEnded(machineId, operation, 'answered');
+          // During the warm-up the latest command's answer lets the next one start now (one, not the whole queue).
+          if (budget.generation === generation && Date.now() < budget.warmUntil && grantedAt === budget.lastGrantAt) {
+            budget.lastGrantAt = Math.min(budget.lastGrantAt, Date.now() - WARM_UP_SPACING_MS);
+          }
           release(generation);
           resolve(value);
         },
         (error: unknown) => {
+          noteOperationEnded(machineId, operation, operationOutcome(error));
+          // An open that failed only after the stall watch's wait is the iPhone's stuck connection, not the computer
+          // refusing: no pause, no escape path, no retry; the watch checks the connection (src/remote/stallWatch.ts).
+          const slow = isChannelRefusal(error) && isSlowOpenFailure(startedAt);
+          if (slow && budget.generation === generation) noteSlowOpenFailure(machineId, Date.now() - startedAt);
           // A refusal from a connection that has since been replaced says nothing about the new one.
-          const refused = isChannelRefusal(error) && budget.generation === generation;
+          const refused = !slow && isChannelRefusal(error) && budget.generation === generation;
           if (refused) budget.coolUntil = Date.now() + REFUSAL_COOL_MS;
           release(generation);
           // Reported once the refused command no longer counts as running, so the reset's guard sees only other work.

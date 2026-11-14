@@ -37,6 +37,8 @@ import { isDemoMachineId } from '../demo/identity';
 import { logAppEvent } from '../app/appLog';
 import { FailureCopy } from '../copy';
 import { isChannelRefusal, reportChannelRefused } from '../remote/channelBudget';
+import { isSlowOpenFailure, noteSlowOpenFailure } from '../remote/stallWatch';
+import { clearDialBackoff } from '../remote/dialBackoff';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 /** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
@@ -62,9 +64,15 @@ function errorCodeOf(error: unknown): string {
 
 /**
  * A terminal the computer refused a channel for says so in plain words, and the refusal goes to the escape path
- * (src/remote/channelPressure.ts); any other failure keeps its own message.
+ * (src/remote/channelPressure.ts); any other failure keeps its own message. An open that failed only after the stall
+ * watch's wait is the iPhone's stuck connection, not a refusal: it goes to the stall watch instead
+ * (src/remote/stallWatch.ts), so terminals are not detached for it.
  */
-function terminalOpenError(machineId: string, error: unknown): string {
+function terminalOpenError(machineId: string, error: unknown, openStartedAt: number | null): string {
+  if (isChannelRefusal(error) && openStartedAt !== null && isSlowOpenFailure(openStartedAt)) {
+    noteSlowOpenFailure(machineId, Date.now() - openStartedAt);
+    return error instanceof Error ? error.message : String(error);
+  }
   if (isChannelRefusal(error)) {
     reportChannelRefused(machineId);
     return FailureCopy.channelsBusy;
@@ -88,7 +96,7 @@ function trackTabOpen<T>(sessionKey: string, work: () => Promise<T>): Promise<T>
 
 /**
  * CDXC:RemoteMachines 2026-10-06 SEE-ALSO:
- * Each warm terminal holds one session channel on the machine's shared SSH connection, and OpenSSH allows 10 by default; the Android connection leaves the other three to commands and uploads (`COMMAND_CHANNEL_SLOTS` in modules/ghostex-native/android/.../GhostexSshConnection.kt). Change both together.
+ * Each warm terminal holds one session channel on the machine's shared SSH connection, and OpenSSH allows 10 by default; the other three are two command slots (commands and uploads) and the connection check's lane, on both platforms (`COMMAND_CHANNEL_SLOTS` in src/remote/channelBudget.ts and modules/ghostex-native/android/.../GhostexSshConnection.kt, `commandSlots` in modules/ghostex-native/ios/SSH/SSHConnection.swift). Change them together.
  */
 export const MAX_WARM_SESSIONS = 7;
 /**
@@ -248,7 +256,8 @@ type TerminalState = {
    * Re-run the open flow for a failed/closed tab. Shared by the Terminal
    * screen's Retry/Reconnect buttons and the app-resume auto-reattach.
    */
-  reopenTab: (sessionKey: string) => Promise<void>;
+  /** `dialNow` (default true) dials a computer waiting after unanswered dials; the automatic restore passes false. */
+  reopenTab: (sessionKey: string, options?: { dialNow?: boolean }) => Promise<void>;
   setFontSizeForSession: (sessionKey: string, size: number) => void;
   /** Drop all pinch-zoom overrides and re-apply the global default everywhere. */
   clearFontSizeOverrides: () => void;
@@ -357,8 +366,9 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       touchWarm(tab.sessionKey);
       await evictExcessWarmEntries();
       let connected = false;
+      let openStartedAt: number | null = null;
       try {
-        await ensureConnected(machine);
+        await ensureConnected(machine, { dialNow: true, reason: 'opening a terminal' });
         connected = true;
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) return tab.sessionKey;
         if (isDemoMachineId(machine.id)) {
@@ -375,12 +385,13 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             ? await remoteTerminalCommand(machine.id, command)
             : await remoteShellCommand(machine.id, tab.cwd);
         if (remoteCommand !== null) opts.command = remoteCommand;
+        openStartedAt = Date.now();
         await GhostexNative.openTerminal(tab.sessionKey, machine.id, opts);
         if (!get().tabs.some((entry) => entry.sessionKey === tab.sessionKey)) {
           await GhostexNative.closeTerminal(tab.sessionKey);
         }
       } catch (error) {
-        patchTab(tab.sessionKey, { state: 'failed', error: terminalOpenError(machine.id, error) });
+        patchTab(tab.sessionKey, { state: 'failed', error: terminalOpenError(machine.id, error, openStartedAt) });
         dropWarm(tab.sessionKey);
         if (connected) verifyAfterFailedOpen(machine);
         throw error;
@@ -461,7 +472,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         }
         if (select) set({ selectedSessionKey: sessionKey });
         touchWarm(sessionKey);
-        await ensureConnected(machine, { verify: true, reason: 'opening an agent terminal' });
+        await ensureConnected(machine, { verify: true, dialNow: true, reason: 'opening an agent terminal' });
         const opening = tabOpenRequests.get(sessionKey);
         if (opening) await opening;
         const current = get().tabs.find((tab) => tab.sessionKey === sessionKey);
@@ -493,6 +504,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
      * User: "How about if we don't connect the terminal until user switches to it but if we're just using chat view then we don't do ssh connection for that session", picking "Chat-only, no terminal", with the rule "pls dont break things for users who set default to terminal at all". A session opened in Chat View gets a `detached` tab: no PTY channel, no login shell, no `ghostex attach`. Its chat needs none of them (it talks to gxserver over the warm chat link; a send wakes a sleeping session in gxserver, and gxserver holds the 200-column chat grid while the chat is shown, `chatGridClaim.ts`). The first switch to its Terminal view attaches it. Supersedes the 2026-10-08 "attach in the background" step of "Phone opens chat first".
      */
     openChatTab: (machine, session) => {
+      // The person opened a chat: its link dials now even if the computer waits after unanswered dials.
+      clearDialBackoff(machine.id, 'opening a chat');
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       const projectId = session.projectId !== undefined && session.projectId.length > 0 ? session.projectId : undefined;
@@ -674,7 +687,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
       }
     },
 
-    reopenTab: (sessionKey) => {
+    reopenTab: (sessionKey, options) => {
       const existing = tabOpenRequests.get(sessionKey);
       if (existing)
         return existing.then(
@@ -708,6 +721,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
         await evictExcessWarmEntries();
         if (!get().tabs.some((entry) => entry.sessionKey === sessionKey)) return;
         let connected = false;
+        let openStartedAt: number | null = null;
         try {
           if (isDemoMachineId(tab.machineId)) {
             patchTab(sessionKey, { state: 'open', error: undefined });
@@ -721,7 +735,7 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
            * the exited process.
            */
           await GhostexNative.closeTerminal(sessionKey).catch(() => undefined);
-          await ensureConnected(target);
+          await ensureConnected(target, { dialNow: options?.dialNow ?? true, reason: 'reconnecting a terminal' });
           connected = true;
           const opts: { command?: string; fontSize?: number; zmxBacked?: boolean; scrollbackRows?: number } = {
             fontSize: initialFontSize(sessionKey),
@@ -740,9 +754,10 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
             const command = await remoteShellCommand(tab.machineId, tab.cwd);
             if (command !== null) opts.command = command;
           }
+          openStartedAt = Date.now();
           await GhostexNative.openTerminal(sessionKey, tab.machineId, opts);
         } catch (error) {
-          patchTab(sessionKey, { state: 'failed', error: terminalOpenError(tab.machineId, error) });
+          patchTab(sessionKey, { state: 'failed', error: terminalOpenError(tab.machineId, error, openStartedAt) });
           logAppEvent(`Terminal: ${tab.machineId}: reopening ${tab.kind} tab failed (${errorCodeOf(error)})`);
           if (connected) verifyAfterFailedOpen(target);
         }
@@ -828,7 +843,7 @@ export function restoreAttachTabs(machineId: string): Promise<void> {
       if (AppState.currentState === 'background' || AppState.currentState === 'inactive') break;
       const current = useTerminalStore.getState().tabs.find((entry) => entry.sessionKey === tab.sessionKey);
       if (current?.state === 'closed' || current?.state === 'failed') {
-        await useTerminalStore.getState().reopenTab(tab.sessionKey);
+        await useTerminalStore.getState().reopenTab(tab.sessionKey, { dialNow: false });
       }
     }
   })();

@@ -113,7 +113,7 @@ export async function openComputerForward(
   machine: MachineConnectionTarget,
   address: Pick<ComputerAddress, 'remotePort' | 'host' | 'path'>,
 ): Promise<ComputerForward> {
-  await ensureConnected(machine);
+  await ensureConnected(machine, { dialNow: true, reason: 'opening a web preview link' });
   const gxserver = await isGxserverAddress(machine, address.remotePort, address.path);
   const host = gxserver ? GXSERVER_FORWARD_HOST : computerDialHost(address.host);
   const { localPort } = await GhostexNative.startPortForward(machine.id, address.remotePort, host);

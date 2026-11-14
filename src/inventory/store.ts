@@ -15,6 +15,7 @@ import { logAppEvent } from '../app/appLog';
 import { withoutGlobalQuickActions, type GhostexMobileSummary } from '../contract/mobileSummary';
 import { hasPassword } from '../machines/credentials';
 import { reconnectMachine } from '../remote/connection';
+import { dialWaitMs } from '../remote/dialBackoff';
 import { restoreAttachTabs } from '../terminal/sessions';
 import { enabledMachines, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../machines/store';
 import { FailureCopy } from '../copy';
@@ -451,7 +452,13 @@ export const useInventoryStore = create<InventoryState>()((set, get) => {
       // hidden machine costs no SSH connection and no poll.
       const machines = enabledMachines(useMachinesStore.getState()).filter((machine) => {
         const failure = get().inventoriesByMachineId[machine.id]?.lastErrorCode;
-        return failure !== 'authFailed' && failure !== 'hostKeyChanged' && !waitingOutBusy(machine.id);
+        return (
+          failure !== 'authFailed' &&
+          failure !== 'hostKeyChanged' &&
+          !waitingOutBusy(machine.id) &&
+          // A computer that did not answer its last dials waits for its next one (src/remote/dialBackoff.ts).
+          dialWaitMs(machine.id) === 0
+        );
       });
       await Promise.all(machines.map((machine) => get().refreshMachine(machine)));
       // Each computer's Cloud Boxes and their sessions ride the same poll (cloudBoxes/sync.ts).
