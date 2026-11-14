@@ -22,13 +22,15 @@ import javax.net.SocketFactory
  * closed from this thread, which needs no sshj lock and frees a blocked writer too. The disconnect listener then reports
  * the drop as before. A healthy idle link reads the computer's keep-alive replies every interval; a slow upload keeps
  * crossing 64 KB. Small writes alone (a keep-alive into a dead path is accepted by the kernel) never count.
- * Every time here is `SystemClock.elapsedRealtime()`, a monotonic clock: a wall-clock correction must neither close a
- * healthy link nor postpone noticing a dead one.
+ * Every time here is `SystemClock.uptimeMillis()`, a monotonic clock that stops in deep sleep: a wall-clock correction
+ * must neither close a healthy link nor postpone noticing a dead one, and the time the phone slept is not silence, so a
+ * healthy link is not closed the moment the phone wakes (the app's own check on returning to the front covers a link
+ * that really died meanwhile).
  * SEE-ALSO: modules/ghostex-native/ios/SSH/SSHConnection.swift (`checkLiveness`), GhostexSshConnection.kt (`connect`).
  */
 internal class GhostexSshLiveness(private val machineId: String) {
-  private val lastReadAt = AtomicLong(SystemClock.elapsedRealtime())
-  private val lastWriteProgressAt = AtomicLong(SystemClock.elapsedRealtime())
+  private val lastReadAt = AtomicLong(SystemClock.uptimeMillis())
+  private val lastWriteProgressAt = AtomicLong(SystemClock.uptimeMillis())
   private val writtenBytes = AtomicLong(0)
 
   @Volatile private var watchdog: Thread? = null
@@ -58,7 +60,7 @@ internal class GhostexSshLiveness(private val machineId: String) {
     }
 
   /** Milliseconds since the path last proved it moves. */
-  fun silentMs(now: Long = SystemClock.elapsedRealtime()): Long =
+  fun silentMs(now: Long = SystemClock.uptimeMillis()): Long =
     now - maxOf(lastReadAt.get(), lastWriteProgressAt.get())
 
   /**
@@ -67,7 +69,7 @@ internal class GhostexSshLiveness(private val machineId: String) {
    */
   fun start(limitMs: Long, stillOpen: () -> Boolean, abort: (String) -> Unit) {
     if (watchdog != null) return
-    val now = SystemClock.elapsedRealtime()
+    val now = SystemClock.uptimeMillis()
     lastReadAt.set(now)
     lastWriteProgressAt.set(now)
     watchdog =
@@ -102,14 +104,14 @@ internal class GhostexSshLiveness(private val machineId: String) {
   }
 
   private fun noteRead(count: Int) {
-    if (count > 0) lastReadAt.set(SystemClock.elapsedRealtime())
+    if (count > 0) lastReadAt.set(SystemClock.uptimeMillis())
   }
 
   private fun noteWritten(count: Int) {
     if (count <= 0) return
     val before = writtenBytes.getAndAdd(count.toLong())
     if ((before + count) / WRITE_PROGRESS_BYTES != before / WRITE_PROGRESS_BYTES) {
-      lastWriteProgressAt.set(SystemClock.elapsedRealtime())
+      lastWriteProgressAt.set(SystemClock.uptimeMillis())
     }
   }
 
