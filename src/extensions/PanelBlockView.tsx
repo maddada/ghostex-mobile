@@ -143,7 +143,7 @@ export default function PanelBlockView({
           {body.root !== undefined ? (
             <View style={styles.row}>
               <View style={styles.slot}>
-                <PanelIcon name={body.root.icon} size={ds(15)} color={ink.muted} />
+                <PanelIcon source={place} name={body.root.icon} size={ds(15)} color={ink.muted} />
               </View>
               <Text style={[styles.title, styles.strong]} numberOfLines={1}>
                 {body.root.title}
@@ -159,7 +159,7 @@ export default function PanelBlockView({
             <View key={`${group.title}-${groupIndex}`} style={body.root !== undefined ? styles.indent : null}>
               <View style={styles.row}>
                 <View style={styles.slot}>
-                  <PanelIcon name={group.icon ?? 'folder'} size={ds(14)} color={ink.muted} />
+                  <PanelIcon source={place} name={group.icon ?? 'folder'} size={ds(14)} color={ink.muted} />
                 </View>
                 <Text style={[styles.title, styles.mutedText]} numberOfLines={1}>
                   {group.title}
@@ -200,7 +200,7 @@ export default function PanelBlockView({
                 pressed ? styles.rowPressed : null,
               ]}
             >
-              <PanelIcon name={button.icon} size={ds(13)} color={ink.text} />
+              <PanelIcon source={place} name={button.icon} size={ds(13)} color={ink.text} />
               <Text style={styles.buttonText} numberOfLines={1}>
                 {button.title}
               </Text>
@@ -210,7 +210,7 @@ export default function PanelBlockView({
       ) : null}
       {body.type === 'empty' ? (
         <View style={styles.empty}>
-          <PanelIcon name={body.icon} size={ds(20)} color={ink.muted} />
+          <PanelIcon source={place} name={body.icon} size={ds(20)} color={ink.muted} />
           {block.title !== undefined ? <Text style={styles.emptyTitle}>{block.title}</Text> : null}
           {body.subtitle !== undefined ? <Text style={styles.emptySubtitle}>{body.subtitle}</Text> : null}
           {body.action !== undefined ? (
@@ -279,7 +279,7 @@ function PanelRowView({
         {dot !== null ? (
           <View style={[styles.dot, { backgroundColor: dot }]} />
         ) : (
-          <PanelIcon name={icon} size={ds(14)} color={ink.muted} />
+          <PanelIcon source={place} name={icon} size={ds(14)} color={ink.muted} />
         )}
       </View>
       <View style={styles.texts}>

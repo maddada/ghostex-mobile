@@ -1,10 +1,13 @@
 /**
  * A panel's icons on the phone: a Tabler name the desktop draws from its own icon set, drawn with the phone's glyph of
- * the same name where it has one. A name the phone has no glyph for, and an extension's own SVG file (served by the
- * computer's gxserver, which the phone's sessions list does not reach), draw nothing, so the row keeps its text.
+ * the same name where it has one, and an extension's own SVG file, read from its computer (extensionIcons.tsx). A name
+ * the phone has no glyph for draws nothing, so the row keeps its text.
  */
 
 import type { ReactElement } from 'react';
+
+import { TAG_ICONS } from '../assets/tablerIcons.generated';
+import { ExtensionIcon, extensionIconPath } from './extensionIcons';
 
 import {
   ArchiveGlyph,
@@ -80,6 +83,7 @@ const GLYPHS: Record<string, Glyph> = {
   note: NoteGlyph,
   pencil: PencilGlyph,
   pin: PinGlyph,
+  puzzle: TAG_ICONS.feature,
   play: PlayGlyph,
   'player-play': PlayGlyph,
   plus: PlusGlyph,
@@ -97,31 +101,41 @@ const GLYPHS: Record<string, Glyph> = {
   world: WorldGlyph,
 };
 
-/** The glyph for a panel's icon name, or null (no name, an extension's own file, a name the phone lacks). */
+/** Which extension, on which computer, an icon belongs to: its own `*.svg` files are read from there. */
+export type PanelIconSource = { machineId: string; extensionId: string };
+
+function iconKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^icon-?/u, '');
+}
+
+/**
+ * The glyph for a panel's icon: a Tabler name in the phone's glyph, or, with `source`, the extension's own SVG
+ * (extensionIcons.tsx). Null for no icon and for a name the phone has no glyph for, so the row keeps its text.
+ */
 export function PanelIcon({
   name,
   size,
   color,
+  source,
 }: {
   name: string | undefined;
   size: number;
   color: string;
+  source?: PanelIconSource;
 }): ReactElement | null {
   if (name === undefined) return null;
-  const key = name
-    .trim()
-    .toLowerCase()
-    .replace(/^icon-?/u, '');
-  if (key.endsWith('.svg')) return null;
-  const Glyph = GLYPHS[key];
-  return Glyph === undefined ? null : <Glyph size={size} color={color} />;
+  const Glyph = GLYPHS[iconKey(name)];
+  if (Glyph !== undefined) return <Glyph size={size} color={color} />;
+  const path = source === undefined ? null : extensionIconPath(source.extensionId, name);
+  return path === null ? null : <ExtensionIcon machineId={source!.machineId} path={path} size={size} color={color} />;
 }
 
-export function hasPanelIcon(name: string | undefined): boolean {
+/** Whether PanelIcon draws something for this icon (from `source`, when given). */
+export function hasPanelIcon(name: string | undefined, source?: PanelIconSource): boolean {
   if (name === undefined) return false;
-  const key = name
-    .trim()
-    .toLowerCase()
-    .replace(/^icon-?/u, '');
-  return GLYPHS[key] !== undefined;
+  if (GLYPHS[iconKey(name)] !== undefined) return true;
+  return source !== undefined && extensionIconPath(source.extensionId, name) !== null;
 }

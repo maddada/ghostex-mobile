@@ -123,6 +123,27 @@ function newestSession(sessions: readonly GhostexSession[]): GhostexSession | nu
   return newest;
 }
 
+/** An extension's mode icon: its own SVG from the computer (the puzzle while it loads), or a Tabler name's glyph. */
+function ModeIcon({
+  machineId,
+  entry,
+  size,
+  color,
+}: {
+  machineId: string;
+  entry: ExtensionPanelEntry;
+  size: number;
+  color: string;
+}): ReactElement {
+  const source = { machineId, extensionId: entry.extensionId };
+  const icon = entry.sidebar?.mode?.icon;
+  return hasPanelIcon(icon, source) ? (
+    <PanelIcon source={source} name={icon} size={size} color={color} />
+  ) : (
+    <PanelIcon name="puzzle" size={size} color={color} />
+  );
+}
+
 export function useExtensionPanels(deps: ExtensionPanelsDeps) {
   const { machine, inventoriesByMachineId } = deps;
   const ink = useSidebarInk();
@@ -308,8 +329,8 @@ export function useExtensionPanels(deps: ExtensionPanelsDeps) {
             run(place, blockId, itemId, item.action);
           },
         };
-        return hasPanelIcon(item.icon)
-          ? { ...row, icon: <PanelIcon name={item.icon} size={14} color={ink.text} /> }
+        return hasPanelIcon(item.icon, place)
+          ? { ...row, icon: <PanelIcon source={place} name={item.icon} size={14} color={ink.text} /> }
           : row;
       }),
     [ink.text, run],
@@ -455,12 +476,8 @@ export function useExtensionPanels(deps: ExtensionPanelsDeps) {
             >
               {selected ? (
                 <ArrowGlyph size={22} color={color} direction="left" />
-              ) : hasPanelIcon(entry.sidebar!.mode!.icon) ? (
-                <PanelIcon name={entry.sidebar!.mode!.icon} size={22} color={color} />
               ) : (
-                <View style={[styles.letter, { borderColor: color }]}>
-                  <Text style={[styles.letterText, { color }]}>{title.slice(0, 1).toUpperCase()}</Text>
-                </View>
+                <ModeIcon machineId={machine.id} entry={entry} size={22} color={color} />
               )}
             </Pressable>
           );
@@ -482,7 +499,7 @@ export function useExtensionPanels(deps: ExtensionPanelsDeps) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.modeTitle}>
-          <PanelIcon name={sidebar.mode!.icon} size={ds(15)} color={ink.muted} />
+          <ModeIcon machineId={machine.id} entry={active} size={ds(15)} color={ink.muted} />
           <Text style={[styles.modeTitleText, { color: ink.selectedText }]} numberOfLines={1}>
             {sidebar.document.title ?? sidebar.mode!.title}
           </Text>
@@ -588,18 +605,5 @@ const styles = StyleSheet.create({
   },
   sectionsBottom: {
     paddingTop: ds(10),
-  },
-  /* An extension whose icon the phone can't draw: its first letter in a small outlined square. */
-  letter: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  letterText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
 });
