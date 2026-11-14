@@ -6,6 +6,7 @@ import android.util.Log
 import dev.ghostex.tailcatbridge.Tailcatbridge
 import java.io.File
 import java.io.InputStream
+import java.net.InetSocketAddress
 import java.security.KeyFactory
 import java.security.Provider
 import java.security.Security
@@ -26,6 +27,9 @@ import net.schmizz.sshj.common.Factory
 import net.schmizz.sshj.common.SecurityUtils
 import net.schmizz.sshj.connection.channel.direct.PTYMode
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.connection.channel.direct.SessionFactory
+import net.schmizz.sshj.sftp.SFTPClient
+import net.schmizz.sshj.sftp.SFTPEngine
 import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.transport.kex.KeyExchange
 import net.schmizz.sshj.userauth.UserAuthException
@@ -496,9 +500,14 @@ class GhostexSshConnection(
     }
     try {
       val viaExec = prefersExecUpload()
-      withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS) {
-        if (viaExec) uploadViaExec(ssh, localFile, remotePath)
-        else uploadViaSftp(ssh, localFile, remotePath)
+      // CDXC:RemoteMachines 2026-11-14 WHY: an upload's channel is a session like a command's, so its slot is held
+      // until sshj detaches the channel, not until the upload returns: an upload whose close the computer did not
+      // answer gave its slot back while the session was still open on the computer, and the slots no longer kept
+      // terminals + commands + uploads + the check within MaxSessions (the iPhone counts uploads the same way).
+      val handle = GhostexExecHandle()
+      withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS, handle) {
+        if (viaExec) uploadViaExec(ssh, localFile, remotePath, handle)
+        else uploadViaSftp(ssh, localFile, remotePath, handle)
       }
     } catch (error: Exception) {
       if (error is GhostexException) throw error
@@ -509,8 +518,9 @@ class GhostexSshConnection(
   /** Cache the remote platform after the first upload; session identity does not change. */
   private fun prefersExecUpload(): Boolean {
     execUploadPreferred?.let { return it }
-    val outcome = withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS) {
-      exec("uname -s", REMOTE_PLATFORM_DETECTION_TIMEOUT_MS)
+    val handle = GhostexExecHandle()
+    val outcome = withCommandChannel(DEFAULT_EXEC_TIMEOUT_MS, handle) {
+      exec("uname -s", REMOTE_PLATFORM_DETECTION_TIMEOUT_MS, handle = handle)
     }
     val preferred = outcome.exitCode == 0 && outcome.stdout.trim() == "Darwin"
     execUploadPreferred = preferred
@@ -521,7 +531,7 @@ class GhostexSshConnection(
    * Stream bytes over an exec channel on Darwin. The remote shell verifies the exact byte
    * count before keeping the file, so a broken channel cannot leave a truncated attachment.
    */
-  private fun uploadViaExec(ssh: SSHClient, localFile: File, remotePath: String) {
+  private fun uploadViaExec(ssh: SSHClient, localFile: File, remotePath: String, handle: GhostexExecHandle) {
     if (remotePath.isEmpty()) {
       throw GhostexException(GhostexErrorCode.SFTP_FAILED, "Upload path is empty.")
     }
@@ -538,8 +548,12 @@ class GhostexSshConnection(
       "trap - EXIT HUP INT TERM"
     ).joinToString("\n")
 
-    ssh.startSession().use { session ->
-      val cmd = session.exec(command)
+    val session = openOwnedSession(ssh, handle)
+    try {
+      val request = handle.sendIfOpen { session.sendExecRequest(command) }
+        ?: throw GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out.")
+      request.await(ssh.connection.timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+      val cmd: Session.Command = session
       val stdout = StreamCollector(cmd.inputStream)
       val stderr = StreamCollector(cmd.errorStream)
       localFile.inputStream().use { input ->
@@ -559,12 +573,27 @@ class GhostexSshConnection(
           ?: "Remote upload command exited with status $exitStatus."
         throw GhostexException(GhostexErrorCode.SFTP_FAILED, detail)
       }
+    } finally {
+      handle.markClosed()
+      closeChannelQuietly(session, handle)
     }
   }
 
   /** SFTP upload for non-Darwin hosts; remove the reserved path if any phase fails. */
-  private fun uploadViaSftp(ssh: SSHClient, localFile: File, remotePath: String) {
-    ssh.newSFTPClient().use { sftp ->
+  private fun uploadViaSftp(ssh: SSHClient, localFile: File, remotePath: String, handle: GhostexExecHandle) {
+    // The subsystem runs on a channel of ours, so its close and detachment reach [handle] like a command's.
+    var channel: GhostexOwnedSessionChannel? = null
+    val sftp = try {
+      val factory = object : SessionFactory {
+        override fun startSession(): Session = openOwnedSession(ssh, handle).also { channel = it }
+        override fun getRemoteSocketAddress(): InetSocketAddress? = ssh.remoteSocketAddress
+      }
+      SFTPClient(SFTPEngine(factory).init())
+    } catch (error: Exception) {
+      channel?.let { closeChannelQuietly(it, handle) }
+      throw error
+    }
+    try {
       try {
         makeRemoteDirectories(sftp, remoteDirectory(remotePath))
         sftp.put(FileSystemFile(localFile), remotePath)
@@ -576,6 +605,14 @@ class GhostexSshConnection(
           // Preserve the transfer error; cleanup can also fail when the channel is gone.
         }
         throw error
+      }
+    } finally {
+      handle.markClosed()
+      channel?.let { closeChannelQuietly(it, handle) }
+      try {
+        sftp.close()
+      } catch (ignored: Exception) {
+        // The channel's own close above already went out; this only stops the SFTP reader.
       }
     }
   }
