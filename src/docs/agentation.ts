@@ -44,7 +44,7 @@ export function parseDocPageMessage(data: string): DocPageMessage | null {
 
 /**
  * CDXC:Docs 2026-10-23 DECISION: User (issue #280, confirmed for the phone): Annotate on an HTML page goes straight into annotating mode and stays in it across reloads, as on the desktop. agentation@3.1.2 mounts collapsed (`isActive` is component state that starts false, is never persisted, and has no prop or handle), so the bootstrap clicks Agentation's own launcher once it renders. It matches the launcher only while it reads `aria-expanded="false"` and `aria-label="Start feedback mode"` inside the open shadow root of its `<agentation-toolbar>` host (3.1.2 put the shortcut into the title, so the title is not matched, and a MutationObserver on the page cannot see into the shadow root, so it polls every 50ms for up to 5s), so it can never switch an active toolbar off; its Cmd/Ctrl+Shift+F shortcut was rejected because it toggles and the synthetic key would also reach the page's own listeners. Every load remounts the WebView and re-runs this bootstrap, which is what keeps it active.
- * SEE-ALSO: apps/desktop/views/manage/preview/html-viewer.tsx (the same start in the desktop's Files view, CDXC:Docs 2026-10-23).
+ * SEE-ALSO: apps/desktop/views/manage/preview/html-viewer.tsx (CDXC:Docs 2026-11-14: the desktop's Files view no longer does this; Annotate there starts off, mounts Agentation already active with no floating toolbar, and the header drives it).
  */
 function bootstrapModule(): string {
   return `
