@@ -215,12 +215,15 @@ export function initAutoReconnect(): void {
       };
     },
     commandsInFlight,
+    // An automatic reset (refusals, stuck closes) follows the same recovery rules as the stall watch, checked again
+    // before the tabs come back; the user's own Reset connection does not come through here.
     reset: async (machineId, reason) => {
       const target = machineTarget(machineId);
-      if (target === undefined) return;
+      if (target === undefined || !canRecover(machineId)) return;
       await reconnectMachine(target, reason);
-      await restoreAttachTabs(machineId);
+      if (canRecover(machineId)) await restoreAttachTabs(machineId);
     },
+    mayRecover: canRecover,
     // iPhone builds with the SSH send queue only (`sshChannelStats`); elsewhere nothing is read.
     stuckCloses: async (machineId) => {
       const read = GhostexNative.sshChannelStats;

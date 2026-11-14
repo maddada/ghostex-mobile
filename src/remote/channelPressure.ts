@@ -26,7 +26,7 @@
 import { create } from 'zustand';
 
 import { logAppEvent } from '../app/appLog';
-import { commandsWaiting, onChannelRefused, onConnectionEnding } from './channelBudget';
+import { commandsWaiting, connectionGeneration, onChannelRefused, onConnectionEnding } from './channelBudget';
 
 const REFUSALS_FOR_RESET = 3;
 const REFUSAL_WINDOW_MS = 60_000;
@@ -49,6 +49,12 @@ export type ChannelPressureHandlers = {
   reset(machineId: string, reason: string): Promise<void>;
   /** Stuck command closes the native layer reports, or null where it cannot (older builds, Android, no connection). */
   stuckCloses?(machineId: string): Promise<StuckCloses | null>;
+  /**
+   * Whether the phone's recovery rules let it replace this computer's connection by itself now (`canRecover` in
+   * src/app/autoReconnect.ts: auto-reconnect on, in front, not disconnected by hand). Read when a stuck close
+   * would reset, after its stats arrived.
+   */
+  mayRecover?(machineId: string): boolean;
 };
 
 /** What `sshChannelStats` says about command closes the computer has not answered. */
@@ -213,12 +219,35 @@ async function plannedReset(
   await active.reset(machineId, reason).catch(() => undefined);
 }
 
-/** One look at a computer's stuck command closes; a close stuck `STUCK_CLOSE_RESET_MS` leads to the planned reset. */
+/** Computers whose stats read is still waiting for its native answer (one at a time per computer). */
+const stuckReads = new Set<string>();
+
+/**
+ * One look at a computer's stuck command closes; a close stuck `STUCK_CLOSE_RESET_MS` leads to the planned reset.
+ * The answer counts only for the connection it was asked on (`connectionGeneration`): a connection replaced while the
+ * native read was pending is not reset or flagged for the one before. The recovery rules are read once the answer is
+ * in; when they forbid an automatic reset, the Reset connection button shows while the app is in front.
+ */
 export async function checkStuckCloses(machineId: string, now = Date.now()): Promise<void> {
   const read = handlers?.stuckCloses;
-  if (read === undefined) return;
-  const stats = await read(machineId).catch(() => null);
+  if (read === undefined || stuckReads.has(machineId)) return;
+  stuckReads.add(machineId);
+  const generation = connectionGeneration(machineId);
+  let stats: StuckCloses | null;
+  try {
+    stats = await read(machineId).catch(() => null);
+  } finally {
+    stuckReads.delete(machineId);
+  }
+  if (connectionGeneration(machineId) !== generation) return;
   if (stats === null || stats.stuckCommandCloses === 0 || stats.oldestStuckCloseMs < STUCK_CLOSE_RESET_MS) return;
+  const active = handlers;
+  if (active === null) return;
+  if (active.mayRecover !== undefined && !active.mayRecover(machineId)) {
+    logAppEvent(`Connection: ${machineId} has commands the computer never finished closing; not resetting by itself`);
+    if (stuckInFront()) setNeedsReset(machineId, true);
+    return;
+  }
   const what =
     `has ${stats.stuckCommandCloses} commands whose close it has not answered ` +
     `(oldest ${Math.round(stats.oldestStuckCloseMs / 1000)} s)`;
@@ -226,10 +255,12 @@ export async function checkStuckCloses(machineId: string, now = Date.now()): Pro
 }
 
 let stuckTimer: ReturnType<typeof setInterval> | null = null;
+let stuckInFront: () => boolean = () => true;
 
 /** Reads the stuck closes of `machineIds()` every `STUCK_CHECK_EVERY_MS` while `inFront()`. */
 export function startStuckCloseChecks(machineIds: () => string[], inFront: () => boolean): void {
   if (stuckTimer !== null) return;
+  stuckInFront = inFront;
   stuckTimer = setInterval(() => {
     if (!inFront()) return;
     for (const machineId of machineIds()) void checkStuckCloses(machineId);
