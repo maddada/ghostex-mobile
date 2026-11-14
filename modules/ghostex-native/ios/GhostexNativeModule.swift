@@ -239,6 +239,20 @@ public class GhostexNativeModule: Module {
                 throw exception
             }
 
+            // A transport that dies by itself (a socket error, a send queue that failed, TCP keep-alives unanswered)
+            // is said to JS, whose recovery replaces it; before, iOS only marked it dead and waited to be asked.
+            await connection.setTransportDeadHandler { [weak self, weak connection] why in
+                guard let connection, GhostexConnectionStore.shared.connection(for: machineId) === connection else {
+                    return
+                }
+                self?.sendConnectionState(
+                    machineId,
+                    state: "disconnected",
+                    error: why,
+                    errorCode: GhostexErrorCode.unreachable.rawValue
+                )
+            }
+
             // Reconnecting with new config replaces the previous client.
             let previous = GhostexConnectionStore.shared.set(connection, for: machineId)
             if let previous {
@@ -373,11 +387,7 @@ public class GhostexNativeModule: Module {
             do {
                 let timeout = timeoutMs.map { $0 / 1000.0 }
                 let result = try await connection.execute(command, timeout: timeout)
-                return [
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "exitCode": result.exitCode,
-                ]
+                return self.execResultRecord(result)
             } catch {
                 throw ghostexException(from: error)
             }
@@ -392,14 +402,27 @@ public class GhostexNativeModule: Module {
             do {
                 let timeout = timeoutMs.map { $0 / 1000.0 }
                 let result = try await connection.execute(command, input: input, timeout: timeout)
-                return [
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "exitCode": result.exitCode,
-                ]
+                return self.execResultRecord(result)
             } catch {
                 throw ghostexException(from: error)
             }
+        }
+
+        /*
+         * The connection's channel bookkeeping, for the phone's recovery from closes the computer never answers. New
+         * in this build: JS calls it only when it exists, so older apps keep working without it.
+         */
+        AsyncFunction("sshChannelStats") { (machineId: String) async -> [String: Any]? in
+            guard let connection = GhostexConnectionStore.shared.connection(for: machineId) else { return nil }
+            let stats = await connection.channelStats()
+            return [
+                "commandsRunning": stats.commandsRunning,
+                "commandsClosing": stats.commandsClosing,
+                "stuckCommandCloses": stats.stuckCommandCloses,
+                "oldestStuckCloseMs": stats.oldestStuckCloseMs,
+                "stuckOtherCloses": stats.stuckOtherCloses,
+                "queuedSendBytes": stats.queuedSendBytes,
+            ]
         }
 
         // MARK: Local port forwarding
@@ -1233,6 +1256,16 @@ public class GhostexNativeModule: Module {
             payload["errorCode"] = errorCode
         }
         sendEvent("onTerminalState", payload)
+    }
+
+    private func execResultRecord(_ result: SSHExecResult) -> [String: Any] {
+        var record: [String: Any] = [
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exitCode": result.exitCode,
+        ]
+        if let signal = result.exitSignal { record["exitSignal"] = signal }
+        return record
     }
 
     private func sendConnectionState(

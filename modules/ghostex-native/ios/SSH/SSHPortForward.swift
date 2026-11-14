@@ -72,13 +72,23 @@ struct PortForwardInfo: Sendable {
     let localPort: Int
 }
 
-/// A direct-tcpip channel whose non-blocking close is still in progress.
-struct ClosingChannel {
+/// A channel whose non-blocking close is still in progress. Only ever touched on the SSHConnection actor.
+final class ClosingChannel {
     let channel: OpaquePointer
-    /// When to stop waiting for the remote and free the channel regardless.
-    let deadline: Date
-    /// `libssh2_channel_close` has already returned success for this channel.
-    var closed: Bool
+    /// An exec channel: it keeps one of the native command slots until its close completes.
+    let holdsCommandSlot: Bool
+    /// The finished command whose result waits for the computer's CLOSE (`SSHConnection.completeClosedExec`).
+    let execRequestId: UUID?
+    /// When our CLOSE went out (the send queue takes it at once); the computer's CLOSE is awaited from then.
+    var closeSentAt: Date?
+    /// `libssh2_channel_close` has returned: the computer's CLOSE arrived, or the transport failed.
+    var closed = false
+
+    init(channel: OpaquePointer, holdsCommandSlot: Bool, execRequestId: UUID?) {
+        self.channel = channel
+        self.holdsCommandSlot = holdsCommandSlot
+        self.execRequestId = execRequestId
+    }
 }
 
 /// Hands one accepted connection from the listener queue to the actor. NWConnection is
@@ -125,8 +135,6 @@ extension SSHConnection {
     private static var directChannelOpenTimeout: TimeInterval { 15 }
     /// A loopback listener that has not reached `.ready` by then never will.
     private static var listenerReadyTimeoutNanoseconds: UInt64 { 10_000_000_000 }
-    /// How long a channel close may wait for the remote's CHANNEL_CLOSE.
-    private static var channelCloseTimeout: TimeInterval { 5 }
 
     /**
      * Start (or reuse) the loopback forward for `remoteHost:remotePort` on the machine and
@@ -165,7 +173,7 @@ extension SSHConnection {
         let generation = portForwardTeardownGeneration
 
         let probe = try await openDirectChannel(remoteHost: remoteHost, remotePort: remotePort)
-        retireForwardChannel(probe)
+        retireChannel(probe)
 
         guard isConnected, portForwardTeardownGeneration == generation else {
             throw SSHError.notConnected
@@ -363,7 +371,7 @@ extension SSHConnection {
         // The forward may have been stopped, or the connection replaced, while it opened.
         guard portForwards[remotePort] === forward else {
             connection.cancel()
-            retireForwardChannel(channel)
+            retireChannel(channel)
             return
         }
 
@@ -414,6 +422,9 @@ extension SSHConnection {
                 if Date() >= deadline { throw SSHError.timeout }
                 await waitForSocket()
                 continue
+            }
+            if lastError == LIBSSH2_ERROR_TIMEOUT {
+                throw SSHError.openTimedOut(Self.lastErrorText(session))
             }
             throw Self.directChannelError(
                 session: session,
@@ -525,6 +536,8 @@ extension SSHConnection {
     private func writeToForwardChannel(_ state: PortForwardChannel) -> Int {
         var totalWritten = 0
         while !state.pendingToRemote.isEmpty {
+            // The send queue is full: the next pass writes more (SSHSendQueue.swift).
+            if sendQueue.pendingBytes > SSHSendQueue.backpressureBytes { break }
             let pendingCount = state.pendingToRemote.count
             let written = state.pendingToRemote.withUnsafeBytes { raw -> Int in
                 guard let base = raw.baseAddress else { return -1 }
@@ -612,64 +625,60 @@ extension SSHConnection {
         guard let state = forwardChannels.removeValue(forKey: id) else { return }
         portForwards[state.remotePort]?.channelIds.remove(id)
         state.connection.cancel()
-        retireForwardChannel(state.channel)
+        retireChannel(state.channel)
     }
 
     /**
-     * Begin closing one direct-tcpip channel. Both `libssh2_channel_close` and
-     * `libssh2_channel_free` answer EAGAIN on a non-blocking session until the
-     * remote's CHANNEL_CLOSE has been exchanged; ignoring that leaves the
-     * channel allocated on the session for as long as it lives, which for a
-     * preview that walks a few dozen pages is a real leak. What does not finish
-     * immediately is handed to the io loop, which drives it to completion.
+     * CDXC:RemoteMachines 2026-11-13 WHY:
+     * Begin closing one channel (a forward, a command, a terminal, an upload). Both `libssh2_channel_close` and
+     * `libssh2_channel_free` answer EAGAIN on a non-blocking session until the computer's CHANNEL_CLOSE has arrived;
+     * ignoring that leaves the channel open on the computer for as long as the connection lives, and OpenSSH allows
+     * 10 per connection. What does not finish at once is driven by the io loop until it does, however long that
+     * takes: there is no deadline after which the entry is dropped (it used to be after 5 s, which leaked exactly the
+     * channels the computer was slow to close). A close still unanswered after `stuckCloseSeconds` is reported as
+     * stuck (`channelStats`); only a new connection frees the computer's side of it.
      */
-    func retireForwardChannel(_ channel: OpaquePointer) {
-        var entry = ClosingChannel(
-            channel: channel,
-            deadline: Date().addingTimeInterval(Self.channelCloseTimeout),
-            closed: false
-        )
-        if libssh2_channel_close(channel) == LIBSSH2_ERROR_EAGAIN {
-            closingForwardChannels.append(entry)
-            startIOLoop()
-            return
-        }
-        entry.closed = true
-        if libssh2_channel_free(channel) == LIBSSH2_ERROR_EAGAIN {
-            closingForwardChannels.append(entry)
+    func retireChannel(_ channel: OpaquePointer, holdsCommandSlot: Bool = false, execRequestId: UUID? = nil) {
+        let entry = ClosingChannel(channel: channel, holdsCommandSlot: holdsCommandSlot, execRequestId: execRequestId)
+        if !advanceClose(entry, now: Date()) {
+            closingChannels.append(entry)
             startIOLoop()
         }
+    }
+
+    /// One step of one close; true once the channel is freed.
+    private func advanceClose(_ entry: ClosingChannel, now: Date) -> Bool {
+        if !entry.closed {
+            let result = libssh2_channel_close(entry.channel)
+            if entry.closeSentAt == nil { entry.closeSentAt = now }
+            if result == LIBSSH2_ERROR_EAGAIN { return false }
+            entry.closed = true
+            if let requestId = entry.execRequestId {
+                // A close that failed (the transport went) never saw the computer's CLOSE: no exit status.
+                let clean = result == 0 && !transportDeadOrFailing
+                completeClosedExec(requestId, channel: entry.channel, closedCleanly: clean)
+            }
+        }
+        return libssh2_channel_free(entry.channel) != LIBSSH2_ERROR_EAGAIN
     }
 
     /// One pass over the channels still closing. Returns true when it moved one on.
     private func drainClosingChannels() -> Bool {
-        guard !closingForwardChannels.isEmpty else { return false }
+        guard !closingChannels.isEmpty else { return false }
         let now = Date()
-        var stillClosing: [ClosingChannel] = []
         var didWork = false
-
-        for var entry in closingForwardChannels {
-            if !entry.closed {
-                if libssh2_channel_close(entry.channel) == LIBSSH2_ERROR_EAGAIN, now < entry.deadline {
-                    stillClosing.append(entry)
-                    continue
-                }
-                entry.closed = true
+        let entries = closingChannels
+        var stillClosing: [ClosingChannel] = []
+        for entry in entries {
+            let wasClosed = entry.closed
+            if advanceClose(entry, now: now) {
                 didWork = true
-            }
-            /*
-             * Past the deadline the free happens anyway: libssh2 documents it as
-             * the "give up on the close handshake" path, and the alternative is
-             * holding the allocation until the session itself is freed.
-             */
-            if libssh2_channel_free(entry.channel) == LIBSSH2_ERROR_EAGAIN, now < entry.deadline {
+            } else {
+                if entry.closed != wasClosed { didWork = true }
                 stillClosing.append(entry)
-                continue
             }
-            didWork = true
         }
-
-        closingForwardChannels = stillClosing
+        closingChannels = stillClosing
         return didWork
     }
 }

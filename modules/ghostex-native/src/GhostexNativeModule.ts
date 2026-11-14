@@ -21,6 +21,7 @@ import type {
   SpeechVoices,
   ReadAloudMode,
   BarLayout,
+  SshChannelStats,
 } from './GhostexNative.types';
 
 declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
@@ -112,6 +113,12 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
    * change on; an older build has no such function, so `remote/connection.ts` checks for it.
    */
   supportsDialTimeout?(): boolean;
+
+  /**
+   * The connection's channel bookkeeping, or null without a connection. Only in iPhone builds with the SSH send queue
+   * (absent on Android and older builds), so callers check for it.
+   */
+  sshChannelStats?(machineId: string): Promise<SshChannelStats | null>;
 
   // Non-interactive command in its own channel (inventory + ghostex CLI actions).
   exec(machineId: string, command: string, timeoutMs?: number): Promise<ExecResult>;

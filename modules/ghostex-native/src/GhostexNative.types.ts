@@ -33,6 +33,20 @@ export type ExecResult = {
   stdout: string;
   stderr: string;
   exitCode: number;
+  /** iPhone builds with the SSH send queue: the signal that ended the command; `exitCode` is then 128 + its number. */
+  exitSignal?: string;
+};
+
+/** `sshChannelStats` (iPhone builds with the SSH send queue): the connection's channel bookkeeping. */
+export type SshChannelStats = {
+  commandsRunning: number;
+  /** Command channels whose result is known but whose close the computer has not answered yet; each holds a slot. */
+  commandsClosing: number;
+  /** Command closes the computer has not answered 30 s after the phone's CLOSE went out. */
+  stuckCommandCloses: number;
+  oldestStuckCloseMs: number;
+  stuckOtherCloses: number;
+  queuedSendBytes: number;
 };
 
 export type OpenTerminalOptions = {
