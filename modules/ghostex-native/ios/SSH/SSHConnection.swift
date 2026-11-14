@@ -1655,11 +1655,14 @@ actor SSHConnection {
     // MARK: - Command slots
 
     /**
-     * Commands the native side lets run at once: the phone's three command slots plus its connection check's lane
+     * Commands the native side lets run at once: the phone's two command slots plus its connection check's lane
      * (src/remote/channelBudget.ts). A command whose channel is still closing keeps its slot until the computer's
      * CLOSE arrives, so a slot JS freed when a promise settled cannot push the computer past its MaxSessions.
+     * 2026-11-14: 3, was 4. Seven warm terminals (`MAX_WARM_SESSIONS`) + these 3 fill MaxSessions 10 exactly; with
+     * 4 the check (or a command) was refused on a healthy connection. Android has the same budget
+     * (`COMMAND_CHANNEL_SLOTS` 2 + `probeChannelSlot` in GhostexSshConnection.kt).
      */
-    static let commandSlots = 4
+    static let commandSlots = 3
     /// How long a new command waits for a slot before it answers E_BUSY (the phone's non-destructive `busy`).
     static let commandAdmissionSeconds: TimeInterval = 5
     /// A close the computer has not answered this long after ours went out is stuck (`channelStats`).
