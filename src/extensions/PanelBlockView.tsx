@@ -208,6 +208,17 @@ export default function PanelBlockView({
           ))}
         </View>
       ) : null}
+      {/* An extension's own page shows on the computer; the phone draws no extension pages. */}
+      {body.type === 'web' ? (
+        <View style={styles.row} accessibilityRole="text">
+          <View style={styles.slot}>
+            <PanelIcon name="world" size={ds(14)} color={ink.muted} />
+          </View>
+          <Text style={[styles.title, styles.mutedText]} numberOfLines={1}>
+            Open on computer
+          </Text>
+        </View>
+      ) : null}
       {body.type === 'empty' ? (
         <View style={styles.empty}>
           <PanelIcon source={place} name={body.icon} size={ds(20)} color={ink.muted} />

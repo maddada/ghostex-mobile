@@ -59,7 +59,9 @@ export type PanelBlockBody =
   | { type: 'progress'; value: number; max: number; label?: string }
   | { type: 'text'; text: string }
   | { type: 'buttons'; items: PanelButton[] }
-  | { type: 'empty'; subtitle?: string; icon?: string; action?: PanelAction };
+  | { type: 'empty'; subtitle?: string; icon?: string; action?: PanelAction }
+  /** A small page of the extension's own: the desktop shows it, the phone an Open on computer row. */
+  | { type: 'web' };
 
 export type PanelBlock = { id: string; tab?: string; title?: string; body: PanelBlockBody };
 export type PanelTab = { id: string; title: string; icon?: string };
@@ -256,6 +258,8 @@ function parseBlock(value: unknown): PanelBlock | null {
           action: parsePanelAction(value.action) ?? undefined,
         },
       };
+    case 'web':
+      return typeof value.path === 'string' ? { ...head, body: { type: 'web' } } : null;
     default:
       return null;
   }
