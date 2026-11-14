@@ -239,117 +239,132 @@ function AutopilotBody({
           value={config.enabled}
           onValueChange={(enabled) => set({ enabled })}
         />
-        <SegmentedRow
-          label="Which sessions"
-          options={[
-            { value: 'all', label: 'Every session' },
-            { value: 'projects', label: 'Projects I pick' },
-            { value: 'sessions', label: 'Sessions I pick' },
-          ]}
-          value={config.scope}
-          onChange={(scope) => set({ scope })}
-        />
-        {config.scope === 'projects'
-          ? view.projects.map((project) => (
-              <ToggleRow
-                key={project.projectId}
-                label={project.name}
-                detail={nameCount(project.name) > 1 ? project.path : undefined}
-                value={project.in}
-                onValueChange={(on) => void send({ op: 'setProject', projectId: project.projectId, on })}
-              />
-            ))
-          : null}
-        {config.scope === 'sessions'
-          ? view.sessions.map((session) => (
-              <ToggleRow
-                key={`${session.projectId}:${session.sessionId}`}
-                label={session.title}
-                detail={session.project}
-                value={session.on}
-                onValueChange={(on) =>
-                  void send({ op: 'setSession', projectId: session.projectId, sessionId: session.sessionId, on })
-                }
-              />
-            ))
-          : null}
-        {config.scope === 'sessions' && view.sessions.length === 0 ? (
-          <Caption>Put a session in with the Autopilot pill in its chat.</Caption>
+        {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): while Autopilot is off its page is
+            the switch (and what it did); every choice under it shows once it is on. */}
+        {config.enabled ? (
+          <>
+            <SegmentedRow
+              label="Which sessions"
+              options={[
+                { value: 'all', label: 'Every session' },
+                { value: 'projects', label: 'Projects I pick' },
+                { value: 'sessions', label: 'Sessions I pick' },
+              ]}
+              value={config.scope}
+              onChange={(scope) => set({ scope })}
+            />
+            {config.scope === 'projects'
+              ? view.projects.map((project) => (
+                  <ToggleRow
+                    key={project.projectId}
+                    label={project.name}
+                    detail={nameCount(project.name) > 1 ? project.path : undefined}
+                    value={project.in}
+                    onValueChange={(on) => void send({ op: 'setProject', projectId: project.projectId, on })}
+                  />
+                ))
+              : null}
+            {config.scope === 'sessions'
+              ? view.sessions.map((session) => (
+                  <ToggleRow
+                    key={`${session.projectId}:${session.sessionId}`}
+                    label={session.title}
+                    detail={session.project}
+                    value={session.on}
+                    onValueChange={(on) =>
+                      void send({ op: 'setSession', projectId: session.projectId, sessionId: session.sessionId, on })
+                    }
+                  />
+                ))
+              : null}
+            {config.scope === 'sessions' && view.sessions.length === 0 ? (
+              <Caption>Put a session in with the Autopilot pill in its chat.</Caption>
+            ) : null}
+          </>
         ) : null}
       </SettingsSection>
       {config.enabled || view.log.length > 0 ? <Summary view={view} /> : null}
-      <SettingsSection name="settings:autopilot:allowed">
-        <SectionHeader title="What it may do" />
-        <SegmentedRow
-          label="On its own"
-          options={[
-            { value: 'heal', label: 'Heal' },
-            { value: 'decide', label: 'Heal and decide' },
-            { value: 'everything', label: 'Everything' },
-          ]}
-          value={config.tier}
-          onChange={(tier) => set({ tier })}
-        />
-        <ToggleRow
-          label="Answer questions for me"
-          detail="When you don't answer in time, it picks each question's recommended choice."
-          value={config.answerQuestions}
-          onValueChange={(answerQuestions) => set({ answerQuestions })}
-        />
-        {config.answerQuestions ? (
-          <SegmentedRow
-            label="Wait for me first"
-            options={[
-              { value: '5', label: '5 min' },
-              { value: '10', label: '10 min' },
-              { value: '15', label: '15 min' },
-            ]}
-            value={String(config.answerAfterMinutes) as '5' | '10' | '15'}
-            onChange={(wait) => set({ answerAfterMinutes: Number(wait) })}
-          />
-        ) : null}
-        <ToggleRow
-          label="Answer approval cards"
-          detail="Permission prompts, Connectors cards and folder trust. While this is off, only you answer them."
-          value={config.answerApprovals}
-          onValueChange={(answerApprovals) => set({ answerApprovals })}
-        />
-      </SettingsSection>
-      <SettingsSection name="settings:autopilot:limits">
-        <SectionHeader title="Hard limits it may cross" />
-        {HARD_LIMITS.map((limit) => (
-          <ToggleRow
-            key={limit.key}
-            label={limit.label}
-            detail={limit.detail}
-            value={config.limits[limit.key] === true}
-            onValueChange={(on) => set({ limits: { [limit.key]: on } })}
-          />
-        ))}
-        <Caption>
-          Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note.
-        </Caption>
-      </SettingsSection>
-      <SettingsSection name="settings:autopilot:supervisor">
-        <SectionHeader title="Supervisor" />
-        <ChoiceRow
-          label="Claude Opus 5.5 · Medium"
-          selected={config.supervisor === 'opusMedium'}
-          onPress={() => set({ supervisor: 'opusMedium' })}
-        />
-        <ChoiceRow
-          label="Codex GPT 6.1 Sol · High"
-          selected={config.supervisor === 'solHigh'}
-          onPress={() => set({ supervisor: 'solHigh' })}
-        />
-        <StepperRow
-          label={`Look at every session every ${minutes} min`}
-          value={`${minutes}`}
-          canDecrease={minutes > 1}
-          canIncrease={minutes < 10}
-          onStep={(delta) => set({ sweepSeconds: (minutes + delta) * 60 })}
-        />
-      </SettingsSection>
+      {config.enabled ? (
+        <>
+          <SettingsSection name="settings:autopilot:allowed">
+            <SectionHeader title="What it may do" />
+            <SegmentedRow
+              label="On its own"
+              options={[
+                { value: 'heal', label: 'Heal' },
+                { value: 'decide', label: 'Heal and decide' },
+                { value: 'everything', label: 'Everything' },
+              ]}
+              value={config.tier}
+              onChange={(tier) => set({ tier })}
+            />
+            {/* Heal leaves questions and approvals for you, so their switches show only above Heal. */}
+            {config.tier !== 'heal' ? (
+              <>
+                <ToggleRow
+                  label="Answer questions for me"
+                  detail="When you don't answer in time, it picks each question's recommended choice."
+                  value={config.answerQuestions}
+                  onValueChange={(answerQuestions) => set({ answerQuestions })}
+                />
+                {config.answerQuestions ? (
+                  <SegmentedRow
+                    label="Wait for me first"
+                    options={[
+                      { value: '5', label: '5 min' },
+                      { value: '10', label: '10 min' },
+                      { value: '15', label: '15 min' },
+                    ]}
+                    value={String(config.answerAfterMinutes) as '5' | '10' | '15'}
+                    onChange={(wait) => set({ answerAfterMinutes: Number(wait) })}
+                  />
+                ) : null}
+                <ToggleRow
+                  label="Answer approval cards"
+                  detail="Permission prompts, Connectors cards and folder trust. While this is off, only you answer them."
+                  value={config.answerApprovals}
+                  onValueChange={(answerApprovals) => set({ answerApprovals })}
+                />
+              </>
+            ) : null}
+          </SettingsSection>
+          <SettingsSection name="settings:autopilot:limits">
+            <SectionHeader title="Hard limits it may cross" />
+            {HARD_LIMITS.map((limit) => (
+              <ToggleRow
+                key={limit.key}
+                label={limit.label}
+                detail={limit.detail}
+                value={config.limits[limit.key] === true}
+                onValueChange={(on) => set({ limits: { [limit.key]: on } })}
+              />
+            ))}
+            <Caption>
+              Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note.
+            </Caption>
+          </SettingsSection>
+          <SettingsSection name="settings:autopilot:supervisor">
+            <SectionHeader title="Supervisor" />
+            <ChoiceRow
+              label="Claude Opus 5.5 · Medium"
+              selected={config.supervisor === 'opusMedium'}
+              onPress={() => set({ supervisor: 'opusMedium' })}
+            />
+            <ChoiceRow
+              label="Codex GPT 6.1 Sol · High"
+              selected={config.supervisor === 'solHigh'}
+              onPress={() => set({ supervisor: 'solHigh' })}
+            />
+            <StepperRow
+              label={`Look at every session every ${minutes} min`}
+              value={`${minutes}`}
+              canDecrease={minutes > 1}
+              canIncrease={minutes < 10}
+              onStep={(delta) => set({ sweepSeconds: (minutes + delta) * 60 })}
+            />
+          </SettingsSection>
+        </>
+      ) : null}
       <Log view={view} onMore={onMore} logLimit={logLimit} />
     </>
   );

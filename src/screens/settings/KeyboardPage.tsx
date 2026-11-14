@@ -2,6 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { CommandPadCopy } from '../../copy';
+import { useSettingsStore } from '../../settings/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { SettingsSection } from './SectionBoundary';
 import { Caption, LinkRow, SectionHeader, SettingsScreenLayout, SettingToggle } from './SettingsControls';
@@ -12,6 +13,7 @@ import { Caption, LinkRow, SectionHeader, SettingsScreenLayout, SettingToggle } 
  */
 function CommandPadSection() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const padOn = useSettingsStore((state) => state.settings.extraKeysToolbarVisible);
 
   return (
     <>
@@ -19,22 +21,28 @@ function CommandPadSection() {
       <SettingToggle settingKey="extraKeysToolbarVisible" label={CommandPadCopy.toggle} />
       <Caption>{CommandPadCopy.settingsCaption}</Caption>
       <SettingToggle settingKey="keyBarHapticsEnabled" label={CommandPadCopy.vibration} />
-      <LinkRow
-        title={CommandPadCopy.padKeys}
-        description={CommandPadCopy.padKeysDescription}
-        onPress={() => navigation.navigate('CommandPadKeysEditor')}
-      />
-      <SectionHeader title={CommandPadCopy.layersSection} />
-      <LinkRow
-        title={CommandPadCopy.extraKeysLayout}
-        description={CommandPadCopy.extraKeysLayoutDescription}
-        onPress={() => navigation.navigate('ExtraKeysEditor')}
-      />
-      <LinkRow
-        title={CommandPadCopy.agentHotkeys}
-        description={CommandPadCopy.agentHotkeysDescription}
-        onPress={() => navigation.navigate('AgentHotkeysEditor')}
-      />
+      {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): the pad's keys and layers show only
+          while the pad is on (TerminalScreen draws no key bar or pad while it is off). */}
+      {padOn ? (
+        <>
+          <LinkRow
+            title={CommandPadCopy.padKeys}
+            description={CommandPadCopy.padKeysDescription}
+            onPress={() => navigation.navigate('CommandPadKeysEditor')}
+          />
+          <SectionHeader title={CommandPadCopy.layersSection} />
+          <LinkRow
+            title={CommandPadCopy.extraKeysLayout}
+            description={CommandPadCopy.extraKeysLayoutDescription}
+            onPress={() => navigation.navigate('ExtraKeysEditor')}
+          />
+          <LinkRow
+            title={CommandPadCopy.agentHotkeys}
+            description={CommandPadCopy.agentHotkeysDescription}
+            onPress={() => navigation.navigate('AgentHotkeysEditor')}
+          />
+        </>
+      ) : null}
     </>
   );
 }

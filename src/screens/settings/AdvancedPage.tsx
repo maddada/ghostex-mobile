@@ -193,14 +193,16 @@ export default function AdvancedPage() {
       <SettingsSection name="settings:advanced:ssh-connection">
         <SectionHeader title="SSH connection" />
         <SettingToggle settingKey="keepAliveEnabled" label="Send keep-alive packets" />
-        <StepperRow
-          label="Keep-alive interval"
-          value={`${settings.keepAliveIntervalSec} s`}
-          canDecrease={settings.keepAliveIntervalSec > KEEP_ALIVE_INTERVAL_MIN_SEC}
-          canIncrease={settings.keepAliveIntervalSec < KEEP_ALIVE_INTERVAL_MAX_SEC}
-          onStep={(delta) => stepKeepAliveInterval(delta * KEEP_ALIVE_INTERVAL_STEP_SEC)}
-          disabled={!settings.keepAliveEnabled}
-        />
+        {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only while keep-alive is on. */}
+        {settings.keepAliveEnabled ? (
+          <StepperRow
+            label="Keep-alive interval"
+            value={`${settings.keepAliveIntervalSec} s`}
+            canDecrease={settings.keepAliveIntervalSec > KEEP_ALIVE_INTERVAL_MIN_SEC}
+            canIncrease={settings.keepAliveIntervalSec < KEEP_ALIVE_INTERVAL_MAX_SEC}
+            onStep={(delta) => stepKeepAliveInterval(delta * KEEP_ALIVE_INTERVAL_STEP_SEC)}
+          />
+        ) : null}
         <Caption>Applies the next time a machine connects.</Caption>
       </SettingsSection>
       {__DEV__ ? (

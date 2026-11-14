@@ -115,14 +115,18 @@ export default function SessionsListPage() {
       <SettingsSection name="settings:sessions-list:spaces">
         <SectionHeader title="Spaces" />
         {toggle('sidebarSpacesEnabled', 'Spaces', 'Group projects into Spaces and switch between them from the chips.')}
-        {organization.sidebarSpacesEnabled
-          ? toggle(
+        {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): both only matter with Spaces on
+            (spaces/spaceFilter.ts), so they show only then. */}
+        {organization.sidebarSpacesEnabled ? (
+          <>
+            {toggle(
               'sidebarActiveProjects',
               'Active projects',
               'A star before your Spaces lists the projects you are working on from every Space.',
-            )
-          : null}
-        {toggle('chiefShowOnAllSpaces', 'Show Main Hub on all Spaces', 'Main Hub stays at the top of every Space.')}
+            )}
+            {toggle('chiefShowOnAllSpaces', 'Show Main Hub on all Spaces', 'Main Hub stays at the top of every Space.')}
+          </>
+        ) : null}
       </SettingsSection>
       <SessionTagsSection items={organization.sidebarSessionTagListItems} summary={selectedSummary} />
       <SettingsSection name="settings:sessions-list:sync">

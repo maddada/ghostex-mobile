@@ -65,29 +65,23 @@ const CHOICE_OPTIONS: readonly { value: AlertChoice; label: string }[] = [
   { value: 'off', label: NotificationChoicesCopy.choiceOff },
 ];
 
-/** One kind: its name and what it covers, over Sound, Silent and Off; dimmed and inert while the master is off. */
+/** One kind: its name and what it covers, over Sound, Silent and Off. Shown only while the master is on. */
 function KindChoice({
   label,
   detail,
   value,
-  disabled,
   onChange,
 }: {
   label: string;
   detail: string;
   value: AlertChoice;
-  disabled: boolean;
   onChange: (value: AlertChoice) => void;
 }) {
   const styles = useSettingsStyles();
   const appearance = useAppearance();
   return (
     <SettingsSearchAnchor label={label}>
-      <View
-        style={[styles.card, disabled && styles.rowDisabled]}
-        pointerEvents={disabled ? 'none' : 'auto'}
-        accessibilityState={{ disabled }}
-      >
+      <View style={styles.card}>
         <View style={local.kindText}>
           <Text style={styles.cardLabel}>{label}</Text>
           <Text style={[local.detail, { color: appearance.muted }]}>{detail}</Text>
@@ -229,20 +223,25 @@ function AgentNotifications() {
       <SectionHeader title={copy.sectionAgents} />
       <SwitchRow label={copy.master} value={notifications.enabled} onValueChange={setMaster} />
       <Caption>{pushing ? NotificationChoicesCopy.pushCaption : copy.limit}</Caption>
-      <SectionHeader title={NotificationChoicesCopy.sectionKinds} />
-      {KIND_ROWS.map((row) => (
-        <KindChoice
-          key={row.key}
-          label={row.label}
-          detail={row.detail}
-          value={notifications.choices[row.key]}
-          disabled={!notifications.enabled}
-          onChange={(choice) => choose(row.key, choice)}
-        />
-      ))}
-      <Caption>{NotificationChoicesCopy.kindsCaption}</Caption>
-      <Caption>{NotificationChoicesCopy.quietHours}</Caption>
-      {notifications.enabled ? <TestNotification settings={notifications} /> : null}
+      {/* CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): the kinds show only while the
+          master switch is on, no longer dimmed. */}
+      {notifications.enabled ? (
+        <>
+          <SectionHeader title={NotificationChoicesCopy.sectionKinds} />
+          {KIND_ROWS.map((row) => (
+            <KindChoice
+              key={row.key}
+              label={row.label}
+              detail={row.detail}
+              value={notifications.choices[row.key]}
+              onChange={(choice) => choose(row.key, choice)}
+            />
+          ))}
+          <Caption>{NotificationChoicesCopy.kindsCaption}</Caption>
+          <Caption>{NotificationChoicesCopy.quietHours}</Caption>
+          <TestNotification settings={notifications} />
+        </>
+      ) : null}
     </>
   );
 }
