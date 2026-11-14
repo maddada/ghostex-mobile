@@ -38,7 +38,7 @@ import {
 import { useDisclosure } from './state';
 import type { TranscriptTheme } from './theme';
 import { ROW_GAP, cardStackMargin } from './cardSpacing';
-import { useRowGap } from './messageSpacing';
+import { useCardStackGap } from './messageSpacing';
 
 /** A status tone's colour on a message card: `failed` red, `waiting` amber, otherwise green (the advisor card's red and amber too, `SystemRows.tsx`). */
 export function toneColor(tone: string, theme: TranscriptTheme): string {
@@ -143,7 +143,7 @@ const AgentCard = memo(function AgentCard({
             <Text style={[SINGLE_LINE_TITLE, styles.fixed, { color: theme.foreground }]} numberOfLines={1}>
               {str(pill, 'prefix')}
             </Text>
-            <SessionPill pill={pill} />
+            <SessionPill pill={pill} textStyle={[SINGLE_LINE_TITLE, { color: theme.foreground }]} />
           </View>
         ) : (
           <Text style={[SINGLE_LINE_TITLE, styles.name, { color: theme.foreground }]} numberOfLines={1}>
@@ -192,7 +192,7 @@ const AgentCard = memo(function AgentCard({
                     <Mark card={recipient} />
                     {obj(recipient.pill) !== null ? (
                       <View style={styles.recipientName}>
-                        <SessionPill pill={obj(recipient.pill) ?? {}} />
+                        <SessionPill pill={obj(recipient.pill) ?? {}} textStyle={{ color: theme.foreground }} />
                       </View>
                     ) : (
                       <Text
@@ -285,7 +285,8 @@ export function SubagentMessageCard({ id, card, references }: { id: string; card
 
 /** The messages this session's agent sent other agents, one row each. */
 export function SentAgentMessageCards({ cards, aboveIsCard = false, columnGap = 0 }: { cards: unknown; aboveIsCard?: boolean; columnGap?: number }) {
-  const rowGap = useRowGap();
+  // The rail's gap on an opened Quiet View line (`useCardStackGap`).
+  const rowGap = useCardStackGap();
   const list = arr(cards)
     .map((card) => obj(card))
     .filter((card): card is JsonRecord => card !== null && obj(card.card) !== null);

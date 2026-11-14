@@ -1,25 +1,31 @@
 /**
- * Another session's agent pill (gx-chat-core `transcript/session_mentions.rs`, where the user's
- * decision lives): a hairline rounded frame around the agent's logo and the session's title, then
- * its state dot and, for a session on another computer than the chat's, that computer's own icon
- * (no name), the one its session rows draw (machines/computerIcons.ts). The same look desktop draws
- * (`session_pill_link` in markdown_links.rs). The dot and the computer are read live from the
- * phone's session list (`mentionedSession.ts`). A card's pill (the core marks it `logo: false`)
- * sits beside the card's own agent tile and leaves the logo to it (CDXC:SessionChat 2026-10-28 on
- * `card_pill`), except a coordinator's, whose tile is the crown: its pill draws the agent's logo
- * (CDXC:SessionChat 2026-11-14 on `titled_pill` in gx-chat-core agent_message_card.rs).
+ * Another session named in the chat (gx-chat-core `transcript/session_mentions.rs`, where the user's
+ * decisions live): the agent's logo and the session's title with a faint dotted underline, no frame
+ * and no fill, then a state dot only while it works or needs you and, for a session on another
+ * computer than the chat's, that computer's own icon (no name), the one its session rows draw
+ * (machines/computerIcons.ts). The same look desktop draws (`session_pill_link` in
+ * markdown_links.rs, `session_pill` in inter_agent_message.rs). The dot and the computer are read
+ * live from the phone's session list (`mentionedSession.ts`). A card's name (the core marks it
+ * `logo: false`) sits beside the card's own agent tile and leaves the logo to it (CDXC:SessionChat
+ * 2026-10-28 on `card_pill`), except a coordinator's, whose tile is the crown: it draws the agent's
+ * logo (CDXC:SessionChat 2026-11-14 on `titled_pill` in gx-chat-core agent_message_card.rs).
  *
  * CDXC:SessionChat 2026-11-14 SEE-ALSO: the user's "i believe we agreed to show the logo of the
  * machine here?" (desktop gx_chat/session_directory.rs `computer_icon`): the computer mark is that
- * computer's own icon, the plain computer only while its icon is unknown. A tap switches to that session; a long press shows
- * its card (`MentionCard.tsx`); a session that is gone draws muted and does nothing.
+ * computer's own icon, the plain computer only while its icon is unknown. A tap switches to that
+ * session, its underline full strength while pressed (the desktop's hover); a long press shows its
+ * card (`MentionCard.tsx`); a session that is gone draws muted, without an underline, and does
+ * nothing.
  *
- * CDXC:SessionChat 2026-11-13 DECISION:
- * User, answering the session-mention design page: Q3060 "the rich pill, in both the chat box and the sent message. But for a session on another computer, show only that computer's icon, not its whole name", and Q3063 "the same look spreads to message cards and the Workers popover, where they name a session". A "Message from / to" card's session name is the framed pill too (without the logo its tile already shows), with the dot and the computer icon. Supersedes the frameless card name in the line's own type and its dotted underline (CDXC:SessionChat 2026-10-29 and 2026-10-31 on desktop `session_pill` in inter_agent_message.rs). The side chat bar's parent name (`plain`) keeps the frameless look: it is not a card.
+ * CDXC:SessionChat 2026-11-15 SEE-ALSO: the user's "i dont like the pill border around the name of
+ * different agents ... only show status when running (red/yellow dots only should show)" is on
+ * `mention_card` in gx-chat-core; it supersedes the framed pill and the idle ring of 2026-11-13.
+ * The side chat bar's parent name (`plain`) keeps the line's own type without the logo or marks.
  *
- * A board card's mention (`[title](board:B4)`, gx-chat-core `board_reference`) is the same pill in
- * the board's own tint (`reference.board`, desktop `board_mention_link`) with the Board pill's icon
- * and the card's title now; a card the board no longer has draws muted with the link's own text.
+ * A board card's mention (`[title](board:B4)`, gx-chat-core `board_reference`) is not a session: it
+ * keeps the framed pill in the board's own tint (`reference.board`, desktop `board_mention_link`)
+ * with the Board pill's icon and the card's title now; a card the board no longer has draws muted
+ * with the link's own text.
  */
 
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
@@ -101,16 +107,14 @@ export function SessionPill({
   const computerDrawing = useComputerIconDrawing(live?.machineId ?? '');
   const longPress =
     onLongPress ?? (target !== null && live !== null ? () => openTranscriptMenu({ mention: target }) : undefined);
+  // The name's own colour, which its underline takes (the line's `textStyle`, else the theme's).
+  const nameColor = StyleSheet.flatten(textStyle)?.color;
+  const ink = typeof nameColor === 'string' ? nameColor : theme.foreground;
+  const opens = !missing && open !== undefined;
   if (plain) {
-    // The name's own colour, which its underline takes (the line's `textStyle`, else the theme's).
-    const nameColor = StyleSheet.flatten(textStyle)?.color;
-    const underline =
-      !missing && open !== undefined
-        ? dottedUnderline(typeof nameColor === 'string' ? nameColor : theme.foreground)
-        : null;
     return (
       <Pressable
-        disabled={missing || open === undefined}
+        disabled={!opens}
         onPress={open}
         accessibilityRole="link"
         accessibilityLabel={`${label}: ${title}`}
@@ -118,12 +122,68 @@ export function SessionPill({
         style={({ pressed }) => [
           styles.pill,
           styles.plainPill,
-          pressed && !missing ? { backgroundColor: theme.ink(0.08) } : null,
+          pressed && opens ? { backgroundColor: theme.ink(0.08) } : null,
         ]}
       >
-        <Text style={[styles.plainLabel, textStyle, missing ? { color: theme.cardMuted } : null, underline]} numberOfLines={1}>
-          {label}
-        </Text>
+        {({ pressed }) => (
+          <Text
+            style={[
+              styles.plainLabel,
+              textStyle,
+              missing ? { color: theme.cardMuted } : null,
+              opens ? dottedUnderline(ink, pressed) : null,
+            ]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        )}
+      </Pressable>
+    );
+  }
+  if (!board) {
+    // Only a session that works or needs you shows its state; idle and sleeping show none.
+    const running = live !== null && (live.state === 'Working' || live.state === 'Needs you');
+    return (
+      <Pressable
+        disabled={!opens}
+        onPress={open}
+        {...(longPress !== undefined ? { onLongPress: longPress } : {})}
+        accessibilityRole="link"
+        accessibilityLabel={`${label}: ${title}${live !== null ? `, ${live.state}` : ''}${
+          live !== null && live.computer.length > 0 ? `, on ${live.computer}` : ''
+        }`}
+        hitSlop={4}
+        style={[styles.pill, styles.name]}
+      >
+        {({ pressed }) => (
+          <>
+            {showsLogo ? (
+              <View style={missing ? styles.faded : null}>
+                {pill.coordinator === true ? (
+                  <CoordinatorGlyph size={12} color={theme.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
+                ) : (
+                  <AgentMark icon={icon.length > 0 ? icon : null} size={12} />
+                )}
+              </View>
+            ) : null}
+            <Text
+              style={[
+                styles.nameLabel,
+                textStyle,
+                { color: missing ? theme.cardMuted : ink },
+                opens ? dottedUnderline(ink, pressed) : null,
+              ]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+            {running && live !== null ? <MentionStateDot state={live.state} theme={theme} /> : null}
+            {live !== null && live.computer.length > 0 ? (
+              <ComputerIconGlyph drawing={computerDrawing} size={11} color={theme.muted} />
+            ) : null}
+          </>
+        )}
       </Pressable>
     );
   }
@@ -133,12 +193,11 @@ export function SessionPill({
       onPress={open}
       {...(longPress !== undefined ? { onLongPress: longPress } : {})}
       accessibilityRole="link"
-      accessibilityLabel={`${label}: ${title}${live !== null ? `, ${live.state}` : ''}${
-        live !== null && live.computer.length > 0 ? `, on ${live.computer}` : ''
-      }`}
+      accessibilityLabel={`${label}: ${title}`}
       hitSlop={4}
       style={({ pressed }) => [
         styles.pill,
+        styles.frame,
         tint !== undefined
           ? { borderColor: colorWithOpacity(tint, 42), backgroundColor: colorWithOpacity(tint, pressed ? 18 : 10) }
           : { borderColor: theme.ink(0.14), backgroundColor: pressed && !missing ? theme.ink(0.08) : theme.ink(0.03) },
@@ -146,23 +205,13 @@ export function SessionPill({
     >
       {showsLogo ? (
         <View style={missing ? styles.faded : null}>
-          {board ? (
-            // A board item's pill (gx-chat-core `board_reference`) takes the Board pill's icon.
-            <Glyph name="layout-board-split" size={12} color={tint ?? theme.foreground} />
-          ) : pill.coordinator === true ? (
-            <CoordinatorGlyph size={12} color={theme.light ? '#000000' : SidebarPalette.ROW_COORDINATOR_CROWN} />
-          ) : (
-            <AgentMark icon={icon.length > 0 ? icon : null} size={12} />
-          )}
+          {/* A board item's pill (gx-chat-core `board_reference`) takes the Board pill's icon. */}
+          <Glyph name="layout-board-split" size={12} color={tint ?? theme.foreground} />
         </View>
       ) : null}
       <Text style={[styles.label, { color: missing ? theme.cardMuted : theme.foreground }]} numberOfLines={1}>
         {label}
       </Text>
-      {live !== null ? <MentionStateDot state={live.state} theme={theme} /> : null}
-      {live !== null && live.computer.length > 0 ? (
-        <ComputerIconGlyph drawing={computerDrawing} size={11} color={theme.muted} />
-      ) : null}
     </Pressable>
   );
 }
@@ -175,13 +224,19 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
     gap: 4,
+  },
+  // A board item's framed pill.
+  frame: {
     paddingHorizontal: 6,
     height: 20,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth * 2,
   },
-  // The fill reaches past the name on each side and the margin takes it back: no space at rest.
-  plainPill: { paddingHorizontal: CARD_PILL_PAD, marginHorizontal: -CARD_PILL_PAD, height: 'auto', borderWidth: 0, borderRadius: 5 },
+  // A session's name: no frame, the line's own height.
+  name: { alignSelf: 'auto' },
+  nameLabel: { fontSize: 13, lineHeight: 18, flexShrink: 1 },
+  // The pressed fill reaches past the name on each side and the margin takes it back.
+  plainPill: { paddingHorizontal: CARD_PILL_PAD, marginHorizontal: -CARD_PILL_PAD, borderRadius: 5 },
   plainLabel: { flexShrink: 1 },
   faded: { opacity: 0.45 },
   label: { fontSize: 12.5, lineHeight: 16, fontWeight: '500', flexShrink: 1 },

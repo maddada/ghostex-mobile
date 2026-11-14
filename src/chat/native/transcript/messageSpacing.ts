@@ -11,8 +11,11 @@
  */
 
 import type { ChatLook } from '../../rust/document';
+import { useContext } from 'react';
+
 import { ROW_GAP } from './cardSpacing';
 import { useChatLook } from './context';
+import { BoxedToolCards } from './ToolCard';
 import { MESSAGE_PART_GAP } from './theme';
 
 /** The space every row ends with at Compact (desktop `COMPACT_ROW_GAP`). */
@@ -37,6 +40,22 @@ export function rowGapOf(look: ChatLook): number {
 /** This transcript's row gap (`rowGapOf`). */
 export function useRowGap(): number {
   return rowGapOf(useChatLook());
+}
+
+/** The space between the cards on an opened Quiet View line's rail, the body's own gap between its
+ *  parts (desktop `RAIL_ROW_GAP`): an opened "3 items updated" line's work item cards sit this close,
+ *  as a "1 report · 1 tool call" line's cards do (user, 2026-11-12: the gap is "ALWAYS small"). */
+export const RAIL_ROW_GAP = 8;
+
+/**
+ * The space between two one-line cards drawn here: the rail's `RAIL_ROW_GAP` inside an opened Quiet
+ * View line (`BoxedToolCards`), the row gap elsewhere (desktop `card_stack_gap` in quiet_view.rs,
+ * where the reason is: a "1 tool call" card and the "Message to" card under it sat a row gap apart
+ * on the rail while its other cards sat 8 apart).
+ */
+export function useCardStackGap(): number {
+  const rowGap = useRowGap();
+  return useContext(BoxedToolCards) ? RAIL_ROW_GAP : rowGap;
 }
 
 /**

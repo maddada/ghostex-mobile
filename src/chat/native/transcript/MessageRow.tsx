@@ -18,7 +18,7 @@ import { FOLDED_CALLS_INSET, ImageRow, ReadImageStrip, WithLoadingPictures } fro
 import { arr, obj, str } from './json';
 import { MessageLongPressContext } from './markdown/blockLongPress';
 import { messageMenuSelection } from './messageCopy';
-import { quietLineLift, useInnerGap, useRowGap } from './messageSpacing';
+import { quietLineLift, useCardStackGap, useInnerGap } from './messageSpacing';
 import { ignoreHold, MESSAGE_TEXT_SELECTABLE, MessageSelection, messageMenuAccessibility } from './messageSelection';
 import { Markdown } from './markdown/Markdown';
 import {
@@ -217,7 +217,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
   const { theme, workOpen, mutedThinking, simple } = useTranscriptEnv();
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
-  const rowGap = useRowGap();
+  const cardGap = useCardStackGap();
   const strengthened = (color: string) => strengthenedText(color, flags.chatTextStrength, theme.light);
   const { inWorkFold, hideFileChanges, quietSteps } = useFoldPlace();
   const boxedTools = useContext(BoxedToolCards);
@@ -408,7 +408,7 @@ function AgentMessage({ message, proseColor }: { message: ProjectedMessage; pros
       {!inWorkFold && arr(message.workflows).length > 0 ? (
         <View
           style={{
-            marginTop: cardStackMargin(callsCard || questionCards || sentCards || gbotCards, MESSAGE_PART_GAP, rowGap),
+            marginTop: cardStackMargin(callsCard || questionCards || sentCards || gbotCards, MESSAGE_PART_GAP, cardGap),
           }}
         >
           <WorkflowCards ids={message.workflows} />

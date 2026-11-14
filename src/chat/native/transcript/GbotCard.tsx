@@ -33,7 +33,7 @@ import { CARD_TEXT_SIZE } from '../cards/primitives';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
 import { cardStackMargin } from './cardSpacing';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
-import { useRowGap } from './messageSpacing';
+import { useCardStackGap } from './messageSpacing';
 import { themedStyles } from './theme';
 
 /** Change ids this app already asked the core about, so a redraw never asks again. */
@@ -75,7 +75,7 @@ export function GbotCards({
   columnGap?: number;
 }) {
   const { gbotCardStates } = useTranscriptFlags();
-  const rowGap = useRowGap();
+  const rowGap = useCardStackGap();
   const rows = shownGbotCards(cards, gbotCardStates);
   if (rows.length === 0) return null;
   return (

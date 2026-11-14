@@ -30,8 +30,13 @@ function faint(color: string): string {
  * and the session's name on a "Message from" / "Message to" card (`SessionPill`, desktop
  * `session_name_underline`). Android draws it solid, as it draws no dotted line.
  */
-export function dottedUnderline(color: string): TextStyle {
-  return { textDecorationLine: 'underline', textDecorationStyle: 'dotted', textDecorationColor: faint(color) };
+export function dottedUnderline(color: string, strong = false): TextStyle {
+  return {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+    // Full strength while pressed, the phone's stand-in for the desktop's hover.
+    textDecorationColor: strong ? color : faint(color),
+  };
 }
 
 export function LinkWords({

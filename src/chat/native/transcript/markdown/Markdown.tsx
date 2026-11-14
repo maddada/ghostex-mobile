@@ -230,7 +230,7 @@ function renderInlines(
         const reference = context.references.get(`${inline.href}\u0000${inline.label}`);
         if (reference?.kind === 'question')
           return <QuestionTagPill key={key} reference={reference} href={inline.href} context={context} />;
-        // A mention of another session (`[<title>](<Global Ref>)`) is its agent pill; a tap goes
+        // A mention of another session (`[<title>](<Global Ref>)`) is its underlined name; a tap goes
         // to the core as any link does, which switches to it (`session_mentions.rs`). A board item
         // (`[<title>](board:B4)`) is the same pill with the board's icon, and a tap opens the
         // board at it (`coordinator_board.rs`).
@@ -239,6 +239,10 @@ function renderInlines(
             <Text key={key}>
               <SessionPill
                 pill={reference.record}
+                // A session's name in the line's own type (a View in a Text does not inherit it).
+                {...(reference.kind === 'session'
+                  ? { textStyle: [{ fontSize: PROSE_SIZE, lineHeight: PROSE_LINE }, style, { color: context.theme.foreground }] }
+                  : {})}
                 onOpen={() => context.openLink(inline.href)}
                 {...(context.longPressLink !== undefined
                   ? {

@@ -28,7 +28,7 @@ import { MessageRow } from './MessageRow';
 import { foldPart, keptParts, lineCards, type QuietLines } from './quietLines';
 import { QuietTurnContext } from './quietTurn';
 import { QuietLine, QuietStatusMark, type QuietSegment } from './quietWork';
-import { useRowGap } from './messageSpacing';
+import { RAIL_ROW_GAP, useRowGap } from './messageSpacing';
 import { AnswersUnderQuietLine } from './PageAnswersCard';
 import { useDisclosure } from './state';
 import { BoxedToolCards } from './ToolCard';
@@ -37,10 +37,6 @@ import { TranscriptItemView } from './TranscriptItemRow';
 /** The space between a shut line and the reply that ends it (desktop `LINE_TO_REPLY`). */
 export const LINE_TO_REPLY = 8;
 const HIDE_FILES = { inWorkFold: false, hideFileChanges: true };
-/** The space between the cards on an opened line's rail, the body's own gap between its parts
- *  (desktop `RAIL_ROW_GAP`): an opened "3 items updated" line's work item cards sit this close, as
- *  a "1 report · 1 tool call" line's cards do (user, 2026-11-12: the gap is "ALWAYS small"). */
-const RAIL_ROW_GAP = 8;
 
 /** The main transcript's lines; `null` outside Quiet View and in the subagent viewer. */
 export const QuietLinesContext = createContext<QuietLines | null>(null);

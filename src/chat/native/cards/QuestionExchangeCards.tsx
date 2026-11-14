@@ -17,12 +17,12 @@ import { arr, isTrue, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { ChoiceRow } from './primitives';
 import { ROW_GAP, cardStackMargin } from '../transcript/cardSpacing';
-import { useRowGap } from '../transcript/messageSpacing';
+import { useCardStackGap } from '../transcript/messageSpacing';
 import { FoldChevron } from '../transcript/foldChevron';
 
 export function QuestionExchangeCards({ exchanges, aboveIsCard = false, columnGap = 0 }: { exchanges: unknown; aboveIsCard?: boolean; columnGap?: number }) {
   const styles = useStyles();
-  const rowGap = useRowGap();
+  const rowGap = useCardStackGap();
   const list = arr(exchanges);
   if (list.length === 0) return null;
   return (
