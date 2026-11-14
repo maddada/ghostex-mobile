@@ -16,9 +16,10 @@
  * "Routine set: Inbox watch", its schedule in words and its next run, then Pause (Resume), Edit and Undo. Edit opens
  * the GBot's Routines in its settings sheet, since the phone has no Automate view.
  *
- * The "Theme changed" card (`kind: themeChanged`, gx-chat-core `theme_cards.rs`, desktop `theme_card.rs`) rides
- * the same cards: the palette icon, "Theme changed by Claude", one line per setting it changed, anything it made
- * hard to read in the warning colour, then Undo; after Undo, "Theme change undone" and who undid it.
+ * The "Theme changed" card (`kind: themeChanged`, gx-chat-core `theme_cards.rs`, desktop `theme_card.rs`) is NOT
+ * drawn on the phone: `shownGbotCards` drops it, so every caller (this stack, the row gaps, Quiet View parts) sees
+ * no card at all. CDXC:PhoneTheme 2026-11-14: the user said "phone shouldn't care about theme being changed on the
+ * pc". The desktop and web builds keep the card.
  */
 
 import { memo, useEffect } from 'react';
@@ -26,7 +27,7 @@ import { Text, View } from 'react-native';
 
 import type { Json } from '../../rust/document';
 import { GbotIcon } from '../../../components/sessions/gbotIcons';
-import { ToneButton, ToneCard, toneLook } from '../cards/ToneCard';
+import { ToneButton, ToneCard } from '../cards/ToneCard';
 import { ErrorLine } from '../cards/ErrorLine';
 import { CARD_TEXT_SIZE } from '../cards/primitives';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
@@ -38,16 +39,23 @@ import { themedStyles } from './theme';
 /** Change ids this app already asked the core about, so a redraw never asks again. */
 const asked = new Set<string>();
 
+/** Card kinds the phone never draws (CDXC:PhoneTheme 2026-11-14, user: "phone shouldn't care about theme being changed on the pc"). */
+const HIDDEN_ON_PHONE = new Set(['themeChanged']);
+
 /**
  * The cards of `cards` that are drawn: each with a change id, less those whose state says GBots are off (core
- * `gbot_cards.rs`, CDXC:GBots 2026-11-09: hidden while GBots are off).
+ * `gbot_cards.rs`, CDXC:GBots 2026-11-09: hidden while GBots are off) and the kinds the phone never draws
+ * ({@link HIDDEN_ON_PHONE}). Every caller sizes its gaps from this list, so a hidden card leaves no gap.
  */
 export function shownGbotCards(cards: Json | undefined, states: { [changeId: string]: Json }): JsonRecord[] {
   return arr(cards)
     .map(obj)
     .filter(
       (card): card is JsonRecord =>
-        card !== null && str(card, 'changeId').length > 0 && !isTrue(states[str(card, 'changeId')], 'off'),
+        card !== null &&
+        str(card, 'changeId').length > 0 &&
+        !HIDDEN_ON_PHONE.has(str(card, 'kind')) &&
+        !isTrue(states[str(card, 'changeId')], 'off'),
     );
 }
 
@@ -72,13 +80,9 @@ export function GbotCards({
   if (rows.length === 0) return null;
   return (
     <View style={{ gap: 8, marginTop: cardStackMargin(aboveIsCard, columnGap, rowGap) }}>
-      {rows.map((card) =>
-        str(card, 'kind') === 'themeChanged' ? (
-          <ThemeCard key={str(card, 'changeId')} card={card} />
-        ) : (
-          <GbotCard key={str(card, 'changeId')} card={card} />
-        ),
-      )}
+      {rows.map((card) => (
+        <GbotCard key={str(card, 'changeId')} card={card} />
+      ))}
     </View>
   );
 }
@@ -198,85 +202,7 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
   );
 });
 
-const ThemeCard = memo(function ThemeCard({ card }: { card: JsonRecord }) {
-  const styles = useStyles();
-  const { dispatch } = useTranscriptEnv();
-  const { gbotCardStates } = useTranscriptFlags();
-  const changeId = str(card, 'changeId');
-  const state = obj(gbotCardStates[changeId]);
-  useEffect(() => {
-    if (state === null && !asked.has(changeId)) {
-      asked.add(changeId);
-      dispatch({ type: 'gbotCard', op: 'load', changeId });
-    }
-  }, [changeId, dispatch, state]);
-  const undone = state !== null && isTrue(state, 'undone');
-  const note = state === null ? '' : str(state, 'note');
-  const error = state === null ? '' : str(state, 'error');
-  const undoLabel = state === null ? '' : str(state, 'undoLabel');
-  const title = undone ? str(card, 'removedTitle') : str(card, 'title');
-  const lines = undone ? [] : arr(card.lines).filter((line): line is string => typeof line === 'string');
-  const warnings = undone ? [] : arr(card.warnings).filter((line): line is string => typeof line === 'string');
-  return (
-    <ToneCard
-      tone="info"
-      tileGlyph={(size, color) => <GbotIcon icon="palette" color={color} size={size} />}
-      title={title}
-      accessibilityLabel={title}
-      body={[
-        lines.length > 0 ? (
-          <View key="lines" style={styles.items}>
-            {lines.map((line, index) => (
-              <Text key={`line-${index}`} selectable style={styles.item}>
-                {line}
-              </Text>
-            ))}
-          </View>
-        ) : null,
-        ...warnings.map((line, index) => (
-          <Text key={`warning-${index}`} selectable style={styles.warning}>
-            {line}
-          </Text>
-        )),
-        note.length > 0 ? (
-          <Text key="note" style={styles.note}>
-            {note}
-          </Text>
-        ) : null,
-        error.length > 0 ? <ErrorLine key="error" message={error} /> : null,
-      ]}
-      footerEnd={
-        undone
-          ? []
-          : [
-              <ToneButton
-                key="undo"
-                kind="secondary"
-                icon="arrow-back-up"
-                label={undoLabel.length > 0 ? undoLabel : 'Undo'}
-                disabled={state === null || !isTrue(state, 'undoEnabled')}
-                onPress={() => dispatch({ type: 'gbotCard', op: 'undo', changeId })}
-              />,
-            ]
-      }
-    />
-  );
-});
-
 const useStyles = themedStyles((P) => ({
-  items: {
-    gap: 2,
-  },
-  item: {
-    color: P.foreground,
-    fontSize: 12.5,
-    lineHeight: 17,
-  },
-  warning: {
-    color: toneLook('warning', P.light).hue ?? P.foreground,
-    fontSize: 12.5,
-    lineHeight: 17,
-  },
   line: {
     color: P.foreground,
     fontSize: CARD_TEXT_SIZE,
