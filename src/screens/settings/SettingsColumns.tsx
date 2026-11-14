@@ -44,6 +44,7 @@ import { SETTINGS_PAGE_ORDER, SETTINGS_PAGES, type SettingsPageId } from './page
 import { LinkRow, SettingsPageEdgesContext, useSettingsStyles } from './SettingsControls';
 import { settingsColumnsFor, type ColumnRoute } from './columnRules';
 import { SettingsSearchField, SettingsSearchResults, useSettingsSearching } from './search/SettingsSearch';
+import { StarRequestRows } from './StarRequestRows';
 import type { SettingsSearchFocus } from './search/SettingsSearchAnchor';
 
 /** The Updates row with its "update ready" summary, which reads the update state and can throw. */
@@ -115,6 +116,7 @@ export function SettingsPageList({
           />
         );
       })}
+      {searching ? null : <StarRequestRows />}
     </>
   );
 }

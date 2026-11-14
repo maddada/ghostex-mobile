@@ -1702,6 +1702,19 @@ export const SettingsCopy = {
     "Configure the exact terminal shortcuts shown on the command pad's Agent layer for each agent. These keys never type slash commands.",
 } as const;
 
+/**
+ * The rows at the end of the Settings list asking for a GitHub star and, on a later day than the star,
+ * for a post on X. Both open the phone's own browser, where the reader is signed in.
+ */
+export const StarRequestCopy = {
+  starTitle: 'Star Ghostex on GitHub',
+  starDescription: 'Ghostex is free and open source. A star helps more people find it.',
+  postTitle: 'Post about Ghostex on X',
+  postDescription: 'Thanks for the star! Tell people what you like about it.',
+  /** What the X compose box starts with; the reader finishes the sentence. Same words as the desktop's card. */
+  postText: "I've been using Ghostex, a free, open source workspace for coding agents. What I like about it:",
+} as const;
+
 /** The search at the top of the Settings list, worded as the desktop's Settings search. */
 export const SettingsSearchCopy = {
   placeholder: 'Search settings',
