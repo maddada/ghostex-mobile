@@ -202,6 +202,24 @@ class GhostexNativeModule : Module() {
     // src/machines/routeChoice.ts).
     Function("supportsDialTimeout") { true }
 
+    // This build has the connection check's own lane (`exec` with lane "probe") and ends a timed-out command alone;
+    // JS turns the Android stall checks on only when it is true (src/remote/channelBudget.ts).
+    Function("probeLane") { true }
+
+    // Command channels whose close the computer has not answered, for the phone's planned reset
+    // (src/remote/channelPressure.ts); the same shape as the iPhone's. Absent on older builds, so JS checks.
+    AsyncFunction("sshChannelStats") { machineId: String ->
+      val stats = connections[machineId]?.channelStats() ?: return@AsyncFunction null
+      mapOf(
+        "commandsRunning" to stats.commandsRunning,
+        "commandsClosing" to stats.commandsClosing,
+        "stuckCommandCloses" to stats.stuckCommandCloses,
+        "oldestStuckCloseMs" to stats.oldestStuckCloseMs,
+        "stuckOtherCloses" to 0,
+        "queuedSendBytes" to 0
+      )
+    }
+
     AsyncFunction("isConnected") { machineId: String ->
       connections[machineId]?.isConnected() ?: false
     }
@@ -303,14 +321,15 @@ class GhostexNativeModule : Module() {
       }
     }
 
-    AsyncFunction("exec") { machineId: String, command: String, timeoutMs: Int?, promise: Promise ->
+    // `lane` "probe" runs the connection check outside the command slots; only passed when `probeLane()` is true.
+    AsyncFunction("exec") { machineId: String, command: String, timeoutMs: Int?, lane: String?, promise: Promise ->
       val connection = connections[machineId]
       if (connection == null) {
         promise.reject(notConnectedException(machineId))
         return@AsyncFunction
       }
       val timeout = timeoutMs?.toLong() ?: GhostexSshConnection.DEFAULT_EXEC_TIMEOUT_MS
-      execAsync(connection, command, null, timeout, promise)
+      execAsync(connection, command, null, timeout, promise, probe = lane == "probe")
     }
 
     AsyncFunction("execWithInput") { machineId: String, command: String, input: String, timeoutMs: Int?, promise: Promise ->
@@ -967,16 +986,31 @@ class GhostexNativeModule : Module() {
     }
   }
 
-  private fun execAsync(connection: GhostexSshConnection, command: String, input: String?, timeout: Long, promise: Promise) {
+  /**
+   * CDXC:RemoteMachines 2026-11-13 WHY: a command that passes its deadline fails alone (GhostexSshExecChannel.kt); the
+   * connection is retired only when its transport is really gone. A timeout used to retire it every time, ending every
+   * terminal and the chat because one slow command was slow.
+   */
+  private fun execAsync(
+    connection: GhostexSshConnection,
+    command: String,
+    input: String?,
+    timeout: Long,
+    promise: Promise,
+    probe: Boolean = false
+  ) {
+    val handle = GhostexExecHandle()
     GhostexSshTask.run(connection, timeout, success = { outcome: GhostexSshConnection.ExecOutcome ->
       promise.resolve(mapOf("stdout" to outcome.stdout, "stderr" to outcome.stderr, "exitCode" to outcome.exitCode))
     }, failure = { error ->
       val coded = mapSshError(error, GhostexErrorCode.CHANNEL_FAILED)
-      if (coded.errorCode == GhostexErrorCode.TIMEOUT || !connection.isConnected()) {
+      if (!connection.isConnected()) {
         retireConnection(connection, "disconnected", coded)
       }
       promise.reject(coded)
-    }, commandChannel = true) { connection.exec(command, timeout, input) }
+    }, commandChannel = !probe, probeChannel = probe, beforeTimeout = { handle.abandon() }, onDeadline = {}, handle = handle) {
+      connection.exec(command, timeout, input, handle)
+    }
   }
 
   // endregion

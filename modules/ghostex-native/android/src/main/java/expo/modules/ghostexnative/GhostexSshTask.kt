@@ -22,21 +22,31 @@ internal object GhostexSshTask {
    * (`GhostexSshConnection.withCommandChannel`); the deadline starts once it has one, so waiting
    * behind other commands never tears the transport down.
    */
-  fun <T> run(
+  internal fun <T> run(
     connection: GhostexSshConnection,
     timeoutMs: Long,
     success: (T) -> Unit,
     failure: (Throwable) -> Unit,
     commandChannel: Boolean = false,
+    probeChannel: Boolean = false,
+    beforeTimeout: () -> Unit = {},
+    onDeadline: () -> Unit = { connection.abortTransport() },
+    handle: GhostexExecHandle? = null,
     work: () -> T
   ) {
     val settled = AtomicBoolean(false)
     val bounded: () -> T = {
       val deadline = deadlines.schedule({
-        if (settled.compareAndSet(false, true)) {
-          // Settle before teardown: transport callbacks may also report this failure.
-          failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
-          connection.abortTransport()
+        if (!settled.get()) {
+          // [beforeTimeout] runs before the timeout can be published and does nothing destructive: a command learns
+          // it was abandoned, so a channel that opens late is never sent its command (GhostexSshExecChannel.kt).
+          beforeTimeout()
+          // [onDeadline] (a connect closes its socket) runs only for a deadline that won: one that lost to a
+          // completion tears nothing down.
+          if (settled.compareAndSet(false, true)) {
+            failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
+            onDeadline()
+          }
         }
       }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
       try {
@@ -48,7 +58,11 @@ internal object GhostexSshTask {
     try {
       connection.workExecutor.execute {
         try {
-          val result = if (commandChannel) connection.withCommandChannel(timeoutMs, bounded) else bounded()
+          val result = when {
+            probeChannel -> connection.withProbeChannel(handle, bounded)
+            commandChannel -> connection.withCommandChannel(timeoutMs, handle, bounded)
+            else -> bounded()
+          }
           if (settled.compareAndSet(false, true)) success(result)
         } catch (error: Throwable) {
           if (settled.compareAndSet(false, true)) failure(error)
