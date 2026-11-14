@@ -613,6 +613,7 @@ export default function NativeChatScreen({
                 sessionId={sessionId}
                 status={dockStatus}
                 onOpenWork={openWorkSheet}
+                onAskSettled={(title) => show(title, false)}
                 typing={composerShown && composerFocused && keyboardUp}
                 {...(dockCap !== undefined ? { maxHeight: dockCap } : {})}
                 gapBelow={

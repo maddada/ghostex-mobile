@@ -829,6 +829,8 @@ export type ChatDocument = {
   workCards?: Json;
   /** The dock above a coordinator's chat box (gx-chat-core `work_cards::dock`): `{cards, line}` or null. */
   workDock?: Json;
+  /** How each work ask settled in the last hour went, by dock row key (gx-chat-core `work_cards::settled_asks`): `"answered"` or `"withdrawn"`. Absent from cores before 2026-11-14. */
+  workAsksSettled?: Json;
   /** The question tags work items ask (gx-chat-core `card_tags`): such a one-click question is drawn as its ask card only. */
   workAskTags?: Json;
   /** A thread's "Approved from <coordinator>" lines, empty when none. Desktop: `relayed_approval.rs`. */

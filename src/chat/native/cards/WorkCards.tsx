@@ -221,6 +221,7 @@ export function WorkDock({
   sessionId,
   status = null,
   onOpenWork,
+  onAskSettled,
   typing = false,
   maxHeight,
   gapBelow = 6,
@@ -231,6 +232,8 @@ export function WorkDock({
   status?: WorkingCardValue | null;
   /** Opens the Work sheet, as the Work pill does (the chat screen's pill sheet). */
   onOpenWork?: () => void;
+  /** Shows the chat's toast for an ask settled elsewhere while its sheet was open: "Answered" or "Withdrawn". */
+  onAskSettled?: (title: string) => void;
   projectId?: string;
   sessionId?: string;
   /** The chat box has the caret with the keyboard up: the dock folds to its bar until a tap opens it. */
@@ -293,6 +296,26 @@ export function WorkDock({
   const dock = obj(dockValue);
   const rows = dockRows(document);
   const board = obj(boardValue);
+  // The sheet's row left the dock while it was open: the sheet goes (its key with it, so the same
+  // row coming back later does not pop it up again), and an ask the coordinator, the computer or
+  // another phone settled says how in a toast (desktop `sync_dock_ask_modal`). The reader's own
+  // answer, Reply or menu pick from the sheet closes it first, so it gets none; a snooze from
+  // elsewhere leaves the ask open, so it gets none either.
+  //
+  // CDXC:Coordinators 2026-11-14 DECISION:
+  // User: "when question is marked as answered give a toast at least that it has been answered",
+  // then yes to the same toast on the phone (Q3109).
+  const sheetGone = sheetKey !== null && !rows.some((row) => str(row, 'key') === sheetKey);
+  const settledValue = document?.workAsksSettled;
+  useEffect(() => {
+    if (!sheetGone || sheetKey === null) return;
+    const how = str(settledValue, sheetKey);
+    setSheetKey(null);
+    if (how === 'answered') onAskSettled?.('Answered');
+    else if (how === 'withdrawn') onAskSettled?.('Withdrawn');
+    // Only the moment the row goes matters, not each new toast callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetGone, sheetKey, settledValue]);
   if (document === null || !workDockShown(document, status)) {
     shownCollapsed.current = null;
     return null;
