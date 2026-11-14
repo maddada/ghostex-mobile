@@ -7,8 +7,13 @@
  * while more than one computer is connected, at the end of every session row, as the desktop's sidebar does
  * (native_sidebar/computer_mark.rs). The icon is read from the computer itself, so the phone shows what was picked on
  * any device. A computer whose Ghostex predates the icon (or that has no socket route) keeps today's look: the cloud
- * on its tab and nothing on its rows. The rule for an unpicked icon is gx-core's `computer_icon_asset`: its kind
- * (laptop or desktop), else its system's mark, else the desktop.
+ * on its tab and nothing on its rows.
+ *
+ * CDXC:RemoteMachines 2026-11-14 DECISION:
+ * User: "we need to show all the logos in the picker for machine icons pls. And we need to be smarter about the icon
+ * shown". The icons include the systems' logos (Apple, Windows, Tux and Linux distributions), and an unpicked icon is
+ * gx-core's `computer_icon_asset`: the logo the computer's gxserver names (`logo`, its Linux distribution's where
+ * known), else its system's logo, else its kind (laptop or desktop), else the desktop.
  */
 
 import { create } from 'zustand';
@@ -24,10 +29,20 @@ export type ComputerIconFacts = {
   kind: string | null;
   /** `macos`, `windows` or `linux`. */
   platform: string | null;
+  /** The logo it wears unpicked (an icon id); null from a gxserver older than the logos. */
+  logo?: string | null;
 };
 
 /** The icons a computer can wear: gx-core `COMPUTER_ICONS`' ids, which name `COMPUTER_ICON_DRAWINGS`. */
 export const COMPUTER_ICON_IDS = [
+  'apple',
+  'windows',
+  'linux',
+  'ubuntu',
+  'debian',
+  'fedora',
+  'arch',
+  'redhat',
   'laptop',
   'desktop',
   'server',
@@ -48,19 +63,38 @@ export const COMPUTER_ICON_IDS = [
   'coffee',
 ] as const;
 
-const SYSTEM_DRAWINGS: Readonly<Record<string, string>> = {
+/** The logo icons' drawings; every other icon's drawing has its id's name. */
+const LOGO_DRAWINGS: Readonly<Record<string, string>> = {
+  apple: 'brandApple',
   windows: 'brandWindows',
-  macos: 'brandApple',
-  linux: 'brandUbuntu',
+  linux: 'brandLinux',
+  ubuntu: 'brandUbuntu',
+  debian: 'brandDebian',
+  fedora: 'brandFedora',
+  arch: 'brandArch',
+  redhat: 'brandRedhat',
 };
 
-function offered(id: string | null): string | null {
-  return id !== null && (COMPUTER_ICON_IDS as readonly string[]).includes(id) ? id : null;
+/** A system's logo icon, for a computer whose gxserver doesn't name its own. */
+const SYSTEM_LOGOS: Readonly<Record<string, string>> = {
+  windows: 'windows',
+  macos: 'apple',
+  linux: 'linux',
+};
+
+function offered(id: string | null | undefined): string | null {
+  return id != null && (COMPUTER_ICON_IDS as readonly string[]).includes(id) ? id : null;
 }
 
 /** The drawing a computer wears (a key of `COMPUTER_ICON_DRAWINGS`): gx-core `computer_icon_asset`. */
 export function computerIconDrawing(facts: ComputerIconFacts): string {
-  return offered(facts.icon) ?? offered(facts.kind) ?? SYSTEM_DRAWINGS[facts.platform ?? ''] ?? 'desktop';
+  const id =
+    offered(facts.icon) ??
+    offered(facts.logo) ??
+    offered(SYSTEM_LOGOS[facts.platform ?? '']) ??
+    offered(facts.kind) ??
+    'desktop';
+  return LOGO_DRAWINGS[id] ?? id;
 }
 
 type ComputerIconsState = {
@@ -121,6 +155,7 @@ export async function readComputerIcon(machine: MachineConnectionTarget): Promis
       icon: text(record.icon),
       kind: text(record.kind),
       platform: text(record.platform),
+      logo: text(record.logo),
     };
     useComputerIconsStore.setState((state) => ({ facts: { ...state.facts, [machine.id]: next } }));
   } catch {
