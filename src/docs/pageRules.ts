@@ -22,7 +22,7 @@ import { remotePathFromFileUrl } from './openDoc';
 import { AGENTATION_ORIGIN } from './agentation';
 import { MERMAID_MODULE_FOLDER } from './markdownDocument';
 import type { ViewerProject } from './mediaStream';
-import { dirName, normalizeRemotePath, remotePathForMirrorUrl, type DocKind } from './paths';
+import { dirName, fileUrlForDocsLoaderUrl, normalizeRemotePath, remotePathForMirrorUrl, type DocKind } from './paths';
 
 // Copy scope ------------------------------------------------------------------------------------
 
@@ -108,29 +108,31 @@ const PHONE_FORWARDS = 'http://127.0.0.1:* https://127.0.0.1:*';
 
 /**
  * CDXC:Docs 2026-11-14 WHY:
- * The mirrored page is a `file://` document the phone itself can read, so its policy names
- * `file:` (WebKit keeps it to the mirror folder, `allowingReadAccessToURL`; Android to what its
- * WebView settings allow, see P5 in the 2026-10-25 note in page.ts). Frames are limited to `blob:`
+ * The mirrored page's own files are named by `mirrorSource`: `file:` on iOS, a `file://` document
+ * WebKit keeps to the page's folder (`allowingReadAccessToURL`), and the mirror under the Docs
+ * loader's origin on Android (`DOCS_LOADER_ORIGIN` in paths.ts), the only place that WebView
+ * serves it from. Frames are limited to `blob:`
  * because a mirrored file loaded in a frame would run without this policy, and the phone, unlike
  * the desktop app, cannot hold every frame to it from outside (an SVG in a frame runs its scripts).
  * An HTML page's own scripts run as authored; Agentation still loads from esm.sh on the phone
  * (`agentation.ts`), so its host is allowed for scripts. A Markdown page runs only the viewer's own
  * Mermaid script, by nonce: script in the Markdown file never runs.
  */
-export function docPageContentPolicy(options: { markdownScriptNonce?: string } = {}): string {
+export function docPageContentPolicy(options: { markdownScriptNonce?: string; mirrorSource?: string } = {}): string {
   const libraries = DOC_PAGE_LIBRARY_HOSTS.map((host) => `https://${host}`).join(' ');
+  const mirror = options.mirrorSource ?? 'file:';
   const scripts =
     options.markdownScriptNonce === undefined
-      ? `file: ${libraries} ${AGENTATION_ORIGIN} 'unsafe-inline' 'unsafe-eval' blob: data: ${PHONE_FORWARDS}`
+      ? `${mirror} ${libraries} ${AGENTATION_ORIGIN} 'unsafe-inline' 'unsafe-eval' blob: data: ${PHONE_FORWARDS}`
       : `'nonce-${options.markdownScriptNonce}' ${MERMAID_MODULE_FOLDER}`;
   return [
     "default-src 'none'",
     `script-src ${scripts}`,
-    `style-src file: ${libraries} 'unsafe-inline' blob: data: ${PHONE_FORWARDS}`,
-    `img-src file: ${libraries} blob: data: ${PHONE_FORWARDS}`,
-    `font-src file: ${libraries} blob: data: ${PHONE_FORWARDS}`,
-    `media-src file: blob: data: ${PHONE_FORWARDS}`,
-    `connect-src file: ${libraries} blob: data:`,
+    `style-src ${mirror} ${libraries} 'unsafe-inline' blob: data: ${PHONE_FORWARDS}`,
+    `img-src ${mirror} ${libraries} blob: data: ${PHONE_FORWARDS}`,
+    `font-src ${mirror} ${libraries} blob: data: ${PHONE_FORWARDS}`,
+    `media-src ${mirror} blob: data: ${PHONE_FORWARDS}`,
+    `connect-src ${mirror} ${libraries} blob: data:`,
     'worker-src blob:',
     'frame-src blob:',
     "object-src 'none'",
@@ -253,7 +255,9 @@ function decodePath(text: string): string {
  * What a top-frame navigation of the page at `pagePath` does. A frame's own navigations stay in
  * the frame, where the page's policy (`frame-src`) holds them.
  */
-export function docNavigationFor(url: string, pagePath: string, tapped: boolean): DocNavigation {
+export function docNavigationFor(rawUrl: string, pagePath: string, tapped: boolean): DocNavigation {
+  // Android's mirror and the computer paths a page names arrive under the Docs loader's origin.
+  const url = fileUrlForDocsLoaderUrl(rawUrl);
   if (/^(?:about|blob|javascript):/iu.test(url)) return { kind: 'stay' };
   if (/^data:/iu.test(url)) return { kind: 'refuse' };
   const ask: DocLinkAsk | null = tapped ? null : 'notTapped';
