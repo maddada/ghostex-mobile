@@ -350,6 +350,30 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     description: "The speed this phone reads agents' replies at.",
     catalog: 'readAloudRate',
   },
+  {
+    page: 'chat',
+    section: 'settings:chat:claude-code',
+    group: 'Claude Code',
+    title: 'Compact idle chats before the prompt cache expires',
+    description: 'Claude Code compacts a long idle chat just before its 1-hour prompt cache expires.',
+    catalog: 'claudeIdleCompaction',
+  },
+  {
+    page: 'chat',
+    section: 'settings:chat:claude-code',
+    group: 'Claude Code',
+    title: 'Only above',
+    description: 'Compact only chats whose context is at least this size. Shown while Compact idle chats is on.',
+    catalog: 'claudeIdleCompactAbove',
+  },
+  {
+    page: 'chat',
+    section: 'settings:chat:claude-code',
+    group: 'Claude Code',
+    title: 'Use a 1-hour prompt cache',
+    description: "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry.",
+    catalog: 'claudeOneHourPromptCache',
+  },
 
   // Voice
   {

@@ -11,6 +11,7 @@ import {
 } from '../../settings/store';
 import { VOICE_SUPPORTED } from '../../voice/conversation';
 import { readAloudVoices, useReadAloudOnAnywhere } from '../../voice/readAloud';
+import { ClaudeCompactionRows } from './ClaudeCompactionRows';
 import { voiceLabel } from './ReadAloudVoicePage';
 import { SettingsSection } from './SectionBoundary';
 import { Caption, ChoiceRow, LinkRow, SectionHeader, SettingsScreenLayout, SettingToggle } from './SettingsControls';
@@ -88,6 +89,9 @@ export default function ChatPage() {
       </SettingsSection>
       <SettingsSection name="settings:chat:read-aloud">
         <ReadAloudRows />
+      </SettingsSection>
+      <SettingsSection name="settings:chat:claude-code">
+        <ClaudeCompactionRows />
       </SettingsSection>
     </SettingsScreenLayout>
   );

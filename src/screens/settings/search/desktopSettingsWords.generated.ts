@@ -96,6 +96,35 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     "options": [],
     "keywords": []
   },
+  "claudeIdleCompactAbove": {
+    "title": "Only above",
+    "subtitle": "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.",
+    "options": [
+      "100K",
+      "100000",
+      "200K",
+      "200000",
+      "300K",
+      "300000",
+      "400K",
+      "400000",
+      "500K",
+      "500000"
+    ],
+    "keywords": []
+  },
+  "claudeIdleCompaction": {
+    "title": "Compact idle chats before the prompt cache expires",
+    "subtitle": "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. In Claude Code's row. Applies to Claude sessions started or resumed after you change it.",
+    "options": [],
+    "keywords": []
+  },
+  "claudeOneHourPromptCache": {
+    "title": "Use a 1-hour prompt cache",
+    "subtitle": "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour.",
+    "options": [],
+    "keywords": []
+  },
   "collabEnabled": {
     "title": "Ghostex Collab",
     "subtitle": "Collab is installed on this computer (Settings > Extensions installs it, with Touch ID or your system's equivalent; this page shows only once it is). Share is in each chat's header, and each share asks for your approval. Uninstall ends every share at once and removes Collab from this computer; it never asks.",
