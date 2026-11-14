@@ -6,7 +6,7 @@
  * which never fold. Agent work Quiet draws the same tail (`hiddenWork.tsx`).
  */
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { GroupedTurn, GroupedWorkItem, ProjectedMessage } from '../../rust/document';
@@ -31,6 +31,7 @@ import {
   QuietSteps,
   QuietWorkLine,
 } from './quietWork';
+import { QuietTurnMark, useQuietTurn } from './quietTurn';
 import { useDisclosure } from './state';
 import { GbotCards, shownGbotCards } from './GbotCard';
 import { WorkflowCards } from './WorkflowCard';
@@ -58,7 +59,13 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
   const { disclosures } = useNativeChatUi();
   const flags = useTranscriptFlags();
   const key = `work:${item.id}`;
-  const [open, toggleRaw] = useDisclosure(disclosures, key, workOpen);
+  const [openRaw, toggleRaw] = useDisclosure(disclosures, key, workOpen);
+  // Inside an opened Quiet View line (gx-chat-core `QuietTurnLook`, where the user's decision is):
+  // its steps straight on that line's rail with no line of their own, or its line titled by its calls.
+  const look = useQuietTurn();
+  const flat = look?.flat === true;
+  const titled = look !== null && (look.title ?? '').length > 0 ? look : null;
+  const open = openRaw || flat;
   // One read per section: several wake-up turns can share their prompt's section.
   const sections: { owner: string; work: JsonRecord }[] = [];
   const seen = new Set<string>();
@@ -76,7 +83,14 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
     }
     toggleRaw();
   };
-  const segments = quietSegments(item.label, item.stats ?? [], theme);
+  const segments =
+    titled !== null
+      ? quietSegments(
+          titled.title as string,
+          (item.stats ?? []).filter((stat) => stat.kind !== titled.titleKind),
+          theme,
+        )
+      : quietSegments(item.label, item.stats ?? [], theme);
   if ((item.stats ?? []).some((stat) => str(stat, 'kind') === 'files')) {
     segments.push({ text: ` · ${lowerFirst(item.simpleFilesLabel)}` });
     segments.push(...countSegments(num(item.filesCard, 'added') ?? 0, num(item.filesCard, 'removed') ?? 0, theme));
@@ -100,16 +114,47 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
     questions: split.tailQuestions,
     sentMessages: split.tailSent,
   }));
+  const marks = look?.marks ?? [];
+  const steps = item.work.map((message, at) => (
+    <Fragment key={message.id}>
+      {marks
+        .filter((mark) => mark.at === at)
+        .map((mark) => (
+          <View key={`mark:${mark.at}`} style={styles.flatMark}>
+            <QuietTurnMark text={mark.text} />
+          </View>
+        ))}
+      <MessageRow message={message} />
+    </Fragment>
+  ));
   return (
     <View style={styles.column}>
-      <QuietWorkLine
-        segments={segments}
-        mark={finishedMark(item.work)}
-        open={open}
-        expandable={item.expandable}
-        onPress={toggle}
-      />
-      {open ? (
+      {flat ? (
+        // On an opened Quiet View line's rail the steps have no line or rail of their own.
+        <FoldPlaceProvider value={QUIET_STEPS}>
+          {foldedCards.map(({ turn, split }) => (
+            <View key={`folded:${turn.id}`} style={styles.foldedCards}>
+              <FoldedCards split={split} />
+            </View>
+          ))}
+          {notices}
+          {steps}
+          {hasFiles ? (
+            <View style={styles.groupedFiles}>
+              <FileChangeStack stackId={key} files={item.files} card={item.filesCard} />
+            </View>
+          ) : null}
+        </FoldPlaceProvider>
+      ) : (
+        <QuietWorkLine
+          segments={segments}
+          mark={finishedMark(item.work)}
+          open={open}
+          expandable={item.expandable}
+          onPress={toggle}
+        />
+      )}
+      {flat ? null : open ? (
         notices.length > 0 || item.work.length > 0 || hasFiles || foldedCards.length > 0 ? (
           <FoldPlaceProvider value={QUIET_STEPS}>
             <QuietSteps>
@@ -119,9 +164,7 @@ export function GroupedWorkRow({ item }: { item: GroupedWorkItem }) {
                 </View>
               ))}
               {notices}
-              {item.work.map((message) => (
-                <MessageRow key={message.id} message={message} />
-              ))}
+              {steps}
               {hasFiles ? (
                 <View style={styles.groupedFiles}>
                   <FileChangeStack stackId={key} files={item.files} card={item.filesCard} />
@@ -203,4 +246,6 @@ const styles = StyleSheet.create({
   groupedFiles: { paddingTop: 4, paddingBottom: 2 },
   groupedPictures: { paddingTop: 4 },
   foldedCards: { paddingVertical: 2 },
+  // A "Then · 22s" mark between two turns' steps (desktop `grouped_work_row`).
+  flatMark: { paddingVertical: 4 },
 });

@@ -26,6 +26,7 @@ import { DisclosureBody, FoldPlaceProvider } from './Disclosure';
 import { Glyph } from './icons';
 import { MessageRow } from './MessageRow';
 import { foldPart, keptParts, lineCards, type QuietLines } from './quietLines';
+import { QuietTurnContext } from './quietTurn';
 import { QuietLine, QuietStatusMark, type QuietSegment } from './quietWork';
 import { useRowGap } from './messageSpacing';
 import { AnswersUnderQuietLine } from './PageAnswersCard';
@@ -116,8 +117,17 @@ export function QuietRow({
     parts.push({ node: <QuietItem item={item} />, gap: 0 });
   } else {
     if (index === line.start) {
-      parts.push({ node: <StretchLine line={line} open={open} onPress={state.toggle} />, gap: 0 });
+      // Opening the line reads back the rows of the turns it draws straight on its rail, which
+      // have no card or line of their own to open (gx-chat-core `QuietStretch::loads`).
+      const onPress = () => {
+        if (!open) {
+          for (const load of line.loads ?? []) dispatch({ type: 'loadWork', id: load.id, work: load.work as never });
+        }
+        state.toggle();
+      };
+      parts.push({ node: <StretchLine line={line} open={open} onPress={onPress} />, gap: 0 });
     }
+    const turnLook = (line.turns ?? []).find((look) => look.row === index) ?? null;
     const tail = line.tail !== undefined && line.tail.row === index ? line.tail : null;
     if (open) {
       const cards = index === line.start && lines !== null ? lineCards(lines, line) : [];
@@ -128,7 +138,9 @@ export function QuietRow({
             {cards.length > 0 ? <WorkCardStack cards={cards} dispatch={dispatch} gap={RAIL_ROW_GAP} /> : null}
             {/* Its tool calls are cards, as its "Message to …" cards are (`ToolCard.tsx`). */}
             <BoxedToolCards.Provider value>
-              <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
+              <QuietTurnContext.Provider value={turnLook}>
+                <QuietItem item={tail !== null ? foldPart(item, tail) : item} />
+              </QuietTurnContext.Provider>
             </BoxedToolCards.Provider>
             {/* The rail runs on through the body's own 8px gap to the line's next row, the same
                 space as between the rows' parts (`RAIL_ROW_GAP` in the desktop's quiet_view.rs). */}

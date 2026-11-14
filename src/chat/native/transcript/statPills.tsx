@@ -21,7 +21,8 @@ const GAP = 6;
 /** The "+N" pill's width before it has been measured. */
 const OVERFLOW_ESTIMATE = 40;
 
-function statGlyph(kind: WorkStat['kind']): GlyphName {
+/** A count's icon, in its pill and as the tile of a card titled by it (`quietTurn.tsx`). */
+export function statGlyph(kind: WorkStat['kind']): GlyphName {
   switch (kind) {
     case 'files':
       return 'pencil';

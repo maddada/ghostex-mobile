@@ -386,6 +386,27 @@ export type QuietStretch = {
   tail?: { row: number; turns: QuietTurnTail[] };
   /** The keys of the work item lines the line holds, drawn at the top of the opened line. */
   cards?: string[];
+  /** How the finished turns the line holds draw once it is open; absent when they draw as in the
+   *  full view (gx-chat-core `QuietTurnLook`). */
+  turns?: QuietTurnLook[];
+  /** The reads opening the line dispatches (`{type: 'loadWork', id, work}` each): the rows still
+   *  on the computer of the turns it draws straight on its rail. */
+  loads?: { id: string; work: Json }[];
+};
+
+/** How one finished turn's row (`completed-work`, or a Reduced `grouped-work` line) draws on an
+ *  opened Quiet View line's rail (gx-chat-core `QuietTurnLook`, where the user's decision is). */
+export type QuietTurnLook = {
+  /** The row, an index into the transcript list. */
+  row: number;
+  /** The card's (or Reduced line's) title in place of "Worked for 48s": "4 tool calls". */
+  title?: string;
+  /** The `kind` of the stat `title` names, which the pills then leave out. */
+  titleKind?: string;
+  /** Its calls sit straight on the rail, with no card or line of its own. */
+  flat?: boolean;
+  /** "Then · 22s" before the turn whose rows start at `at` in the row's `work`. */
+  marks?: { at: number; text: string }[];
 };
 
 /** An answers card drawn shut as its own small line: a row's id, or `<turn id>#questions`. */

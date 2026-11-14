@@ -182,7 +182,12 @@ function ToolRunRows({ message, boxed = false }: { message: ProjectedMessage; bo
       </View>,
     );
   }
-  if (simple && !showAll && boxed) {
+  // CDXC:SessionChat 2026-11-14 DECISION: User, of an opened Quiet View line whose one call sat on its
+  // rail as a bare row: "when there's only 1 tool call, still show 1 tool call card that you expand to
+  // see that tool call, because all the ones there are cards now, not tool calls shown directly". In the
+  // boxed card a run with no fold of its own (one call, or none hidden) gets the same shut "1 tool call"
+  // card as a longer run. SEE-ALSO: the desktop's `unboxed_tool_rows` in native_chat/tool_run.rs.
+  if ((simple || hidden === 0) && !showAll && boxed) {
     return shell(
       <View style={styles.flushColumn}>
         <Pressable

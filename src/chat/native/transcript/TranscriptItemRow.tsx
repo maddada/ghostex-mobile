@@ -11,8 +11,10 @@ import type {
   CompletedWorkItem,
   GroupedWorkItem,
   ProjectedMessage,
+  QuietTurnLook,
   SummaryItem,
   TranscriptItem,
+  WorkStat,
 } from '../../rust/document';
 import { QuestionExchangeCards } from '../cards';
 import {
@@ -47,7 +49,8 @@ import {
 } from './singleLineCard';
 import { GroupedWorkRow } from './quietWorkRows';
 import { SummaryQuietRun } from './quietView';
-import { StatPills } from './statPills';
+import { QuietTurnMark, useQuietTurn } from './quietTurn';
+import { StatPills, statGlyph } from './statPills';
 import { HiddenGroupedWorkRow } from './hiddenWork';
 
 /** The space between the parts of a finished turn at Message spacing Default (desktop `PART_GAP` in completed_work_row.rs); Compact shrinks it (`innerGapOf`). */
@@ -197,49 +200,69 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
   const hasSent = arr(folded.tailSent).some((sent) => obj(obj(sent)?.card) !== null);
   const rowGap = useRowGap();
   const partGap = useInnerGap(COMPLETED_PART_GAP);
+  // Inside an opened Quiet View line (gx-chat-core `QuietTurnLook`, where the user's decision is):
+  // its calls straight on that line's rail with no card, or its card titled by its calls.
+  const look = useQuietTurn();
+  const flat = look?.flat === true;
+  const shown = open || flat;
+  const log = item.work.map((message, index) => {
+    // A row that opens on its tool card right under one that closes on its own is a row
+    // gap away from it, like any two one-line cards (`cardSpacing.ts`); the log's own gap
+    // is 8 (`DisclosureBody`). Desktop `completed_work_row.rs` does the same.
+    const above = index > 0 ? item.work[index - 1] : undefined;
+    const cardFirst =
+      obj(message.toolCard) !== null && (typeof message.text === 'string' ? message.text.trim() : '') === '';
+    const margin = gapAbove(above !== undefined && obj(above.toolCard) !== null, cardFirst, 8, rowGap) - 8;
+    return margin > 0 ? (
+      <View key={message.id} style={{ marginTop: margin }}>
+        <MessageRow message={message} />
+      </View>
+    ) : (
+      <MessageRow key={message.id} message={message} />
+    );
+  });
+  const notice =
+    deferredState !== undefined ? (
+      <DeferredNotice id={item.id} deferred={item.deferred} error={deferredState.error ?? ''} />
+    ) : null;
   return (
     <View style={[styles.completedColumn, partGap !== COMPLETED_PART_GAP && { gap: partGap }]}>
-      <WorkSummary item={item} open={open} onToggle={toggle} />
-      {open && foldsCards(folded) ? <FoldedCards split={folded} columnGap={partGap} /> : null}
+      {flat ? (
+        (look?.marks ?? []).map((mark) => (
+          <View key={`mark:${mark.at}`} style={styles.flatMark}>
+            <QuietTurnMark text={mark.text} />
+          </View>
+        ))
+      ) : (
+        <WorkSummary item={item} open={open} onToggle={toggle} look={look} />
+      )}
+      {shown && foldsCards(folded) ? <FoldedCards split={folded} columnGap={partGap} /> : null}
       {/* The turn's files fold shows only while its card is open, collapsed, right under the card
           (gx-chat-core `turn_files_fold`, where the user's decision is; desktop `completed_work_row.rs`).
           A closed card leaves the files to its "N files" pill. */}
-      {open ? (
+      {shown ? (
         <CompletedFilesFold
           itemId={item.id}
           files={item.files}
           card={item.filesCard}
           label={simple ? item.simpleFilesLabel : item.filesLabel}
           deferred={item.deferred}
-          notice={
-            deferredState !== undefined ? (
-              <DeferredNotice id={item.id} deferred={item.deferred} error={deferredState.error ?? ''} />
-            ) : null
-          }
+          notice={notice}
         />
       ) : null}
-      {open ? (
+      {/* On an opened Quiet View line's rail the log has no rail of its own: that line's rail is it. */}
+      {flat ? (
+        <FoldPlaceProvider value={IN_WORK_FOLD}>
+          <View style={styles.flatLog}>
+            {notice}
+            {log}
+          </View>
+        </FoldPlaceProvider>
+      ) : open ? (
         <FoldPlaceProvider value={IN_WORK_FOLD}>
           <DisclosureBody onCollapse={toggle} label="Collapse completed work" rail="work">
-            {deferredState !== undefined ? (
-              <DeferredNotice id={item.id} deferred={item.deferred} error={deferredState.error ?? ''} />
-            ) : null}
-            {item.work.map((message, index) => {
-              // A row that opens on its tool card right under one that closes on its own is a row
-              // gap away from it, like any two one-line cards (`cardSpacing.ts`); the log's own gap
-              // is 8 (`DisclosureBody`). Desktop `completed_work_row.rs` does the same.
-              const above = index > 0 ? item.work[index - 1] : undefined;
-              const cardFirst =
-                obj(message.toolCard) !== null && (typeof message.text === 'string' ? message.text.trim() : '') === '';
-              const margin = gapAbove(above !== undefined && obj(above.toolCard) !== null, cardFirst, 8, rowGap) - 8;
-              return margin > 0 ? (
-                <View key={message.id} style={{ marginTop: margin }}>
-                  <MessageRow message={message} />
-                </View>
-              ) : (
-                <MessageRow key={message.id} message={message} />
-              );
-            })}
+            {notice}
+            {log}
           </DisclosureBody>
         </FoldPlaceProvider>
       ) : null}
@@ -263,10 +286,24 @@ function CompletedWorkRow({ item }: { item: CompletedWorkItem }) {
  * tile with a green check badge, "Worked for 2m 5s" and the turn's counts as pills (gx-chat-core `work_summary.rs`), so the closed
  * fold still says what happened; the whole bar opens and closes it, with no chevron.
  */
-function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: boolean; onToggle(): void }) {
+function WorkSummary({
+  item,
+  open,
+  onToggle,
+  look,
+}: {
+  item: CompletedWorkItem;
+  open: boolean;
+  onToggle(): void;
+  /** Inside an opened Quiet View line, titled by its calls: that count's icon and words lead, and
+   *  it leaves the pills (`quietTurn.tsx`). */
+  look: QuietTurnLook | null;
+}) {
   const { theme } = useTranscriptEnv();
-  const stats = item.stats ?? [];
-  const spoken = [item.label, ...stats.map((stat) => stat.label)].join(', ');
+  const titled = look !== null && (look.title ?? '').length > 0 ? look : null;
+  const label = titled !== null ? (titled.title as string) : item.label;
+  const stats = (item.stats ?? []).filter((stat) => titled === null || stat.kind !== titled.titleKind);
+  const spoken = [label, ...stats.map((stat) => stat.label)].join(', ');
   // The closed card keeps the pictures its rows read in view, under its header past a hairline
   // (gx-chat-core `read_images.rs`, where the user's decision is); opened, each row shows its own.
   const pictures = !open && (item.readImages ?? []).length > 0;
@@ -280,8 +317,8 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
         accessibilityState={{ expanded: open }}
         style={({ pressed }) => [styles.summary, pressed && singleLinePressed(theme)]}
       >
-        <SingleLineTile glyph="clock" badge="check" />
-        <Text style={[SINGLE_LINE_TITLE, { color: theme.foreground }]}>{item.label}</Text>
+        <SingleLineTile glyph={titled !== null ? statGlyph((titled.titleKind ?? 'tools') as WorkStat['kind']) : 'clock'} badge="check" />
+        <Text style={[SINGLE_LINE_TITLE, { color: theme.foreground }]}>{label}</Text>
         {/* The count pills sit at the row's right end on one line (`statPills.tsx`). */}
         <StatPills stats={stats} />
       </Pressable>
@@ -297,6 +334,9 @@ function WorkSummary({ item, open, onToggle }: { item: CompletedWorkItem; open: 
 const styles = StyleSheet.create({
   column: { gap: SUMMARY_PART_GAP, minWidth: 0 },
   completedColumn: { gap: COMPLETED_PART_GAP, minWidth: 0 },
+  // A "Then · 22s" mark sits 4pt over the turn's first row (desktop `FLAT_MARK_GAP`).
+  flatMark: { marginBottom: 4 - COMPLETED_PART_GAP },
+  flatLog: { gap: 8, minWidth: 0 },
   // Every one-line card's height and padding (`singleLineCard.ts`).
   summary: {
     flexDirection: 'row',
