@@ -90,6 +90,7 @@ import MachineTabs, {
   type MachineTabStripItem,
 } from '../components/sessions/MachineTabs';
 import SpaceTabs, { spaceMenuIcon } from '../components/sessions/SpaceTabs';
+import { useExtensionPanels } from '../extensions/useExtensionPanels';
 import ChiefRow, { CHIEF_LABEL } from '../components/sessions/ChiefRow';
 import { runGhostexCli } from '../components/sessions/cli';
 import {
@@ -913,6 +914,23 @@ export default function SessionsScreen({ navigation }: Props) {
     setTransientStatus,
   });
 
+  /** Sidebar extensions: their modes, their sections in the list and what their items do (src/extensions/). */
+  const extensionPanels = useExtensionPanels({
+    machine,
+    machineById,
+    inventoriesByMachineId,
+    attach: (target, session) => attach(target, session),
+    launchAgent,
+    resolvePrimaryAgent,
+    runCreationFlow: (target, command, message) => runCreationFlow(target, command, message),
+    openSessionMenu: (target, item) =>
+      setOverlay({ kind: 'sessionMenu', ctx: { machine: target, item }, menuPath: [] }),
+    openProjectMenu: (target, header) =>
+      setOverlay({ kind: 'projectMenu', ctx: { machine: target, header }, menuPath: [] }),
+    notify: (title, message) => setTransientStatus(message, { title }),
+    refreshMachineFresh,
+  });
+
   /**
    * The header's New session (./sessions-screen/new-session-button.tsx): the project sheet, or,
    * with no project to list, Add computer, Add project, or why the list is empty.
@@ -1498,6 +1516,7 @@ export default function SessionsScreen({ navigation }: Props) {
         ) : null}
         {/* Shown only while there is an update to take, in the side bar's poses too (CDXC:Updates 2026-11-12). */}
         <UpdateButton />
+        {extensionPanels.modeButtons(styles.headerButton, sidebarAppearance.foreground)}
         {inRail ? null : newSessionButton}
         {inRail ? null : bellButton}
         {inRail ? null : moreButton}
@@ -1568,7 +1587,7 @@ export default function SessionsScreen({ navigation }: Props) {
         A machine with no Spaces has nothing to switch between — Other alone
         would be every project — so the row appears only once it has one.
       */}
-      {unified.on ? (
+      {extensionPanels.active ? null : unified.on ? (
         // The Unified list's header stands where the Workspace and Space tiles stand: its filter narrows by them.
         unified.header
       ) : machine !== null && showWorkspaceTile && selectedWorkspace !== null ? (
@@ -1653,7 +1672,7 @@ export default function SessionsScreen({ navigation }: Props) {
           onClose={() => setActiveProjectsMenuOpen(false)}
         />
       ) : null}
-      {machine !== null && !hasHomeProject(inventoriesByMachineId[machine.id]?.summary) ? (
+      {machine !== null && !extensionPanels.active && !hasHomeProject(inventoriesByMachineId[machine.id]?.summary) ? (
         <ChiefRow
           rows={chiefRowModels}
           onOpen={(row) => withMachine(row.machineId, (target) => void attach(target, row.session))}
@@ -1665,6 +1684,7 @@ export default function SessionsScreen({ navigation }: Props) {
         <ContextMenu visible title={chiefMenu.title} items={chiefMenu.items} onClose={() => setChiefMenu(null)} />
       ) : null}
       {gbots.overlays}
+      {extensionPanels.overlays}
       {chiefConfirm !== null ? (
         <ConfirmDialog
           visible
@@ -1701,49 +1721,60 @@ export default function SessionsScreen({ navigation }: Props) {
         />
       ) : null}
       <View style={styles.listArea} onLayout={(event) => setListWidth(event.nativeEvent.layout.width)}>
-        <SessionList
-          unified={
-            unified.on
-              ? {
-                  data: unified.items,
-                  keyExtractor: unified.keyExtractor,
-                  renderItem: unified.renderItem,
-                  style: [styles.list, listEdges.scroll],
-                  contentContainerStyle: [styles.listContent, listEdges.content],
-                  refreshControl: listRefreshControl,
-                  ListHeaderComponent: triageHeader,
-                  ListFooterComponent: listFooter,
-                }
-              : null
-          }
-          classic={{
-            data: visibleEntries.blocks,
-            keyExtractor: (entry) => entry.listKey,
-            renderItem: renderBlock,
-            style: [styles.list, listEdges.scroll],
-            contentContainerStyle: [styles.listContent, listEdges.content],
-            refreshControl: listRefreshControl,
-            ListHeaderComponent: triageHeader,
-            ListFooterComponent: (
-              <>
-                {visibleEntries.emptyProjects > 0 ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setShowAllProjects((showing) => !showing)}
-                    style={styles.showAllProjects}
-                  >
-                    <Text style={[styles.showAllProjectsText, { color: inkWash(listInk, 0.55) }]}>
-                      {showAllProjects
-                        ? 'Hide projects without sessions'
-                        : `Show all projects (${visibleEntries.emptyProjects} hidden)`}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {listFooter}
-              </>
-            ),
-          }}
-        />
+        {/* A sidebar extension's own mode takes the list's place, as on the desktop. */}
+        {extensionPanels.active ? (
+          extensionPanels.modeView(listRefreshControl)
+        ) : (
+          <SessionList
+            unified={
+              unified.on
+                ? {
+                    data: unified.items,
+                    keyExtractor: unified.keyExtractor,
+                    renderItem: unified.renderItem,
+                    style: [styles.list, listEdges.scroll],
+                    contentContainerStyle: [styles.listContent, listEdges.content],
+                    refreshControl: listRefreshControl,
+                    ListHeaderComponent: triageHeader,
+                    ListFooterComponent: listFooter,
+                  }
+                : null
+            }
+            classic={{
+              data: visibleEntries.blocks,
+              keyExtractor: (entry) => entry.listKey,
+              renderItem: renderBlock,
+              style: [styles.list, listEdges.scroll],
+              contentContainerStyle: [styles.listContent, listEdges.content],
+              refreshControl: listRefreshControl,
+              ListHeaderComponent: (
+                <>
+                  {triageHeader}
+                  {extensionPanels.sections('projectsTop')}
+                </>
+              ),
+              ListFooterComponent: (
+                <>
+                  {visibleEntries.emptyProjects > 0 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setShowAllProjects((showing) => !showing)}
+                      style={styles.showAllProjects}
+                    >
+                      <Text style={[styles.showAllProjectsText, { color: inkWash(listInk, 0.55) }]}>
+                        {showAllProjects
+                          ? 'Hide projects without sessions'
+                          : `Show all projects (${visibleEntries.emptyProjects} hidden)`}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {extensionPanels.sections('projectsBottom')}
+                  {listFooter}
+                </>
+              ),
+            }}
+          />
+        )}
         <NoticeToast notice={notice} bottom={12} />
       </View>
       {/*

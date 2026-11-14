@@ -3,6 +3,7 @@
  * Part of the mobile summary contract (`./index.ts`).
  */
 
+import type { ExtensionPanels } from '../extensionPanels';
 import type { GhostexClaudeCloud } from '../claudeCloud';
 import type {
   GhostexAgentLauncher,
@@ -322,6 +323,11 @@ export type GhostexMobileSummary = {
   customSessionTags: GhostexCustomSessionTags;
   /** The computer's workspaces; null on a daemon without workspaces (nothing is filtered then). */
   workspaces: GhostexWorkspaces | null;
+  /**
+   * Sidebar extensions' panels (`extensionPanels`, contract/extensionPanels.ts); absent or null on a computer without
+   * them (older than 11.8, or no sidebar extension on), which draws nothing new.
+   */
+  extensionPanels?: ExtensionPanels | null;
   /**
    * Derived: workspaceGroups present OR any raw session carries a sortOrder.
    * When true the payload is pre-sorted like the desktop sidebar and must not

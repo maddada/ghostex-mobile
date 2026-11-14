@@ -158,8 +158,8 @@ export type UnifiedListDeps = {
   wall?: { columns: number; appearance: SidebarAppearance } | null;
 };
 
-/** A session's row as the long-press menu and the Project list know it. */
-function sessionItemOf(machineId: string, session: GhostexSession, summary: GhostexMobileSummary | null): SessionItem {
+/** A session's row as the long-press menu and the Project list know it (sidebar extensions' session items too). */
+export function sessionItemOf(machineId: string, session: GhostexSession, summary: GhostexMobileSummary | null): SessionItem {
   const project = summary?.projects.find((entry) => entry.projectId === session.projectId);
   const projectKey = projectKeyForSession(session);
   return {

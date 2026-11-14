@@ -4,6 +4,7 @@
  */
 
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
+import { parseExtensionPanels } from '../extensionPanels';
 import { boolValue, firstNonEmpty, isObject, trimmedValue, type JsonObject } from './json';
 import { scanJsonObjects } from './jsonScan';
 import type {
@@ -454,6 +455,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     sidebarSpaces: parseSidebarSpaces(root.sidebarSpaces),
     customSessionTags: parseCustomSessionTags(root.customSessionTags),
     workspaces: parseWorkspaces(root.sidebarWorkspaces),
+    extensionPanels: parseExtensionPanels(root.extensionPanels),
     preserveSessionOrder: workspaceGroups !== null || anySortOrder,
     builtInFeatures: Array.isArray(root.builtInFeatures)
       ? root.builtInFeatures.filter((id): id is string => typeof id === 'string')
