@@ -4,11 +4,14 @@
  * CDXC:RemoteMachines 2026-11-13 WHY:
  * OpenSSH refuses a session channel past `MaxSessions` (10 by default) on one connection. Up to seven warm
  * terminals each hold one (`MAX_WARM_SESSIONS` in src/terminal/sessions.ts), and every command opens another. The
- * Android connection has kept commands to three slots since 2026-10-06; the iPhone opened one for every command, so
+ * Android connection has kept commands to a few slots since 2026-10-06; the iPhone opened one for every command, so
  * a few reads at once (the Sessions poll, the keep-awake renewal, the round-trip check) got "Failed to open channel",
  * which read as a dropped connection: the phone tore down a working connection about once a minute, terminal Retry
  * was refused the same way, and the computer's update and skills reads found no route. On the iPhone every command
- * now waits here for one of three slots.
+ * now waits here for one of two slots.
+ * - Two, not three (2026-11-14, CodeRabbit on #45): the connection check's lane opens a session too, and 7 terminals
+ *   + 3 commands + the check came to 11 against `MaxSessions` 10, so the check (or a command) was refused on a healthy
+ *   connection. 7 + 2 + 1 fits. Both platforms use the same numbers.
  * - A wait is finite and ends with `E_BUSY` (never `E_TIMEOUT`): a command that never left the phone says nothing
  *   about the connection, so it must not count as a stall or as a refusal.
  * - A slot is given back only when the native call settles, not when its caller stops waiting.
@@ -25,8 +28,8 @@ import { GhostexNative } from '../../modules/ghostex-native/src';
 import { nativeProbeLane } from './probeLane';
 import { isSlowOpenFailure, noteOperationEnded, noteOperationStarted, noteSlowOpenFailure } from './stallWatch';
 
-/** OpenSSH's default `MaxSessions` (10) less the seven warm terminals, as on Android. */
-export const COMMAND_CHANNEL_SLOTS = 3;
+/** OpenSSH's default `MaxSessions` (10) less the seven warm terminals and the connection check's lane, as on Android. */
+export const COMMAND_CHANNEL_SLOTS = 2;
 /** The longest a command waits for a slot, however long its own run may take. */
 export const MAX_ADMISSION_WAIT_MS = 20_000;
 
@@ -115,7 +118,7 @@ function listenForConnectionEnds(): void {
   });
 }
 
-/** Whether commands wait for a slot here: the iPhone only, Android's connection keeps its own three. */
+/** Whether commands wait for a slot here: the iPhone only, Android's connection keeps its own two. */
 function budgeted(): boolean {
   return Platform.OS === 'ios';
 }
@@ -229,7 +232,7 @@ function operationOutcome(error: unknown): 'timeout' | 'failed' {
 }
 
 /**
- * Runs the connection check in its own lane, outside the three command slots, so it never waits behind slow commands
+ * Runs the connection check in its own lane, outside the two command slots, so it never waits behind slow commands
  * (src/remote/stallWatch.ts). One check runs at a time; a second is `E_BUSY`. iPhone, and Android builds whose native
  * connection has the lane (`nativeProbeLane`); older Android builds keep their three slots, and a fourth exec there
  * waits on them.

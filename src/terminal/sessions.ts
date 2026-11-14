@@ -95,7 +95,7 @@ function trackTabOpen<T>(sessionKey: string, work: () => Promise<T>): Promise<T>
 
 /**
  * CDXC:RemoteMachines 2026-10-06 SEE-ALSO:
- * Each warm terminal holds one session channel on the machine's shared SSH connection, and OpenSSH allows 10 by default; the Android connection leaves the other three to commands and uploads (`COMMAND_CHANNEL_SLOTS` in modules/ghostex-native/android/.../GhostexSshConnection.kt). Change both together.
+ * Each warm terminal holds one session channel on the machine's shared SSH connection, and OpenSSH allows 10 by default; the other three are two command slots (commands and uploads) and the connection check's lane, on both platforms (`COMMAND_CHANNEL_SLOTS` in src/remote/channelBudget.ts and modules/ghostex-native/android/.../GhostexSshConnection.kt, `commandSlots` in modules/ghostex-native/ios/SSH/SSHConnection.swift). Change them together.
  */
 export const MAX_WARM_SESSIONS = 7;
 /**
