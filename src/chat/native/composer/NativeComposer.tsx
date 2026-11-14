@@ -51,7 +51,7 @@ import { phonePlaceholder } from './placeholder';
 import { CatchUpCard } from '../cards/CatchUpCard';
 import { sessionDetailsRingOf } from '../cards/SessionDetailsSheet';
 import { FilesLinksCard } from '../cards/FilesLinksCard';
-import { OptionPills, modeInModelPill, modeLook, type PillKind } from './OptionPills';
+import { OptionPills, modeInModelPill, modeLook, optionPillsLeadIn, type PillKind } from './OptionPills';
 import { RunLocationRow } from './RunLocationRow';
 import { ProjectPickerSheet } from './ProjectPickerSheet';
 import { draftProjectChoices, moveDraftToProject } from './draftProjectChoices';
@@ -949,7 +949,12 @@ export function NativeComposer({
                     style={[styles.footer, motion.controlsStyle]}
                     onLayout={(event: LayoutChangeEvent) => setFooterWidth(Math.round(event.nativeEvent.layout.width))}
                   >
-                    <View style={styles.options}>
+                    <View
+                      style={[
+                        styles.options,
+                        { marginLeft: document !== null ? -optionPillsLeadIn(document, compact) : 0 },
+                      ]}
+                    >
                       {document !== null ? (
                         <OptionPills document={document} onOpen={openPill} modelOnly={compact} />
                       ) : null}
@@ -1174,10 +1179,11 @@ const useStyles = themedStyles((P) => ({
   /*
    * CDXC:SessionChat 2026-11-12 DECISION:
    * User, with layout A: "less space left of the model pill so it matches the space right of the send button". The
-   * pills keep their 10pt pressed-fill padding, and the row reaches that far past the card's 14pt inset, so the model's
-   * mark starts 14pt from the box's edge, as Send ends 14pt from the other one.
+   * pills keep their pressed-fill padding, and the row reaches that far past the card's 14pt inset
+   * (`optionPillsLeadIn`, set inline), so the leading pill's mark starts 14pt from the box's edge, as Send ends 14pt
+   * from the other one.
    */
-  options: { flexShrink: 1, minWidth: 0, flexDirection: 'row', marginLeft: -10 },
+  options: { flexShrink: 1, minWidth: 0, flexDirection: 'row' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: ACTION_GAP, marginLeft: 'auto' },
   control: {
     width: CONTROL_WIDTH,

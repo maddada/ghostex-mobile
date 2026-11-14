@@ -57,6 +57,30 @@ export function modeInModelPill(document: ChatDocument, modelOnly = false): bool
   return !modelOnly && isTrue(labels, 'showModel') && arr(obj(document.optionMenus)?.mode).length > 0;
 }
 
+/** A pill's inner padding (its pressed fill) before its icon or label, per leading pill. */
+const PILL_PADDING = 10;
+const AGENT_CHIP_PADDING = 8;
+const MODE_PILL_PADDING = 7;
+
+/**
+ * CDXC:SessionChat 2026-11-14 DECISION:
+ * User: the first pill's icon sits as far from the box's left border as Send sits from its right one. The row is pulled
+ * left by the padding of whichever pill leads it (the agent chip, the model or options pill, or a lone mode pill), so
+ * its icon starts at the card's inset and its pressed fill reaches out past it.
+ */
+export function optionPillsLeadIn(document: ChatDocument, modelOnly = false): number {
+  const labels = obj(document.optionLabels);
+  if (str(obj(labels?.agentChip), 'name').length > 0) return AGENT_CHIP_PADDING;
+  if (isTrue(labels, 'showModel')) return PILL_PADDING;
+  if (modelOnly) return 0;
+  const merged = obj(document.modelMenu) !== null;
+  if (isTrue(labels, 'showOptions') && !merged && document.composerOverflow?.optionsOverflowed !== true) {
+    return PILL_PADDING;
+  }
+  if (arr(obj(document.optionMenus)?.mode).length > 0) return MODE_PILL_PADDING;
+  return 0;
+}
+
 /*
  * CDXC:SessionChat 2026-11-12 DECISION:
  * User picked layout A of the "Phone chat box: a cleaner bottom bar" page (Q2727): the permission mode joins the model
@@ -239,7 +263,14 @@ export function ContextRing({ percentage }: { percentage: number }) {
 
 const useStyles = themedStyles((P) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 1, minWidth: 0 },
-  agentChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 8, flexShrink: 0 },
+  agentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 24,
+    paddingHorizontal: AGENT_CHIP_PADDING,
+    flexShrink: 0,
+  },
   agentTile: { width: 14, height: 14, borderRadius: 3, alignItems: 'center', justifyContent: 'center' },
   agentInitial: { color: '#111111', fontSize: 9, fontWeight: '700' },
   agentName: { color: P.primary, fontSize: 13, fontWeight: '500' },
@@ -248,7 +279,7 @@ const useStyles = themedStyles((P) => ({
     alignItems: 'center',
     gap: 4,
     height: 30,
-    paddingHorizontal: 10,
+    paddingHorizontal: PILL_PADDING,
     borderRadius: 15,
     maxWidth: 160,
     flexShrink: 1,
@@ -260,7 +291,7 @@ const useStyles = themedStyles((P) => ({
   pillText: { color: P.primary, fontSize: 13, flexShrink: 1 },
   suffix: { color: P.mutedInk(0.8) },
   skeleton: { height: 10, borderRadius: 5, backgroundColor: P.mutedInk(0.24) },
-  modePill: { paddingHorizontal: 7 },
+  modePill: { paddingHorizontal: MODE_PILL_PADDING },
   modeGlyph: { opacity: 0.55 },
   /** The hairline between the model's name and the mode glyph inside the model pill. */
   modeRule: { width: StyleSheet.hairlineWidth * 2, height: 14, marginHorizontal: 2, backgroundColor: P.ink(0.16) },
