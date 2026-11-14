@@ -28,7 +28,7 @@ import net.schmizz.sshj.connection.channel.direct.SessionChannel
  *   open refusal, or the transport's end), never because a close stopped waiting: a close the computer does not
  *   answer keeps its slot, so timed-out commands cannot push the computer past its MaxSessions. Those closes are
  *   reported by `sshChannelStats`, which the phone's planned reset reads (src/remote/channelPressure.ts).
- * SEE-ALSO: GhostexSshTask.kt (`onDeadline`), GhostexSshConnection.exec, GhostexNativeModule.execAsync.
+ * SEE-ALSO: GhostexSshTask.kt (`beforeTimeout`), GhostexSshConnection.exec, GhostexNativeModule.execAsync.
  */
 internal class GhostexExecHandle {
   enum class State { OPENING, OPEN, ABANDONED, CLOSED }

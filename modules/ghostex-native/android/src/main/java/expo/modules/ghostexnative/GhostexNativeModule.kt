@@ -1008,7 +1008,7 @@ class GhostexNativeModule : Module() {
         retireConnection(connection, "disconnected", coded)
       }
       promise.reject(coded)
-    }, commandChannel = !probe, probeChannel = probe, onDeadline = { handle.abandon() }, handle = handle) {
+    }, commandChannel = !probe, probeChannel = probe, beforeTimeout = { handle.abandon() }, onDeadline = {}, handle = handle) {
       connection.exec(command, timeout, input, handle)
     }
   }

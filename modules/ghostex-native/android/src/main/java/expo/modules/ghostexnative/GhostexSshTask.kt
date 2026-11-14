@@ -29,6 +29,7 @@ internal object GhostexSshTask {
     failure: (Throwable) -> Unit,
     commandChannel: Boolean = false,
     probeChannel: Boolean = false,
+    beforeTimeout: () -> Unit = {},
     onDeadline: () -> Unit = { connection.abortTransport() },
     handle: GhostexExecHandle? = null,
     work: () -> T
@@ -37,11 +38,14 @@ internal object GhostexSshTask {
     val bounded: () -> T = {
       val deadline = deadlines.schedule({
         if (!settled.get()) {
-          // The operation learns it was abandoned before the timeout is published, so a command whose channel opens
-          // late is never sent (GhostexSshExecChannel.kt); a connect still closes its socket here.
-          onDeadline()
+          // [beforeTimeout] runs before the timeout can be published and does nothing destructive: a command learns
+          // it was abandoned, so a channel that opens late is never sent its command (GhostexSshExecChannel.kt).
+          beforeTimeout()
+          // [onDeadline] (a connect closes its socket) runs only for a deadline that won: one that lost to a
+          // completion tears nothing down.
           if (settled.compareAndSet(false, true)) {
             failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
+            onDeadline()
           }
         }
       }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
