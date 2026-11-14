@@ -8,8 +8,9 @@
  * CDXC:AgentProviders 2026-11-14 DECISION:
  * User (Q3111): add the three Claude idle compaction rows to the phone's Settings. The phone has no
  * per-agent page, so they are a Claude Code section of Settings › Chat for the picked computer
- * (the selected one first), and Only above shows only while the switch is on (the rule in
- * AGENTS.md). A computer whose Ghostex is older answers `notFound`: the section says to update it.
+ * (the selected one first). Only above showed only while the switch was on (the rule in AGENTS.md)
+ * until 2026-11-14 (Q3239): renamed Compact chats above, it shows always, since it also sets the size
+ * Ghostex compacts at before carrying a session on (server/src/carry_on_compaction.rs). A computer whose Ghostex is older answers `notFound`: the section says to update it.
  * SEE-ALSO: server/src/agents/claude_idle_compaction.rs (where the user's decision is),
  * apps/desktop/src/app/window/settings_modal/tabs/agents/claude_context.rs.
  */
@@ -27,7 +28,7 @@ import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
 
 const CALL_TIMEOUT_MS = 15_000;
 
-/** The desktop's "Only above" choices (`CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS`). */
+/** The desktop's "Compact chats above" choices (`CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS`). */
 const ONLY_ABOVE_OPTIONS = [
   { value: '100000', label: '100K' },
   { value: '200000', label: '200K' },
@@ -154,17 +155,18 @@ export function ClaudeCompactionRows() {
             value={loaded.values.claudeIdleCompaction}
             onValueChange={(next) => change({ claudeIdleCompaction: next })}
           />
-          {loaded.values.claudeIdleCompaction ? (
-            <>
-              <Caption>Only above: compact only chats whose context is at least this size.</Caption>
-              <SegmentedRow
-                label="Only above"
-                options={ONLY_ABOVE_OPTIONS}
-                value={loaded.values.claudeIdleCompactAbove}
-                onChange={(next) => change({ claudeIdleCompactAbove: next })}
-              />
-            </>
-          ) : null}
+          {/* Shown always: the size also decides which sessions Ghostex compacts before carrying them on
+              (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs, Q3239). */}
+          <Caption>
+            Compact chats above: the size at which Claude Code compacts an idle chat, and Ghostex compacts a session
+            before carrying it on after a restart or a usage-limit reset.
+          </Caption>
+          <SegmentedRow
+            label="Compact chats above"
+            options={ONLY_ABOVE_OPTIONS}
+            value={loaded.values.claudeIdleCompactAbove}
+            onChange={(next) => change({ claudeIdleCompactAbove: next })}
+          />
           <ToggleRow
             label="Use a 1-hour prompt cache"
             value={loaded.values.claudeOneHourPromptCache}

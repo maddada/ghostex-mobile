@@ -362,8 +362,9 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     page: 'chat',
     section: 'settings:chat:claude-code',
     group: 'Claude Code',
-    title: 'Only above',
-    description: 'Compact only chats whose context is at least this size. Shown while Compact idle chats is on.',
+    title: 'Compact chats above',
+    description:
+      'The size at which Claude Code compacts an idle chat, and Ghostex compacts a session before carrying it on.',
     catalog: 'claudeIdleCompactAbove',
   },
   {

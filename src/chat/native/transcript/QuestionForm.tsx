@@ -77,7 +77,7 @@ const INFO_ICON_ROOM = 20;
  *
  * CDXC:SessionChat 2026-10-24 DECISION: User: "remove the text about skipped (add i icon there for that)". The footer's sentence wrapped into five lines beside the buttons on the phone, so the icon takes its place and the sentence shows on a tap (a hover tooltip on the computer, desktop `ask_info_hint` in ask_card.rs). Skip all and Send answers keep their size and place.
  */
-function InfoHint({ hint }: { hint: string }) {
+export function InfoHint({ hint }: { hint: string }) {
   const { theme } = useTranscriptEnv();
   const icon = useRef<ViewInstance>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
