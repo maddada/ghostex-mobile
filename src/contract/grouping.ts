@@ -467,7 +467,7 @@ function projectDisplayName(project: GhostexProject): string {
   return 'Project';
 }
 
-function groupsForProject(summary: GhostexMobileSummary, projectId: string): GhostexSessionGroup[] {
+export function groupsForProject(summary: GhostexMobileSummary, projectId: string): GhostexSessionGroup[] {
   if (projectId.length === 0 || summary.workspaceGroups === null) return [];
   const projectGroups = summary.workspaceGroups.projects?.[projectId]?.groups;
   if (projectGroups === undefined) return [];

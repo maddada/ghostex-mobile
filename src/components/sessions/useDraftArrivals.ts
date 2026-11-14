@@ -11,11 +11,12 @@
 
 import { useEffect, useRef } from 'react';
 
-import { DraftArrivals, type DraftRow } from '../../contract/draftArrivals';
+import { DraftArrivals, OpenedArrivals, sessionRevealPlan, type DraftRow } from '../../contract/draftArrivals';
 import { projectKeyForSession, sessionKindSection } from '../../contract/grouping';
 import type { UnifiedRow } from '../../contract/unified/build';
 import type { MachineInventory } from '../../inventory/store';
 import { useUnifiedListStore } from '../../screens/sessions-screen/unified-list-store';
+import { useTerminalStore } from '../../terminal/sessions';
 import { useCollapseStore } from './collapseStore';
 
 function createdMs(createdAt: string): number | null {
@@ -23,15 +24,22 @@ function createdMs(createdAt: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-/** The Project list: one tracker per computer, reset while the Unified list is shown. */
+/**
+ * The Project list: one tracker per computer, reset while the Unified list is shown. A new session
+ * the phone opens (one it just created, mostly) also opens its collection, project, session group
+ * and heading, whichever heading that is (CDXC:Sidebar 2026-11-14 in contract/draftArrivals.ts).
+ */
 export function useOpenProjectDraftsOnArrival(
   inventoriesByMachineId: Record<string, MachineInventory>,
   enabled: boolean,
 ): void {
   const trackers = useRef(new Map<string, DraftArrivals>());
+  const openedTrackers = useRef(new Map<string, OpenedArrivals>());
+  const selectedSessionKey = useTerminalStore((state) => state.selectedSessionKey);
   useEffect(() => {
     if (!enabled) {
       trackers.current.clear();
+      openedTrackers.current.clear();
       return;
     }
     const nowMs = Date.now();
@@ -53,8 +61,29 @@ export function useOpenProjectDraftsOnArrival(
       for (const arrival of tracker.observe(drafts, nowMs)) {
         useCollapseStore.getState().openDrafts(machineId, arrival.collapseKey);
       }
+      let opened = openedTrackers.current.get(machineId);
+      if (opened === undefined) {
+        opened = new OpenedArrivals();
+        openedTrackers.current.set(machineId, opened);
+      }
+      opened.observe(
+        sessions.map((session) => ({
+          id: session.sessionId,
+          collapseKey: '',
+          createdMs: createdMs(session.createdAt),
+        })),
+        nowMs,
+      );
+      // The terminal store keys an open session `<machineId>:<sessionId>` (attachSessionKey).
+      const prefix = `${machineId}:`;
+      const openId = selectedSessionKey?.startsWith(prefix) === true ? selectedSessionKey.slice(prefix.length) : null;
+      if (!opened.takeOpened(openId, nowMs)) continue;
+      const session = sessions.find((candidate) => candidate.sessionId === openId);
+      const summary = inventory.summary;
+      if (session === undefined || summary === null || summary === undefined) continue;
+      useCollapseStore.getState().openSession(machineId, sessionRevealPlan(summary, session, nowMs));
     }
-  }, [inventoriesByMachineId, enabled]);
+  }, [inventoriesByMachineId, enabled, selectedSessionKey]);
 }
 
 /** The Unified list's Drafts shelf. */
