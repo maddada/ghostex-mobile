@@ -192,6 +192,7 @@ import { attachSessionKey, useTerminalStore } from '../terminal/sessions';
 import { GhostexPalette } from '../theme/palette';
 import { useStatusBarStyle } from '../theme/statusBar';
 import { useAppearance } from '../theme/useAppearance';
+import { clearDialBackoff } from '../remote/dialBackoff';
 import {
   closePutsSessionToSleep,
   type SessionContext,
@@ -203,10 +204,7 @@ import {
 import { closeConfirmCopy } from './sessions-screen/close-confirm';
 import { SessionList } from './sessions-screen/session-list';
 import { SessionsBottomBar } from './sessions-screen/BottomBar';
-import {
-  SESSIONS_HEADER_HEIGHT,
-  styles,
-} from './sessions-screen/styles';
+import { SESSIONS_HEADER_HEIGHT, styles } from './sessions-screen/styles';
 import { useSessionsScreenActions } from './sessions-screen/use-sessions-screen-actions';
 import { useSessionsScreenMenus } from './sessions-screen/use-sessions-screen-menus';
 import { makeSnoozeSession, useUnifiedList } from './sessions-screen/use-unified-list';
@@ -799,6 +797,8 @@ export default function SessionsScreen({ navigation }: Props) {
     if (machine === null) return;
     setPullRefreshing(true);
     const done = (): void => setPullRefreshing(false);
+    // A pull is the person asking: computers waiting after unanswered dials are dialled now (dialBackoff.ts).
+    for (const entry of unified.on ? machines : [machine]) clearDialBackoff(entry.id, 'pull to refresh');
     // Fresh on every computer: `refreshAll` would join a poll already under way and settle on
     // what it read before the pull.
     const refreshed = unified.on

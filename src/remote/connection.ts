@@ -497,11 +497,34 @@ const PROBE_TIMEOUT_MS = 5_000;
  */
 export async function checkStalledConnection(machineId: string): Promise<StallCheckOutcome> {
   const generation = connectionGeneration(machineId);
+  const deadline = Date.now() + STALL_SUSPECT_MS + PROBE_GRACE_MS;
   const outcome = await probeConnection(machineId, Date.now(), STALL_SUSPECT_MS);
   if (outcome !== 'failed' || connectionGeneration(machineId) !== generation) return outcome;
-  const connected = await GhostexNative.isConnected(machineId).catch(() => null);
+  // The same deadline covers asking native whether the socket closed: on the iPhone that call waits for the
+  // connection's actor, which a terminal's start can hold for 20 s (CDXC:RemoteMachines 2026-11-14 at PROBE_GRACE_MS).
+  const connected = await withinDeadline(
+    GhostexNative.isConnected(machineId).catch(() => null),
+    deadline - Date.now(),
+  );
+  if (connected === 'late') {
+    logAppEvent(`Connection: ${machineId} check unknown: no answer from the phone's SSH by the check's deadline`);
+    return 'unknown';
+  }
   if (connected !== false || connectionGeneration(machineId) !== generation) return outcome;
   return 'lost';
+}
+
+/** `task`'s answer, or `late` when it has none within `ms` (what it answers later is dropped). */
+async function withinDeadline<T>(task: Promise<T>, ms: number): Promise<T | 'late'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), Math.max(0, ms));
+  });
+  try {
+    return await Promise.race([task, late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function reconnectMachine(machine: MachineConnectionTarget, reason = 'Retry'): Promise<void> {

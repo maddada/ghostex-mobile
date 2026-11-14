@@ -38,6 +38,7 @@ import { logAppEvent } from '../app/appLog';
 import { FailureCopy } from '../copy';
 import { isChannelRefusal, reportChannelRefused } from '../remote/channelBudget';
 import { isSlowOpenFailure, noteSlowOpenFailure } from '../remote/stallWatch';
+import { clearDialBackoff } from '../remote/dialBackoff';
 
 const tabOpenRequests = new Map<string, Promise<unknown>>();
 /** Scrollback rows each warm native entry was opened with (the setting applies to new terminals only). */
@@ -502,6 +503,8 @@ export const useTerminalStore = create<TerminalState>()((set, get) => {
      * User: "How about if we don't connect the terminal until user switches to it but if we're just using chat view then we don't do ssh connection for that session", picking "Chat-only, no terminal", with the rule "pls dont break things for users who set default to terminal at all". A session opened in Chat View gets a `detached` tab: no PTY channel, no login shell, no `ghostex attach`. Its chat needs none of them (it talks to gxserver over the warm chat link; a send wakes a sleeping session in gxserver, and gxserver holds the 200-column chat grid while the chat is shown, `chatGridClaim.ts`). The first switch to its Terminal view attaches it. Supersedes the 2026-10-08 "attach in the background" step of "Phone opens chat first".
      */
     openChatTab: (machine, session) => {
+      // The person opened a chat: its link dials now even if the computer waits after unanswered dials.
+      clearDialBackoff(machine.id, 'opening a chat');
       const sessionKey = attachSessionKey(machine.id, session.sessionId);
       const existing = get().tabs.find((tab) => tab.sessionKey === sessionKey);
       const projectId = session.projectId !== undefined && session.projectId.length > 0 ? session.projectId : undefined;
