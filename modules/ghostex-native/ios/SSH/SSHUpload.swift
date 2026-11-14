@@ -20,6 +20,12 @@ extension SSHConnection {
         permissions: Int32 = 0o600,
         strategy: SSHUploadStrategy = .automatic
     ) async throws {
+        // A session channel like a command's: it waits for a command slot, holds it while it runs, and its channel
+        // keeps it while closing (`holdsCommandSlot`), so the native guard counts every session JS lets through.
+        guard libssh2Session != nil else { throw SSHError.notConnected }
+        try await awaitCommandSlot(admission: Self.commandAdmissionSeconds)
+        activeUploads += 1
+        defer { activeUploads -= 1 }
         if strategy == .execPreferred {
             logger.info("Using exec-preferred upload strategy [path: \(remotePath, privacy: .public)]")
             try await uploadViaExec(data, to: remotePath)
@@ -73,7 +79,7 @@ extension SSHConnection {
             if case SSHError.timeout = error { timedOut = true } else { timedOut = false }
             if started, channelOpenClaim == opener, sessionGeneration == generation, libssh2Session != nil,
                 timedOut || !(error is SSHError) {
-                abandonOpen(AbandonedChannelOpen(owner: opener, holdsCommandSlot: false, what: what, resume: open))
+                abandonOpen(AbandonedChannelOpen(owner: opener, holdsCommandSlot: true, what: what, resume: open))
             } else if channelOpenClaim == opener {
                 releaseChannelOpen(opener)
             }
@@ -84,7 +90,7 @@ extension SSHConnection {
     /// Closes an upload's channel through the closing queue, unless the session (and the channel with it) is gone.
     private func retireUploadChannel(_ channel: OpaquePointer, generation: Int) {
         guard sessionGeneration == generation, libssh2Session != nil else { return }
-        retireChannel(channel)
+        retireChannel(channel, holdsCommandSlot: true)
     }
 
     private func uploadViaSCP(_ data: Data, to remotePath: String, permissions: Int32) async throws {

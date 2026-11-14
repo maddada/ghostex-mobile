@@ -310,6 +310,9 @@ actor SSHConnection {
     /// (SSHChannelOpens.swift).
     var abandonedOpens: [AbandonedChannelOpen] = []
 
+    /// Uploads running now; each holds a command slot like a command (`commandSlotsInUse`, SSHUpload.swift).
+    var activeUploads = 0
+
     /// Bumped when the session is freed: an operation that suspended checks it before touching its pointers again.
     private(set) var sessionGeneration = 0
 
@@ -1655,9 +1658,11 @@ actor SSHConnection {
     // MARK: - Command slots
 
     /**
-     * Commands the native side lets run at once: the phone's two command slots plus its connection check's lane
-     * (src/remote/channelBudget.ts). A command whose channel is still closing keeps its slot until the computer's
-     * CLOSE arrives, so a slot JS freed when a promise settled cannot push the computer past its MaxSessions.
+     * Commands and uploads the native side lets run at once: the phone's two command slots plus its connection
+     * check's lane (src/remote/channelBudget.ts). A command or upload whose channel is still closing keeps its slot
+     * until the computer's CLOSE arrives, so a slot JS freed when a promise settled cannot push the computer past its
+     * MaxSessions. Uploads count since 2026-11-14: JS counted them but this guard did not, so a command whose close
+     * was stuck, an upload and two commands came to 11 sessions with seven terminals.
      * 2026-11-14: 3, was 4. Seven warm terminals (`MAX_WARM_SESSIONS`) + these 3 fill MaxSessions 10 exactly; with
      * 4 the check (or a command) was refused on a healthy connection. Android has the same budget
      * (`COMMAND_CHANNEL_SLOTS` 2 + `probeChannelSlot` in GhostexSshConnection.kt).
@@ -1669,11 +1674,11 @@ actor SSHConnection {
     static let stuckCloseSeconds: TimeInterval = 30
 
     private var commandSlotsInUse: Int {
-        execRequests.count + closingChannels.filter(\.holdsCommandSlot).count
+        execRequests.count + activeUploads + closingChannels.filter(\.holdsCommandSlot).count
             + abandonedOpens.filter(\.holdsCommandSlot).count
     }
 
-    private func awaitCommandSlot(admission: TimeInterval) async throws {
+    func awaitCommandSlot(admission: TimeInterval) async throws {
         let deadline = Date().addingTimeInterval(admission)
         while commandSlotsInUse >= Self.commandSlots {
             try Task.checkCancellation()
@@ -1691,11 +1696,11 @@ actor SSHConnection {
     struct ChannelStats: Sendable {
         let commandsRunning: Int
         let commandsClosing: Int
-        /// Command channels whose CLOSE went out `stuckCloseSeconds` ago with no CLOSE from the computer.
+        /// Command and upload channels whose CLOSE went out `stuckCloseSeconds` ago with no CLOSE from the computer.
         let stuckCommandCloses: Int
         /// How long the oldest stuck command close has waited, in milliseconds (0 when none).
         let oldestStuckCloseMs: Int
-        /// Other channels (terminals, forwards, uploads) whose close is stuck the same way.
+        /// Other channels (terminals, forwards) whose close is stuck the same way.
         let stuckOtherCloses: Int
         let queuedSendBytes: Int
     }
@@ -1709,7 +1714,7 @@ actor SSHConnection {
         let stuckCommands = stuck.filter(\.holdsCommandSlot)
         let oldest = stuckCommands.compactMap(\.closeSentAt).min()
         return ChannelStats(
-            commandsRunning: execRequests.count,
+            commandsRunning: execRequests.count + activeUploads,
             commandsClosing: closingChannels.filter(\.holdsCommandSlot).count,
             stuckCommandCloses: stuckCommands.count,
             oldestStuckCloseMs: oldest.map { Int(now.timeIntervalSince($0) * 1000) } ?? 0,
