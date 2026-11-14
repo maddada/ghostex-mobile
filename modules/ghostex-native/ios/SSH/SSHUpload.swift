@@ -48,10 +48,13 @@ extension SSHConnection {
         open: @escaping (OpaquePointer) -> OpaquePointer?
     ) async throws -> OpaquePointer {
         let opener = try await awaitChannelOpenClaim(timeout: config.connectionTimeout)
+        // SCP's startup includes the remote scp's acknowledgement, which libssh2 waits for without a bound.
+        let deadline = Date().addingTimeInterval(Self.abandonedOpenLimit)
         var started = false
         do {
             while true {
                 try Task.checkCancellation()
+                if started, Date() >= deadline { throw SSHError.timeout }
                 let session = try liveSession(since: generation)
                 if let channel = open(session) {
                     releaseChannelOpen(opener)
@@ -66,8 +69,10 @@ extension SSHConnection {
                 await waitForSocket()
             }
         } catch {
+            let timedOut: Bool
+            if case SSHError.timeout = error { timedOut = true } else { timedOut = false }
             if started, channelOpenClaim == opener, sessionGeneration == generation, libssh2Session != nil,
-                !(error is SSHError) {
+                timedOut || !(error is SSHError) {
                 abandonOpen(AbandonedChannelOpen(owner: opener, holdsCommandSlot: false, what: what, resume: open))
             } else if channelOpenClaim == opener {
                 releaseChannelOpen(opener)
@@ -96,14 +101,20 @@ extension SSHConnection {
         let scpChannel = try await openUploadChannel(generation: generation, what: "SCP") { session in
             remotePath.withCString { libssh2_scp_send64(session, $0, permissions, size, 0, 0) }
         }
+        // `finishUploadChannel` frees the channel: only a failure before it returns retires it.
+        let exitStatus: Int32
         do {
             try await writeUpload(data, to: scpChannel, generation: generation, what: "SCP")
-            _ = try await finishUploadChannel(scpChannel, generation: generation)
-            logger.info("SCP upload finished [path: \(remotePath, privacy: .public)]")
+            exitStatus = try await finishUploadChannel(scpChannel, generation: generation)
         } catch {
             retireUploadChannel(scpChannel, generation: generation)
             throw error
         }
+        // The remote scp reports a failed write (a full disk) only in its exit status; the exec upload is tried next.
+        guard exitStatus == 0 else {
+            throw SSHError.sftpFailed("SCP upload failed with exit status \(exitStatus)")
+        }
+        logger.info("SCP upload finished [path: \(remotePath, privacy: .public)]")
     }
 
     private func uploadViaExec(_ data: Data, to remotePath: String) async throws {
@@ -122,6 +133,7 @@ extension SSHConnection {
         let execChannel = try await openUploadChannel(generation: generation, what: "Exec upload") { session in
             Self.openSessionChannel(session)
         }
+        let exitStatus: Int32
         do {
             _ = libssh2_channel_handle_extended_data2(
                 execChannel,
@@ -149,15 +161,16 @@ extension SSHConnection {
             }
 
             try await writeUpload(data, to: execChannel, generation: generation, what: "Exec upload")
-            let exitStatus = try await finishUploadChannel(execChannel, generation: generation, drainOutput: true)
-            guard exitStatus == 0 else {
-                throw SSHError.sftpFailed("Exec upload failed with exit status \(exitStatus)")
-            }
-            logger.info("Exec upload finished [path: \(remotePath, privacy: .public)]")
+            exitStatus = try await finishUploadChannel(execChannel, generation: generation, drainOutput: true)
         } catch {
             retireUploadChannel(execChannel, generation: generation)
             throw error
         }
+        // Checked after the catch: `finishUploadChannel` already freed the channel (retiring it again was a double free).
+        guard exitStatus == 0 else {
+            throw SSHError.sftpFailed("Exec upload failed with exit status \(exitStatus)")
+        }
+        logger.info("Exec upload finished [path: \(remotePath, privacy: .public)]")
     }
 
     private func writeUpload(_ data: Data, to channel: OpaquePointer, generation: Int, what: String) async throws {

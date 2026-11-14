@@ -256,6 +256,8 @@ actor SSHConnection {
         var batchBuffer = Data()
         var lastYieldTime: UInt64 = DispatchTime.now().uptimeNanoseconds
         var recentBytesPerRead: Int = 0
+        /// The terminal's last write: the next one waits for it, so writes never interleave across a wait.
+        var lastWrite: Task<Void, Error>?
 
         init(id: UUID, channel: OpaquePointer, continuation: AsyncStream<Data>.Continuation) {
             self.id = id
@@ -1541,11 +1543,22 @@ actor SSHConnection {
 
     // MARK: - Write
 
+    /// Writes run one after another per terminal: a paste that waits on the send queue gives the actor up, and a later
+    /// keystroke must not land inside it. Other terminals keep writing meanwhile.
     func write(_ data: Data, to shellId: UUID) async throws {
         guard let state = shellChannels[shellId] else {
             throw SSHError.notConnected
         }
+        let previous = state.lastWrite
+        let current = Task {
+            _ = await previous?.result
+            try await self.writeInOrder(data, to: shellId, state: state)
+        }
+        state.lastWrite = current
+        try await current.value
+    }
 
+    private func writeInOrder(_ data: Data, to shellId: UUID, state: ShellChannelState) async throws {
         // Copy data to array for async-safe access
         var bytes = [UInt8](data)
         var remaining = bytes.count
@@ -1668,6 +1681,8 @@ actor SSHConnection {
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
+        // The wait can outlive the connection (a disconnect empties the slots): never register on a freed session.
+        guard isConnected else { throw SSHError.notConnected }
     }
 
     struct ChannelStats: Sendable {
