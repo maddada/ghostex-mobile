@@ -40,7 +40,7 @@ export const ConnectStartCopy = {
     {
       key: 'computer',
       title: 'On your computer',
-      lead: 'Open the Ghostex menu and click Connect a Device.',
+      lead: 'Open the Ghostex menu and click Connect a Phone.',
       link: '',
       tail: '',
     },
@@ -75,7 +75,7 @@ export const ConnectStartCopy = {
 export const ScanCopy = {
   title: 'Scan the code',
   steps: {
-    computer: { title: '1. On your computer', detail: 'Open the Ghostex menu and click Connect a Device.' },
+    computer: { title: '1. On your computer', detail: 'Open the Ghostex menu and click Connect a Phone.' },
     phone: { title: '2. On this phone', detail: 'Point the camera at the code it shows.' },
   },
   stillTile: 'The camera opens over this screen.',
@@ -98,7 +98,7 @@ export const ScanCopy = {
       detail: 'On the computer, click the Copy button under the code, send the text to this phone and paste it.',
     },
     olderComputer:
-      "No Connect a Device in the computer's menu? On Ghostex 11.3 it is called Connect a phone; on 11.2 or earlier, click Mobile & Remote, then Connect.",
+      "No Connect a Phone in the computer's menu? Ghostex 11.6 and earlier call it Connect a Device (11.3: Connect a phone); on 11.2 or earlier, click Mobile & Remote, then Connect.",
     paste: 'Paste a code',
   },
   found: (computer: string) => `Found ${computer}`,
@@ -106,7 +106,7 @@ export const ScanCopy = {
   tailscaleFound: (user: string, address: string) => `Tailscale code · ${user}@${address}`,
   rejected: {
     title: "That's not a Ghostex code",
-    detail: "Point at the code in the computer's Connect a Device window.",
+    detail: "Point at the code in the computer's Connect a device window.",
   },
   outdated: {
     title: 'This code needs a newer Ghostex app',
@@ -143,7 +143,7 @@ export const ScanCopy = {
 /**
  * After a code is scanned: the screen that waits for Approve on the computer, and the screen a failed pairing
  * stays on until the person acts. Each failure names what really happened, in the computer's own words for the
- * way back ("Connect a Device").
+ * way back ("Connect a Phone").
  */
 export const PairingCopy = {
   checkTitle: 'Check your computer',
@@ -158,7 +158,7 @@ export const PairingCopy = {
       {
         title: 'Look for the words on the computer',
         detail:
-          'They show in its Connect a Device window, or in a window called "Approve this phone?". It can take a few seconds.',
+          'They show in its Connect a device window, or in a window called "Approve this phone?". It can take a few seconds.',
       },
       {
         title: 'Open Settings > Remote there',
@@ -166,7 +166,7 @@ export const PairingCopy = {
       },
       {
         title: 'Still nothing? Start again',
-        detail: 'Tap Cancel, click Connect a Device on the computer again, and scan the new code.',
+        detail: 'Tap Cancel, click Connect a Phone on the computer again, and scan the new code.',
       },
     ],
   },
@@ -174,34 +174,34 @@ export const PairingCopy = {
   pasteInstead: 'Paste a code instead',
   details: 'Details',
   hideDetails: 'Hide details',
-  backToComputer: 'On the computer, click Connect a Device again, then scan the new code.',
+  backToComputer: 'On the computer, click Connect a Phone again, then scan the new code.',
   failure: {
     timedOut: {
       title: 'Nobody approved this phone in time',
       body: (computer: string, minutes: number | null) =>
-        `${minutes !== null && minutes > 0 ? `${computer} waited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : `${computer} stopped waiting.`} On the computer, click Connect a Device again, then scan the new code.`,
+        `${minutes !== null && minutes > 0 ? `${computer} waited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : `${computer} stopped waiting.`} On the computer, click Connect a Phone again, then scan the new code.`,
     },
     dropped: {
       title: 'The computer stopped waiting',
       body: (computer: string) =>
-        `${computer} let go of this phone's request before anyone approved it, for example because Ghostex there restarted. Click Connect a Device there again, then scan the new code.`,
+        `${computer} let go of this phone's request before anyone approved it, for example because Ghostex there restarted. Click Connect a Phone there again, then scan the new code.`,
     },
     expired: {
       title: 'That code is used up',
-      body: 'A code works once, for 5 minutes. On the computer, click Connect a Device again, then scan the new code.',
+      body: 'A code works once, for 5 minutes. On the computer, click Connect a Phone again, then scan the new code.',
     },
     denied: {
       title: 'The computer said no',
       body: (computer: string) =>
-        `This phone was turned away on ${computer}. If that was a mistake, click Connect a Device there again and scan the new code.`,
+        `This phone was turned away on ${computer}. If that was a mistake, click Connect a Phone there again and scan the new code.`,
     },
     noSecret: {
       title: 'That code is not complete',
-      body: 'It was copied while the Connect a Device window was closed. Open that window on the computer and scan the code it shows.',
+      body: 'It was copied while the Connect a device window was closed. Open that window on the computer and scan the code it shows.',
     },
     wordsMismatch: {
       title: 'The words did not match',
-      body: 'So pairing stopped, to keep this phone safe. On the computer, click Connect a Device again, then scan the new code.',
+      body: 'So pairing stopped, to keep this phone safe. On the computer, click Connect a Phone again, then scan the new code.',
     },
     needsUpdate: { title: 'Update Ghostex on this phone' },
     computerTooOld: { title: 'Update Ghostex on the computer' },
@@ -878,7 +878,7 @@ export const MachinesCopy = {
     sectionLabel: 'Add a computer',
     easyConnect: {
       title: 'Scan the code',
-      subtitle: 'Click Connect a Device on the computer.',
+      subtitle: 'Click Connect a Phone on the computer.',
       button: 'Scan',
     },
     tailscale: {
@@ -2184,3 +2184,18 @@ export const ApprovalsCopy = {
   requirePresence: (ios: boolean) => (ios ? 'Require Face ID to approve' : 'Require your fingerprint to approve'),
   requirePresenceFailed: 'Could not change it',
 } as const;
+
+/** Connect two of this phone's computers to each other (`machines/linkComputers.ts`). */
+export const LinkComputersCopy = {
+  sectionLabel: 'Connect to another computer',
+  idle: (other: string) => `Let this computer and ${other} open each other's chats and terminals.`,
+  connect: 'Connect',
+  confirmTitle: (first: string, second: string) => `Connect ${first} and ${second}?`,
+  confirmBody: (first: string, second: string) =>
+    `Each will be able to open the other's chats and terminals. You may be asked to approve on this phone. Remove either one any time in Settings > Remote on ${first} or ${second}.`,
+  confirmLabel: 'Connect both ways',
+  asking: (added: string, to: string) => `Asking ${to} to add ${added}…`,
+  approving: (added: string, to: string) => `Approving ${to} on ${added}…`,
+  adding: (added: string, to: string) => `${to} is adding ${added}…`,
+  done: 'Connected both ways.',
+};
