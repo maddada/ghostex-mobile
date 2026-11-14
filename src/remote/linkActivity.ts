@@ -21,7 +21,7 @@
  * (`checkQuiet`).
  */
 
-type Transfer = { until: number };
+type Transfer = { until: number; startedAt: number };
 
 const transfers = new Map<string, Set<Transfer>>();
 const lastProgressAt = new Map<string, number>();
@@ -71,12 +71,34 @@ export function linkTransferring(machineId: string): boolean {
 }
 
 /**
+ * How long a heavy transfer keeps a liveness check waiting after the link last delivered anything (or the newest
+ * transfer began).
+ *
+ * CDXC:RemoteMachines 2026-11-14 WHY:
+ * A check used to wait as long as any transfer lasted (an upload may run 10 minutes), so a 5 s check took 30 to 50 s
+ * in Sebastian's exports while the connection may already have been dead. After 15 s with nothing delivered the check
+ * runs anyway. Uploads report no progress to JavaScript, so a check that runs while a transfer is under way never
+ * calls the link stalled (a slow upload is not a dead link): it can only find it answering, gone or unknown
+ * (src/remote/connection.ts `probeConnection`).
+ */
+export const TRANSFER_SILENCE_MS = 15_000;
+
+/** Whether a heavy transfer still keeps checks waiting: one is under way and the link spoke within the last 15 s. */
+export function transferDefers(machineId: string, now = Date.now()): boolean {
+  const set = liveTransfers(machineId);
+  if (set === undefined) return false;
+  let newestStart = 0;
+  for (const transfer of set) newestStart = Math.max(newestStart, transfer.startedAt);
+  return now - Math.max(linkProgressAt(machineId), newestStart) < TRANSFER_SILENCE_MS;
+}
+
+/**
  * Registers one heavy transfer on `machineId`'s connection for at most `maxMs`, its own deadline,
  * so one whose caller never ends it cannot keep the link exempt for good. Returns its end: pass
  * `true` when it delivered something, which counts as progress. Ending twice does nothing.
  */
 export function beginLinkTransfer(machineId: string, maxMs: number): (delivered: boolean) => void {
-  const transfer: Transfer = { until: Date.now() + maxMs };
+  const transfer: Transfer = { until: Date.now() + maxMs, startedAt: Date.now() };
   let set = transfers.get(machineId);
   if (set === undefined) {
     set = new Set();
@@ -118,15 +140,17 @@ export async function noteLinkAnswer<T>(machineId: string, task: Promise<T>): Pr
 
 /**
  * While heavy transfers are under way on `machineId`'s connection, waits until anything comes back
- * after `since` (`progress`) or every transfer has ended without delivering (`idle`). Answers at
- * once when something already came back, or nothing heavy is under way.
+ * after `since` (`progress`), every transfer has ended without delivering (`idle`), or the transfers
+ * stopped deferring checks (`silent`: one is still under way, but nothing came for `TRANSFER_SILENCE_MS`).
+ * Answers at once when something already came back, or nothing heavy is under way.
  */
-export function waitForLinkProgressOrIdle(machineId: string, since: number): Promise<'progress' | 'idle'> {
+export function waitForLinkProgressOrIdle(machineId: string, since: number): Promise<'progress' | 'idle' | 'silent'> {
   if (linkProgressAt(machineId) > since) return Promise.resolve('progress');
   if (!linkTransferring(machineId)) return Promise.resolve('idle');
+  if (!transferDefers(machineId)) return Promise.resolve('silent');
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (answer: 'progress' | 'idle'): void => {
+    const finish = (answer: 'progress' | 'idle' | 'silent'): void => {
       if (settled) return;
       settled = true;
       stopProgress();
@@ -139,6 +163,7 @@ export function waitForLinkProgressOrIdle(machineId: string, since: number): Pro
     // A transfer past its deadline is swept here too, so the wait never outlives the longest one.
     const sweep = setInterval(() => {
       if (!linkTransferring(machineId)) finish('idle');
+      else if (!transferDefers(machineId)) finish('silent');
     }, 1_000);
   });
 }

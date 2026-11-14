@@ -133,7 +133,7 @@ async function runAddProjectCli(
   let json: JsonObject | null = null;
   let failed = false;
   try {
-    await ensureConnected(machine);
+    await ensureConnected(machine, { dialNow: true, reason: 'adding a project' });
     const result = await execRemoteCommand(machine.id, command, timeoutMs);
     output = `${result.stdout}\n${result.stderr}`.trim();
     json = firstJsonObject(result.stdout);

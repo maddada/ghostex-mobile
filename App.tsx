@@ -21,6 +21,7 @@ import { checkForCrashReport, noteCrashRoute } from './src/app/crashReports';
 import { reportMobileView } from './src/analytics/clientView';
 import { flushPendingDeepLink, initDeepLinks, navigationRef } from './src/app/deepLinks';
 import { initAppLifecycle } from './src/app/lifecycle';
+import { reconcileInheritedNative } from './src/app/inheritedNative';
 import { initRouteMoveBack } from './src/app/routeMoveBack';
 import { initSettingsSync } from './src/settingsSync/settingsSync';
 import { initLiveActivity } from './src/notifications/liveActivity';
@@ -180,21 +181,24 @@ export default function App() {
     void checkForCrashReport().catch(() => undefined);
     // Stores keyed by machine id load after the machine list, whose load may merge duplicate
     // records and move their saved data to the record it keeps (healDuplicateComputers).
-    void useMachinesStore
+    const terminalsLoaded = useMachinesStore
       .getState()
       .hydrate()
       .finally(() => {
-        void useTerminalStore.getState().hydrate();
         void useWebPreviewStore.getState().hydrate();
+        return useTerminalStore.getState().hydrate();
       });
     void useExtraKeysStore.getState().hydrate();
     void useAgentHotkeysStore.getState().hydrate();
     void useBarGeometryStore.getState().hydrate();
     // Native sync installs after hydration so it pushes the persisted values.
-    void useSettingsStore
+    const settingsLoaded = useSettingsStore
       .getState()
       .hydrate()
       .then(() => initSettingsNativeSync());
+    // What native kept from before a JavaScript restart (an over-the-air update) is settled once the computers, the
+    // terminals and the auto-reconnect setting have loaded (src/app/inheritedNative.ts).
+    void Promise.allSettled([terminalsLoaded, settingsLoaded]).then(() => reconcileInheritedNative());
   }, []);
 
   if (!hydrated) {
@@ -310,7 +314,11 @@ export default function App() {
                     getComponent={() => require('./src/screens/BeadsScreen').default}
                     options={{ title: BeadsCopy.title }}
                   />
-                  <Stack.Screen name="Bead" getComponent={() => require('./src/screens/BeadScreen').default} options={{ title: '' }} />
+                  <Stack.Screen
+                    name="Bead"
+                    getComponent={() => require('./src/screens/BeadScreen').default}
+                    options={{ title: '' }}
+                  />
                   <Stack.Screen
                     name="AttentionList"
                     component={AttentionListScreen}

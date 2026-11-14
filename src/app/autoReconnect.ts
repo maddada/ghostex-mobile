@@ -29,9 +29,13 @@ import {
   channelSnapshotAtEnd,
   clearChannelPressure,
   installChannelPressure,
+  offerConnectionReset,
+  startStuckCloseChecks,
 } from '../remote/channelPressure';
+import { installStallWatch, resetStallWatch } from '../remote/stallWatch';
+import { clearDialBackoff, dialWaitMs } from '../remote/dialBackoff';
 import { noteConnectionEnded, startChannelSnapshots } from '../remote/connectionTrace';
-import { reconnectMachine } from '../remote/connection';
+import { checkStalledConnection, reconnectMachine } from '../remote/connection';
 import { logAppEvent } from './appLog';
 
 const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 30_000];
@@ -49,6 +53,7 @@ function foreground(): boolean {
 export function markManualDisconnect(machineId: string): void {
   cancelConnectionAttempt(machineId);
   manualDisconnects.add(machineId);
+  resetStallWatch(machineId);
   cancelRetry(machineId);
   attemptsByMachineId.delete(machineId);
 }
@@ -83,7 +88,11 @@ function scheduleReconnect(machineId: string): void {
   if (retryTimers.has(machineId) || !canRecover(machineId)) return;
   const attempt = attemptsByMachineId.get(machineId) ?? 0;
   attemptsByMachineId.set(machineId, attempt + 1);
-  const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+  // A computer that did not answer its last dials is tried again when its wait ends (dialBackoff.ts), not before.
+  const delay = Math.max(
+    RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)]!,
+    dialWaitMs(machineId),
+  );
   retryTimers.set(
     machineId,
     setTimeout(() => {
@@ -192,6 +201,8 @@ export function redialAfterServerStop(machineId: string): void {
 /** Validate existing sockets after resume or route changes, then resume bounded retries. */
 export function recoverConnections(reason = 'back in front'): void {
   for (const machine of enabledMachines(useMachinesStore.getState())) {
+    // Back in front, a network change or a new start may reach a computer that did not answer before.
+    clearDialBackoff(machine.id, reason);
     void recoverMachine(machine.id, true, reason);
   }
 }
@@ -211,12 +222,40 @@ export function initAutoReconnect(): void {
       };
     },
     commandsInFlight,
-    reset: async (machineId) => {
+    // An automatic reset (refusals, stuck closes) follows the same recovery rules as the stall watch, checked again
+    // before the tabs come back; the user's own Reset connection does not come through here.
+    reset: async (machineId, reason) => {
       const target = machineTarget(machineId);
-      if (target === undefined) return;
-      await reconnectMachine(target, 'the computer kept refusing channels');
-      await restoreAttachTabs(machineId);
+      if (target === undefined || !canRecover(machineId)) return false;
+      await reconnectMachine(target, reason);
+      if (canRecover(machineId)) await restoreAttachTabs(machineId);
+      return true;
     },
+    mayRecover: canRecover,
+    // iPhone builds with the SSH send queue only (`sshChannelStats`); elsewhere nothing is read.
+    stuckCloses: async (machineId) => {
+      const read = GhostexNative.sshChannelStats;
+      if (typeof read !== 'function') return null;
+      return read.call(GhostexNative, machineId);
+    },
+  });
+  installStallWatch({
+    check: checkStalledConnection,
+    replace: async (machineId, reason) => {
+      const target = machineTarget(machineId);
+      if (target === undefined || !canRecover(machineId)) return;
+      await reconnectMachine(target, reason);
+      if (canRecover(machineId)) await restoreAttachTabs(machineId);
+    },
+    mayRecover: canRecover,
+    plainShells: (machineId) =>
+      useTerminalStore
+        .getState()
+        .tabs.filter(
+          (tab) =>
+            tab.machineId === machineId && tab.kind !== 'attach' && (tab.state === 'open' || tab.state === 'opening'),
+        ).length,
+    offerReset: offerConnectionReset,
   });
   startChannelSnapshots(
     () =>
@@ -224,6 +263,13 @@ export function initAutoReconnect(): void {
         .map((machine) => machine.id)
         .filter((machineId) => !isDemoMachineId(machineId)),
     channelSnapshot,
+  );
+  startStuckCloseChecks(
+    () =>
+      enabledMachines(useMachinesStore.getState())
+        .map((machine) => machine.id)
+        .filter((machineId) => !isDemoMachineId(machineId)),
+    () => AppState.currentState === 'active',
   );
   GhostexNative.addListener('onConnectionState', (event) => {
     const ended =
@@ -233,6 +279,8 @@ export function initAutoReconnect(): void {
     logAppEvent(
       `Connection: ${event.machineId} ${event.state}${'errorCode' in event && event.errorCode ? ` (${event.errorCode})` : ''}${ended}`,
     );
+    // Any change of the connection (up, ending, dialling again) ends what the stall watch held for the one before.
+    resetStallWatch(event.machineId);
     if (event.state === 'connected') clearChannelPressure(event.machineId);
     if (event.state === 'connecting') {
       permanentFailures.delete(event.machineId);

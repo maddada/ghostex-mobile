@@ -50,7 +50,7 @@ async function uploadStagedChatFile(
   prefix: string,
   tail: string,
 ): Promise<string> {
-  await ensureConnected(machine);
+  await ensureConnected(machine, { dialNow: true, reason: 'sending a file' });
   const exec = await execRemoteScript(
     machine.id,
     {
