@@ -45,8 +45,8 @@ export type ChannelPressureHandlers = {
   openTerminals(machineId: string): { agents: number; shells: number };
   /** Commands the phone runs there right now. */
   commandsInFlight(machineId: string): number;
-  /** Replaces the computer's connection. */
-  reset(machineId: string, reason: string): Promise<void>;
+  /** Replaces the computer's connection; false when it declined (the recovery rules), so nothing was reset. */
+  reset(machineId: string, reason: string): Promise<boolean>;
   /** Stuck command closes the native layer reports, or null where it cannot (older builds, Android, no connection). */
   stuckCloses?(machineId: string): Promise<StuckCloses | null>;
   /**
@@ -197,26 +197,37 @@ async function plannedReset(
   const shellsOpen = active.openTerminals(machineId).shells > 0;
   const tooSoon = pressure.lastResetAt !== null && now - pressure.lastResetAt < RESET_MIN_GAP_MS;
   const running = active.commandsInFlight(machineId);
-  if (shellsOpen || tooSoon || running > 0) {
+  const recoveryOff = active.mayRecover !== undefined && !active.mayRecover(machineId);
+  if (recoveryOff || shellsOpen || tooSoon || running > 0) {
     logAppEvent(
       `Connection: ${name} ${what}; not resetting by itself (${
-        shellsOpen
-          ? 'a plain terminal is open'
-          : tooSoon
-            ? 'it was reset less than 5 minutes ago'
-            : `${running} commands or uploads still running`
+        recoveryOff
+          ? 'the recovery rules do not allow it now'
+          : shellsOpen
+            ? 'a plain terminal is open'
+            : tooSoon
+              ? 'it was reset less than 5 minutes ago'
+              : `${running} commands or uploads still running`
       })`,
     );
     // Work still running defers the reset to the next trigger, which checks again; the button is there meanwhile.
     setNeedsReset(machineId, true);
     return;
   }
+  // Only a reset that starts counts for the five-minute gap and clears the refusals (gx-xgs.10.11).
+  const before = { ...pressure, refusals: [...pressure.refusals] };
   pressure.lastResetAt = now;
   pressure.stageOneAt = null;
   pressure.lastRefusalAt = null;
   pressure.refusals = [];
-  logAppEvent(`Connection: freeing up the connection to ${name}`);
-  await active.reset(machineId, reason).catch(() => undefined);
+  const started = await active.reset(machineId, reason).catch(() => true);
+  if (started) {
+    logAppEvent(`Connection: freed up the connection to ${name}`);
+    return;
+  }
+  Object.assign(pressure, before);
+  logAppEvent(`Connection: ${name} ${what}; not resetting by itself (the recovery rules do not allow it now)`);
+  setNeedsReset(machineId, true);
 }
 
 /** Computers whose stats read is still waiting for its native answer (one at a time per computer). */

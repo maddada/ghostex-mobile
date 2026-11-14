@@ -219,9 +219,10 @@ export function initAutoReconnect(): void {
     // before the tabs come back; the user's own Reset connection does not come through here.
     reset: async (machineId, reason) => {
       const target = machineTarget(machineId);
-      if (target === undefined || !canRecover(machineId)) return;
+      if (target === undefined || !canRecover(machineId)) return false;
       await reconnectMachine(target, reason);
       if (canRecover(machineId)) await restoreAttachTabs(machineId);
+      return true;
     },
     mayRecover: canRecover,
     // iPhone builds with the SSH send queue only (`sshChannelStats`); elsewhere nothing is read.
