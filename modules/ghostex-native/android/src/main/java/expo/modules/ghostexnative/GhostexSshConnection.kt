@@ -71,13 +71,14 @@ class GhostexSshConnection(
   /**
    * CDXC:RemoteMachines 2026-10-06 WHY:
    * Everything the phone does on a machine shares this one SSH connection, and OpenSSH (macOS and Windows alike) refuses a session channel past `MaxSessions`, 10 by default, with the bare reason "open failed". Up to seven warm terminals each hold a channel for as long as they live, so commands and uploads opened on top of them without a limit lost the race whenever a few ran at once: a chat attachment failed with "open failed" while the chat's own polls were running. Commands and uploads therefore take one of the remaining slots and wait for a free one instead of being refused.
+   * 2026-11-13: two slots, not three. The connection check's lane (`probeChannelSlot`) opens a session too, and 7 + 3 + 1 passed 10: the check (or a command) was refused on a healthy connection.
    * SEE-ALSO: MAX_WARM_SESSIONS in src/terminal/sessions.ts (the terminals' share of the budget).
    */
   private val commandChannelSlots = Semaphore(COMMAND_CHANNEL_SLOTS, true)
 
   /**
    * CDXC:RemoteMachines 2026-11-13 WHY: the phone's connection check runs in its own lane, one permit outside the
-   * command slots, so it answers even while three slow commands hold every slot. Before, the check waited behind them
+   * command slots, so it answers even while slow commands hold every slot. Before, the check waited behind them
    * and came back "still busy" without reaching the computer, which the phone read as a dead connection. JS asks for
    * it only when this build says so (`probeLane`), so older apps keep their behaviour.
    */
@@ -371,7 +372,11 @@ class GhostexSshConnection(
     try {
       val session = openOwnedSession(ssh, handle)
       try {
-        val cmd = session.exec(command)
+        // Only while OPEN, and ordered before the deadline's close: a request after our CLOSE ends the connection.
+        val request = handle.sendIfOpen { session.sendExecRequest(command) }
+          ?: throw GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out.")
+        request.await(ssh.connection.timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        val cmd: Session.Command = session
         val stopSending = {
           outputCut.set(true)
           try {
@@ -417,7 +422,10 @@ class GhostexSshConnection(
     handle.channel = channel
     handle.closeLater = { owned ->
       try {
-        workExecutor.execute { closeChannelQuietly(owned, handle) }
+        workExecutor.execute {
+          handle.awaitSendDone()
+          closeChannelQuietly(owned, handle)
+        }
       } catch (ignored: RejectedExecutionException) {
         // The connection is closing; its channels go with it.
       }
@@ -433,11 +441,10 @@ class GhostexSshConnection(
       channel.open()
     } catch (error: Exception) {
       if (causeIsOpenFailure(error) || !isConnected()) throw error
-      // sshj stopped waiting, but the channel is still attached: a late answer is still taken (and closed) here; with
-      // none, the open's own bound ends the transport.
-      if (handle.awaitLateOpen(GhostexExecHandle.LATE_OPEN_GRACE_MS) && handle.confirmed) {
-        closeChannelQuietly(channel, handle)
-      }
+      // sshj stopped waiting, but the channel is still attached: a late answer is still taken (and closed) here, or by
+      // the reader's hook when it comes after this wait; with none, the open's own bound ends the transport.
+      handle.awaitLateOpen(GhostexExecHandle.LATE_OPEN_GRACE_MS)
+      if (handle.stopWaitingForLateOpen()) closeChannelQuietly(channel, handle)
       throw GhostexException(GhostexErrorCode.TIMEOUT, "Opening a channel on the computer timed out.", error)
     }
     if (!handle.markOpen()) {
@@ -816,8 +823,11 @@ class GhostexSshConnection(
     private const val MAX_EXEC_OUTPUT_BYTES = 48L * 1024 * 1024
     private const val OWNER_READ_WRITE_PERMISSIONS = 0b110_000_000 // 0600
 
-    /** OpenSSH's default `MaxSessions` (10) less the seven warm terminals `MAX_WARM_SESSIONS` allows. */
-    private const val COMMAND_CHANNEL_SLOTS = 3
+    /**
+     * OpenSSH's default `MaxSessions` (10) less the seven warm terminals `MAX_WARM_SESSIONS` allows, less the
+     * connection check's own lane (`probeChannelSlot`).
+     */
+    private const val COMMAND_CHANNEL_SLOTS = 2
 
     /** A command close the computer has not answered this long after ours went out is stuck (`channelStats`). */
     private const val STUCK_CLOSE_MS = 30_000L
