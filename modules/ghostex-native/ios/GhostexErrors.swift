@@ -18,6 +18,8 @@ enum GhostexErrorCode: String {
     case notConnected = "E_NOT_CONNECTED"
     case channelFailed = "E_CHANNEL_FAILED"
     case sftpFailed = "E_SFTP_FAILED"
+    /// exec: every native command slot is held (some by commands still closing); the command never ran.
+    case busy = "E_BUSY"
     /// startPortForward: the remote accepted the request but nothing listens on that port.
     case portNotListening = "E_PORT_NOT_LISTENING"
     /// startPortForward: the remote sshd refuses direct-tcpip channels.
@@ -61,8 +63,10 @@ extension GhostexErrorCode {
             return .hostKeyMismatch
         case .connectionRefused:
             return .refused
-        case .timeout:
+        case .timeout, .openTimedOut:
             return .timeout
+        case .busy:
+            return .busy
         case .notConnected:
             return .notConnected
         case .connectionFailed, .unknown:
