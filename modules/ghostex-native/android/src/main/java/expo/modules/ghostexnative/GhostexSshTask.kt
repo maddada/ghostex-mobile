@@ -28,6 +28,8 @@ internal object GhostexSshTask {
     success: (T) -> Unit,
     failure: (Throwable) -> Unit,
     commandChannel: Boolean = false,
+    probeChannel: Boolean = false,
+    onDeadline: () -> Unit = { connection.abortTransport() },
     work: () -> T
   ) {
     val settled = AtomicBoolean(false)
@@ -36,7 +38,8 @@ internal object GhostexSshTask {
         if (settled.compareAndSet(false, true)) {
           // Settle before teardown: transport callbacks may also report this failure.
           failure(GhostexException(GhostexErrorCode.TIMEOUT, "The SSH operation timed out."))
-          connection.abortTransport()
+          // A command ends only itself (GhostexSshExecChannel.kt); a connect still closes its socket.
+          onDeadline()
         }
       }, timeoutMs.coerceAtLeast(1), TimeUnit.MILLISECONDS)
       try {
@@ -48,7 +51,11 @@ internal object GhostexSshTask {
     try {
       connection.workExecutor.execute {
         try {
-          val result = if (commandChannel) connection.withCommandChannel(timeoutMs, bounded) else bounded()
+          val result = when {
+            probeChannel -> connection.withProbeChannel(bounded)
+            commandChannel -> connection.withCommandChannel(timeoutMs, bounded)
+            else -> bounded()
+          }
           if (settled.compareAndSet(false, true)) success(result)
         } catch (error: Throwable) {
           if (settled.compareAndSet(false, true)) failure(error)

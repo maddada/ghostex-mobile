@@ -21,6 +21,9 @@ object GhostexErrorCode {
   const val CHANNEL_FAILED = "E_CHANNEL_FAILED"
   const val SFTP_FAILED = "E_SFTP_FAILED"
 
+  /** exec in the probe lane: another connection check is already running; this one never ran. */
+  const val BUSY = "E_BUSY"
+
   /** startPortForward: the remote accepted the request but nothing listens on that port. */
   const val PORT_NOT_LISTENING = "E_PORT_NOT_LISTENING"
 
