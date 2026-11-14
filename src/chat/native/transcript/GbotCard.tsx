@@ -15,6 +15,10 @@
  * The "Routine set" card (`kind: routineSet`, gx-chat-core `routine_cards.rs`) is drawn here too: the GBot's icon,
  * "Routine set: Inbox watch", its schedule in words and its next run, then Pause (Resume), Edit and Undo. Edit opens
  * the GBot's Routines in its settings sheet, since the phone has no Automate view.
+ *
+ * The "Theme changed" card (`kind: themeChanged`, gx-chat-core `theme_cards.rs`, desktop `theme_card.rs`) rides
+ * the same cards: the palette icon, "Theme changed by Claude", one line per setting it changed, anything it made
+ * hard to read in the warning colour, then Undo; after Undo, "Theme change undone" and who undid it.
  */
 
 import { memo, useEffect } from 'react';
@@ -22,7 +26,7 @@ import { Text, View } from 'react-native';
 
 import type { Json } from '../../rust/document';
 import { GbotIcon } from '../../../components/sessions/gbotIcons';
-import { ToneButton, ToneCard } from '../cards/ToneCard';
+import { ToneButton, ToneCard, toneLook } from '../cards/ToneCard';
 import { ErrorLine } from '../cards/ErrorLine';
 import { CARD_TEXT_SIZE } from '../cards/primitives';
 import { useTranscriptEnv, useTranscriptFlags } from './context';
@@ -68,9 +72,13 @@ export function GbotCards({
   if (rows.length === 0) return null;
   return (
     <View style={{ gap: 8, marginTop: cardStackMargin(aboveIsCard, columnGap, rowGap) }}>
-      {rows.map((card) => (
-        <GbotCard key={str(card, 'changeId')} card={card} />
-      ))}
+      {rows.map((card) =>
+        str(card, 'kind') === 'themeChanged' ? (
+          <ThemeCard key={str(card, 'changeId')} card={card} />
+        ) : (
+          <GbotCard key={str(card, 'changeId')} card={card} />
+        ),
+      )}
     </View>
   );
 }
@@ -190,7 +198,85 @@ const GbotCard = memo(function GbotCard({ card }: { card: JsonRecord }) {
   );
 });
 
+const ThemeCard = memo(function ThemeCard({ card }: { card: JsonRecord }) {
+  const styles = useStyles();
+  const { dispatch } = useTranscriptEnv();
+  const { gbotCardStates } = useTranscriptFlags();
+  const changeId = str(card, 'changeId');
+  const state = obj(gbotCardStates[changeId]);
+  useEffect(() => {
+    if (state === null && !asked.has(changeId)) {
+      asked.add(changeId);
+      dispatch({ type: 'gbotCard', op: 'load', changeId });
+    }
+  }, [changeId, dispatch, state]);
+  const undone = state !== null && isTrue(state, 'undone');
+  const note = state === null ? '' : str(state, 'note');
+  const error = state === null ? '' : str(state, 'error');
+  const undoLabel = state === null ? '' : str(state, 'undoLabel');
+  const title = undone ? str(card, 'removedTitle') : str(card, 'title');
+  const lines = undone ? [] : arr(card.lines).filter((line): line is string => typeof line === 'string');
+  const warnings = undone ? [] : arr(card.warnings).filter((line): line is string => typeof line === 'string');
+  return (
+    <ToneCard
+      tone="info"
+      tileGlyph={(size, color) => <GbotIcon icon="palette" color={color} size={size} />}
+      title={title}
+      accessibilityLabel={title}
+      body={[
+        lines.length > 0 ? (
+          <View key="lines" style={styles.items}>
+            {lines.map((line, index) => (
+              <Text key={`line-${index}`} selectable style={styles.item}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null,
+        ...warnings.map((line, index) => (
+          <Text key={`warning-${index}`} selectable style={styles.warning}>
+            {line}
+          </Text>
+        )),
+        note.length > 0 ? (
+          <Text key="note" style={styles.note}>
+            {note}
+          </Text>
+        ) : null,
+        error.length > 0 ? <ErrorLine key="error" message={error} /> : null,
+      ]}
+      footerEnd={
+        undone
+          ? []
+          : [
+              <ToneButton
+                key="undo"
+                kind="secondary"
+                icon="arrow-back-up"
+                label={undoLabel.length > 0 ? undoLabel : 'Undo'}
+                disabled={state === null || !isTrue(state, 'undoEnabled')}
+                onPress={() => dispatch({ type: 'gbotCard', op: 'undo', changeId })}
+              />,
+            ]
+      }
+    />
+  );
+});
+
 const useStyles = themedStyles((P) => ({
+  items: {
+    gap: 2,
+  },
+  item: {
+    color: P.foreground,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  warning: {
+    color: toneLook('warning', P.light).hue ?? P.foreground,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
   line: {
     color: P.foreground,
     fontSize: CARD_TEXT_SIZE,
