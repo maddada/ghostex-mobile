@@ -14,6 +14,7 @@
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 
 import { DocsCopy } from '../copy';
 import type { SidebarAppearance } from '../theme/sidebarAppearance';
@@ -33,7 +34,10 @@ import {
 } from './pageRules';
 import {
   baseName,
+  DOCS_LOADER_ORIGIN,
+  docsLoaderUrl,
   extensionOf,
+  fileUrlForDocsLoaderUrl,
   MIRROR_FOLDER,
   mirrorSegments,
   normalizeRemotePath,
@@ -60,7 +64,7 @@ export type DocPage =
   | { kind: 'source'; html: string }
   | {
       kind: PreviewKind;
-      /** What the WebView loads. */
+      /** What the WebView loads: the mirror file's `file://` URI, under the Docs loader's origin on Android. */
       uri: string;
       /** The mirror folder. */
       rootUri: string;
@@ -115,6 +119,17 @@ function directoryUri(directory: Directory): string {
   return directory.uri.endsWith('/') ? directory.uri : `${directory.uri}/`;
 }
 
+/** Android's Docs viewer loads the mirror through the WebView's asset loader (`DOCS_LOADER_ORIGIN`). */
+const LOADS_THROUGH_DOCS_LOADER = Platform.OS === 'android';
+
+/** The URL the WebView loads a mirror file from. */
+function loadUrl(fileUri: string): string {
+  return LOADS_THROUGH_DOCS_LOADER ? docsLoaderUrl(fileUri) : fileUri;
+}
+
+/** What a page's content policy names its own mirrored files by (`docPageContentPolicy`). */
+const MIRROR_SOURCE = LOADS_THROUGH_DOCS_LOADER ? `${DOCS_LOADER_ORIGIN}/${MIRROR_FOLDER}/` : 'file:';
+
 /** The `file://` URI a remote path is mirrored at, each segment percent-encoded. */
 function mirrorUri(rootUri: string, remotePath: string): string | null {
   const segments = mirrorSegments(remotePath);
@@ -128,7 +143,10 @@ function writeMirrorFile(uri: string, content: string, encoding: 'base64' | 'utf
   file.writeSync(content, { encoding });
 }
 
-const MIRROR_PATH_IN_TEXT = new RegExp(`(?:file://)?/[^\\s"'\`()<>]*/${MIRROR_FOLDER}/[^\\s"'\`()<>#?]+`, 'gu');
+const MIRROR_PATH_IN_TEXT = new RegExp(
+  `(?:${DOCS_LOADER_ORIGIN.replace(/[.]/gu, '\\.')}|(?:file://)?/[^\\s"'\`()<>]*)/${MIRROR_FOLDER}/[^\\s"'\`()<>#?]+`,
+  'gu',
+);
 
 /**
  * Rewrites phone mirror paths inside text (Agentation's copied feedback names the page it was
@@ -137,7 +155,7 @@ const MIRROR_PATH_IN_TEXT = new RegExp(`(?:file://)?/[^\\s"'\`()<>]*/${MIRROR_FO
  */
 export function mirrorPathsToRemote(text: string): string {
   return text.replace(MIRROR_PATH_IN_TEXT, (match) => {
-    const url = match.startsWith('file://') ? match : `file://${match}`;
+    const url = match.startsWith('file://') || match.startsWith(DOCS_LOADER_ORIGIN) ? match : `file://${match}`;
     const remote = remotePathForMirrorUrl(url)?.remotePath;
     return remote === undefined ? match : remote.replace(/\.ghostex-view\.html$/u, '');
   });
@@ -258,6 +276,7 @@ function isScannable(remotePath: string): boolean {
  * - P3, ask before leaving a Docs page: a navigation the user did not tap asks first, and another app's link always asks; a tap on an ordinary link opens as before (DocViewerScreen.tsx).
  * - P4, known limit: a loopback port the page's markup names is forwarded, so that server on the computer can still receive the page's requests (loads only, now: the policy refuses `fetch`, sockets and forms there), and a page can load from any phone loopback port.
  * - P5, checked, not changed here: on Android the page runs with `allowFileAccessFromFileURLs`, so it can read the app's own files under `file://` (AsyncStorage's database, chat snapshots, other pages' mirrors); P2 keeps what it reads from leaving, and the full fix is native (the next app build).
+ * - P5, 11.7.0 app build (user, Q3199 "Fix in the next app build"): Android serves the mirror through the WebView's asset loader at `DOCS_LOADER_ORIGIN` (paths.ts) with file access, file-URL access and universal access off, so a page reaches its mirror and nothing else of the app's; iOS is unchanged.
  */
 
 const LOOPBACK_URL =
@@ -352,7 +371,7 @@ async function mirrorAssets(
 function remotePathForRequestedUrl(url: string): string | null {
   const mirrored = remotePathForMirrorUrl(url);
   if (mirrored !== null) return mirrored.remotePath;
-  const file = remotePathFromFileUrl(url);
+  const file = remotePathFromFileUrl(fileUrlForDocsLoaderUrl(url));
   if (file !== null) return file.path;
   // A Windows path in a page reads as a one-letter URL scheme (`c:/Users/…`).
   if (/^[a-z]:\//iu.test(url)) {
@@ -393,7 +412,7 @@ export async function mirrorRequestedAssets(
     if (!mirror.copied.has(path)) continue;
     const mirrored = mirrorUri(mirror.rootUri, path);
     for (const url of pathUrls) {
-      const replacement = remotePathForMirrorUrl(url) !== null ? url : mirrored;
+      const replacement = remotePathForMirrorUrl(url) !== null ? url : mirrored === null ? null : loadUrl(mirrored);
       if (replacement !== null) replacements[url] = replacement;
     }
   }
@@ -436,7 +455,7 @@ export async function buildDocPage(
     writeMirrorFile(pageUri, renderMediaDocument(kind, source, title, appearance), 'utf8');
     return {
       kind,
-      uri: pageUri,
+      uri: loadUrl(pageUri),
       rootUri,
       readAccessUri,
       title,
@@ -472,7 +491,7 @@ export async function buildDocPage(
     writeMirrorFile(pageUri, renderImageDocument(title, title, appearance), 'utf8');
     return {
       kind,
-      uri: pageUri,
+      uri: loadUrl(pageUri),
       rootUri,
       readAccessUri,
       title,
@@ -487,7 +506,7 @@ export async function buildDocPage(
     writeMirrorFile(pageUri, renderTextDocument(text, title, appearance), 'utf8');
     return {
       kind,
-      uri: pageUri,
+      uri: loadUrl(pageUri),
       rootUri,
       readAccessUri,
       title,
@@ -503,11 +522,15 @@ export async function buildDocPage(
 
   if (kind === 'html') {
     // The page's bytes as authored, with its content policy written first (`pageRules.ts`).
-    writeMirrorFile(documentUri, withPagePolicyBase64(read.base64, docPageContentPolicy()), 'base64');
+    writeMirrorFile(
+      documentUri,
+      withPagePolicyBase64(read.base64, docPageContentPolicy({ mirrorSource: MIRROR_SOURCE })),
+      'base64',
+    );
     const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(text)), isCancelled, true);
     return {
       kind,
-      uri: documentUri,
+      uri: loadUrl(documentUri),
       rootUri,
       readAccessUri,
       title,
@@ -519,11 +542,15 @@ export async function buildDocPage(
 
   const markdownScriptNonce = newScriptNonce();
   const html = renderMarkdownDocument(text, title, appearance, markdownScriptNonce);
-  writeMirrorFile(pageUri, withPagePolicy(html, docPageContentPolicy({ markdownScriptNonce })), 'utf8');
+  writeMirrorFile(
+    pageUri,
+    withPagePolicy(html, docPageContentPolicy({ markdownScriptNonce, mirrorSource: MIRROR_SOURCE })),
+    'utf8',
+  );
   const skippedAssets = await mirrorAssets(mirror, referencedPaths(htmlReferences(html)), isCancelled, true);
   return {
     kind,
-    uri: pageUri,
+    uri: loadUrl(pageUri),
     rootUri,
     readAccessUri,
     title,

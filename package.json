@@ -59,6 +59,7 @@
   },
   "private": true,
   "patchedDependencies": {
-    "react-native-screens@4.30.0": "patches/react-native-screens@4.30.0.patch"
+    "react-native-screens@4.30.0": "patches/react-native-screens@4.30.0.patch",
+    "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
   }
 }
