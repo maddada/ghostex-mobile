@@ -13,8 +13,18 @@ export const REGISTER_PUSH_TOKEN_METHOD = 'registerPushToken';
 /** What `ghostex server endpoint` lists for a computer that offers push: only such a computer gets a registration. */
 export const PUSH_NOTIFICATIONS_CAPABILITY = 'pushNotifications';
 
-/** One push message's event: any kind (only the notifying ones notify, `mapEvent`), '' without a feed row id. */
-export type PushEvent = { kind: string; machineId: string; sessionId: string; notificationId: string };
+/**
+ * One push message's event: any kind (only the notifying ones notify, `mapEvent`), '' without a feed row id.
+ * `worker`: a coordinator's thread's own news, which the computer sends by the phone's Workers choice
+ * (CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs); absent from an older computer.
+ */
+export type PushEvent = {
+  kind: string;
+  machineId: string;
+  sessionId: string;
+  notificationId: string;
+  worker?: boolean;
+};
 
 /** Printable ASCII without spaces, as the computer writes its identifiers. */
 const IDENTIFIER = /^[\x21-\x7e]+$/u;
@@ -38,7 +48,7 @@ export function pushEventFromData(data: unknown): PushEvent | null {
     if (id === null) return null;
     notificationId = id;
   }
-  return { kind, machineId, sessionId, notificationId };
+  return { kind, machineId, sessionId, notificationId, ...(record.worker === true ? { worker: true } : {}) };
 }
 
 /**

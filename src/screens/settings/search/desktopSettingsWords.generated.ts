@@ -15,7 +15,7 @@ export type DesktopSettingWords = {
 export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords>> = {
   "attentionAlertsFor": {
     "title": "Alert me for",
-    "subtitle": "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
+    "subtitle": "A red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever an agent finishes, and for a coordinator only once none of its workers is still working; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. Workers follow the Workers setting instead. The bell keeps a row either way.",
     "options": [
       "All",
       "all",
@@ -91,8 +91,8 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     "keywords": []
   },
   "claudeIdleCompactAbove": {
-    "title": "Only above",
-    "subtitle": "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.",
+    "title": "Compact chats above",
+    "subtitle": "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
     "options": [
       "100K",
       "100000",

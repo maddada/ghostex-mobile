@@ -642,10 +642,12 @@ export default function AttentionList({
         setEndedTarget({ machineId: row.machineId, sessionId: row.sessionId, title: feedRowTitle(row), ended });
         return;
       }
+      // A thread's approval opens its coordinator, where the card is relayed (`openSessionId`).
+      const sessionId = row.openSessionId ?? row.sessionId;
       onOpenSession({
         machineId: row.machineId,
-        sessionId: row.sessionId,
-        question: questionSessions.has(sessionKey(row.machineId, row.sessionId)),
+        sessionId,
+        question: questionSessions.has(sessionKey(row.machineId, sessionId)),
       });
     },
     [questions, closed, change, onOpenSession],

@@ -71,6 +71,11 @@ export type SessionFacts = {
   finishedNeedsYou?: boolean;
   /** When that attention began (`attention.enteredAt`, ISO); '' outside attention or when the computer omits it. */
   attentionEnteredAt: string;
+  /**
+   * A thread under a coordinator (a worker): its finished turns, questions and errors follow the Workers choice
+   * (CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs).
+   */
+  worker?: boolean;
 };
 
 /** The normalised event: event kind plus session identity and names, no text. */
@@ -86,6 +91,8 @@ export type AttentionEvent = {
   /** The session's title as the computer's session list has it ('' when it has none). */
   sessionTitle: string;
   occurredAt: string;
+  /** A worker's own news (not an approval or other wait only the user can end): the Workers choice decides. */
+  worker?: boolean;
 };
 
 /** The session as the computer's session list has it, or undefined when it does not list it. */
@@ -110,6 +117,7 @@ export function sessionFacts(
     attentionId: session.attentionEventId,
     attentionEnteredAt: session.attentionEnteredAt,
     finishedNeedsYou: attentionAlerts('needsYou', { ...session, attentionKind: 'finished' }),
+    worker: session.coordinatorSessionId.trim().length > 0,
   };
 }
 
@@ -150,5 +158,6 @@ export function mapEvent(event: HostEvent, facts: SessionFacts | undefined): Att
     projectName: facts.projectName,
     sessionTitle: facts.title,
     occurredAt: event.occurredAt,
+    ...(facts.worker === true && kind !== 'waiting' ? { worker: true } : {}),
   };
 }

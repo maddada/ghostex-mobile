@@ -80,9 +80,12 @@ function tapData(response: Notifications.NotificationResponse): Partial<Notifica
   const data: Record<string, unknown> | null | undefined = response.notification.request.content.data;
   if (typeof data?.machineId !== 'string' || typeof data.sessionId !== 'string') return null;
   const kind = HOST_EVENT_KINDS.find((known) => known === data.kind);
+  // A thread's approval opens its coordinator, where the card is relayed (`openSessionId`,
+  // CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs).
+  const opens = typeof data.openSessionId === 'string' && data.openSessionId.length > 0 ? data.openSessionId : null;
   return {
     machineId: data.machineId,
-    sessionId: data.sessionId,
+    sessionId: opens ?? data.sessionId,
     ...(kind !== undefined ? { kind } : {}),
     ...(typeof data.url === 'string' ? { url: data.url } : {}),
     ...(typeof data.notificationId === 'string' ? { notificationId: data.notificationId } : {}),

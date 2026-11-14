@@ -87,6 +87,12 @@ export type FeedRow = {
    * `server/src/notification_feed/store.rs`).
    */
   awaitingApproval?: boolean;
+  /**
+   * The session a tap opens when it is not the row's own: a coordinator's thread's approval opens the coordinator,
+   * where the card is relayed (CDXC:Notifications 2026-11-14 in `server/src/worker_alerts.rs`). A computer that
+   * predates it never sends it.
+   */
+  openSessionId?: string;
 };
 
 export type FeedSnapshot = {
@@ -112,6 +118,7 @@ export function parseFeedRow(value: unknown): FeedRow | null {
   if (!id || projectId === undefined || !sessionId || !createdAt || Number.isNaN(Date.parse(createdAt))) return null;
   if (kind === undefined) return null;
   const accountId = text(raw, 'accountId');
+  const openSessionId = text(raw, 'openSessionId');
   const removeRaw = raw.removeDevice;
   const removeDevice =
     typeof removeRaw === 'object' && removeRaw !== null && !Array.isArray(removeRaw)
@@ -130,6 +137,7 @@ export function parseFeedRow(value: unknown): FeedRow | null {
     read: raw.read === true,
     ...(accountId !== undefined && accountId.length > 0 ? { accountId } : {}),
     ...(raw.awaitingApproval === true ? { awaitingApproval: true } : {}),
+    ...(openSessionId !== undefined && openSessionId.length > 0 ? { openSessionId } : {}),
     ...(removeDevice !== null && removeDevice.id.length > 0 ? { removeDevice } : {}),
   };
 }

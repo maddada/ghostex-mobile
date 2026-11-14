@@ -87,11 +87,23 @@ export type AttentionSoundDeps = Pick<NotifyDeps, 'announced' | 'soundOn' | 'onS
   play(events: readonly EventIdentity[]): void;
 };
 
+/**
+ * The choice for an event: a worker's own news (its finished turn, question or error) follows Workers
+ * (CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs), anything else its kind's choice.
+ */
+function eventChoice(event: Pick<AttentionEvent, 'kind' | 'worker'>, settings: NotificationSettings) {
+  return alertChoiceFor(event.worker === true ? 'threadReport' : event.kind, settings);
+}
+
 /** Whether the choices let an event of `kind` notify (not Off); nothing does before the first ask was answered. */
-export function notificationAllowed(kind: AttentionKind, settings: NotificationSettings): boolean {
+export function notificationAllowed(
+  kind: AttentionKind,
+  settings: NotificationSettings,
+  worker = false,
+): boolean {
   if (settings.askedAt === undefined || !settings.enabled) return false;
   // Waiting and "has a question": one choice, Needs you (only the wording differs).
-  return alertChoiceFor(kind, settings) !== 'off';
+  return eventChoice({ kind, worker }, settings) !== 'off';
 }
 
 /*
@@ -146,7 +158,7 @@ export function notificationRequestFor(
  * the record of announced events is loaded (`processHostEvents`).
  */
 export function postNotification(event: AttentionEvent, identity: EventIdentity, deps: NotifyDeps): boolean {
-  if (!notificationAllowed(event.kind, deps.settings())) return false;
+  if (!notificationAllowed(event.kind, deps.settings(), event.worker === true)) return false;
   // The user is looking at this session: nothing is announced, its row stays in the attention list, and the
   // event counts as seen, so a copy that comes after the user left announces nothing either.
   if (deps.onScreen(event.machineId, event.sessionId)) {
@@ -154,7 +166,7 @@ export function postNotification(event: AttentionEvent, identity: EventIdentity,
     return false;
   }
   // Silent: shown without the sound; Sound: with it while the attention sound is on.
-  const sound = deps.soundOn() && alertChoiceFor(event.kind, deps.settings()) === 'sound';
+  const sound = deps.soundOn() && eventChoice(event, deps.settings()) === 'sound';
   const announcement = deps.announced.announce(identity, { notification: true, sound });
   if (announcement.rateLimited) {
     deps.log(`Notification held back by the rate limit (${event.kind}); it is in the attention list.`);

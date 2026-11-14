@@ -364,9 +364,10 @@ function pushHostEvent(push: PushEvent): HostEvent | null {
 function takeForegroundPush(data: unknown): boolean {
   const push = pushEventFromData(data);
   if (push === null) return false;
-  if (push.kind === THREAD_REPORT_KIND) {
-    // A thread's turn under a coordinator: the computer sends it only for a choice that is not Off, and with or without
-    // its sound as chosen, so iOS shows it as it came, unless the choice is Off by now or its session is open here.
+  if (push.kind === THREAD_REPORT_KIND || push.worker === true) {
+    // A worker's news (a thread's turn, question or error under a coordinator): the computer sends it only for a
+    // Workers choice that is not Off, and with or without its sound as chosen, so iOS shows it as it came, unless the
+    // choice is Off by now or its session is open here.
     const settings = useSettingsStore.getState().settings.notifications;
     const machineId = pushMachineId(push.machineId, enabledMachines(useMachinesStore.getState()));
     if (alertChoiceFor('threadReport', settings) === 'off' || !settings.enabled) return true;

@@ -2025,12 +2025,13 @@ export const NotificationChoicesCopy = {
   needsYou: 'Needs you',
   needsYouDetail: 'A question, an approval or permission, or an agent waiting for you.',
   finished: 'Finished',
-  finishedDetail: 'A session you talk to finished its turn. A coordinator’s own turn notifies only when it needs you.',
+  finishedDetail:
+    'A session you talk to finished its turn. A coordinator notifies once none of its workers is still working.',
   errors: 'Errors',
   errorsDetail: 'A session stopped on an error, is stuck, or is out of usage on every account.',
-  threadReports: 'Thread reports',
+  threadReports: 'Workers',
   threadReportsDetail:
-    'A thread under a coordinator finished a turn. It reports to its coordinator, so this is Off unless you want every report.',
+    'A coordinator’s worker finished, asked a question, stopped moving or hit an error. Its coordinator is told, so this is Off unless you want them too. An approval always notifies under Needs you.',
   kindsCaption:
     'Silent shows the notification without a sound. Several notices close together come as one sound, and the notices of one session stack together. Nothing notifies for a session open on screen, or for an agent starting or working.',
   pushCaption:
