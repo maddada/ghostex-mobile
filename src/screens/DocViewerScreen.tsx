@@ -58,7 +58,7 @@ import { buildDocPage, mirrorPathsToRemote, mirrorRequestedAssets, type DocPage 
 import { docNavigationFor, navigationWasTapped, type DocNavigation } from '../docs/pageRules';
 import { viewerProject } from '../docs/mediaStream';
 import { openComputerFile } from '../docs/openComputerFile';
-import { baseName, docKindForPath, extensionOf, normalizeRemotePath } from '../docs/paths';
+import { baseName, docKindForPath, extensionOf, MIRROR_FOLDER, normalizeRemotePath } from '../docs/paths';
 import { FileKindIcon } from '../files/FileRows';
 import { useProjectDocsRpc } from '../files/machine';
 import { formatFileSize, statProjectFile } from '../files/preview';
@@ -530,8 +530,12 @@ export default function DocViewerScreen({ navigation, route }: Props) {
           // Source is inline escaped text, not an authored page with access to sibling assets. A page
           // reads its own folder's mirror (its project's, for Markdown), not other pages' copies.
           allowingReadAccessToURL={page.kind === 'source' ? undefined : page.readAccessUri}
-          allowFileAccess={!isSource}
-          allowFileAccessFromFileURLs={!isSource}
+          // Android loads the mirror from the Docs loader's origin with no file access at all
+          // (DOCS_LOADER_ORIGIN in docs/paths.ts); iOS reads it from `file://`.
+          androidCacheAssetFolder={isSource ? undefined : MIRROR_FOLDER}
+          allowFileAccess={false}
+          allowFileAccessFromFileURLs={Platform.OS === 'ios' && !isSource}
+          allowUniversalAccessFromFileURLs={false}
           // A player page names the computer's stream through a phone forward, which is not the page's to report.
           injectedJavaScriptBeforeContentLoaded={
             isSource || page.kind === 'video' || page.kind === 'audio' ? undefined : ASSET_LOADER_SCRIPT

@@ -1,0 +1,212 @@
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+index 80c68034b193a47bedb56ca527352de9548e8ac6..61fd68a19aa1578c00a8052aa0c24721c42a3d6c 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
+ import androidx.annotation.Nullable;
+ import androidx.webkit.JavaScriptReplyProxy;
+ import androidx.webkit.WebMessageCompat;
++import androidx.webkit.WebViewAssetLoader;
+ import androidx.webkit.WebViewCompat;
+ import androidx.webkit.WebViewFeature;
+ 
+@@ -41,6 +42,8 @@ import com.facebook.react.views.scroll.ScrollEventType;
+ import com.reactnativecommunity.webview.events.TopCustomMenuSelectionEvent;
+ import com.reactnativecommunity.webview.events.TopMessageEvent;
+ 
++import java.io.File;
++
+ import org.json.JSONException;
+ import org.json.JSONObject;
+ 
+@@ -79,6 +82,25 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+     protected boolean nestedScrollEnabled = false;
+     protected ProgressChangedFilter progressChangedFilter;
+ 
++    /**
++     * Ghostex patch (androidCacheAssetFolder): serves one folder of the app's cache at
++     * https://appassets.androidplatform.net/<folder>/, read by RNCWebViewClient.shouldInterceptRequest
++     * on WebView's network thread, hence volatile. Null: the host is left alone.
++     */
++    protected volatile @Nullable WebViewAssetLoader cacheAssetLoader;
++
++    public void setCacheAssetFolder(@Nullable String folder) {
++        // One plain folder name directly under the cache, never a path out of it.
++        if (folder == null || folder.isEmpty() || folder.contains("/") || folder.contains("\\") || folder.startsWith(".")) {
++            cacheAssetLoader = null;
++            return;
++        }
++        File directory = new File(getContext().getCacheDir(), folder);
++        cacheAssetLoader = new WebViewAssetLoader.Builder()
++            .addPathHandler("/" + folder + "/", new WebViewAssetLoader.InternalStoragePathHandler(getContext(), directory))
++            .build();
++    }
++
+     /**
+      * WebView must be created with an context of the current activity
+      * <p>
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 209b85525f0ceadae168b7575de00eafe4dba1d0..51e9a8019cc3a6498ba8779bdb2f3960a48a1acd 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -15,6 +15,7 @@ import android.webkit.WebViewClient;
+ 
+ import androidx.annotation.Nullable;
+ import androidx.core.util.Pair;
++import androidx.webkit.WebViewAssetLoader;
+ 
+ import com.facebook.common.logging.FLog;
+ import com.facebook.react.bridge.Arguments;
+@@ -32,6 +33,7 @@ import com.reactnativecommunity.webview.events.TopRenderProcessGoneEvent;
+ import com.reactnativecommunity.webview.events.TopShouldStartLoadWithRequestEvent;
+ import android.webkit.CookieManager;
+ 
++import java.io.ByteArrayInputStream;
+ import java.util.concurrent.atomic.AtomicReference;
+ 
+ public class RNCWebViewClient extends WebViewClient {
+@@ -46,6 +48,24 @@ public class RNCWebViewClient extends WebViewClient {
+         basicAuthCredential = credential;
+     }
+ 
++    /**
++     * Ghostex patch (androidCacheAssetFolder): a WebView with a cache asset folder gets that folder's
++     * files from https://appassets.androidplatform.net/<folder>/ and a 404 for every other URL on
++     * that host, so nothing for it ever reaches the network.
++     */
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        WebViewAssetLoader loader = view instanceof RNCWebView ? ((RNCWebView) view).cacheAssetLoader : null;
++        if (loader != null && request.getUrl() != null
++            && "appassets.androidplatform.net".equalsIgnoreCase(request.getUrl().getHost())) {
++            WebResourceResponse response = loader.shouldInterceptRequest(request.getUrl());
++            if (response != null) return response;
++            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null,
++                new ByteArrayInputStream(new byte[0]));
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
++
+     @Override
+     public void onPageFinished(WebView webView, String url) {
+         super.onPageFinished(webView, url);
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+index f83033b3597a425da159555233bacce250ccfce0..a4bc3398fbc87641b524592a70af20e53e34642f 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+@@ -552,6 +552,10 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+         view.settings.allowFileAccess = allowFileAccess;
+     }
+ 
++    fun setAndroidCacheAssetFolder(viewWrapper: RNCWebViewWrapper, folder: String?) {
++        viewWrapper.webView.setCacheAssetFolder(folder)
++    }
++
+     fun setAllowFileAccessFromFileURLs(viewWrapper: RNCWebViewWrapper, value: Boolean) {
+         val view = viewWrapper.webView
+         view.settings.allowFileAccessFromFileURLs = value;
+diff --git a/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java b/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+index fa8efb88e2b7c09afbfe473363cdb29af964563c..da5b5479b32bcc4ca614cdeaaed5505a714dff7f 100644
+--- a/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
++++ b/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+@@ -69,6 +69,12 @@ public class RNCWebViewManager extends ViewGroupManager<RNCWebViewWrapper>
+         mRNCWebViewManagerImpl.setAllowFileAccess(view, value);
+     }
+ 
++    @Override
++    @ReactProp(name = "androidCacheAssetFolder")
++    public void setAndroidCacheAssetFolder(RNCWebViewWrapper view, @Nullable String value) {
++        mRNCWebViewManagerImpl.setAndroidCacheAssetFolder(view, value);
++    }
++
+     @Override
+     @ReactProp(name = "allowFileAccessFromFileURLs")
+     public void setAllowFileAccessFromFileURLs(RNCWebViewWrapper view, boolean value) {
+diff --git a/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java b/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+index 974337f41ce01a5102eeafa6e54fbb3b949c48d7..092b5d16595089de62165f39781d129dd2909a7d 100644
+--- a/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
++++ b/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+@@ -51,6 +51,11 @@ public class RNCWebViewManager extends ViewGroupManager<RNCWebViewWrapper> {
+         mRNCWebViewManagerImpl.setAllowFileAccess(view, value);
+     }
+ 
++    @ReactProp(name = "androidCacheAssetFolder")
++    public void setAndroidCacheAssetFolder(RNCWebViewWrapper view, @Nullable String value) {
++        mRNCWebViewManagerImpl.setAndroidCacheAssetFolder(view, value);
++    }
++
+     @ReactProp(name = "allowFileAccessFromFileURLs")
+     public void setAllowFileAccessFromFileURLs(RNCWebViewWrapper view, boolean value) {
+         mRNCWebViewManagerImpl.setAllowFileAccessFromFileURLs(view, value);
+diff --git a/lib/RNCWebViewNativeComponent.d.ts b/lib/RNCWebViewNativeComponent.d.ts
+index 6b789f988382b14e4c615d2289fb77a424270430..7e5bd2d4f3f42c6121e878913a24ebcdb83c352e 100644
+--- a/lib/RNCWebViewNativeComponent.d.ts
++++ b/lib/RNCWebViewNativeComponent.d.ts
+@@ -114,6 +114,7 @@ type WebViewDownloadEvent = Readonly<{
+ }>;
+ export interface NativeProps extends ViewProps {
+     allowFileAccess?: boolean;
++    androidCacheAssetFolder?: string;
+     allowsProtectedMedia?: boolean;
+     allowsFullscreenVideo?: boolean;
+     androidLayerType?: WithDefault<'none' | 'software' | 'hardware', 'none'>;
+diff --git a/lib/RNCWebViewNativeComponent.js b/lib/RNCWebViewNativeComponent.js
+index 826121014cd6831b7088d26d4e6aa330f4076c95..055872aa8a9b1b979747a4054ec0b9e3402a82a0 100644
+--- a/lib/RNCWebViewNativeComponent.js
++++ b/lib/RNCWebViewNativeComponent.js
+@@ -1 +1 @@
+-var _interopRequireDefault=require("@babel/runtime/helpers/interopRequireDefault");Object.defineProperty(exports,"__esModule",{value:true});exports.default=exports.__INTERNAL_VIEW_CONFIG=exports.Commands=void 0;var _codegenNativeComponent=_interopRequireDefault(require("react-native/Libraries/Utilities/codegenNativeComponent"));var _codegenNativeCommands=_interopRequireDefault(require("react-native/Libraries/Utilities/codegenNativeCommands"));var NativeComponentRegistry=require('react-native/Libraries/NativeComponent/NativeComponentRegistry');var _require=require('react-native/Libraries/NativeComponent/ViewConfigIgnore'),ConditionallyIgnoredEventHandlers=_require.ConditionallyIgnoredEventHandlers;var _require2=require("react-native/Libraries/ReactNative/RendererProxy"),dispatchCommand=_require2.dispatchCommand;var nativeComponentName='RNCWebView';var __INTERNAL_VIEW_CONFIG=exports.__INTERNAL_VIEW_CONFIG={uiViewClassName:'RNCWebView',directEventTypes:{topContentSizeChange:{registrationName:'onContentSizeChange'},topRenderProcessGone:{registrationName:'onRenderProcessGone'},topContentProcessDidTerminate:{registrationName:'onContentProcessDidTerminate'},topCustomMenuSelection:{registrationName:'onCustomMenuSelection'},topFileDownload:{registrationName:'onFileDownload'},topLoadingError:{registrationName:'onLoadingError'},topLoadingSubResourceError:{registrationName:'onLoadingSubResourceError'},topLoadingFinish:{registrationName:'onLoadingFinish'},topLoadingProgress:{registrationName:'onLoadingProgress'},topLoadingStart:{registrationName:'onLoadingStart'},topHttpError:{registrationName:'onHttpError'},topMessage:{registrationName:'onMessage'},topOpenWindow:{registrationName:'onOpenWindow'},topScroll:{registrationName:'onScroll'},topShouldStartLoadWithRequest:{registrationName:'onShouldStartLoadWithRequest'}},validAttributes:Object.assign({allowFileAccess:true,allowsProtectedMedia:true,allowsFullscreenVideo:true,androidLayerType:true,cacheMode:true,domStorageEnabled:true,downloadingMessage:true,forceDarkOn:true,geolocationEnabled:true,lackPermissionToDownloadMessage:true,messagingModuleName:true,minimumFontSize:true,mixedContentMode:true,nestedScrollEnabled:true,overScrollMode:true,saveFormDataDisabled:true,scalesPageToFit:true,setBuiltInZoomControls:true,setDisplayZoomControls:true,setSupportMultipleWindows:true,textZoom:true,thirdPartyCookiesEnabled:true,hasOnScroll:true,allowingReadAccessToURL:true,allowsBackForwardNavigationGestures:true,allowsInlineMediaPlayback:true,allowsPictureInPictureMediaPlayback:true,allowsAirPlayForMediaPlayback:true,allowsLinkPreview:true,automaticallyAdjustContentInsets:true,autoManageStatusBarEnabled:true,bounces:true,contentInset:true,contentInsetAdjustmentBehavior:true,contentMode:true,dataDetectorTypes:true,decelerationRate:true,directionalLockEnabled:true,enableApplePay:true,hideKeyboardAccessoryView:true,keyboardDisplayRequiresUserAction:true,limitsNavigationsToAppBoundDomains:true,mediaCapturePermissionGrantType:true,pagingEnabled:true,pullToRefreshEnabled:true,refreshControlLightMode:true,removeIosKeyboardObserver:true,scrollEnabled:true,sharedCookiesEnabled:true,textInteractionEnabled:true,useSharedProcessPool:true,menuItems:true,suppressMenuItems:true,hasOnFileDownload:true,fraudulentWebsiteWarningEnabled:true,allowFileAccessFromFileURLs:true,allowUniversalAccessFromFileURLs:true,applicationNameForUserAgent:true,basicAuthCredential:true,cacheEnabled:true,incognito:true,injectedJavaScript:true,injectedJavaScriptBeforeContentLoaded:true,injectedJavaScriptForMainFrameOnly:true,injectedJavaScriptBeforeContentLoadedForMainFrameOnly:true,javaScriptCanOpenWindowsAutomatically:true,javaScriptEnabled:true,webviewDebuggingEnabled:true,mediaPlaybackRequiresUserAction:true,messagingEnabled:true,hasOnOpenWindowEvent:true,showsHorizontalScrollIndicator:true,showsVerticalScrollIndicator:true,indicatorStyle:true,newSource:true,userAgent:true,injectedJavaScriptObject:true,paymentRequestEnabled:true},ConditionallyIgnoredEventHandlers({onContentSizeChange:true,onRenderProcessGone:true,onContentProcessDidTerminate:true,onCustomMenuSelection:true,onFileDownload:true,onLoadingError:true,onLoadingSubResourceError:true,onLoadingFinish:true,onLoadingProgress:true,onLoadingStart:true,onHttpError:true,onMessage:true,onOpenWindow:true,onScroll:true,onShouldStartLoadWithRequest:true}))};var _default=exports.default=NativeComponentRegistry.get(nativeComponentName,function(){return __INTERNAL_VIEW_CONFIG;});var Commands=exports.Commands={goBack:function goBack(ref){dispatchCommand(ref,"goBack",[]);},goForward:function goForward(ref){dispatchCommand(ref,"goForward",[]);},reload:function reload(ref){dispatchCommand(ref,"reload",[]);},stopLoading:function stopLoading(ref){dispatchCommand(ref,"stopLoading",[]);},injectJavaScript:function injectJavaScript(ref,javascript){dispatchCommand(ref,"injectJavaScript",[javascript]);},requestFocus:function requestFocus(ref){dispatchCommand(ref,"requestFocus",[]);},postMessage:function postMessage(ref,data){dispatchCommand(ref,"postMessage",[data]);},loadUrl:function loadUrl(ref,url){dispatchCommand(ref,"loadUrl",[url]);},clearFormData:function clearFormData(ref){dispatchCommand(ref,"clearFormData",[]);},clearCache:function clearCache(ref,includeDiskFiles){dispatchCommand(ref,"clearCache",[includeDiskFiles]);},clearHistory:function clearHistory(ref){dispatchCommand(ref,"clearHistory",[]);}};
+\ No newline at end of file
++var _interopRequireDefault=require("@babel/runtime/helpers/interopRequireDefault");Object.defineProperty(exports,"__esModule",{value:true});exports.default=exports.__INTERNAL_VIEW_CONFIG=exports.Commands=void 0;var _codegenNativeComponent=_interopRequireDefault(require("react-native/Libraries/Utilities/codegenNativeComponent"));var _codegenNativeCommands=_interopRequireDefault(require("react-native/Libraries/Utilities/codegenNativeCommands"));var NativeComponentRegistry=require('react-native/Libraries/NativeComponent/NativeComponentRegistry');var _require=require('react-native/Libraries/NativeComponent/ViewConfigIgnore'),ConditionallyIgnoredEventHandlers=_require.ConditionallyIgnoredEventHandlers;var _require2=require("react-native/Libraries/ReactNative/RendererProxy"),dispatchCommand=_require2.dispatchCommand;var nativeComponentName='RNCWebView';var __INTERNAL_VIEW_CONFIG=exports.__INTERNAL_VIEW_CONFIG={uiViewClassName:'RNCWebView',directEventTypes:{topContentSizeChange:{registrationName:'onContentSizeChange'},topRenderProcessGone:{registrationName:'onRenderProcessGone'},topContentProcessDidTerminate:{registrationName:'onContentProcessDidTerminate'},topCustomMenuSelection:{registrationName:'onCustomMenuSelection'},topFileDownload:{registrationName:'onFileDownload'},topLoadingError:{registrationName:'onLoadingError'},topLoadingSubResourceError:{registrationName:'onLoadingSubResourceError'},topLoadingFinish:{registrationName:'onLoadingFinish'},topLoadingProgress:{registrationName:'onLoadingProgress'},topLoadingStart:{registrationName:'onLoadingStart'},topHttpError:{registrationName:'onHttpError'},topMessage:{registrationName:'onMessage'},topOpenWindow:{registrationName:'onOpenWindow'},topScroll:{registrationName:'onScroll'},topShouldStartLoadWithRequest:{registrationName:'onShouldStartLoadWithRequest'}},validAttributes:Object.assign({allowFileAccess:true,androidCacheAssetFolder:true,allowsProtectedMedia:true,allowsFullscreenVideo:true,androidLayerType:true,cacheMode:true,domStorageEnabled:true,downloadingMessage:true,forceDarkOn:true,geolocationEnabled:true,lackPermissionToDownloadMessage:true,messagingModuleName:true,minimumFontSize:true,mixedContentMode:true,nestedScrollEnabled:true,overScrollMode:true,saveFormDataDisabled:true,scalesPageToFit:true,setBuiltInZoomControls:true,setDisplayZoomControls:true,setSupportMultipleWindows:true,textZoom:true,thirdPartyCookiesEnabled:true,hasOnScroll:true,allowingReadAccessToURL:true,allowsBackForwardNavigationGestures:true,allowsInlineMediaPlayback:true,allowsPictureInPictureMediaPlayback:true,allowsAirPlayForMediaPlayback:true,allowsLinkPreview:true,automaticallyAdjustContentInsets:true,autoManageStatusBarEnabled:true,bounces:true,contentInset:true,contentInsetAdjustmentBehavior:true,contentMode:true,dataDetectorTypes:true,decelerationRate:true,directionalLockEnabled:true,enableApplePay:true,hideKeyboardAccessoryView:true,keyboardDisplayRequiresUserAction:true,limitsNavigationsToAppBoundDomains:true,mediaCapturePermissionGrantType:true,pagingEnabled:true,pullToRefreshEnabled:true,refreshControlLightMode:true,removeIosKeyboardObserver:true,scrollEnabled:true,sharedCookiesEnabled:true,textInteractionEnabled:true,useSharedProcessPool:true,menuItems:true,suppressMenuItems:true,hasOnFileDownload:true,fraudulentWebsiteWarningEnabled:true,allowFileAccessFromFileURLs:true,allowUniversalAccessFromFileURLs:true,applicationNameForUserAgent:true,basicAuthCredential:true,cacheEnabled:true,incognito:true,injectedJavaScript:true,injectedJavaScriptBeforeContentLoaded:true,injectedJavaScriptForMainFrameOnly:true,injectedJavaScriptBeforeContentLoadedForMainFrameOnly:true,javaScriptCanOpenWindowsAutomatically:true,javaScriptEnabled:true,webviewDebuggingEnabled:true,mediaPlaybackRequiresUserAction:true,messagingEnabled:true,hasOnOpenWindowEvent:true,showsHorizontalScrollIndicator:true,showsVerticalScrollIndicator:true,indicatorStyle:true,newSource:true,userAgent:true,injectedJavaScriptObject:true,paymentRequestEnabled:true},ConditionallyIgnoredEventHandlers({onContentSizeChange:true,onRenderProcessGone:true,onContentProcessDidTerminate:true,onCustomMenuSelection:true,onFileDownload:true,onLoadingError:true,onLoadingSubResourceError:true,onLoadingFinish:true,onLoadingProgress:true,onLoadingStart:true,onHttpError:true,onMessage:true,onOpenWindow:true,onScroll:true,onShouldStartLoadWithRequest:true}))};var _default=exports.default=NativeComponentRegistry.get(nativeComponentName,function(){return __INTERNAL_VIEW_CONFIG;});var Commands=exports.Commands={goBack:function goBack(ref){dispatchCommand(ref,"goBack",[]);},goForward:function goForward(ref){dispatchCommand(ref,"goForward",[]);},reload:function reload(ref){dispatchCommand(ref,"reload",[]);},stopLoading:function stopLoading(ref){dispatchCommand(ref,"stopLoading",[]);},injectJavaScript:function injectJavaScript(ref,javascript){dispatchCommand(ref,"injectJavaScript",[javascript]);},requestFocus:function requestFocus(ref){dispatchCommand(ref,"requestFocus",[]);},postMessage:function postMessage(ref,data){dispatchCommand(ref,"postMessage",[data]);},loadUrl:function loadUrl(ref,url){dispatchCommand(ref,"loadUrl",[url]);},clearFormData:function clearFormData(ref){dispatchCommand(ref,"clearFormData",[]);},clearCache:function clearCache(ref,includeDiskFiles){dispatchCommand(ref,"clearCache",[includeDiskFiles]);},clearHistory:function clearHistory(ref){dispatchCommand(ref,"clearHistory",[]);}};
+\ No newline at end of file
+diff --git a/lib/WebViewTypes.d.ts b/lib/WebViewTypes.d.ts
+index f666e8142adcf0e976d60024065291fb291ec012..a68e523883684e58c407937b1f1a1e3689d7f4dd 100644
+--- a/lib/WebViewTypes.d.ts
++++ b/lib/WebViewTypes.d.ts
+@@ -846,6 +846,14 @@ export interface AndroidWebViewProps extends WebViewSharedProps {
+      * @platform android
+      */
+     allowFileAccess?: boolean;
++    /**
++     * Ghostex patch: serves the files in this folder of the app's cache directory at
++     * `https://appassets.androidplatform.net/<folder>/` through androidx.webkit's
++     * WebViewAssetLoader, so a page can load its sibling files with file access turned off.
++     * Every other URL on that host answers 404 and never reaches the network.
++     * @platform android
++     */
++    androidCacheAssetFolder?: string;
+     /**
+      * Used on Android only, controls whether form autocomplete data should be saved
+      * @platform android
+diff --git a/src/RNCWebViewNativeComponent.ts b/src/RNCWebViewNativeComponent.ts
+index ca3af151a378c516266ae965a44898920e831172..c073f394718a82fc9a13cbd2949f2d60d3841b5f 100644
+--- a/src/RNCWebViewNativeComponent.ts
++++ b/src/RNCWebViewNativeComponent.ts
+@@ -133,6 +133,7 @@ type WebViewDownloadEvent = Readonly<{
+ export interface NativeProps extends ViewProps {
+   // Android only
+   allowFileAccess?: boolean;
++  androidCacheAssetFolder?: string;
+   allowsProtectedMedia?: boolean;
+   allowsFullscreenVideo?: boolean;
+   androidLayerType?: WithDefault<'none' | 'software' | 'hardware', 'none'>;
+diff --git a/src/WebViewTypes.ts b/src/WebViewTypes.ts
+index 4e7247f82e2bc418b495196132add7b416780a08..322a891de120f6cfea9a712355fc0d60254c04c5 100644
+--- a/src/WebViewTypes.ts
++++ b/src/WebViewTypes.ts
+@@ -1026,6 +1026,15 @@ export interface AndroidWebViewProps extends WebViewSharedProps {
+    */
+   allowFileAccess?: boolean;
+ 
++  /**
++   * Ghostex patch: serves the files in this folder of the app's cache directory at
++   * `https://appassets.androidplatform.net/<folder>/` through androidx.webkit's
++   * WebViewAssetLoader, so a page can load its sibling files with file access turned off.
++   * Every other URL on that host answers 404 and never reaches the network.
++   * @platform android
++   */
++  androidCacheAssetFolder?: string;
++
+   /**
+    * Used on Android only, controls whether form autocomplete data should be saved
+    * @platform android

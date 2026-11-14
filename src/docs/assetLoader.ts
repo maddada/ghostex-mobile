@@ -45,9 +45,10 @@ export function assetLoaderInjectionScript(): string {
   return `(function () {
   if (window.__GHOSTEX_DOCS_ASSETS__) return;
   // What the viewer can place: a mirror file, any other file path, a Windows path (read as a
-  // one-letter scheme), and the loopback addresses that name the computer.
+  // one-letter scheme), and the loopback addresses that name the computer. On Android the mirror
+  // and a path the page wrote (\`/Users/…\`) load from the Docs loader's origin (DOCS_LOADER_ORIGIN).
   // Backslashes are doubled: this is a template literal, which would drop a single one.
-  var computerUrl = /^(?:file:|[a-z]:\\/|https?:\\/\\/(?:[^\\/?#@]*@)?(?:localhost|[^\\/?#:]+\\.localhost|127(?:\\.\\d{1,3}){3}|0\\.0\\.0\\.0|\\[::1\\]|\\[::ffff:(?:127\\.0\\.0\\.1|7f00:1)\\])(?::\\d+)?(?:[\\/?#]|$))/i;
+  var computerUrl = /^(?:file:|https:\\/\\/appassets\\.androidplatform\\.net\\/|[a-z]:\\/|https?:\\/\\/(?:[^\\/?#@]*@)?(?:localhost|[^\\/?#:]+\\.localhost|127(?:\\.\\d{1,3}){3}|0\\.0\\.0\\.0|\\[::1\\]|\\[::ffff:(?:127\\.0\\.0\\.1|7f00:1)\\])(?::\\d+)?(?:[\\/?#]|$))/i;
   var waiting = {};
   // URLs the viewer answered with: a phone-side forward is on the phone, never asked about again.
   var produced = {};

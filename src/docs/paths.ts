@@ -257,11 +257,42 @@ export function remotePathFromMirrorSegments(segments: readonly string[]): strin
 export const MIRROR_FOLDER = 'ghostex-docs-view';
 
 /**
+ * Where Android's Docs viewer loads the mirror from: the WebView answers this origin's
+ * `/ghostex-docs-view/…` from the mirror folder itself (`androidCacheAssetFolder`, the app's
+ * react-native-webview patch) and 404s the rest of it, so the page runs with file access off.
+ *
+ * CDXC:Docs 2026-11-14 WHY:
+ * Android has no `allowingReadAccessToURL` to keep a `file://` page to its own folder (P5 in the
+ * 2026-11-14 note in page.ts). Served from this https origin with file access off, the page loads
+ * from the mirror folder only and its sibling `fetch`es (`data.json`) still work. iOS keeps
+ * `file://` with read access limited to the page's folder.
+ */
+export const DOCS_LOADER_ORIGIN = 'https://appassets.androidplatform.net';
+
+/** A mirror file's `file://` URI as Android's Docs viewer loads it, under {@link DOCS_LOADER_ORIGIN}. */
+export function docsLoaderUrl(fileUri: string): string {
+  const marker = `/${MIRROR_FOLDER}/`;
+  const at = fileUri.indexOf(marker);
+  return fileUri.startsWith('file://') && at >= 0 ? `${DOCS_LOADER_ORIGIN}${fileUri.slice(at)}` : fileUri;
+}
+
+/**
+ * A URL under {@link DOCS_LOADER_ORIGIN} as the `file://` URL it stands for, so the mirror and the
+ * computer paths a page names read the same on both platforms (`/Users/…` in a page resolves to
+ * `https://appassets.androidplatform.net/Users/…`); any other URL as given.
+ */
+export function fileUrlForDocsLoaderUrl(url: string): string {
+  const prefix = `${DOCS_LOADER_ORIGIN}/`;
+  return url.slice(0, prefix.length).toLowerCase() === prefix ? `file:///${url.slice(prefix.length)}` : url;
+}
+
+/**
  * The remote path a URL inside the mirror stands for, or null for any other URL. Matched on the
  * mirror folder's name rather than the full root, because WebKit may report `/private/var/…` for a
  * page loaded as `/var/…`.
  */
-export function remotePathForMirrorUrl(url: string): { remotePath: string; fragment: string } | null {
+export function remotePathForMirrorUrl(rawUrl: string): { remotePath: string; fragment: string } | null {
+  const url = fileUrlForDocsLoaderUrl(rawUrl);
   if (!url.startsWith('file://')) return null;
   const hashIndex = url.indexOf('#');
   const fragment = hashIndex >= 0 ? url.slice(hashIndex + 1) : '';
