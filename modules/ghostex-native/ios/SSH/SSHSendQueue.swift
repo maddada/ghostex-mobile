@@ -202,11 +202,26 @@ final class SSHSendQueue: @unchecked Sendable {
     }
 }
 
-/// libssh2's session abstract: the keyboard-interactive password and the send queue, reached from C callbacks.
+/// libssh2's session abstract: the keyboard-interactive password, the send queue and the bytes received, reached
+/// from C callbacks.
 final class SSHSessionContext: @unchecked Sendable {
     let sendQueue = SSHSendQueue()
     private nonisolated(unsafe) var _password: String?
+    private nonisolated(unsafe) var _inboundBytes: Int = 0
     private let lock = NSLock()
+
+    /// Every byte libssh2 has read from the socket (`sshCountingRecvCallback`).
+    nonisolated var inboundBytes: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _inboundBytes
+    }
+
+    nonisolated func noteInbound(_ count: Int) {
+        lock.lock()
+        _inboundBytes += count
+        lock.unlock()
+    }
 
     nonisolated init() {}
 
@@ -238,4 +253,21 @@ nonisolated(unsafe) let sshQueuedSendCallback: @convention(c) (
 ) -> Int = { socket, buffer, length, _, abstract in
     guard let context = SSHSessionContext.from(abstract) else { return -Int(EPIPE) }
     return context.sendQueue.accept(socket: socket, bytes: buffer, length: length)
+}
+
+/// `LIBSSH2_CALLBACK_RECV`: libssh2's own receive, plus a count of what arrived (the liveness check's evidence).
+nonisolated(unsafe) let sshCountingRecvCallback: @convention(c) (
+    libssh2_socket_t,
+    UnsafeMutableRawPointer?,
+    Int,
+    Int32,
+    UnsafeMutablePointer<UnsafeMutableRawPointer?>?
+) -> Int = { socket, buffer, length, flags, abstract in
+    let received = Darwin.recv(socket, buffer, length, flags)
+    if received < 0 {
+        let error = errno
+        return -Int(error == EWOULDBLOCK ? EAGAIN : error)
+    }
+    if received > 0 { SSHSessionContext.from(abstract)?.noteInbound(received) }
+    return received
 }

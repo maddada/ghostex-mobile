@@ -278,6 +278,10 @@ actor SSHConnection {
     private var transportDead = false
     private var ioTask: Task<Void, Never>?
     private var livenessTask: Task<Void, Never>?
+    /// The liveness check's view of the computer: the last time a byte arrived, and its unanswered keep-alive.
+    private var lastInboundAt = Date()
+    private var lastInboundEvidence = 0
+    private var keepAliveSentAt: Date?
     private var execRequests: [UUID: ExecRequest] = [:]
     /// Commands whose output ended and whose result waits for the computer's CLOSE (exit status comes before it).
     private var closingExecRequests: [UUID: ExecRequest] = [:]
@@ -298,6 +302,13 @@ actor SSHConnection {
      */
     var closingChannels: [ClosingChannel] = []
 
+    /// Opens whose caller stopped waiting; they keep the channel-open claim until libssh2 settles them
+    /// (SSHChannelOpens.swift).
+    var abandonedOpens: [AbandonedChannelOpen] = []
+
+    /// Bumped when the session is freed: an operation that suspended checks it before touching its pointers again.
+    private(set) var sessionGeneration = 0
+
     /**
      * Bumped by every teardown. `startPortForward` suspends twice (the probe and
      * the listener), and a stop or a disconnect that lands in between must not
@@ -311,7 +322,7 @@ actor SSHConnection {
      * token first and holds it until its open finishes — including across the EAGAIN
      * retries a non-blocking open needs.
      */
-    private var channelOpenClaim: UUID?
+    private(set) var channelOpenClaim: UUID?
 
     let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "app.ghostex.mobile",
@@ -553,10 +564,10 @@ actor SSHConnection {
         #endif
 
         /*
-         * CDXC:RemoteMachines 2026-11-13 WHY: a dead link is found by TCP keep-alives (first probe after the
-         * configured idle time, 30 s by default, then every 10 s, 3 unanswered = dead, about a minute in all).
-         * libssh2's keep-alive never read its replies, so it detected nothing, and it was one of the sends that left
-         * a packet half sent.
+         * CDXC:RemoteMachines 2026-11-13 WHY: TCP keep-alives find a dead direct link (first probe after the
+         * configured idle time, 30 s by default, then every 10 s, 3 unanswered = dead). They see only the first hop,
+         * so an Easy Connect tunnel (a loopback socket here) or unacknowledged data needs the SSH-level check in
+         * `checkLiveness` too.
          */
         if config.keepAliveEnabled {
             var on: Int32 = 1
@@ -587,6 +598,9 @@ actor SSHConnection {
         sendQueue.attach(socket: socket, blockingTimeout: config.connectionTimeout)
         _ = libssh2_session_callback_set(
             session, LIBSSH2_CALLBACK_SEND, unsafeBitCast(sshQueuedSendCallback, to: UnsafeMutableRawPointer.self)
+        )
+        _ = libssh2_session_callback_set(
+            session, LIBSSH2_CALLBACK_RECV, unsafeBitCast(sshCountingRecvCallback, to: UnsafeMutableRawPointer.self)
         )
 
         // Prefer fast ciphers - AES-GCM and ChaCha20 are hardware-accelerated on Apple Silicon
@@ -665,6 +679,10 @@ actor SSHConnection {
 
         // Set non-blocking for I/O
         setSessionBlocking(session, false)
+        // Sent only by the liveness check, after a silence, through the send queue (`checkLiveness`).
+        if config.keepAliveEnabled {
+            libssh2_keepalive_config(session, 1, UInt32(keepAliveIntervalSeconds))
+        }
 
         isActive = true
         transportDead = false
@@ -675,6 +693,8 @@ actor SSHConnection {
     #if GHOSTEX_SSH_HARNESS
     /// Harness only: puts the old 8 KB send-buffer cap back to prove the queue does not depend on it.
     nonisolated(unsafe) static var harnessSendBufferCap: Int32 = 0
+    /// Harness only: a shorter bound on a forward's channel open.
+    nonisolated(unsafe) static var harnessDirectOpenTimeout: TimeInterval = 0
     #endif
 
     /// libssh2's blocking mode, mirrored to the send queue, which drains itself in blocking sections.
@@ -773,12 +793,14 @@ actor SSHConnection {
 
         if let keyString = config.credentials.privateKey, !keyString.isEmpty {
             // Public key auth from in-memory key material
-            let keyData = Data(keyString.utf8)
+            // NUL-terminated: libssh2's key parsing reads past the given length looking for one (AddressSanitizer
+            // caught a heap over-read in sign_frommemory with the unterminated buffer).
+            let keyBytes = keyString.utf8CString
             let passphrase = config.credentials.passphrase
             logger.info("Attempting publickey auth for user: \(username)")
 
-            authResult = keyData.withUnsafeBytes { rawBuffer -> Int32 in
-                guard let baseAddress = rawBuffer.bindMemory(to: CChar.self).baseAddress else {
+            authResult = keyBytes.withUnsafeBufferPointer { buffer -> Int32 in
+                guard let baseAddress = buffer.baseAddress else {
                     return LIBSSH2_ERROR_ALLOC
                 }
 
@@ -789,7 +811,7 @@ actor SSHConnection {
                     nil,
                     0,
                     baseAddress,
-                    Int(keyData.count),
+                    keyBytes.count - 1,
                     passphrase
                 )
             }
@@ -931,6 +953,7 @@ actor SSHConnection {
         // libssh2_session_free below frees whatever channels the session still
         // owns, so a close that never finished draining is released with it.
         closingChannels.removeAll()
+        abandonedOpens.removeAll()
         channelOpenClaim = nil
         // The socket is closed already (`detach` above): what is still queued can never be sent.
         sendQueue.detach("the connection was closed")
@@ -939,6 +962,7 @@ actor SSHConnection {
             libssh2_session_disconnect_ex(session, 11, "Normal shutdown", "")
             libssh2_session_free(session)
             libssh2Session = nil
+            sessionGeneration += 1
         }
     }
 
@@ -958,7 +982,8 @@ actor SSHConnection {
         terminalType: String = "xterm-256color",
         startupCommand: String? = nil
     ) async throws -> ShellHandle {
-        guard let session = libssh2Session else {
+        let generation = sessionGeneration
+        guard libssh2Session != nil else {
             throw SSHError.notConnected
         }
 
@@ -967,6 +992,8 @@ actor SSHConnection {
         // here, and so the io loop never runs while the session is blocking.
         let opener = try await awaitChannelOpenClaim(timeout: config.connectionTimeout)
         defer { releaseChannelOpen(opener) }
+        // The wait for the claim can outlive the session (a disconnect frees it).
+        let session = try liveSession(since: generation)
 
         // Set blocking for channel setup. The send queue drains itself while blocking, earlier bytes first
         // (forward data queued before this), so libssh2's wait for each reply never waits on unsent bytes.
@@ -1198,13 +1225,16 @@ actor SSHConnection {
             if pumpPortForwardChannels() {
                 didWork = true
             }
+            if driveAbandonedOpens() {
+                didWork = true
+            }
 
             noteSendQueueFailure()
 
             // Channels still being closed keep the loop alive: nothing else
             // drives their EAGAIN retries. So do queued bytes.
             if shellChannels.isEmpty, execRequests.isEmpty, forwardChannels.isEmpty,
-                closingChannels.isEmpty, sendQueue.pendingBytes == 0 {
+                closingChannels.isEmpty, abandonedOpens.isEmpty, sendQueue.pendingBytes == 0 {
                 break
             }
 
@@ -1281,15 +1311,7 @@ actor SSHConnection {
         if request.channel == nil {
             // Another opener owns the session's channel-open state; retry on a later pass.
             guard claimChannelOpen(request.id) else { return false }
-            let newChannel = libssh2_channel_open_ex(
-                session,
-                "session",
-                UInt32("session".utf8.count),
-                2 * 1024 * 1024,
-                32768,
-                nil,
-                0
-            )
+            let newChannel = Self.openSessionChannel(session)
             if let newChannel = newChannel {
                 request.channel = newChannel
                 releaseChannelOpen(request.id)
@@ -1393,8 +1415,15 @@ actor SSHConnection {
      */
     private func finishExecRequest(_ requestId: UUID, error: Error?) {
         guard let request = execRequests.removeValue(forKey: requestId) else { return }
-        // A request abandoned mid-open (timeout, cancellation) must not strand the claim.
-        releaseChannelOpen(requestId)
+        if request.channel == nil, channelOpenClaim == requestId {
+            // Its open is still in flight on the session: it is finished without running the command, and keeps the
+            // claim and the slot until then (SSHChannelOpens.swift).
+            abandonOpen(AbandonedChannelOpen(owner: requestId, holdsCommandSlot: true, what: "a command") { session in
+                Self.openSessionChannel(session)
+            })
+        } else {
+            releaseChannelOpen(requestId)
+        }
         let channel = request.channel
         request.channel = nil
 
@@ -1448,6 +1477,11 @@ actor SSHConnection {
         return numbers[signal].map { 128 + $0 } ?? 255
     }
 
+    /// A command channel's open, the same call every time (an abandoned one is resumed with it).
+    static func openSessionChannel(_ session: OpaquePointer) -> OpaquePointer? {
+        libssh2_channel_open_ex(session, "session", UInt32("session".utf8.count), 2 * 1024 * 1024, 32768, nil, 0)
+    }
+
     static func lastErrorText(_ session: OpaquePointer) -> String {
         var message: UnsafeMutablePointer<CChar>?
         var length: Int32 = 0
@@ -1479,6 +1513,10 @@ actor SSHConnection {
         // long enough to avoid busy spinning
         _ = poll(&pfd, 1, 5)
         flushSendQueue()
+        // A real suspension point: a terminal write waiting on a full window, or an upload, used to loop here without
+        // ever giving the actor up, so every other terminal, command and the io loop waited behind it. Callers check
+        // their session and channel again after this (`liveSession`, `write`).
+        await Task.yield()
     }
 
     /// Hands queued bytes to the socket now; true when it moved some. A queue that failed ends the transport.
@@ -1509,10 +1547,12 @@ actor SSHConnection {
 
         defer { kickSendQueue() }
         while remaining > 0 {
+            // Every wait below can end the transport (`waitForSocket` flushes the queue, whose failure retires and
+            // frees this terminal's channel) or let a disconnect run: the channel is checked before each use.
+            guard isConnected, let live = shellChannels[shellId], live === state else { throw SSHError.notConnected }
             // The send queue is full: wait for the socket to take some (SSHSendQueue.swift).
             if sendQueue.pendingBytes > SSHSendQueue.backpressureBytes {
                 await waitForSocket()
-                guard isConnected, shellChannels[shellId] != nil else { throw SSHError.notConnected }
                 continue
             }
             // stream_id 0 = stdin
@@ -1608,6 +1648,7 @@ actor SSHConnection {
 
     private var commandSlotsInUse: Int {
         execRequests.count + closingChannels.filter(\.holdsCommandSlot).count
+            + abandonedOpens.filter(\.holdsCommandSlot).count
     }
 
     private func awaitCommandSlot(admission: TimeInterval) async throws {
@@ -1669,6 +1710,7 @@ actor SSHConnection {
      * flushes bytes the queue still holds, and ends the transport when the socket reports an error or a close.
      */
     private func startLivenessLoop() {
+        lastInboundAt = Date()
         guard livenessTask == nil else { return }
         livenessTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -1684,15 +1726,58 @@ actor SSHConnection {
         livenessTask = nil
     }
 
-    /// False once the transport is gone, which ends the loop.
-    func checkLiveness() -> Bool {
-        guard isActive, !transportDead, socket >= 0 else { return false }
+    /**
+     * CDXC:RemoteMachines 2026-11-14 WHY:
+     * False once the transport is gone, which ends the loop. Besides the socket's own error, the computer has to be
+     * heard from: after `keepAliveIntervalSeconds` with no byte from it (libssh2's reads, counted by the receive
+     * callback, or bytes waiting unread on an idle socket), one SSH keep-alive that wants a reply goes out through the
+     * send queue, and if nothing arrives within another interval the transport is dead (about a minute by default).
+     * A loopback socket (an Easy Connect tunnel) or data the computer never acknowledges keeps TCP's own checks quiet
+     * forever. Sent through the queue, the keep-alive can no longer leave a packet half sent (SSHSendQueue.swift).
+     */
+    func checkLiveness(now: Date = Date()) -> Bool {
+        guard isActive, !transportDead, socket >= 0, let session = libssh2Session else { return false }
         kickSendQueue()
         if let problem = Self.socketProblem(socket) {
             markTransportDead(problem)
             return false
         }
+        guard config.keepAliveEnabled else { return !transportDead }
+        let waiting = Self.bytesWaiting(socket)
+        let evidence = sessionContext.inboundBytes + waiting
+        if evidence != lastInboundEvidence {
+            lastInboundEvidence = evidence
+            lastInboundAt = now
+            keepAliveSentAt = nil
+        }
+        let interval = TimeInterval(keepAliveIntervalSeconds)
+        if let sent = keepAliveSentAt {
+            if now.timeIntervalSince(sent) >= interval {
+                markTransportDead("no answer from the computer for \(Int(now.timeIntervalSince(lastInboundAt))) s")
+                return false
+            }
+        } else if now.timeIntervalSince(lastInboundAt) >= interval, waiting < Self.unreadEvidenceCap {
+            var secondsToNext: Int32 = 0
+            let result = libssh2_keepalive_send(session, &secondsToNext)
+            if result != 0 {
+                noteTransportError(Int(result))
+                return false
+            }
+            keepAliveSentAt = now
+            kickSendQueue()
+        }
         return !transportDead
+    }
+
+    /// Unread bytes past this mean the computer keeps sending to an idle connection: no keep-alive is needed.
+    private static let unreadEvidenceCap = 16 * 1024
+
+    /// Bytes the computer sent that nobody has read yet (an idle connection's io loop is not running).
+    /// Peeked, not read (Swift has no `ioctl`), and counted up to `unreadEvidenceCap`.
+    static func bytesWaiting(_ socket: Int32) -> Int {
+        var buffer = [UInt8](repeating: 0, count: unreadEvidenceCap)
+        let peeked = recv(socket, &buffer, buffer.count, MSG_PEEK | MSG_DONTWAIT)
+        return max(0, peeked)
     }
 
     /// An error or end-of-stream waiting on the socket, without consuming any byte.
@@ -1713,315 +1798,5 @@ actor SSHConnection {
             return "socket error: \(String(cString: strerror(errno)))"
         }
         return nil
-    }
-
-    // MARK: - Upload
-
-    /// Quote a path for POSIX shells (used by the exec-fallback upload).
-    static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
-    }
-
-    func upload(
-        _ data: Data,
-        to remotePath: String,
-        permissions: Int32 = 0o600,
-        strategy: SSHUploadStrategy = .automatic
-    ) async throws {
-        if strategy == .execPreferred {
-            logger.info("Using exec-preferred upload strategy [path: \(remotePath, privacy: .public)]")
-            try await uploadViaExec(data, to: remotePath)
-            return
-        }
-
-        do {
-            logger.info("Trying SCP upload [path: \(remotePath, privacy: .public)]")
-            try await uploadViaSCP(data, to: remotePath, permissions: permissions)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            logger.warning("SCP upload failed, retrying with exec channel: \(error.localizedDescription, privacy: .public)")
-            try await uploadViaExec(data, to: remotePath)
-        }
-    }
-
-    private func uploadViaSCP(_ data: Data, to remotePath: String, permissions: Int32) async throws {
-        guard let session = libssh2Session else {
-            throw SSHError.notConnected
-        }
-        guard !remotePath.isEmpty else {
-            throw SSHError.sftpFailed("Upload path is empty")
-        }
-        logger.info("Opening SCP upload channel [path: \(remotePath, privacy: .public)]")
-
-        var scpChannel: OpaquePointer?
-        do {
-            // libssh2 keeps channel-open state on the session: the upload's open waits its turn like every other.
-            // Only the open holds the claim; the transfer itself runs without it.
-            do {
-                let opener = try await awaitChannelOpenClaim(timeout: config.connectionTimeout)
-                defer { releaseChannelOpen(opener) }
-                while scpChannel == nil {
-                    try Task.checkCancellation()
-                    scpChannel = remotePath.withCString { pathPtr in
-                        libssh2_scp_send64(
-                            session,
-                            pathPtr,
-                            permissions,
-                            Int64(data.count),
-                            0,
-                            0
-                        )
-                    }
-
-                    if scpChannel != nil {
-                        break
-                    }
-
-                    let lastError = libssh2_session_last_errno(session)
-                    if lastError == LIBSSH2_ERROR_EAGAIN {
-                        await waitForSocket()
-                        continue
-                    }
-                    throw SSHError.sftpFailed("SCP channel open failed: \(lastError)")
-                }
-            }
-
-            guard let scpChannel else {
-                throw SSHError.sftpFailed("SCP channel open failed")
-            }
-
-            let bytes = [UInt8](data)
-            var offset = 0
-            while offset < bytes.count {
-                try Task.checkCancellation()
-                if sendQueue.pendingBytes > SSHSendQueue.backpressureBytes {
-                    await waitForSocket()
-                    guard isConnected else { throw SSHError.notConnected }
-                    continue
-                }
-                let written = bytes.withUnsafeBufferPointer { buffer -> Int in
-                    guard let baseAddress = buffer.baseAddress else { return -1 }
-                    let pointer = UnsafeRawPointer(baseAddress.advanced(by: offset)).assumingMemoryBound(to: CChar.self)
-                    return Int(libssh2_channel_write_ex(scpChannel, 0, pointer, bytes.count - offset))
-                }
-
-                if written > 0 {
-                    offset += written
-                } else if written == Int(LIBSSH2_ERROR_EAGAIN) {
-                    await waitForSocket()
-                } else {
-                    throw SSHError.sftpFailed("SCP write failed: \(written)")
-                }
-            }
-
-            _ = try await finishUploadChannel(scpChannel)
-            logger.info("SCP upload finished [path: \(remotePath, privacy: .public)]")
-        } catch {
-            if let scpChannel {
-                retireChannel(scpChannel)
-            }
-            throw error
-        }
-    }
-
-    private func uploadViaExec(_ data: Data, to remotePath: String) async throws {
-        guard let session = libssh2Session else {
-            throw SSHError.notConnected
-        }
-        guard !remotePath.isEmpty else {
-            throw SSHError.sftpFailed("Upload path is empty")
-        }
-        logger.info("Opening exec upload channel [path: \(remotePath, privacy: .public)]")
-
-        let quotedPath = Self.shellQuoted(remotePath)
-        let command = "cat > \(quotedPath) && chmod 600 \(quotedPath)"
-
-        var execChannel: OpaquePointer?
-        do {
-            // Only the open holds the claim; the transfer itself runs without it.
-            do {
-    let opener = try await awaitChannelOpenClaim(timeout: config.connectionTimeout)
-                defer { releaseChannelOpen(opener) }
-                while execChannel == nil {
-                    try Task.checkCancellation()
-                    execChannel = libssh2_channel_open_ex(
-                        session,
-                        "session",
-                        UInt32("session".utf8.count),
-                        2 * 1024 * 1024,
-                        32768,
-                        nil,
-                        0
-                    )
-
-                    if execChannel != nil {
-                        break
-                    }
-
-                    let lastError = libssh2_session_last_errno(session)
-                    if lastError == LIBSSH2_ERROR_EAGAIN {
-                        await waitForSocket()
-                        continue
-                    }
-                    throw SSHError.sftpFailed("Exec upload channel open failed: \(lastError)")
-                }
-            }
-
-            guard let execChannel else {
-                throw SSHError.sftpFailed("Exec upload channel open failed")
-            }
-
-            _ = libssh2_channel_handle_extended_data2(
-                execChannel,
-                LIBSSH2_CHANNEL_EXTENDED_DATA_IGNORE
-            )
-
-            while true {
-                try Task.checkCancellation()
-                let execResult = libssh2_channel_process_startup(
-                    execChannel,
-                    "exec",
-                    4,
-                    command,
-                    UInt32(command.utf8.count)
-                )
-                if execResult == 0 {
-                    break
-                }
-                if execResult == Int32(LIBSSH2_ERROR_EAGAIN) {
-                    await waitForSocket()
-                    continue
-                }
-                throw SSHError.sftpFailed("Exec upload startup failed: \(execResult)")
-            }
-
-            let bytes = [UInt8](data)
-            var offset = 0
-            while offset < bytes.count {
-                try Task.checkCancellation()
-                if sendQueue.pendingBytes > SSHSendQueue.backpressureBytes {
-                    await waitForSocket()
-                    guard isConnected else { throw SSHError.notConnected }
-                    continue
-                }
-                let written = bytes.withUnsafeBufferPointer { buffer -> Int in
-                    guard let baseAddress = buffer.baseAddress else { return -1 }
-                    let pointer = UnsafeRawPointer(baseAddress.advanced(by: offset)).assumingMemoryBound(to: CChar.self)
-                    return Int(libssh2_channel_write_ex(execChannel, 0, pointer, bytes.count - offset))
-                }
-
-                if written > 0 {
-                    offset += written
-                } else if written == Int(LIBSSH2_ERROR_EAGAIN) {
-                    await waitForSocket()
-                } else {
-                    throw SSHError.sftpFailed("Exec upload write failed: \(written)")
-                }
-            }
-
-            let exitStatus = try await finishUploadChannel(execChannel, drainOutput: true)
-            guard exitStatus == 0 else {
-                throw SSHError.sftpFailed("Exec upload failed with exit status \(exitStatus)")
-            }
-            logger.info("Exec upload finished [path: \(remotePath, privacy: .public)]")
-        } catch {
-            if let execChannel {
-                retireChannel(execChannel)
-            }
-            throw error
-        }
-    }
-
-    private func finishUploadChannel(
-        _ channel: OpaquePointer,
-        drainOutput: Bool = false
-    ) async throws -> Int32 {
-        while true {
-            try Task.checkCancellation()
-            let sendEOFResult = libssh2_channel_send_eof(channel)
-            if sendEOFResult == 0 {
-                break
-            }
-            if sendEOFResult == Int32(LIBSSH2_ERROR_EAGAIN) {
-                await waitForSocket()
-                continue
-            }
-            throw SSHError.sftpFailed("Upload send EOF failed: \(sendEOFResult)")
-        }
-
-        while true {
-            try Task.checkCancellation()
-            if drainOutput {
-                try await drainChannelOutput(channel)
-            }
-            let waitEOFResult = libssh2_channel_wait_eof(channel)
-            if waitEOFResult == 0 {
-                break
-            }
-            if waitEOFResult == Int32(LIBSSH2_ERROR_EAGAIN) {
-                await waitForSocket()
-                continue
-            }
-            throw SSHError.sftpFailed("Upload wait EOF failed: \(waitEOFResult)")
-        }
-
-        while true {
-            try Task.checkCancellation()
-            let closeResult = libssh2_channel_close(channel)
-            if closeResult == 0 {
-                break
-            }
-            if closeResult == Int32(LIBSSH2_ERROR_EAGAIN) {
-                await waitForSocket()
-                continue
-            }
-            throw SSHError.sftpFailed("Upload close failed: \(closeResult)")
-        }
-
-        while true {
-            try Task.checkCancellation()
-            let waitClosedResult = libssh2_channel_wait_closed(channel)
-            if waitClosedResult == 0 {
-                break
-            }
-            if waitClosedResult == Int32(LIBSSH2_ERROR_EAGAIN) {
-                await waitForSocket()
-                continue
-            }
-            throw SSHError.sftpFailed("Upload wait close failed: \(waitClosedResult)")
-        }
-
-        let exitStatus = libssh2_channel_get_exit_status(channel)
-        libssh2_channel_free(channel)
-        return exitStatus
-    }
-
-    private func drainChannelOutput(_ channel: OpaquePointer) async throws {
-        var buffer = [CChar](repeating: 0, count: 4096)
-
-        while true {
-            try Task.checkCancellation()
-            let stdoutRead = libssh2_channel_read_ex(channel, 0, &buffer, buffer.count)
-            if stdoutRead > 0 {
-                continue
-            }
-            if stdoutRead == Int(LIBSSH2_ERROR_EAGAIN) || stdoutRead == 0 {
-                break
-            }
-            throw SSHError.sftpFailed("Exec upload stdout drain failed: \(stdoutRead)")
-        }
-
-        while true {
-            try Task.checkCancellation()
-            let stderrRead = libssh2_channel_read_ex(channel, 1, &buffer, buffer.count)
-            if stderrRead > 0 {
-                continue
-            }
-            if stderrRead == Int(LIBSSH2_ERROR_EAGAIN) || stderrRead == 0 {
-                break
-            }
-            throw SSHError.sftpFailed("Exec upload stderr drain failed: \(stderrRead)")
-        }
     }
 }

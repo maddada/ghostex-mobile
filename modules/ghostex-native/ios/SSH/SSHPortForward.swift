@@ -81,7 +81,11 @@ final class ClosingChannel {
     let execRequestId: UUID?
     /// When our CLOSE went out (the send queue takes it at once); the computer's CLOSE is awaited from then.
     var closeSentAt: Date?
-    /// `libssh2_channel_close` has returned: the computer's CLOSE arrived, or the transport failed.
+    /// `libssh2_channel_close` returned: our EOF and CLOSE are out (not proof of the computer's CLOSE).
+    var closeReturned = false
+    /// The close failed (the transport went): the computer's CLOSE will never be seen.
+    var closeFailed = false
+    /// The computer's CLOSE arrived, or the close failed: the channel can be freed.
     var closed = false
 
     init(channel: OpaquePointer, holdsCommandSlot: Bool, execRequestId: UUID?) {
@@ -132,7 +136,12 @@ extension SSHConnection {
      * open that never finished would keep shells and exec channels from ever
      * starting.
      */
-    private static var directChannelOpenTimeout: TimeInterval { 15 }
+    private static var directChannelOpenTimeout: TimeInterval {
+        #if GHOSTEX_SSH_HARNESS
+        if harnessDirectOpenTimeout > 0 { return harnessDirectOpenTimeout }
+        #endif
+        return 15
+    }
     /// A loopback listener that has not reached `.ready` by then never will.
     private static var listenerReadyTimeoutNanoseconds: UInt64 { 10_000_000_000 }
 
@@ -397,40 +406,54 @@ extension SSHConnection {
     private func openDirectChannel(remoteHost: String, remotePort: Int) async throws -> OpaquePointer {
         /*
          * Bounded on both halves: waiting for the claim, and holding it across
-         * the EAGAIN retries below. A remote that never answers the open would
-         * otherwise keep the claim forever, and every shell and exec channel
-         * waits behind it.
+         * the EAGAIN retries below. An open still in flight when the bound passes
+         * keeps the claim until libssh2's own read timeout settles it
+         * (SSHChannelOpens.swift), never longer.
          */
+        let generation = sessionGeneration
         let opener = try await awaitChannelOpenClaim(timeout: Self.directChannelOpenTimeout)
-        defer { releaseChannelOpen(opener) }
         let deadline = Date().addingTimeInterval(Self.directChannelOpenTimeout)
-
-        while true {
-            try Task.checkCancellation()
-            guard let session = libssh2Session else { throw SSHError.notConnected }
-            if let channel = libssh2_channel_direct_tcpip_ex(
-                session,
-                remoteHost,
-                Int32(remotePort),
-                Self.forwardLoopbackHost,
-                0
-            ) {
-                return channel
+        let target = Self.forwardLoopbackHost
+        let open: (OpaquePointer) -> OpaquePointer? = { session in
+            libssh2_channel_direct_tcpip_ex(session, remoteHost, Int32(remotePort), target, 0)
+        }
+        var started = false
+        do {
+            while true {
+                try Task.checkCancellation()
+                let session = try liveSession(since: generation)
+                if let channel = open(session) {
+                    releaseChannelOpen(opener)
+                    return channel
+                }
+                let lastError = libssh2_session_last_errno(session)
+                if lastError == LIBSSH2_ERROR_EAGAIN {
+                    started = true
+                    if Date() >= deadline { throw SSHError.timeout }
+                    await waitForSocket()
+                    continue
+                }
+                releaseChannelOpen(opener)
+                if lastError == LIBSSH2_ERROR_TIMEOUT {
+                    throw SSHError.openTimedOut(Self.lastErrorText(session))
+                }
+                throw Self.directChannelError(
+                    session: session,
+                    lastError: lastError,
+                    remotePort: remotePort
+                )
             }
-            let lastError = libssh2_session_last_errno(session)
-            if lastError == LIBSSH2_ERROR_EAGAIN {
-                if Date() >= deadline { throw SSHError.timeout }
-                await waitForSocket()
-                continue
+        } catch {
+            // Timed out or cancelled with libssh2's open in flight: finished without a forward, never left for the
+            // next opener to adopt (SSHChannelOpens.swift).
+            let inFlight = started && channelOpenClaim == opener && sessionGeneration == generation
+                && libssh2Session != nil && !transportDeadOrFailing
+            if inFlight {
+                abandonOpen(AbandonedChannelOpen(owner: opener, holdsCommandSlot: false, what: "a forward", resume: open))
+            } else if channelOpenClaim == opener {
+                releaseChannelOpen(opener)
             }
-            if lastError == LIBSSH2_ERROR_TIMEOUT {
-                throw SSHError.openTimedOut(Self.lastErrorText(session))
-            }
-            throw Self.directChannelError(
-                session: session,
-                lastError: lastError,
-                remotePort: remotePort
-            )
+            throw error
         }
     }
 
@@ -646,16 +669,37 @@ extension SSHConnection {
         }
     }
 
-    /// One step of one close; true once the channel is freed.
+    /**
+     * One step of one close; true once the channel is freed. libssh2 1.11.0's non-blocking close returns success as
+     * soon as any packet arrives after our CLOSE went out, whichever channel it was for (channel.c, the `!rc` loop in
+     * `_libssh2_channel_close`): a keep-alive reply made a close the computer never answered look finished. The
+     * computer's CLOSE is therefore awaited separately (`wait_eof`, then `wait_closed`, both non-blocking) before the
+     * exit status is read or the channel freed.
+     */
     private func advanceClose(_ entry: ClosingChannel, now: Date) -> Bool {
-        if !entry.closed {
+        if !entry.closeReturned {
             let result = libssh2_channel_close(entry.channel)
             if entry.closeSentAt == nil { entry.closeSentAt = now }
             if result == LIBSSH2_ERROR_EAGAIN { return false }
+            entry.closeReturned = true
+            entry.closeFailed = result != 0
+        }
+        if !entry.closed {
+            if !entry.closeFailed {
+                let eof = libssh2_channel_wait_eof(entry.channel)
+                if eof == LIBSSH2_ERROR_EAGAIN { return false }
+                if eof == 0 {
+                    let closed = libssh2_channel_wait_closed(entry.channel)
+                    if closed == LIBSSH2_ERROR_EAGAIN { return false }
+                    entry.closeFailed = closed != 0
+                } else {
+                    entry.closeFailed = true
+                }
+            }
             entry.closed = true
             if let requestId = entry.execRequestId {
                 // A close that failed (the transport went) never saw the computer's CLOSE: no exit status.
-                let clean = result == 0 && !transportDeadOrFailing
+                let clean = !entry.closeFailed && !transportDeadOrFailing
                 completeClosedExec(requestId, channel: entry.channel, closedCleanly: clean)
             }
         }
@@ -671,10 +715,11 @@ extension SSHConnection {
         var stillClosing: [ClosingChannel] = []
         for entry in entries {
             let wasClosed = entry.closed
+            let wasReturned = entry.closeReturned
             if advanceClose(entry, now: now) {
                 didWork = true
             } else {
-                if entry.closed != wasClosed { didWork = true }
+                if entry.closed != wasClosed || entry.closeReturned != wasReturned { didWork = true }
                 stillClosing.append(entry)
             }
         }
