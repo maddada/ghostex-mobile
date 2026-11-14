@@ -1,120 +1,102 @@
 /**
- * The desktop Settings search's matcher, ported from apps/desktop/src/app/window/settings_modal/search.rs (itself the
- * Fuse.js 7.3.0 Bitap search with `threshold: 0.24`, `ignoreLocation`), reduced to whether a text matches. The phone
- * and the desktop decide a match the same way, so a word that finds a setting on one finds it on the other.
+ * The desktop Settings search's matcher, ported from apps/desktop/src/app/window/settings_modal/search.rs
+ * (`SearchPattern`), reduced to whether a text matches. The phone and the desktop decide a match the same way, so a
+ * word that finds a setting on one finds it on the other.
+ *
+ * CDXC:Settings 2026-11-15 DECISION:
+ * User: "searching for spaces shows a lot of sidebar pages that dont have spaces in the sidebar of settings pls fix".
+ * Both searches were Fuse.js's Bitap match (`threshold: 0.24`, `ignoreLocation`): the query anywhere inside a text,
+ * one typo forgiven in six letters, so "spaces" found "workspaces", "Monospace", "SpaceO", "Spacegray", "spacing"
+ * and every passing "a space". A text now matches when every query word finds one of its words: from the word's
+ * start, as the plural of a word in a name (a title, choice or search word, not a description), or (query words of
+ * `MIN_TYPO_WORD_LEN` letters and more) one typo away.
  *
  * Kept free of React Native.
  */
 
-/** Fuse's `threshold` in the desktop's `getSettingsSectionSearch`. */
-const SEARCH_THRESHOLD = 0.24;
-/** Fuse's machine word size: longer patterns are searched in 32-character chunks. */
-const MAX_BITS = 32;
-
-type Chunk = { readonly pattern: string; readonly alphabet: ReadonlyMap<number, number>; readonly start: number };
+/** The shortest query word a single typo is forgiven in: "spaces" is one letter from "SpaceO", "theme" from "there". */
+const MIN_TYPO_WORD_LEN = 7;
 
 /** JavaScript `trim`, as the desktop's `js_trim`. */
 export function searchTrim(value: string): string {
   return value.replace(/^[\s﻿]+|[\s﻿]+$/gu, '');
 }
 
-/** A lower-cased Fuse pattern, split into the chunks Fuse searches. */
-export class SearchPattern {
-  readonly pattern: string;
-  private readonly chunks: readonly Chunk[];
+/** The lower-cased words of a text: runs of letters and digits, as code points. */
+function wordsOf(text: string): string[][] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== '')
+    .map((word) => Array.from(word));
+}
 
-  constructor(query: string) {
-    this.pattern = query.toLowerCase();
-    const chunks: Chunk[] = [];
-    const add = (chunk: string, start: number): void => {
-      const alphabet = new Map<number, number>();
-      for (let index = 0; index < chunk.length; index += 1) {
-        const unit = chunk.charCodeAt(index);
-        alphabet.set(unit, ((alphabet.get(unit) ?? 0) | (1 << (chunk.length - index - 1))) >>> 0);
-      }
-      chunks.push({ pattern: chunk, alphabet, start });
-    };
-    const length = this.pattern.length;
-    if (length > MAX_BITS) {
-      const remainder = length % MAX_BITS;
-      const end = length - remainder;
-      for (let index = 0; index < end; index += MAX_BITS) add(this.pattern.slice(index, index + MAX_BITS), index);
-      if (remainder > 0) add(this.pattern.slice(length - MAX_BITS), length - MAX_BITS);
-    } else if (length > 0) {
-      add(this.pattern, 0);
-    }
-    this.chunks = chunks;
-  }
+function same(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((unit, index) => unit === b[index]);
+}
 
-  /** `BitapSearch.searchIn(text).isMatch`. */
-  matches(text: string): boolean {
-    const lower = text.toLowerCase();
-    if (this.pattern === lower) return true;
-    return this.chunks.some((chunk) => bitapIsMatch(lower, chunk.pattern, chunk.alphabet, chunk.start));
+/** Whether two words are at most one edit apart (a letter added, dropped, changed, or two neighbours swapped). */
+function withinOneEdit(a: readonly string[], b: readonly string[]): boolean {
+  if (same(a, b)) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (long.length - short.length > 1) return false;
+  let prefix = 0;
+  while (prefix < short.length && short[prefix] === long[prefix]) prefix += 1;
+  if (short.length === long.length) {
+    const rest = prefix + 1;
+    return (
+      same(short.slice(rest), long.slice(rest)) ||
+      (rest < short.length &&
+        short[prefix] === long[rest] &&
+        short[rest] === long[prefix] &&
+        same(short.slice(rest + 1), long.slice(rest + 1)))
+    );
   }
+  // One letter dropped from the longer word.
+  return same(short.slice(prefix), long.slice(prefix + 1));
 }
 
 /**
- * Fuse's `search()` with `ignoreLocation: true`, `findAllMatches: false` and `minMatchCharLength: 1`, reduced to its
- * `isMatch`: a score is `errors / patternLen`, everything else kept as Fuse (and the desktop port) has it.
+ * Whether query word `query` finds text word `word`: the word starts with it, it is the plural of a name (`plural`:
+ * "spaces" finds the title "Go to Space 1"), or, for a long query word, the two (or the word's start) are one typo apart.
  */
-function bitapIsMatch(text: string, pattern: string, alphabet: ReadonlyMap<number, number>, location: number): boolean {
-  const patternLen = pattern.length;
-  const textLen = text.length;
-  const expectedLocation = Math.min(location, textLen);
-  const score = (errors: number): number => errors / patternLen;
-  let currentThreshold = SEARCH_THRESHOLD;
-  let bestLocation = expectedLocation;
-  // Exact matches first: each one lowers the threshold to 0.
-  for (let index = text.indexOf(pattern, Math.max(0, bestLocation)); index !== -1;) {
-    currentThreshold = Math.min(currentThreshold, 0);
-    bestLocation = index + patternLen;
-    index = text.indexOf(pattern, bestLocation);
+function wordMatches(query: readonly string[], word: readonly string[], plural: boolean): boolean {
+  if (query.length <= word.length && same(query, word.slice(0, query.length))) return true;
+  if (plural && query.length > 3 && query[query.length - 1] === 's') {
+    const singular = query.slice(0, -1);
+    if (same(word, singular)) return true;
+    if (singular[singular.length - 1] === 'e' && same(word, singular.slice(0, -1))) return true;
   }
-  bestLocation = -1;
-  let lastBitArr: number[] = [];
-  let binMax = patternLen + textLen;
-  const mask = (1 << (patternLen - 1)) >>> 0;
-  const get = (array: readonly number[], index: number): number => (index < 0 ? 0 : (array[index] ?? 0));
-  for (let errors = 0; errors < patternLen; errors += 1) {
-    let binMin = 0;
-    let binMid = binMax;
-    while (binMin < binMid) {
-      if (score(errors) <= currentThreshold) binMin = binMid;
-      else binMax = binMid;
-      binMid = Math.floor((binMax - binMin) / 2 + binMin);
-    }
-    binMax = binMid;
-    let start = Math.max(1, expectedLocation - binMid + 1);
-    const finish = Math.min(expectedLocation + binMid, textLen) + patternLen;
-    const bitArr: number[] = new Array<number>(Math.max(0, finish + 2)).fill(0);
-    if (finish + 1 < bitArr.length) bitArr[finish + 1] = ((1 << errors) - 1) >>> 0;
-    for (let j = finish; j >= start; j -= 1) {
-      const currentLocation = j - 1;
-      const charMatch =
-        currentLocation >= 0 && currentLocation < textLen ? (alphabet.get(text.charCodeAt(currentLocation)) ?? 0) : 0;
-      let value = (((get(bitArr, j + 1) << 1) | 1) & charMatch) >>> 0;
-      if (errors > 0) {
-        value = (value | (((get(lastBitArr, j + 1) | get(lastBitArr, j)) << 1) | 1 | get(lastBitArr, j + 1))) >>> 0;
-      }
-      bitArr[j] = value;
-      if ((value & mask) !== 0) {
-        const finalScore = score(errors);
-        if (finalScore <= currentThreshold) {
-          currentThreshold = finalScore;
-          bestLocation = currentLocation;
-          if (bestLocation <= expectedLocation) break;
-          start = Math.max(1, 2 * expectedLocation - bestLocation);
-        }
-      }
-    }
-    if (score(errors + 1) > currentThreshold) break;
-    lastBitArr = bitArr;
+  if (query.length < MIN_TYPO_WORD_LEN || query[0] !== word[0]) return false;
+  for (let length = query.length - 1; length <= query.length + 1; length += 1) {
+    if (length <= word.length && withinOneEdit(query, word.slice(0, length))) return true;
   }
-  return bestLocation >= 0;
+  return false;
 }
 
-/** Whether any non-blank text matches, as Fuse includes an item when one of its keys matches. */
-export function anyMatches(pattern: SearchPattern, texts: readonly string[]): boolean {
-  return texts.some((text) => searchTrim(text) !== '' && pattern.matches(text));
+/** A Settings search query, split into the words a text must hold to match. */
+export class SearchPattern {
+  private readonly words: string[][];
+  /** A query with no letters or digits ("+", "/") matches as plain text. */
+  private readonly raw: string;
+
+  constructor(query: string) {
+    this.words = wordsOf(query);
+    this.raw = query.toLowerCase();
+  }
+
+  /**
+   * Whether `text` holds every query word. A plural query word finds its singular in a name, not in a description
+   * (`prose`), whose passing "a space" or "empty space" is not about Spaces.
+   */
+  matches(text: string, prose = false): boolean {
+    if (this.words.length === 0) return this.raw !== '' && text.toLowerCase().includes(this.raw);
+    const textWords = wordsOf(text);
+    return this.words.every((query) => textWords.some((word) => wordMatches(query, word, !prose)));
+  }
+}
+
+/** Whether any non-blank text matches; `prose` for descriptions. */
+export function anyMatches(pattern: SearchPattern, texts: readonly string[], prose = false): boolean {
+  return texts.some((text) => searchTrim(text) !== '' && pattern.matches(text, prose));
 }

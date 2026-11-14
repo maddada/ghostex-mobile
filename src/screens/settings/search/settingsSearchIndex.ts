@@ -885,36 +885,37 @@ function pageTrail(page: SettingsPageId): string {
 }
 
 /** Every word a row is found by: the phone's, and the desktop's for the same setting. */
-function entryTexts(entry: SettingsSearchEntry): { titles: string[]; others: string[] } {
+function entryTexts(entry: SettingsSearchEntry): { titles: string[]; names: string[]; prose: string[] } {
   const desktop = entry.catalog === undefined ? undefined : DESKTOP_SETTINGS_WORDS[entry.catalog];
   return {
     titles: [entry.title, ...(desktop === undefined ? [] : [desktop.title])],
-    others: [
-      entry.description ?? '',
+    names: [
       entry.group ?? '',
       ...(entry.options ?? []),
       ...(entry.keywords ?? []),
-      ...(desktop === undefined ? [] : [desktop.subtitle, ...desktop.options, ...desktop.keywords]),
+      ...(desktop === undefined ? [] : [...desktop.options, ...desktop.keywords]),
     ],
+    prose: [entry.description ?? '', ...(desktop === undefined ? [] : [desktop.subtitle])],
   };
 }
 
 /**
  * How well `texts` match, best first, or null: a title starting with the words (or one of its words starting with
- * them), a title holding them, a title close to them, then any other word of the row.
+ * them), a title the words find (fuzzyMatch.ts), then any other word of the row. A title only holding the words
+ * inside a word ("Workspaces" for "spaces") no longer counts (CDXC:Settings 2026-11-15 in fuzzyMatch.ts).
  */
 function rank(
   query: string,
   pattern: SearchPattern,
   titles: readonly string[],
-  others: readonly string[]
+  names: readonly string[],
+  prose: readonly string[]
 ): number | null {
   const lower = query.toLowerCase();
   const lowered = titles.map((title) => title.toLowerCase());
   if (lowered.some((title) => title.startsWith(lower) || title.includes(` ${lower}`))) return 0;
-  if (lowered.some((title) => title.includes(lower))) return 1;
   if (anyMatches(pattern, titles)) return 2;
-  if (anyMatches(pattern, others)) return 3;
+  if (anyMatches(pattern, names) || anyMatches(pattern, prose, true)) return 3;
   return null;
 }
 
@@ -931,7 +932,7 @@ export function searchSettings(query: string, pages: readonly SettingsPageId[]):
 
   pages.forEach((page, index) => {
     const meta = SETTINGS_PAGES[page];
-    const score = rank(trimmed, pattern, [meta.title], []);
+    const score = rank(trimmed, pattern, [meta.title], [], []);
     if (score === null) return;
     ranked.push({
       result: { key: `page:${page}`, title: meta.title, breadcrumb: 'Settings', description: meta.description, page },
@@ -943,8 +944,8 @@ export function searchSettings(query: string, pages: readonly SettingsPageId[]):
   SETTINGS_SEARCH_ENTRIES.forEach((entry, index) => {
     const pageOrder = order.get(SUB_PAGE_PARENT[entry.page] ?? entry.page);
     if (pageOrder === undefined) return;
-    const { titles, others } = entryTexts(entry);
-    const score = rank(trimmed, pattern, titles, others);
+    const { titles, names, prose } = entryTexts(entry);
+    const score = rank(trimmed, pattern, titles, names, prose);
     if (score === null) return;
     const desktop = entry.catalog === undefined ? undefined : DESKTOP_SETTINGS_WORDS[entry.catalog];
     const trail = pageTrail(entry.page);
