@@ -111,6 +111,10 @@ extension SSHConnection {
         let exitStatus: Int32
         do {
             try await writeUpload(data, to: scpChannel, generation: generation, what: "SCP")
+            // The SCP protocol ends a file with one zero byte, which libssh2 leaves to the caller. Without it the
+            // remote `scp -t` reads end of input where it waits for that byte and exits 1 though the file is written,
+            // and the whole picture went up a second time through the exec upload (issue #647).
+            try await writeUpload(Data([0]), to: scpChannel, generation: generation, what: "SCP")
             exitStatus = try await finishUploadChannel(scpChannel, generation: generation)
         } catch {
             retireUploadChannel(scpChannel, generation: generation)
@@ -179,12 +183,46 @@ extension SSHConnection {
         logger.info("Exec upload finished [path: \(remotePath, privacy: .public)]")
     }
 
+    /**
+     * CDXC:RemoteMachines 2026-11-17 WHY:
+     * An upload must end, in success or a clear failure, never wait for good (issue #647: a picture sent from the
+     * phone's chat never arrived and the composer waited 6+ minutes with no error). libssh2 answers EAGAIN to a write
+     * on a channel whose window is used up even after the computer ended its side of it, and a remote command that
+     * exits at once (the exec upload's `cat` where no POSIX shell runs it, a full disk) stops granting window after
+     * the first 2 MB: the write loop then waited on the socket forever while the connection answered every check.
+     * A write that cannot go on because the computer ended the channel fails at once; one where nothing moves (no
+     * byte taken, the phone's send queue not draining) for `uploadStallSeconds` fails too. The waits for the
+     * computer's EOF and CLOSE after the data are bounded the same way.
+     * SEE-ALSO: src/remote/commands.ts (`uploadOverLink`, the JavaScript deadline for builds without this).
+     */
+    static let uploadStallSeconds: TimeInterval = 60
+
+    /// Tracks whether an upload still moves: bytes taken by libssh2 or the phone's send queue draining.
+    private struct UploadProgress {
+        var lastMovedAt = Date()
+        var lastQueued = Int.max
+
+        mutating func note(queued: Int, wrote: Bool) {
+            if wrote || queued < lastQueued { lastMovedAt = Date() }
+            lastQueued = queued
+        }
+
+        func stalled() -> Bool { Date().timeIntervalSince(lastMovedAt) >= SSHConnection.uploadStallSeconds }
+    }
+
     private func writeUpload(_ data: Data, to channel: OpaquePointer, generation: Int, what: String) async throws {
         let bytes = [UInt8](data)
         var offset = 0
+        var progress = UploadProgress()
         while offset < bytes.count {
             try Task.checkCancellation()
             _ = try liveSession(since: generation)
+            progress.note(queued: sendQueue.pendingBytes, wrote: false)
+            if progress.stalled() {
+                throw SSHError.sftpFailed(
+                    "\(what) stopped: the computer took no data for \(Int(Self.uploadStallSeconds)) s"
+                )
+            }
             if sendQueue.pendingBytes > SSHSendQueue.backpressureBytes {
                 await waitForSocket()
                 continue
@@ -197,7 +235,14 @@ extension SSHConnection {
 
             if written > 0 {
                 offset += written
+                progress.note(queued: sendQueue.pendingBytes, wrote: true)
             } else if written == Int(LIBSSH2_ERROR_EAGAIN) {
+                // Window used up and the computer already ended the channel: no more window is coming.
+                if libssh2_channel_eof(channel) != 0 {
+                    throw SSHError.sftpFailed(
+                        "\(what) stopped: the computer closed it after \(offset) of \(bytes.count) bytes"
+                    )
+                }
                 await waitForSocket()
             } else {
                 throw SSHError.sftpFailed("\(what) write failed: \(written)")
@@ -205,15 +250,20 @@ extension SSHConnection {
         }
     }
 
-    /// Repeats `step` until it stops answering EAGAIN, checking the session after every wait.
+    /// Repeats `step` until it stops answering EAGAIN, checking the session after every wait; bounded like a write.
     private func untilDone(
         generation: Int,
         failure: String,
         _ step: () throws -> Int32
     ) async throws {
+        var progress = UploadProgress()
         while true {
             try Task.checkCancellation()
             _ = try liveSession(since: generation)
+            progress.note(queued: sendQueue.pendingBytes, wrote: false)
+            if progress.stalled() {
+                throw SSHError.sftpFailed("\(failure): the computer did not answer in \(Int(Self.uploadStallSeconds)) s")
+            }
             let result = try step()
             if result == 0 { return }
             if result == Int32(LIBSSH2_ERROR_EAGAIN) {
@@ -230,9 +280,16 @@ extension SSHConnection {
         drainOutput: Bool = false
     ) async throws -> Int32 {
         try await untilDone(generation: generation, failure: "Upload send EOF failed") { libssh2_channel_send_eof(channel) }
+        var progress = UploadProgress()
         while true {
             try Task.checkCancellation()
             _ = try liveSession(since: generation)
+            progress.note(queued: sendQueue.pendingBytes, wrote: false)
+            if progress.stalled() {
+                throw SSHError.sftpFailed(
+                    "Upload wait EOF failed: the computer did not answer in \(Int(Self.uploadStallSeconds)) s"
+                )
+            }
             if drainOutput {
                 try drainChannelOutput(channel)
             }
