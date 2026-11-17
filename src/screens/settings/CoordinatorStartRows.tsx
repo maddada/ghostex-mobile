@@ -10,7 +10,7 @@
  * section says to update it. Shape: ClaudeCompactionRows.tsx.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import ActionSheet from '../../components/common/ActionSheet';
@@ -96,34 +96,55 @@ export function CoordinatorStartRows() {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [saveError, setSaveError] = useState<string | null>(null);
   const machineId = machine?.id ?? null;
+  // The newest record of the shown computer, so Try again dials its current host.
+  const machineRef = useRef(machine);
+  machineRef.current = machine;
+  // One generation for every read, advanced by each read and by a change of computer: an answer
+  // (a read, or a save's failure) from an older one never touches what is shown.
+  const generation = useRef(0);
+  // What the computer is known to hold, so a failed save puts back only its own field.
+  const confirmed = useRef<Values | null>(null);
 
   const load = useCallback(() => {
-    if (machine === null) return () => undefined;
-    let live = true;
+    const current = machineRef.current;
+    const mine = ++generation.current;
+    confirmed.current = null;
+    if (current === null) return;
     setLoaded({ kind: 'loading' });
     setSaveError(null);
-    void readValues(machine).then((next) => {
-      if (live) setLoaded(next);
+    void readValues(current).then((next) => {
+      if (generation.current !== mine) return;
+      if (next.kind === 'values') confirmed.current = next.values;
+      setLoaded(next);
     });
-    return () => {
-      live = false;
-    };
-    // Reload when the computer changes, not on every store update of the same one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineId]);
+  }, []);
 
-  useEffect(() => load(), [load]);
+  // Reload when the computer changes, not on every store update of the same one.
+  useEffect(() => {
+    load();
+    return () => {
+      generation.current += 1;
+    };
+  }, [machineId, load]);
 
   if (machine === null) return null;
 
   const change = (patch: Partial<Values>) => {
     if (loaded.kind !== 'values') return;
-    const before = loaded.values;
-    setLoaded({ kind: 'values', values: { ...before, ...patch } });
+    const mine = generation.current;
+    setLoaded({ kind: 'values', values: { ...loaded.values, ...patch } });
     setSaveError(null);
     void saveValue(machine, patch).then((error) => {
-      if (error === null) return;
-      setLoaded({ kind: 'values', values: before });
+      if (generation.current !== mine || confirmed.current === null) return;
+      const known: Values = confirmed.current;
+      if (error === null) {
+        confirmed.current = { ...known, ...patch };
+        return;
+      }
+      const restore: Partial<Values> = {};
+      if (patch.coordinatorModel !== undefined) restore.coordinatorModel = known.coordinatorModel;
+      if (patch.coordinatorEffort !== undefined) restore.coordinatorEffort = known.coordinatorEffort;
+      setLoaded((shown) => (shown.kind === 'values' ? { kind: 'values', values: { ...shown.values, ...restore } } : shown));
       setSaveError(`Couldn't save it on ${machineDisplayLabel(machine)}: ${error}`);
     });
   };
