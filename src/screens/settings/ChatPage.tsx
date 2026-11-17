@@ -12,6 +12,7 @@ import {
 import { VOICE_SUPPORTED } from '../../voice/conversation';
 import { readAloudVoices, useReadAloudOnAnywhere } from '../../voice/readAloud';
 import { ClaudeCompactionRows } from './ClaudeCompactionRows';
+import { CoordinatorStartRows } from './CoordinatorStartRows';
 import { voiceLabel } from './ReadAloudVoicePage';
 import { SettingsSection } from './SectionBoundary';
 import { Caption, ChoiceRow, LinkRow, SectionHeader, SettingsScreenLayout, SettingToggle } from './SettingsControls';
@@ -86,6 +87,9 @@ export default function ChatPage() {
           only (the default), Every session or Off. Show marker emojis puts the marker emoji
           in front of each coloured section; while it is off the colour and the label show the kind.
         </Caption>
+      </SettingsSection>
+      <SettingsSection name="settings:chat:coordinators">
+        <CoordinatorStartRows />
       </SettingsSection>
       <SettingsSection name="settings:chat:read-aloud">
         <ReadAloudRows />

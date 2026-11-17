@@ -1,0 +1,223 @@
+/**
+ * Settings › Chat › Coordinators: what a new coordinator starts on, on one computer, the same two
+ * settings as the desktop's Settings › Chat (`coordinatorModel`, `coordinatorEffort`). They live in
+ * that computer's settings, which its gxserver reads when it creates a coordinator: read through
+ * `/api/readCoordinatorStart` and saved with `updateSettingsPatch`, like any settings write.
+ *
+ * CDXC:Coordinators 2026-11-17 SEE-ALSO: the user's decision (Opus 5.5 at Medium by default, the same
+ * rows on the phone, no pickers in New Coordinator) is at `coordinator_start_model` in
+ * packages/gx-protocol/src/coordinator.rs. A computer whose Ghostex is older answers `notFound`: the
+ * section says to update it. Shape: ClaudeCompactionRows.tsx.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import ActionSheet from '../../components/common/ActionSheet';
+import { chatMachineLink } from '../../chat/rust/machine-link';
+import { isDemoMachine } from '../../demo/identity';
+import { isMachineEnabled, machineDisplayLabel, useMachinesStore, type MachineRecord } from '../../machines/store';
+import { useAppearance } from '../../theme/useAppearance';
+import { Caption, ChoiceRow, LinkRow, SectionHeader, useSettingsStyles } from './SettingsControls';
+import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
+
+const CALL_TIMEOUT_MS = 15_000;
+
+/** The desktop's Coordinator model choices (`COORDINATOR_MODEL_OPTIONS`), in its order. */
+const MODEL_OPTIONS = [
+  { value: 'opus', label: 'Opus 5.5' },
+  { value: 'agent', label: 'Agent default' },
+] as const;
+
+/** The desktop's Coordinator effort choices (`COORDINATOR_EFFORT_OPTIONS`), in its order. */
+const EFFORT_OPTIONS = [
+  { value: 'agent', label: 'Agent default' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'XHigh' },
+] as const;
+
+type Model = (typeof MODEL_OPTIONS)[number]['value'];
+type Effort = (typeof EFFORT_OPTIONS)[number]['value'];
+
+type Values = { coordinatorModel: Model; coordinatorEffort: Effort };
+
+type Loaded = { kind: 'loading' } | { kind: 'values'; values: Values } | { kind: 'failed'; message: string };
+
+async function readValues(machine: MachineRecord): Promise<Loaded> {
+  const answer = await chatMachineLink(machine).rpc('readCoordinatorStart', {}, CALL_TIMEOUT_MS);
+  if (answer.error !== null) {
+    return {
+      kind: 'failed',
+      message:
+        answer.error.code === 'notFound'
+          ? `Update Ghostex on ${machineDisplayLabel(machine)} to change these from the phone.`
+          : answer.error.message,
+    };
+  }
+  const result = (answer.result ?? {}) as Record<string, unknown>;
+  return {
+    kind: 'values',
+    values: {
+      coordinatorModel: MODEL_OPTIONS.find((option) => option.value === result.model)?.value ?? 'opus',
+      coordinatorEffort: EFFORT_OPTIONS.find((option) => option.value === result.effort)?.value ?? 'medium',
+    },
+  };
+}
+
+async function saveValue(machine: MachineRecord, patch: Partial<Values>): Promise<string | null> {
+  const answer = await chatMachineLink(machine).rpc(
+    'dispatchRendererCommand',
+    { action: 'updateSettingsPatch', payload: { patch } },
+    CALL_TIMEOUT_MS,
+  );
+  return answer.error === null ? null : answer.error.message;
+}
+
+/** The computers that can be picked, and the one shown: the picked one, else the selected one. */
+function useCoordinatorComputer(pickedId: string | null): { machine: MachineRecord | null; machines: MachineRecord[] } {
+  const all = useMachinesStore((state) => state.machines);
+  const selectedId = useMachinesStore((state) => state.selectedMachineId);
+  return useMemo(() => {
+    const machines = all.filter((entry) => isMachineEnabled(entry) && !isDemoMachine(entry));
+    const machine =
+      machines.find((entry) => entry.id === pickedId) ??
+      machines.find((entry) => entry.id === selectedId) ??
+      machines[0] ??
+      null;
+    return { machine, machines };
+  }, [all, pickedId, selectedId]);
+}
+
+export function CoordinatorStartRows() {
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const { machine, machines } = useCoordinatorComputer(pickedId);
+  const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const machineId = machine?.id ?? null;
+
+  const load = useCallback(() => {
+    if (machine === null) return () => undefined;
+    let live = true;
+    setLoaded({ kind: 'loading' });
+    setSaveError(null);
+    void readValues(machine).then((next) => {
+      if (live) setLoaded(next);
+    });
+    return () => {
+      live = false;
+    };
+    // Reload when the computer changes, not on every store update of the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machineId]);
+
+  useEffect(() => load(), [load]);
+
+  if (machine === null) return null;
+
+  const change = (patch: Partial<Values>) => {
+    if (loaded.kind !== 'values') return;
+    const before = loaded.values;
+    setLoaded({ kind: 'values', values: { ...before, ...patch } });
+    setSaveError(null);
+    void saveValue(machine, patch).then((error) => {
+      if (error === null) return;
+      setLoaded({ kind: 'values', values: before });
+      setSaveError(`Couldn't save it on ${machineDisplayLabel(machine)}: ${error}`);
+    });
+  };
+
+  return (
+    <>
+      <SectionHeader title="Coordinator model" />
+      {machines.length > 1 ? <ComputerRow machine={machine} machines={machines} onPick={setPickedId} /> : null}
+      {loaded.kind === 'loading' ? <Caption>Reading {machineDisplayLabel(machine)}'s settings…</Caption> : null}
+      {loaded.kind === 'failed' ? (
+        <>
+          <Caption>{loaded.message}</Caption>
+          <LinkRow title="Try again" onPress={() => load()} />
+        </>
+      ) : null}
+      {loaded.kind === 'values' ? (
+        <>
+          {MODEL_OPTIONS.map((option) => (
+            <ChoiceRow
+              key={option.value}
+              label={option.label}
+              selected={loaded.values.coordinatorModel === option.value}
+              onPress={() => change({ coordinatorModel: option.value })}
+            />
+          ))}
+          <Caption>
+            The model a new coordinator starts on. Opus 5.5 works best on Claude; Agent default uses the agent's usual
+            model. Change a running coordinator's model in its chat.
+          </Caption>
+          <SectionHeader title="Coordinator effort" />
+          {EFFORT_OPTIONS.map((option) => (
+            <ChoiceRow
+              key={option.value}
+              label={option.label}
+              selected={loaded.values.coordinatorEffort === option.value}
+              onPress={() => change({ coordinatorEffort: option.value })}
+            />
+          ))}
+          <Caption>
+            The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the
+            agent's usual effort. Change a running coordinator's effort in its chat.
+          </Caption>
+          {saveError !== null ? <Caption>{saveError}</Caption> : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** Which computer the rows change; a tap picks another. */
+function ComputerRow({
+  machine,
+  machines,
+  onPick,
+}: {
+  machine: MachineRecord;
+  machines: MachineRecord[];
+  onPick: (id: string) => void;
+}) {
+  const styles = useSettingsStyles();
+  const appearance = useAppearance();
+  const [open, setOpen] = useState(false);
+  return (
+    <SettingsSearchAnchor label="Coordinator computer">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Coordinator settings for ${machineDisplayLabel(machine)}`}
+        accessibilityHint="Picks another computer"
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.row, local.computer, pressed && styles.rowPressed]}
+      >
+        <View style={styles.linkText}>
+          <Text style={styles.linkTitle}>{machineDisplayLabel(machine)}</Text>
+          <Text style={styles.linkDescription}>New coordinators on this computer start on what you pick below</Text>
+        </View>
+        <Text style={[styles.chevron, { color: appearance.muted }]}>⌄</Text>
+      </Pressable>
+      <ActionSheet
+        visible={open}
+        title="Change coordinator settings on"
+        items={machines.map((entry) => ({
+          key: entry.id,
+          label: `${entry.id === machine.id ? '✓ ' : ''}${machineDisplayLabel(entry)}`,
+          onPress: () => {
+            setOpen(false);
+            onPick(entry.id);
+          },
+        }))}
+        onClose={() => setOpen(false)}
+      />
+    </SettingsSearchAnchor>
+  );
+}
+
+const local = StyleSheet.create({
+  computer: { minHeight: 56 },
+});

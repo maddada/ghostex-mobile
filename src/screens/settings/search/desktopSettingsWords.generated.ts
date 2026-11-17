@@ -254,6 +254,34 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     ],
     "keywords": []
   },
+  "coordinatorEffort": {
+    "title": "Coordinator effort",
+    "subtitle": "The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
+    "options": [
+      "Agent default",
+      "agent",
+      "Low",
+      "low",
+      "Medium",
+      "medium",
+      "High",
+      "high",
+      "XHigh",
+      "xhigh"
+    ],
+    "keywords": []
+  },
+  "coordinatorModel": {
+    "title": "Coordinator model",
+    "subtitle": "The model a new coordinator starts on. Opus 5.5 works best on Claude; Agent default uses the agent's usual model. Change a running coordinator's model in its chat.",
+    "options": [
+      "Opus 5.5",
+      "opus",
+      "Agent default",
+      "agent"
+    ],
+    "keywords": []
+  },
   "customSidebarTitlebarBackgroundTintColor": {
     "title": "Custom dark mode tint",
     "subtitle": "The custom dark mode colour, chosen in the colour picker the + square opens.",
