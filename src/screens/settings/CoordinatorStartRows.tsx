@@ -104,9 +104,10 @@ export function CoordinatorStartRows() {
   const generation = useRef(0);
   // What the computer is known to hold, so a failed save puts back only its own field.
   const confirmed = useRef<Values | null>(null);
-  // The newest save of each field: an older save's failure never puts back a field a newer one owns.
+  // The newest save of each field, and the saves that have finished.
   const saveCount = useRef(0);
   const latestSave = useRef<Record<keyof Values, number>>({ coordinatorModel: 0, coordinatorEffort: 0 });
+  const settledSaves = useRef(new Set<number>());
 
   const load = useCallback(() => {
     const current = machineRef.current;
@@ -142,19 +143,20 @@ export function CoordinatorStartRows() {
     setSaveError(null);
     void saveValue(machine, patch).then((error) => {
       if (generation.current !== mine || confirmed.current === null) return;
-      if (error === null) {
-        confirmed.current = { ...confirmed.current, ...patch };
-        return;
-      }
-      // Only a field no newer save has taken over goes back to what the computer holds.
+      settledSaves.current.add(save);
+      if (error === null) confirmed.current = { ...confirmed.current, ...patch };
+      // Once a field's newest save has finished, the field shows what the computer holds, so a
+      // late success after a newer failure (or a failure after a newer success) ends in sync.
+      // A field whose newest save is still running keeps showing that pick.
       const known: Values = confirmed.current;
-      const restore: Partial<Values> = {};
+      const settle: Partial<Values> = {};
       for (const key of keys) {
-        if (latestSave.current[key] === save) Object.assign(restore, { [key]: known[key] });
+        if (settledSaves.current.has(latestSave.current[key])) Object.assign(settle, { [key]: known[key] });
       }
-      if (Object.keys(restore).length === 0) return;
-      setLoaded((shown) => (shown.kind === 'values' ? { kind: 'values', values: { ...shown.values, ...restore } } : shown));
-      setSaveError(`Couldn't save it on ${machineDisplayLabel(machine)}: ${error}`);
+      if (Object.keys(settle).length > 0) {
+        setLoaded((shown) => (shown.kind === 'values' ? { kind: 'values', values: { ...shown.values, ...settle } } : shown));
+      }
+      if (error !== null) setSaveError(`Couldn't save it on ${machineDisplayLabel(machine)}: ${error}`);
     });
   };
 
