@@ -104,6 +104,9 @@ export function CoordinatorStartRows() {
   const generation = useRef(0);
   // What the computer is known to hold, so a failed save puts back only its own field.
   const confirmed = useRef<Values | null>(null);
+  // The newest save of each field: an older save's failure never puts back a field a newer one owns.
+  const saveCount = useRef(0);
+  const latestSave = useRef<Record<keyof Values, number>>({ coordinatorModel: 0, coordinatorEffort: 0 });
 
   const load = useCallback(() => {
     const current = machineRef.current;
@@ -132,18 +135,24 @@ export function CoordinatorStartRows() {
   const change = (patch: Partial<Values>) => {
     if (loaded.kind !== 'values') return;
     const mine = generation.current;
+    const keys = (Object.keys(patch) as (keyof Values)[]).filter((key) => patch[key] !== undefined);
+    const save = ++saveCount.current;
+    for (const key of keys) latestSave.current[key] = save;
     setLoaded({ kind: 'values', values: { ...loaded.values, ...patch } });
     setSaveError(null);
     void saveValue(machine, patch).then((error) => {
       if (generation.current !== mine || confirmed.current === null) return;
-      const known: Values = confirmed.current;
       if (error === null) {
-        confirmed.current = { ...known, ...patch };
+        confirmed.current = { ...confirmed.current, ...patch };
         return;
       }
+      // Only a field no newer save has taken over goes back to what the computer holds.
+      const known: Values = confirmed.current;
       const restore: Partial<Values> = {};
-      if (patch.coordinatorModel !== undefined) restore.coordinatorModel = known.coordinatorModel;
-      if (patch.coordinatorEffort !== undefined) restore.coordinatorEffort = known.coordinatorEffort;
+      for (const key of keys) {
+        if (latestSave.current[key] === save) Object.assign(restore, { [key]: known[key] });
+      }
+      if (Object.keys(restore).length === 0) return;
       setLoaded((shown) => (shown.kind === 'values' ? { kind: 'values', values: { ...shown.values, ...restore } } : shown));
       setSaveError(`Couldn't save it on ${machineDisplayLabel(machine)}: ${error}`);
     });
