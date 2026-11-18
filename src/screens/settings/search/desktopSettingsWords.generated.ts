@@ -256,7 +256,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "coordinatorEffort": {
     "title": "Coordinator effort",
-    "subtitle": "The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
+    "subtitle": "The effort a new coordinator starts on: High unless you pick another. Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
     "options": [
       "Agent default",
       "agent",

@@ -398,7 +398,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     group: 'Coordinator effort',
     title: 'Coordinator effort',
     anchor: header('Coordinator effort'),
-    description: 'The effort a new coordinator starts on: Medium unless you pick another.',
+    description: 'The effort a new coordinator starts on: High unless you pick another.',
     catalog: 'coordinatorEffort',
   },
   {

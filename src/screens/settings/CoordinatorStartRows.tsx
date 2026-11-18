@@ -4,7 +4,7 @@
  * that computer's settings, which its gxserver reads when it creates a coordinator: read through
  * `/api/readCoordinatorStart` and saved with `updateSettingsPatch`, like any settings write.
  *
- * CDXC:Coordinators 2026-11-17 SEE-ALSO: the user's decision (Opus 5.5 at Medium by default, the same
+ * CDXC:Coordinators 2026-11-17 SEE-ALSO: the user's decision (Opus 5.5 at High by default, the same
  * rows on the phone, no pickers in New Coordinator) is at `coordinator_start_model` in
  * packages/gx-protocol/src/coordinator.rs. A computer whose Ghostex is older answers `notFound`: the
  * section says to update it. Shape: ClaudeCompactionRows.tsx.
@@ -61,7 +61,7 @@ async function readValues(machine: MachineRecord): Promise<Loaded> {
     kind: 'values',
     values: {
       coordinatorModel: MODEL_OPTIONS.find((option) => option.value === result.model)?.value ?? 'opus',
-      coordinatorEffort: EFFORT_OPTIONS.find((option) => option.value === result.effort)?.value ?? 'medium',
+      coordinatorEffort: EFFORT_OPTIONS.find((option) => option.value === result.effort)?.value ?? 'high',
     },
   };
 }
@@ -195,8 +195,8 @@ export function CoordinatorStartRows() {
             />
           ))}
           <Caption>
-            The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the
-            agent's usual effort. Change a running coordinator's effort in its chat.
+            The effort a new coordinator starts on: High unless you pick another. Agent default uses the agent's
+            usual effort. Change a running coordinator's effort in its chat.
           </Caption>
           {saveError !== null ? <Caption>{saveError}</Caption> : null}
         </>
