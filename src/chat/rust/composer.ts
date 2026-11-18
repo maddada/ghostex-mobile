@@ -15,7 +15,8 @@
 import type { ChatDocument } from './document';
 import { nextDraftVersion, randomUuid } from './host-records';
 import type { UserAction } from './actions';
-import { releaseAnswerHold } from '../native/transcript/answerHold';
+import { endAnswerHoldForSend } from '../native/transcript/answerHold';
+import { useTranscriptBottomStore } from '../native/transcript/bottomStore';
 import {
   findUploadTokens,
   insertUploadTokens,
@@ -235,8 +236,10 @@ export class ComposerModel {
       fromHistory: false,
       uploadTokens: {},
     });
-    // A send from the chat box follows the newest row again (`answerHold.ts`).
-    releaseAnswerHold();
+    // A message sent (not queued) brings the list back to the bottom wherever the reader had
+    // scrolled, as desktop's `follow_tail_for_send` (native_chat/answer_anchor.rs, where the reason
+    // is); an answer hold keeps its own rule (`answerHold.ts`). Other modes leave the list alone.
+    if (mode === 'send' && !endAnswerHoldForSend()) useTranscriptBottomStore.getState().jumpToBottom?.();
     this.hooks.dispatch(submission);
     return true;
   }

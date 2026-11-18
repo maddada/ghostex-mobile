@@ -6,10 +6,12 @@
 
 import { readableSecondaryText } from '../../theme/sidebarAppearance';
 import { useAppearance } from '../../theme/useAppearance';
-import { ActivityIndicator, Switch, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Linking, Switch, Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { DownloadGlyph, RefreshGlyph } from '../../components/sessions/icons';
+import { CopyGlyph, DownloadGlyph, RefreshGlyph } from '../../components/sessions/icons';
 import { EditMachineCopy } from '../../copy';
 import {
   appUpdateView,
@@ -33,6 +35,12 @@ export default function AppUpdateSection({ machine }: { machine: MachineConnecti
   const appearance = useAppearance();
   const formStyles = useFormStyles();
   const update = useAppUpdateStore((state) => state.byMachineId[machine.id]);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   if (update === undefined) return null;
   const view = appUpdateView(update);
   const copy = EditMachineCopy.appUpdate;
@@ -51,6 +59,51 @@ export default function AppUpdateSection({ machine }: { machine: MachineConnecti
             <Text style={[formStyles.rowDetail, { color: readableSecondaryText(TONE_COLOR[view.tone], appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]) }]}>{line}</Text>
           </View>
         </View>
+        {view.linux !== null && view.linux.command !== null ? (
+          <View style={[formStyles.row, { paddingTop: 2, borderTopWidth: 0 }]}>
+            <Text
+              selectable
+              style={[
+                formStyles.rowDetail,
+                formStyles.rowDetailMono,
+                {
+                  flex: 1,
+                  color: appearance.foreground,
+                  backgroundColor: appearance.cardActive,
+                  borderRadius: 8,
+                  padding: 10,
+                },
+              ]}
+            >
+              {view.linux.command}
+            </Text>
+          </View>
+        ) : null}
+        {view.linux !== null && (view.linux.command !== null || view.linux.releaseUrl !== null) ? (
+          <View style={[formStyles.row, { paddingTop: 2, borderTopWidth: 0, gap: 8 }]}>
+            {view.linux.command !== null ? (
+              <SetupButton
+                small
+                label={copied ? copy.copied : copy.copyCommand}
+                icon={<CopyGlyph size={14} color={appearance.foreground} />}
+                onPress={() => {
+                  const command = view.linux?.command;
+                  if (command != null) void Clipboard.setStringAsync(command).then(() => setCopied(true));
+                }}
+              />
+            ) : null}
+            {view.linux.releaseUrl !== null ? (
+              <SetupButton
+                small
+                label={copy.releasePage}
+                onPress={() => {
+                  const url = view.linux?.releaseUrl;
+                  if (url != null) void Linking.openURL(url).catch(() => undefined);
+                }}
+              />
+            ) : null}
+          </View>
+        ) : null}
         {action !== null ? (
           <View style={[formStyles.row, { paddingTop: 2, borderTopWidth: 0 }]}>
             <SetupButton

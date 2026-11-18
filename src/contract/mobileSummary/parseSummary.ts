@@ -42,6 +42,7 @@ function parseProjects(value: unknown): GhostexProject[] {
       isHome: entry.isHome === true,
       gbotsProject: entry.gbotsProject === true || isObject(entry.gbotsBot) ? true : undefined,
       gbotsBot: parseGbotsBot(entry.gbotsBot),
+      autopilotSupervisorProject: entry.autopilotSupervisorProject === true ? true : undefined,
       icon: parseProjectIcon(entry),
       themeColor: normalizedHexColor(trimmedValue(entry, 'themeColor')),
       worktreeParentProjectId: isObject(entry.worktree) ? trimmedValue(entry.worktree, 'parentProjectId') : '',
@@ -488,6 +489,10 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     separateByMachine: root.sidebarSeparateByMachine === true,
     hideDisconnectedMachines: root.sidebarHideDisconnectedMachines === true,
     pinnedSessionOrder: root.pinnedSessionOrder === 'recent' ? 'recent' : 'manual',
+    unifiedSessionOrder:
+      root.unifiedSessionOrder === 'alphabetical' || root.unifiedSessionOrder === 'created'
+        ? root.unifiedSessionOrder
+        : 'recent',
     capabilities: parseCapabilities(root.capabilities),
   };
 }

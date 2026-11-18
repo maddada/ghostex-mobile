@@ -23,6 +23,9 @@ import type {
 } from './model';
 
 /** Normalized session row: fallback chains applied, provider guaranteed "zmx". */
+/** How the Unified list orders its cards (`unifiedSessionOrder`). */
+export type UnifiedSessionOrder = 'recent' | 'alphabetical' | 'created';
+
 export type GhostexSession = {
   /** Display-only compact badge; derived from first 4 chars of sessionId when omitted. */
   alias: string;
@@ -414,6 +417,12 @@ export type GhostexMobileSummary = {
    * Manual unless the computer sends `recent`.
    */
   pinnedSessionOrder?: 'manual' | 'recent';
+  /**
+   * The computer's Unified sidebar Session order (CDXC:Sidebar 2026-11-17 in
+   * packages/gx-core/src/unified_sidebar/build.rs `unified_session_cmp`): `recent` orders cards by when they came
+   * back, `alphabetical` by title, `created` newest first. Recent unless the computer sends another.
+   */
+  unifiedSessionOrder?: UnifiedSessionOrder;
   /**
    * Group working sessions (`groupWorkingSessions`): the Project list puts each project's working sessions in a
    * Working section. Only Sidebar organization sync carries it (settingsSync/sidebarOrganization.ts); off when absent.

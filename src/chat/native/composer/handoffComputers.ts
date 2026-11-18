@@ -9,7 +9,7 @@ import {
   type HandoffComputer,
   type HandoffMachineInput,
 } from '../../../contract/handoff/handoff';
-import { isGbotProject } from '../../../contract/gbotsFilter';
+import { isHiddenProject } from '../../../contract/gbotsFilter';
 import { useInventoryStore } from '../../../inventory/store';
 import { enabledMachines, machineDisplayLabel, useMachinesStore } from '../../../machines/store';
 
@@ -27,7 +27,7 @@ export function handoffComputersFor(machineId: string, projectId: string): Hando
       connected: (inventory?.lastError ?? null) === null,
       // A GBot's folder is no place to hand work to; only the chat's own stays, so it can be ranked as the source.
       projects: summary.projects
-        .filter((project) => !isGbotProject(project) || (machine.id === machineId && project.projectId === projectId))
+        .filter((project) => !isHiddenProject(project) || (machine.id === machineId && project.projectId === projectId))
         .map((project) => ({
           projectId: project.projectId,
           title: project.name ?? project.projectId,

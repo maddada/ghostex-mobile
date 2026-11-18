@@ -218,8 +218,14 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       workingSection: organization.unifiedWorkingSection,
       parking: organization.enableSessionParking,
       pinnedOrder: organization.pinnedSessionOrder,
+      sessionOrder: organization.unifiedSessionOrder,
     }),
-    [organization.unifiedWorkingSection, organization.enableSessionParking, organization.pinnedSessionOrder],
+    [
+      organization.unifiedWorkingSection,
+      organization.enableSessionParking,
+      organization.pinnedSessionOrder,
+      organization.unifiedSessionOrder,
+    ],
   );
   const ink = useSidebarInk();
   const styles = unifiedListStyles(ink);

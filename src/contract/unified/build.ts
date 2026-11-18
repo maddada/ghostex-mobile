@@ -134,6 +134,8 @@ export type UnifiedSettings = {
    * in the order they were dragged into, or the one that came back last first. Manual when absent.
    */
   pinnedOrder?: 'manual' | 'recent';
+  /** `unifiedSessionOrder` (`unifiedSessionCompare`). Recent when absent. */
+  sessionOrder?: 'recent' | 'alphabetical' | 'created';
 };
 
 /** What the filter keeps. An empty list keeps everything of its kind; the kinds narrow together. */
@@ -269,6 +271,22 @@ export function spaceOfProject(spaces: UnifiedSpaceInput[], project: UnifiedProj
       : space.memberProjectIds.includes(project.parentProjectId ?? project.projectId),
   );
   return claimed?.spaceId ?? OTHER_SPACE_ID;
+}
+
+/**
+ * Unicode code point order, which is Rust's `str` order (UTF-8 bytes): unlike `<` on UTF-16 code units, a character
+ * past U+FFFF (an emoji) sorts after U+E000..U+FFFF (a fullwidth letter), as on the desktop.
+ */
+export function compareCodePoints(left: string, right: string): number {
+  const a = left[Symbol.iterator]();
+  const b = right[Symbol.iterator]();
+  for (;;) {
+    const x = a.next();
+    const y = b.next();
+    if (x.done || y.done) return x.done === y.done ? 0 : x.done ? -1 : 1;
+    const diff = (x.value.codePointAt(0) ?? 0) - (y.value.codePointAt(0) ?? 0);
+    if (diff !== 0) return diff;
+  }
 }
 
 /** Byte order, as the desktop compares strings. */
@@ -504,13 +522,43 @@ export function buildUnifiedList<S>(
     const byCameBack = newestFirst((row) => row.cameBackMs);
     view.pinned.sort((left, right) => placed(left) - placed(right) || byCameBack(left, right));
   }
-  view.active.sort(newestFirst((row) => row.cameBackMs));
-  view.working.sort(newestFirst((row) => row.session.workingStartedMs ?? 0));
+  const order = settings.sessionOrder ?? 'recent';
+  view.active.sort(unifiedSessionCompare(order, newestFirst((row) => row.cameBackMs)));
+  view.working.sort(unifiedSessionCompare(order, newestFirst((row) => row.session.workingStartedMs ?? 0)));
   view.snoozed.sort(
     (left, right) =>
       (left.session.snoozedUntilMs ?? Number.MAX_SAFE_INTEGER) -
         (right.session.snoozedUntilMs ?? Number.MAX_SAFE_INTEGER) || tie(left, right),
   );
-  view.parked.sort(newestFirst((row) => row.session.lastInteractionMs ?? 0));
+  view.parked.sort(unifiedSessionCompare(order, newestFirst((row) => row.session.lastInteractionMs ?? 0)));
   return view;
+}
+
+/**
+ * How two cards of the list, the Moving shelf or the Parked shelf compare, as gx-core unified_sidebar/build.rs
+ * `unified_session_cmp` does (CDXC:Sidebar 2026-11-17 there): the shelf's own clock (`recent`) under Recent, the
+ * title A to Z (then the project, then the id) under Alphabetical, newest first under Created. Alphabetical and
+ * Created never read when a session came back, so a send, a turn's end or a thread that needs you moves no card.
+ */
+export function unifiedSessionCompare<S>(
+  order: 'recent' | 'alphabetical' | 'created',
+  recent: (left: UnifiedRow<S>, right: UnifiedRow<S>) => number,
+): (left: UnifiedRow<S>, right: UnifiedRow<S>) => number {
+  // gx-core `stable_identity_cmp`: the project id, then the session id, the same on every client (the routed
+  // `sidebarSessionId` is shaped differently here and on the desktop).
+  const tie = (left: UnifiedRow<S>, right: UnifiedRow<S>) =>
+    compareCodePoints(left.session.projectId, right.session.projectId) ||
+    compareCodePoints(left.session.sessionId, right.session.sessionId) ||
+    compareText(left.sidebarSessionId, right.sidebarSessionId);
+  switch (order) {
+    case 'alphabetical':
+      return (left, right) =>
+        compareCodePoints((left.session.title ?? '').toLowerCase(), (right.session.title ?? '').toLowerCase()) ||
+        compareCodePoints(left.repo.label.toLowerCase(), right.repo.label.toLowerCase()) ||
+        tie(left, right);
+    case 'created':
+      return (left, right) => (right.session.createdMs ?? 0) - (left.session.createdMs ?? 0) || tie(left, right);
+    default:
+      return recent;
+  }
 }

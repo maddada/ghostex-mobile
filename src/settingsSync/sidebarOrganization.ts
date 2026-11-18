@@ -12,6 +12,7 @@
 
 import { EMPTY_SIDEBAR_SPACES } from '../contract/mobileSummary/model';
 import type { GhostexMobileSummary } from '../contract/mobileSummary';
+import type { UnifiedSessionOrder } from '../contract/mobileSummary/session';
 import { useSettingsStore, type GhostexSettings } from '../settings/store';
 import { useSyncedEntriesStore } from './syncedEntries';
 
@@ -34,6 +35,7 @@ export type SidebarOrganization = {
   pinnedSessionOrder: 'manual' | 'recent';
   unifiedWorkingSection: boolean;
   unifiedGroupByProject: boolean;
+  unifiedSessionOrder: UnifiedSessionOrder;
   unifiedProjectOrder: string[];
   sidebarSessionTagListItems: unknown[] | null;
 };
@@ -56,6 +58,7 @@ export const SIDEBAR_ORGANIZATION_DEFAULTS: SidebarOrganization = {
   pinnedSessionOrder: 'manual',
   unifiedWorkingSection: true,
   unifiedGroupByProject: false,
+  unifiedSessionOrder: 'recent',
   unifiedProjectOrder: [],
   sidebarSessionTagListItems: null,
 };
@@ -69,6 +72,10 @@ function readValue<K extends SidebarOrganizationKey>(key: K, value: unknown): Si
       return (value === 'unified' || value === 'project' ? value : undefined) as SidebarOrganization[K] | undefined;
     case 'pinnedSessionOrder':
       return (value === 'recent' || value === 'manual' ? value : undefined) as SidebarOrganization[K] | undefined;
+    case 'unifiedSessionOrder':
+      return (value === 'recent' || value === 'alphabetical' || value === 'created' ? value : undefined) as
+        | SidebarOrganization[K]
+        | undefined;
     case 'unifiedProjectOrder':
       return (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined) as
         | SidebarOrganization[K]
@@ -122,6 +129,7 @@ export function computerSidebarValues(summary: GhostexMobileSummary): Partial<Si
     pinnedSessionOrder: summary.pinnedSessionOrder === 'recent' ? 'recent' : 'manual',
     unifiedWorkingSection: summary.unifiedWorkingSection !== false,
     unifiedGroupByProject: summary.unifiedGroupByProject === true,
+    unifiedSessionOrder: summary.unifiedSessionOrder ?? 'recent',
     unifiedProjectOrder: summary.unifiedProjectOrder ?? [],
   };
 }
@@ -182,6 +190,7 @@ export function organizeSummary(summary: GhostexMobileSummary): GhostexMobileSum
     pinnedSessionOrder: organization.pinnedSessionOrder,
     unifiedWorkingSection: organization.unifiedWorkingSection,
     unifiedGroupByProject: organization.unifiedGroupByProject,
+    unifiedSessionOrder: organization.unifiedSessionOrder,
     unifiedProjectOrder: organization.unifiedProjectOrder,
     sessionTagListItems: organization.sidebarSessionTagListItems ?? undefined,
     sidebarSpaces: spacesOff ? EMPTY_SIDEBAR_SPACES : summary.sidebarSpaces,

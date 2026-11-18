@@ -7,6 +7,9 @@
  * CDXC:GBots 2026-11-09 WHY: `gbotsProject` comes whether GBots are on or off (server/src/gbots/presentation.rs), so a
  * GBot's folder never turns into a plain project when they are switched off: nothing of a bot shows then. A separate
  * module from contract/gbots.ts so contract/grouping.ts can use it without an import cycle.
+ * CDXC:Autopilot 2026-11-18 DECISION: User (Q88, "All three, over the air"): the phone leaves Autopilot's own project (its
+ * supervisor's folder, `autopilotSupervisorProject`) out of its lists the way the desktop starts it hidden; the phone has no
+ * per-project hiding, so it takes the same exits as a GBot's folder. The supervisor opens from Settings > Autopilot.
  * SEE-ALSO: packages/gx-core/src/sidebar_view/projects.rs (the desktop's same rule).
  */
 
@@ -17,9 +20,16 @@ export function isGbotProject(project: Pick<GhostexProject, 'gbotsProject' | 'gb
   return project.gbotsProject === true || project.gbotsBot !== undefined;
 }
 
-/** The project ids of the computer's GBots' folders. */
+/** A GBot's folder or Autopilot's own project: no list or picker of the user's projects shows either. */
+export function isHiddenProject(
+  project: Pick<GhostexProject, 'gbotsProject' | 'gbotsBot' | 'autopilotSupervisorProject'>,
+): boolean {
+  return isGbotProject(project) || project.autopilotSupervisorProject === true;
+}
+
+/** The project ids of the computer's GBots' folders and of Autopilot's project (see `isHiddenProject`). */
 export function gbotProjectIds(summary: Pick<GhostexMobileSummary, 'projects'>): Set<string> {
-  return new Set(summary.projects.filter(isGbotProject).map((project) => project.projectId));
+  return new Set(summary.projects.filter(isHiddenProject).map((project) => project.projectId));
 }
 
 /** Whether `session` is a GBot's chat (its project is a bot's folder, or the computer marks it). */

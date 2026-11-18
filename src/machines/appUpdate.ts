@@ -38,6 +38,11 @@ export type AppUpdateStatus = {
   phase?: string | null;
   supported?: boolean;
   unsupportedReason?: string | null;
+  /**
+   * A Linux computer's install kind, the command that updates it and its release page
+   * (server/src/app_update/linux_install.rs). Absent from a gxserver that predates it, `null` off Linux.
+   */
+  linuxUpdate?: { kind?: string | null; command?: string | null; releaseUrl?: string | null } | null;
   availableVersion?: string | null;
   progress?: number | null;
   message?: string | null;
@@ -73,6 +78,8 @@ export type AppUpdateView = {
   /** The switch's value, or `null` when this computer cannot update itself. */
   autoUpdate: boolean | null;
   updateAvailable: boolean;
+  /** A Linux computer that updates by a command the user runs there: the command (if any) and its release page. */
+  linux: { command: string | null; releaseUrl: string | null } | null;
 };
 
 type AppUpdateState = {
@@ -111,6 +118,7 @@ export function appUpdateView(update: RemoteAppUpdate): AppUpdateView {
       progress: null,
       autoUpdate: null,
       updateAvailable: false,
+      linux: null,
     };
   }
   const version = text(status.version);
@@ -119,6 +127,7 @@ export function appUpdateView(update: RemoteAppUpdate): AppUpdateView {
   // A Linux server runs gxserver without the app; there is nothing to open.
   if (phase === 'appNotRunning' && text(status.platform) === 'linux') phase = 'idle';
   const supported = status.supported === true;
+  const linux = linuxUpdateOf(status, available, supported);
   const progress = typeof status.progress === 'number' ? status.progress : null;
   // "Updated to …" is news for a day, not a permanent label.
   const finishedAt = Date.parse(text(status.lastResult?.finishedAt) ?? '');
@@ -155,7 +164,7 @@ export function appUpdateView(update: RemoteAppUpdate): AppUpdateView {
     tone = 'warning';
     detail = text(lastResult.message);
   } else if (available !== null && !supported) {
-    const reason = text(status.unsupportedReason);
+    const reason = linux?.command != null ? LINUX_COMMAND_LINE : text(status.unsupportedReason);
     detail = reason === null ? null : `${available} is out. ${reason}`;
   } else if (available !== null) {
     detail = `Ghostex ${available} is available`;
@@ -181,6 +190,25 @@ export function appUpdateView(update: RemoteAppUpdate): AppUpdateView {
     progress,
     autoUpdate: supported ? status.autoUpdate === true : null,
     updateAvailable: available !== null && supported && !inProgress,
+    linux,
+  };
+}
+
+const LINUX_COMMAND_LINE = 'Update it in a terminal.';
+
+/**
+ * What to show for a Linux computer that updates by a command (a package manager) or a download page.
+ * Only when `linuxUpdate` is there (an older gxserver sends the same words in `unsupportedReason`, which
+ * keeps showing as it is) and the computer cannot update itself: an AppImage does that from its own
+ * window, so it keeps the line it has today.
+ */
+function linuxUpdateOf(status: AppUpdateStatus, available: string | null, supported: boolean): AppUpdateView['linux'] {
+  const info = status.linuxUpdate;
+  if (available === null || supported || info == null || typeof info !== 'object' || info.kind === 'appimage') return null;
+  const releaseUrl = text(info.releaseUrl);
+  return {
+    command: text(info.command),
+    releaseUrl: releaseUrl !== null && releaseUrl.startsWith('https://') ? releaseUrl : null,
   };
 }
 

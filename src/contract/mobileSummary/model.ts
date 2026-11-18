@@ -45,6 +45,12 @@ export type GhostexProject = {
   gbotsProject?: boolean;
   /** The GBot this project is the folder of (`gbotsBot`), only while GBots are on: drawn as its row under Main Hub. */
   gbotsBot?: GhostexGbotsBot;
+  /**
+   * Autopilot's own "Autopilot" project, the folder of its supervisor (`autopilotSupervisorProject`, server/src/autopilot/
+   * supervisor.rs); only sent when true, and not by a computer from before it. The desktop hides it from the sidebar until
+   * the user shows it; the phone has no hiding, so no list or picker shows it (contract/gbotsFilter.ts).
+   */
+  autopilotSupervisorProject?: boolean;
   icon: GhostexProjectIcon;
   /** Workspace theme color ("#rrggbb"), or "": tints the project rail. */
   themeColor: string;

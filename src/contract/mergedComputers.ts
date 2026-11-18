@@ -49,7 +49,7 @@ function displayName(project: GhostexProject): string {
 
 /** Whether a project can join another computer's entry: not a worktree and not a GBot's folder. */
 function mergeable(project: GhostexProject): boolean {
-  return project.worktreeParentProjectId.length === 0 && project.gbotsProject !== true && project.gbotsBot === undefined;
+  return project.worktreeParentProjectId.length === 0 && project.gbotsProject !== true && project.gbotsBot === undefined && project.autopilotSupervisorProject !== true;
 }
 
 /** Spaces and groups of every computer added together: by id, else by name, members renamed to the entries. */

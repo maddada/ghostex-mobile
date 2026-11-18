@@ -18,6 +18,12 @@ const PINNED_ORDER_OPTIONS: { value: SidebarOrganization['pinnedSessionOrder']; 
   { value: 'recent', label: 'Most recently updated' },
 ];
 
+const SESSION_ORDER_OPTIONS: { value: SidebarOrganization['unifiedSessionOrder']; label: string }[] = [
+  { value: 'recent', label: 'Recent' },
+  { value: 'alphabetical', label: 'A to Z' },
+  { value: 'created', label: 'Created' },
+];
+
 /**
  * Settings › Sidebar & Sessions: the desktop's Sidebar organization settings, under the desktop's names and in its
  * sections (packages/settings-catalog general/sidebar.rs, layout.rs), synced with the computers
@@ -83,6 +89,18 @@ export default function SessionsListPage() {
               'Group by project',
               "Every computer's sessions of one repository under one header.",
             )}
+            {/* CDXC:Sidebar 2026-11-17 DECISION (packages/gx-core/src/unified_sidebar/build.rs `unified_session_cmp`):
+                Recent activity by default; synced with the computers. */}
+            <SegmentedRow
+              label="Session order"
+              options={SESSION_ORDER_OPTIONS}
+              value={organization.unifiedSessionOrder}
+              onChange={(next) => setSidebarSetting('unifiedSessionOrder', next)}
+            />
+            <Caption>
+              Session order: recent activity, alphabetical by title, or newest first. A to Z and Created keep a
+              session in place when it works or finishes.
+            </Caption>
           </>
         ) : (
           <>

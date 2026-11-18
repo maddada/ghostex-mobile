@@ -1150,6 +1150,9 @@ export const EditMachineCopy = {
   appUpdate: {
     label: 'Ghostex',
     reading: 'Reading the Ghostex version…',
+    copyCommand: 'Copy command',
+    copied: 'Copied',
+    releasePage: 'Release page',
     autoUpdate: 'Keep this machine up to date',
     autoUpdateDetail:
       'Installs Ghostex updates on that computer by itself while none of its agents is working. Sessions keep running through the restart.',

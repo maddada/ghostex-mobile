@@ -1360,6 +1360,23 @@ export default function SessionsScreen({ navigation }: Props) {
           onPress: () => setSidebarSetting('unifiedWorkingSection', summary?.unifiedWorkingSection === false),
         },
       );
+      // Session order, as the desktop's Sort & Filter lists it (CDXC:Sidebar 2026-11-17 in gx-core
+      // unified_sidebar/build.rs `unified_session_cmp`).
+      const sessionOrder = summary?.unifiedSessionOrder ?? 'recent';
+      items.push({ kind: 'heading', key: 'session-order-heading', label: 'Session order' });
+      for (const [value, label] of [
+        ['recent', 'Recent activity'],
+        ['alphabetical', 'Alphabetical'],
+        ['created', 'Created'],
+      ] as const) {
+        items.push({
+          kind: 'item',
+          key: `session-order-${value}`,
+          label,
+          selected: sessionOrder === value,
+          onPress: () => setSidebarSetting('unifiedSessionOrder', value),
+        });
+      }
     } else {
       items.push(
         {

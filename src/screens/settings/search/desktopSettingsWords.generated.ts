@@ -38,7 +38,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "autopilotApprovals": {
     "title": "When it asks permission",
-    "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you.",
+    "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread stays in plan mode: its reads are approved, a request to stop planning gets \"No, keep planning\", and its edits and commands are declined.",
     "options": [],
     "keywords": []
   },
@@ -1824,6 +1824,19 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     "title": "Group by project",
     "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
     "options": [],
+    "keywords": []
+  },
+  "unifiedSessionOrder": {
+    "title": "Session order",
+    "subtitle": "Order the Unified sidebar's sessions by recent activity (a session moves to the top when you send it a message and when it finishes or needs you), alphabetically by title, or by when each was created, newest first. Alphabetical and Created never move a session when it works or finishes; turn off the Moving section too for a list that never moves. Pinned sessions follow Pinned order. Applies to the phone too. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+    "options": [
+      "Recent activity",
+      "recent",
+      "Alphabetical",
+      "alphabetical",
+      "Created (newest first)",
+      "created"
+    ],
     "keywords": []
   },
   "unifiedWorkingSection": {
