@@ -35,7 +35,8 @@ export type UsageAccount = {
  * the computer has the hub's management key) appended to `accounts` as a saved account, so the core projects its
  * meters like any other. A hub account whose login is also a saved Claude Swap or Codex Swap account here is left out:
  * the Swap one already shows it, as the computer's sidebar does (apps/desktop/src/app/titlebar/account_usage.rs
- * `distinct_accounts`). Hub accounts the hub turned off are left out too.
+ * `distinct_accounts`); an unsaved or turned-off Swap login doesn't count. Hub accounts the hub turned off are left
+ * out too.
  *
  * SEE-ALSO: server/src/accounts/hub/mod.rs (`rows`), server/src/accounts/hub/sidebar.rs.
  */
@@ -44,11 +45,21 @@ export function withHubAccounts(answer: unknown): unknown {
   const hubs = arr(root?.cliproxyHubs);
   if (root === null || root === undefined || hubs.length === 0) return answer;
   const accounts = arr(root.accounts);
-  const swapLogin = (provider: string, email: string) =>
+  // Only a Swap login saved here and not turned off stands in for its hub twin, matched by provider, email and,
+  // when both name one, Codex workspace (gxserver's `swapLogins`; older computers: the saved accounts themselves).
+  const saved = Array.isArray(root.swapLogins)
+    ? arr(root.swapLogins)
+    : accounts.filter((row) => isTrue(row, 'registered') && !isTrue(row, 'userDisabled'));
+  const swapLogin = (provider: string, email: string, workspace: string) =>
     email.length > 0 &&
-    accounts.some(
-      (row) => str(row, 'provider') === provider && str(row, 'email').toLowerCase() === email.toLowerCase(),
-    );
+    saved.some((row) => {
+      const theirs = str(row, 'workspace');
+      return (
+        str(row, 'provider') === provider &&
+        str(row, 'email').toLowerCase() === email.toLowerCase() &&
+        (theirs.length === 0 || workspace.length === 0 || theirs === workspace)
+      );
+    });
   const added: unknown[] = [];
   for (const hub of hubs) {
     for (const row of arr(obj(hub)?.accounts)) {
@@ -56,7 +67,9 @@ export function withHubAccounts(answer: unknown): unknown {
       const name = str(row, 'name');
       const email = name.includes('@') ? name : '';
       if (!PROVIDERS.some((entry) => entry === provider) || str(row, 'status') === 'disabled') continue;
-      if (swapLogin(provider, email)) continue;
+      if (swapLogin(provider, email, str(row, 'workspace'))) continue;
+      // The hub's reason for an account it can't use, when there is no usage error to show.
+      const reason = str(row, 'usageError') || (str(row, 'status') === 'error' ? str(row, 'statusMessage') : '');
       added.push({
         id: str(row, 'id'),
         provider,
@@ -65,7 +78,7 @@ export function withHubAccounts(answer: unknown): unknown {
         registered: true,
         status: 'ready',
         usage: arr(obj(row)?.usage),
-        usageError: str(row, 'usageError'),
+        usageError: reason,
         hubLabel: str(hub, 'label'),
       });
     }

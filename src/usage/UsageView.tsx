@@ -180,8 +180,7 @@ export default function UsageView({ machineId, placement }: { machineId: string;
             key={`${account.provider}:${account.id}`}
             account={account}
             refreshing={refreshing === account.id}
-            // A hub account is read by the computer through its hub every two minutes; it has no Refresh now.
-            onRefresh={known && refreshing === null && account.hub.length === 0 ? () => refreshAccount(account.id) : null}
+            onRefresh={known && refreshing === null ? () => refreshAccount(account.id) : null}
           />
         ))}
         {known ? (
@@ -224,7 +223,8 @@ function AccountSection({
         <Text style={styles.email} numberOfLines={1}>
           {account.hub.length > 0 ? UsageCopy.onHub(account.hub) : account.email}
         </Text>
-        {refreshing ? (
+        {/* A hub account is read by the computer through its hub on its own schedule: it has no Refresh now. */}
+        {account.hub.length > 0 ? null : refreshing ? (
           <ActivityIndicator size="small" color={appearance.muted} style={styles.accountRefresh} />
         ) : (
           <Pressable
