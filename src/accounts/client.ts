@@ -110,6 +110,7 @@ export async function readManagedAccounts(
       usageError: str(row, 'usageError'),
       meters: meters.get(id)?.meters ?? [],
       unavailable: (meters.get(id)?.meters.length ?? 0) === 0,
+      hub: '',
       status,
       disabled,
       needsSignIn: !disabled && status !== 'ready' && status !== 'loading' && status.length > 0,

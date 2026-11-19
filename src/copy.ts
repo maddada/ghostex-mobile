@@ -1726,6 +1726,8 @@ export const UsageCopy = {
   refreshAccount: (name: string) => `Refresh ${name}'s usage now`,
   loading: 'Reading accounts and usage…',
   unavailable: 'Usage is unavailable for this login.',
+  /** Beside a CLIProxyAPI hub account's name: the hub it is on. */
+  onHub: (hub: string) => `on ${hub}`,
   /** Opens the Accounts screen on this computer: sign-ins and Reconnect (src/accounts/). */
   manageAccounts: 'Manage accounts',
   /** No saved and enabled account to show: none saved, or every saved one turned off on the computer. */
