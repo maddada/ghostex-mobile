@@ -288,7 +288,7 @@ export function PageSheet({ chat, machine, page, starredPages, onClose, onHide, 
     if (onHide === undefined) return;
     setPictures(null);
     const target = machineRef.current;
-    const shown = title.length > 0 ? title : 'Ghostex page';
+    const shown = title.length > 0 ? title : 'Live page';
     void keepPendingDraft().then(() => {
       onHide(shown);
       if (pageId !== null) void sendUnsavedDraft(target.id, pageId);
@@ -370,10 +370,10 @@ export function PageSheet({ chat, machine, page, starredPages, onClose, onHide, 
         <View style={styles.bar}>
           <View style={styles.heading}>
             <Text numberOfLines={1} style={styles.title}>
-              {title.length > 0 ? title : 'Ghostex page'}
+              {title.length > 0 ? title : 'Live page'}
             </Text>
             <Text numberOfLines={1} style={[styles.detail, armed && { color: P.foreground }]}>
-              {armed ? 'Press back again to close' : 'Ghostex page'}
+              {armed ? 'Press back again to close' : 'Live page'}
             </Text>
           </View>
           {changed || refreshing ? (

@@ -123,7 +123,7 @@ export function hiddenPageWaiting(page: HiddenPage): boolean {
 
 /** What the pill is, in the page's own words for its count ("3 of 16 answered"). */
 export function hiddenPageDescription(page: HiddenPage): string {
-  const title = page.title.trim().length > 0 ? page.title.trim() : 'Ghostex page';
+  const title = page.title.trim().length > 0 ? page.title.trim() : 'Live page';
   if (page.counts !== null) return `${title}, ${page.counts.answered} of ${page.counts.total} answered`;
   return page.questionsLeft ? `${title}, waiting for you` : title;
 }

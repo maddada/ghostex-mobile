@@ -667,7 +667,7 @@ export function PagePill({
       <Glyph name="file-type-html" size={14} color={P.cardMuted} />
       {tier === 'full' ? (
         <Text style={styles.pageTitle} numberOfLines={1}>
-          {page.title.trim().length > 0 ? page.title.trim() : 'Ghostex page'}
+          {page.title.trim().length > 0 ? page.title.trim() : 'Live page'}
         </Text>
       ) : null}
       {trailing}
@@ -689,7 +689,7 @@ export function PageOverflowRow({ page, onPress }: { page: HiddenPage; onPress: 
     >
       <Glyph name="file-type-html" size={16} color={P.cardMuted} />
       <Text style={styles.overflowName} numberOfLines={1}>
-        {page.title.trim().length > 0 ? page.title.trim() : 'Ghostex page'}
+        {page.title.trim().length > 0 ? page.title.trim() : 'Live page'}
       </Text>
       {count !== null ? (
         <Text style={[styles.count, styles.overflowCount]}>{count}</Text>

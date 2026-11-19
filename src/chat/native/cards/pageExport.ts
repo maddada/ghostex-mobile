@@ -30,7 +30,7 @@ export function readExportedPage(params: unknown): ExportedPageFile | null {
   const fields = (typeof params === 'object' && params !== null ? params : {}) as Record<string, unknown>;
   const html = typeof fields.html === 'string' ? fields.html : '';
   if (html.length === 0) return null;
-  const title = typeof fields.title === 'string' && fields.title.length > 0 ? fields.title : 'Ghostex page';
+  const title = typeof fields.title === 'string' && fields.title.length > 0 ? fields.title : 'Live page';
   const named = typeof fields.fileName === 'string' ? fields.fileName.replace(/[\\/:*?"<>|]/gu, ' ').trim() : '';
   return { title, fileName: named.length > 0 ? named : 'ghostex-page.html', html };
 }
