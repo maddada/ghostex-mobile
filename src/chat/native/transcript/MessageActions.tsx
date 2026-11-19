@@ -116,11 +116,12 @@ function useReplyActionItems(message: ProjectedMessage): ActionItem[] {
    * CDXC:SessionChat 2026-10-24 DECISION: User: "for inline it shouldn't be showing overlapping the command text. instead we should have 2 buttons (copy and paste in terminal (just pastes it doesn't run it)". On the phone, a reply holding one inline command offers Copy command and Paste in terminal (typed into a new terminal, Enter left to the user) in its menu; one holding one command block offers Run in terminal, which the block's own Run button beside its copy button does too.
    */
   // A span that is a command only by its shape is left out of the count, so a reply with one real
-  // command keeps its rows (gx-chat-core run_command.rs `CommandKind::Shape`).
-  const commands =
-    message.role === 'assistant' && typeof message.text === 'string'
-      ? messageCommands(message.text).filter((entry) => !entry.shape)
-      : [];
+  // command keeps its rows (gx-chat-core run_command.rs `CommandKind::Shape`); with no known command,
+  // a lone shape-only one offers them.
+  const found =
+    message.role === 'assistant' && typeof message.text === 'string' ? messageCommands(message.text) : [];
+  const known = found.filter((entry) => !entry.shape);
+  const commands = known.length > 0 ? known : found;
   if (commands.length === 1) {
     const { command, inline } = commands[0]!;
     if (inline) {
