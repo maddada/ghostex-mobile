@@ -111,6 +111,7 @@ export async function readManagedAccounts(
       meters: meters.get(id)?.meters ?? [],
       unavailable: (meters.get(id)?.meters.length ?? 0) === 0,
       hub: '',
+      signedOut: meters.get(id)?.signedOut ?? (status === 'loginRequired' || status === 'identityChanged'),
       status,
       disabled,
       needsSignIn: !disabled && status !== 'ready' && status !== 'loading' && status.length > 0,

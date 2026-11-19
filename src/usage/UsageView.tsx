@@ -44,6 +44,9 @@ import { GhostexRadii } from '../theme/palette';
 import { readAccountUsage, readAccountUsageNow } from './client';
 import type { UsageAccount } from './usageMeters';
 
+/** Settings > Accounts' "Needs sign-in" amber on the computer (settings_modal/tabs/accounts/widgets.rs). */
+const NEEDS_SIGN_IN_AMBER = { dark: '#fcd34d', light: '#b45309' } as const;
+
 /** How often the usage is read again while the view is open: the chat Accounts panel's poll. */
 const READ_EVERY_MS = 30_000;
 const PADDING = 12;
@@ -209,15 +212,18 @@ function AccountSection({
 }) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
+  // CDXC:AgentProviders 2026-11-19 DECISION: User (Q4198 A): a signed-out account's name and numbers turn amber, the
+  // amber the computer's Settings > Accounts gives "Needs sign-in" and its sidebar meters now use.
+  const amber = account.signedOut ? (appearance.light ? NEEDS_SIGN_IN_AMBER.light : NEEDS_SIGN_IN_AMBER.dark) : null;
   const meterAppearance = useMemo(() => ({
-    foreground: appearance.foreground, muted: appearance.muted, meterTrack: appearance.control, meterFill: appearance.accent,
-  }), [appearance]);
+    foreground: amber ?? appearance.foreground, muted: appearance.muted, meterTrack: appearance.control, meterFill: appearance.accent,
+  }), [appearance, amber]);
   const Icon = AGENT_ICONS[account.provider];
   return (
     <View style={styles.account}>
       <View style={styles.nameLine}>
         {Icon !== undefined ? <Icon size={16} color={agentIconTint(account.provider)} /> : null}
-        <Text style={styles.name} numberOfLines={1}>
+        <Text style={[styles.name, amber !== null && { color: amber }]} numberOfLines={1}>
           {account.name}
         </Text>
         <Text style={styles.email} numberOfLines={1}>

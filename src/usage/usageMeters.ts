@@ -28,6 +28,11 @@ export type UsageAccount = {
   readonly unavailable: boolean;
   /** The CLIProxyAPI hub the account is on (its name), or empty for a Claude Swap or Codex Swap account. */
   readonly hub: string;
+  /**
+   * The computer reads this login as needing a sign-in (`loginRequired`, `identityChanged`): its name and numbers draw
+   * amber, as the computer's sidebar meters do (CDXC:AgentProviders 2026-11-19, apps/desktop/src/app/titlebar/account_usage.rs).
+   */
+  readonly signedOut: boolean;
 };
 
 /**
@@ -100,6 +105,9 @@ function savedAccounts(answer: unknown): { row: unknown; provider: UsageProvider
   return accounts;
 }
 
+/** The states the computer reads as needing a sign-in (`ghostex accounts` calls them `needsSignIn`). */
+const SIGNED_OUT = new Set(['loginRequired', 'identityChanged']);
+
 /** Join by input position before filtering: the core includes rows with missing or duplicate account ids. */
 export function buildUsageMeters(answer: unknown, columns: unknown): UsageAccount[] {
   const projected = arr(columns);
@@ -116,6 +124,7 @@ export function buildUsageMeters(answer: unknown, columns: unknown): UsageAccoun
       meters,
       unavailable: meters.length === 0,
       hub: str(row, 'hubLabel'),
+      signedOut: SIGNED_OUT.has(str(row, 'status')),
     };
   });
 }
