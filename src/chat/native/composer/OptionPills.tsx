@@ -22,12 +22,14 @@ export type PillKind = 'model' | 'options' | 'mode' | 'context';
 /** Codex's permission modes take the colour of the Claude mode closest to them (`option_pills.rs`). */
 const MODE_COLORS: Record<string, [mode: 'advance' | 'pause', color: string]> = {
   'accept-edits': ['advance', '#d3bff8'],
+  'auto-edits': ['advance', '#d3bff8'],
   auto: ['advance', '#f6daa0'],
   'approve-for-me': ['advance', '#f6daa0'],
   bypass: ['advance', '#ffb6c5'],
   'full-access': ['advance', '#ffb6c5'],
   manual: ['pause', '#d2d4dc'],
   'ask-for-approval': ['pause', '#d2d4dc'],
+  ask: ['pause', '#d2d4dc'],
   plan: ['pause', '#a6ddd8'],
   'read-only': ['pause', '#a6ddd8'],
 };

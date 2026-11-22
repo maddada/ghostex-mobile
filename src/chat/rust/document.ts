@@ -1364,6 +1364,8 @@ export type QuestionCard = {
   approvalTitle?: string;
   /** The muted line under it: the tool, and the folder it runs in when known. */
   approvalDetail?: string;
+  /** Optional brief note explaining why an approval still reached the user (e.g. in Full access). */
+  approvalReason?: string;
   /** The answer went out while gxserver was away and goes again once it is back. */
   reconnecting?: boolean;
 };

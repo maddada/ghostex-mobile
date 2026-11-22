@@ -5,17 +5,26 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { RustChat } from '../../rust/useRustChat';
 import { APPROVAL_ASK_FALLBACK, APPROVAL_TITLE_FALLBACK, RECONNECTING_NOTE, approvalAnswer } from './answers';
+import { Glyph } from './icons';
 import { str } from './json';
 import { useCardText } from './primitives';
-import { CommandBox, PendingAnswerNote, ToneButton, ToneCard, ToneDismiss, dimPending, isShellTool } from './ToneCard';
+import { CommandBox, PendingAnswerNote, ToneButton, ToneCard, ToneDismiss, dimPending, isShellTool, toneLook } from './ToneCard';
+import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+
+function withAlpha(hex: string, alpha: number): string {
+  const value = parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
 
 export function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const cardText = useCardText();
+  const styles = useStyles();
+  const P = useTranscriptTheme();
   const { dispatch } = chat;
   const prompt = document.prompt;
   const card = document.questionCard;
@@ -24,6 +33,7 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
   const busy = card.busy || pending;
   const summary = str(prompt, 'summary');
   const tool = str(prompt, 'tool');
+  const reason = (card.approvalReason ?? '').trim() || str(prompt, 'reason');
   const body =
     summary.length > 0
       ? [<CommandBox key="command" command={summary} shell={isShellTool(tool)} />]
@@ -32,6 +42,24 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
             {card.approvalAsk || APPROVAL_ASK_FALLBACK}
           </Text>,
         ];
+  if (reason.length > 0) {
+    const look = toneLook('warning', P.light);
+    const hue = look.hue ?? P.muted;
+    body.push(
+      <View
+        key="reason"
+        style={[
+          styles.reason,
+          { borderColor: withAlpha(hue, 0.28), backgroundColor: withAlpha(hue, 0.08) },
+        ]}
+      >
+        <View style={styles.reasonIcon}>
+          <Glyph name={look.icon} size={14} color={hue} />
+        </View>
+        <Text style={styles.reasonBody}>{reason}</Text>
+      </View>,
+    );
+  }
   if (card.reconnecting === true) {
     body.push(
       <Text key="reconnecting" style={cardText.hint}>
@@ -80,3 +108,25 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
     />
   );
 }
+
+const useStyles = themedStyles((P) => ({
+  reason: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  reasonIcon: {
+    marginTop: 2,
+  },
+  reasonBody: {
+    flex: 1,
+    minWidth: 0,
+    color: P.foreground,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+}));
