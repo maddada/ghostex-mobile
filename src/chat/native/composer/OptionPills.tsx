@@ -28,7 +28,6 @@ const MODE_COLORS: Record<string, [mode: 'advance' | 'pause', color: string]> = 
   bypass: ['advance', '#ffb6c5'],
   'full-access': ['advance', '#ffb6c5'],
   manual: ['pause', '#d2d4dc'],
-  ask: ['pause', '#d2d4dc'],
   'ask-for-approval': ['pause', '#d2d4dc'],
   ask: ['pause', '#d2d4dc'],
   plan: ['pause', '#a6ddd8'],
