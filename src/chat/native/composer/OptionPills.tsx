@@ -30,6 +30,7 @@ const MODE_COLORS: Record<string, [mode: 'advance' | 'pause', color: string]> = 
   manual: ['pause', '#d2d4dc'],
   ask: ['pause', '#d2d4dc'],
   'ask-for-approval': ['pause', '#d2d4dc'],
+  ask: ['pause', '#d2d4dc'],
   plan: ['pause', '#a6ddd8'],
   'read-only': ['pause', '#a6ddd8'],
 };

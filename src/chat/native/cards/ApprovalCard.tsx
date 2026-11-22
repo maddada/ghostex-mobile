@@ -13,17 +13,16 @@ import { APPROVAL_ASK_FALLBACK, APPROVAL_TITLE_FALLBACK, RECONNECTING_NOTE, appr
 import { Glyph } from './icons';
 import { str } from './json';
 import { useCardText } from './primitives';
-import {
-  CommandBox,
-  PendingAnswerNote,
-  ToneButton,
-  ToneCard,
-  ToneDismiss,
-  dimPending,
-  isShellTool,
-  toneLook,
-} from './ToneCard';
+import { CommandBox, PendingAnswerNote, ToneButton, ToneCard, ToneDismiss, dimPending, isShellTool, toneLook } from './ToneCard';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+
+function withAlpha(hex: string, alpha: number): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return hex;
+  }
+  const value = parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
 
 export function ApprovalCard({ chat, document }: { chat: RustChat; document: ChatDocument }) {
   const cardText = useCardText();
@@ -37,7 +36,7 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
   const busy = card.busy || pending;
   const summary = str(prompt, 'summary');
   const tool = str(prompt, 'tool');
-  const reason = (card.approvalReason?.trim() || str(prompt, 'reason').trim());
+  const reason = (card.approvalReason ?? '').trim() || str(prompt, 'reason');
   const body =
     summary.length > 0
       ? [<CommandBox key="command" command={summary} shell={isShellTool(tool)} />]
@@ -47,22 +46,20 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
           </Text>,
         ];
   if (reason.length > 0) {
-    const warning = toneLook('warning', P.light);
-    const hue = warning.hue ?? P.muted;
-    const isHex = /^#[0-9a-fA-F]{6}$/.test(hue);
+    const look = toneLook('warning', P.light);
+    const hue = look.hue ?? P.muted;
     body.push(
       <View
         key="reason"
         style={[
-          styles.reasonBox,
-          {
-            borderColor: isHex ? `${hue}47` : P.border,
-            backgroundColor: isHex ? `${hue}14` : P.ink(0.06),
-          },
+          styles.reason,
+          { borderColor: withAlpha(hue, 0.28), backgroundColor: withAlpha(hue, 0.08) },
         ]}
       >
-        <Glyph name={warning.icon} size={14} color={hue} />
-        <Text style={styles.reasonText}>{reason}</Text>
+        <View style={styles.reasonIcon}>
+          <Glyph name={look.icon} size={14} color={hue} />
+        </View>
+        <Text style={styles.reasonBody}>{reason}</Text>
       </View>,
     );
   }
@@ -116,7 +113,7 @@ export function ApprovalCard({ chat, document }: { chat: RustChat; document: Cha
 }
 
 const useStyles = themedStyles((P) => ({
-  reasonBox: {
+  reason: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
@@ -125,11 +122,14 @@ const useStyles = themedStyles((P) => ({
     borderRadius: 8,
     borderWidth: 1,
   },
-  reasonText: {
+  reasonIcon: {
+    marginTop: 2,
+  },
+  reasonBody: {
     flex: 1,
     minWidth: 0,
+    color: P.foreground,
     fontSize: 13,
     lineHeight: 18,
-    color: P.foreground,
   },
 }));
