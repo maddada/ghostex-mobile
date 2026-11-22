@@ -1364,6 +1364,8 @@ export type QuestionCard = {
   approvalTitle?: string;
   /** The muted line under it: the tool, and the folder it runs in when known. */
   approvalDetail?: string;
+  /** Why Ghostex or the agent paused for approval (for example outside the workspace). */
+  approvalReason?: string;
   /** The answer went out while gxserver was away and goes again once it is back. */
   reconnecting?: boolean;
 };
