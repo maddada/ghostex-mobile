@@ -17,6 +17,9 @@ import { CommandBox, PendingAnswerNote, ToneButton, ToneCard, ToneDismiss, dimPe
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 
 function withAlpha(hex: string, alpha: number): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return hex;
+  }
   const value = parseInt(hex.slice(1), 16);
   return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
 }
