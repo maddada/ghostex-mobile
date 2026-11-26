@@ -63,6 +63,8 @@ export type RootStackParamList = {
   FindPrompts: { machineId: string };
   /** One Find result in full, addressed by its stable prompt key. */
   FindPrompt: { machineId: string; promptKey: string };
+  /** A computer's screen, seen and driven from the phone (CDXC:RemoteScreen 2026-11-26 in remoteScreen/api.ts). */
+  RemoteScreen: { machineId: string };
   /** Web preview opening screen: enter an address or select a listening port. */
   WebPreviewPorts: { machineId: string };
   /** Browse a computer-side port through SSH, or an ordinary website directly. */

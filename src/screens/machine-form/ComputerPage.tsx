@@ -47,6 +47,7 @@ import {
   type MachineRecord,
 } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
+import { useRemoteScreenEnabled } from '../../remoteScreen/api';
 import { useRemovalAsksComputer } from '../../notifications/pushStore';
 import { approvalMode, listApprovals, setRequirePresence, usePlainApprovals } from '../../security/approvals';
 import { useAppearance } from '../../theme/useAppearance';
@@ -104,6 +105,8 @@ function ComputerPageBody({
   const formStyles = useFormStyles();
   const edges = useScrollToBarEdges(formStyles.scroll);
   const copy = ComputerPageCopy;
+  /** Open screen shows only while that computer has Remote screen switched on (remoteScreen/api.ts). */
+  const remoteScreen = useRemoteScreenEnabled(machine);
   const inventory = useInventoryStore((state) => state.inventoriesByMachineId[machine.id]);
   const status = machineCardStatus(machine, inventory);
   const easyConnect = machine.transport === 'tailcat';
@@ -225,6 +228,16 @@ function ComputerPageBody({
   const showsApprovals = easyConnect || machine.deviceId !== undefined || plainApprovals;
 
   const moreRows: { key: string; label: string; detail: string; onPress: () => void }[] = [
+    ...(remoteScreen
+      ? [
+          {
+            key: 'screen',
+            label: copy.rows.screen,
+            detail: copy.rows.screenDetail,
+            onPress: () => navigation.navigate('RemoteScreen', { machineId: machine.id }),
+          },
+        ]
+      : []),
     {
       key: 'name',
       label: easyConnect ? copy.rows.name.easyConnect : copy.rows.name.tailscale,

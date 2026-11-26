@@ -1204,6 +1204,9 @@ export const ComputerPageCopy = {
     advanced: 'Advanced',
     advancedEasyConnect: 'Ports, keys, test the connection, pair again',
     advancedTailscale: 'Port, SSH key, host key, test the connection',
+    /** Only while that computer has Remote screen switched on (CDXC:RemoteScreen 2026-11-26 in remoteScreen/api.ts). */
+    screen: 'Open screen',
+    screenDetail: 'See and control this computer',
   },
   /** Titles of the row pages (MachineForm with a `section`). */
   sectionTitles: {
@@ -2635,3 +2638,29 @@ export const AutomationsCopy = {
   settingsSearchBreadcrumb: 'Menu › Automations',
   settingsSearchDescription: 'See, pause, resume and run each computer’s scheduled automations, runs and triage.',
 } as const;
+
+/** The remote screen viewer (CDXC:RemoteScreen 2026-11-26 in remoteScreen/api.ts). */
+export const RemoteScreenCopy = {
+  close: 'Close',
+  starting: (computer: string) => (computer === '' ? 'Opening the screen…' : `Opening ${computer}'s screen…`),
+  failedTitle: (computer: string) =>
+    computer === '' ? "Couldn't open the screen" : `Couldn't open ${computer}'s screen`,
+  failedBody: (code: string, message: string, computer: string) => {
+    const there = computer === '' ? 'the computer' : computer;
+    switch (code) {
+      case 'remoteScreenOff':
+        return `Remote screen is off on ${there}.`;
+      case 'remoteScreenHelperMissing':
+        return `Ghostex on ${there} has no screen helper yet.`;
+      case 'forbidden':
+        return `This phone isn't allowed to open ${there}'s screen.`;
+      case 'unreachable':
+        return `Can't reach ${there} right now.`;
+      case 'pageFailed':
+        return 'The screen stopped loading. The connection to the computer may have dropped.';
+      default:
+        return message === '' ? 'Something went wrong starting the screen.' : message;
+    }
+  },
+  tryAgain: 'Try again',
+};

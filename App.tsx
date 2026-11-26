@@ -76,6 +76,7 @@ import FindPromptScreen from './src/screens/FindPromptScreen';
 import FindPromptsScreen from './src/screens/FindPromptsScreen';
 import WebPreviewPortsScreen from './src/screens/WebPreviewPortsScreen';
 import WebPreviewScreen from './src/screens/WebPreviewScreen';
+import RemoteScreenScreen from './src/screens/RemoteScreenScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import ConnectChooseScreen from './src/screens/ConnectChooseScreen';
 import ScanCodeScreen from './src/screens/ScanCodeScreen';
@@ -328,6 +329,7 @@ export default function App() {
                     options={{ title: WebPreviewCopy.pickerTitle }}
                   />
                   <Stack.Screen name="WebPreview" component={WebPreviewScreen} options={{ headerShown: false }} />
+                  <Stack.Screen name="RemoteScreen" component={RemoteScreenScreen} options={{ headerShown: false }} />
                   <Stack.Screen name="Docs" component={DocsScreen} options={{ title: DocsCopy.listTitle }} />
                   <Stack.Screen name="DocViewer" component={DocViewerScreen} options={{ title: '' }} />
                   <Stack.Screen name="Changes" component={ChangesScreen} options={{ title: ChangesCopy.title }} />
