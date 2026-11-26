@@ -14,7 +14,7 @@ import * as Clipboard from 'expo-clipboard';
 import Collapsible from '../../components/common/Collapsible';
 import { SwitchRow } from '../../components/common/SwitchRow';
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { TailscaleFormCopy } from '../../copy';
+import { TailscaleFormCopy } from '../../copy/machines';
 import type { MachineTransport } from '../../machines/store';
 
 import { useFormStyles } from './styles';

@@ -21,7 +21,7 @@ import { Accordion, type AccordionItem } from '../components/common/Collapsible'
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { SetupButton, StatusDot, useSetupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { SshOsButtons, type SshOs } from '../components/onboarding/SshAccessHelpSheet';
-import { CantReachCopy } from '../copy';
+import { CantReachCopy } from '../copy/machines';
 import { useInventoryStore } from '../inventory/store';
 import { machineDisplayLabel, machineTransportLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';

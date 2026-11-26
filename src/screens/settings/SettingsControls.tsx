@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Glyph } from '../../chat/native/cards/icons';
-import { SwitchRow } from '../../components/common/SwitchRow';
+import { SwitchRow, type SwitchRowAccessibility } from '../../components/common/SwitchRow';
 import SteppedSlider from '../../components/common/SteppedSlider';
 import { FoldListFrame } from '../../components/common/foldGap';
 import KeyboardAwareScrollView from '../../components/common/keyboard/KeyboardAwareScrollView';
@@ -429,12 +429,20 @@ export function ToggleRow({
   detail,
   value,
   onValueChange,
+  icon,
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   label: string;
   /** A muted second line under the label. */
   detail?: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  /** A symbol before the label (a Session Tags status entry's). */
+  icon?: ReactNode;
+  /** VoiceOver's actions on the row besides its switch (a Session Tags entry's Move Up and Move Down). */
+  accessibilityActions?: SwitchRowAccessibility['accessibilityActions'];
+  onAccessibilityAction?: SwitchRowAccessibility['onAccessibilityAction'];
 }) {
   const styles = useSettingsStyles();
   const appearance = useAppearance();
@@ -446,7 +454,10 @@ export function ToggleRow({
         label={label}
         style={styles.row}
         pressedStyle={styles.rowPressed}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
       >
+        {icon}
         {detail === undefined ? (
           <Text style={styles.rowLabel}>{label}</Text>
         ) : (

@@ -13,7 +13,7 @@ import { readableSecondaryText } from '../../theme/sidebarAppearance';
 import { useAppearance } from '../../theme/useAppearance';
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { DownloadGlyph, RefreshGlyph } from '../../components/sessions/icons';
-import { EditMachineCopy } from '../../copy';
+import { EditMachineCopy } from '../../copy/machines';
 import { openShownCommandTerminal } from '../../machines/appUpdate';
 import type { MachineConnectionTarget } from '../../machines/credentials';
 import { machineNameById } from '../../machines/store';

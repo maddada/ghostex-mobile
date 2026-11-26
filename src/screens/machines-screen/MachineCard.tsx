@@ -13,7 +13,7 @@ import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChevronRightGlyph, CloudGlyph, DownloadGlyph, TrashGlyph } from '../../components/sessions/icons';
-import { MachinesCopy } from '../../copy';
+import { MachinesCopy } from '../../copy/machines';
 import type { AppUpdateView } from '../../machines/appUpdate';
 import { GhostexRadii, GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import { MACHINE_STATUS_BADGE_LABEL, MACHINE_STATUS_COLOR, type MachineCardStatus } from './machineCardModel';

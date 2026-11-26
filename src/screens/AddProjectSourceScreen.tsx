@@ -54,7 +54,8 @@ import {
   GitForkGlyph,
   WorldGlyph,
 } from '../components/sessions/icons';
-import { AddProjectCopy, EditMachineCopy } from '../copy';
+import { AddProjectCopy } from '../copy';
+import { EditMachineCopy } from '../copy/machines';
 import { useInventoryStore } from '../inventory/store';
 import { openShownCommandTerminal } from '../machines/appUpdate';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';

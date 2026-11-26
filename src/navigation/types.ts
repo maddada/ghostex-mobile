@@ -1,7 +1,7 @@
 import type { AddProjectSourceId } from '../addProject/client';
 import type { ContextSession } from '../files/sessionContext';
 import type { SettingsPageId } from '../screens/settings/pages';
-import type { SettingsSearchFocus } from '../screens/settings/search/SettingsSearchAnchor';
+import type { SettingsSearchFocus } from '../screens/settings/search/settingsSearchFocus';
 
 /**
  * Add/edit machine form params. `tailcatToken` prefills the Easy Connect

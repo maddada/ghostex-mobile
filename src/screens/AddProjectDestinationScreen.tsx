@@ -38,7 +38,8 @@ import {
   invalidateProjectPickerPlacesCache,
   useProjectPickerPlaces,
 } from '../addProject/useProjectPickerPlaces';
-import { AddProjectCopy, EditMachineCopy } from '../copy';
+import { AddProjectCopy } from '../copy';
+import { EditMachineCopy } from '../copy/machines';
 import { useInventoryStore } from '../inventory/store';
 import { openShownCommandTerminal } from '../machines/appUpdate';
 import { useMachinesStore } from '../machines/store';

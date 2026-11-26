@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
-import { Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+
+/** VoiceOver's custom actions a row can carry besides its switch. */
+export type SwitchRowAccessibility = Pick<PressableProps, 'accessibilityActions' | 'onAccessibilityAction'>;
 
 /**
  * A row that holds a switch and toggles it when any part of the row is tapped, not only the switch.
@@ -15,6 +18,8 @@ export function SwitchRow({
   style,
   pressedStyle,
   children,
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   value: boolean;
   onValueChange: (value: boolean) => void;
@@ -25,12 +30,14 @@ export function SwitchRow({
   /** Drawn while the row is pressed; a light dim when omitted. */
   pressedStyle?: StyleProp<ViewStyle>;
   children: ReactNode;
-}) {
+} & SwitchRowAccessibility) {
   return (
     <Pressable
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: value, disabled }}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       disabled={disabled}
       onPress={() => onValueChange(!value)}
       style={({ pressed }) => [style, pressed ? (pressedStyle ?? { opacity: 0.7 }) : null]}

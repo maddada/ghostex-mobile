@@ -519,6 +519,7 @@ function normalizeRoot(root: JsonObject): GhostexMobileSummary {
     sidebarView: root.sidebarView === 'unified' ? 'unified' : 'project',
     unifiedWorkingSection: root.unifiedWorkingSection !== false,
     unifiedGroupByProject: root.unifiedGroupByProject === true,
+    groupSessionsByTags: root.groupSessionsByTags === true,
     unifiedProjectOrder: Array.isArray(root.unifiedProjectOrder)
       ? root.unifiedProjectOrder.filter((key): key is string => typeof key === 'string')
       : [],

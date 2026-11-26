@@ -4,7 +4,8 @@
  *
  * A row is found by the words it shows, so the shared rows (`SettingsControls`) anchor themselves with no change to
  * the pages; a hand-built row wraps itself in `SettingsSearchAnchor`. A row that is not on screen (a choice that only
- * shows once another is made, a section still loading) falls back to the top of its Settings section.
+ * shows once another is made, a section still loading) falls back to the result's stand-in row, where it names one,
+ * or to the top of its Settings section.
  */
 
 import {
@@ -22,20 +23,7 @@ import { Animated, StyleSheet, View, type ScrollViewInstance, type ViewInstance 
 
 import { colorWithOpacity, GhostexRadii } from '../../../theme/palette';
 import { useAppearance } from '../../../theme/useAppearance';
-
-export type SettingsSearchAnchorKind = 'row' | 'header';
-
-export type SettingsSearchTarget = { readonly kind: SettingsSearchAnchorKind; readonly label: string };
-
-/**
- * A result's place on its page, carried in the `SettingsPage` route's params. `section` is the `SettingsSection` name
- * ('' for a page without sections); `target` null lands on the section's top. `at` tells two taps of one result apart.
- */
-export type SettingsSearchFocus = {
-  readonly section: string;
-  readonly target: SettingsSearchTarget | null;
-  readonly at: number;
-};
+import { focusedAnchor, type SettingsSearchAnchorKind, type SettingsSearchFocus } from './settingsSearchFocus';
 
 type Anchor = {
   readonly section: string;
@@ -132,7 +120,8 @@ async function sectionTop(scroll: ScrollViewInstance | null, anchors: readonly A
 
 /**
  * The anchors and scroll view of one Settings page's layout, and the landing on the focus the page was opened with:
- * the row as soon as it shows, else (after a moment) the top of its section, upgraded to the row if it shows later.
+ * the row as soon as it shows, else its stand-in row or (after a moment) the top of its section, upgraded to the row
+ * if it shows later; after a stand-in, for as long as the page is open.
  */
 export function useSettingsSearchLanding(): {
   anchors: SettingsSearchAnchors;
@@ -151,16 +140,15 @@ export function useSettingsSearchLanding(): {
     const started = Date.now();
     const inSection = (): Anchor[] => [...anchors.anchors].filter((anchor) => anchor.section === focus.section);
     const tryRow = (): boolean => {
-      const target = focus.target;
-      if (target === null) return false;
-      const row = inSection().find((anchor) => anchor.kind === target.kind && anchor.label === target.label);
-      if (row === undefined) return false;
-      landed.current = { at: focus.at, exact: true };
+      const found = focusedAnchor(anchors.anchors, focus);
+      // The stand-in is revealed once; the page keeps waiting for the row itself.
+      if (found === null || (!found.exact && landed.current?.at === focus.at)) return false;
+      landed.current = { at: focus.at, exact: found.exact };
       // A frame for the rows to lay out before measuring.
       requestAnimationFrame(() => {
-        if (live) void reveal(scrollRef.current, row);
+        if (live) void reveal(scrollRef.current, found.anchor);
       });
-      return true;
+      return found.exact;
     };
     let fallingBack = false;
     const tryFallback = (): void => {
@@ -181,7 +169,12 @@ export function useSettingsSearchLanding(): {
       if (tryRow()) return stop();
       const waited = Date.now() - started;
       if (focus.target === null || waited >= FALLBACK_AFTER_MS) tryFallback();
-      if (waited >= GIVE_UP_AFTER_MS || (focus.target === null && fallingBack)) stop();
+      if (focus.target === null && fallingBack) return stop();
+      if (waited < GIVE_UP_AFTER_MS) return;
+      // A row behind a choice on the page (the stand-in's) shows once that choice is made: the page keeps listening
+      // for it, without polling, while it is open.
+      if (focus.standIn === undefined) stop();
+      else clearInterval(timer);
     };
     const timer = setInterval(step, POLL_MS);
     const stop = (): void => {

@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { TailscaleFormCopy } from '../../copy';
+import { TailscaleFormCopy } from '../../copy/machines';
 import { useFormStyles } from './styles';
 import { runConnectionTest, type ConnectionTestOutcome, type ConnectionTestPlan } from './testConnection';
 

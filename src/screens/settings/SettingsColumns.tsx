@@ -45,7 +45,7 @@ import { LinkRow, SettingsPageEdgesContext, useSettingsStyles } from './Settings
 import { settingsColumnsFor, type ColumnRoute } from './columnRules';
 import { SettingsSearchField, SettingsSearchResults, useSettingsSearching } from './search/SettingsSearch';
 import { StarRequestRows } from './StarRequestRows';
-import type { SettingsSearchFocus } from './search/SettingsSearchAnchor';
+import type { SettingsSearchFocus } from './search/settingsSearchFocus';
 
 /** The Updates row with its "update ready" summary, which reads the update state and can throw. */
 function UpdatesNoticeRow({ onPress, selected }: { onPress: () => void; selected: boolean | undefined }) {

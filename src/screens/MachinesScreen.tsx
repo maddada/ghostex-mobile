@@ -24,7 +24,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import PathCard from '../components/onboarding/PathCard';
 import { CameraGlyph, QrcodeGlyph, ShieldGlyph, SparklesGlyph } from '../components/onboarding/SetupIcons';
-import { MachinesCopy } from '../copy';
+import { MachinesCopy } from '../copy/machines';
 import { DemoCopy } from '../demo/copy';
 import { useInventoryStore } from '../inventory/store';
 import { removeComputerFromPhone } from '../machines/removeComputer';

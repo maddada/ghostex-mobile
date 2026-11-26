@@ -37,7 +37,8 @@ import {
 import { SetupButton, useSetupText } from '../components/onboarding/SetupPrimitives';
 import SshAccessHelpSheet, { type SshOs } from '../components/onboarding/SshAccessHelpSheet';
 import { CheckIcon } from '../components/terminal/icons';
-import { ComputerPageCopy, EditMachineCopy, MachineCopy, SshDetailsFormCopy, TailscaleFormCopy } from '../copy';
+import { MachineCopy } from '../copy';
+import { ComputerPageCopy, EditMachineCopy, SshDetailsFormCopy, TailscaleFormCopy } from '../copy/machines';
 import { useInventoryStore } from '../inventory/store';
 import { APP_UPDATE_FRESH_MS, refreshAppUpdate } from '../machines/appUpdate';
 import { refreshMachineTools } from '../machines/machineTools';

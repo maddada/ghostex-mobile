@@ -11,16 +11,24 @@
  * Kept free of React Native components: the lists below are plain data.
  */
 
-import { AutomationsCopy, CommandPadCopy, LiveActivityCopy, NotificationChoicesCopy, NotificationsCopy } from '../../../copy';
+import {
+  AutomationsCopy,
+  CommandPadCopy,
+  LiveActivityCopy,
+  NotificationChoicesCopy,
+  NotificationsCopy,
+  SessionGroupsCopy,
+} from '../../../copy';
 import { CrashReportsSettingsCopy } from '../../../copy/crashReports';
 import { CRASH_REPORTS_IN_SETTINGS } from '../../../feedback/crashReports';
 import { LIVE_ACTIVITY_PUSH_SUPPORTED } from '../../../notifications/liveActivityPushStore';
 import { NOTIFICATIONS_SUPPORTED } from '../../../notifications/notificationCentre';
 import { ANALYTICS_PURPOSE_COPY, ANALYTICS_TOGGLE_TITLE } from '../../../copy/privacy';
+import type { SidebarOrganization } from '../../../settingsSync/sidebarOrganization';
 import { SETTINGS_PAGES, type SettingsPageId } from '../pages';
 import { DESKTOP_SETTINGS_WORDS } from './desktopSettingsWords.generated';
 import { anyMatches, SearchPattern, searchTrim } from './fuzzyMatch';
-import type { SettingsSearchFocus, SettingsSearchTarget } from './SettingsSearchAnchor';
+import type { SettingsSearchFocus, SettingsSearchTarget } from './settingsSearchFocus';
 
 export type SettingsSearchEntry = {
   readonly page: SettingsPageId;
@@ -41,6 +49,11 @@ export type SettingsSearchEntry = {
   readonly keywords?: readonly string[];
   /** The row's choices, found like its title. */
   readonly options?: readonly string[];
+  /**
+   * A row the page shows only with the Unified sidebar. While the Project sidebar is chosen, the result says
+   * `projectDescription` and the page lands on `standIn`, where the sidebar is chosen, then on the row once it shows.
+   */
+  readonly unifiedOnly?: { readonly projectDescription: string; readonly standIn: SettingsSearchTarget };
 };
 
 const header = (label: string): SettingsSearchTarget => ({ kind: 'header', label });
@@ -257,6 +270,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: 'settings:sessions-list:sidebar',
     group: 'Layout',
     formerGroup: 'Sidebar',
+    title: 'Group sessions by tags',
+    description: 'Group Unified by the Session Tags order. Change the order in Session Tags.',
+    catalog: 'groupSessionsByTags',
+    unifiedOnly: { projectDescription: SessionGroupsCopy.searchInProjectSidebar, standIn: row('Sidebar') },
+  },
+  {
+    page: 'sessionsList',
+    section: 'settings:sessions-list:sidebar',
+    group: 'Layout',
+    formerGroup: 'Sidebar',
     title: 'Moving section',
     description: 'Sessions that are working fold into a Moving section at the bottom until they need you.',
     catalog: 'unifiedWorkingSection',
@@ -355,7 +378,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: 'settings:sessions-list:session-tags',
     title: 'Session Tags',
     anchor: header('Session Tags'),
-    description: 'The tags the Tag As menu and the tag filter offer.',
+    description: 'The tags the Tag As menu and the tag filter offer, and the order Group sessions by tags follows.',
     catalog: 'sidebarSessionTagListItems',
   },
 
@@ -1180,9 +1203,14 @@ const PAGE_SEARCH_ALIASES: Partial<Record<SettingsPageId, readonly string[]>> = 
 
 /**
  * The Settings pages and rows `query` finds, best first, among `pages` (the pages this phone lists, in its order:
- * another page's rows are left out). A blank query finds nothing.
+ * another page's rows are left out). A blank query finds nothing. `sidebarView` is the sidebar chosen in Sidebar &
+ * Sessions, which decides where a Unified-only row's result leads.
  */
-export function searchSettings(query: string, pages: readonly SettingsPageId[]): SettingsSearchResult[] {
+export function searchSettings(
+  query: string,
+  pages: readonly SettingsPageId[],
+  sidebarView: SidebarOrganization['sidebarView'],
+): SettingsSearchResult[] {
   const trimmed = searchTrim(query);
   if (trimmed === '') return [];
   const pattern = new SearchPattern(trimmed);
@@ -1209,14 +1237,19 @@ export function searchSettings(query: string, pages: readonly SettingsPageId[]):
     const desktop = entry.catalog === undefined ? undefined : DESKTOP_SETTINGS_WORDS[entry.catalog];
     const trail = pageTrail(entry.page);
     const group = entry.group;
+    const elsewhere = sidebarView === 'project' ? entry.unifiedOnly : undefined;
+    const target = entry.anchor === undefined ? row(entry.title) : entry.anchor;
     ranked.push({
       result: {
         key: `row:${index}`,
         title: entry.title,
         breadcrumb: group === undefined || group === entry.title ? trail : `${trail} › ${group}`,
-        description: entry.description ?? desktop?.subtitle ?? '',
+        description: elsewhere?.projectDescription ?? entry.description ?? desktop?.subtitle ?? '',
         page: entry.page,
-        focus: { section: entry.section, target: entry.anchor === undefined ? row(entry.title) : entry.anchor },
+        focus:
+          elsewhere === undefined
+            ? { section: entry.section, target }
+            : { section: entry.section, target, standIn: elsewhere.standIn },
       },
       rank: score,
       order: pageOrder * 1000 + index,

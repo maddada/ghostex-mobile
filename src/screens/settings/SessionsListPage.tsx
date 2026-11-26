@@ -1,6 +1,8 @@
+import { SessionGroupsCopy } from '../../copy';
 import { useInventoryStore } from '../../inventory/store';
 import { useMachinesStore } from '../../machines/store';
 import { useSettingsStore } from '../../settings/store';
+import { setGroupSessionsByTags } from '../../settingsSync/groupingSwitch';
 import { setSidebarSetting } from '../../settingsSync/settingsSync';
 import { useSidebarOrganization, type SidebarOrganization } from '../../settingsSync/sidebarOrganization';
 import { useSyncedEntriesStore } from '../../settingsSync/syncedEntries';
@@ -84,11 +86,18 @@ export default function SessionsListPage() {
             )}
         {unified ? (
           <>
+            <ToggleRow
+              label={SessionGroupsCopy.switchLabel}
+              detail={SessionGroupsCopy.switchDetail}
+              value={organization.groupSessionsByTags}
+              onValueChange={(next) => setGroupSessionsByTags(next, selectedSummary)}
+            />
             {toggle(
               'unifiedWorkingSection',
               'Moving section',
               'Sessions that are working fold into a Moving section at the bottom until they need you.',
             )}
+            {organization.groupSessionsByTags ? <Caption>{SessionGroupsCopy.movingKept}</Caption> : null}
             {toggle(
               'unifiedGroupByProject',
               'Group by project',
@@ -166,7 +175,11 @@ export default function SessionsListPage() {
           </>
         ) : null}
       </SettingsSection>
-      <SessionTagsSection items={organization.sidebarSessionTagListItems} summary={selectedSummary} />
+      <SessionTagsSection
+        items={organization.sidebarSessionTagListItems}
+        summary={selectedSummary}
+        grouping={unified && organization.groupSessionsByTags}
+      />
       <SettingsSection name="settings:sessions-list:sync">
         <Caption>
           {!carrying

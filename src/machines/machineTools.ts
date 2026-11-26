@@ -14,7 +14,8 @@
  * picker), server/src/machine_integrations.rs, server/src/managed_tools/desktop_control.rs.
  */
 
-import { EditMachineCopy, FailureCopy } from '../copy';
+import { FailureCopy } from '../copy';
+import { EditMachineCopy } from '../copy/machines';
 import { create } from 'zustand';
 
 import { chatMachineLink, unreachableMessage } from '../chat/rust/machine-link';

@@ -11,6 +11,7 @@ import {
   type GhostexSummaryCapabilities,
 } from '../mobileSummary';
 import { withoutGbots } from '../gbotsFilter';
+import { effectiveSessionTag } from '../sessionTags';
 import { collectionIdByProjectId, orderedSpaces } from '../../spaces/spaceFilter';
 import { filterSummaryForWorkspace } from '../../workspaces/workspaceFilter';
 import {
@@ -45,10 +46,41 @@ export function isBrowserSession(session: GhostexSession): boolean {
   return session.kind === 'browser' || session.surface === 'browser';
 }
 
-/** A session in the builder's terms, read by its computer's capabilities, keeping the phone's own record beside it. */
+/** What a main session's hidden side chats wait on (gx-core sidebar_view/rows.rs `SideChatNeeds`). */
+export type SideChatNeeds = { questions: number; awaitingAnswer: boolean; approval: boolean };
+
+/**
+ * The questions and approvals each main session's side chats wait on, by `<projectId>\n<sessionId>` of the main
+ * session (gx-core rows.rs `side_chat_needs`). A side chat is not a row of the list, so its main session's row counts
+ * them as its own, as the desktop's row does (CDXC:SideChats 2026-11-02 there).
+ */
+export function sideChatNeedsOf(
+  sessions: readonly GhostexSession[],
+  capabilities: GhostexSummaryCapabilities,
+): Map<string, SideChatNeeds> {
+  const needs = new Map<string, SideChatNeeds>();
+  for (const session of sessions) {
+    if (session.sideChatParentSessionId === '') continue;
+    const question = hasQuestion(session.pendingQuestionCount, capabilities.awaitingAnswer && session.awaitingAnswer);
+    if (!question && session.awaitingApproval !== true) continue;
+    const key = `${session.projectId ?? ''}\n${session.sideChatParentSessionId}`;
+    const entry = needs.get(key) ?? { questions: 0, awaitingAnswer: false, approval: false };
+    entry.questions += session.pendingQuestionCount;
+    entry.awaitingAnswer ||= session.awaitingAnswer;
+    entry.approval ||= session.awaitingApproval === true;
+    needs.set(key, entry);
+  }
+  return needs;
+}
+
+/**
+ * A session in the builder's terms, read by its computer's capabilities, keeping the phone's own record beside it;
+ * `sideChats` is what its hidden side chats wait on, counted as its own.
+ */
 export function unifiedSessionInput(
   session: GhostexSession,
   capabilities: GhostexSummaryCapabilities,
+  sideChats: SideChatNeeds | undefined = undefined,
 ): UnifiedSessionInput & { source: GhostexSession } {
   return {
     sessionId: session.sessionId,
@@ -59,12 +91,18 @@ export function unifiedSessionInput(
         ? session.gitBranch
         : (session.work?.branch ?? ''),
     activity: session.activity,
-    awaitingApproval: session.awaitingApproval === true,
-    hasQuestion: hasQuestion(session.pendingQuestionCount, capabilities.awaitingAnswer && session.awaitingAnswer),
+    awaitingApproval: session.awaitingApproval === true || sideChats?.approval === true,
+    hasQuestion: hasQuestion(
+      session.pendingQuestionCount + (sideChats?.questions ?? 0),
+      capabilities.awaitingAnswer && (session.awaitingAnswer || sideChats?.awaitingAnswer === true),
+    ),
     modelSelectionFailed: session.modelSelectionFailed === true,
     // The desktop counts a program's `error` as Failed only once its turn is over (gx-core rows.rs).
     programStatusFailed: session.programStatusFailed === true && session.activity === 'attention',
     hasBackgroundWork: (session.backgroundWorkDetectedAt ?? '') !== '',
+    attentionKind: session.attentionKind,
+    attentionHandoverNeedsYou: session.attentionHandoverNeedsYou,
+    sessionTag: effectiveSessionTag(session),
     isPinned: session.isPinned === true,
     isParked: session.isParked === true,
     isDraft: session.isDraft === true,
@@ -100,6 +138,8 @@ export function unifiedMachineInput(computer: UnifiedComputer, alone: boolean): 
       ? computer.summary
       : filterSummaryForWorkspace(computer.summary, computer.workspaceId),
   );
+  // Before the side chats are hidden, what they wait on goes to their main sessions' rows.
+  const sideChats = sideChatNeedsOf(summary.sessions, summary.capabilities);
   const collections = collectionIdByProjectId(summary);
   const pathById = new Map(summary.projects.map((project) => [project.projectId, project.path ?? '']));
   const spaces = orderedSpaces(summary.sidebarSpaces);
@@ -131,7 +171,13 @@ export function unifiedMachineInput(computer: UnifiedComputer, alone: boolean): 
         collectionId: collections.get(project.projectId) ?? null,
       };
     }),
-    sessions: visibleSessions(summary.sessions).map((session) => unifiedSessionInput(session, summary.capabilities)),
+    sessions: visibleSessions(summary.sessions).map((session) =>
+      unifiedSessionInput(
+        session,
+        summary.capabilities,
+        sideChats.get(`${session.projectId ?? ''}\n${session.sessionId}`),
+      ),
+    ),
   };
 }
 

@@ -28,7 +28,8 @@ import ThemePage, { ThemeResetHeaderButton } from './ThemePage';
 import ExperiencePage from './ExperiencePage';
 import UpdatesPage from './UpdatesPage';
 import VoicePage from './VoicePage';
-import { SettingsSearchFocusProvider, type SettingsSearchFocus } from './search/SettingsSearchAnchor';
+import { SettingsSearchFocusProvider } from './search/SettingsSearchAnchor';
+import type { SettingsSearchFocus } from './search/settingsSearchFocus';
 
 /** One Settings page, chosen by the `SettingsPage` route's `page` param; beside the list in two columns. */
 export default function SettingsPageScreen({ route }: NativeStackScreenProps<RootStackParamList, 'SettingsPage'>) {

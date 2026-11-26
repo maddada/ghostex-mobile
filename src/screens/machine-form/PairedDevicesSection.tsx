@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { EditMachineCopy } from '../../copy';
+import { EditMachineCopy } from '../../copy/machines';
 import { chatMachineLink } from '../../chat/rust/machine-link';
 import type { ApprovalRequest } from '../../security/approvalPayload';
 import { approveRequest } from '../../security/approvals';

@@ -3,6 +3,8 @@
  * project's own shelves inside it, in the order the user arranged.
  *
  * A port of packages/gx-core/src/unified_sidebar/grouping.rs, held to it by `unifiedFixture.json`.
+ * While Group sessions by tags is on (./sessionGroups.ts) these headers are not drawn: the projects stand inside each
+ * status group in `orderedRepoKeys` order, and Pinned, Snoozed and Parked stay outside every group.
  */
 
 import type { UnifiedFilterOption, UnifiedRow, UnifiedView } from './build';

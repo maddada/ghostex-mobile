@@ -114,6 +114,11 @@ export function StatusCircleCheckGlyph(props: GlyphProps) {
   );
 }
 
+/** The Idle status group's empty circle (the approved design's `state-idle`), the same circle as the two above. */
+export function StatusCircleGlyph(props: GlyphProps) {
+  return <TablerGlyph {...props} shapes={[{ d: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0' }]} />;
+}
+
 export function FilterGlyph(props: GlyphProps) {
   return (
     <TablerGlyph

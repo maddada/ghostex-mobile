@@ -171,7 +171,11 @@ export const useUnifiedListStore = create<UnifiedListState>((set, get) => {
   };
 });
 
+/**
+ * Whether a shelf is open: Drafts and Pinned (which has a heading only while Group sessions by tags is on) start open,
+ * the others folded.
+ */
 export function shelfOpen(shelf: UnifiedShelf, toggled: readonly string[], repoKey: string | null = null): boolean {
   const key = repoKey === null ? shelf : `${repoKey}|${shelf}`;
-  return toggled.includes(key) !== (shelf === 'drafts');
+  return toggled.includes(key) !== (shelf === 'drafts' || shelf === 'pinned');
 }

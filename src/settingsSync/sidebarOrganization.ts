@@ -36,6 +36,7 @@ export type SidebarOrganization = {
   unifiedWorkingSection: boolean;
   unifiedGroupByProject: boolean;
   unifiedSessionOrder: UnifiedSessionOrder;
+  groupSessionsByTags: boolean;
   unifiedProjectOrder: string[];
   sidebarSessionTagListItems: unknown[] | null;
 };
@@ -59,6 +60,7 @@ export const SIDEBAR_ORGANIZATION_DEFAULTS: SidebarOrganization = {
   unifiedWorkingSection: true,
   unifiedGroupByProject: false,
   unifiedSessionOrder: 'recent',
+  groupSessionsByTags: false,
   unifiedProjectOrder: [],
   sidebarSessionTagListItems: null,
 };
@@ -130,6 +132,7 @@ export function computerSidebarValues(summary: GhostexMobileSummary): Partial<Si
     unifiedWorkingSection: summary.unifiedWorkingSection !== false,
     unifiedGroupByProject: summary.unifiedGroupByProject === true,
     unifiedSessionOrder: summary.unifiedSessionOrder ?? 'recent',
+    groupSessionsByTags: summary.groupSessionsByTags === true,
     unifiedProjectOrder: summary.unifiedProjectOrder ?? [],
   };
 }
@@ -191,6 +194,7 @@ export function organizeSummary(summary: GhostexMobileSummary): GhostexMobileSum
     unifiedWorkingSection: organization.unifiedWorkingSection,
     unifiedGroupByProject: organization.unifiedGroupByProject,
     unifiedSessionOrder: organization.unifiedSessionOrder,
+    groupSessionsByTags: organization.groupSessionsByTags,
     unifiedProjectOrder: organization.unifiedProjectOrder,
     sessionTagListItems: organization.sidebarSessionTagListItems ?? undefined,
     sidebarSpaces: spacesOff ? EMPTY_SIDEBAR_SPACES : summary.sidebarSpaces,

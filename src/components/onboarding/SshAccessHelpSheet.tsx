@@ -11,7 +11,7 @@ import { useAppearance, type Appearance } from '../../theme/useAppearance';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { SshAccessCopy } from '../../copy';
+import { SshAccessCopy } from '../../copy/machines';
 import { GhostexRadii, GhostexStrokeWidth, SetupPalette } from '../../theme/palette';
 import BottomSheet from '../common/BottomSheet';
 import { SetupButton, StepNumber, useSetupText } from './SetupPrimitives';

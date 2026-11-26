@@ -4,7 +4,7 @@
  * all on one line each. Pure functions so the card component only renders.
  */
 
-import { MachinesCopy } from '../../copy';
+import { MachinesCopy } from '../../copy/machines';
 import { DemoCopy } from '../../demo/copy';
 import { isDemoMachine } from '../../demo/identity';
 import type { MachineInventory } from '../../inventory/store';

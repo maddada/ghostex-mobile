@@ -7,7 +7,7 @@
 import { useAppearance } from '../../theme/useAppearance';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 
-import { TailscaleFormCopy } from '../../copy';
+import { TailscaleFormCopy } from '../../copy/machines';
 
 import { useFormStyles } from './styles';
 

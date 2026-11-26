@@ -10,7 +10,7 @@ import { useAppearance } from '../../theme/useAppearance';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SetupButton, StatusDot } from '../../components/onboarding/SetupPrimitives';
-import { EditMachineCopy } from '../../copy';
+import { EditMachineCopy } from '../../copy/machines';
 import { easyConnectRouteName, useEasyConnectPath } from '../../machines/easyConnectPath';
 import type { MachineRecord } from '../../machines/store';
 

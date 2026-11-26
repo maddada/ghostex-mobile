@@ -14,6 +14,7 @@
  * into it and fails when they change; this file must give the same answers. The summary adapter supplies `hasQuestion` through the shared mobile-summary predicate.
  */
 
+import type { GhostexAttentionKind } from '../mobileSummary';
 import { ACTIVE_SPACE_LABEL, sessionKeepsActive } from '../../spaces/activeProjects';
 import { mergedRepoIdentities, repoIdentity, type RepoIdentity } from './repo';
 import {
@@ -52,6 +53,16 @@ export type UnifiedSessionInput = {
   modelSelectionFailed: boolean;
   programStatusFailed: boolean;
   hasBackgroundWork: boolean;
+  /**
+   * `attention.kind` while the session is in attention: a finished turn or a wait for the user; `''` or absent from a
+   * computer that does not send it. Only Group sessions by tags reads it (sessionGroups.ts); the row's own status
+   * stays `unifiedStatus`.
+   */
+  attentionKind?: GhostexAttentionKind;
+  /** `attention.handoverNeedsYou`: a finished turn whose handover asks for the user. */
+  attentionHandoverNeedsYou?: boolean;
+  /** The session's hand-set tag (`effectiveSessionTag`), which a tag entry of the Session Tags list groups by. */
+  sessionTag?: string;
   isPinned: boolean;
   isParked: boolean;
   /** Never sent a message (gxserver's `draftStatus`, the row's pencil). */

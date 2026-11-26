@@ -403,6 +403,12 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
     ],
     "keywords": []
   },
+  "groupSessionsByTags": {
+    "title": "Group sessions by tags",
+    "subtitle": "Group the Unified sidebar by the Session Tags order: Needs you, Question, Error, Finished (not yet read), Working and Idle, across every project, with Drafts and Pinned above the groups and Snoozed and Parked below. Change the order in Session Tags, on a computer or on the phone. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+    "options": [],
+    "keywords": []
+  },
   "groupWorkingSessions": {
     "title": "Group working sessions",
     "subtitle": "Move sessions into a collapsed Working section under their project while their agent works; they return to Sessions when it stops or needs you. Also in the sidebar's Sort & Filter menu.",
@@ -619,8 +625,20 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "sidebarSessionTagListItems": {
     "title": "Tag filter list",
-    "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.",
+    "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu. While Group sessions by tags is on, the list also holds the six status entries (Needs you, Question, Error, Finished (not yet read), Working and Idle), which follow each agent and are never offered in Tag as; the first enabled entry that applies sets a session's group.",
     "options": [
+      "Needs you",
+      "status-needs-you",
+      "Question",
+      "status-question",
+      "Error",
+      "status-error",
+      "Finished (not yet read)",
+      "status-finished",
+      "Working",
+      "status-working",
+      "Idle",
+      "status-idle",
       "Favorite",
       "favorite",
       "High Priority",
@@ -1818,7 +1836,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "unifiedGroupByProject": {
     "title": "Group by project",
-    "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+    "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. While Group sessions by tags is on, each group lists its sessions under their projects' headings instead, and Pinned, Snoozed and Parked stay above and below the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
     "options": [],
     "keywords": []
   },
@@ -1837,7 +1855,7 @@ export const DESKTOP_SETTINGS_WORDS: Readonly<Record<string, DesktopSettingWords
   },
   "unifiedWorkingSection": {
     "title": "Group busy sessions in a Moving section",
-    "subtitle": "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Shown while the Unified sidebar is selected.",
+    "subtitle": "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Not shown while Group sessions by tags is on, which lists them in its Working group; the setting is kept. Shown while the Unified sidebar is selected.",
     "options": [],
     "keywords": []
   },

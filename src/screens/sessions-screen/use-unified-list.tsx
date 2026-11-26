@@ -10,6 +10,12 @@
  * The session wall (`wall`, the iPhone Duo's inner display with tiles chosen): each run of cards and shelf rows is
  * drawn as rows of tiles (`screens/wall/`) in the list's order, its group and shelf headers keeping their place; a
  * tile's badge is its card's status, a tap and a long press do what the card's do.
+ *
+ * With Group sessions by tags on (contract/unified/sessionGroups.ts) the cards stand in status and tag groups across
+ * every project, each under a header of the same stream (between the wall's runs of tiles too), with Drafts and Pinned
+ * above them and Snoozed and Parked below, and no Moving section; Group by project then puts project headings inside
+ * the groups. The view itself is built as before, so the reveal, the clocks, the icons and the triage read every
+ * session whatever group it stands in.
  */
 
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactElement } from 'react';
@@ -42,6 +48,13 @@ import {
 import { unifiedProjectChoices, type UnifiedProjectChoice } from '../../contract/unified/choices';
 import { toggleUnifiedFilter, unifiedFilterLabel, unifiedFilterMenu } from '../../contract/unified/filterMenu';
 import { unifiedListOf, unifiedMachineInput, type UnifiedComputer } from '../../contract/unified/fromSummary';
+import {
+  groupedUnifiedSettings,
+  groupUnifiedBySessionTags,
+  sessionGroupInputsKey,
+  sessionGroupInputsOf,
+  type SessionGroupHeader as GroupHeader,
+} from '../../contract/unified/sessionGroups';
 import { useSidebarOrganization } from '../../settingsSync/sidebarOrganization';
 import { useOpenUnifiedDraftsOnArrival } from '../../components/sessions/useDraftArrivals';
 import { groupUnifiedList, moveUnifiedProject, unifiedGroupCount, type UnifiedGroup } from '../../contract/unified/grouping';
@@ -64,6 +77,7 @@ import {
   UnifiedShelfHeader,
   UnifiedSlimRow,
 } from '../../components/sessions/unified/UnifiedCard';
+import { SessionGroupHeader, SessionGroupProjectHeading } from '../../components/sessions/unified/groupHeaders';
 import SessionRow, { treeAnchorBelowRow } from '../../components/sessions/SessionRow';
 import type { WorkChipActions } from '../../components/sessions/WorkChips';
 import { CoordinatorFold } from '../../components/sessions/CoordinatorFold';
@@ -121,6 +135,9 @@ export function makeSnoozeSession(deps: {
 
 type UnifiedListItem =
   | { kind: 'group'; key: string; repoKey: string; label: string; count: number; open: boolean; urgent: UnifiedStatus | null }
+  /** Group sessions by tags: a group's header, and a project's heading inside a group (neither folds). */
+  | { kind: 'statusGroup'; key: string; header: GroupHeader }
+  | { kind: 'groupProject'; key: string; repoKey: string; label: string; count: number }
   | { kind: 'shelf'; key: string; shelf: UnifiedShelf; repoKey: string | null; count: number; open: boolean }
   | { kind: 'card'; key: string; row: UnifiedRow<GhostexSession>; inGroup?: boolean }
   | { kind: 'slim'; key: string; shelf: UnifiedShelf; row: UnifiedRow<GhostexSession> }
@@ -238,18 +255,24 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   // The synced Sidebar organization, laid over each computer's summary (settingsSync/sidebarOrganization.ts).
   const organization = useSidebarOrganization(selectedSummary);
   const on = organization.sidebarView === 'unified';
+  const grouping = organization.groupSessionsByTags;
   const unifiedSettings = useMemo(
-    () => ({
-      workingSection: organization.unifiedWorkingSection,
-      parking: organization.enableSessionParking,
-      pinnedOrder: organization.pinnedSessionOrder,
-      sessionOrder: organization.unifiedSessionOrder,
-    }),
+    () =>
+      groupedUnifiedSettings(
+        {
+          workingSection: organization.unifiedWorkingSection,
+          parking: organization.enableSessionParking,
+          pinnedOrder: organization.pinnedSessionOrder,
+          sessionOrder: organization.unifiedSessionOrder,
+        },
+        grouping,
+      ),
     [
       organization.unifiedWorkingSection,
       organization.enableSessionParking,
       organization.pinnedSessionOrder,
       organization.unifiedSessionOrder,
+      grouping,
     ],
   );
   const ink = useSidebarInk();
@@ -398,9 +421,15 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     }
     activation.current = { key: selectedSessionKey, ancestors: chain };
     const shelf = card.shelf;
-    const inGroup = layout.groupByProject && shelf !== 'drafts';
+    // With the status groups the project headings neither fold nor hold shelves, and Pinned has a fold of its own.
+    const inGroup = layout.groupByProject && !grouping && shelf !== 'drafts';
     const repoKey = inGroup ? card.repo.key : null;
-    const foldsShelf = shelf === 'working' || shelf === 'snoozed' || shelf === 'parked' || shelf === 'drafts';
+    const foldsShelf =
+      shelf === 'working' ||
+      shelf === 'snoozed' ||
+      shelf === 'parked' ||
+      shelf === 'drafts' ||
+      (grouping && shelf === 'pinned');
     useUnifiedListStore.getState().revealThread({
       ancestors,
       shelfKey:
@@ -414,11 +443,22 @@ export function useUnifiedList(deps: UnifiedListDeps) {
   useOpenUnifiedDraftsOnArrival(view.drafts, on);
   const layout = { groupByProject: organization.unifiedGroupByProject, projectOrder: organization.unifiedProjectOrder };
   const groups = useMemo(
-    (): UnifiedGroup<GhostexSession>[] => (layout.groupByProject ? groupUnifiedList(view, layout.projectOrder) : []),
+    (): UnifiedGroup<GhostexSession>[] =>
+      layout.groupByProject && !grouping ? groupUnifiedList(view, layout.projectOrder) : [],
     // `projectOrder` is a new array per summary read, so its content is the dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view, layout.groupByProject, layout.projectOrder.join('\n')],
+    [view, layout.groupByProject, grouping, layout.projectOrder.join('\n')],
   );
+  const catalog = selectedSummary?.customSessionTags;
+  // `projectOrder` and the tag list are new arrays per summary read; their content, in one lossless key, is what the
+  // groups depend on.
+  const inputsKey = sessionGroupInputsKey(layout.projectOrder, organization.sidebarSessionTagListItems);
+  const groupByProject = layout.groupByProject;
+  const sessionGroups = useMemo(() => {
+    if (!grouping) return [];
+    const { projectOrder, tagList } = sessionGroupInputsOf(inputsKey);
+    return groupUnifiedBySessionTags(view, { tagList, catalog: catalog ?? null, projectOrder, groupByProject });
+  }, [view, grouping, catalog, groupByProject, inputsKey]);
   const choices = useMemo((): UnifiedProjectChoice[] => {
     if (!on) return [];
     return unifiedProjectChoices(
@@ -515,7 +555,43 @@ export function useUnifiedList(deps: UnifiedListDeps) {
         pushCard(shelf === 'working' ? { kind: 'card', key: row.id, row, inGroup: repoKey !== null } : { kind: 'slim', key: row.id, shelf, row });
       }
     };
-    if (layout.groupByProject) {
+    if (grouping) {
+      // Drafts and Pinned above the groups, Snoozed and Parked below, whatever Group by project says.
+      if (view.pinned.length > 0) {
+        const open = shelfOpen('pinned', toggledShelves);
+        list.push({
+          kind: 'shelf',
+          key: 'shelf:pinned',
+          shelf: 'pinned',
+          repoKey: null,
+          count: view.pinned.length,
+          open,
+        });
+        if (open) for (const row of view.pinned) pushCard({ kind: 'card', key: row.id, row });
+      }
+      for (const group of sessionGroups) {
+        if (group.header !== null)
+          list.push({ kind: 'statusGroup', key: `status-group:${group.key}`, header: group.header });
+        else list.push({ kind: 'gap', key: 'gap:ungrouped' });
+        if (group.projects === null) {
+          for (const row of group.rows) pushCard({ kind: 'card', key: row.id, row });
+          continue;
+        }
+        for (const project of group.projects) {
+          list.push({
+            kind: 'groupProject',
+            key: `group-project:${group.key}|${project.repoKey}`,
+            repoKey: project.repoKey,
+            label: project.label,
+            count: project.rows.length,
+          });
+          for (const row of project.rows) pushCard({ kind: 'card', key: row.id, row, inGroup: true });
+        }
+      }
+      const shelves = (['snoozed', 'parked'] as const).filter((shelf) => view[shelf].length > 0);
+      if (shelves.length > 0) list.push({ kind: 'gap', key: 'gap:shelves' });
+      for (const shelf of shelves) pushShelf(shelf, view[shelf], null);
+    } else if (layout.groupByProject) {
       for (const group of groups) {
         const open = !foldedGroups.includes(group.repoKey);
         const urgent = mostUrgent([...group.pinned, ...group.active, ...group.working, ...group.snoozed, ...group.parked]);
@@ -550,7 +626,19 @@ export function useUnifiedList(deps: UnifiedListDeps) {
       });
     }
     return list;
-  }, [view, toggledShelves, computers, groups, foldedGroups, layout.groupByProject, machines, inventoriesByMachineId, workChipActions]);
+  }, [
+    view,
+    toggledShelves,
+    computers,
+    groups,
+    sessionGroups,
+    grouping,
+    foldedGroups,
+    layout.groupByProject,
+    machines,
+    inventoriesByMachineId,
+    workChipActions,
+  ]);
 
   // The session wall: each run of cards and shelf rows as rows of tiles; every other item keeps its place.
   const wallColumns = wall?.columns ?? null;
@@ -650,6 +738,17 @@ export function useUnifiedList(deps: UnifiedListDeps) {
     if (item.kind === 'shelf') {
       const shelfKey = item.repoKey === null ? item.shelf : `${item.repoKey}|${item.shelf}`;
       return <UnifiedShelfHeader shelf={item.shelf} count={item.count} open={item.open} onToggle={() => toggleShelf(shelfKey)} />;
+    }
+    if (item.kind === 'statusGroup') return <SessionGroupHeader header={item.header} catalog={catalog} />;
+    if (item.kind === 'groupProject') {
+      return (
+        <SessionGroupProjectHeading
+          label={item.label}
+          icon={repoIcons.get(item.repoKey) ?? null}
+          count={item.count}
+          onNew={() => openGroupNewSession(item.repoKey)}
+        />
+      );
     }
     if (item.kind === 'group') {
       return (

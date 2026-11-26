@@ -107,17 +107,14 @@ import {
   FeedbackCopy,
   FindPromptsCopy,
   MachineCopy,
-  MachinesCopy,
   NotificationsCopy,
   AccountsCopy,
   PanesCopy,
   ScanCopy,
   SettingsCopy,
-  SshAccessCopy,
-  TailscaleFormCopy,
-  SshDetailsFormCopy,
   WebPreviewCopy,
 } from './src/copy';
+import { MachinesCopy, SshAccessCopy, TailscaleFormCopy, SshDetailsFormCopy } from './src/copy/machines';
 import { isSettingsRoute } from './src/screens/settings/columnRules';
 import { useAppearance } from './src/theme/useAppearance';
 import { useTerminalColours } from './src/theme/useTerminalColours';

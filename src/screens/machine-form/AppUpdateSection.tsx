@@ -14,7 +14,7 @@ import { ActivityIndicator, Alert, Linking, Switch, Text, View } from 'react-nat
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { CopyGlyph, DownloadGlyph, RefreshGlyph } from '../../components/sessions/icons';
-import { EditMachineCopy } from '../../copy';
+import { EditMachineCopy } from '../../copy/machines';
 import {
   appUpdateView,
   openShownCommandTerminal,

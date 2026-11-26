@@ -396,6 +396,11 @@ export type GhostexMobileSummary = {
   unifiedWorkingSection?: boolean;
   /** Group by Project in the Unified sidebar. */
   unifiedGroupByProject?: boolean;
+  /**
+   * Group sessions by tags in the Unified sidebar: status groups in the Session Tags order. The computer sends it
+   * only while on; absent means off, as from a computer without the switch.
+   */
+  groupSessionsByTags?: boolean;
   /** Repository keys in the order the user arranged the project groups. */
   unifiedProjectOrder?: string[];
   /** The Unified sidebar's own hover strip, which the phone's swipe buttons follow. */

@@ -14,7 +14,7 @@ import { GhostexNative } from '../../../modules/ghostex-native/src';
 import { CheckGlyph } from '../../components/onboarding/SetupIcons';
 import { StepNumber } from '../../components/onboarding/SetupPrimitives';
 import { SshOsButtons, type SshOs } from '../../components/onboarding/SshAccessHelpSheet';
-import { TailscaleFormCopy } from '../../copy';
+import { TailscaleFormCopy } from '../../copy/machines';
 import { GhostexStrokeWidth } from '../../theme/palette';
 
 export type TailscalePhoneState =

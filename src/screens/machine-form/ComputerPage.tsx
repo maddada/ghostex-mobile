@@ -2,7 +2,7 @@
  * A computer's page (Machines > a computer, Sessions' Remote Settings): whether it is connected and how, its
  * Approvals, the devices that can reach it, then four rows (name and Sessions tab, Ghostex updates, agents and
  * tools, Advanced) that each open a short page, and Remove at the bottom. Nothing on it is saved with a button.
- * CDXC:RemotePairing 2026-11-10 in copy.ts (`ComputerPageCopy`) has the user's pick.
+ * CDXC:RemotePairing 2026-11-10 in src/copy/machines.ts (`ComputerPageCopy`) has the user's pick.
  */
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -15,7 +15,8 @@ import { SwitchRow } from '../../components/common/SwitchRow';
 import { useScrollToBarEdges } from '../../components/common/verticalBar/VerticalBarArea';
 import { ChevronRightGlyph } from '../../components/onboarding/SetupIcons';
 import { SetupButton, StatusDot } from '../../components/onboarding/SetupPrimitives';
-import { ApprovalsCopy, ComputerPageCopy, EditMachineCopy, SshPairingCopy } from '../../copy';
+import { ApprovalsCopy, SshPairingCopy } from '../../copy';
+import { ComputerPageCopy, EditMachineCopy } from '../../copy/machines';
 import DemoMachineForm from '../../demo/DemoMachineForm';
 import { isDemoMachine } from '../../demo/identity';
 import { useInventoryStore } from '../../inventory/store';

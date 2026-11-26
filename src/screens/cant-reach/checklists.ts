@@ -6,7 +6,7 @@
  * an `action` the screen turns into a button.
  */
 
-import { CantReachCopy } from '../../copy';
+import { CantReachCopy } from '../../copy/machines';
 import { isTailscaleSshMachine, type MachineRecord } from '../../machines/store';
 
 export type ChecklistVerify = 'tailscaleOnPhone';

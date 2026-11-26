@@ -16,7 +16,7 @@ import { Alert, Switch, Text, View } from 'react-native';
 
 import { SwitchRow } from '../../components/common/SwitchRow';
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
-import { EditMachineCopy } from '../../copy';
+import { EditMachineCopy } from '../../copy/machines';
 import { chatMachineLink } from '../../chat/rust/machine-link';
 import { machineDisplayLabel, machineName, type MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
