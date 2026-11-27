@@ -60,6 +60,8 @@ internal object GhostexVoice {
   private var conversation: Session? = null
   private var dictation: Session? = null
   private var debugReceiver: BroadcastReceiver? = null
+  /** A call's waiting music, as `voiceSetWaitingMusic` sets it for that call's session. */
+  data class WaitingMusic(val enabled: Boolean = false, val volume: Float = 0.3f, val path: String? = null)
 
   data class Options(
     val mode: String,
@@ -152,6 +154,18 @@ internal object GhostexVoice {
   /** What JavaScript needs after a reload: the conversation still running, if any. */
   fun status(): Map<String, Any?>? = current("conversation")?.snapshot()
 
+  /**
+   * Settings › Voice set the waiting music, or a call is handed the phone's settings: the preview takes the volume,
+   * and the conversation running now takes the rest only when [session] names it. Nothing is kept for later calls; a
+   * call starts without music (GhostexVoice.swift's `setWaitingMusic` holds the WHY).
+   */
+  fun setWaitingMusic(enabled: Boolean, volume: Double, path: String?, session: String?) {
+    val music = WaitingMusic(enabled && path != null, volume.coerceIn(0.0, 1.0).toFloat(), path)
+    GhostexVoiceAudio.WaitingMusicPreview.setVolume(music.volume)
+    val call = current("conversation") ?: return
+    if (session != null && call.id == session) call.applyWaitingMusic(music)
+  }
+
   internal fun finished(session: Session) {
     synchronized(lock) {
       if (conversation === session) conversation = null
@@ -225,6 +239,9 @@ internal object GhostexVoice {
     private var audioSession: GhostexVoiceAudio.Session? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    /** A conversation's waiting music ([GhostexVoiceAudio.Music]) and when it plays ([GhostexVoiceAudio.WaitingMusicGate]). */
+    private var music: GhostexVoiceAudio.Music? = null
+    private var musicGate: GhostexVoiceAudio.WaitingMusicGate? = null
 
     fun snapshot(): Map<String, Any?> = mapOf(
       "id" to id,
@@ -239,8 +256,23 @@ internal object GhostexVoice {
 
     fun start() {
       if (conversationMode) {
+        // The gate comes first: asking for audio focus may answer a refusal at once (`onFocus(false)`), and the gate
+        // must hold it, or a working `state` frame would start the music while another app has the audio.
+        musicGate = GhostexVoiceAudio.WaitingMusicGate(
+          schedule = { delayMs, run -> worker.postDelayed({ run() }, delayMs) },
+          play = {
+            if (music?.start() == true) Log.i(TAG, "the waiting music started: the agent has been working for 1.5 s")
+            else Log.i(TAG, "the waiting music did not start: no piece to play")
+          },
+          stop = { reason ->
+            music?.stop()
+            Log.i(TAG, "the waiting music stopped: $reason")
+          },
+        )
         audioSession = GhostexVoiceAudio.Session(context) { gained -> onFocus(gained) }.also { it.begin() }
         player = GhostexVoiceAudio.Player().also { it.setSpeed(speed) }
+        // No piece and the gate off until the settings set for this call arrive (`setWaitingMusic`).
+        music = GhostexVoiceAudio.Music(player!!.audioSessionId)
         holdLocks()
         GhostexForegroundService.startVoiceMode(context, title)
       }
@@ -261,6 +293,7 @@ internal object GhostexVoice {
     private fun onFocus(gained: Boolean) {
       if (disposed) return
       focusPaused = !gained
+      musicGate?.setPaused(!gained)
       // A call or a navigation prompt took the speaker: the agent stops talking and stops listening.
       if (!gained && player?.playing() == true) sendJson(JSONObject().put("type", "interrupt"))
       status(if (gained) "focusResumed" else "focusPaused", null)
@@ -277,6 +310,7 @@ internal object GhostexVoice {
       if (ready) sendJson(JSONObject().put("type", "mute").put("muted", value))
       if (value && pushToTalk && talking) {
         talking = false
+        musicGate?.setTalking(false)
         status("notTalking", null)
       }
       refreshNotice()
@@ -305,6 +339,7 @@ internal object GhostexVoice {
         return
       }
       talking = value
+      musicGate?.setTalking(value)
       sendJson(JSONObject().put("type", if (value) "talkStart" else "talkEnd"))
       status(if (value) "talking" else "notTalking", null)
       refreshNotice()
@@ -313,6 +348,7 @@ internal object GhostexVoice {
     fun cancelTalking() {
       if (!conversationMode || !talking) return
       talking = false
+      musicGate?.setTalking(false)
       sendJson(JSONObject().put("type", "talkCancel"))
       status("notTalking", null)
       refreshNotice()
@@ -320,6 +356,16 @@ internal object GhostexVoice {
 
     fun toggleTalking() {
       if (pushToTalk) setTalking(!talking)
+    }
+
+    /**
+     * The waiting music set for this call: at its start, or changed in Settings › Voice during it. Turned off, the gate
+     * stops the music first, so it fades out before the piece is let go.
+     */
+    fun applyWaitingMusic(settings: WaitingMusic) {
+      if (!conversationMode || disposed) return
+      musicGate?.setEnabled(settings.enabled)
+      music?.configure(settings.path, settings.volume)
     }
 
     /** gxserver times the reply's end and an interruption's estimate by this rate; it resets on every attach. */
@@ -343,6 +389,7 @@ internal object GhostexVoice {
     fun end() {
       if (disposed) return
       finishing = true
+      musicGate?.end()
       if (conversationMode) {
         sendJson(JSONObject().put("type", "end"))
         capture?.stop()
@@ -385,6 +432,9 @@ internal object GhostexVoice {
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
           if (gen != generation || !conversationMode) return
+          // The reply's first audio fades the music out at once, also when the `state` frame was late.
+          music?.stop()
+          musicGate?.replyAudio()
           player?.enqueue(bytes.toByteArray())
         }
 
@@ -422,6 +472,8 @@ internal object GhostexVoice {
             pushToTalk = frame.optString("callMode") == "pushToTalk"
             talking = false
             status("notTalking", null)
+            musicGate?.setTalking(false)
+            musicGate?.setLinkDown(false)
             // gxserver starts every client unmuted; a reattach carries this phone's Mute over.
             if (muted) sendJson(JSONObject().put("type", "mute").put("muted", true))
             sendPlaybackRate()
@@ -430,6 +482,7 @@ internal object GhostexVoice {
         }
         "state" -> {
           state = frame.optString("state", state)
+          musicGate?.agentState(state)
           refreshNotice()
         }
         "focus" -> if (conversationMode) {
@@ -471,6 +524,7 @@ internal object GhostexVoice {
       if (detachedAt == 0L) {
         Log.i(TAG, "conversation socket lost${if (httpCode != null) " (HTTP $httpCode)" else ""}; reattaching")
         detachedAt = now
+        musicGate?.setLinkDown(true)
         player?.cut(null)
         refreshNotice()
       }
@@ -542,6 +596,10 @@ internal object GhostexVoice {
       capture = null
       player?.release()
       player = null
+      musicGate?.end()
+      musicGate = null
+      music?.release()
+      music = null
       audioSession?.end()
       audioSession = null
       wakeLock?.let { if (it.isHeld) it.release() }

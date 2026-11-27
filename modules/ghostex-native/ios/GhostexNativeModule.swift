@@ -1248,6 +1248,25 @@ public class GhostexNativeModule: Module {
             GhostexVoice.status().map(eventPayload)
         }
 
+        // A call's waiting music and Settings › Voice's preview of it (GhostexVoiceAudio.swift). `path` is expo-asset's
+        // `file://` URI of the bundled piece; `session` is the call it is for (nil: the preview's volume only).
+        AsyncFunction("voiceSetWaitingMusic") { (enabled: Bool, volume: Double, path: String?, session: String?) in
+            GhostexVoice.setWaitingMusic(
+                enabled: enabled, volume: volume, path: path.flatMap(GhostexVoiceAudio.localFilePath), session: session
+            )
+        }
+
+        AsyncFunction("voicePreviewWaitingMusic") { (path: String, volume: Double, seconds: Double) throws in
+            do {
+                guard let file = GhostexVoiceAudio.localFilePath(path) else { throw CocoaError(.fileNoSuchFile) }
+                try GhostexWaitingMusicPreview.play(path: file, volume: Float(min(1, max(0, volume))), seconds: max(1, seconds))
+            } catch {
+                throw GhostexException(code: .channelFailed, reason: "Couldn't play the music: \(error.localizedDescription)")
+            }
+        }
+
+        AsyncFunction("voiceStopWaitingMusicPreview") { GhostexWaitingMusicPreview.stop() }
+
         // Dictate's recordings (GhostexVoiceRecorder.swift): record to a file first, upload it after.
         AsyncFunction("dictationRecordStart") { () throws -> String in
             do {

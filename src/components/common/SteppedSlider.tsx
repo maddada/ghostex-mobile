@@ -9,7 +9,10 @@ type SteppedSliderProps = {
   value: number;
   minimumValue: number;
   maximumValue: number;
+  /** What a touch rounds to, and what VoiceOver's and TalkBack's adjust actions move by. */
   step: number;
+  /** A touch takes any value between the ends, not rounded to `step`; `step` then only paces the adjust actions. */
+  continuous?: boolean;
   valueLabel: string;
   onValueChange: (value: number) => void;
   /** Paints the card, text and track in these colors (Settings pages pass the current appearance). */
@@ -24,6 +27,7 @@ export default function SteppedSlider({
   minimumValue,
   maximumValue,
   step,
+  continuous = false,
   valueLabel,
   onValueChange,
   appearance: suppliedAppearance,
@@ -39,8 +43,9 @@ export default function SteppedSlider({
   const valueForLocation = (locationX: number): number => {
     if (trackWidth <= 0) return value;
     const ratio = Math.min(1, Math.max(0, locationX / trackWidth));
-    const stepped = Math.round((minimumValue + ratio * range) / step) * step;
-    return Math.min(maximumValue, Math.max(minimumValue, stepped));
+    const touched = minimumValue + ratio * range;
+    const next = continuous ? touched : Math.round(touched / step) * step;
+    return Math.min(maximumValue, Math.max(minimumValue, next));
   };
 
   const handleTouch = (event: GestureResponderEvent): void => {

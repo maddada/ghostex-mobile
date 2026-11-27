@@ -10,15 +10,21 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.io.File
+import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -44,6 +50,13 @@ internal object GhostexVoiceAudio {
   /** 40 ms of PCM16 mono at 24 kHz: what the CLI sends per frame (the contract allows 20 to 100 ms). */
   const val CHUNK_BYTES = 1_920
   const val BYTES_PER_MS = 48
+
+  /** A file path from what JavaScript passes for a bundled file (expo-asset's `file://` URI, or a plain path); null otherwise. */
+  fun localFilePath(uri: String): String? {
+    if (uri.startsWith("/")) return uri
+    val parsed = Uri.parse(uri)
+    return parsed.path?.takeIf { parsed.scheme == "file" && it.isNotEmpty() && it != "/" }
+  }
 
   private const val TAG = "GhostexVoice"
 
@@ -226,6 +239,10 @@ internal object GhostexVoiceAudio {
       itemStartFrame = -1L
     }
 
+    /** The reply track's audio session: the waiting music plays in the same one ([Music]). */
+    val audioSessionId: Int
+      get() = track.audioSessionId
+
     fun enqueue(audio: ByteArray) {
       if (running) queue.add(audio)
     }
@@ -396,6 +413,466 @@ internal object GhostexVoiceAudio {
         audio.isSpeakerphoneOn = previousSpeaker
       }
       audio.mode = previousMode
+    }
+  }
+
+  /**
+   * When a call's waiting music plays: the twin of GhostexVoiceAudio.swift's `GhostexWaitingMusicGate`, whose CDXC
+   * notes hold the DECISION and the WHY. Once the agent's first reply audio of the call has arrived and the agent has
+   * then been thinking or running a tool for [DELAY_MS] without a break, until the agent speaks or listens again, its
+   * reply audio arrives, the person talks, the call's audio focus is lost, the link drops, the music is turned off or
+   * the call ends; each start waits the whole delay again. The socket's reader, the link's worker and the main thread
+   * all call it, so every entry point is synchronized.
+   *
+   * CDXC:VoiceMode 2026-11-27 WHY: The music played right at the start of a call, before the agent's greeting:
+   * gxserver reports `thinking` for every response it asks for, the greeting included. The music is meant for the
+   * agent's work, not for the call's setup, so it waits for the agent's first reply audio of the call ([replied]). A
+   * rejoin keeps that (the session and its gate stay); a new call has a new gate and starts without it.
+   */
+  class WaitingMusicGate(
+    private val schedule: (Long, () -> Unit) -> Unit,
+    private val play: () -> Unit,
+    private val stop: (String) -> Unit,
+  ) {
+    private var enabled = false
+    /** The latest `state` frame's value, and whether the agent's reply audio came after it. */
+    private var agentState = ""
+    private var replying = false
+    /** The agent's first reply audio of this call has arrived; never cleared, so a rejoin keeps it. */
+    private var replied = false
+    private var talking = false
+    private var paused = false
+    private var linkDown = false
+    private var ended = false
+    /** The start waiting out its delay; anything that ends the wait clears it, so that timer then does nothing. */
+    private var pending: Int? = null
+    private var waits = 0
+    var playing = false
+      private set
+
+    /** The switch, and whether this build has a piece to play. */
+    @Synchronized
+    fun setEnabled(value: Boolean) {
+      enabled = value
+      update()
+    }
+
+    /** A `state` frame: `thinking` and `toolRunning` wait for the music; anything else stops it. */
+    @Synchronized
+    fun agentState(value: String) {
+      agentState = value
+      replying = false
+      update()
+    }
+
+    /** The agent's reply audio arrived: it speaks, whatever the last `state` frame said. The first one arms the music. */
+    @Synchronized
+    fun replyAudio() {
+      if (replying) return
+      replying = true
+      replied = true
+      update()
+    }
+
+    /** Talk is held (push-to-talk, or a muted Regular call held open). */
+    @Synchronized
+    fun setTalking(value: Boolean) {
+      talking = value
+      update()
+    }
+
+    /** Audio focus went to another app or a phone call. */
+    @Synchronized
+    fun setPaused(value: Boolean) {
+      paused = value
+      update()
+    }
+
+    /** The socket dropped and the call is joining again: what the agent was doing is unknown until a new `state` frame. */
+    @Synchronized
+    fun setLinkDown(value: Boolean) {
+      linkDown = value
+      if (value) {
+        agentState = ""
+        replying = false
+      }
+      update()
+    }
+
+    @Synchronized
+    fun end() {
+      ended = true
+      update()
+    }
+
+    /** Why the music must not play now, or null while the agent thinks or works. */
+    private fun blocker(): String? = when {
+      ended -> "the call ended"
+      !enabled -> "waiting music is off"
+      paused -> "the call's audio was taken away"
+      linkDown -> "the link to the computer dropped"
+      talking -> "you are holding Talk"
+      replying -> "the agent's reply audio arrived"
+      !replied -> "the agent has not replied yet"
+      agentState == "thinking" || agentState == "toolRunning" -> null
+      agentState.isEmpty() -> "the agent is not working"
+      else -> "the agent is $agentState"
+    }
+
+    private fun update() {
+      val reason = blocker()
+      if (reason != null) {
+        pending = null
+        if (playing) {
+          playing = false
+          stop(reason)
+        }
+        return
+      }
+      if (playing || pending != null) return
+      waits += 1
+      val wait = waits
+      pending = wait
+      schedule(DELAY_MS) { fire(wait) }
+    }
+
+    @Synchronized
+    private fun fire(wait: Int) {
+      if (pending != wait) return
+      pending = null
+      playing = true
+      play()
+    }
+
+    companion object {
+      const val DELAY_MS = 1_500L
+    }
+  }
+
+  /**
+   * A call's waiting music: the piece decoded once to 16-bit mono PCM and looped on a track of its own with the reply's
+   * usage (`USAGE_VOICE_COMMUNICATION`) and in the reply track's audio session, so it takes the call's route and the
+   * echo canceller's reference as the reply does. Its own volume; it fades in and out over 0.2 s plus the track's short
+   * buffer. The twin of the iOS engine's music node (GhostexVoiceAudio.swift). [Player] is unchanged by it.
+   */
+  class Music(private val audioSessionId: Int) {
+    /** The music thread waits on it: typed as Java's Object for `wait` and `notifyAll`, as React Native does. */
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    private val lock: Object = Object()
+    @Volatile private var running = true
+    // Guarded by `lock`.
+    private var path: String? = null
+    private var decodedPath: String? = null
+    private var pcm: ShortArray? = null
+    private var rate = 0
+    private var volume = 0.3f
+    /** The music should be heard; the thread writes while [active] and fades toward silence once this is false. */
+    private var wanted = false
+    private var active = false
+    private var gain = 0f
+    /** The loudest gain since the music last held steady: a fade down takes [FADE_SECONDS] from it, not [volume]'s. */
+    private var fadeFrom = 0f
+    private var position = 0
+    /** Touched by the music thread only. */
+    private var track: AudioTrack? = null
+    private val thread = Thread({ loop() }, "GhostexVoiceMusic").apply {
+      isDaemon = true
+      start()
+    }
+
+    /**
+     * The piece (null: none) and volume this phone set. Another piece replaces one that is playing at once; no piece
+     * fades the one that plays out first, and the thread lets its decoded audio go once it is silent ([loop]). 0 is
+     * silent at once, also while the loop plays.
+     */
+    fun configure(path: String?, volume: Float) {
+      synchronized(lock) {
+        this.volume = volume
+        // CDXC:VoiceMode 2026-11-26 WHY: 0 % means silent: a fade toward it from the gain playing would still be heard,
+        // also over the agent's reply when its first audio stops the music right after.
+        if (volume == 0f) gain = 0f
+        if (path != this.path) {
+          this.path = path
+          if (path == null) {
+            wanted = false
+          } else {
+            gain = 0f
+            position = 0
+          }
+          lock.notifyAll()
+        }
+      }
+    }
+
+    /** The gate's start: fades the music in. False when there is no piece to play. */
+    fun start(): Boolean = synchronized(lock) {
+      if (path == null) {
+        false
+      } else {
+        wanted = true
+        active = true
+        lock.notifyAll()
+        true
+      }
+    }
+
+    /** The gate's stop, and the reply's first audio: fades the music out. */
+    fun stop() {
+      synchronized(lock) { wanted = false }
+    }
+
+    fun release() {
+      running = false
+      synchronized(lock) { lock.notifyAll() }
+      thread.interrupt()
+    }
+
+    private class Chunk(val samples: ShortArray, val rate: Int, val silent: Boolean)
+
+    private fun loop() {
+      try {
+        while (running) {
+          val toDecode = synchronized(lock) {
+            if (path == null && !active && decodedPath != null) {
+              // Turned off and faded out: the piece's audio goes, and the thread waits below for a new one.
+              decodedPath = null
+              pcm = null
+              rate = 0
+            }
+            path?.takeIf { it != decodedPath }
+          }
+          if (toDecode != null) {
+            val decoded = decode(toDecode)
+            synchronized(lock) {
+              if (path == toDecode) {
+                decodedPath = toDecode
+                pcm = decoded?.first
+                rate = decoded?.second ?: 0
+                position = 0
+              }
+            }
+            continue
+          }
+          val chunk = synchronized(lock) { nextChunk() }
+          if (chunk == null) {
+            track?.let { quiet ->
+              if (quiet.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                quiet.pause()
+                quiet.flush()
+              }
+            }
+            // Nothing to write until a start or another piece (also with no piece at all, its audio let go above).
+            synchronized(lock) { if (running && !active && path == decodedPath) lock.wait(250) }
+            continue
+          }
+          val out = trackFor(chunk.rate)
+          if (out.playState != AudioTrack.PLAYSTATE_PLAYING) out.play()
+          out.write(chunk.samples, 0, chunk.samples.size)
+          if (chunk.silent) synchronized(lock) { if (!wanted && gain == 0f) active = false }
+        }
+      } catch (_: InterruptedException) {
+      } catch (error: IllegalStateException) {
+        Log.w(TAG, "waiting music stopped: ${error.message}")
+      } finally {
+        track?.release()
+        track = null
+      }
+    }
+
+    /** 20 ms of the loop at the gain ramping toward the volume (or silence), or null when nothing should be written. */
+    private fun nextChunk(): Chunk? {
+      val samples = pcm
+      if (!active || samples == null || samples.isEmpty() || rate <= 0) {
+        active = false
+        return null
+      }
+      val target = if (wanted) volume else 0f
+      // A fade down runs from the loudest gain since the music held steady, so a stop right after the volume was
+      // lowered still ends within FADE_SECONDS; a fade up takes FADE_SECONDS to the volume.
+      fadeFrom = if (gain == target) gain else maxOf(fadeFrom, gain)
+      val step = maxOf(volume, fadeFrom, 0.05f) / (FADE_SECONDS * rate)
+      val out = ShortArray(rate / 50)
+      for (index in out.indices) {
+        gain = if (gain < target) minOf(target, gain + step) else maxOf(target, gain - step)
+        out[index] = (samples[position] * gain).toInt().toShort()
+        position = if (position + 1 >= samples.size) 0 else position + 1
+      }
+      return Chunk(out, rate, !wanted && gain == 0f)
+    }
+
+    private fun trackFor(sampleRate: Int): AudioTrack {
+      track?.let {
+        if (it.sampleRate == sampleRate) return it
+        it.release()
+      }
+      val minimum = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+      return AudioTrack.Builder()
+        .setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        )
+        .setAudioFormat(
+          AudioFormat.Builder()
+            .setSampleRate(sampleRate)
+            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .build()
+        )
+        .setTransferMode(AudioTrack.MODE_STREAM)
+        // A short buffer, so a stop is heard within the fade: about 60 ms.
+        .setBufferSizeInBytes(maxOf(minimum, sampleRate * 2 * 6 / 100))
+        .setSessionId(audioSessionId)
+        .build()
+        .also { track = it }
+    }
+
+    /**
+     * The piece as 16-bit mono PCM and its sample rate, without the AAC encoder's priming and padding frames (the file
+     * names both, `encoder-delay` and `encoder-padding`), so the loop point has no gap; null when it cannot be read.
+     */
+    private fun decode(path: String): Pair<ShortArray, Int>? {
+      val extractor = MediaExtractor()
+      var codec: MediaCodec? = null
+      try {
+        extractor.setDataSource(path)
+        val index = (0 until extractor.trackCount).firstOrNull {
+          extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+        } ?: return null
+        extractor.selectTrack(index)
+        val format = extractor.getTrackFormat(index)
+        var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        val decoder = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+        codec = decoder
+        decoder.configure(format, null, null, 0)
+        decoder.start()
+        val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+        var out = ShortArray(maxOf(sampleRate, (durationUs * sampleRate / 1_000_000L).toInt() + sampleRate))
+        var count = 0
+        val info = MediaCodec.BufferInfo()
+        var inputDone = false
+        while (running) {
+          if (!inputDone) {
+            val input = decoder.dequeueInputBuffer(10_000)
+            if (input >= 0) {
+              val size = extractor.readSampleData(decoder.getInputBuffer(input)!!, 0)
+              if (size < 0) {
+                decoder.queueInputBuffer(input, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                inputDone = true
+              } else {
+                decoder.queueInputBuffer(input, 0, size, extractor.sampleTime, 0)
+                extractor.advance()
+              }
+            }
+          }
+          val output = decoder.dequeueOutputBuffer(info, 10_000)
+          if (output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+            channels = decoder.outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            sampleRate = decoder.outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+          } else if (output >= 0) {
+            val bytes = decoder.getOutputBuffer(output)!!
+            bytes.position(info.offset)
+            bytes.limit(info.offset + info.size)
+            val shorts = bytes.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+            val frames = shorts.remaining() / channels
+            if (count + frames > out.size) out = out.copyOf(maxOf(out.size * 2, count + frames))
+            for (frame in 0 until frames) {
+              var sum = 0
+              for (channel in 0 until channels) sum += shorts.get(frame * channels + channel)
+              out[count++] = (sum / channels).toShort()
+            }
+            decoder.releaseOutputBuffer(output, false)
+            if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+          }
+        }
+        val delay = if (format.containsKey("encoder-delay")) format.getInteger("encoder-delay") else 0
+        val padding = if (format.containsKey("encoder-padding")) format.getInteger("encoder-padding") else 0
+        val end = count - padding
+        if (end <= delay) return null
+        return out.copyOfRange(delay, end) to sampleRate
+      } catch (error: Exception) {
+        Log.w(TAG, "waiting music could not be decoded: ${error.message}")
+        return null
+      } finally {
+        try {
+          codec?.stop()
+        } catch (_: IllegalStateException) {
+        }
+        codec?.release()
+        extractor.release()
+      }
+    }
+
+    companion object {
+      private const val FADE_SECONDS = 0.2f
+    }
+  }
+
+  /**
+   * Settings › Voice's short preview of a waiting music piece, outside any call, at the volume set: the twin of
+   * GhostexWaitingMusicPreview (iOS). One at a time: a new one replaces the last, a volume change applies to it, and it
+   * fades out by itself after its seconds.
+   */
+  object WaitingMusicPreview {
+    private const val FADE_STEPS = 15
+    private val handler = Handler(Looper.getMainLooper())
+    private var player: MediaPlayer? = null
+    private var volume = 0f
+    private var plays = 0
+
+    @Synchronized
+    fun play(path: String, volume: Float, seconds: Double) {
+      val next = MediaPlayer()
+      try {
+        next.setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        )
+        next.setDataSource(path)
+        next.isLooping = true
+        next.prepare()
+        next.setVolume(volume, volume)
+      } catch (error: Exception) {
+        next.release()
+        throw error
+      }
+      player?.release()
+      player = next
+      this.volume = volume
+      plays += 1
+      val play = plays
+      next.start()
+      handler.postDelayed({ fadeOut(play, 0) }, (seconds * 1000).toLong())
+    }
+
+    @Synchronized
+    fun setVolume(value: Float) {
+      volume = value
+      player?.setVolume(value, value)
+    }
+
+    @Synchronized
+    fun stop() {
+      plays += 1
+      player?.release()
+      player = null
+    }
+
+    @Synchronized
+    private fun fadeOut(play: Int, step: Int) {
+      val current = player ?: return
+      if (play != plays) return
+      if (step >= FADE_STEPS) {
+        stop()
+        return
+      }
+      val level = volume * (FADE_STEPS - step - 1) / FADE_STEPS
+      current.setVolume(level, level)
+      handler.postDelayed({ fadeOut(play, step + 1) }, 20)
     }
   }
 }

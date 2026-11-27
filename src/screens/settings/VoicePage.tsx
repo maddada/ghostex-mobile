@@ -1,15 +1,16 @@
 /**
  * Settings › Voice: Dictate and the voice agent on one computer, picked at the top, and the
- * phone's own microphone at the bottom. Dictate's engine (Hex 3 on that computer, OpenAI or xAI)
- * and language live on that computer and are read and saved through its gxserver
- * (`voice/dictateSettings.ts`); so is the voice agent's call mode.
+ * phone's own settings at the bottom: the waiting music in calls (`voice/waitingMusic.ts`) and the
+ * microphone. Dictate's engine (Hex 3 on that computer, OpenAI or xAI) and language live on that
+ * computer and are read and saved through its gxserver (`voice/dictateSettings.ts`); so is the
+ * voice agent's call mode.
  *
  * CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): "Settings › Voice, with a computer picker at the top". Each paired computer has its own Dictate engine, since its gxserver transcribes; the microphone stays a phone setting. The page replaces Settings › Voice agent, whose call mode is now its Voice agent section.
  */
 
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import ActionSheet from '../../components/common/ActionSheet';
@@ -67,6 +68,18 @@ import {
   type VoiceAgentReadOutcome,
   type VoiceAgentSaveOutcome,
 } from '../../voice/voiceAgentSaves';
+import {
+  changeWaitingMusic,
+  loadWaitingMusic,
+  previewWaitingMusic,
+  stopWaitingMusicPreview,
+  useWaitingMusicStore,
+  waitingMusicSupported,
+  WAITING_MUSIC_PIECES,
+  WAITING_MUSIC_VOLUME_MAX,
+  WAITING_MUSIC_VOLUME_MIN,
+  type WaitingMusicPiece,
+} from '../../voice/waitingMusic';
 import { SettingsSection } from './SectionBoundary';
 import {
   Caption,
@@ -76,6 +89,7 @@ import {
   SectionHeader,
   SegmentedRow,
   SettingsScreenLayout,
+  SettingsSlider,
   ToggleRow,
   useSettingsStyles,
 } from './SettingsControls';
@@ -104,6 +118,7 @@ export default function VoicePage() {
     return (
       <SettingsScreenLayout>
         <Caption>Connect a computer first: Dictate and the voice agent run on your computer.</Caption>
+        <WaitingMusicSection />
         <PhoneSection />
       </SettingsScreenLayout>
     );
@@ -121,6 +136,7 @@ export default function VoicePage() {
       <ComputerPicker machine={machine} machines={machines} locked={voiceAgentBusy} />
       {loadedFor === machine.id ? <DictateSection machine={machine} /> : null}
       <CallModeSection machine={machine} onBusyChange={setVoiceAgentBusy} />
+      <WaitingMusicSection />
       <PhoneSection />
     </SettingsScreenLayout>
   );
@@ -858,7 +874,109 @@ function TurnWordsBlock({
   );
 }
 
-/** The microphone: the one voice setting that belongs to the phone. */
+/**
+ * The voice agent's waiting music in calls on this phone (`voice/waitingMusic.ts`): the switch, its own volume and the
+ * piece, each with a short preview. Saved on this phone, so it shows without a computer too.
+ */
+function WaitingMusicSection() {
+  const settings = useWaitingMusicStore((state) => state.settings);
+  const loaded = useWaitingMusicStore((state) => state.loaded);
+  const previewing = useWaitingMusicStore((state) => state.previewing);
+  const supported = waitingMusicSupported();
+
+  useEffect(() => {
+    void loadWaitingMusic();
+  }, []);
+  // A preview stops when the page is left, covered by another page, or closed.
+  useFocusEffect(useCallback(() => stopWaitingMusicPreview, []));
+
+  return (
+    <SettingsSection name="settings:voice:waiting-music">
+      <SectionHeader title="Calls on this phone" />
+      {!supported ? (
+        <Caption>Waiting music needs a newer version of the Ghostex app on this phone.</Caption>
+      ) : !loaded ? null : (
+        <>
+          <ToggleRow
+            label="Waiting music"
+            detail="After the agent first speaks in a call, plays quietly if it thinks or runs a tool for 1.5 seconds. Fades out when the agent speaks or you talk."
+            value={settings.enabled}
+            onValueChange={(enabled) => void changeWaitingMusic({ enabled })}
+          />
+          {/* Shown while the music is off too: the volume and piece can be set, and previewed, before turning it on. */}
+          <SettingsSlider
+            label="Waiting music volume"
+            minimumValue={WAITING_MUSIC_VOLUME_MIN}
+            maximumValue={WAITING_MUSIC_VOLUME_MAX}
+            // Stepless; 5 % is only how far a VoiceOver or TalkBack swipe moves it.
+            step={5}
+            continuous
+            value={settings.volumePercent}
+            valueLabel={`${Math.round(settings.volumePercent)}%`}
+            onValueChange={(volumePercent) => void changeWaitingMusic({ volumePercent })}
+          />
+          <Caption>Its own volume, as a share of the call's: the agent's voice stays as it is.</Caption>
+          {WAITING_MUSIC_PIECES.map((piece) => (
+            <MusicPieceRow
+              key={piece.id}
+              piece={piece}
+              selected={settings.piece === piece.id}
+              previewing={previewing === piece.id}
+            />
+          ))}
+          <Caption>
+            Saved on this phone only. The music is from OpenGameArt, given to the public domain by its authors (CC0).
+          </Caption>
+        </>
+      )}
+    </SettingsSection>
+  );
+}
+
+/** One piece: a tap picks it; Preview plays a few seconds of it (Stop ends that early). */
+function MusicPieceRow({
+  piece,
+  selected,
+  previewing,
+}: {
+  piece: WaitingMusicPiece;
+  selected: boolean;
+  previewing: boolean;
+}) {
+  const styles = useSettingsStyles();
+  return (
+    <SettingsSearchAnchor label={piece.title}>
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="radio"
+          accessibilityState={{ selected }}
+          accessibilityLabel={`${piece.title}, by ${piece.author}`}
+          style={local.pieceChoice}
+          onPress={() => void changeWaitingMusic({ piece: piece.id })}
+        >
+          <View style={styles.rowText}>
+            <Text style={styles.cardLabel}>{piece.title}</Text>
+            <Text style={styles.linkDescription}>{piece.author}</Text>
+          </View>
+          <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+            {selected && <View style={styles.radioInner} />}
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={previewing ? `Stop the preview of ${piece.title}` : `Preview ${piece.title}`}
+          hitSlop={6}
+          style={({ pressed }) => [styles.stepperButton, local.previewButton, pressed && styles.rowPressed]}
+          onPress={() => (previewing ? stopWaitingMusicPreview() : void previewWaitingMusic(piece.id))}
+        >
+          <Text style={styles.segmentText}>{previewing ? 'Stop' : 'Preview'}</Text>
+        </Pressable>
+      </View>
+    </SettingsSearchAnchor>
+  );
+}
+
+/** The microphone, a setting of the phone itself. */
 function PhoneSection() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
 
@@ -892,4 +1010,6 @@ const local = StyleSheet.create({
   controls: { gap: 8 },
   field: { flex: 1, minHeight: 32, paddingVertical: 4 },
   remove: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  pieceChoice: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  previewButton: { width: 'auto', minWidth: 76, paddingHorizontal: 12 },
 });

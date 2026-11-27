@@ -49,6 +49,7 @@ import { saveGbotVoice } from './gbotVoice';
 import { parseCallSessions, type CallSessions } from './callSessions';
 import { captionParagraphs, toolLineFrame } from './lines';
 import { microphoneAllowed, microphoneDeniedMessage } from './microphone';
+import { prepareWaitingMusicForCall } from './waitingMusic';
 
 /** Where the conversation is: not running, opening, talking, reconnecting after a dropped link, over. */
 export type VoicePhase = 'idle' | 'starting' | 'live' | 'reattaching' | 'ended';
@@ -792,8 +793,21 @@ export function initVoice(): void {
         muted: status.muted,
         talking: status.talking === true,
       });
+      // The call is handed this phone's waiting music settings again, and the changes made during it reach it.
+      followWaitingMusic(status.id);
     })
     .catch(() => undefined);
+}
+
+/**
+ * This phone's waiting music follows call `session` once its piece is found, and only while that call runs
+ * (`waitingMusic.ts`); the call never waits for it, and starts natively without music until then.
+ */
+function followWaitingMusic(session: string): void {
+  void prepareWaitingMusicForCall(
+    session,
+    () => nativeSessionId === session && voiceActive(useVoiceStore.getState().phase),
+  );
 }
 
 /** True while a conversation is open or opening (the button shows it, the screen controls it). */
@@ -963,6 +977,7 @@ export async function startVoice(
       ...(language !== undefined ? { language } : {}),
       ...(about !== undefined ? { focus: focusQuery(about) } : {}),
     });
+    followWaitingMusic(nativeSessionId);
     voiceLog(`the phone opened its call (${provider}, speed ${speed}×${clipTurns ? ', recorded turns offered' : ''})`);
     if (movedNote !== null) notice(movedNote);
     if (speed !== 1) await GhostexNative.voiceSetSpeed(speed);

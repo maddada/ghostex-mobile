@@ -325,6 +325,17 @@ declare class GhostexNativeModule extends NativeModule<GhostexNativeEvents> {
   /** Drops a dictation without its final text. */
   voiceCancel(mode: VoiceMode): Promise<void>;
   voiceStatus(): Promise<VoiceStatus | null>;
+  /**
+   * This phone's waiting music in a call (`src/voice/waitingMusic.ts`): on or off, its volume (0 to 1, of the call's
+   * playback) and the piece's file (expo-asset's `file://` URI; null plays nothing), for the call whose session is
+   * `session` (`voiceStart`'s answer). A call starts without music and only takes the settings that name it; nothing is
+   * kept for later calls. The volume also applies to a preview playing now (`session` null: only that). Absent in app
+   * builds from before waiting music: they play none.
+   */
+  voiceSetWaitingMusic?(enabled: boolean, volume: number, path: string | null, session: string | null): Promise<void>;
+  /** Plays `path` for `seconds` at `volume` (0 to 1) outside a call, replacing a preview that plays; then fades out. */
+  voicePreviewWaitingMusic?(path: string, volume: number, seconds: number): Promise<void>;
+  voiceStopWaitingMusicPreview?(): Promise<void>;
   // Dictate's recordings (GhostexVoiceRecorder.kt / .swift): the microphone to a WAV file first.
   /** Starts recording; answers the recording's id. A microphone failure arrives as a `micError` status. */
   dictationRecordStart(): Promise<string>;

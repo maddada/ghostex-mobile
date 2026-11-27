@@ -17,6 +17,7 @@ import { CRASH_REPORTS_IN_SETTINGS } from '../../../feedback/crashReports';
 import { LIVE_ACTIVITY_PUSH_SUPPORTED } from '../../../notifications/liveActivityPushStore';
 import { NOTIFICATIONS_SUPPORTED } from '../../../notifications/notificationCentre';
 import { ANALYTICS_PURPOSE_COPY, ANALYTICS_TOGGLE_TITLE } from '../../../copy/privacy';
+import { WAITING_MUSIC_PIECES } from '../../../voice/waitingMusic';
 import { SETTINGS_PAGES, type SettingsPageId } from '../pages';
 import { DESKTOP_SETTINGS_WORDS } from './desktopSettingsWords.generated';
 import { anyMatches, SearchPattern, searchTrim } from './fuzzyMatch';
@@ -531,6 +532,32 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: 'Turn words',
     description: 'The words that end your turn, per language.',
     catalog: 'voiceAgentTurnWords',
+  },
+  {
+    page: 'voice',
+    section: 'settings:voice:waiting-music',
+    group: 'Calls on this phone',
+    title: 'Waiting music',
+    description: 'Quiet music in a voice agent call while the agent thinks or runs a tool.',
+    keywords: ['music', 'hold music', 'waiting', 'thinking', 'call', 'loop'],
+  },
+  {
+    page: 'voice',
+    section: 'settings:voice:waiting-music',
+    group: 'Calls on this phone',
+    title: 'Waiting music volume',
+    description: "How loud the waiting music plays, apart from the agent's voice.",
+    keywords: ['music volume', 'loudness', 'quiet'],
+  },
+  {
+    page: 'voice',
+    section: 'settings:voice:waiting-music',
+    group: 'Calls on this phone',
+    title: 'Waiting music piece',
+    anchor: null,
+    description: 'The piece the waiting music plays, each with a short preview.',
+    options: WAITING_MUSIC_PIECES.map((piece) => piece.title),
+    keywords: ['preview', 'song', 'track', 'tune'],
   },
   {
     page: 'voice',

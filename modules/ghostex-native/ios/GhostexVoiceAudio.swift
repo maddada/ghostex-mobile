@@ -25,6 +25,8 @@ import os
 
 /// What uses the app's one audio session; the strongest use picks its category.
 enum GhostexAudioUse: Int, Comparable {
+    /// Settings › Voice's preview of a waiting music piece.
+    case preview = -1
     case speech = 0
     case recording = 1
     case conversation = 2
@@ -87,8 +89,11 @@ final class GhostexAudioSession {
         case .speech:
             // Music and navigation duck under a reply; a navigation prompt interrupts it (`spokenAudio`).
             try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        case .preview:
+            // A few seconds of a waiting music piece: other audio ducks under it, as under Read aloud.
+            try session.setCategory(.playback, mode: .default, options: [.duckOthers])
         }
-        if top != .speech {
+        if top >= .recording {
             // The format gxserver speaks: asking for it saves the engine a resample when the route allows it.
             try? session.setPreferredSampleRate(Double(GhostexVoiceAudio.sampleRate))
             try? session.setPreferredIOBufferDuration(0.02)
@@ -108,6 +113,18 @@ enum GhostexVoiceAudio {
     /// The wire format, and the float format the speaker plays it in.
     static let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Double(sampleRate), channels: 1, interleaved: true)!
     static let playFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false)!
+
+    /// The waiting music pieces' format (src/voice/music: mono AAC at 44.1 kHz), until a piece is opened.
+    static let musicFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    /// The waiting music fades in and out in this many 20 ms steps: 0.3 s.
+    static let musicFadeSteps = 15
+
+    /// A file path from what JavaScript passes for a bundled file (expo-asset's `file://` URI, or a plain path); nil otherwise.
+    static func localFilePath(_ uri: String) -> String? {
+        if uri.hasPrefix("/") { return uri }
+        guard let url = URL(string: uri), url.isFileURL, !url.path.isEmpty, url.path != "/" else { return nil }
+        return url.path
+    }
 
     // MARK: Debug feed
 
@@ -238,6 +255,27 @@ final class GhostexVoiceEngine {
     private(set) var itemId: String?
     private(set) var running = false
 
+    /**
+     * The waiting music (conversation only): a second player node on the same engine, straight into the main mixer
+     * beside the agent's player, so it follows the call's route and is in the echo canceller's reference. Its own
+     * volume; the agent's speed never touches it. Guarded by `musicLock`; never held while taking `rebuildLock`.
+     */
+    private let musicLock = NSLock()
+    private let musicQueue = DispatchQueue(label: "io.ghostex.voice.music")
+    private var music: AVAudioPlayerNode?
+    private var musicPath: String?
+    private var musicFile: AVAudioFile?
+    private var musicVolume: Float = 0.3
+    /// The music should be heard: set by `startMusic`, cleared by `stopMusic` and by the agent's reply audio.
+    private var musicOn = false
+    /// The file is queued on `music`, which plays it (perhaps fading out).
+    private var musicQueued = false
+    /// Bumped whenever the queued loops stop counting: their completions then queue nothing more.
+    private var musicToken = 0
+    private var musicFade: DispatchSourceTimer?
+    private var musicFadeFrom: Float = 0
+    private var musicFadeStep = 0
+
     /// A line for the Logs sheet, and the system log (`GhostexVoice.journal`).
     private func note(_ message: String) {
         GhostexVoice.journal(message, mode: conversation ? "conversation" : "dictation")
@@ -363,6 +401,7 @@ final class GhostexVoiceEngine {
             } else {
                 note("the microphone started again as it was")
             }
+            resumeMusic()
             return true
         } catch {
             note("the microphone did not start again as it was: \(error.localizedDescription)")
@@ -395,6 +434,12 @@ final class GhostexVoiceEngine {
             self.player = player
             self.timePitch = timePitch
             playQueue = GhostexPlayQueue()
+            let music = AVAudioPlayerNode()
+            engine.attach(music)
+            musicLock.lock()
+            engine.connect(music, to: engine.mainMixerNode, format: musicFile?.processingFormat ?? GhostexVoiceAudio.musicFormat)
+            self.music = music
+            musicLock.unlock()
         } else {
             // A record-only engine still needs its output side wired (the main mixer to the
             // speaker, silent), or its I/O unit stops right after starting.
@@ -414,6 +459,7 @@ final class GhostexVoiceEngine {
         engine.prepare()
         try engine.start()
         player?.play()
+        resumeMusic()
         builtAt = Date()
         #if targetEnvironment(simulator)
         let processing = false
@@ -489,6 +535,10 @@ final class GhostexVoiceEngine {
         configObserver = nil
         engine.inputNode.removeTap(onBus: 0)
         player?.stop()
+        musicLock.lock()
+        dropMusicQueueLocked()
+        music = nil
+        musicLock.unlock()
         engine.stop()
         #if !targetEnvironment(simulator)
         // The next engine opens its own voice-processing unit; this one lets go of it first.
@@ -504,6 +554,7 @@ final class GhostexVoiceEngine {
         do {
             try engine.start()
             player?.play()
+            resumeMusic()
             note("the microphone started again after the interruption")
         } catch {
             note("the microphone did not start again after the interruption: \(error.localizedDescription)")
@@ -518,6 +569,9 @@ final class GhostexVoiceEngine {
         running = false
         generation += 1
         teardown()
+        musicLock.lock()
+        musicOn = false
+        musicLock.unlock()
         note("the microphone stopped (the call or recording ended)")
     }
 
@@ -558,6 +612,7 @@ final class GhostexVoiceEngine {
     /// Queues PCM16 audio from gxserver for the speaker.
     func enqueue(_ audio: Data) {
         guard running, let player else { return }
+        stopMusicForReply()
         let frames = audio.count / 2
         guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: GhostexVoiceAudio.playFormat, frameCapacity: AVAudioFrameCount(frames)),
               let channel = buffer.floatChannelData?[0] else { return }
@@ -637,6 +692,172 @@ final class GhostexVoiceEngine {
         itemStart = -1
         return true
     }
+
+    // MARK: Waiting music (conversation only)
+
+    /**
+     * The piece and volume this phone set (`voiceSetWaitingMusic`); nil plays nothing. Another piece replaces one
+     * that is playing at once; no piece fades the one that plays out first and lets its file go only once silent
+     * (`fadeMusicLocked`). A piece that cannot be opened leaves no music and says why in the Logs.
+     */
+    func setMusic(path: String?, volume: Float) {
+        rebuildLock.lock()
+        musicLock.lock()
+        musicVolume = volume
+        if musicFade == nil, musicOn, musicQueued { music?.volume = volume }
+        var problem: String?
+        if path != musicPath {
+            musicPath = path
+            if path == nil, musicQueued {
+                musicOn = false
+                fadeMusicLocked()
+            } else {
+                dropMusicQueueLocked()
+                musicFile = nil
+                if let path {
+                    do {
+                        musicFile = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+                    } catch {
+                        problem = "the waiting music could not be opened: \(error.localizedDescription)"
+                    }
+                }
+                if let music, let file = musicFile, let engine = music.engine, music.outputFormat(forBus: 0) != file.processingFormat {
+                    engine.disconnectNodeOutput(music)
+                    engine.connect(music, to: engine.mainMixerNode, format: file.processingFormat)
+                }
+                if musicOn { queueMusicLocked(fadeIn: false) }
+            }
+        }
+        musicLock.unlock()
+        rebuildLock.unlock()
+        if let problem { note(problem) }
+    }
+
+    /// The gate's start: fades the music in over 0.3 s. False when there is nothing to play.
+    func startMusic() -> Bool {
+        musicLock.lock()
+        defer { musicLock.unlock() }
+        // `musicPath` nil with a file still open: the last piece is fading out to be let go.
+        guard conversation, running, music != nil, musicFile != nil, musicPath != nil else { return false }
+        musicOn = true
+        if musicQueued {
+            // Still fading out: it fades back in from where it is.
+            fadeMusicLocked()
+        } else {
+            queueMusicLocked(fadeIn: true)
+        }
+        return true
+    }
+
+    /// The gate's stop: fades the music out within 0.3 s, then stops the node.
+    func stopMusic() {
+        musicLock.lock()
+        defer { musicLock.unlock() }
+        guard musicOn else { return }
+        musicOn = false
+        fadeMusicLocked()
+    }
+
+    /**
+     * CDXC:VoiceMode 2026-11-26 WHY: The agent's reply must never play over the waiting music, also while the phone
+     * is locked and JavaScript does not run, and also when a `state` frame comes late. So the first audio of a reply
+     * fades the music out here, on the socket's own path, whatever the session's gate knows.
+     */
+    private func stopMusicForReply() {
+        musicLock.lock()
+        defer { musicLock.unlock() }
+        guard musicOn else { return }
+        musicOn = false
+        fadeMusicLocked()
+    }
+
+    /// After the engine started again (in place, as a new engine, after an interruption): music that should be heard plays on.
+    private func resumeMusic() {
+        musicLock.lock()
+        defer { musicLock.unlock() }
+        guard musicOn else { return }
+        dropMusicQueueLocked()
+        queueMusicLocked(fadeIn: false)
+    }
+
+    /// Queues the piece twice on the node (each finished pass queues one more, so the loop never runs dry) and plays it.
+    private func queueMusicLocked(fadeIn: Bool) {
+        guard let music, let file = musicFile, music.engine?.isRunning == true else { return }
+        let token = musicToken
+        musicQueued = true
+        music.volume = fadeIn ? 0 : musicVolume
+        scheduleMusicPass(music, file, token)
+        scheduleMusicPass(music, file, token)
+        music.play()
+        if fadeIn { fadeMusicLocked() }
+    }
+
+    /// One pass of the whole piece, queued right behind the previous one, so the loop point has no gap.
+    private func scheduleMusicPass(_ node: AVAudioPlayerNode, _ file: AVAudioFile, _ token: Int) {
+        node.scheduleSegment(
+            file,
+            startingFrame: 0,
+            frameCount: AVAudioFrameCount(file.length),
+            at: nil,
+            completionCallbackType: .dataConsumed
+        ) { [weak self, weak node] _ in
+            // A stop runs this while holding `musicLock`, so the next pass is queued from `musicQueue`.
+            self?.musicQueue.async {
+                guard let self, let node else { return }
+                self.musicLock.lock()
+                defer { self.musicLock.unlock() }
+                guard self.musicToken == token, self.musicQueued, self.music === node else { return }
+                self.scheduleMusicPass(node, file, token)
+            }
+        }
+    }
+
+    /// Stops the node at once and forgets its queue and any fade; whether the music should be heard stays as it is.
+    private func dropMusicQueueLocked() {
+        musicToken += 1
+        musicFade?.cancel()
+        musicFade = nil
+        if musicQueued { music?.stop() }
+        musicQueued = false
+    }
+
+    /**
+     * Moves the node's volume to `musicVolume` while the music should be heard, or to silence, in
+     * `musicFadeSteps` steps of 20 ms (0.3 s); once silent, the node stops and its queue is dropped, and with no
+     * piece set any more (the music was turned off) the file is let go.
+     */
+    private func fadeMusicLocked() {
+        musicFade?.cancel()
+        musicFade = nil
+        guard let music, musicQueued else { return }
+        musicFadeFrom = music.volume
+        musicFadeStep = 0
+        let token = musicToken
+        let timer = DispatchSource.makeTimerSource(queue: musicQueue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(20))
+        timer.setEventHandler { [weak self, weak timer] in
+            guard let self, let timer else { return }
+            self.musicLock.lock()
+            defer { self.musicLock.unlock() }
+            guard self.musicToken == token, self.musicFade === timer, let music = self.music else {
+                timer.cancel()
+                return
+            }
+            self.musicFadeStep += 1
+            let steps = GhostexVoiceAudio.musicFadeSteps
+            let to: Float = self.musicOn ? self.musicVolume : 0
+            music.volume = self.musicFadeStep >= steps ? to : self.musicFadeFrom + (to - self.musicFadeFrom) * Float(self.musicFadeStep) / Float(steps)
+            guard self.musicFadeStep >= steps else { return }
+            timer.cancel()
+            self.musicFade = nil
+            if !self.musicOn {
+                self.dropMusicQueueLocked()
+                if self.musicPath == nil { self.musicFile = nil }
+            }
+        }
+        musicFade = timer
+        timer.resume()
+    }
 }
 
 /// How many buffers a player node was given and has not taken or dropped yet; its completion handlers run off the socket's queue.
@@ -660,5 +881,205 @@ private final class GhostexPlayQueue {
         lock.lock()
         defer { lock.unlock() }
         return buffers == 0
+    }
+}
+
+/**
+ * When a call's waiting music plays: once the agent's first reply audio of the call has arrived and the agent has then
+ * been thinking or running a tool for `delay` without a break, until the agent speaks or listens again, its reply
+ * audio arrives, the person talks (a hold, or `userSpeaking`), the call's audio is taken away (an interruption,
+ * CallKit's hold), the link to the computer drops, the music is turned off or the call ends. Each start waits the
+ * whole `delay` again. Only what happens goes in and only `play` and `stop` come out; the session owns the timer
+ * (`schedule`) and the audio. `play` answers whether the music started: one that did not (no piece, the call's audio
+ * not running yet) is not taken as playing, and the next event that still lets it play, such as the call's audio
+ * starting (`audioRestarted`), waits the whole `delay` again. Not thread-safe: the session calls it on its queue.
+ *
+ * CDXC:VoiceMode 2026-11-26 DECISION: The user asked for waiting music in a voice agent call while the agent thinks or
+ * works, so silence does not sound like a dropped call: open-source pieces to choose from, their own volume, and a
+ * switch. It is on by default, plays at 30 % of the call's playback after 1.5 s of thinking or a running tool, and its
+ * settings are kept on the phone, per device (Settings › Voice, src/voice/waitingMusic.ts). Only a conversation has a
+ * gate: Dictate and Read aloud never play it, and nothing plays outside a call.
+ * CDXC:VoiceMode 2026-11-26 WHY: A call goes on with the phone locked, and its `state` frames and reply audio arrive
+ * on this socket whether or not JavaScript runs (React Native stops its timers while the app is paused, GhostexVoice.kt),
+ * so the 1.5 s start and every stop are decided here, natively; JavaScript only sets the switch, volume and piece.
+ * CDXC:VoiceMode 2026-11-27 WHY: The music played right at the start of a call, before the agent's greeting: gxserver
+ * reports `thinking` for every response it asks for, the greeting included. The music is meant for the agent's work,
+ * not for the call's setup, so it waits for the agent's first reply audio of the call (`replied`). A rejoin keeps
+ * that (the session and its gate stay); a new call has a new gate and starts without it.
+ */
+final class GhostexWaitingMusicGate {
+    static let delay: TimeInterval = 1.5
+
+    private let schedule: (TimeInterval, @escaping () -> Void) -> Void
+    private let play: () -> Bool
+    private let stop: (String) -> Void
+
+    private var enabled = false
+    /// The latest `state` frame's value, and whether the agent's reply audio came after it.
+    private var agentState = ""
+    private var replying = false
+    /// The agent's first reply audio of this call has arrived; never cleared, so a rejoin keeps it.
+    private var replied = false
+    private var talking = false
+    private var paused = false
+    private var linkDown = false
+    private var ended = false
+    /// The start waiting out its delay; anything that ends the wait clears it, so that timer then does nothing.
+    private var pending: Int?
+    private var waits = 0
+    private(set) var playing = false
+
+    init(schedule: @escaping (TimeInterval, @escaping () -> Void) -> Void, play: @escaping () -> Bool, stop: @escaping (String) -> Void) {
+        self.schedule = schedule
+        self.play = play
+        self.stop = stop
+    }
+
+    /// The switch, and whether this build has a piece to play.
+    func setEnabled(_ value: Bool) {
+        enabled = value
+        update()
+    }
+
+    /// A `state` frame: `thinking` and `toolRunning` wait for the music; anything else stops it.
+    func agentState(_ value: String) {
+        agentState = value
+        replying = false
+        update()
+    }
+
+    /// The agent's reply audio arrived: it speaks, whatever the last `state` frame said. The first one arms the music.
+    func replyAudio() {
+        guard !replying else { return }
+        replying = true
+        replied = true
+        update()
+    }
+
+    /// Talk is held (push-to-talk, or a muted Regular call held open).
+    func setTalking(_ value: Bool) {
+        talking = value
+        update()
+    }
+
+    /// Another app or CallKit took the call's audio.
+    func setPaused(_ value: Bool) {
+        paused = value
+        update()
+    }
+
+    /// The socket dropped and the call is joining again: what the agent was doing is unknown until a new `state` frame.
+    func setLinkDown(_ value: Bool) {
+        linkDown = value
+        if value {
+            agentState = ""
+            replying = false
+        }
+        update()
+    }
+
+    func end() {
+        ended = true
+        update()
+    }
+
+    /**
+     * The call's audio started, or was built anew (the system's media reset) without the music: nothing plays on it
+     * now, whatever the gate thought, and the music starts again after the whole `delay` if the agent still works. A
+     * start that was already waiting is dropped too, so its timer does nothing: the whole `delay` counts from here.
+     */
+    func audioRestarted() {
+        playing = false
+        pending = nil
+        update()
+    }
+
+    /// Why the music must not play now, or nil while the agent thinks or works.
+    private var blocker: String? {
+        if ended { return "the call ended" }
+        if !enabled { return "waiting music is off" }
+        if paused { return "the call's audio was taken away" }
+        if linkDown { return "the link to the computer dropped" }
+        if talking { return "you are holding Talk" }
+        if replying { return "the agent's reply audio arrived" }
+        if !replied { return "the agent has not replied yet" }
+        if agentState == "thinking" || agentState == "toolRunning" { return nil }
+        return agentState.isEmpty ? "the agent is not working" : "the agent is \(agentState)"
+    }
+
+    private func update() {
+        if let reason = blocker {
+            pending = nil
+            if playing {
+                playing = false
+                stop(reason)
+            }
+            return
+        }
+        guard !playing, pending == nil else { return }
+        waits += 1
+        let wait = waits
+        pending = wait
+        schedule(Self.delay) { [weak self] in
+            guard let self, self.pending == wait else { return }
+            self.pending = nil
+            self.playing = self.play()
+        }
+    }
+}
+
+/**
+ * Settings › Voice's short preview of a waiting music piece, outside any call, at the volume set. One at a time: a new
+ * one replaces the last, a volume change applies to it, and it fades out by itself after `seconds`.
+ */
+enum GhostexWaitingMusicPreview {
+    private static let lock = NSLock()
+    private static var player: AVAudioPlayer?
+    private static var plays = 0
+
+    static func play(path: String, volume: Float, seconds: Double) throws {
+        let next = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+        next.numberOfLoops = -1
+        next.volume = volume
+        lock.lock()
+        defer { lock.unlock() }
+        if player == nil { try GhostexAudioSession.shared.acquire(.preview) }
+        player?.stop()
+        player = next
+        plays += 1
+        let play = plays
+        next.play()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { end(play, fade: true) }
+    }
+
+    static func stop() {
+        lock.lock()
+        let play = plays
+        lock.unlock()
+        end(play, fade: false)
+    }
+
+    static func setVolume(_ volume: Float) {
+        lock.lock()
+        player?.volume = volume
+        lock.unlock()
+    }
+
+    private static func end(_ play: Int, fade: Bool) {
+        lock.lock()
+        guard play == plays, let current = player else {
+            lock.unlock()
+            return
+        }
+        if fade {
+            lock.unlock()
+            current.setVolume(0, fadeDuration: 0.3)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { end(play, fade: false) }
+            return
+        }
+        player = nil
+        lock.unlock()
+        current.stop()
+        GhostexAudioSession.shared.release(.preview)
     }
 }
