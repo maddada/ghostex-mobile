@@ -5,7 +5,9 @@
  */
 
 import { memo, useContext, useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+
+import { NestedVerticalScroll } from '../../../components/common/HorizontalSwipe';
 import Animated, {
   Easing,
   FadeIn,
@@ -595,7 +597,7 @@ function BoxedThinkingCard({ id, body, message }: { id: string; body: string; me
           style={[styles.boxedThoughtBody, { borderTopColor: theme.ink(SINGLE_LINE_CARD.borderAlpha) }]}
         >
           <View style={styles.boxedThoughtProse}>
-            <ScrollView
+            <NestedVerticalScroll
               ref={scroll}
               style={styles.thinkingScroll}
               nestedScrollEnabled
@@ -613,7 +615,7 @@ function BoxedThinkingCard({ id, body, message }: { id: string; body: string; me
                 color={lane}
                 headingColor={mutedThinking ? lane : undefined}
               />
-            </ScrollView>
+            </NestedVerticalScroll>
           </View>
           {calls !== undefined ? <BoxedCardToolRows message={message} /> : null}
         </Animated.View>
@@ -679,7 +681,7 @@ function SlimThinkingLine({ id, body, message }: { id: string; body: string; mes
       {open && expandable ? (
         <View style={styles.thinkingInset}>
           <DisclosureBody onCollapse={toggle} label="Collapse thinking" gap={4}>
-            <ScrollView
+            <NestedVerticalScroll
               ref={scroll}
               style={styles.thinkingScroll}
               nestedScrollEnabled
@@ -697,7 +699,7 @@ function SlimThinkingLine({ id, body, message }: { id: string; body: string; mes
                 color={lane}
                 headingColor={mutedThinking ? lane : undefined}
               />
-            </ScrollView>
+            </NestedVerticalScroll>
           </DisclosureBody>
         </View>
       ) : null}

@@ -9,7 +9,9 @@
  */
 
 import { memo, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { NestedHorizontalScroll } from '../../../components/common/HorizontalSwipe';
 
 import { useNativeChatUi, useRowDetail, useTranscriptEnv } from './context';
 import { DisclosureBody } from './Disclosure';
@@ -540,7 +542,7 @@ export function FileChangeDiff({
           {status === 'deleted' ? 'File removed' : 'Empty file'}
         </Text>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
+        <NestedHorizontalScroll showsHorizontalScrollIndicator={false} nestedScrollEnabled>
           <View style={styles.lines}>
             {shown.map((line, lineIndex) => {
               const kind = str(line, 'kind');
@@ -590,7 +592,7 @@ export function FileChangeDiff({
               );
             })}
           </View>
-        </ScrollView>
+        </NestedHorizontalScroll>
       )}
       {failed && (showAll || !hasMore) ? (
         <Text style={[styles.error, { color: theme.error }]}>{str(file, 'error')}</Text>

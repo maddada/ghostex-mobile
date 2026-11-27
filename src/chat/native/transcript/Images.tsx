@@ -6,7 +6,9 @@
  */
 
 import { memo, useId, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { NestedHorizontalScroll } from '../../../components/common/HorizontalSwipe';
 
 import { openChatImageViewer } from '../cards';
 import { mixHex } from '../cards/PillsStrip';
@@ -141,7 +143,7 @@ export const PictureStrip = memo(function PictureStrip({ images }: { images: Cha
   // A lone picture is never wider than the screen it is read on; a row of them scrolls instead.
   const maxWidth = single ? Math.min(VISUAL.singleMaxWidth, screenWidth - 48) : VISUAL.stripMaxWidth;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={!single} contentContainerStyle={styles.strip}>
+    <NestedHorizontalScroll showsHorizontalScrollIndicator={!single} contentContainerStyle={styles.strip}>
       {images.map((image, index) => (
         <StripTile
           key={index}
@@ -152,7 +154,7 @@ export const PictureStrip = memo(function PictureStrip({ images }: { images: Cha
           onOpen={() => openPicture(image, images, index)}
         />
       ))}
-    </ScrollView>
+    </NestedHorizontalScroll>
   );
 });
 
@@ -365,8 +367,7 @@ export const ReadImageStrip = memo(function ReadImageStrip({
   const color = edge ?? theme.background;
   return (
     <View style={[styles.stripArea, { marginLeft: inset }]}>
-      <ScrollView
-        horizontal
+      <NestedHorizontalScroll
         showsHorizontalScrollIndicator={false}
         alwaysBounceHorizontal={false}
         overScrollMode="never"
@@ -397,7 +398,7 @@ export const ReadImageStrip = memo(function ReadImageStrip({
             themeMuted={theme.muted}
           />
         ))}
-      </ScrollView>
+      </NestedHorizontalScroll>
       {edges.left ? (
         <HorizontalFade id={`${fadeId}-left`} color={color} from={1} to={0} style={[styles.stripFade, { left: 0 }]} />
       ) : null}

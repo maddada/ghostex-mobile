@@ -7,7 +7,9 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type TextStyle } from 'react-native';
+
+import { NestedHorizontalScroll, NestedVerticalScroll } from '../../../../components/common/HorizontalSwipe';
 
 import { openChatTablePreview, tableCsv } from '../../cards';
 import { useChatViewSize } from '../../chatPlacement';
@@ -480,9 +482,9 @@ function CodeBlock({
   const codeContent = wrapped ? (
     <View style={styles.codeBody}>{body}</View>
   ) : (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
+    <NestedHorizontalScroll showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
       <BlockLongPress>{body}</BlockLongPress>
-    </ScrollView>
+    </NestedHorizontalScroll>
   );
   return (
     <View
@@ -568,9 +570,9 @@ function CodeBlock({
       </View>
       {long && !expanded ? (
         // The transcript is a list too, so Android needs `nestedScrollEnabled` for the code to scroll on its own.
-        <ScrollView nestedScrollEnabled style={{ maxHeight: CODE_CAP }}>
+        <NestedVerticalScroll nestedScrollEnabled style={{ maxHeight: CODE_CAP }}>
           {codeContent}
-        </ScrollView>
+        </NestedVerticalScroll>
       ) : (
         codeContent
       )}
@@ -648,8 +650,7 @@ function Table({ block, context: rowContext }: { block: Extract<Block, { t: 'tab
   const lines = collapsed ? 1 : undefined;
   const table = (
     <View style={styles.table}>
-      <ScrollView
-        horizontal
+      <NestedHorizontalScroll
         showsHorizontalScrollIndicator={false}
         onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}
       >
@@ -725,7 +726,7 @@ function Table({ block, context: rowContext }: { block: Extract<Block, { t: 'tab
             </View>
           ))}
         </BlockLongPress>
-      </ScrollView>
+      </NestedHorizontalScroll>
       <View style={styles.tableActions}>
         <TableAction
           label="Open table"

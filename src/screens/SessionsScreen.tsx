@@ -23,11 +23,11 @@ import {
   BackHandler,
   Platform,
   Pressable,
-  RefreshControl,
   Text,
   View,
   type ViewInstance,
 } from 'react-native';
+import { RefreshControl } from 'react-native-gesture-handler';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';

@@ -7,7 +7,9 @@
  */
 
 import { memo, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { NestedVerticalScroll } from '../../../components/common/HorizontalSwipe';
 
 import type { ProjectedMessage } from '../../rust/document';
 import { useNativeChatUi, useTranscriptEnv, useTranscriptFlags } from './context';
@@ -226,11 +228,11 @@ function CommandOutputCard({ id, card }: { id: string; card: JsonRecord }) {
         <DisclosureHeading label={str(card, 'command')} open={open} onToggle={toggle} color={theme.cardMuted} medium />
       </View>
       {open && output.length > 0 ? (
-        <ScrollView nestedScrollEnabled style={[styles.commandBody, { borderTopColor: theme.border }]}>
+        <NestedVerticalScroll nestedScrollEnabled style={[styles.commandBody, { borderTopColor: theme.border }]}>
           <Text selectable style={[styles.commandText, { color: theme.cardMuted }]}>
             {output}
           </Text>
-        </ScrollView>
+        </NestedVerticalScroll>
       ) : null}
     </View>
   );
@@ -411,14 +413,14 @@ function StatusRows({ id, suppressed }: { id: string; suppressed: JsonRecord }) 
         />
       ))}
       {expandable && open && body.length > 0 ? (
-        <ScrollView
+        <NestedVerticalScroll
           nestedScrollEnabled
           style={[styles.suppressedBody, { borderColor: theme.border, backgroundColor: theme.input }]}
         >
           <Text selectable style={[styles.commandText, { color: theme.muted }]}>
             {body}
           </Text>
-        </ScrollView>
+        </NestedVerticalScroll>
       ) : null}
     </View>
   );
@@ -521,14 +523,14 @@ function CollapsedSuppressed({ id, suppressed }: { id: string; suppressed: JsonR
     <View style={styles.collapsed}>
       <DisclosureHeading label={str(suppressed, 'label')} open={open} onToggle={toggle} color={theme.muted} />
       {open && body.length > 0 ? (
-        <ScrollView
+        <NestedVerticalScroll
           nestedScrollEnabled
           style={[styles.suppressedBody, { borderColor: theme.border, backgroundColor: theme.input }]}
         >
           <Text selectable style={[styles.commandText, { color: theme.muted }]}>
             {body}
           </Text>
-        </ScrollView>
+        </NestedVerticalScroll>
       ) : null}
     </View>
   );

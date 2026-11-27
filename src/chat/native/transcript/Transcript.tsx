@@ -10,19 +10,24 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
+  type FlatList,
   type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ViewInstance,
 } from 'react-native';
+import { FlatList as GestureFlatList } from 'react-native-gesture-handler';
 
 import Animated, { FadeIn } from 'react-native-reanimated';
+
+import {
+  NestedVerticalScroll,
+  useHorizontalSwipeGesture,
+} from '../../../components/common/HorizontalSwipe';
 
 import { NO_BAR_INSETS } from '../../../components/common/verticalBar/layout';
 import { useScrollToBarEdges } from '../../../components/common/verticalBar/VerticalBarArea';
@@ -248,6 +253,8 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
   const rows = items ?? state?.items ?? [];
   const { dispatch } = chat;
 
+  const horizontalSwipe = useHorizontalSwipeGesture();
+  const swipePan = main ? horizontalSwipe : null;
   const listRef = useRef<FlatList<Row>>(null);
   // The chat view's list reaches under the iPhone Duo's side bar, its rows keep clear of it;
   // a transcript inside a card (a subagent's) keeps to the card.
@@ -560,7 +567,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
      */
     body =
       empty === null ? null : (
-        <ScrollView
+        <NestedVerticalScroll
           style={[styles.list, listEdges.scroll]}
           contentContainerStyle={[styles.emptyScroll, listEdges.content]}
           keyboardDismissMode="on-drag"
@@ -568,11 +575,11 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
           alwaysBounceVertical
         >
           {empty}
-        </ScrollView>
+        </NestedVerticalScroll>
       );
   } else {
     body = (
-      <FlatList
+      <GestureFlatList
         ref={listRef}
         inverted
         data={data}
@@ -600,6 +607,7 @@ export function NativeTranscript({ chat, items, main = true, active = true }: Na
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={11}
+        requireToFail={swipePan ?? undefined}
         // Status line in the chat: the working line is the list's last row while the agent works
         // (`StatusTail` in `cards/WorkingCard.tsx`); an inverted list draws its header at the bottom.
         ListHeaderComponent={

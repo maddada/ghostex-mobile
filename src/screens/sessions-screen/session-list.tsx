@@ -7,22 +7,31 @@
  */
 
 import type { ReactElement } from 'react';
-import { FlatList, type FlatListProps } from 'react-native';
+import type { FlatListProps } from 'react-native';
+import { FlatList as GestureFlatList } from 'react-native-gesture-handler';
 
+import { useHorizontalSwipeGesture } from '../../components/common/HorizontalSwipe';
 import { FoldListFrame } from '../../components/common/foldGap';
 import { useLaptopFold } from '../../components/common/verticalBar/laptopFold';
+
+export type SessionListProps<ItemT> = Omit<FlatListProps<ItemT>, 'renderScrollComponent' | 'ref'>;
 
 export function SessionList<U, C>({
   unified,
   classic,
 }: {
   /** The Unified list's props while it is on, else null. */
-  unified: FlatListProps<U> | null;
-  classic: FlatListProps<C>;
+  unified: SessionListProps<U> | null;
+  classic: SessionListProps<C>;
 }): ReactElement {
+  const swipePan = useHorizontalSwipeGesture();
   return (
     <FoldListFrame fold={useLaptopFold()} endAboveFold={unified !== null}>
-      {unified !== null ? <FlatList key="unified" {...unified} /> : <FlatList key="classic" {...classic} />}
+      {unified !== null ? (
+        <GestureFlatList key="unified" {...unified} requireToFail={swipePan ?? undefined} />
+      ) : (
+        <GestureFlatList key="classic" {...classic} requireToFail={swipePan ?? undefined} />
+      )}
     </FoldListFrame>
   );
 }

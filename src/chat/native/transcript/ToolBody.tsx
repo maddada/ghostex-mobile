@@ -5,7 +5,9 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { NestedVerticalScroll } from '../../../components/common/HorizontalSwipe';
 
 import { useTranscriptEnv } from './context';
 import { Glyph } from './icons';
@@ -69,7 +71,7 @@ export function ToolBody({
           ) : null}
         </View>
       ) : null}
-      <ScrollView
+      <NestedVerticalScroll
         nestedScrollEnabled
         style={[styles.bodyBox, toolLines === true && styles.bodyBoxUncapped, { backgroundColor: theme.input }]}
         contentContainerStyle={styles.bodyContent}
@@ -77,7 +79,7 @@ export function ToolBody({
         <Text selectable style={[styles.bodyText, { color: failed ? theme.error : theme.muted }]}>
           {content}
         </Text>
-      </ScrollView>
+      </NestedVerticalScroll>
     </View>
   );
 }
