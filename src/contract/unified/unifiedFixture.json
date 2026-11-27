@@ -8539,7 +8539,7 @@
         ],
         "crews": {
           "local|boss": {
-            "badgeCount": 2,
+            "badgeCount": 4,
             "badgeTone": "idle",
             "containsActive": true,
             "folded": [
@@ -8547,12 +8547,12 @@
             ],
             "heldOpen": false,
             "key": "local|p|boss",
-            "listed": 2,
+            "listed": 4,
             "older": 0,
             "olderRow": false,
             "olderShown": false,
             "open": false,
-            "total": 2,
+            "total": 4,
             "unfolded": false
           }
         },
@@ -8565,14 +8565,10 @@
               "local|left"
             ],
             "label": "p",
-            "parked": [
-              "local|parked"
-            ],
+            "parked": [],
             "pinned": [],
             "repoKey": "dir:p",
-            "snoozed": [
-              "local|napping"
-            ],
+            "snoozed": [],
             "working": []
           }
         ],
@@ -8600,9 +8596,7 @@
           ],
           "spaces": []
         },
-        "parked": [
-          "local|parked"
-        ],
+        "parked": [],
         "pinned": [],
         "rows": {
           "local|boss": {
@@ -8621,22 +8615,6 @@
             "spaceKey": null,
             "status": null
           },
-          "local|napping": {
-            "cameBackMs": 9200000,
-            "machineLabel": null,
-            "repoKey": "dir:p",
-            "repoLabel": "p",
-            "spaceKey": null,
-            "status": null
-          },
-          "local|parked": {
-            "cameBackMs": 9100000,
-            "machineLabel": null,
-            "repoKey": "dir:p",
-            "repoLabel": "p",
-            "spaceKey": null,
-            "status": null
-          },
           "local|right": {
             "cameBackMs": 8100000,
             "machineLabel": null,
@@ -8646,10 +8624,8 @@
             "status": null
           }
         },
-        "snoozed": [
-          "local|napping"
-        ],
-        "total": 5,
+        "snoozed": [],
+        "total": 3,
         "widenedFilter": null,
         "working": []
       },
