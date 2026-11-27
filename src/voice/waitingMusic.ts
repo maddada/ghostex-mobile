@@ -6,10 +6,14 @@
  * holds the DECISION, and `WaitingMusicGate` in GhostexVoiceAudio.kt), so it works with the phone locked.
  *
  * CDXC:VoiceMode 2026-11-26 DECISION: The settings belong to this phone, one set per device, and the computer and its
- * desktop app are unchanged: a phone in a car holder can be set up differently from another one. They are on by
- * default at 30 % of the call's playback, with six CC0 pieces to choose from (music/PROVENANCE.md), each with a short
- * preview. The user chose Calm Loop as the piece a phone starts with; a piece already chosen and saved stays. The user
+ * desktop app are unchanged: a phone in a car holder can be set up differently from another one. They start at 30 %
+ * of the call's playback, with six CC0 pieces to choose from (music/PROVENANCE.md), each with a short preview. The user chose Calm Loop as the piece a phone starts with; a piece already chosen and saved stays. The user
  * added Bossa Town and Coffee House Bump after the first four, at the end, so the list keeps its order.
+ *
+ * CDXC:VoiceMode 2026-11-28 DECISION: User: the waiting music starts off by default for now, also on a phone that
+ * saved it on before, unless the user turned it on with the switch. Settings › Voice turns it on as the PR made it.
+ * WHY: The first build saved the whole setting, `enabled: true` included, on any change (volume, piece), so a saved
+ * `true` alone does not say the user chose it; only a save from the switch itself marks `enabledByUser`.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -60,6 +64,8 @@ export type WaitingMusicSettings = {
   /** Percent of the call's playback, the agent's voice playing at 100. */
   volumePercent: number;
   piece: WaitingMusicPieceId;
+  /** The user set `enabled` with the switch (a saved `enabled: true` without it was the old default, read as off). */
+  enabledByUser: boolean;
 };
 
 /** The volume is stepless between these, in percent of the call's playback; 0 is silent. */
@@ -67,9 +73,10 @@ export const WAITING_MUSIC_VOLUME_MIN = 0;
 export const WAITING_MUSIC_VOLUME_MAX = 100;
 
 export const WAITING_MUSIC_DEFAULTS: WaitingMusicSettings = {
-  enabled: true,
+  enabled: false,
   volumePercent: 30,
   piece: 'calmLoop',
+  enabledByUser: false,
 };
 
 /** How long Settings › Voice's preview of a piece plays before it fades out. */
@@ -81,8 +88,11 @@ const STORAGE_KEY = 'voice.waitingMusic';
 export function sanitizeWaitingMusic(value: unknown): WaitingMusicSettings {
   const record = value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const volume = record.volumePercent;
+  const enabledByUser = record.enabledByUser === true;
   return {
-    enabled: typeof record.enabled === 'boolean' ? record.enabled : WAITING_MUSIC_DEFAULTS.enabled,
+    // Off unless the user turned it on with the switch; a saved off always stays off.
+    enabled: record.enabled === true && enabledByUser,
+    enabledByUser,
     volumePercent:
       typeof volume === 'number' && Number.isFinite(volume)
         ? Math.min(WAITING_MUSIC_VOLUME_MAX, Math.max(WAITING_MUSIC_VOLUME_MIN, volume))
@@ -219,7 +229,11 @@ export async function changeWaitingMusic(patch: Partial<WaitingMusicSettings>): 
   const sent = generation;
   const session = runningCall();
   await loadWaitingMusic();
-  const settings = sanitizeWaitingMusic({ ...useWaitingMusicStore.getState().settings, ...patch });
+  const settings = sanitizeWaitingMusic({
+    ...useWaitingMusicStore.getState().settings,
+    ...patch,
+    ...('enabled' in patch ? { enabledByUser: true } : {}),
+  });
   useWaitingMusicStore.setState({ settings });
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
