@@ -2,14 +2,15 @@
  * The voice screen: one conversation with the manager voice agent, made to be glanced at while
  * walking or driving. A big state circle (listening, thinking, speaking, running a tool), live
  * captions of what you and the agent said with tool calls as short rows, the voice (tap it to pick
- * another) with a small speed button beside it (a list from 1x to 2x), the remembered last conversation to continue
- * (`VoiceMemoryCard`), and large Mute, hold-to-talk and Hang up controls with a Stop talking pill above them
+ * another) with a small speed button beside it (a list from 1x to 2x), the call's sessions (a
+ * Sessions sheet in a call about all sessions, `SessionsStrip`), the remembered last conversation
+ * (`VoiceMemoryCard`: once recalled, or offered by an older computer), and large Mute, hold-to-talk and Hang up controls with a Stop talking pill above them
  * (`VoiceStopPill`). Closing the screen keeps the conversation going; the top bar's
  * Voice button and the "Voice mode on" notification bring it back.
  */
 
 import { readableSecondaryText } from '../theme/sidebarAppearance';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -41,11 +42,20 @@ import KeyboardAvoidingContainer from '../components/common/keyboard/KeyboardAvo
 import { useKeyboardTop } from '../components/common/keyboard/keyboardFrame';
 import { useScrollToBarEdges } from '../components/common/verticalBar/VerticalBarArea';
 import { CheckGlyph } from '../components/onboarding/SetupIcons';
+import { STATUS_DOT_SIZE } from '../components/sessions/rows';
+import { OverlappedDots } from '../components/sessions/StatusDotStack';
 import { SettingsGlyph } from '../components/sessions/icons';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useTerminalStore } from '../terminal/sessions';
-import { GhostexPalette, GhostexRadii } from '../theme/palette';
+import { GhostexPalette, GhostexRadii, SidebarPalette } from '../theme/palette';
+import {
+  callSessionDetail,
+  callSessionFocusTarget,
+  callSessionsSummary,
+  showsSessionsStrip,
+  type CallSessionState,
+} from '../voice/callSessions';
 import {
   dismissVoice,
   flashVoiceHint,
@@ -365,6 +375,130 @@ function FocusBanner() {
   );
 }
 
+/** The status dot of a row in the Sessions sheet: the sidebar's colours for waiting and working; none otherwise. */
+function callSessionDotColor(state: CallSessionState): string | null {
+  switch (state) {
+    case 'waitingOnApproval':
+      return SidebarPalette.ROW_APPROVAL;
+    case 'waitingOnQuestion':
+      return SidebarPalette.ROW_QUESTION;
+    case 'working':
+      return SidebarPalette.ROW_WORKING;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Whether the call's session line shows, and with it whether its Sessions sheet may be open
+ * (`showsSessionsStrip`): both follow one rule, so a call about one session, or a tap's move still
+ * waiting for the computer, has neither.
+ */
+function useSessionsListShown(): boolean {
+  return useVoiceStore((state) =>
+    showsSessionsStrip({
+      active: voiceActive(state.phase),
+      callSessions: state.callSessions,
+      focus: state.focus,
+      requestedFocus: state.requestedFocus,
+      pendingFocus: state.pendingFocus,
+    }),
+  );
+}
+
+/**
+ * The line above the captions in a call about all sessions: "All sessions" with a summary of the
+ * call's sessions, and a Sessions button at its right end that opens the list (`callSessions.ts`).
+ * It takes the focus banner's place and look; a call about one session or with a GBot keeps its own
+ * banner instead, and a computer that sends no session list shows neither.
+ */
+function SessionsStrip({ onOpen }: { onOpen: () => void }) {
+  const appearance = useAppearance();
+  const styles = useMemo(() => createStyles(appearance), [appearance]);
+  const list = useVoiceStore((state) => state.callSessions);
+  const phase = useVoiceStore((state) => state.phase);
+  const shown = useSessionsListShown();
+  if (list === null || !shown) return null;
+  return (
+    <View style={styles.focusBanner}>
+      <Text style={styles.focusText} numberOfLines={1}>
+        <Text style={styles.focusTitle}>All sessions</Text>
+        {` · ${callSessionsSummary(list)}`}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Sessions: list the sessions of this call"
+        disabled={phase !== 'live'}
+        hitSlop={8}
+        style={({ pressed }) => [styles.allSessions, phase !== 'live' && styles.controlDisabled, pressed && styles.controlPressed]}
+        onPress={onOpen}
+      >
+        <Text style={styles.allSessionsText}>Sessions</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** The call's sessions; a tap on one of this computer's moves the call to it, the others are dimmed. */
+function VoiceSessionsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const appearance = useAppearance();
+  const styles = useMemo(() => createStyles(appearance), [appearance]);
+  const list = useVoiceStore((state) => state.callSessions);
+  const live = useVoiceStore((state) => state.phase === 'live');
+  const shown = useSessionsListShown();
+  return (
+    <BottomSheet visible={visible && shown} onClose={onClose}>
+      <Text style={styles.sheetTitle}>Sessions in this call</Text>
+      {(list?.sessions ?? []).map((session) => {
+        const target = callSessionFocusTarget(session);
+        const dot = callSessionDotColor(session.state);
+        return (
+          <Pressable
+            key={session.ref}
+            accessibilityRole="button"
+            accessibilityLabel={
+              target !== null
+                ? `${session.title}, ${callSessionDetail(session)}. Talk about this session`
+                : `${session.title}, ${callSessionDetail(session)}`
+            }
+            accessibilityState={{ disabled: target === null || !live }}
+            disabled={target === null || !live}
+            style={({ pressed }) => [styles.sheetRow, styles.sheetRowTall, target === null && styles.sessionRowDimmed, pressed && styles.controlPressed]}
+            onPress={() => {
+              if (target === null) return;
+              onClose();
+              focusVoiceOn(target);
+            }}
+          >
+            <View style={styles.sheetCheck}>
+              {dot !== null ? <OverlappedDots colors={[dot]} size={STATUS_DOT_SIZE} ringColor={appearance.card} /> : null}
+            </View>
+            <View style={styles.sheetRowText}>
+              <Text style={styles.sheetChoiceLabel} numberOfLines={1}>
+                {session.title}
+              </Text>
+              <Text style={styles.sheetRowDetail} numberOfLines={1}>
+                {callSessionDetail(session)}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+      {list !== null && list.more > 0 ? (
+        <Text style={styles.sheetNote}>{list.more === 1 ? '1 more session is not listed.' : `${list.more} more sessions are not listed.`}</Text>
+      ) : null}
+      {(list?.unavailable ?? []).map((computer) => (
+        <Text key={`unavailable-${computer}`} style={styles.sheetNote}>
+          {`Sessions on ${computer} are not listed: it can't be reached right now.`}
+        </Text>
+      ))}
+      {list !== null && list.sessions.length === 0 && list.more === 0 && list.unavailable.length === 0 ? (
+        <Text style={styles.sheetNote}>No sessions are open.</Text>
+      ) : null}
+    </BottomSheet>
+  );
+}
+
 /** What a screen reader says a caption's hold does. */
 const CAPTION_HOLD_HINT = 'Hold the words to select them, or hold the name above them to copy the whole message';
 
@@ -510,6 +644,13 @@ export default function VoiceScreen({ navigation }: Props) {
   const [holdSlidOff, setHoldSlidOff] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const sessionsShown = useSessionsListShown();
+  // The sheet closes for good when the call stops being about all sessions (a tap, a move by voice,
+  // a hang-up), so widening later doesn't bring it back unasked.
+  useEffect(() => {
+    if (!sessionsShown) setSessionsOpen(false);
+  }, [sessionsShown]);
   const canPickVoice = active && voice.voiceOptions.length > 0;
   // The conversation reaches under the iPhone Duo's side bar, its lines keep clear of it.
   const linesEdges = useScrollToBarEdges(styles.linesContent);
@@ -636,6 +777,7 @@ export default function VoiceScreen({ navigation }: Props) {
           ) : null}
 
           <FocusBanner />
+          <SessionsStrip onOpen={() => setSessionsOpen(true)} />
 
           <View style={styles.lines}>
             <ScrollView
@@ -765,6 +907,7 @@ export default function VoiceScreen({ navigation }: Props) {
       <VoicePickerSheet visible={pickerOpen && canPickVoice} onClose={() => setPickerOpen(false)} />
       <VoiceSpeedSheet visible={speedOpen && active} onClose={() => setSpeedOpen(false)} />
       <VoiceSettingsSheet visible={settingsOpen && active} onClose={() => setSettingsOpen(false)} />
+      <VoiceSessionsSheet visible={sessionsOpen} onClose={() => setSessionsOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -836,6 +979,8 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   sheetCheck: { width: 24, alignItems: 'center' },
   sheetRowLabel: { flex: 1, color: appearance.foreground, fontSize: 18 },
   sheetRowDetail: { color: appearance.muted, fontSize: 14 },
+  // A row on another computer: listed, but a call can't be about it (`callSessionCanFocus`).
+  sessionRowDimmed: { opacity: 0.45 },
   stateBlock: { alignItems: 'center', paddingTop: 12, paddingBottom: 16 },
   orb: { width: 132, height: 132, borderRadius: 66, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
   orbCore: { width: 72, height: 72, borderRadius: 36, opacity: 0.85 },

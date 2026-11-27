@@ -46,6 +46,7 @@ import {
   stopClipTalk,
 } from './clipTalk';
 import { saveGbotVoice } from './gbotVoice';
+import { parseCallSessions, type CallSessions } from './callSessions';
 import { captionParagraphs, toolLineFrame } from './lines';
 import { microphoneAllowed, microphoneDeniedMessage } from './microphone';
 
@@ -112,6 +113,10 @@ type VoiceState = {
   focus: VoiceFocus | null;
   /** The session a call being started was asked to be about, until gxserver's `ready` names it. */
   requestedFocus: VoiceFocusTarget | null;
+  /** The sessions of this call (gxserver's `sessions` frame, `callSessions.ts`); null until one came, and always from an older computer. */
+  callSessions: CallSessions | null;
+  /** The `projectId:sessionId` a tap asked the running call to move to, until the computer answers (`focus` frame, `focusNotFound`, or `ready`). */
+  pendingFocus: string | null;
   /** The call microphone kept stopping, so each turn is recorded while Talk is held (`clipTalk.ts`). */
   clipTalk: boolean;
 };
@@ -181,6 +186,8 @@ const INITIAL: VoiceState = {
   shownSession: null,
   focus: null,
   requestedFocus: null,
+  callSessions: null,
+  pendingFocus: null,
   clipTalk: false,
 };
 
@@ -414,6 +421,7 @@ function onFrame(json: string): void {
       set({
         focus,
         requestedFocus: null,
+        pendingFocus: null,
         ...(focus !== null ? { shownSession: shownFromFocus(focus) } : {}),
       });
       currentProvider = text('provider') || currentProvider;
@@ -504,7 +512,7 @@ function onFrame(json: string): void {
       const next = parseFocus(frame.focus);
       voiceLog(next !== null ? 'the call is about one session now' : 'the call is about all sessions now');
       const note = focusChangeNotice(useVoiceStore.getState().focus, next);
-      set({ focus: next, ...(next !== null ? { shownSession: shownFromFocus(next) } : {}) });
+      set({ focus: next, pendingFocus: null, ...(next !== null ? { shownSession: shownFromFocus(next) } : {}) });
       if (note !== null) notice(note);
       return;
     }
@@ -558,6 +566,14 @@ function onFrame(json: string): void {
       if (shown !== null) set({ shownSession: shown });
       return;
     }
+    case 'sessions': {
+      // The call's session list; the log names how many, never the titles.
+      const list = parseCallSessions(frame);
+      if (list === null) return;
+      if (useVoiceStore.getState().callSessions === null) voiceLog(`the computer listed ${list.sessions.length + list.more} sessions for the call`);
+      set({ callSessions: list });
+      return;
+    }
     case 'announcement':
       noticeSeq += 1;
       pushLine({ kind: 'announcement', key: `announcement-${noticeSeq}`, text: text('text') });
@@ -568,6 +584,8 @@ function onFrame(json: string): void {
       logAppEvent(`Voice agent: ${code || 'error'}${frame.fatal === true ? ' (call ended)' : ''}: ${message}`);
       if (frame.fatal === true) set({ problem: { code, message } });
       else notice(message);
+      // A move the computer could not make leaves the call as it was.
+      if (code === 'focusNotFound') set({ pendingFocus: null });
       return;
     }
     case 'ended': {
@@ -963,12 +981,15 @@ export async function startVoice(
  * CDXC:VoiceMode 2026-10-23 WHY: The banner the user picked has no way to widen, and "Yes, both ways" needs one on the phone, so the banner gets a small All sessions button at its right end (the desktop strip's button, same word).
  */
 export function focusVoiceOn(about: VoiceFocusTarget | null): void {
+  const session = about !== null ? focusRef(about) : null;
   if (clipTalkActive()) {
-    clipSend({ type: 'focus', session: about !== null ? focusRef(about) : null });
+    clipSend({ type: 'focus', session });
+    if (session !== null) set({ pendingFocus: session });
     return;
   }
   if (nativeSessionId === null || !voiceActive(useVoiceStore.getState().phase)) return;
-  void GhostexNative.voiceSetFocus(about !== null ? focusRef(about) : null).catch(() => undefined);
+  void GhostexNative.voiceSetFocus(session).catch(() => undefined);
+  if (session !== null) set({ pendingFocus: session });
 }
 
 /** Hangs up (or abandons a conversation still opening). */
