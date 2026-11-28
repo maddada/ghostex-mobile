@@ -20,7 +20,7 @@ import {
 import type { SidebarMenuItem } from '../../../screens/sessions-screen/sidebar-menus';
 
 /** The toolbar controls in desktop's order, which is also the order they fold into More actions
- * (`toolbar.rs`, `COMPOSER_CONTROLS`). Maximize is desktop-only. Files & Links, Summary mode (under
+ * (`toolbar.rs`, `COMPOSER_CONTROLS`). Maximize is no button here: the phone's is the Expand row of More actions. Files & Links, Summary mode (under
  * View) and Stash Prompt are always More actions rows, and Dictate always shows right before Send and
  * never folds (desktop CDXC:SessionChat 2026-10-20). */
 export const COMPOSER_CONTROLS = [
@@ -80,6 +80,11 @@ export type MoreActionsInput = {
    * Close After Done is a shared place, so `sessionRows` already follows its switch.
    */
   delayedSend?: boolean;
+  /**
+   * The chat box's Expand: false offers Expand, true (the box fills the chat) offers Collapse; absent where the chat
+   * box cannot expand (`NativeComposer`'s `expanded`).
+   */
+  expanded?: boolean;
 };
 
 /**
@@ -381,6 +386,7 @@ export function moreActionsRows({
   allFolded = false,
   sleeping = false,
   delayedSend = true,
+  expanded,
 }: MoreActionsInput): MenuRow[] {
   const folded = (id: string): boolean => allFolded || overflowed(document, id);
   const actions = document.hostActions ?? [];
@@ -438,6 +444,20 @@ export function moreActionsRows({
       case 'chatToolbar': {
         // The toolbar controls folded off the chat box, in their own words (`COMPOSER_CONTROLS`).
         const rows: MenuRow[] = [];
+        /*
+         * CDXC:SessionChat 2026-11-28 DECISION:
+         * User: "please add the button to expand the chat box to the options of the chat box under 3 dots on mobile".
+         * Desktop's chat box has Maximize on its toolbar (`toolbar.rs`, `maximizeComposer`); the phone's box has no
+         * room for it, so Expand is the first of the toolbar's rows here, with desktop's maximize/minimize glyphs. It
+         * grows the box over the transcript (`NativeComposer`'s `expanded`) and reads Collapse while it does.
+         */
+        if (expanded !== undefined) {
+          rows.push({
+            label: expanded ? 'Collapse' : 'Expand',
+            iconPath: expanded ? 'titlebar/minimize.svg' : 'titlebar/maximize.svg',
+            command: { type: 'composerHost', action: 'toggleExpanded' },
+          });
+        }
         if (folded('attach') && available('attach')) {
           rows.push({
             label: 'Attach a file or folder',

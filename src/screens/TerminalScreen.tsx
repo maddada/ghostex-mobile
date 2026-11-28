@@ -1237,7 +1237,16 @@ export default function TerminalScreen({ navigation, route }: Props) {
    * the composer keeps only its keyboard gap (`KeyboardLiftedView`). With the keyboard down the spacer stays as decided
    * above; the iPhone is unchanged (its composer lifts itself to the keyboard from wherever the spacer leaves it).
    */
-  const chatBottomSpacer = headerPlacement.kind === 'top' && !(Platform.OS === 'android' && keyboardVisible);
+  /*
+   * CDXC:SessionChat 2026-11-28 DECISION:
+   * User: "make the chat box fill the bottom width and not rounded". The chat box is a square dock flush on the
+   * screen's bottom edge that keeps the home indicator's or gesture bar's inset inside its own background
+   * (`NativeComposer`), so while it shows the spacer goes (supersedes the 2026-10-29 spacing above for the chat box).
+   * A question card standing in its place keeps the spacer.
+   */
+  const [chatComposerShown, setChatComposerShown] = useState(true);
+  const chatBottomSpacer =
+    headerPlacement.kind === 'top' && !(Platform.OS === 'android' && keyboardVisible) && !chatComposerShown;
   // The same buttons in the iPhone Duo's side bar (rail) and status band (`useTerminalRailButtons`).
   const railButtons = useTerminalRailButtons({
     appearance,
@@ -1693,6 +1702,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
                   openSearchRequestId={chatSearchRequestId}
                   openSessionNoteRequestId={chatSessionNoteRequestId}
                   onQueueCountChange={handleChatQueueCount}
+                  onComposerShownChange={setChatComposerShown}
                   tabSwipe={chatTabSwipe}
                   links={activeChatLinks}
                   style={activeChatStyle}

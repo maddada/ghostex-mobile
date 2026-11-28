@@ -150,6 +150,11 @@ export type NativeChatScreenProps = {
   /** The Ghostex queue's length, for the terminal view's "Queued: N" button. Never called before
    * the machine reports a queue at all. */
   onQueueCountChange?: (count: number) => void;
+  /**
+   * Whether the chat box shows (no question card in its place): it then keeps the bottom inset inside its own
+   * background, so the terminal screen drops its spacer below the chat.
+   */
+  onComposerShownChange?: (shown: boolean) => void;
   /** The session's links for the working card's Links pill and the tap that opens their sheet. */
   links?: PillsStripLinks | null;
   /**
@@ -177,6 +182,7 @@ export default function NativeChatScreen({
   openSearchRequestId = 0,
   openSessionNoteRequestId = 0,
   onQueueCountChange,
+  onComposerShownChange,
   links = null,
   inPane = false,
   focusRequestId = 0,
@@ -691,6 +697,14 @@ export default function NativeChatScreen({
 
   // An image dropped anywhere on the chat view joins the draft, as the attach button adds one.
   const composerShown = !questionReplacesComposer(document);
+  // The chat box keeps the bottom inset inside its own background (`NativeComposer`'s dock), so the screen keeps none
+  // below the chat while it shows; a question card in its place leaves the screen's spacer as it was.
+  useEffect(() => {
+    onComposerShownChange?.(composerShown);
+  }, [composerShown, onComposerShownChange]);
+  // More actions' Expand: the chat box fills the chat (`NativeComposer`'s `expanded`); another session starts collapsed.
+  const [composerExpanded, setComposerExpanded] = useState(false);
+  useEffect(() => setComposerExpanded(false), [sessionId]);
   // The sheet outlives the composer when a live question replaces it, including during modal dismissal.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
   // The card a board pill in the chat asked to see (gx-chat-core `show_item`): the board opens at
@@ -773,7 +787,7 @@ export default function NativeChatScreen({
       : Math.round(
           composerFrame.height -
             composerFrame.transcriptTop -
-            TRANSCRIPT_KEPT_IN_VIEW -
+            (composerExpanded ? 0 : TRANSCRIPT_KEPT_IN_VIEW) -
             (composerFrame.composerTop - composerFrame.transcriptBottom),
         );
 
@@ -941,6 +955,8 @@ export default function NativeChatScreen({
                     sleeping={sleeping}
                     voiceAgent={voiceAgent}
                     holdSend={switchingToTerminal}
+                    expanded={composerExpanded}
+                    onExpandedChange={setComposerExpanded}
                     {...(composerRoom !== undefined ? { room: composerRoom } : {})}
                     {...(document !== null
                       ? {

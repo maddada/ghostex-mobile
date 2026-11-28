@@ -21,6 +21,7 @@ export default memo(function SessionChatSurface(props: NativeChatScreenProps) {
         visible={props.visible}
         tabSwipe={props.tabSwipe ?? null}
         parked={props.parked === true}
+        {...(props.onComposerShownChange !== undefined ? { onComposerShownChange: props.onComposerShownChange } : {})}
         style={props.style}
       />
     );

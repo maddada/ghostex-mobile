@@ -35,31 +35,45 @@ import { useKeyboardInset } from './useKeyboardInset';
 const KEYBOARD_GAP = 8;
 /** The least space below the composer without a keyboard, where the window has no bottom inset. */
 const MIN_BOTTOM = 12;
+/**
+ * The same two for a child that keeps `bottom` inside its own background (`padBelow` false: the chat box's dock, whose
+ * content has its own padding): it sits right on the keyboard, and on the screen's edge where there is no inset.
+ */
+const FLUSH_KEYBOARD_GAP = 0;
+const FLUSH_MIN_BOTTOM = 4;
 
 export function KeyboardLiftedView({
   style,
+  padBelow = true,
   children,
 }: {
   style?: StyleProp<ViewStyle>;
+  /**
+   * False: this view keeps no space below what it holds; its function child puts `bottom` inside its own last row (the
+   * chat box's dock, whose background then reaches the screen's edge or the keyboard).
+   */
+  padBelow?: boolean;
   /** A function child gets the padding below it (the lift or the inset) in the render it changes. */
   children: ReactNode | ((bottom: number) => ReactNode);
 }) {
   const insets = useSafeAreaInsets();
   const anchor = useRef<ViewInstance>(null);
   const { inset, onAnchorLayout } = useKeyboardInset(anchor);
+  const keyboardGap = padBelow ? KEYBOARD_GAP : FLUSH_KEYBOARD_GAP;
+  const minBottom = padBelow ? MIN_BOTTOM : FLUSH_MIN_BOTTOM;
   // In the laptop pose the lift ends at the fold's top: keep the knick's clearance there.
-  const gap = useLaptopFold() === null ? KEYBOARD_GAP : LAPTOP_CLEAR;
+  const gap = useLaptopFold() === null ? keyboardGap : LAPTOP_CLEAR;
   // Android reports the keyboard only while it is up (`keyboardDidShow` to `keyboardDidHide`).
   const androidKeyboardUp = useKeyboardFrame() !== null && Platform.OS === 'android';
   const bottom = useChatPlacement().inPane
-    ? MIN_BOTTOM
+    ? minBottom
     : inset > 0
       ? inset + gap
       : androidKeyboardUp
-        ? KEYBOARD_GAP
-        : Math.max(insets.bottom, MIN_BOTTOM);
+        ? keyboardGap
+        : Math.max(insets.bottom, minBottom);
   return (
-    <View ref={anchor} style={[style, { paddingBottom: bottom }]} onLayout={onAnchorLayout}>
+    <View ref={anchor} style={[style, padBelow ? { paddingBottom: bottom } : null]} onLayout={onAnchorLayout}>
       {typeof children === 'function' ? children(bottom) : children}
     </View>
   );

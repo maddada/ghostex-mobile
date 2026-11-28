@@ -2,7 +2,7 @@
  * The chat's row menus on the phone: More actions, the option pills' menus, the attach sheet. Rows
  * have the shape desktop's `show_chat_menu` draws (`option_menu/render.rs`): `heading`,
  * `separator`, `label` + `description` / `detail` / `badge` (a count circle after the label), `info` (an (i) at the
- * row's end that shows its text on a tap without running the row), `checked`, `disabled`, `destructive` (label and glyph in the error colour), `iconPath`, `icon` (an
+ * row's end, or a heading's, that shows its text on a tap without running the row), `checked`, `disabled`, `destructive` (label and glyph in the error colour), `iconPath`, `icon` (an
  * agent mark), a `command` to run, `children` for a submenu (a pushed page here), the two
  * panel rows `accounts` (the Accounts & limits panel) and `context` (the context window panel), and `tiles`, the quick
  * row of the one session menu (session-menu/layout.ts): its rows side by side, each an icon over a label of up to two
@@ -264,9 +264,13 @@ export function MenuRowView({
   const destructive = isTrue(row, 'destructive');
   if (isTrue(row, 'heading')) {
     const description = str(row, 'description');
+    const headingInfo = str(row, 'info');
     return (
       <View style={styles.heading}>
-        <Text style={styles.headingText}>{label}</Text>
+        <View style={styles.headingLine}>
+          <Text style={[styles.headingText, styles.labelText]}>{label}</Text>
+          {headingInfo.length > 0 ? <InfoHint hint={headingInfo} style={styles.info} /> : null}
+        </View>
         {description.length > 0 ? <Text style={styles.headingDescription}>{description}</Text> : null}
       </View>
     );
@@ -450,6 +454,7 @@ const useStyles = themedStyles((P) => ({
     marginHorizontal: 8,
   },
   heading: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4, gap: 2 },
+  headingLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   headingText: { color: P.muted, fontSize: 12, fontWeight: '600' },
   headingDescription: { color: P.muted, fontSize: 12 },
   row: {

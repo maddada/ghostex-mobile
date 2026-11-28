@@ -19,7 +19,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type { UserAction } from '../../rust/actions';
@@ -102,7 +102,7 @@ import { useComposerMotion } from './useComposerMotion';
 import { DictationBar, DictationCard, unavailableProblem } from './DictationBar';
 import { toneLook } from '../cards/ToneCard';
 import { dictationClock, useDictation } from './useDictation';
-import { engineStatusLine } from '../../../voice/dictateModel';
+import { engineStatusLine, type DictateEngine } from '../../../voice/dictateModel';
 import { computerName } from '../../../screens/settings/voiceComputer';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
 import { useChatPlacement } from '../chatPlacement';
@@ -165,6 +165,13 @@ export type NativeComposerProps = {
    * is done.
    */
   holdSend?: boolean;
+  /**
+   * The box is expanded (More actions' Expand): the field takes all of `room`, so the box covers the transcript, as
+   * desktop's Maximize does. Absent, the box has no Expand row. The screen holds it (its `room` then keeps no strip of
+   * transcript); a message leaving the box collapses it, as desktop's send closes the maximized box.
+   */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 const DEFAULT_HOST_ACTIONS: readonly string[] = ['terminalView'];
@@ -182,8 +189,9 @@ const CLEARANCE = 8;
 const INPUT_MAX_HEIGHT = 168;
 /** The fewest the field shrinks to when the room is short: two lines, which scroll inside it. */
 const INPUT_MIN_HEIGHT = 44;
-const CARD_BORDER = 1;
-/** The collapsed inner body before its first collapse is measured: inside `styles.card`'s border. */
+/** The box's one border: a hairline along its top edge (`styles.dock`). */
+const CARD_BORDER = StyleSheet.hairlineWidth;
+/** The collapsed inner body before its first collapse is measured: under `styles.dock`'s top border. */
 const COLLAPSED_CARD_ESTIMATE = 6 + Math.max(COLLAPSED_INPUT_HEIGHT, CONTROL_WIDTH, SEND_WIDTH) + 6;
 
 /** How often a composer focus may re-read the agent's screen for the readiness light. */
@@ -198,6 +206,72 @@ function terminalReadinessTint(document: ChatDocument): string | null {
   if (readiness === 'ready') return '#a6e3b1';
   if (readiness === 'notReady') return NOT_READY_TINT;
   return null;
+}
+
+/**
+ * The mic's hold menu (Dictate): the voice agent's row where the mic carries it, the engine as the section's heading,
+ * Transcribe previous (the newest recording that has no text yet) and the computer's Voice settings.
+ */
+export function dictationMenuRows({
+  voiceInMic,
+  voiceLit,
+  engine,
+  previous,
+  machineLabel,
+}: {
+  voiceInMic: boolean;
+  voiceLit: boolean;
+  engine: DictateEngine | null;
+  previous: { durationMs: number; createdAt: number } | null;
+  /** The chat's computer by name ("your computer" when unknown). */
+  machineLabel: string;
+}): MenuRow[] {
+  const rows: MenuRow[] = [];
+  if (voiceInMic) {
+    rows.push({
+      label: voiceLit ? 'Open the voice agent' : 'Talk to the voice agent',
+      iconPath: 'titlebar/headset.svg',
+      command: { type: 'host', action: 'voiceAgent' },
+    });
+  }
+  /*
+   * CDXC:SessionChat 2026-11-28 DECISION:
+   * User, of this sheet: "clean up this so the extra subtitle text is hidden under an info icon that I need to
+   * click on to read more". Where Dictate transcribes and what Voice settings holds are each an (i) at the end of
+   * their row, shown on a tap (`InfoHint`); a tap on the row still runs it. An engine that is not ready keeps its
+   * line in view: it says why the mic is dimmed and what to do.
+   */
+  if (engine !== null) {
+    const status = engineStatusLine(engine, machineLabel);
+    rows.push({
+      heading: true,
+      label: engine.label,
+      ...(engine.ready ? { info: status } : { description: status }),
+    });
+  }
+  if (previous !== null) {
+    const minutes = Math.floor((Date.now() - previous.createdAt) / 60_000);
+    const when =
+      minutes < 1
+        ? 'just now'
+        : minutes < 60
+          ? `${minutes} min ago`
+          : minutes < 2880
+            ? `${Math.floor(minutes / 60)} h ago`
+            : `${Math.floor(minutes / 1440)} days ago`;
+    rows.push({
+      label: `Transcribe previous (${dictationClock(previous.durationMs)}, ${when})`,
+      iconPath: 'titlebar/microphone.svg',
+      command: { type: 'composerHost', action: 'transcribePreviousDictation' },
+    });
+  }
+  rows.push({
+    label: 'Voice settings',
+    info: `Dictate's engine and language on ${machineLabel}.`,
+    iconPath: 'titlebar/settings.svg',
+    command: { type: 'composerHost', action: 'voiceSettings' },
+  });
+  return rows;
 }
 
 const CONTROL_GLYPHS: Record<ComposerControlId, GlyphName> = {
@@ -229,6 +303,8 @@ export function NativeComposer({
   sleeping = false,
   voiceAgent = false,
   holdSend = false,
+  expanded,
+  onExpandedChange,
 }: NativeComposerProps) {
   const styles = useStyles();
   const P = useTranscriptTheme();
@@ -389,6 +465,8 @@ export function NativeComposer({
   const [frame, setFrame] = useState({ cardTop: -1, content: -1, field: -1 });
   /** The pill strip's height at the box's top, which the field gives up too. */
   const [stripHeight, setStripHeight] = useState(0);
+  /** The status line's height under the box, inside its background, which the field gives up too. */
+  const [statusLineHeight, setStatusLineHeight] = useState(0);
   const measureFrame = useCallback((part: 'cardTop' | 'content' | 'field', value: number) => {
     const next = Math.round(value);
     setFrame((now) => (now[part] === next ? now : { ...now, [part]: next }));
@@ -614,6 +692,16 @@ export function NativeComposer({
           // Settings › Voice, on this chat's computer (NativeChatScreen opens it).
           if (chat.machine !== null) host('voiceSettings', { machineId: chat.machine.id });
           return;
+        case 'toggleExpanded':
+          if (expanded === true) {
+            onExpandedChange?.(false);
+            return;
+          }
+          // A box closed to one line by a scroll opens first, then takes the room.
+          if (document?.composerCollapsed === true) dispatch({ type: 'composerExpand', editor: true });
+          onExpandedChange?.(true);
+          field.current?.focus();
+          return;
         case 'terminalView':
           // On a Native chat the Terminal View button really switches, after the chat screen's sheet asks.
           host(document?.nonCliMode === true ? 'switchToTerminalBased' : 'terminalView', { source: 'button' });
@@ -633,8 +721,27 @@ export function NativeComposer({
           host(action);
       }
     },
-    [dictation, dispatch, document?.nonCliMode, host, model, openAttach, serves],
+    [
+      dictation,
+      dispatch,
+      document?.composerCollapsed,
+      document?.nonCliMode,
+      expanded,
+      host,
+      model,
+      onExpandedChange,
+      openAttach,
+      serves,
+    ],
   );
+
+  // A message leaving the box (its draft id changes) collapses an expanded box, as desktop's send closes Maximize.
+  const expandedDraftId = useRef(model?.draftId);
+  useEffect(() => {
+    if (expandedDraftId.current === model?.draftId) return;
+    expandedDraftId.current = model?.draftId;
+    if (expanded === true) onExpandedChange?.(false);
+  }, [expanded, model?.draftId, onExpandedChange]);
 
   /** A menu row's command, routed the way desktop's `handle_action` routes it. */
   const runCommand = useCallback(
@@ -824,43 +931,12 @@ export function NativeComposer({
   // previous (the newest recording that has no text yet) and the computer's Voice settings.
   const openDictationMenu = useCallback(() => {
     void dictation.previous().then((previous) => {
-      const engine = dictation.engine;
-      const rows: MenuRow[] = [];
-      if (voiceInMic) {
-        rows.push({
-          label: voiceLit ? 'Open the voice agent' : 'Talk to the voice agent',
-          iconPath: 'titlebar/headset.svg',
-          command: { type: 'host', action: 'voiceAgent' },
-        });
-      }
-      if (engine !== null) {
-        rows.push({
-          heading: true,
-          label: engine.label,
-          description: engineStatusLine(engine, machineLabel ?? 'your computer'),
-        });
-      }
-      if (previous !== null) {
-        const minutes = Math.floor((Date.now() - previous.createdAt) / 60_000);
-        const when =
-          minutes < 1
-            ? 'just now'
-            : minutes < 60
-              ? `${minutes} min ago`
-              : minutes < 2880
-                ? `${Math.floor(minutes / 60)} h ago`
-                : `${Math.floor(minutes / 1440)} days ago`;
-        rows.push({
-          label: `Transcribe previous (${dictationClock(previous.durationMs)}, ${when})`,
-          iconPath: 'titlebar/microphone.svg',
-          command: { type: 'composerHost', action: 'transcribePreviousDictation' },
-        });
-      }
-      rows.push({
-        label: 'Voice settings',
-        description: `Dictate's engine and language on ${machineLabel ?? 'your computer'}`,
-        iconPath: 'titlebar/settings.svg',
-        command: { type: 'composerHost', action: 'voiceSettings' },
+      const rows = dictationMenuRows({
+        voiceInMic,
+        voiceLit,
+        engine: dictation.engine,
+        previous,
+        machineLabel: machineLabel ?? 'your computer',
       });
       setMenu({ kind: 'rows', title: 'Dictate', rows });
     });
@@ -895,6 +971,7 @@ export function NativeComposer({
         allFolded: compact,
         sleeping,
         delayedSend: delayedSendOnIn(summary),
+        ...(onExpandedChange !== undefined ? { expanded: expanded === true } : {}),
       }),
     });
   }, [
@@ -902,6 +979,8 @@ export function NativeComposer({
     chat.machine,
     compact,
     document,
+    expanded,
+    onExpandedChange,
     model,
     serves,
     sessionId,
@@ -1068,6 +1147,7 @@ export function NativeComposer({
   const hasDraft = text.trim().length > 0 || (model?.failedPictures.length ?? 0) > 0;
   const placeholder = phonePlaceholder(document?.composerPlaceholder ?? '', available('dictate'));
   const statusLine = document !== null && statusLineReserved(document);
+  const statusLineShown = statusLine && !compact;
   /*
    * CDXC:SessionChat 2026-10-28 DECISION:
    * User: "I should always be able to click on the send for the composer in all cases". With the
@@ -1081,17 +1161,20 @@ export function NativeComposer({
   // `bottom` is the padding below the composer (the keyboard's lift or the home indicator's inset), which
   // KeyboardLiftedView hands to its child in the very render it changes, so the field is never sized for
   // the previous keyboard.
-  const inputMaxHeightFor = (bottom: number): number =>
+  // Expanded (More actions' Expand), the field takes all of that room, so the box fills the chat.
+  const fillsRoom = expanded === true && room !== undefined && measured && !collapsed;
+  const roomForField = (bottom: number): number =>
     room === undefined || !measured
       ? INPUT_MAX_HEIGHT
-      : Math.max(
-          INPUT_MIN_HEIGHT,
-          Math.min(
-            INPUT_MAX_HEIGHT,
-            room -
-              (frame.cardTop + (compact ? 0 : stripHeight) + CARD_BORDER * 2 + (frame.content - frame.field) + bottom),
-          ),
-        );
+      : room -
+        (frame.cardTop +
+          (compact ? 0 : stripHeight) +
+          CARD_BORDER +
+          (frame.content - frame.field) +
+          (statusLineShown ? statusLineHeight : 0) +
+          bottom);
+  const inputMaxHeightFor = (bottom: number): number =>
+    Math.max(INPUT_MIN_HEIGHT, fillsRoom ? roomForField(bottom) : Math.min(INPUT_MAX_HEIGHT, roomForField(bottom)));
 
   const draftToggles: DraftStripToggles | null =
     document?.worktreeTray != null && document.worktreeTray.status == null
@@ -1108,7 +1191,7 @@ export function NativeComposer({
   const stripNode = renderStrip !== undefined ? renderStrip(draftToggles) : strip;
 
   return (
-    <KeyboardLiftedView style={styles.root}>
+    <KeyboardLiftedView style={styles.root} padBelow={false}>
       {(bottom) => (
         <>
           {/* A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip (`cards/SavedDraftPill.tsx`). */}
@@ -1228,125 +1311,238 @@ export function NativeComposer({
               noProject={noProjectOn}
             />
           ) : null}
+          {/*
+            CDXC:SessionChat 2026-11-28 DECISION:
+            User: "For the mobile app let's make the chat box fill the bottom width and not rounded." The box is a
+            square dock across the chat's whole width, flush on the bottom edge (or on the keyboard), with a hairline
+            along its top in the box's border colour (the ring's colour while it has the caret). Its background runs
+            under the status line and the space below it (the home indicator's or gesture bar's inset, which
+            KeyboardLiftedView hands over as `bottom`), so nothing floats. What the box holds is unchanged.
+          */}
           <View
-            style={[styles.card, focused ? styles.cardFocused : null]}
+            style={[styles.dock, focused ? styles.dockFocused : null, { paddingBottom: bottom }]}
             onLayout={(event: LayoutChangeEvent) => measureFrame('cardTop', event.nativeEvent.layout.y)}
           >
-            {/* The chat's pills ride in a strip along the box's top edge, inside its border (`PillsStrip.tsx`); what the box holds under it is unchanged. */}
-            {stripNode !== undefined && !compact ? (
-              <View
-                onLayout={(event: LayoutChangeEvent) => setStripHeight(Math.round(event.nativeEvent.layout.height))}
-              >
-                {stripNode}
-              </View>
-            ) : null}
-            <Animated.View style={[styles.cardInner, motion.cardStyle]}>
-              <Pressable
-                accessible={false}
-                onPress={() => {
-                  if (requestedCollapsed) dispatch({ type: 'composerExpand', editor: true });
-                  field.current?.focus();
-                }}
-                onLayout={(event: LayoutChangeEvent) => {
-                  motion.onContentLayout(event);
-                  if (!collapsed) measureFrame('content', event.nativeEvent.layout.height);
-                }}
-                style={[styles.cardBody, collapsed ? styles.cardCollapsed : null]}
-              >
-                {/* A new coordinator's first message, waiting for Start (`FirstMessageCard.tsx`); desktop draws it above the image tiles too. */}
-                {!collapsed && document !== null ? <FirstMessageCard document={document} dispatch={dispatch} /> : null}
-                {!collapsed && document?.worktreeTray && document.firstMessageCard == null && draftCoordinatorMode ? (
-                  <View style={styles.coordinatorDraftCard}>
-                    <View style={styles.coordinatorDraftHeader}>
-                      <Glyph name="coordinator-crown-points" size={13} color={P.foreground} />
-                      <Text style={styles.coordinatorDraftTitle}>Coordinator first message</Text>
+            <View style={styles.card}>
+              {/* The chat's pills ride in a strip along the box's top edge, inside its border (`PillsStrip.tsx`); what the box holds under it is unchanged. */}
+              {stripNode !== undefined && !compact ? (
+                <View
+                  onLayout={(event: LayoutChangeEvent) => setStripHeight(Math.round(event.nativeEvent.layout.height))}
+                >
+                  {stripNode}
+                </View>
+              ) : null}
+              <Animated.View style={[styles.cardInner, motion.cardStyle]}>
+                <Pressable
+                  accessible={false}
+                  onPress={() => {
+                    if (requestedCollapsed) dispatch({ type: 'composerExpand', editor: true });
+                    field.current?.focus();
+                  }}
+                  onLayout={(event: LayoutChangeEvent) => {
+                    motion.onContentLayout(event);
+                    if (!collapsed) measureFrame('content', event.nativeEvent.layout.height);
+                  }}
+                  style={[styles.cardBody, collapsed ? styles.cardCollapsed : null]}
+                >
+                  {/* A new coordinator's first message, waiting for Start (`FirstMessageCard.tsx`); desktop draws it above the image tiles too. */}
+                  {!collapsed && document !== null ? <FirstMessageCard document={document} dispatch={dispatch} /> : null}
+                  {!collapsed && document?.worktreeTray && document.firstMessageCard == null && draftCoordinatorMode ? (
+                    <View style={styles.coordinatorDraftCard}>
+                      <View style={styles.coordinatorDraftHeader}>
+                        <Glyph name="coordinator-crown-points" size={13} color={P.foreground} />
+                        <Text style={styles.coordinatorDraftTitle}>Coordinator first message</Text>
+                      </View>
+                      <Text style={styles.coordinatorDraftLine} selectable>
+                        {FIRST_LINE}
+                      </Text>
+                      <Text style={styles.coordinatorDraftBenefits}>{NEW_ORCHESTRATOR_BENEFITS}</Text>
                     </View>
-                    <Text style={styles.coordinatorDraftLine} selectable>
-                      {FIRST_LINE}
-                    </Text>
-                    <Text style={styles.coordinatorDraftBenefits}>{NEW_ORCHESTRATOR_BENEFITS}</Text>
-                  </View>
-                ) : null}
-                {!collapsed && document !== null ? (
-                  <AttachmentPreviews
-                    references={references}
-                    pending={document.pendingAttachments}
-                    images={state.images}
-                    draft={text}
-                    active={activeImage}
-                    dispatch={dispatch}
-                    waiting={model?.heldSend != null}
-                    failed={model?.failedPictures}
-                    onDropFailed={chat.dropFailedPicture}
-                  />
-                ) : null}
-                {document !== null ? <QueueList document={document} dispatch={dispatch} /> : null}
-                {(() => {
-                  const boostHint =
-                    !collapsed &&
-                    !compact &&
-                    document?.boosts?.hint != null &&
-                    (Boolean(document.boosts.hint.title?.trim()) || Boolean(document.boosts.hint.text?.trim()))
-                      ? document.boosts.hint
-                      : null;
-                  return (
-                    <View
-                      style={
-                        collapsed
-                          ? styles.collapsedRow
-                          : boostHint !== null
-                            ? styles.editorWithChipRow
-                            : null
-                      }
+                  ) : null}
+                  {!collapsed && document !== null ? (
+                    <AttachmentPreviews
+                      references={references}
+                      pending={document.pendingAttachments}
+                      images={state.images}
+                      draft={text}
+                      active={activeImage}
+                      dispatch={dispatch}
+                      waiting={model?.heldSend != null}
+                      failed={model?.failedPictures}
+                      onDropFailed={chat.dropFailedPicture}
+                    />
+                  ) : null}
+                  {document !== null ? <QueueList document={document} dispatch={dispatch} /> : null}
+                  {(() => {
+                    const boostHint =
+                      !collapsed &&
+                      !compact &&
+                      document?.boosts?.hint != null &&
+                      (Boolean(document.boosts.hint.title?.trim()) || Boolean(document.boosts.hint.text?.trim()))
+                        ? document.boosts.hint
+                        : null;
+                    return (
+                      <View
+                        style={
+                          collapsed
+                            ? styles.collapsedRow
+                            : boostHint !== null
+                              ? styles.editorWithChipRow
+                              : null
+                        }
+                      >
+                        <View
+                          style={collapsed || boostHint !== null ? styles.grow : null}
+                          onLayout={(event: LayoutChangeEvent) => {
+                            if (!collapsed) measureFrame('field', event.nativeEvent.layout.height);
+                          }}
+                        >
+                          <ComposerInput
+                            ref={field}
+                            model={model}
+                            input={{
+                              ...input,
+                              focused: () => {
+                                setFocused(true);
+                                onFocusChange?.(true);
+                                input.focused();
+                                readTerminalTail();
+                              },
+                              blurred: () => {
+                                setFocused(false);
+                                onFocusChange?.(false);
+                                input.blurred();
+                              },
+                            }}
+                            references={references}
+                            parsedFor={text}
+                            parse={parseDraftReferences}
+                            placeholder={placeholder}
+                            collapsed={collapsed}
+                            maxHeight={inputMaxHeightFor(bottom)}
+                            {...(fillsRoom ? { minHeight: inputMaxHeightFor(bottom) } : {})}
+                            onTextChange={(next) => {
+                              if (next.length > 0 && chat.machine !== null) {
+                                markDraftTouched(attachSessionKey(chat.machine.id, sessionId));
+                              }
+                              setText(next);
+                            }}
+                            onCaret={setCaret}
+                            onImages={(event) => {
+                              if (chat.machine !== null) markDraftTouched(attachSessionKey(chat.machine.id, sessionId));
+                              receiveImages(event);
+                            }}
+                          />
+                        </View>
+                        {boostHint !== null ? <BoostHintChip hint={boostHint} dispatch={dispatch} /> : null}
+                        {collapsed ? (
+                          // Collapsed, desktop's toolbar keeps More actions beside Send (`render_toolbar`).
+                          <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
+                        ) : null}
+                        {collapsed ? (
+                          <SendControl
+                            document={document}
+                            hasDraft={hasDraft || draftCoordinatorMode}
+                            ready={model.ready && !holdSend}
+                            submit={submitDraft}
+                            dispatch={dispatch}
+                            onHold={openSendMenu}
+                          />
+                        ) : null}
+                      </View>
+                    );
+                  })()}
+                  {/* Quiet lines about the box itself, under its text (`BoxNotes.tsx`). */}
+                  {!collapsed ? (
+                    <SecretSendWarning
+                      model={model}
+                      cardOpen={secretRequestOpen(document)}
+                      keptOnDevice={document?.draftKeptOnDevice === true}
+                    />
+                  ) : null}
+                  {!collapsed && document !== null ? <BoxNotes document={document} /> : null}
+                  {!collapsed ? (
+                    <Animated.View
+                      style={[styles.footer, motion.controlsStyle]}
+                      onLayout={(event: LayoutChangeEvent) => setFooterWidth(Math.round(event.nativeEvent.layout.width))}
                     >
                       <View
-                        style={collapsed || boostHint !== null ? styles.grow : null}
-                        onLayout={(event: LayoutChangeEvent) => {
-                          if (!collapsed) measureFrame('field', event.nativeEvent.layout.height);
-                        }}
+                        style={[
+                          styles.options,
+                          { marginLeft: document !== null ? -optionPillsLeadIn(document, compact) : 0 },
+                        ]}
                       >
-                        <ComposerInput
-                          ref={field}
-                          model={model}
-                          input={{
-                            ...input,
-                            focused: () => {
-                              setFocused(true);
-                              onFocusChange?.(true);
-                              input.focused();
-                              readTerminalTail();
-                            },
-                            blurred: () => {
-                              setFocused(false);
-                              onFocusChange?.(false);
-                              input.blurred();
-                            },
-                          }}
-                          references={references}
-                          parsedFor={text}
-                          parse={parseDraftReferences}
-                          placeholder={placeholder}
-                          collapsed={collapsed}
-                          maxHeight={inputMaxHeightFor(bottom)}
-                          onTextChange={(next) => {
-                            if (next.length > 0 && chat.machine !== null) {
-                              markDraftTouched(attachSessionKey(chat.machine.id, sessionId));
-                            }
-                            setText(next);
-                          }}
-                          onCaret={setCaret}
-                          onImages={(event) => {
-                            if (chat.machine !== null) markDraftTouched(attachSessionKey(chat.machine.id, sessionId));
-                            receiveImages(event);
-                          }}
-                        />
+                        {document !== null ? (
+                          <OptionPills document={document} onOpen={openPill} modelOnly={compact} />
+                        ) : null}
                       </View>
-                      {boostHint !== null ? <BoostHintChip hint={boostHint} dispatch={dispatch} /> : null}
-                      {collapsed ? (
-                        // Collapsed, desktop's toolbar keeps More actions beside Send (`render_toolbar`).
-                        <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
-                      ) : null}
-                      {collapsed ? (
+                      <View style={styles.toolbar}>
+                        <ToolbarButton
+                          glyph="dots"
+                          label={
+                            document !== null && terminalIssue(document) !== null
+                              ? `More actions. Terminal problem: ${terminalIssue(document)}`
+                              : 'More actions'
+                          }
+                          onPress={openMore}
+                          disabled={document === null}
+                          tint={document !== null && terminalIssue(document) !== null ? NOT_READY_TINT : null}
+                        />
+                        {document !== null && !compact
+                          ? COMPOSER_CONTROLS.filter(
+                              (control) =>
+                                available(control.id) &&
+                                (control.id === 'terminal' ? terminalFixed : !overflowed(document, control.id)),
+                            ).map((control) => {
+                              const glyph = CONTROL_GLYPHS[control.id];
+                              const pressed = control.id === 'note' && document.composerChrome.notePressed;
+                              const badge = control.id === 'note' && document.composerChrome.notePresence ? '' : null;
+                              // Copy Report sits right before the Terminal View glyph while it reads not ready
+                              // (desktop `toolbar.rs`, CDXC:SessionChat 2026-10-25).
+                              const report =
+                                control.id === 'terminal' && document.terminalTail?.readiness === 'notReady' ? (
+                                  <CopyReportPill key="copyReport" onPress={() => dispatch({ type: 'copyReport' })} />
+                                ) : null;
+                              return [
+                                report,
+                                <ToolbarButton
+                                  key={control.id}
+                                  glyph={glyph}
+                                  label={control.label}
+                                  pressed={pressed}
+                                  badge={badge}
+                                  tint={control.id === 'terminal' ? terminalReadinessTint(document) : null}
+                                  onPress={() => performComposerAction(control.action)}
+                                />,
+                              ];
+                            })
+                          : null}
+                        {voiceShown ? (
+                          <ToolbarButton
+                            glyph="headset"
+                            label={voiceLit ? 'Voice mode on: open the voice agent' : 'Talk to the voice agent'}
+                            tint={voiceLit ? P.accent : null}
+                            onPress={() => host('voiceAgent')}
+                          />
+                        ) : null}
+                        {available('dictate') ? (
+                          <ToolbarButton
+                            glyph={dictation.listening ? 'player-stop' : 'microphone'}
+                            label={
+                              dictation.listening
+                                ? 'Stop dictating'
+                                : !dictation.ready
+                                  ? `Dictate isn't ready on ${machineLabel ?? 'your computer'}`
+                                  : dictation.engine !== null
+                                    ? `Dictate · ${dictation.engine.label}`
+                                    : 'Dictate'
+                            }
+                            dimmed={!dictation.ready && !dictation.listening}
+                            pressed={dictation.listening}
+                            onPress={() => performComposerAction('dictate')}
+                            onLongPress={openDictationMenu}
+                          />
+                        ) : null}
                         <SendControl
                           document={document}
                           hasDraft={hasDraft || draftCoordinatorMode}
@@ -1355,148 +1551,53 @@ export function NativeComposer({
                           dispatch={dispatch}
                           onHold={openSendMenu}
                         />
-                      ) : null}
-                    </View>
-                  );
-                })()}
-                {/* Quiet lines about the box itself, under its text (`BoxNotes.tsx`). */}
-                {!collapsed ? (
-                  <SecretSendWarning
-                    model={model}
-                    cardOpen={secretRequestOpen(document)}
-                    keptOnDevice={document?.draftKeptOnDevice === true}
-                  />
-                ) : null}
-                {!collapsed && document !== null ? <BoxNotes document={document} /> : null}
-                {!collapsed ? (
-                  <Animated.View
-                    style={[styles.footer, motion.controlsStyle]}
-                    onLayout={(event: LayoutChangeEvent) => setFooterWidth(Math.round(event.nativeEvent.layout.width))}
-                  >
-                    <View
-                      style={[
-                        styles.options,
-                        { marginLeft: document !== null ? -optionPillsLeadIn(document, compact) : 0 },
-                      ]}
-                    >
-                      {document !== null ? (
-                        <OptionPills document={document} onOpen={openPill} modelOnly={compact} />
-                      ) : null}
-                    </View>
-                    <View style={styles.toolbar}>
-                      <ToolbarButton
-                        glyph="dots"
-                        label={
-                          document !== null && terminalIssue(document) !== null
-                            ? `More actions. Terminal problem: ${terminalIssue(document)}`
-                            : 'More actions'
-                        }
-                        onPress={openMore}
-                        disabled={document === null}
-                        tint={document !== null && terminalIssue(document) !== null ? NOT_READY_TINT : null}
-                      />
-                      {document !== null && !compact
-                        ? COMPOSER_CONTROLS.filter(
-                            (control) =>
-                              available(control.id) &&
-                              (control.id === 'terminal' ? terminalFixed : !overflowed(document, control.id)),
-                          ).map((control) => {
-                            const glyph = CONTROL_GLYPHS[control.id];
-                            const pressed = control.id === 'note' && document.composerChrome.notePressed;
-                            const badge = control.id === 'note' && document.composerChrome.notePresence ? '' : null;
-                            // Copy Report sits right before the Terminal View glyph while it reads not ready
-                            // (desktop `toolbar.rs`, CDXC:SessionChat 2026-10-25).
-                            const report =
-                              control.id === 'terminal' && document.terminalTail?.readiness === 'notReady' ? (
-                                <CopyReportPill key="copyReport" onPress={() => dispatch({ type: 'copyReport' })} />
-                              ) : null;
-                            return [
-                              report,
-                              <ToolbarButton
-                                key={control.id}
-                                glyph={glyph}
-                                label={control.label}
-                                pressed={pressed}
-                                badge={badge}
-                                tint={control.id === 'terminal' ? terminalReadinessTint(document) : null}
-                                onPress={() => performComposerAction(control.action)}
-                              />,
-                            ];
-                          })
-                        : null}
-                      {voiceShown ? (
-                        <ToolbarButton
-                          glyph="headset"
-                          label={voiceLit ? 'Voice mode on: open the voice agent' : 'Talk to the voice agent'}
-                          tint={voiceLit ? P.accent : null}
-                          onPress={() => host('voiceAgent')}
-                        />
-                      ) : null}
-                      {available('dictate') ? (
-                        <ToolbarButton
-                          glyph={dictation.listening ? 'player-stop' : 'microphone'}
-                          label={
-                            dictation.listening
-                              ? 'Stop dictating'
-                              : !dictation.ready
-                                ? `Dictate isn't ready on ${machineLabel ?? 'your computer'}`
-                                : dictation.engine !== null
-                                  ? `Dictate · ${dictation.engine.label}`
-                                  : 'Dictate'
-                          }
-                          dimmed={!dictation.ready && !dictation.listening}
-                          pressed={dictation.listening}
-                          onPress={() => performComposerAction('dictate')}
-                          onLongPress={openDictationMenu}
-                        />
-                      ) : null}
-                      <SendControl
-                        document={document}
-                        hasDraft={hasDraft || draftCoordinatorMode}
-                        ready={model.ready && !holdSend}
-                        submit={submitDraft}
-                        dispatch={dispatch}
-                        onHold={openSendMenu}
-                      />
-                    </View>
-                    {document !== null && !compact ? (
-                      <View
-                        style={styles.measure}
-                        pointerEvents="none"
-                        onLayout={(event) => setOptionsWidth(Math.round(event.nativeEvent.layout.width))}
-                      >
-                        <OptionPills
-                          document={
-                            {
-                              ...document,
-                              composerOverflow: { overflowed: [], optionsOverflowed: false },
-                            } as ChatDocument
-                          }
-                          onOpen={() => undefined}
-                        />
                       </View>
-                    ) : null}
+                      {document !== null && !compact ? (
+                        <View
+                          style={styles.measure}
+                          pointerEvents="none"
+                          onLayout={(event) => setOptionsWidth(Math.round(event.nativeEvent.layout.width))}
+                        >
+                          <OptionPills
+                            document={
+                              {
+                                ...document,
+                                composerOverflow: { overflowed: [], optionsOverflowed: false },
+                              } as ChatDocument
+                            }
+                            onOpen={() => undefined}
+                          />
+                        </View>
+                      ) : null}
+                    </Animated.View>
+                  ) : null}
+                </Pressable>
+                {/* Non-interactive mirror of the collapsed `...` + Send slot that cross-fades cleanly
+                    during collapse/expand transitions so those controls never pop. */}
+                {!collapsed && motion.showCompactOverlay ? (
+                  <Animated.View pointerEvents="none" style={[styles.compactOverlay, motion.compactControlsStyle]}>
+                    <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
+                    <SendControl
+                      document={document}
+                      hasDraft={hasDraft || draftCoordinatorMode}
+                      ready={model.ready && !holdSend}
+                      submit={submitDraft}
+                      dispatch={dispatch}
+                      onHold={openSendMenu}
+                    />
                   </Animated.View>
                 ) : null}
-              </Pressable>
-              {/* Non-interactive mirror of the collapsed `...` + Send slot that cross-fades cleanly
-                  during collapse/expand transitions so those controls never pop. */}
-              {!collapsed && motion.showCompactOverlay ? (
-                <Animated.View pointerEvents="none" style={[styles.compactOverlay, motion.compactControlsStyle]}>
-                  <ToolbarButton glyph="dots" label="More actions" onPress={openMore} disabled={document === null} />
-                  <SendControl
-                    document={document}
-                    hasDraft={hasDraft || draftCoordinatorMode}
-                    ready={model.ready && !holdSend}
-                    submit={submitDraft}
-                    dispatch={dispatch}
-                    onHold={openSendMenu}
-                  />
-                </Animated.View>
-              ) : null}
-            </Animated.View>
+              </Animated.View>
+            </View>
+            {statusLineShown && document !== null ? (
+              <View
+                style={styles.statusLine}
+                onLayout={(event: LayoutChangeEvent) => setStatusLineHeight(Math.round(event.nativeEvent.layout.height))}
+              >
+                <StatusLine document={document} dispatch={dispatch} />
+              </View>
+            ) : null}
           </View>
-          {statusLine && document !== null && !compact ? <StatusLine document={document} dispatch={dispatch} /> : null}
           <MenuSheet
             rows={menu?.kind === 'rows' ? menu.rows : null}
             {...(menu?.kind === 'rows' && menu.title !== undefined ? { title: menu.title } : {})}
@@ -1592,13 +1693,19 @@ function ToolbarButton({
 const useStyles = themedStyles((P) => ({
   root: { gap: 8, paddingHorizontal: 10, paddingTop: 6, backgroundColor: 'transparent' },
   error: { color: P.error, fontSize: 13, paddingHorizontal: 8 },
-  card: {
-    borderRadius: 22,
-    borderWidth: CARD_BORDER,
-    borderColor: P.composerBorder,
+  /*
+   * The box, square and as wide as the chat: it reaches past the root's side padding (which the cards above it
+   * keep), and its background runs under the status line and the bottom inset (`paddingBottom`, set inline).
+   */
+  dock: {
+    marginHorizontal: -10,
+    borderTopWidth: CARD_BORDER,
+    borderTopColor: P.composerBorder,
     backgroundColor: P.composerBackground,
-    overflow: 'hidden',
   },
+  dockFocused: { borderTopColor: P.ring },
+  card: { overflow: 'hidden' },
+  statusLine: { paddingHorizontal: 10, paddingBottom: 4 },
   /** The box's content under the strip; it clips it while its height tweens. */
   cardInner: {
     overflow: 'hidden',
@@ -1609,13 +1716,6 @@ const useStyles = themedStyles((P) => ({
     paddingTop: 10,
     paddingBottom: 8,
     gap: 6,
-  },
-  cardFocused: {
-    borderColor: P.ring,
-    shadowColor: P.ring,
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 0 },
   },
   cardCollapsed: { paddingTop: 6, paddingBottom: 6 },
   collapsedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -22,8 +23,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useHorizontalSwipeGesture } from '../components/common/HorizontalSwipe';
+import { useKeyboardFrame } from '../components/common/keyboard/keyboardFrame';
 import { useKeyboardInset } from '../chat/native/composer/useKeyboardInset';
 import { TabSwipeView, type TabSwipe } from '../chat/native/TabSwipe';
 import { userBubbleTint } from '../chat/native/transcript/theme';
@@ -38,15 +41,15 @@ type Props = {
   tabSwipe: TabSwipe | null;
   /** Kept warm for a recent tab while another is shown (`WarmChats.tsx`). */
   parked: boolean;
+  /** Told the chat box shows, so the terminal screen keeps no spacer below it (the box keeps the inset). */
+  onComposerShownChange?: (shown: boolean) => void;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Space between the chat box and the keyboard's top edge (the real chat box's `KEYBOARD_GAP`). */
-const KEYBOARD_GAP = 8;
 /** The chat box's own space below its field without a keyboard. */
 const COMPOSER_PADDING = 10;
 
-export default function DemoChatView({ sessionId, visible, tabSwipe, parked, style }: Props) {
+export default function DemoChatView({ sessionId, visible, tabSwipe, parked, onComposerShownChange, style }: Props) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const [turns, setTurns] = useState<readonly DemoTurn[]>(() => demoTranscript(sessionId));
@@ -56,6 +59,24 @@ export default function DemoChatView({ sessionId, visible, tabSwipe, parked, sty
   const composerRef = useRef<ViewInstance>(null);
   const { inset: keyboardInset, onAnchorLayout } = useKeyboardInset(composerRef);
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const insets = useSafeAreaInsets();
+  // Android reports the keyboard only while it is up; the screen then already ends at its top.
+  const androidKeyboardUp = useKeyboardFrame() !== null && Platform.OS === 'android';
+  /*
+   * The bar reaches the screen's bottom edge, as the real chat box does (CDXC:SessionChat 2026-11-28 in
+   * NativeComposer): the home indicator's or gesture bar's inset is inside its background, and with the keyboard up it
+   * sits on the keyboard.
+   */
+  const composerBottom =
+    keyboardInset > 0
+      ? keyboardInset + COMPOSER_PADDING
+      : androidKeyboardUp
+        ? COMPOSER_PADDING
+        : Math.max(insets.bottom, COMPOSER_PADDING);
+
+  useEffect(() => {
+    onComposerShownChange?.(true);
+  }, [onComposerShownChange]);
 
   useEffect(() => {
     setTurns(demoTranscript(sessionId));
@@ -110,7 +131,7 @@ export default function DemoChatView({ sessionId, visible, tabSwipe, parked, sty
       <View
         ref={composerRef}
         onLayout={onAnchorLayout}
-        style={[styles.composer, { paddingBottom: keyboardInset > 0 ? keyboardInset + KEYBOARD_GAP : COMPOSER_PADDING }]}
+        style={[styles.composer, { paddingBottom: composerBottom }]}
       >
         <TextInput
           value={draft}
@@ -196,6 +217,7 @@ const createStyles = (appearance: Appearance) =>
       paddingTop: COMPOSER_PADDING,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: appearance.border,
+      backgroundColor: appearance.card,
     },
     input: {
       flex: 1,

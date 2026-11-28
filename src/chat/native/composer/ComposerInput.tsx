@@ -127,6 +127,8 @@ export const ComposerInput = forwardRef<
     placeholder: string;
     collapsed: boolean;
     maxHeight: number;
+    /** The expanded box (More actions' Expand): the field stands this tall even when the draft is short. */
+    minHeight?: number;
     onTextChange: (text: string) => void;
     onCaret: (caret: number) => void;
     /** Images the keyboard inserted or Paste put in (`GhostexImageIntakeView`, Android). */
@@ -142,6 +144,7 @@ export const ComposerInput = forwardRef<
     placeholder,
     collapsed,
     maxHeight,
+    minHeight,
     onTextChange,
     onCaret,
     onImages,
@@ -427,7 +430,10 @@ export const ComposerInput = forwardRef<
         keyboardAppearance={P.light ? 'light' : 'dark'}
         autoCapitalize="sentences"
         textAlignVertical="top"
-        style={[styles.input, collapsed ? styles.collapsed : { maxHeight }]}
+        style={[
+          styles.input,
+          collapsed ? styles.collapsed : { maxHeight, ...(minHeight !== undefined ? { minHeight } : {}) },
+        ]}
         {...TEXT_DROPS}
       >
         {children}
