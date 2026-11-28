@@ -260,6 +260,26 @@ export const ComposerInput = forwardRef<
     }
   }, [model.replaceSequence, model.text, model.caret, onTextChange]);
 
+  /*
+   * The caret this field placed by itself is the model's too (`input.selected`).
+   *
+   * CDXC:Dictate 2026-11-28 FIX:
+   * User (phone): "When I clicked the stop button to stop my recording, it added my recording at the start of the text
+   * of the chat box even though my caret was at the end after an image." Dictate's words, and a pasted or picked
+   * picture, go where the host's model says the caret is (`dictationPoint`, `placeUploads` in chat/rust/composer.ts),
+   * and the model only heard where it is from the field's selection reports. iOS sends none for a caret the phone
+   * sets itself (`setSelection`, the `selection` prop) and none for a tap that leaves the caret where it already was.
+   * A restored draft ("Look at this [Image #1]") is drawn with the caret at its end, so a tap after the picture moved
+   * nothing, the model kept the 0 it started with, and the words went before the picture. The field now tells the
+   * model where its caret is when it is first drawn and whenever it is given new text, so the two never differ.
+   */
+  const caretPlaced = (shown: ChipText, caret: number): void => {
+    const inDraft = draftOffset(shown, caret);
+    draftSelection.current = { start: inDraft, end: inDraft };
+    input.selected(draftSelection.current);
+    onCaret(inDraft);
+  };
+
   // The shown text changed without the field typing it (the host replaced the draft, or the core's
   // parse turned markdown into a chip): the field gets the new text, and the caret goes where it was
   // in the draft.
@@ -275,12 +295,17 @@ export const ComposerInput = forwardRef<
       if (shown !== null) draftSelection.current = { start: draftOffset(text, shown.start), end: draftOffset(text, shown.end) };
       return;
     }
-    if (first) return;
+    // A field drawn with text has its caret at the end (`draftSelection` starts there).
+    if (first) {
+      caretPlaced(text, shownOffset(text, draftSelection.current.end));
+      return;
+    }
     const hostPlaced = caretRequested.current;
     caretRequested.current = false;
     const caret = shownOffset(text, draftSelection.current.end);
     force({ start: caret, end: caret });
     if (hostPlaced) holdHostCaret(caret);
+    caretPlaced(text, caret);
   }, [text]);
 
   const onChangeText = (next: string): void => {
