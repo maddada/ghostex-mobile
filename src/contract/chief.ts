@@ -14,13 +14,13 @@
 import type { GhostexSession, GhostexMobileSummary } from './mobileSummary';
 
 /**
- * Chief's name on its row and its menus: "Chief of Staff". The one place the phone spells it, as
- * server/src/chief/mod.rs `CHIEF_TITLE` is gxserver's (CDXC:Chief 2026-11-08 there).
+ * The chat's own name on its row, its menus and the Earlier Chats sheet: "Ghostex AI". The one place
+ * the phone spells it, as server/src/chief/mod.rs `CHIEF_TITLE` is gxserver's (CDXC:Chief 2026-11-28
+ * there: "Ask Ghostex AI" before).
  */
-export const CHIEF_LABEL = 'Ask Ghostex AI';
+export const CHIEF_LABEL = 'Ghostex AI';
 /**
- * Its name inside a sentence. CDXC:Chief 2026-11-21 DECISION (server/src/chief/mod.rs): Chief of Staff is "Ask Ghostex AI" on
- * its row and in menus, "Ghostex AI" in a sentence.
+ * Its name inside a sentence: "Ghostex AI" too since CDXC:Chief 2026-11-28 (server/src/chief/mod.rs).
  */
 export const CHIEF_NAME = 'Ghostex AI';
 
