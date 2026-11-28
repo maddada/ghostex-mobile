@@ -15,7 +15,15 @@ import DemoChatView from './DemoChatView';
  */
 export default memo(function SessionChatSurface(props: NativeChatScreenProps) {
   if (isDemoMachine(props.machine)) {
-    return <DemoChatView sessionId={props.sessionId} visible={props.visible} style={props.style} />;
+    return (
+      <DemoChatView
+        sessionId={props.sessionId}
+        visible={props.visible}
+        tabSwipe={props.tabSwipe ?? null}
+        parked={props.parked === true}
+        style={props.style}
+      />
+    );
   }
   return <NativeChatScreen {...props} />;
 });

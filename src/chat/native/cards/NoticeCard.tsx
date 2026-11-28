@@ -46,10 +46,13 @@ export function NoticeCard({
   chat,
   document,
   onHostAction,
+  onActionMenuOpen,
 }: {
   chat: RustChat;
   document: ChatDocument;
   onHostAction?: CardHostAction;
+  /** The card's action menu (`actionMenu`) is opening: the band holding the card brings its rows into view. */
+  onActionMenuOpen?: () => void;
 }) {
   const cardText = useCardText();
   const styles = useStyles();
@@ -522,7 +525,10 @@ export function NoticeCard({
             accessibilityLabel={`${menu.label}, ${menu.entries.length} ${menu.entries.length === 1 ? 'choice' : 'choices'}`}
             disabled={busy}
             trailing={<Glyph name={menuOpen ? 'chevron-up' : 'chevron-down'} size={14} color={look.P.foreground} />}
-            onPress={() => setMenuKey(menuOpen ? null : key)}
+            onPress={() => {
+              if (!menuOpen) onActionMenuOpen?.();
+              setMenuKey(menuOpen ? null : key);
+            }}
           />
         </View>
         {menuOpen ? (

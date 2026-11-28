@@ -91,18 +91,42 @@ export function NativeChatErrorCards({
   gapBelow = 0,
 }: NativeChatCardsProps & { gapBelow?: number }) {
   const { height } = useChatViewSize();
+  const band = useRef<ScrollViewInstance>(null);
+  const revealMenu = useRef(false);
   const document = chat.state?.document ?? null;
   if (document === null || !chatErrorCardsShown(document)) return null;
   const errorNotice = isErrorTerminalNotice(document);
+  /*
+   * CDXC:AgentProviders 2026-11-28 WHY:
+   * 12.5.0 smoke on the iPhone Duo: the out-of-usage card's "Choose what to do" showed 3 of its 7 rows. The band
+   * shrinks to the room left above the chat box and the menu opened below what it showed, with nothing to say the rest
+   * was there. Opening the menu now scrolls the band to its end, as the card band below already keeps its newest card
+   * in view, so the rows come into view and the rest of the card scrolls back.
+   */
   return (
     <ScrollView
+      ref={band}
+      onContentSizeChange={() => {
+        if (!revealMenu.current) return;
+        revealMenu.current = false;
+        band.current?.scrollToEnd({ animated: true });
+      }}
       style={[styles.band, { maxHeight: height * CARD_BAND_SHARE }]}
       contentContainerStyle={[styles.errorStack, { paddingBottom: gapBelow }]}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled
     >
       <ComposerNotReadyCard chat={chat} document={document} onHostAction={onHostAction} />
-      {errorNotice ? <NoticeCard chat={chat} document={document} onHostAction={onHostAction} /> : null}
+      {errorNotice ? (
+        <NoticeCard
+          chat={chat}
+          document={document}
+          onHostAction={onHostAction}
+          onActionMenuOpen={() => {
+            revealMenu.current = true;
+          }}
+        />
+      ) : null}
     </ScrollView>
   );
 }

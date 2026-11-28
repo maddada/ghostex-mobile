@@ -1,23 +1,31 @@
 /**
  * Chat for a demo session. The transcript and the reply live in the demo world,
  * so this view never mounts the Rust chat core and never opens a socket.
+ *
+ * CDXC:SessionChat 2026-11-28 WHY:
+ * 12.5.0 smoke on the iPhone: in the demo a sideways swipe never changed tabs (a rightward one went back to Sessions)
+ * and the keyboard covered the chat box. The demo chat had neither the real chat's tab swipe (`TabSwipe.tsx`) nor its
+ * keyboard lift (`useKeyboardInset`, as the chat box's `KeyboardLiftedView`); React Native's KeyboardAvoidingView
+ * here lifted nothing. It now uses both, so the demo shows what a paired computer's chat does.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
   type ScrollViewInstance,
   type StyleProp,
+  type ViewInstance,
   type ViewStyle,
 } from 'react-native';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 
+import { useHorizontalSwipeGesture } from '../components/common/HorizontalSwipe';
+import { useKeyboardInset } from '../chat/native/composer/useKeyboardInset';
+import { TabSwipeView, type TabSwipe } from '../chat/native/TabSwipe';
 import { userBubbleTint } from '../chat/native/transcript/theme';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
 import { DemoCopy } from './copy';
@@ -26,16 +34,27 @@ import { demoProjectName, demoTranscript, sendDemoMessage, type DemoTurn } from 
 type Props = {
   sessionId: string;
   visible: boolean;
+  /** A sideways swipe on the transcript goes to the previous or next tab, as in the real chat; null: no swipe. */
+  tabSwipe: TabSwipe | null;
+  /** Kept warm for a recent tab while another is shown (`WarmChats.tsx`). */
+  parked: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export default function DemoChatView({ sessionId, visible, style }: Props) {
+/** Space between the chat box and the keyboard's top edge (the real chat box's `KEYBOARD_GAP`). */
+const KEYBOARD_GAP = 8;
+/** The chat box's own space below its field without a keyboard. */
+const COMPOSER_PADDING = 10;
+
+export default function DemoChatView({ sessionId, visible, tabSwipe, parked, style }: Props) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
   const [turns, setTurns] = useState<readonly DemoTurn[]>(() => demoTranscript(sessionId));
   const [draft, setDraft] = useState('');
   const [streaming, setStreaming] = useState<string | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const composerRef = useRef<ViewInstance>(null);
+  const { inset: keyboardInset, onAnchorLayout } = useKeyboardInset(composerRef);
   const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -76,21 +95,23 @@ export default function DemoChatView({ sessionId, visible, style }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.root, !visible ? styles.hidden : null, style]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      pointerEvents={visible ? 'auto' : 'none'}
-    >
+    <View style={[styles.root, !visible ? styles.hidden : null, style]} pointerEvents={visible ? 'auto' : 'none'}>
       <Text style={styles.note}>{DemoCopy.chatNote}</Text>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.transcript} keyboardShouldPersistTaps="handled">
-        {turns.map((turn) => (
-          <Message key={turn.id} turn={turn} styles={styles} />
-        ))}
-        {streaming !== null ? (
-          <Message turn={{ id: 'streaming', role: 'agent', text: streaming }} styles={styles} />
-        ) : null}
-      </ScrollView>
-      <View style={styles.composer}>
+      <TabSwipeView swipe={tabSwipe} shown={!parked}>
+        <DemoTranscript scrollRef={scrollRef} contentStyle={styles.transcript}>
+          {turns.map((turn) => (
+            <Message key={turn.id} turn={turn} styles={styles} />
+          ))}
+          {streaming !== null ? (
+            <Message turn={{ id: 'streaming', role: 'agent', text: streaming }} styles={styles} />
+          ) : null}
+        </DemoTranscript>
+      </TabSwipeView>
+      <View
+        ref={composerRef}
+        onLayout={onAnchorLayout}
+        style={[styles.composer, { paddingBottom: keyboardInset > 0 ? keyboardInset + KEYBOARD_GAP : COMPOSER_PADDING }]}
+      >
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -111,7 +132,30 @@ export default function DemoChatView({ sessionId, visible, style }: Props) {
           <Text style={styles.sendLabel}>Send</Text>
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+/** The transcript's vertical scroll, which waits for the tab swipe to see a drag is more vertical than sideways. */
+function DemoTranscript({
+  scrollRef,
+  contentStyle,
+  children,
+}: {
+  scrollRef: RefObject<ScrollViewInstance | null>;
+  contentStyle: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const swipePan = useHorizontalSwipeGesture();
+  return (
+    <GestureScrollView
+      ref={scrollRef}
+      contentContainerStyle={contentStyle}
+      keyboardShouldPersistTaps="handled"
+      requireToFail={swipePan ?? undefined}
+    >
+      {children}
+    </GestureScrollView>
   );
 }
 
@@ -149,7 +193,7 @@ const createStyles = (appearance: Appearance) =>
       alignItems: 'flex-end',
       gap: 8,
       paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingTop: COMPOSER_PADDING,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: appearance.border,
     },
