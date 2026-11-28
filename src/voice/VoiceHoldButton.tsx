@@ -1,16 +1,17 @@
 /**
- * The voice screen's hold button: icon only, full tile height so it is comfortable to hold. Press
- * and hold to talk (or, in a muted Regular call, to unmute); let go to send. Sliding the finger off
+ * The voice screen's hold button: a waveform and words that say what holding does now ("Hold to
+ * talk", "Hold to unmute", "Let go to send" while held), dimmed when holding does nothing. Press and
+ * hold to talk (or, in a muted Regular call, to unmute); let go to send. Sliding the finger off
  * shows "Release to cancel" and letting go there sends nothing; sliding back keeps talking.
  *
  * CDXC:VoiceMode 2026-10-24 DECISION: User, asked "On the phone, what happens when your finger slides off the hold button?", picked "It cancels: "Release to cancel", and sliding back on keeps talking". Built on the touch responder, not `Pressable`, whose `onPressOut` fired as soon as the finger left the button's press area and sent the turn early.
- * CDXC:VoiceMode 2026-10-24 DECISION: User: "On the phone it's icon-only beside Mute; keep it a comfortable size to hold, but no label." The tile keeps the controls' size and shows a waveform, so it never reads as Mute's microphone.
+ * CDXC:VoiceMode 2026-11-28 DECISION: User, on the voice screen's button with only a waveform: "the button in the middle there doesn't have text ... I don't know what it does", then picked "Always there, labelled with what holding does ("Hold to talk", "Hold to unmute"), dimmed when it does nothing". The button always shows its words beside the waveform and stays in place in every state, so the buttons never move. Supersedes the 2026-10-24 decision "On the phone it's icon-only beside Mute; keep it a comfortable size to hold, but no label."
  * SEE-ALSO: server/src/voice_agent/talk.rs (what a hold does), apps/desktop/src/app/voice_agent/panel_controls.rs (the computer's button).
  */
 
 import * as Haptics from 'expo-haptics';
 import { useRef, useState } from 'react';
-import { type GestureResponderEvent, type LayoutChangeEvent, StyleSheet, View, type ViewStyle } from 'react-native';
+import { type GestureResponderEvent, type LayoutChangeEvent, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { useAppearance } from '../theme/useAppearance';
@@ -30,6 +31,12 @@ export function WaveformGlyph({ size, color }: { size: number; color: string }) 
       />
     </Svg>
   );
+}
+
+/** The button's words for what holding does now (`voiceHoldMode`); a hold that does nothing keeps "Hold to talk", dimmed. */
+function holdWords(mode: ReturnType<typeof voiceHoldMode>, held: boolean): string {
+  if (held) return 'Let go to send';
+  return mode === 'unmute' ? 'Hold to unmute' : 'Hold to talk';
 }
 
 /** `onSlide` tells the screen whether the finger is off the button, for "Release to cancel". */
@@ -85,6 +92,8 @@ export function VoiceHoldButton({ style, onSlide }: { style: ViewStyle; onSlide:
   };
 
   const held = voice.talking;
+  // A hold that does nothing dims the whole button (`unavailable`), so its words stay readable.
+  const ink = held && off ? appearance.danger : appearance.foreground;
   const accessibilityLabel =
     mode === 'mutedLock'
       ? 'Unmute to talk'
@@ -125,24 +134,20 @@ export function VoiceHoldButton({ style, onSlide }: { style: ViewStyle; onSlide:
             : [styles.held, { backgroundColor: appearance.primaryFillPressed, borderColor: appearance.border }]),
       ]}
     >
-      <View pointerEvents="none">
-        <WaveformGlyph
-          size={34}
-          color={
-            held && off
-              ? appearance.danger
-              : ready || held
-                ? appearance.foreground
-                : appearance.muted
-          }
-        />
+      <View pointerEvents="none" style={styles.content}>
+        <WaveformGlyph size={20} color={ink} />
+        <Text style={[styles.label, { color: ink }]} numberOfLines={2}>
+          {holdWords(mode, held)}
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  unavailable: { opacity: 0.35 },
+  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  label: { flexShrink: 1, fontSize: 15, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  unavailable: { opacity: 0.45 },
   held: {
     transform: [{ scale: 0.96 }],
     borderWidth: 2,

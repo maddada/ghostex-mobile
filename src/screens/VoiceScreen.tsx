@@ -1,12 +1,24 @@
 /**
  * The voice screen: one conversation with the manager voice agent, made to be glanced at while
- * walking or driving. A big state circle (listening, thinking, speaking, running a tool), live
- * captions of what you and the agent said with tool calls as short rows, the voice (tap it to pick
- * another) with a small speed button beside it (a list from 1x to 2x), the call's sessions (a
- * Sessions sheet in a call about all sessions, `SessionsStrip`), the remembered last conversation
- * (`VoiceMemoryCard`: once recalled, or offered by an older computer), and large Mute, hold-to-talk and Hang up controls with a Stop talking pill above them
- * (`VoiceStopPill`). Closing the screen keeps the conversation going; the top bar's
- * Voice button and the "Voice mode on" notification bring it back.
+ * walking or driving. The header says what the call is doing (a dot and a word: Listening,
+ * Speaking, Muted…) over the computer's name; under it the voice and the speaking speed sit as two
+ * pills of one height (tap to pick another). Before anything is said the centre shows a waveform,
+ * "Go ahead, I'm listening." and a hint; then live captions of what you and the agent said with
+ * tool calls as short rows. The call's sessions (a Sessions sheet in a call about all sessions,
+ * `SessionsStrip`), the remembered last conversation (`VoiceMemoryCard`: once recalled, or offered
+ * by an older computer), a Stop talking pill (`VoiceStopPill`), and a bottom dock: the text box,
+ * then Mute, a round red Hang up and the hold-to-talk button. Closing the screen keeps the
+ * conversation going; the top bar's Voice button and the "Voice mode on" notification bring it back.
+ *
+ * CDXC:VoiceMode 2026-11-28 DECISION: User, on the call screen: "The hang-up button here looks weird
+ * ... the speed drop down ... is like smaller in height than the picker for the voice of the agent
+ * ... this page in general doesn't look super good", then picked on the options page: the
+ * "Computer panel" look (status dot and word in the header, a waveform with "Go ahead, I'm
+ * listening.", a bottom dock, like the computer's voice panel), Hang up as a round red button with
+ * its word under it, the middle button always there and labelled with what holding does, and the
+ * voice and speed as two pills of the same height. Supersedes the big state circle with the
+ * "Voice agent" title and the row of three tall tiles. The dock puts the round Hang up between Mute
+ * and the hold button, which keeps it centred and one row shorter than Hang up under the others.
  */
 
 import { readableSecondaryText } from '../theme/sidebarAppearance';
@@ -82,6 +94,7 @@ import { VoiceHoldButton } from '../voice/VoiceHoldButton';
 import { VoiceStopPill } from '../voice/VoiceStopPill';
 import { VoiceTextBox } from '../voice/VoiceTextBox';
 import { VoiceMemoryCard } from '../voice/VoiceMemoryCard';
+import { VoiceCallWaveform, type WaveMotion } from '../voice/VoiceCallWaveform';
 import { voiceSheetScrollY } from '../voice/voiceList';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Voice'>;
@@ -166,7 +179,41 @@ function useFollowBottom() {
   return { away, jumpToBottom, scrollProps };
 }
 
-/** The state circle's words and colour for what the agent is doing. */
+/**
+ * Hang up's fill: the computer's voice panel red (`panel.rs`, #dc2626), the same in dark and light.
+ * CDXC:VoiceMode 2026-11-28 WHY: the button was filled with `appearance.danger`, the theme's red
+ * *text* colour, which the app lightens to stay readable on a dark page, so it came out pale pink
+ * under white words.
+ */
+const HANG_UP_RED = '#DC2626';
+const HANG_UP_RED_PRESSED = '#B91C1C';
+
+/** The centre's words and how the waveform moves, before anything has been said. */
+function centreLook(state: ReturnType<typeof useVoiceStore.getState>): { title: string; motion: WaveMotion } {
+  if (state.phase === 'starting') return { title: 'Starting the voice agent…', motion: 'flat' };
+  if (state.phase === 'reattaching') return { title: 'Reconnecting…', motion: 'flat' };
+  if (state.phase === 'ended') return { title: 'Call ended', motion: 'flat' };
+  if (state.paused) return { title: 'Paused', motion: 'flat' };
+  switch (state.agentState) {
+    case 'connecting':
+      return { title: 'Starting the voice agent…', motion: 'flat' };
+    case 'userSpeaking':
+      return { title: 'Hearing you', motion: 'strong' };
+    case 'thinking':
+      return { title: 'Thinking…', motion: 'calm' };
+    case 'toolRunning':
+      return { title: state.toolLabel ?? 'Working', motion: 'calm' };
+    case 'speaking':
+      return { title: 'Speaking', motion: 'strong' };
+    default:
+      if (state.talking) return { title: 'Hearing you', motion: 'strong' };
+      if (state.muted) return { title: 'You’re muted', motion: 'flat' };
+      if (state.pushToTalk || state.clipTalk) return { title: 'Hold to talk, then let go to send', motion: 'flat' };
+      return { title: 'Go ahead, I’m listening.', motion: 'calm' };
+  }
+}
+
+/** The header's word and dot colour for what the agent is doing. */
 function stateLook(state: ReturnType<typeof useVoiceStore.getState>): { label: string; color: string } {
   if (state.phase === 'starting') return { label: 'Connecting…', color: GhostexPalette.MUTED };
   if (state.phase === 'reattaching') return { label: 'Reconnecting…', color: GhostexPalette.STATUS_WORKING };
@@ -195,6 +242,15 @@ function ChevronDown({ color }: { color: string }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Path d="M 6 9 l 6 6 6 -6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** The small chevron at a pill's end: the pill opens a list. */
+function PillChevron({ color }: { color: string }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M 6 9 l 6 6 6 -6" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -630,14 +686,16 @@ export default function VoiceScreen({ navigation }: Props) {
   const { away, jumpToBottom, scrollProps } = useFollowBottom();
   const look = stateLook(voice);
   const active = voiceActive(voice.phase);
+  const centre = centreLook(voice);
+  /** The state's colour, readable on this page (the palette's colours are drawn for a dark one). */
+  const stateInk = readableSecondaryText(look.color, appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]);
   /*
-   * While the keyboard is up the state shows small and the buttons step aside, so the text box and
-   * its send button always fit above the keyboard (CDXC:VoiceMode 2026-11-11 WHY: on an iPhone 15 Pro
-   * Max the big state circle, the buttons and a three-line box were taller than the room left above
-   * the keyboard, so the box's last line and its send button sat under it).
+   * While the keyboard is up the buttons step aside and the centre scrolls with the captions, so the
+   * text box and its send button always fit above the keyboard (CDXC:VoiceMode 2026-11-11 WHY: on an
+   * iPhone 15 Pro Max the big state circle, the buttons and a three-line box were taller than the
+   * room left above the keyboard, so the box's last line and its send button sat under it).
    */
   const keyboardUp = useKeyboardTop() !== null;
-  const compact = voice.lines.length > 0 || keyboardUp;
   const machine = useMachinesStore((state) => state.machines.find((entry) => entry.id === voice.machineId) ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
   /** The hold button's finger is off the button: the strip says "Release to cancel". */
@@ -680,7 +738,7 @@ export default function VoiceScreen({ navigation }: Props) {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       {/* The text box and everything above it stand above the keyboard while it is up. */}
       <KeyboardAvoidingContainer style={styles.body}>
-        {/* Everything above the text box; on a short screen it gives way first, so the box never does. */}
+        {/* Everything above the dock; on a short screen it gives way first, so the dock never does. */}
         <View style={styles.above}>
           <View style={styles.header}>
             <Pressable
@@ -693,57 +751,15 @@ export default function VoiceScreen({ navigation }: Props) {
               <ChevronDown color={appearance.foreground} />
             </Pressable>
             <View style={styles.headerTitles}>
-              <Text style={styles.title}>Voice agent</Text>
+              <View style={styles.status} accessible accessibilityLabel={`Voice agent: ${look.label}`} accessibilityLiveRegion="polite">
+                <View style={[styles.statusDot, { backgroundColor: stateInk }]} />
+                <Text style={styles.statusText} numberOfLines={1}>
+                  {look.label}
+                </Text>
+              </View>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {voice.machineName}
               </Text>
-              <View style={styles.voiceChips}>
-                {voice.voice !== null ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Voice: ${voiceName(voice.voice)}. Change the voice`}
-                    disabled={!canPickVoice}
-                    hitSlop={8}
-                    style={({ pressed }) => [styles.voiceChip, pressed && styles.controlPressed]}
-                    onPress={() => setPickerOpen(true)}
-                  >
-                    <Text style={styles.voiceChipText} numberOfLines={1}>
-                      {`${voiceProviderName(voice.provider)} · ${voiceName(voice.voice)}`}
-                    </Text>
-                    {canPickVoice ? (
-                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                        <Path
-                          d="M 6 9 l 6 6 6 -6"
-                          stroke={appearance.muted}
-                          strokeWidth={2.4}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </Svg>
-                    ) : null}
-                  </Pressable>
-                ) : null}
-                {active ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Speaking speed ${speedLabel(voice.speed)}. Change the speed`}
-                    hitSlop={8}
-                    style={({ pressed }) => [styles.voiceChip, styles.speedChip, pressed && styles.controlPressed]}
-                    onPress={() => setSpeedOpen(true)}
-                  >
-                    <Text style={styles.speedChipText}>{speedLabel(voice.speed)}</Text>
-                    <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
-                      <Path
-                        d="M 6 9 l 6 6 6 -6"
-                        stroke={appearance.muted}
-                        strokeWidth={2.6}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </Svg>
-                  </Pressable>
-                ) : null}
-              </View>
             </View>
             {active ? (
               <Pressable
@@ -760,15 +776,38 @@ export default function VoiceScreen({ navigation }: Props) {
             )}
           </View>
 
-          {/* Big while nothing has been said yet; once captions arrive it shrinks so they get the room. */}
-          <View style={[styles.stateBlock, compact && styles.stateBlockCompact]} accessibilityLiveRegion="polite">
-            <View style={[styles.orb, compact && styles.orbCompact, { borderColor: look.color }]}>
-              <View style={[styles.orbCore, compact && styles.orbCoreCompact, { backgroundColor: look.color }]} />
+          {/* The voice and the speed: two pills of one height (CDXC:VoiceMode 2026-11-28 DECISION at the top). */}
+          {voice.voice !== null || active ? (
+            <View style={styles.pills}>
+              {voice.voice !== null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Voice: ${voiceName(voice.voice)}. Change the voice`}
+                  disabled={!canPickVoice}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.pill, styles.voicePill, pressed && styles.controlPressed]}
+                  onPress={() => setPickerOpen(true)}
+                >
+                  <Text style={styles.pillText} numberOfLines={1}>
+                    {`${voiceProviderName(voice.provider)} · ${voiceName(voice.voice)}`}
+                  </Text>
+                  {canPickVoice ? <PillChevron color={appearance.muted} /> : null}
+                </Pressable>
+              ) : null}
+              {active ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Speaking speed ${speedLabel(voice.speed)}. Change the speed`}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.pill, pressed && styles.controlPressed]}
+                  onPress={() => setSpeedOpen(true)}
+                >
+                  <Text style={styles.pillText}>{speedLabel(voice.speed)}</Text>
+                  <PillChevron color={appearance.muted} />
+                </Pressable>
+              ) : null}
             </View>
-            <Text style={[styles.stateLabel, compact && styles.stateLabelCompact, { color: readableSecondaryText(look.color, appearance.foreground, [appearance.background, appearance.card, appearance.cardActive]) }]} numberOfLines={2}>
-              {look.label}
-            </Text>
-          </View>
+          ) : null}
 
           {voice.problem !== null ? (
             <View style={styles.problem}>
@@ -786,14 +825,21 @@ export default function VoiceScreen({ navigation }: Props) {
               contentContainerStyle={[styles.linesContent, linesEdges.content]}
             >
               {voice.phase === 'live' ? <VoiceMemoryCard /> : null}
-              {voice.lines.length === 0 && active ? (
-                <Text style={styles.hint}>
-                  {voice.focus?.gbot !== undefined
-                    ? `Talk with ${voice.focus.gbot.name} as you would in its chat.`
-                    : voice.focus !== null && !voice.focus.closed
-                    ? `Ask what ${voice.focus.title} is doing, or tell it what to do next.`
-                    : 'Ask what your agents are doing, or tell one what to do next.'}
-                </Text>
+              {/* Before anything is said: the waveform, what the call is doing, and what to say (the computer's panel centre). */}
+              {voice.lines.length === 0 ? (
+                <View style={styles.centre}>
+                  <VoiceCallWaveform color={stateInk} motion={centre.motion} />
+                  <Text style={styles.centreTitle}>{centre.title}</Text>
+                  {active ? (
+                    <Text style={styles.hint}>
+                      {voice.focus?.gbot !== undefined
+                        ? `Talk with ${voice.focus.gbot.name} as you would in its chat.`
+                        : voice.focus !== null && !voice.focus.closed
+                        ? `Ask what ${voice.focus.title} is doing, or tell it what to do next.`
+                        : 'Ask what your agents are doing, or tell one what to do next.'}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
               {voice.lines.map((line) => (
                 <Line key={line.key} line={line} />
@@ -836,46 +882,54 @@ export default function VoiceScreen({ navigation }: Props) {
 
           {/* After the call too: a caption copied then still says "Copied". */}
           {active || voice.phase === 'ended' ? <VoiceStopPill slidOff={holdSlidOff} /> : null}
+        </View>
+
+        {/* The dock: the text box, then Mute, the round red Hang up and the hold button. */}
+        <View style={styles.dock}>
+          {active ? <VoiceTextBox /> : null}
           {keyboardUp ? null : active ? (
             <View style={styles.controls}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={voice.muted ? 'Unmute the microphone' : 'Mute the microphone'}
-                style={({ pressed }) => [styles.control, voice.muted && styles.controlOn, pressed && styles.controlPressed]}
+                style={({ pressed }) => [styles.button, styles.beside, voice.muted && styles.buttonOn, pressed && styles.controlPressed]}
                 onPress={() => setVoiceMuted(!voice.muted)}
               >
-                <MicrophoneGlyph
-                  size={30}
-                  color={appearance.foreground}
-                  crossed={voice.muted}
-                />
-                <Text style={[styles.controlLabel, voice.muted && styles.controlLabelOn]}>
+                <MicrophoneGlyph size={20} color={appearance.foreground} crossed={voice.muted} />
+                <Text style={styles.buttonLabel} numberOfLines={1}>
                   {voice.muted ? 'Unmute' : 'Mute'}
                 </Text>
               </Pressable>
-              <VoiceHoldButton style={styles.control} onSlide={setHoldSlidOff} />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Hang up"
-                style={({ pressed }) => [styles.control, styles.hangUp, pressed && styles.hangUpPressed]}
+                hitSlop={6}
+                style={styles.hangUp}
                 onPress={hangUpVoice}
               >
-                <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M 3 14 c 5 -5 13 -5 18 0 l -2 3 l -4 -1.5 v -2.5 c -2 -0.6 -4 -0.6 -6 0 v 2.5 l -4 1.5 z"
-                    fill="#ffffff"
-                  />
-                </Svg>
-                <Text style={[styles.controlLabel, styles.hangUpLabel]}>Hang up</Text>
+                {({ pressed }) => (
+                  <>
+                    <View style={[styles.hangUpCircle, pressed && styles.hangUpCirclePressed]}>
+                      <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
+                        <Path
+                          d="M 3 14 c 5 -5 13 -5 18 0 l -2 3 l -4 -1.5 v -2.5 c -2 -0.6 -4 -0.6 -6 0 v 2.5 l -4 1.5 z"
+                          fill="#ffffff"
+                        />
+                      </Svg>
+                    </View>
+                    <Text style={styles.hangUpLabel}>Hang up</Text>
+                  </>
+                )}
               </Pressable>
+              <VoiceHoldButton style={{ ...styles.button, ...styles.beside }} onSlide={setHoldSlidOff} />
             </View>
           ) : (
-            <View style={styles.controls}>
+            <View style={[styles.controls, styles.endedControls]}>
               {machine !== null ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Start a new conversation"
-                  style={({ pressed }) => [styles.control, styles.wide, styles.controlOn, pressed && styles.controlPressed]}
+                  style={({ pressed }) => [styles.button, styles.buttonOn, pressed && styles.controlPressed]}
                   onPress={() =>
                     // Talk again keeps the call's scope: about the same session, unless it was closed.
                     void startVoice(
@@ -887,22 +941,21 @@ export default function VoiceScreen({ navigation }: Props) {
                     )
                   }
                 >
-                  <HeadsetGlyph size={30} color={appearance.foreground} />
-                  <Text style={[styles.controlLabel, styles.controlLabelOn]}>Talk again</Text>
+                  <HeadsetGlyph size={20} color={appearance.foreground} />
+                  <Text style={styles.buttonLabel}>Talk again</Text>
                 </Pressable>
               ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
-                style={({ pressed }) => [styles.control, styles.wide, pressed && styles.controlPressed]}
+                style={({ pressed }) => [styles.button, pressed && styles.controlPressed]}
                 onPress={close}
               >
-                <Text style={styles.controlLabel}>Close</Text>
+                <Text style={styles.buttonLabel}>Close</Text>
               </Pressable>
             </View>
           )}
         </View>
-        {active ? <VoiceTextBox /> : null}
       </KeyboardAvoidingContainer>
       <VoicePickerSheet visible={pickerOpen && canPickVoice} onClose={() => setPickerOpen(false)} />
       <VoiceSpeedSheet visible={speedOpen && active} onClose={() => setSpeedOpen(false)} />
@@ -919,20 +972,24 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   headerButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   headerTitles: { flex: 1, alignItems: 'center' },
-  title: { color: appearance.foreground, fontSize: 18, fontWeight: '600' },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '100%' },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  statusText: { flexShrink: 1, color: appearance.foreground, fontSize: 18, fontWeight: '600' },
   subtitle: { color: appearance.muted, fontSize: 14, marginTop: 2 },
-  voiceChip: {
+  // The voice and the speed: one height, one type size (the speed was a smaller pill beside the voice's).
+  pills: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-    paddingHorizontal: 12,
-    minHeight: 32,
-    borderRadius: 16,
+    gap: 6,
+    height: 36,
+    paddingLeft: 14,
+    paddingRight: 12,
+    borderRadius: 18,
     backgroundColor: appearance.cardActive,
   },
-  voiceChipText: { color: appearance.foreground, fontSize: 15, fontWeight: '600' },
-  voiceChips: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  voicePill: { flexShrink: 1 },
+  pillText: { flexShrink: 1, color: appearance.foreground, fontSize: 15, fontWeight: '600' },
   focusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -968,8 +1025,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
     backgroundColor: appearance.cardActive,
   },
   openSessionText: { flexShrink: 1, color: appearance.foreground, fontSize: 15, fontWeight: '600' },
-  speedChip: { paddingHorizontal: 8, minHeight: 26, borderRadius: 13 },
-  speedChipText: { color: appearance.foreground, fontSize: 13, fontWeight: '600' },
   sheetTitle: { color: appearance.foreground, fontSize: 18, fontWeight: '700', marginBottom: 8 },
   sheetRow: { flexDirection: 'row', alignItems: 'center', minHeight: 52, gap: 10 },
   sheetRowTall: { paddingVertical: 8 },
@@ -981,14 +1036,6 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   sheetRowDetail: { color: appearance.muted, fontSize: 14 },
   // A row on another computer: listed, but a call can't be about it (`callSessionCanFocus`).
   sessionRowDimmed: { opacity: 0.45 },
-  stateBlock: { alignItems: 'center', paddingTop: 12, paddingBottom: 16 },
-  orb: { width: 132, height: 132, borderRadius: 66, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  orbCore: { width: 72, height: 72, borderRadius: 36, opacity: 0.85 },
-  stateLabel: { marginTop: 14, fontSize: 26, fontWeight: '700', textAlign: 'center', paddingHorizontal: 24 },
-  stateBlockCompact: { flexDirection: 'row', justifyContent: 'center', gap: 16, paddingTop: 4, paddingBottom: 12 },
-  orbCompact: { width: 64, height: 64, borderRadius: 32 },
-  orbCoreCompact: { width: 34, height: 34, borderRadius: 17 },
-  stateLabelCompact: { marginTop: 0, paddingHorizontal: 0, flexShrink: 1 },
   problem: {
     marginHorizontal: 16,
     marginBottom: 8,
@@ -1000,8 +1047,11 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   lines: { flex: 1 },
   jumpRow: { position: 'absolute', right: 22, bottom: 16 },
   // CDXC:VoiceMode 2026-10-24 WHY: more room between lines so a reply, its tool line and an announcement read apart; the user's decision is in gxserver's paragraphs.rs.
-  linesContent: { paddingHorizontal: 16, paddingBottom: 16, gap: 16 },
-  hint: { color: appearance.muted, fontSize: 17, textAlign: 'center', marginTop: 8 },
+  linesContent: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 16, gap: 16 },
+  // The centre before anything is said, in the middle of what is left above the dock.
+  centre: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 16 },
+  centreTitle: { marginTop: 18, color: appearance.foreground, fontSize: 20, fontWeight: '600', textAlign: 'center' },
+  hint: { color: appearance.muted, fontSize: 16, lineHeight: 22, textAlign: 'center', marginTop: 8, maxWidth: 300 },
   caption: { borderRadius: GhostexRadii.section, padding: 12, maxWidth: '92%' },
   captionUser: { alignSelf: 'flex-end', backgroundColor: appearance.cardActive },
   captionAgent: { alignSelf: 'flex-start', backgroundColor: appearance.card },
@@ -1016,24 +1066,29 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   toolText: { color: appearance.muted, fontSize: 15, flex: 1 },
   announcement: { color: appearance.attention, fontSize: 16, paddingHorizontal: 4 },
   notice: { color: appearance.muted, fontSize: 15, fontStyle: 'italic', paddingHorizontal: 4 },
-  controls: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
-  control: {
+  dock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: appearance.border, paddingTop: 10 },
+  controls: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 16, paddingBottom: 12 },
+  endedControls: { alignItems: 'center' },
+  button: {
     flex: 1,
-    minHeight: 96,
-    borderRadius: GhostexRadii.section,
+    minWidth: 0,
+    height: 50,
+    flexDirection: 'row',
+    gap: 6,
+    borderRadius: 14,
     backgroundColor: appearance.neutralFill,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingHorizontal: 10,
   },
-  wide: { minHeight: 72 },
-  controlOn: { backgroundColor: appearance.primaryFill },
+  // Mute and the hold button sit level with the middle of the round Hang up (64 tall).
+  beside: { marginTop: 7 },
+  buttonOn: { backgroundColor: appearance.primaryFill },
+  buttonLabel: { flexShrink: 1, color: appearance.foreground, fontSize: 15, fontWeight: '600' },
   controlPressed: { opacity: 0.75 },
   controlDisabled: { opacity: 0.35 },
-  controlLabel: { color: appearance.foreground, fontSize: 17, fontWeight: '600', textAlign: 'center' },
-  controlLabelOn: { color: appearance.foreground },
-  hangUp: { backgroundColor: appearance.danger },
-  hangUpLabel: { color: '#ffffff' },
-  hangUpPressed: { transform: [{ scale: 0.98 }] },
+  hangUp: { alignItems: 'center', gap: 6 },
+  hangUpCircle: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: HANG_UP_RED },
+  hangUpCirclePressed: { backgroundColor: HANG_UP_RED_PRESSED, transform: [{ scale: 0.96 }] },
+  hangUpLabel: { color: appearance.foreground, fontSize: 13, fontWeight: '600' },
 });
