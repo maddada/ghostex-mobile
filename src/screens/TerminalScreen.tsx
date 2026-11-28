@@ -119,6 +119,7 @@ import { DuoChromeCopy, PanesCopy, RenameCopy, SessionCopy, TerminalHeaderCopy }
 import { summarizeFailure } from '../inventory/client';
 import { hasPassword } from '../machines/credentials';
 import { useInventoryStore } from '../inventory/store';
+import { closeAfterDoneOnIn } from '../sessions/delayedActionsSwitch';
 import { sessionNotesOnIn } from '../sessions/sessionNotesSwitch';
 import { useBeadsOn } from '../beads/featureSwitch';
 import type { RootStackParamList } from '../navigation/types';
@@ -338,6 +339,11 @@ export default function TerminalScreen({ navigation, route }: Props) {
   const beadsOn = useBeadsOn(activeTab?.machineId);
   const sessionNotesOn = useInventoryStore((state) =>
     activeTab === null ? true : sessionNotesOnIn(state.inventoriesByMachineId[activeTab.machineId]?.summary),
+  );
+  // Delayed Actions' Close After Done switch only while the computer has Close After Done on, or this session is
+  // already set to close (CDXC:DelayedSend 2026-11-28 in sessions/delayedActionsSwitch.ts).
+  const closeAfterDoneOn = useInventoryStore((state) =>
+    activeTab === null ? true : closeAfterDoneOnIn(state.inventoriesByMachineId[activeTab.machineId]?.summary),
   );
   const sessionLinkOpenTarget = useInventoryStore((state) =>
     activeTab === null
@@ -1931,7 +1937,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
               agentIcon={activeSession.agentIcon}
               agentName={activeSession.agentName.length > 0 ? activeSession.agentName : activeSession.agent}
               closeAfterDoneActive={activeSession.closeAfterDone}
-              supportsCloseAfterDone={!activeSession.isCoordinator}
+              supportsCloseAfterDone={!activeSession.isCoordinator && (closeAfterDoneOn || activeSession.closeAfterDone)}
               visible
               sessionTitle={agentSessionTitle}
               remainingLabel={activeSession.delayedSendRemainingLabel}

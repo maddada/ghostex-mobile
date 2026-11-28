@@ -75,6 +75,11 @@ export type MoreActionsInput = {
   allFolded?: boolean;
   /** The session sleeps: the core's Sleep row reads Wake, as the sidebar's does. */
   sleeping?: boolean;
+  /**
+   * The computer has Delayed Send on (`sessions/delayedActionsSwitch.ts`); off, no Delayed Send row. On when absent.
+   * Close After Done is a shared place, so `sessionRows` already follows its switch.
+   */
+  delayedSend?: boolean;
 };
 
 /**
@@ -375,6 +380,7 @@ export function moreActionsRows({
   voiceCallGbotName = '',
   allFolded = false,
   sleeping = false,
+  delayedSend = true,
 }: MoreActionsInput): MenuRow[] {
   const folded = (id: string): boolean => allFolded || overflowed(document, id);
   const actions = document.hostActions ?? [];
@@ -402,10 +408,12 @@ export function moreActionsRows({
   const fill = (id: string): MenuRow[] => {
     if (SHARED_PLACES.has(id)) return sessionRows === undefined ? [] : sessionRows(id);
     switch (id) {
+      case 'delayedSend':
+        // Delayed Send off on the computer (CDXC:DelayedSend 2026-11-28 in sessions/delayedActionsSwitch.ts).
+        return delayedSend ? coreRow(id) : [];
       case 'rename':
       case 'fork':
       case 'fullReload':
-      case 'delayedSend':
         return coreRow(id);
       case 'sleep':
         // The session sleeps: the core's Sleep row reads Wake, as the sidebar's does.

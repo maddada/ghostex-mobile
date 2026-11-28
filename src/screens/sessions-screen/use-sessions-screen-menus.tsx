@@ -178,6 +178,7 @@ import { callVoiceAbout } from '../../voice/callAbout';
 import { VOICE_SUPPORTED } from '../../voice/conversation';
 import { voiceAgentOnFor } from '../../voice/VoiceButton';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
+import { closeAfterDoneOnIn, delayedSendOnIn } from '../../sessions/delayedActionsSwitch';
 import { sessionTagsOnIn } from '../../sessions/sessionTagsSwitch';
 import { beadsOnIn } from '../../beads/featureSwitch';
 import {
@@ -934,6 +935,8 @@ export function useSessionsScreenMenus({
           voiceAgentOnFor(ctx.machine.id),
         sessionNotes: sessionNotesOnIn(summaryFor(ctx.machine.id)),
         sessionTags: sessionTagsOnIn(summaryFor(ctx.machine.id)),
+        delayedSend: delayedSendOnIn(summaryFor(ctx.machine.id)),
+        closeAfterDone: closeAfterDoneOnIn(summaryFor(ctx.machine.id)),
         beads: beadsOnIn(summaryFor(ctx.machine.id)),
         // Both lists offer Snooze, as both desktop sidebars do (the Project list's Snoozed section, contract/grouping.ts).
         snooze: true,

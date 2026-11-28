@@ -36,6 +36,7 @@ import {
   type SidebarMenuCommand,
   type SidebarMenuItem,
 } from '../../screens/sessions-screen/sidebar-menus';
+import { delayedSendOnIn } from '../../sessions/delayedActionsSwitch';
 import { useAppearance } from '../../theme/useAppearance';
 import ContextMenu, { type ContextMenuItem, type MenuAnchor } from '../sessions/ContextMenu';
 
@@ -162,12 +163,10 @@ function terminalMenu(props: TerminalMenuProps, layout: SessionMenuLayout): Side
     skillsEnabled,
     leadingItems = [],
   } = props;
+  const summary = machineId === null ? null : useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary;
   const shared =
     agentActionsEnabled && session !== null && machineId !== null
-      ? sessionMenuPlaces(
-          sessionMenuInputFromSummary(useInventoryStore.getState().inventoriesByMachineId[machineId]?.summary, session),
-          layout,
-        )
+      ? sessionMenuPlaces(sessionMenuInputFromSummary(summary, session), layout)
       : null;
   const own = (id: string, options: { alt?: boolean; disabled?: boolean } = {}): SidebarMenuItem[] => {
     const action = OWN_ACTIONS[id];
@@ -189,10 +188,12 @@ function terminalMenu(props: TerminalMenuProps, layout: SessionMenuLayout): Side
     switch (id) {
       case 'terminalLeading':
         return leadingItems.length > 0 ? [{ hostSlot: 'terminalLeading', checked: false, disabled: false }] : [];
+      case 'delayedSend':
+        // Delayed Send off on the computer (CDXC:DelayedSend 2026-11-28 in sessions/delayedActionsSwitch.ts).
+        return agentActionsEnabled && delayedSendOnIn(summary) ? own(id) : [];
       case 'rename':
       case 'promptEditor':
       case 'fullReload':
-      case 'delayedSend':
         return agentActionsEnabled ? own(id) : [];
       case 'sleep':
         // A Native chat has no Sleep (CDXC:SessionSleep 2026-11-27 in screens/sessions-screen/sidebar-menus.ts `canSleep`).

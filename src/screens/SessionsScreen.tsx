@@ -249,6 +249,7 @@ import { useWallPreviews } from './wall/useWallPreviews';
 import WallSwitch from './wall/WallSwitch';
 import { foldedOuterDisplay, triageSessions, unifiedTriageWaits, type TriageWait } from './triage/model';
 import TriageSection from './triage/TriageSection';
+import { closeAfterDoneOnIn } from '../sessions/delayedActionsSwitch';
 import { sessionTagsOnIn } from '../sessions/sessionTagsSwitch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sessions'>;
@@ -2201,7 +2202,10 @@ export default function SessionsScreen({ navigation }: Props) {
               : overlay.ctx.item.session.agent
           }
           closeAfterDoneActive={overlay.ctx.item.session.closeAfterDone}
-          supportsCloseAfterDone={!overlay.ctx.item.session.isCoordinator}
+          supportsCloseAfterDone={
+            !overlay.ctx.item.session.isCoordinator &&
+            (closeAfterDoneOnIn(summaryFor(overlay.ctx.machine.id)) || overlay.ctx.item.session.closeAfterDone)
+          }
           visible
           sessionTitle={sessionTitle(overlay.ctx.item.session)}
           remainingLabel={overlay.ctx.item.session.delayedSendRemainingLabel}

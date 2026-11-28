@@ -41,6 +41,7 @@ import { enabledVisibleTagIds } from '../../contract/sessionTagList';
 import { effectiveSessionTag, SESSION_TAG_SECTIONS } from '../../contract/sessionTags';
 import { FORK_AGENT_ICONS, isCoordinatorAgent } from '../../sessions/sessionCommands';
 import { sessionNotesOnIn } from '../../sessions/sessionNotesSwitch';
+import { closeAfterDoneOnIn, delayedSendOnIn } from '../../sessions/delayedActionsSwitch';
 import { sessionTagsOnIn } from '../../sessions/sessionTagsSwitch';
 import { beadsOnIn } from '../../beads/featureSwitch';
 import {
@@ -485,6 +486,16 @@ export type SessionMenuInput = {
    * when parking; off, Add to Favorites / Remove from Favorites takes Tag As's place. On when absent.
    */
   sessionTags?: boolean;
+  /**
+   * The computer has Delayed Send on (`sessions/delayedActionsSwitch.ts`), so the menu offers Delayed Send and Edit
+   * Delayed Send; off, an already scheduled one keeps Disable Delayed Send. On when absent.
+   */
+  delayedSend?: boolean;
+  /**
+   * The computer has Close After Done on (`sessions/delayedActionsSwitch.ts`); off, the row stays only on a session
+   * already set to close, so it can be turned off. On when absent.
+   */
+  closeAfterDone?: boolean;
   /** The computer has its Beads extension on (`beads/featureSwitch.ts`), so the menu offers Beads. Off when absent. */
   beads?: boolean;
   /** The menu offers Snooze (or Unsnooze), as the desktop's does, run through gxserver directly. */
@@ -522,6 +533,8 @@ export function sessionMenuInputFromSummary(
     project: summary?.projects.find((project) => project.projectId === session.projectId) ?? null,
     sessionNotes: sessionNotesOnIn(summary),
     sessionTags: sessionTagsOnIn(summary),
+    delayedSend: delayedSendOnIn(summary),
+    closeAfterDone: closeAfterDoneOnIn(summary),
     beads: beadsOnIn(summary),
     tagListItems: summary?.sessionTagListItems,
     parking: summary?.enableSessionParking !== false,
@@ -868,6 +881,8 @@ export function sessionMenuPlaces(input: SessionMenuInput, layout: SessionMenuLa
     voiceCall = false,
     sessionNotes = true,
     sessionTags = true,
+    delayedSend = true,
+    closeAfterDone = true,
     snooze = false,
     actionsIcon,
     tagListItems,
@@ -997,7 +1012,8 @@ export function sessionMenuPlaces(input: SessionMenuInput, layout: SessionMenuLa
           ? [layoutRow(layout, 'fullReload', command({ type: 'fullReloadSession', sessionId: id }))]
           : [];
       case 'delayedSend':
-        return caps.canDelayedSend
+        // Delayed Send off on the computer (`sessions/delayedActionsSwitch.ts`): no offer to schedule one.
+        return caps.canDelayedSend && delayedSend
           ? [layoutRow(layout, 'delayedSend', { type: 'sessionAction', sessionId: id, action: 'delayedSend' })]
           : [];
       case 'note':
@@ -1005,7 +1021,8 @@ export function sessionMenuPlaces(input: SessionMenuInput, layout: SessionMenuLa
           ? [layoutRow(layout, 'note', { type: 'sessionAction', sessionId: id, action: 'note' })]
           : [];
       case 'closeAfterDone':
-        return caps.canCloseAfterDone
+        // Close After Done off on the computer: the row stays only while this session is already set to close, to undo it.
+        return caps.canCloseAfterDone && (closeAfterDone || session.closeAfterDone)
           ? [layoutRow(layout, 'closeAfterDone', command({ type: 'toggleCloseAfterDone', sessionId: id }))]
           : [];
       case 'export':
@@ -1024,7 +1041,10 @@ export function sessionMenuPlaces(input: SessionMenuInput, layout: SessionMenuLa
         return caps.canDelayedSend && session.delayedSendDeadlineAt.length > 0
           ? [
               layoutSubmenu(layout, 'postponeBy', [
-                row('Edit Delayed Send', 'pencil', { type: 'sessionAction', sessionId: id, action: 'delayedSend' }),
+                // Delayed Send off on the computer: the scheduled one still goes out, and only Disable stays to stop it.
+                ...(delayedSend
+                  ? [row('Edit Delayed Send', 'pencil', { type: 'sessionAction', sessionId: id, action: 'delayedSend' })]
+                  : []),
                 row('Disable Delayed Send', 'x', command({ type: 'cancelDelayedSend', sessionId: id })),
               ]),
             ]

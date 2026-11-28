@@ -39,6 +39,7 @@ import { isTrue, obj, str, type JsonRecord } from './json';
 import { useInventoryStore } from '../../../inventory/store';
 import { sessionMenuLayoutNow } from '../../../session-menu/layout';
 import { sessionMenuInputFromSummary, sessionMenuPlaces } from '../../../screens/sessions-screen/sidebar-menus';
+import { delayedSendOnIn } from '../../../sessions/delayedActionsSwitch';
 import {
   COMPOSER_CONTROLS,
   moreActionsRows,
@@ -893,6 +894,7 @@ export function NativeComposer({
         voiceCallGbotName,
         allFolded: compact,
         sleeping,
+        delayedSend: delayedSendOnIn(summary),
       }),
     });
   }, [
