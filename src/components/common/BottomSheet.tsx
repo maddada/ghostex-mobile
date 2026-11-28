@@ -19,6 +19,7 @@ import { useKeyboardTop } from './keyboard/keyboardFrame';
 import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
 import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
+import { AlertOutlet, closeOrCancelAlert } from './dialog/AlertHost';
 import { useGrabberDrag } from './useGrabberDrag';
 import { useSheetPresence } from './useSheetPresence';
 
@@ -44,7 +45,13 @@ export default function BottomSheet({ visible, onClose, children, scrollRef }: B
   const lastChildren = useRef(children);
   if (visible) lastChildren.current = children;
   return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={mounted}
+      transparent
+      animationType="none"
+      onRequestClose={closeOrCancelAlert(onClose)}
+      statusBarTranslucent
+    >
       <KeyboardAvoidingContainer style={styles.fill} pointerEvents={visible ? 'auto' : 'none'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button">
           <Animated.View style={[styles.backdrop, { opacity: progress }]} />
@@ -70,6 +77,7 @@ export default function BottomSheet({ visible, onClose, children, scrollRef }: B
           </KeyboardAwareScrollView>
         </Animated.View>
       </KeyboardAvoidingContainer>
+      <AlertOutlet active={visible} />
     </Modal>
   );
 }

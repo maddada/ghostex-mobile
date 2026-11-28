@@ -4,16 +4,16 @@
  * Q1033 D7: saving snapshots stays on the computer).
  */
 
-import { Alert } from 'react-native';
 
 import type { ContextMenuItem } from '../components/sessions/ContextMenu';
 import { deleteBox, openBoxPullRequest, pullBoxBranch, stopBox, type BoxActionOutcome } from './actions';
 import { boxBranch, chipDetail } from './chip';
 import type { CloudBoxEntry } from './store';
 import { cloudBoxStateLabel, isReachable } from './types';
+import { showAlert } from '../components/common/dialog/alert';
 
 function confirmDelete(entry: CloudBoxEntry, force: boolean, report: (outcome: BoxActionOutcome) => void): void {
-  Alert.alert(
+  showAlert(
     force ? `Delete ${entry.box.name} anyway?` : `Delete ${entry.box.name}?`,
     force
       ? 'Its uncommitted and unpushed work is lost with it.'

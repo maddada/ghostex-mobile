@@ -8,7 +8,7 @@
 
 import { useMemo, useCallback, useLayoutEffect, useState } from 'react';
 
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,6 +25,7 @@ import type { Appearance } from '../theme/useAppearance';
 import { SettingsColumnsFrame } from './settings/SettingsColumns';
 import { SettingsPageScrollView } from './settings/SettingsControls';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
+import { showAlert } from '../components/common/dialog/alert';
 
 /** A position in the preview: round, the size of the design's preview keys. */
 const PREVIEW_KEY = 68;
@@ -55,7 +56,7 @@ export default function CommandPadKeysEditorScreen() {
   };
 
   const reset = useCallback((): void => {
-    Alert.alert(CommandPadCopy.resetTitle, CommandPadCopy.resetBody, [
+    showAlert(CommandPadCopy.resetTitle, CommandPadCopy.resetBody, [
       { text: CommandPadCopy.cancel, style: 'cancel' },
       {
         text: CommandPadCopy.reset,

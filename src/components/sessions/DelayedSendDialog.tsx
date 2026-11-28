@@ -5,16 +5,16 @@
  * off the fold (`useFoldCardPlacement`).
  */
 
-import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
-import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AGENT_ICONS } from '../../assets/agentIcons.generated';
 import type { DelayedSendTrigger } from '../../commands/ghostexCli';
 import { agentIconTint, resolveAgentArtId } from '../../contract/mobileSummary';
 import { GhostexStrokeWidth } from '../../theme/palette';
+import DateTimeWheelSheet from '../common/dialog/DateTimeWheelSheet';
 import { useFoldCardPlacement } from '../common/foldAvoidance';
 import KeyboardAvoidingContainer from '../common/keyboard/KeyboardAvoidingContainer';
 import KeyboardAwareScrollView from '../common/keyboard/KeyboardAwareScrollView';
@@ -86,28 +86,11 @@ export default function DelayedSendDialog({
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('5');
   const [specificTime, setSpecificTime] = useState(() => new Date());
-  const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+  // Delayed Send's own date and time picker (`DateTimeWheelSheet`), drawn inside this dialog's Modal.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [sendEnterEnabled, setSendEnterEnabled] = useState(true);
   const [closeAfterDoneEnabled, setCloseAfterDoneEnabled] = useState(closeAfterDoneActive);
   const [trigger, setTrigger] = useState<DelayedSendTrigger | 'specificTime'>('allAgentsStop');
-  const dismissPicker = useCallback(() => setPickerMode(null), []);
-  const changePickerValue = useCallback(
-    (_: DateTimePickerChangeEvent, selected: Date) => {
-      setSpecificTime((previous) => {
-        const next = new Date(previous);
-        if (pickerMode === 'date') {
-          next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
-        } else {
-          next.setHours(selected.getHours(), selected.getMinutes());
-        }
-        next.setSeconds(0, 0);
-        return next;
-      });
-      if (Platform.OS === 'android') setPickerMode(null);
-    },
-    [pickerMode],
-  );
-
   /**
    * CDXC:DelayedSend 2026-11-11 DECISION:
    * Issue #546: seed the form once each time the dialog opens, like the desktop
@@ -129,7 +112,7 @@ export default function DelayedSendDialog({
     setHours(String(duration?.hours ?? 0));
     setMinutes(String(duration?.minutes ?? 5));
     setSpecificTime(new Date(Math.ceil((Date.now() + (remainingMs || 5 * 60_000)) / 60_000) * 60_000));
-    setPickerMode(null);
+    setPickerOpen(false);
     setSendEnterEnabled(true);
     setCloseAfterDoneEnabled(closeAfterDoneActive);
     const hasArmedTimer = delayedSendDeadlineAt.length > 0 || remainingLabel.length > 0;
@@ -208,7 +191,12 @@ export default function DelayedSendDialog({
 
   const placement = useFoldCardPlacement({ avoidsKeyboard: true, belowSafeAreaTop: true });
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={pickerOpen ? () => setPickerOpen(false) : onCancel}
+    >
       <KeyboardAvoidingContainer safeAreaTop style={styles.keyboardFill}>
         <Pressable style={[styles.backdrop, placement.style]} onPress={onCancel}>
           <Pressable style={styles.card} onLayout={placement.onCardLayout} onPress={(event) => event.stopPropagation()}>
@@ -272,7 +260,7 @@ export default function DelayedSendDialog({
                               style={[styles.triggerOption, selected ? styles.triggerOptionSelected : null]}
                               onPress={() => {
                                 setTrigger(value);
-                                setPickerMode(null);
+                                setPickerOpen(false);
                               }}
                             >
                               <View style={[styles.radio, selected ? styles.radioSelected : null]}>
@@ -323,7 +311,7 @@ export default function DelayedSendDialog({
                                   accessibilityRole="button"
                                   accessibilityLabel="Choose date"
                                   style={styles.input}
-                                  onPress={() => setPickerMode('date')}
+                                  onPress={() => setPickerOpen(true)}
                                 >
                                   <Text style={styles.dateTimeValue}>{specificTime.toLocaleDateString()}</Text>
                                 </Pressable>
@@ -334,7 +322,7 @@ export default function DelayedSendDialog({
                                   accessibilityRole="button"
                                   accessibilityLabel="Choose time"
                                   style={styles.input}
-                                  onPress={() => setPickerMode('time')}
+                                  onPress={() => setPickerOpen(true)}
                                 >
                                   <Text style={styles.dateTimeValue}>
                                     {specificTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -345,19 +333,6 @@ export default function DelayedSendDialog({
                             <Text style={styles.triggerDescription}>
                               {isValidDelay ? 'Uses your local time.' : 'Choose a future date and time within 24 days.'}
                             </Text>
-                            {pickerMode && visible ? (
-                              <DateTimePicker
-                                value={specificTime}
-                                mode={pickerMode}
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                minimumDate={pickerMode === 'date' ? new Date(nowMs) : undefined}
-                                maximumDate={
-                                  pickerMode === 'date' ? new Date(nowMs + DELAYED_SEND_MAX_DELAY_MS) : undefined
-                                }
-                                onDismiss={dismissPicker}
-                                onValueChange={changePickerValue}
-                              />
-                            ) : null}
                           </View>
                         ) : (
                           <Text style={styles.triggerDescription}>
@@ -416,6 +391,19 @@ export default function DelayedSendDialog({
           </Pressable>
         </Pressable>
       </KeyboardAvoidingContainer>
+      <DateTimeWheelSheet
+        inline
+        visible={visible && pickerOpen}
+        title="Send at"
+        value={specificTime}
+        min={new Date(nowMs)}
+        max={new Date(nowMs + DELAYED_SEND_MAX_DELAY_MS)}
+        onSet={(picked) => {
+          setSpecificTime(picked);
+          setPickerOpen(false);
+        }}
+        onCancel={() => setPickerOpen(false)}
+      />
     </Modal>
   );
 }

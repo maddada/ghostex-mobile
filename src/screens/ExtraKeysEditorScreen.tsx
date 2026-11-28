@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -40,6 +40,8 @@ import { SettingsCopy } from '../copy';
 import { SettingsColumnsFrame } from './settings/SettingsColumns';
 import { SettingsPageScrollView } from './settings/SettingsControls';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
+import { AlertOutlet, closeOrCancelAlert } from '../components/common/dialog/AlertHost';
+import { showAlert } from '../components/common/dialog/alert';
 
 const STATUS_LINE = SettingsCopy.extraKeysStatus;
 const EXAMPLES_LINE =
@@ -113,7 +115,7 @@ export default function ExtraKeysEditorScreen() {
     const { row, index } = selected;
     const otherRow = row === 0 ? 1 : 0;
     if (draft[otherRow].length >= EXTRA_KEYS_MAX_PER_ROW) {
-      Alert.alert('Row Full', `A row can hold at most ${EXTRA_KEYS_MAX_PER_ROW} keys.`);
+      showAlert('Row Full', `A row can hold at most ${EXTRA_KEYS_MAX_PER_ROW} keys.`);
       return;
     }
     updateDraft((next) => {
@@ -133,7 +135,7 @@ export default function ExtraKeysEditorScreen() {
 
   const addItem = (row: number, item: ExtraKeyStored): void => {
     if (draft[row].length >= EXTRA_KEYS_MAX_PER_ROW) {
-      Alert.alert('Row Full', `A row can hold at most ${EXTRA_KEYS_MAX_PER_ROW} keys.`);
+      showAlert('Row Full', `A row can hold at most ${EXTRA_KEYS_MAX_PER_ROW} keys.`);
       return;
     }
     updateDraft((next) => {
@@ -144,14 +146,14 @@ export default function ExtraKeysEditorScreen() {
   const handleSave = (): void => {
     const error = saveLayout(draft);
     if (error !== null) {
-      Alert.alert('Cannot Save Layout', error);
+      showAlert('Cannot Save Layout', error);
       return;
     }
     navigation.goBack();
   };
 
   const handleReset = (): void => {
-    Alert.alert('Reset to Default?', 'This replaces both rows with the standard layout.', [
+    showAlert('Reset to Default?', 'This replaces both rows with the standard layout.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
@@ -169,7 +171,7 @@ export default function ExtraKeysEditorScreen() {
     if (customDraft === null || addTargetRow === null) return;
     const label = customDraft.label.trim();
     if (label.length === 0) {
-      Alert.alert('Missing Label', 'Give the key a short label.');
+      showAlert('Missing Label', 'Give the key a short label.');
       return;
     }
     let item: ExtraKeyStored;
@@ -177,11 +179,11 @@ export default function ExtraKeysEditorScreen() {
       const key = customDraft.shortcutKey.trim();
       const normalized = SHORTCUT_KEY_NAMES.find((name) => name.toLowerCase() === key.toLowerCase());
       if (normalized === undefined && key.length !== 1) {
-        Alert.alert('Unsupported Key', `Use a single character or one of: ${SHORTCUT_KEY_NAMES.join(', ')}.`);
+        showAlert('Unsupported Key', `Use a single character or one of: ${SHORTCUT_KEY_NAMES.join(', ')}.`);
         return;
       }
       if (!customDraft.ctrl && !customDraft.alt && !customDraft.shift) {
-        Alert.alert('Missing Modifier', 'Shortcuts need at least one of Ctrl, Alt, or Shift.');
+        showAlert('Missing Modifier', 'Shortcuts need at least one of Ctrl, Alt, or Shift.');
         return;
       }
       item = {
@@ -195,7 +197,7 @@ export default function ExtraKeysEditorScreen() {
       };
     } else {
       if (customDraft.text.length === 0) {
-        Alert.alert('Missing Text', 'Enter the text this key should insert.');
+        showAlert('Missing Text', 'Enter the text this key should insert.');
         return;
       }
       item = {
@@ -307,7 +309,7 @@ export default function ExtraKeysEditorScreen() {
           visible={addTargetRow !== null && customDraft === null}
           transparent
           animationType="fade"
-          onRequestClose={() => setAddTargetRow(null)}
+          onRequestClose={closeOrCancelAlert(() => setAddTargetRow(null))}
         >
           <KeyboardAvoidingContainer safeAreaTop style={styles.modalKeyboardFill}>
             <Pressable style={[styles.modalBackdrop, addPlacement.style]} onPress={() => setAddTargetRow(null)}>
@@ -351,6 +353,7 @@ export default function ExtraKeysEditorScreen() {
               </Pressable>
             </Pressable>
           </KeyboardAvoidingContainer>
+          <AlertOutlet active={addTargetRow !== null && customDraft === null} />
         </Modal>
 
         {/* Custom-action editor */}
@@ -358,7 +361,7 @@ export default function ExtraKeysEditorScreen() {
           visible={customDraft !== null}
           transparent
           animationType="fade"
-          onRequestClose={() => setCustomDraft(null)}
+          onRequestClose={closeOrCancelAlert(() => setCustomDraft(null))}
         >
           <KeyboardAvoidingContainer safeAreaTop style={styles.modalKeyboardFill}>
             <Pressable style={[styles.modalBackdrop, customPlacement.style]} onPress={() => setCustomDraft(null)}>
@@ -449,6 +452,7 @@ export default function ExtraKeysEditorScreen() {
               </Pressable>
             </Pressable>
           </KeyboardAvoidingContainer>
+          <AlertOutlet active={customDraft !== null} />
         </Modal>
       </SafeAreaView>
     </SettingsColumnsFrame>

@@ -9,7 +9,6 @@
  */
 
 import { useCallback, useState, type ReactElement } from 'react';
-import { Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { CloneFailedError, cloneRepository } from '../addProject/client';
@@ -43,6 +42,7 @@ import { useInventoryStore } from '../inventory/store';
 import { openShownCommandTerminal } from '../machines/appUpdate';
 import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddProjectDestination'>;
 
@@ -111,7 +111,7 @@ export default function AddProjectDestinationScreen({ navigation, route }: Props
     void openShownCommandTerminal(machine, errorCommand)
       .then(({ sessionKey, title }) => navigation.navigate('Terminal', { sessionKey, machineId, title }))
       .catch((failure: unknown) =>
-        Alert.alert(EditMachineCopy.appUpdate.runInTerminalFailed, failure instanceof Error ? failure.message : String(failure)),
+        showAlert(EditMachineCopy.appUpdate.runInTerminalFailed, failure instanceof Error ? failure.message : String(failure)),
       )
       .finally(() => setOpeningTerminal(false));
   }, [errorCommand, machine, machineId, navigation, openingTerminal]);

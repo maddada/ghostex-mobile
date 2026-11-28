@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -8,6 +8,7 @@ import { DocsCopy } from '../copy';
 import { openComputerFile } from '../docs/openComputerFile';
 import type { RootStackParamList } from '../navigation/types';
 import { classifyMachineLink, withPageTheme } from './machineLinks';
+import { showAlert } from '../components/common/dialog/alert';
 
 export type OpenMachineLinkOptions = {
   /** The session's project, whose file link reads a video, audio, PDF or drawing the link names. */
@@ -39,7 +40,7 @@ export function useOpenMachineLink() {
             options.notify ??
             ((message, error, title) => {
               // Progress needs no alert; a copied path or a failure does.
-              if (error || title !== undefined) Alert.alert(title ?? DocsCopy.openFailed, message);
+              if (error || title !== undefined) showAlert(title ?? DocsCopy.openFailed, message);
             }),
         });
         return;

@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Switch, Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
 
 import { SwitchRow } from '../../components/common/SwitchRow';
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
@@ -21,6 +21,7 @@ import { chatMachineLink } from '../../chat/rust/machine-link';
 import { machineDisplayLabel, machineName, type MachineRecord } from '../../machines/store';
 import { useAppearance } from '../../theme/useAppearance';
 import { useFormStyles } from './styles';
+import { showAlert } from '../../components/common/dialog/alert';
 
 const REFRESH_MS = 10_000;
 const RPC_TIMEOUT_MS = 15_000;
@@ -106,7 +107,7 @@ export default function ServerLinksSection({ machine, reachable }: { machine: Ma
       setBusy(serverId);
       try {
         const answer = await chatMachineLink(machine).rpc('serverLinks', params, timeoutMs);
-        if (answer.error !== null) Alert.alert(failed, answer.error.message);
+        if (answer.error !== null) showAlert(failed, answer.error.message);
         else setRows(readServerLinks(answer.result));
       } finally {
         setBusy(null);
@@ -116,7 +117,7 @@ export default function ServerLinksSection({ machine, reachable }: { machine: Ma
   );
 
   const confirmRemove = (row: ServerLinkRow): void => {
-    Alert.alert(copy.removeTitle(row.name), copy.removeDetail(row.name, machineDisplayLabel(machine)), [
+    showAlert(copy.removeTitle(row.name), copy.removeDetail(row.name, machineDisplayLabel(machine)), [
       { text: copy.cancel, style: 'cancel' },
       {
         text: copy.remove,

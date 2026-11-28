@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { shellQuote } from '../../../commands/ghostexCli';
 import type { MachineConnectionTarget } from '../../../machines/credentials';
@@ -23,6 +23,7 @@ import { arr, obj, str } from './json';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
 import { sheetPrompts } from './savedPromptsScope';
 import { Sheet } from './Sheet';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 const DELETE_TIMEOUT_MS = 30_000;
 
@@ -123,7 +124,7 @@ export function SavedPromptsSheet({
           onChanged();
         })
         .catch((error: unknown) => {
-          Alert.alert('Delete failed', error instanceof Error ? error.message : 'The prompt was not deleted.');
+          showAlert('Delete failed', error instanceof Error ? error.message : 'The prompt was not deleted.');
         })
         .finally(() => setDeleting(null));
     },
@@ -132,7 +133,7 @@ export function SavedPromptsSheet({
 
   const confirmRemove = useCallback(
     (prompt: SavedPrompt) => {
-      Alert.alert('Delete saved prompt?', prompt.content.slice(0, 160), [
+      showAlert('Delete saved prompt?', prompt.content.slice(0, 160), [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => remove(prompt) },
       ]);

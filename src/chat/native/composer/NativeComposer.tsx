@@ -19,7 +19,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Alert, AppState, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type { UserAction } from '../../rust/actions';
@@ -106,6 +106,7 @@ import { computerName } from '../../../screens/settings/voiceComputer';
 import { KeyboardLiftedView } from './KeyboardLiftedView';
 import { useChatPlacement } from '../chatPlacement';
 import { useVoiceStore, voiceActive } from '../../../voice/conversation';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 export type NativeComposerProps = {
   /** The draft's own place, which the tray's project chip moves it from. */
@@ -660,7 +661,7 @@ export function NativeComposer({
           // Signing in to an account runs the agent's login on the computer, where desktop's Add
           // account leads (Settings > Accounts); the phone says where instead of doing nothing.
           else
-            Alert.alert(
+            showAlert(
               'Add accounts on your computer',
               'Open Ghostex on your computer and go to Settings > Accounts to sign in to another account.',
             );
@@ -683,7 +684,7 @@ export function NativeComposer({
         case 'openSkillsSettings':
           // Skills install on the computer the agents run on, where desktop's row leads
           // (Settings > Integrations > Agent skills); the phone says where, like Add account.
-          Alert.alert(
+          showAlert(
             'Install skills on your computer',
             'Open Ghostex on your computer and go to Settings > Integrations > Agent skills to install or remove Ghostex skills.',
           );

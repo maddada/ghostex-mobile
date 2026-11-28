@@ -12,7 +12,6 @@ import { plural } from '../../../plural';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import {
-  Alert,
   Animated,
   Easing,
   Pressable,
@@ -56,6 +55,7 @@ import { remoteWorkerNotice } from './remoteWorker';
 import { AgentMark } from './agentMark';
 import { BoardRelayButtons } from './RelayedApprovalCard';
 import { openRelayedCardForThread } from './relayedApprovals';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 /** Each group's colour: the sidebar's question pink, approval red and working amber. */
 const GROUP_COLOR: Record<string, string | null> = {
@@ -762,7 +762,7 @@ function CoordinatorBoardList({ chat, document, onDone, afterSheet, focus = null
     // A thread on another computer: the phone talks only to the coordinator's computer.
     if (type === 'openCoordinatorThread' && str(command, 'serverId').trim().length > 0) {
       const notice = remoteWorkerNotice('another computer');
-      Alert.alert(notice.title, notice.message);
+      showAlert(notice.title, notice.message);
       return;
     }
     chat.dispatch(asJson(command) as unknown as UserAction);

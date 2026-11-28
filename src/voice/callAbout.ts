@@ -5,12 +5,12 @@
  * CDXC:VoiceMode 2026-10-23 DECISION: User, asked "Where do you start a voice call about one chat on the phone?", picked "A row in the chat's ⋯ menu, and Voice Call when you long-press a session". The top bar's headset stays the all-sessions call everywhere.
  */
 
-import { Alert } from 'react-native';
 
 import type { MachineConnectionTarget } from '../machines/credentials';
 import { useMachinesStore } from '../machines/store';
 import { focusVoiceOn, hangUpVoice, startVoice, useVoiceStore, voiceActive } from './conversation';
 import { callGbotId, voiceCallAboutAction, type VoiceFocusTarget } from './focus';
+import { showAlert } from '../components/common/dialog/alert';
 
 /** How long a hang-up may take before the new call starts anyway (gxserver answers `ended` in well under a second). */
 const HANG_UP_WAIT_MS = 8_000;
@@ -82,7 +82,7 @@ export function callVoiceAbout(machine: MachineConnectionTarget, about: VoiceFoc
       show();
       return;
     case 'otherComputer':
-      Alert.alert(
+      showAlert(
         `A voice call is open on ${state.machineName}`,
         about.gbot !== undefined
           ? `A call stays on the computer it started on. Hang up and call ${about.gbot.name} on ${name}?`
@@ -95,7 +95,7 @@ export function callVoiceAbout(machine: MachineConnectionTarget, about: VoiceFoc
       return;
     case 'replace':
       // A call with a GBot stays with it (gxserver refuses to move it), so this is a new call.
-      Alert.alert(
+      showAlert(
         `A voice call is open on ${name}`,
         about.gbot !== undefined
           ? `Hang up and call ${about.gbot.name}?`

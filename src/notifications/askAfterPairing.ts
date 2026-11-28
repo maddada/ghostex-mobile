@@ -13,12 +13,13 @@
  * (Android's persistent notification, which no longer asks at startup).
  */
 
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
 import { logAppEvent } from '../app/appLog';
 import { enabledMachines, useMachinesStore } from '../machines/store';
 import { useSettingsStore } from '../settings/store';
+import { showAlert } from '../components/common/dialog/alert';
 
 export const PAIRING_ASK_TITLE = 'Get a ping when an agent needs you';
 export const PAIRING_ASK_BODY =
@@ -49,7 +50,7 @@ function remember(): void {
 function ask(askIos: () => Promise<void>): void {
   if (showing || !due()) return;
   showing = true;
-  Alert.alert(PAIRING_ASK_TITLE, PAIRING_ASK_BODY, [
+  showAlert(PAIRING_ASK_TITLE, PAIRING_ASK_BODY, [
     {
       text: 'Not now',
       style: 'cancel',

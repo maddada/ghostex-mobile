@@ -1,22 +1,19 @@
 /**
- * Generic centered confirm dialog: title, optional body, optional highlighted
- * target line, confirm button (destructive tint option) + cancel. When
- * `cancelLabel` is null the dialog is informational (single Close-style
- * button). `selectableBody` renders the body as selectable text so users can
- * copy commands when no clipboard module is available. Half folded like a laptop the card stands below the
- * fold, or above it when it does not fit there, held to that band: a longer body scrolls between the title and the
- * buttons (`useFoldCardPlacement`).
+ * Generic confirm dialog: title, optional body, optional highlighted target line, confirm button (destructive tint
+ * option) + cancel. When `cancelLabel` is null the dialog is informational (a single Close-style button).
+ * `selectableBody` renders the body as selectable text so users can copy commands when no clipboard module is
+ * available. Drawn as the app's dialog sheet (`HostedDialogSheet`), the same as `showAlert()`: buttons stacked, the
+ * confirm on top and Cancel under it; Back, a tap outside or a drag down run `onDismiss`.
  */
 
 import { useMemo } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useFoldCardPlacement } from './foldAvoidance';
-import { barPadding } from './verticalBar/layout';
-import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
+import { HostedDialogSheet } from './dialog/AlertHost';
+import { DialogButton, DialogButtons, DialogMessage, DialogTitle } from './dialog/DialogParts';
 
-import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import { GhostexStrokeWidth } from '../../theme/palette';
 
 export type ConfirmDialogProps = {
   visible: boolean;
@@ -57,135 +54,59 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const appearance = useAppearance();
   const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const bar = useVerticalBarSpace();
-  const placement = useFoldCardPlacement({ avoidsKeyboard: false });
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
-      <Pressable style={[styles.backdrop, barPadding(bar, 24), placement.style]} onPress={onDismiss}>
+    <HostedDialogSheet visible={visible} onDismiss={onDismiss} accessibilityLabel={title}>
+      <DialogTitle>{title}</DialogTitle>
+      {body !== undefined && body.length > 0 ? <DialogMessage selectable={selectableBody}>{body}</DialogMessage> : null}
+      {targetLine !== undefined && targetLine.length > 0 ? (
+        <Text style={styles.target} numberOfLines={1}>
+          {targetLine}
+        </Text>
+      ) : null}
+      {checkbox !== undefined ? (
         <Pressable
-          style={[styles.card, placement.maxHeight !== null && { maxHeight: placement.maxHeight }]}
-          onLayout={placement.onCardLayout}
-          onPress={(event) => event.stopPropagation()}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: checkbox.checked }}
+          accessibilityLabel={checkbox.label}
+          hitSlop={8}
+          onPress={checkbox.onToggle}
+          style={styles.checkboxRow}
         >
-          <Text style={styles.title}>{title}</Text>
-          <ScrollView style={styles.content} bounces={false}>
-            {body !== undefined && body.length > 0 ? (
-              <Text selectable={selectableBody} style={[styles.body, selectableBody ? styles.bodyMono : null]}>
-                {body}
-              </Text>
-            ) : null}
-            {targetLine !== undefined && targetLine.length > 0 ? (
-              <Text style={styles.target} numberOfLines={1}>
-                {targetLine}
-              </Text>
-            ) : null}
-          </ScrollView>
-          {checkbox !== undefined ? (
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: checkbox.checked }}
-              accessibilityLabel={checkbox.label}
-              hitSlop={8}
-              onPress={checkbox.onToggle}
-              style={styles.checkboxRow}
-            >
-              <View style={[styles.checkbox, checkbox.checked ? styles.checkboxChecked : null]}>
-                {checkbox.checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
-              </View>
-              <Text style={styles.checkboxLabel}>{checkbox.label}</Text>
-            </Pressable>
-          ) : null}
-          <View style={styles.buttonRow}>
-            {cancelLabel !== null ? (
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelButtonPressed]}
-                onPress={onCancel}
-              >
-                <Text style={styles.cancelLabel}>{cancelLabel}</Text>
-              </Pressable>
-            ) : null}
-            {equalButtons ? (
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelButtonPressed]}
-                onPress={onConfirm}
-              >
-                <Text style={styles.cancelLabel}>{confirmLabel}</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.confirmButton,
-                  destructive ? styles.confirmButtonDestructive : pressed ? styles.confirmButtonPressed : null,
-                ]}
-                onPress={onConfirm}
-              >
-                <Text style={[styles.confirmLabel, destructive ? styles.confirmLabelDestructive : null]}>
-                  {confirmLabel}
-                </Text>
-              </Pressable>
-            )}
+          <View style={[styles.checkbox, checkbox.checked ? styles.checkboxChecked : null]}>
+            {checkbox.checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
           </View>
+          <Text style={styles.checkboxLabel}>{checkbox.label}</Text>
         </Pressable>
-      </Pressable>
-    </Modal>
+      ) : null}
+      <DialogButtons>
+        <DialogButton
+          label={confirmLabel}
+          kind={equalButtons ? 'neutral' : destructive ? 'destructive' : 'primary'}
+          onPress={onConfirm}
+        />
+        {cancelLabel !== null ? <DialogButton label={cancelLabel} kind="neutral" onPress={onCancel} /> : null}
+      </DialogButtons>
+    </HostedDialogSheet>
   );
 }
 
 const createStyles = (appearance: Appearance) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  card: {
-    backgroundColor: appearance.background,
-    borderRadius: 12,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: appearance.border,
-    padding: 16,
-  },
-  title: {
-    color: appearance.foreground,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  // Its own height while it fits; it shrinks and scrolls where the card is held to its band.
-  content: {
-    flexGrow: 0,
-    flexShrink: 1,
-  },
-  body: {
-    color: appearance.muted,
-    fontSize: 12,
-    marginTop: 8,
-  },
-  bodyMono: {
-    color: appearance.foreground,
-    fontFamily: 'monospace',
-    backgroundColor: appearance.input,
-    borderRadius: GhostexRadii.input,
-    padding: 10,
-  },
   target: {
     color: appearance.foreground,
-    fontSize: 13,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
     marginTop: 8,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 14,
+    gap: 10,
+    marginTop: 16,
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     borderWidth: GhostexStrokeWidth,
     borderColor: appearance.border,
     backgroundColor: appearance.input,
@@ -198,56 +119,13 @@ const createStyles = (appearance: Appearance) => StyleSheet.create({
   },
   checkboxTick: {
     color: appearance.accentForeground,
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 15,
     fontWeight: '700',
   },
   checkboxLabel: {
     color: appearance.foreground,
-    fontSize: 13,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 16,
-  },
-  cancelButton: {
-    height: 40,
-    paddingHorizontal: 16,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: appearance.neutralFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButtonPressed: {
-    backgroundColor: appearance.neutralFillPressed,
-  },
-  cancelLabel: {
-    color: appearance.foreground,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  confirmButton: {
-    height: 40,
-    paddingHorizontal: 16,
-    borderRadius: GhostexRadii.card,
-    backgroundColor: appearance.primaryFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmButtonPressed: {
-    backgroundColor: appearance.primaryFillPressed,
-  },
-  confirmButtonDestructive: {
-    backgroundColor: appearance.danger,
-  },
-  confirmLabel: {
-    color: appearance.foreground,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  confirmLabelDestructive: {
-    color: '#ffffff',
+    fontSize: 14,
+    flexShrink: 1,
   },
 });

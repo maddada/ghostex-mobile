@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { addProjectPath, createProjectDirectory } from '../addProject/client';
@@ -45,6 +45,7 @@ import { useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { GhostexRadii, GhostexStrokeWidth } from '../theme/palette';
 import { useAppearance, type Appearance } from '../theme/useAppearance';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddProjectLocal'>;
 
@@ -91,7 +92,7 @@ export default function AddProjectLocalScreen({ navigation, route }: Props): Rea
     const resolved = resolveSubmittedPath(trimmed, browse);
     const duplicate = duplicateProjectFor(machineId, resolved);
     if (duplicate !== null) {
-      Alert.alert(
+      showAlert(
         AddProjectCopy.duplicateTitle,
         AddProjectCopy.duplicateBody(duplicate.name ?? duplicate.path ?? resolved),
       );

@@ -31,7 +31,6 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   BackHandler,
   Linking,
@@ -94,6 +93,7 @@ import {
   remoteDisplayAddress,
 } from '../webPreview/urls';
 import { BAND_ROW_HEIGHT, BAND_ROW_PADDING, TOOLBAR_BUTTON_SIZE, TOOLBAR_PADDING, useWebPreviewStyles } from './web-preview/styles';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WebPreview'>;
 
@@ -759,7 +759,7 @@ export function WebPreviewView({ page, placement, onClose, onPage, controlInset 
     if (currentUrl === null || address.kind === 'remote' || isLoopbackHost(parseHttpUrl(currentUrl)?.host ?? ''))
       return;
     void Linking.openURL(currentUrl).catch(() => {
-      Alert.alert(WebPreviewCopy.previewTitle, WebPreviewCopy.openInBrowserFailed);
+      showAlert(WebPreviewCopy.previewTitle, WebPreviewCopy.openInBrowserFailed);
     });
   }, [address.kind, currentUrl]);
 

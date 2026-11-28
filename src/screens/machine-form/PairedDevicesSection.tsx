@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { EditMachineCopy } from '../../copy';
@@ -20,6 +20,7 @@ import { approveRequest } from '../../security/approvals';
 import { hasApproverKey } from '../../security/approverKey';
 import { machineDisplayLabel, machineName, type MachineRecord } from '../../machines/store';
 import { useFormStyles } from './styles';
+import { showAlert } from '../../components/common/dialog/alert';
 
 const REFRESH_MS = 5000;
 const RPC_TIMEOUT_MS = 15_000;
@@ -90,7 +91,7 @@ export default function PairedDevicesSection({ machine, reachable }: { machine: 
       setBusy(deviceId);
       try {
         const answer = await chatMachineLink(machine).rpc('removePairedDevice', { deviceId }, REMOVE_TIMEOUT_MS);
-        if (answer.error !== null) Alert.alert(copy.removeFailed, answer.error.message);
+        if (answer.error !== null) showAlert(copy.removeFailed, answer.error.message);
         else setList(readPairedDevicesList(answer.result));
       } finally {
         setBusy(null);
@@ -111,13 +112,13 @@ export default function PairedDevicesSection({ machine, reachable }: { machine: 
         );
         const request = (answer.result as { request?: ApprovalRequest } | null)?.request;
         if (answer.error !== null || request === undefined) {
-          Alert.alert(copy.approveFailed, answer.error?.message ?? copy.noLongerWaiting);
+          showAlert(copy.approveFailed, answer.error?.message ?? copy.noLongerWaiting);
           return;
         }
         await approveRequest(machine, request);
         await refresh();
       } catch (error) {
-        Alert.alert(copy.approveFailed, error instanceof Error ? error.message : String(error));
+        showAlert(copy.approveFailed, error instanceof Error ? error.message : String(error));
       } finally {
         setBusy(null);
       }
@@ -128,7 +129,7 @@ export default function PairedDevicesSection({ machine, reachable }: { machine: 
   const confirmRemove = (device: ListedDevice): void => {
     const self = device.id === machine.deviceId;
     const computer = machineName(machine);
-    Alert.alert(copy.removeTitle(device.name), self ? copy.removeSelfDetail(computer) : copy.removeDetail(computer), [
+    showAlert(copy.removeTitle(device.name), self ? copy.removeSelfDetail(computer) : copy.removeDetail(computer), [
       { text: copy.cancel, style: 'cancel' },
       { text: copy.remove, style: 'destructive', onPress: () => void remove(device.id) },
     ]);

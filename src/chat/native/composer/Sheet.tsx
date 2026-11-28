@@ -23,6 +23,7 @@ import { useFoldSheetMaxHeight } from '../../../components/common/foldAvoidance'
 import { useKeyboardTop } from '../../../components/common/keyboard/keyboardFrame';
 import KeyboardAvoidingContainer from '../../../components/common/keyboard/KeyboardAvoidingContainer';
 import { useVerticalBarSpace } from '../../../components/common/verticalBar/VerticalBarArea';
+import { AlertOutlet, closeOrCancelAlert } from '../../../components/common/dialog/AlertHost';
 import { useGrabberDrag } from '../../../components/common/useGrabberDrag';
 import { useSheetPresence } from '../../../components/common/useSheetPresence';
 import { Glyph } from './icons';
@@ -70,7 +71,7 @@ export function Sheet(props: SheetProps) {
       visible={mounted}
       transparent
       animationType="none"
-      onRequestClose={onBack ?? onClose}
+      onRequestClose={closeOrCancelAlert(onBack ?? onClose)}
       {...(onDismissed !== undefined ? { onDismiss: onDismissed } : {})}
       statusBarTranslucent
     >
@@ -126,6 +127,7 @@ export function Sheet(props: SheetProps) {
           {children}
         </Animated.View>
       </KeyboardAvoidingContainer>
+      <AlertOutlet active={visible} />
     </Modal>
   );
 }

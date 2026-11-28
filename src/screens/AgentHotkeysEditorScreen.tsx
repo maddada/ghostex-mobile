@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -29,6 +29,7 @@ import { SettingsCopy } from '../copy';
 import { SettingsColumnsFrame } from './settings/SettingsColumns';
 import { SettingsPageScrollView } from './settings/SettingsControls';
 import { useAppearanceHeader } from './settings/useAppearanceHeader';
+import { showAlert } from '../components/common/dialog/alert';
 
 function makeHotkeyId(agentId: ConfigurableAgentId): string {
   return `${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -76,16 +77,16 @@ export default function AgentHotkeysEditorScreen() {
   const submitHotkey = (): void => {
     const normalizedLabel = label.trim();
     if (normalizedLabel.length === 0) {
-      Alert.alert('Missing Label', 'Enter the short label shown on the agent key.');
+      showAlert('Missing Label', 'Enter the short label shown on the agent key.');
       return;
     }
     const parsed = parseAgentHotkey(hotkey);
     if (typeof parsed === 'string') {
-      Alert.alert('Invalid Hotkey', parsed);
+      showAlert('Invalid Hotkey', parsed);
       return;
     }
     if (editingIndex < 0 && agentHotkeys.length >= AGENT_HOTKEYS_MAX_PER_AGENT) {
-      Alert.alert(
+      showAlert(
         'Hotkey Limit Reached',
         `${AGENT_NAMES[agentId]} can have at most ${AGENT_HOTKEYS_MAX_PER_AGENT} hotkeys.`,
       );
@@ -104,7 +105,7 @@ export default function AgentHotkeysEditorScreen() {
     else next.push(item);
     const error = saveProfile(agentId, next);
     if (error !== null) {
-      Alert.alert('Cannot Save Hotkey', error);
+      showAlert('Cannot Save Hotkey', error);
       return;
     }
     clearEditor();
@@ -114,7 +115,7 @@ export default function AgentHotkeysEditorScreen() {
     const next = agentHotkeys.filter((item) => item.id !== id);
     const error = saveProfile(agentId, next);
     if (error !== null) {
-      Alert.alert('Cannot Remove Hotkey', error);
+      showAlert('Cannot Remove Hotkey', error);
       return;
     }
     if (editingId === id) clearEditor();
@@ -127,11 +128,11 @@ export default function AgentHotkeysEditorScreen() {
     const [item] = next.splice(index, 1);
     next.splice(target, 0, item);
     const error = saveProfile(agentId, next);
-    if (error !== null) Alert.alert('Cannot Move Hotkey', error);
+    if (error !== null) showAlert('Cannot Move Hotkey', error);
   };
 
   const handleReset = (): void => {
-    Alert.alert(
+    showAlert(
       `Restore ${AGENT_NAMES[agentId]} Defaults?`,
       `Only ${AGENT_NAMES[agentId]}'s hotkeys will be replaced.`,
       [

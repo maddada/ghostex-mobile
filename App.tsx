@@ -94,6 +94,8 @@ import SshPairingNotices from './src/components/security/SshPairingNotices';
 import EasyConnectFallbackAsk from './src/components/security/EasyConnectFallbackAsk';
 import ApprovalAlerts from './src/components/security/ApprovalAlerts';
 import SwitchRequestToast from './src/components/common/SwitchRequestToast';
+import { ToastHost } from './src/components/common/appToast';
+import { AlertHost } from './src/components/common/dialog/AlertHost';
 import TestFlightNotice from './src/components/common/TestFlightNotice';
 import { useWebPreviewStore } from './src/webPreview/store';
 import {
@@ -429,6 +431,10 @@ export default function App() {
         <SwitchRequestToast />
         {/* TestFlight installs only: switch to the App Store version (src/updates/testFlightNotice.ts). */}
         <TestFlightNotice />
+        {/* Short notices (src/components/common/appToast.tsx). */}
+        <ToastHost />
+        {/* `alert()` questions while no sheet is open (src/components/common/dialog/AlertHost.tsx). */}
+        <AlertHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

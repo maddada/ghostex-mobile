@@ -43,6 +43,8 @@ export type Appearance = SidebarAppearance & {
   accent: string;
   accentForeground: string;
   danger: string;
+  /** The destructive colour as designed (or set under the theme's roles), before `danger` makes it readable on every surface. */
+  dangerHue: string;
   dangerFill: string;
   dangerFillPressed: string;
   attention: string;
@@ -146,6 +148,7 @@ export function resolveAppearance(settings: ThemeColourSettings, light: boolean)
     accent,
     accentForeground,
     danger,
+    dangerHue: dangerBase,
     dangerFill: dangerFills.rest,
     dangerFillPressed: dangerFills.pressed,
     attention: text(customAccent ?? GhostexPalette.STATUS_ATTENTION),

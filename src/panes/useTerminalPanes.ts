@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { Alert, Keyboard, TextInput, type LayoutRectangle } from 'react-native';
+import { Keyboard, TextInput, type LayoutRectangle } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GhostexNative } from '../../modules/ghostex-native/src';
@@ -37,6 +37,7 @@ import { openPaneFullScreen } from './openFullScreen';
 import type { PaneContent, PaneDisplay } from './resolve';
 import { usePaneStore } from './store';
 import type { PaneHost } from './usePaneHost';
+import { showAlert } from '../components/common/dialog/alert';
 
 type TerminalNavigation = NativeStackScreenProps<RootStackParamList, 'Terminal'>['navigation'];
 type TwoPanes = Extract<PaneDisplay, { kind: 'panes' }>;
@@ -465,7 +466,7 @@ export function useTerminalPanes({
           if (sessionId !== null) openPaneSession(machine.id, sessionId);
         } catch (error) {
           setProgress(null);
-          Alert.alert(PanesCopy.newTerminalFailed, error instanceof Error ? error.message : String(error), [
+          showAlert(PanesCopy.newTerminalFailed, error instanceof Error ? error.message : String(error), [
             { text: 'OK' },
           ]);
         }

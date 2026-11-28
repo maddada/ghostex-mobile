@@ -19,7 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { Glyph } from '../../chat/native/cards/icons';
@@ -105,6 +105,7 @@ import {
   ValueRow,
 } from './SettingsControls';
 import { SettingsSearchAnchor } from './search/SettingsSearchAnchor';
+import { showAlert } from '../../components/common/dialog/alert';
 
 /** Which appearance had a colour or preset picked on purpose since the page opened (`pickedOnPurpose`). */
 type Picked = { dark: boolean; light: boolean };
@@ -1184,10 +1185,10 @@ function TerminalPaletteRows() {
       const state = useSettingsStore.getState();
       const next = importGhosttyTheme(state.settings, text, asset.name);
       state.patchSettings({ importedTerminalPalettes: next.importedTerminalPalettes });
-      Alert.alert('Palette imported', 'Choose it in the terminal palette list for dark or light mode.');
+      showAlert('Palette imported', 'Choose it in the terminal palette list for dark or light mode.');
     } catch (error) {
       if (active.current) {
-        Alert.alert(
+        showAlert(
           'Cannot import palette',
           error instanceof GhosttyImportError
             ? error.message
@@ -1240,7 +1241,7 @@ function TerminalPaletteRows() {
 
 /** Confirmation dialog shared by the header Reset button (single & two-column Duo) and bottom Reset row. */
 export function promptResetThemeToDefault(onDidReset?: () => void): void {
-  Alert.alert(
+  showAlert(
     'Reset theme to default?',
     'This restores Ghostex default colours, artwork settings, and fine-tune overrides on this phone.',
     [

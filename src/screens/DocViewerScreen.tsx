@@ -30,7 +30,6 @@ import * as Clipboard from 'expo-clipboard';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Platform,
   Pressable,
@@ -78,6 +77,7 @@ import {
   releaseComputerForward,
 } from '../webPreview/machineLinks';
 import { useOpenMachineLink } from '../webPreview/useOpenMachineLink';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DocViewer'>;
 
@@ -355,7 +355,7 @@ export default function DocViewerScreen({ navigation, route }: Props) {
         askingRef.current = false;
       };
       const shown = link.kind === 'file' ? link.path : link.url;
-      Alert.alert(
+      showAlert(
         DocsCopy.linkAskTitle[link.ask],
         DocsCopy.linkAskDetail(shown.length > 600 ? `${shown.slice(0, 600)}…` : shown, link.ask),
         [

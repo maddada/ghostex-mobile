@@ -21,7 +21,7 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
-import { Alert, Platform, Pressable, StyleSheet, ToastAndroid, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
 import { DictationBar, unavailableProblem } from '../../chat/native/composer/DictationBar';
@@ -38,6 +38,7 @@ import { chooseVoiceComputer } from '../../voice/dictateSettings';
 import { VoiceButton } from '../../voice/VoiceButton';
 import { KeyboardIcon, PanesIcon } from './icons';
 import { TRACK_TINT_ALPHA } from './tabStrip';
+import { showToast } from '../common/appToast';
 
 /** The chat box's geometry (`NativeComposer.tsx`): its side margin, corner, inner padding and 32 pt controls. */
 const SIDE_MARGIN = 10;
@@ -92,11 +93,9 @@ export type TerminalBottomBarProps = {
   keyboardDisabled?: boolean;
 };
 
-/** A short problem no row shows (no microphone permission, nothing to transcribe again). */
+/** A short problem no row shows (no microphone permission, nothing to transcribe again): the app's own toast. */
 function toast(message: string): void {
-  if (message.length === 0) return;
-  if (Platform.OS === 'android') ToastAndroid.show(message, ToastAndroid.SHORT);
-  else Alert.alert(message);
+  showToast(message, { error: true });
 }
 
 export default function TerminalBottomBar({

@@ -11,7 +11,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
-import { Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import {
@@ -60,6 +59,7 @@ import { openShownCommandTerminal } from '../machines/appUpdate';
 import { machineDisplayLabel, useMachinesStore } from '../machines/store';
 import type { RootStackParamList } from '../navigation/types';
 import { useAppearance } from '../theme/useAppearance';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddProjectSource'>;
 
@@ -121,7 +121,7 @@ export default function AddProjectSourceScreen({ navigation, route }: Props): Re
       void openShownCommandTerminal(machine, commandId)
         .then(({ sessionKey, title }) => navigation.navigate('Terminal', { sessionKey, machineId, title }))
         .catch((error: unknown) =>
-          Alert.alert(EditMachineCopy.appUpdate.runInTerminalFailed, error instanceof Error ? error.message : String(error)),
+          showAlert(EditMachineCopy.appUpdate.runInTerminalFailed, error instanceof Error ? error.message : String(error)),
         )
         .finally(() => {
           if (mountedRef.current) setOpeningTerminal(false);
@@ -177,7 +177,7 @@ export default function AddProjectSourceScreen({ navigation, route }: Props): Re
       if (machine === null || addingRef.current) return;
       const duplicate = duplicateProjectFor(machineId, suggestion.path);
       if (duplicate !== null) {
-        Alert.alert(
+        showAlert(
           AddProjectCopy.duplicateTitle,
           AddProjectCopy.duplicateBody(duplicate.name ?? duplicate.path ?? suggestion.path),
         );

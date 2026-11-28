@@ -1,18 +1,12 @@
 /**
- * Generic action sheet: modal bottom sheet with a title/subtitle header and a
- * scrollable list of action rows (label + optional detail line, destructive
- * tint, disabled state). Styling per docs/specs/sessions-drawer.md §0. Half folded like a laptop it starts
- * below the fold and its list scrolls inside.
+ * Generic action sheet: the app's dialog sheet (`HostedDialogSheet`) with a title/subtitle header and a scrollable
+ * list of choice rows (label + optional detail line, destructive tint, disabled state, radio mark), the same rows
+ * `showAlert()` draws for three or more choices. Half folded like a laptop it starts below the fold and its list
+ * scrolls inside.
  */
 
-import { useMemo } from 'react';
-import { useAppearance, type Appearance } from '../../theme/useAppearance';
-import { Modal, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-
-import { useFoldSheetMaxHeight } from './foldAvoidance';
-import { useVerticalBarSpace } from './verticalBar/VerticalBarArea';
-
-import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import { HostedDialogSheet } from './dialog/AlertHost';
+import { DialogMessage, DialogRow, DialogRows, DialogTitle } from './dialog/DialogParts';
 
 export type ActionSheetItem = {
   key: string;
@@ -35,116 +29,23 @@ export type ActionSheetProps = {
 };
 
 export default function ActionSheet({ visible, title, subtitle, items, onClose }: ActionSheetProps) {
-  const appearance = useAppearance();
-  const styles = useMemo(() => createStyles(appearance), [appearance]);
-  const bar = useVerticalBarSpace();
-  const foldMaxHeight = useFoldSheetMaxHeight({ avoidsKeyboard: false });
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, bar.padding]} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, foldMaxHeight !== undefined && { maxHeight: foldMaxHeight }]}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle !== undefined && subtitle.length > 0 ? (
-            <Text style={styles.subtitle} numberOfLines={2}>
-              {subtitle}
-            </Text>
-          ) : null}
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {items.map((item) => (
-              <Pressable
-                key={item.key}
-                accessibilityRole={item.selected === undefined ? 'button' : 'radio'}
-                accessibilityState={item.selected === undefined ? undefined : { selected: item.selected }}
-                disabled={item.disabled === true}
-                style={({ pressed }) => [
-                  styles.row,
-                  pressed ? styles.rowPressed : null,
-                  item.disabled === true ? styles.rowDisabled : null,
-                ]}
-                onPress={item.onPress}
-              >
-                <Text style={[styles.rowLabel, item.destructive === true ? styles.rowLabelDestructive : null]}>
-                  {item.label}
-                </Text>
-                {item.detail !== undefined && item.detail.length > 0 ? (
-                  <Text style={styles.rowDetail}>{item.detail}</Text>
-                ) : null}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <HostedDialogSheet visible={visible} onDismiss={onClose} accessibilityLabel={title}>
+      <DialogTitle>{title}</DialogTitle>
+      {subtitle !== undefined && subtitle.length > 0 ? <DialogMessage>{subtitle}</DialogMessage> : null}
+      <DialogRows>
+        {items.map((item) => (
+          <DialogRow
+            key={item.key}
+            label={item.label}
+            {...(item.detail !== undefined ? { detail: item.detail } : {})}
+            destructive={item.destructive === true}
+            disabled={item.disabled === true}
+            {...(item.selected !== undefined ? { selected: item.selected } : {})}
+            onPress={item.onPress}
+          />
+        ))}
+      </DialogRows>
+    </HostedDialogSheet>
   );
 }
-
-const createStyles = (appearance: Appearance) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: appearance.background,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: appearance.border,
-    paddingTop: 14,
-    paddingBottom: 24,
-    paddingHorizontal: 12,
-    maxHeight: '80%',
-  },
-  title: {
-    color: appearance.foreground,
-    fontSize: 15,
-    fontWeight: 'bold',
-    paddingHorizontal: 4,
-  },
-  subtitle: {
-    color: appearance.muted,
-    fontSize: 12,
-    marginTop: 4,
-    paddingHorizontal: 4,
-  },
-  list: {
-    marginTop: 10,
-  },
-  listContent: {
-    gap: 6,
-  },
-  row: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: GhostexRadii.row,
-    backgroundColor: appearance.card,
-    borderWidth: GhostexStrokeWidth,
-    borderColor: appearance.border,
-  },
-  rowPressed: {
-    backgroundColor: appearance.cardActive,
-  },
-  rowDisabled: {
-    opacity: 0.4,
-  },
-  rowLabel: {
-    color: appearance.foreground,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  rowLabelDestructive: {
-    color: appearance.danger,
-  },
-  rowDetail: {
-    color: appearance.muted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-});

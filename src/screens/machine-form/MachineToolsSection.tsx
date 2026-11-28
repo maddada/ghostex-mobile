@@ -7,7 +7,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { readableSecondaryText } from '../../theme/sidebarAppearance';
 import { useAppearance } from '../../theme/useAppearance';
@@ -43,6 +43,7 @@ import {
 import type { RootStackParamList } from '../../navigation/types';
 import { SetupPalette } from '../../theme/palette';
 import { useFormStyles } from './styles';
+import { showAlert } from '../../components/common/dialog/alert';
 
 const TONE_COLOR: Record<RowTone, string> = {
   muted: SetupPalette.MUTED,
@@ -131,7 +132,7 @@ function Row({
                   navigation.navigate('Terminal', { sessionKey, machineId: machine.id, title }),
                 )
                 .catch((error: unknown) =>
-                  Alert.alert(
+                  showAlert(
                     EditMachineCopy.machineTools.runInTerminalFailed,
                     error instanceof Error ? error.message : String(error),
                   ),

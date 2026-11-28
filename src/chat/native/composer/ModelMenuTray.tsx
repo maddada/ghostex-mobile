@@ -4,12 +4,13 @@
  * side list opens as a page of the sheet, so it stays on screen on a narrow phone.
  */
 
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Glyph, type GlyphName } from './icons';
 import { arr, isTrue, obj, str, type JsonRecord } from './json';
 import { footerLines } from './modelMenuState';
 import { themedStyles, useTranscriptTheme } from '../transcript/theme';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 /** The glyph beside each value (`render.rs`: brain, chart bars, bolt, person). */
 const BUTTON_GLYPHS: Record<string, GlyphName> = {
@@ -90,7 +91,7 @@ export function ModelMenuTray({
                     accessibilityRole="button"
                     accessibilityLabel={hint}
                     hitSlop={8}
-                    onPress={() => Alert.alert(label, hint)}
+                    onPress={() => showAlert(label, hint)}
                   >
                     <Glyph name="info-circle" size={14} color={P.ink(0.64)} />
                   </Pressable>

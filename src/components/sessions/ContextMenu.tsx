@@ -14,6 +14,7 @@
  * element, which iOS would read as one element holding all of them.
  */
 
+import { AlertOutlet, closeOrCancelAlert } from '../common/dialog/AlertHost';
 import { useMemo, Fragment, useState, type ReactElement, type ReactNode } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
@@ -525,8 +526,15 @@ export default function ContextMenu({
   );
   if (inline) return visible ? content : null;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismissed}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={closeOrCancelAlert(onClose)}
+      onDismiss={onDismissed}
+    >
       {content}
+      <AlertOutlet active={visible} />
     </Modal>
   );
 }

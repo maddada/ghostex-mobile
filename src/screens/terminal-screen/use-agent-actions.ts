@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GhostexNative } from '../../../modules/ghostex-native/src';
@@ -60,6 +60,7 @@ import {
   type TerminalSkillRow,
   type ExportedTranscript,
 } from './session-lookups';
+import { showAlert } from '../../components/common/dialog/alert';
 
 type TerminalNavigation = NativeStackScreenProps<RootStackParamList, 'Terminal'>['navigation'];
 
@@ -120,7 +121,7 @@ export function useTerminalAgentActions({
   }, [activeProjectId, activeSession, activeTab]);
 
   const reportAgentFailure = useCallback((title: string, error: unknown): void => {
-    Alert.alert(title, error instanceof Error ? error.message : String(error), [{ text: 'OK' }]);
+    showAlert(title, error instanceof Error ? error.message : String(error), [{ text: 'OK' }]);
   }, []);
 
   /** Deliver text to the session through the Session Chat send endpoint. */
@@ -168,7 +169,7 @@ export function useTerminalAgentActions({
         requestSessionRenameCommand(session.sessionId, projectId, title, activeAgentId),
         {
           optimisticChange: renameMutation(session.sessionId, title),
-          onError: (message) => Alert.alert('Rename Failed', message, [{ text: 'OK' }]),
+          onError: (message) => showAlert('Rename Failed', message, [{ text: 'OK' }]),
         },
       );
       /*
@@ -204,12 +205,12 @@ export function useTerminalAgentActions({
       sleeping
         ? {
             optimisticChange: lifecycleMutation(session.sessionId, false),
-            onError: (message) => Alert.alert('Wake Failed', message, [{ text: 'OK' }]),
+            onError: (message) => showAlert('Wake Failed', message, [{ text: 'OK' }]),
           }
         : {
             closeWarmSessionId: session.sessionId,
             optimisticChange: lifecycleMutation(session.sessionId, true),
-            onError: (message) => Alert.alert('Sleep Failed', message, [{ text: 'OK' }]),
+            onError: (message) => showAlert('Sleep Failed', message, [{ text: 'OK' }]),
           },
     );
   }, [agentTarget]);
@@ -225,7 +226,7 @@ export function useTerminalAgentActions({
       if (target === null) return;
       setAgentOverlay(AGENT_OVERLAY_NONE);
       await runSessionCommand(target.machine, delayedSendCommand(target.session.sessionId, trigger, delayMs), {
-        onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]),
+        onError: (message) => showAlert('Delayed Send Failed', message, [{ text: 'OK' }]),
       });
     },
     [agentTarget],
@@ -236,7 +237,7 @@ export function useTerminalAgentActions({
     if (target === null) return;
     setAgentOverlay(AGENT_OVERLAY_NONE);
     await runSessionCommand(target.machine, cancelDelayedSendCommand(target.session.sessionId), {
-      onError: (message) => Alert.alert('Delayed Send Failed', message, [{ text: 'OK' }]),
+      onError: (message) => showAlert('Delayed Send Failed', message, [{ text: 'OK' }]),
     });
   }, [agentTarget]);
 
@@ -245,7 +246,7 @@ export function useTerminalAgentActions({
     if (target === null) return;
     setAgentOverlay(AGENT_OVERLAY_NONE);
     await runSessionCommand(target.machine, closeAfterDoneCommand(target.session.sessionId), {
-      onError: (message) => Alert.alert('Session Automation Failed', message, [{ text: 'OK' }]),
+      onError: (message) => showAlert('Session Automation Failed', message, [{ text: 'OK' }]),
     });
   }, [agentTarget]);
 
@@ -477,7 +478,7 @@ export function useTerminalAgentActions({
         const pick = source === 'image' ? pickAndSendImageAttachment : pickAndSendAttachment;
         await pick(tab.machineId, tab.sessionKey, chatModeActive ? sendChatMessageFromUser : undefined);
       } catch {
-        Alert.alert('File Not Sent', "Ghostex couldn't upload it to the computer. Try again.", [{ text: 'OK' }]);
+        showAlert('File Not Sent', "Ghostex couldn't upload it to the computer. Try again.", [{ text: 'OK' }]);
       } finally {
         setUploading(false);
       }
@@ -512,7 +513,7 @@ export function useTerminalAgentActions({
     const session = activeSession;
     const projectId = session.projectId.length > 0 ? session.projectId : undefined;
     const title = session.displayTitle.length > 0 ? session.displayTitle : SessionCopy.fallbackTitle;
-    Alert.alert('Kill Session?', `This permanently ends "${title}" on the connected machine.`, [
+    showAlert('Kill Session?', `This permanently ends "${title}" on the connected machine.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Kill Session',
@@ -521,7 +522,7 @@ export function useTerminalAgentActions({
           void runSessionCommand(machine, killSessionCommand(session.sessionId, projectId, 'phone.terminalKill'), {
             closeWarmSessionId: session.sessionId,
             optimisticChange: { kind: 'sessionClose', sessionId: session.sessionId },
-            onError: (message) => Alert.alert('Kill Session Failed', message, [{ text: 'OK' }]),
+            onError: (message) => showAlert('Kill Session Failed', message, [{ text: 'OK' }]),
           });
         },
       },
@@ -541,7 +542,7 @@ export function useTerminalAgentActions({
    * the same question.
    */
   const promptAttachmentSource = useCallback((): void => {
-    Alert.alert('Send & Attach File', undefined, [
+    showAlert('Send & Attach File', undefined, [
       { text: 'Photo Library', onPress: () => void handleUpload('image') },
       { text: 'Choose File', onPress: () => void handleUpload('file') },
       { text: 'Cancel', style: 'cancel' },
@@ -582,7 +583,7 @@ export function useTerminalAgentActions({
   /** Skills install on the computer the agents run on (desktop: Settings > Integrations > Agent skills). */
   const configureSkills = useCallback((): void => {
     setAgentOverlay(AGENT_OVERLAY_NONE);
-    Alert.alert(
+    showAlert(
       'Install skills on your computer',
       'Open Ghostex on your computer and go to Settings > Integrations > Agent skills to install or remove Ghostex skills.',
     );

@@ -23,7 +23,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   BackHandler,
   Keyboard,
   Platform,
@@ -175,6 +174,7 @@ import { boxIdOfMachine } from '../cloudBoxes/types';
 import CloudBoxPill from '../components/terminal/CloudBoxPill';
 import CoordinatorPlaybookSheet, { loadCoordinatorPlaybook } from './sessions-screen/CoordinatorPlaybookSheet';
 import type { MachineConnectionTarget } from '../machines/credentials';
+import { showAlert } from '../components/common/dialog/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>;
 
@@ -970,7 +970,7 @@ export default function TerminalScreen({ navigation, route }: Props) {
         void closeTab(tab.sessionKey);
         return;
       }
-      Alert.alert('Close Tab?', `This will disconnect "${tab.title}".`, [
+      showAlert('Close Tab?', `This will disconnect "${tab.title}".`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Close', style: 'destructive', onPress: () => void closeTab(tab.sessionKey) },
       ]);

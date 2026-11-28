@@ -12,7 +12,6 @@
  */
 
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Alert } from 'react-native';
 
 import {
   coordinatorEditCommand,
@@ -56,6 +55,7 @@ import {
 import type { SidebarMenuCommand } from '../sessions-screen/sidebar-menus';
 import WorkLinkPicker, { parseWorkLinkCandidates } from '../sessions-screen/work-link-picker';
 import { machineRecordFor } from './session-lookups';
+import { showAlert } from '../../components/common/dialog/alert';
 
 /** The session a shared row was built for. */
 export type SessionMenuTarget = { machineId: string; sessionId: string };
@@ -125,7 +125,7 @@ export function useSessionMenuRunner({
             title: 'Close session?',
             body: 'This closes the selected Ghostex session on the connected machine.',
           });
-      Alert.alert(copy.title, `${sessionTitle(session)}\n\n${copy.body}`, [
+      showAlert(copy.title, `${sessionTitle(session)}\n\n${copy.body}`, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Close Session',
@@ -182,7 +182,7 @@ export function useSessionMenuRunner({
               return;
             case 'makeCoordinator': {
               const confirm = makeCoordinatorConfirm(session);
-              Alert.alert(confirm.title, confirm.body, [
+              showAlert(confirm.title, confirm.body, [
                 { text: 'Cancel', style: 'cancel' },
                 { text: confirm.confirmLabel, onPress: () => void makeCoordinator(machine, session, feedback) },
               ]);

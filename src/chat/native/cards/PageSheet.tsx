@@ -19,7 +19,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   AppState,
   Image,
   Linking,
@@ -69,6 +68,8 @@ import {
   readPageMessage,
   resendScript,
 } from './pageSheetScript';
+import { AlertOutlet, closeOrCancelAlert } from '../../../components/common/dialog/AlertHost';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 /** How long the first back press keeps the sheet armed for a second one to close it. */
 const CLOSE_ARMED_FOR_MS = 2_000;
@@ -436,7 +437,7 @@ export function PageSheet({ chat, machine, page, starredPages, onClose, onHide, 
     refreshingRef.current = false;
     setRefreshing(false);
     if (answer.error !== null) {
-      Alert.alert('The page could not be refreshed', answer.error.message);
+      showAlert('The page could not be refreshed', answer.error.message);
       return;
     }
     setChanged(false);
@@ -510,7 +511,7 @@ export function PageSheet({ chat, machine, page, starredPages, onClose, onHide, 
       visible
       animationType="slide"
       presentationStyle="fullScreen"
-      onRequestClose={backPressed}
+      onRequestClose={closeOrCancelAlert(backPressed)}
       statusBarTranslucent
       navigationBarTranslucent
     >
@@ -697,6 +698,7 @@ export function PageSheet({ chat, machine, page, starredPages, onClose, onHide, 
           onClose={() => setShareOpen(false)}
         />
       ) : null}
+      <AlertOutlet active />
     </Modal>
   );
 }

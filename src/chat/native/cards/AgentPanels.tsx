@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ChatDocument } from '../../rust/document';
 import type { UserAction } from '../../rust/actions';
@@ -22,6 +22,7 @@ import { PulseDot, Spinner } from './primitives';
 import { remoteWorkerComputer, remoteWorkerNotice } from './remoteWorker';
 import { ComputerIconGlyph } from '../../../components/sessions/ComputerIconGlyph';
 import { useServerComputerDrawing } from '../transcript/mentionedSession';
+import { showAlert } from '../../../components/common/dialog/alert';
 
 /** A sheet's first line under its title: the panel's muted detail and an optional ornament. */
 function MenuMeta({ meta, trailing }: { meta: string; trailing?: ReactNode }) {
@@ -199,7 +200,7 @@ function ThreadRow({ row, chat, onDone }: { row: unknown; chat: RustChat; onDone
   const openThread = () => {
     if (computer !== null) {
       const notice = remoteWorkerNotice(computer);
-      Alert.alert(notice.title, notice.message);
+      showAlert(notice.title, notice.message);
       return;
     }
     chat.dispatch({

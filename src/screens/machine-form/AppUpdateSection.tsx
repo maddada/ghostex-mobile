@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Switch, Text, View } from 'react-native';
 
 import { SetupButton } from '../../components/onboarding/SetupPrimitives';
 import { CopyGlyph, DownloadGlyph, RefreshGlyph } from '../../components/sessions/icons';
@@ -29,6 +29,7 @@ import { machineNameById } from '../../machines/store';
 import type { RootStackParamList } from '../../navigation/types';
 import { SetupPalette } from '../../theme/palette';
 import { useFormStyles } from './styles';
+import { showAlert } from '../../components/common/dialog/alert';
 
 const TONE_COLOR: Record<AppUpdateView['tone'], string> = {
   muted: SetupPalette.MUTED,
@@ -127,7 +128,7 @@ export default function AppUpdateSection({ machine }: { machine: MachineConnecti
                       navigation.navigate('Terminal', { sessionKey, machineId: machine.id, title }),
                     )
                     .catch((error: unknown) =>
-                      Alert.alert(copy.runInTerminalFailed, error instanceof Error ? error.message : String(error)),
+                      showAlert(copy.runInTerminalFailed, error instanceof Error ? error.message : String(error)),
                     )
                     .finally(() => setOpening(false));
                 }}

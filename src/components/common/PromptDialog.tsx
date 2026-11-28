@@ -1,18 +1,18 @@
 /**
  * Generic prompt dialog: title, optional body, single text input (optional
  * secure entry), optional checkbox row, inline error line, confirm + cancel.
- * Used for Rename session (§2) and the machine password prompt (§4). Half folded like a laptop the card stands
- * off the fold: above it with the keyboard up (the keyboard-avoiding layer), else below it when it fits.
+ * Used for Rename session (§2) and the machine password prompt (§4). Drawn as the app's dialog sheet
+ * (`HostedDialogSheet`), riding on the keyboard: the confirm button on top, Cancel under it.
  */
 
 import { useMemo, useEffect, useState } from 'react';
 import { useAppearance, type Appearance } from '../../theme/useAppearance';
 
-import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput } from 'react-native';
 
-import { GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
-import { useFoldCardPlacement } from './foldAvoidance';
-import KeyboardAvoidingContainer from './keyboard/KeyboardAvoidingContainer';
+import { colorWithOpacity, GhostexRadii, GhostexStrokeWidth } from '../../theme/palette';
+import { HostedDialogSheet } from './dialog/AlertHost';
+import { DialogButton, DialogButtons, DialogTitle } from './dialog/DialogParts';
 import KeyboardAwareScrollView from './keyboard/KeyboardAwareScrollView';
 
 export type PromptDialogProps = {
@@ -56,7 +56,6 @@ export default function PromptDialog({
   const styles = useMemo(() => createPromptDialogStyles(appearance), [appearance]);
   const [value, setValue] = useState(initialValue);
   const [checkboxValue, setCheckboxValue] = useState(initialCheckboxValue);
-  const placement = useFoldCardPlacement({ avoidsKeyboard: true, belowSafeAreaTop: true });
 
   // Reset the form whenever the dialog opens with fresh initial values.
   useEffect(() => {
@@ -67,54 +66,37 @@ export default function PromptDialog({
   }, [visible, initialValue, initialCheckboxValue]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <KeyboardAvoidingContainer safeAreaTop style={styles.keyboardFill}>
-        <Pressable style={[styles.backdrop, placement.style]} onPress={onCancel}>
-          <Pressable style={styles.card} onLayout={placement.onCardLayout} onPress={(event) => event.stopPropagation()}>
-            <KeyboardAwareScrollView bounces={false} contentContainerStyle={styles.cardContent}>
-              <Text style={styles.title}>{title}</Text>
-              {body !== undefined && body.length > 0 ? <Text style={styles.body}>{body}</Text> : null}
-              <TextInput
-                keyboardAppearance={appearance.light ? 'light' : 'dark'}
-                style={[styles.input, multiline ? styles.inputMultiline : null]}
-                placeholder={placeholder}
-                placeholderTextColor={appearance.muted}
-                autoCapitalize={multiline ? 'sentences' : 'none'}
-                autoCorrect={multiline}
-                multiline={multiline}
-                textAlignVertical={multiline ? 'top' : 'center'}
-                secureTextEntry={secureTextEntry}
-                value={value}
-                onChangeText={setValue}
-              />
-              {checkboxLabel !== undefined ? (
-                <Pressable style={styles.checkboxRow} onPress={() => setCheckboxValue(!checkboxValue)}>
-                  <Switch value={checkboxValue} onValueChange={setCheckboxValue} />
-                  <Text style={styles.checkboxLabel}>{checkboxLabel}</Text>
-                </Pressable>
-              ) : null}
-              {error !== null && error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
-              <View style={styles.buttonRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelButtonPressed]}
-                  onPress={onCancel}
-                >
-                  <Text style={styles.cancelLabel}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  style={styles.confirmButton}
-                  onPress={() => onSubmit(value, checkboxValue)}
-                >
-                  <Text style={styles.confirmLabel}>{confirmLabel}</Text>
-                </Pressable>
-              </View>
-            </KeyboardAwareScrollView>
+    <HostedDialogSheet visible={visible} onDismiss={onCancel} accessibilityLabel={title}>
+      <KeyboardAwareScrollView bounces={false} style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+        <DialogTitle>{title}</DialogTitle>
+        {body !== undefined && body.length > 0 ? <Text style={styles.sheetBody}>{body}</Text> : null}
+        <TextInput
+          keyboardAppearance={appearance.light ? 'light' : 'dark'}
+          accessibilityLabel={title}
+          style={[styles.input, styles.sheetInput, multiline ? styles.inputMultiline : null]}
+          placeholder={placeholder}
+          placeholderTextColor={appearance.muted}
+          autoCapitalize={multiline ? 'sentences' : 'none'}
+          autoCorrect={multiline}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          secureTextEntry={secureTextEntry}
+          value={value}
+          onChangeText={setValue}
+        />
+        {checkboxLabel !== undefined ? (
+          <Pressable style={styles.checkboxRow} onPress={() => setCheckboxValue(!checkboxValue)}>
+            <Switch value={checkboxValue} onValueChange={setCheckboxValue} />
+            <Text style={styles.checkboxLabel}>{checkboxLabel}</Text>
           </Pressable>
-        </Pressable>
-      </KeyboardAvoidingContainer>
-    </Modal>
+        ) : null}
+        {error !== null && error.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
+        <DialogButtons>
+          <DialogButton label={confirmLabel} kind="primary" onPress={() => onSubmit(value, checkboxValue)} />
+          <DialogButton label="Cancel" kind="neutral" onPress={onCancel} />
+        </DialogButtons>
+      </KeyboardAwareScrollView>
+    </HostedDialogSheet>
   );
 }
 
@@ -141,6 +123,10 @@ export const createPromptDialogStyles = (appearance: Appearance) => StyleSheet.c
   cardContent: {
     padding: 16,
   },
+  // In the dialog sheet (`PromptDialog`): its content scrolls above the keyboard when it does not fit.
+  sheetScroll: { flexGrow: 0, flexShrink: 1 },
+  sheetBody: { color: colorWithOpacity(appearance.foreground, 74), fontSize: 14, lineHeight: 20, marginTop: 6 },
+  sheetInput: { marginTop: 14, height: 46, fontSize: 15 },
   title: {
     color: appearance.foreground,
     fontSize: 15,
